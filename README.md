@@ -30,12 +30,14 @@ Built with Electron, React, TypeScript, and Zustand. Licensed under [MIT](./LICE
 git clone https://github.com/Huckcity/winslab.git
 cd winslab
 
-# Install dependencies (with legacy peer deps support)
+# Install dependencies
 npm install --legacy-peer-deps
 
 # Start dev server with hot reload
 npm run dev
 ```
+
+> **npm 11.16+ / v12**: Install scripts (native compilation for `midi`, Electron binary download, `esbuild` binary) require explicit approval. This project ships an `allowScripts` allowlist in `package.json` that pre-approves these packages. If you see "install scripts blocked" warnings (e.g. `Error: Electron uninstall` when launching), run `npm approve-scripts --all` to regenerate the allowlist from your current dependency tree, then `npm install` again.
 
 ### Development Commands
 

@@ -62,6 +62,11 @@
     },
     "publish": null
   },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true,
+    "midi": true
+  },
   "dependencies": {
     "electron-store": "^11.0.2",
     "midi": "^2.0.0",
