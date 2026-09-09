@@ -12,6 +12,9 @@ Object.defineProperty(window, 'winslab', {
     osc: {
       send: vi.fn(() => Promise.resolve()),
       startListener: vi.fn(() => Promise.resolve())
+    },
+    script: {
+      readFile: vi.fn(() => Promise.resolve(''))
     }
   },
   writable: true

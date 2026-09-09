@@ -1,4 +1,4 @@
-import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue } from '../types/cue'
+import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue } from '../types/cue'
 import { audioPlayer } from './AudioPlayer'
 import type { RunningCue } from '../store'
 
@@ -15,6 +15,7 @@ interface RunnerDeps {
   setRunning: SetRunning
   clearAllRunning: ClearAllRunning
   syncCueDuration: (id: string, durationMs: number) => void
+  getWorkspacePath: () => string | null
 }
 
 export class CueRunner {
@@ -150,10 +151,28 @@ export class CueRunner {
           signal: AbortSignal.timeout(cue.timeout ?? 5000)
         }).finally(() => { this.timers.delete(cue.id); onDone() })
         break
-      case 'script':
-        try { new Function(cue.script)() } catch (e) { console.error('Script cue error:', e) }
-        onDone()
+      case 'script': {
+        const scriptCue = cue as ScriptCue
+        const workspacePath = this.deps!.getWorkspacePath()
+        const include = async (relativePath: string): Promise<void> => {
+          const code = await window.winslab.script.readFile(relativePath, workspacePath)
+          const fn = new Function('include', code)
+          await fn(include)
+        }
+        const fn = new Function('include', scriptCue.script)
+        try {
+          const result = fn(include)
+          if (result != null && typeof (result as any).then === 'function') {
+            Promise.resolve(result).catch((e: unknown) => console.error('Script cue error:', e)).finally(onDone)
+          } else {
+            onDone()
+          }
+        } catch (e) {
+          console.error('Script cue error:', e)
+          onDone()
+        }
         break
+      }
     }
   }
 

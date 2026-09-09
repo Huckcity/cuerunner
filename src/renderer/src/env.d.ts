@@ -21,6 +21,9 @@ interface WinslabBridge {
     send: (cmd: { host: string; port: number; address: string; args: OscArg[] }) => Promise<void>
     startListener: (port: number) => Promise<void>
   }
+  script: {
+    readFile: (relativePath: string, workspacePath: string | null) => Promise<string>
+  }
   workspace: {
     open: () => Promise<{ path: string; workspace: Workspace } | null>
     openPath: (filePath: string) => Promise<{ path: string; workspace: Workspace }>

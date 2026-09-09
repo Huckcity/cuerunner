@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('winslab', {
     startListener: (port: number): Promise<void> =>
       ipcRenderer.invoke('osc:startListener', port)
   },
+  script: {
+    readFile: (relativePath: string, workspacePath: string | null): Promise<string> =>
+      ipcRenderer.invoke('script:readFile', relativePath, workspacePath)
+  },
   workspace: {
     open: (): Promise<{ path: string; workspace: Workspace } | null> =>
       ipcRenderer.invoke('workspace:open'),

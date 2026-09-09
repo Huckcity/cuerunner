@@ -1,5 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
+import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import { OscEngine } from '../osc/OscEngine'
 import {
@@ -51,6 +52,14 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('osc:startListener', async (_, port: number) => {
     osc.startListener(port)
+  })
+
+  // Script
+  ipcMain.handle('script:readFile', async (_, relativePath: string, workspacePath: string | null) => {
+    const resolved = relativePath.startsWith('/')
+      ? relativePath
+      : path.resolve(workspacePath ? path.dirname(workspacePath) : process.cwd(), relativePath)
+    return await readFile(resolved, 'utf-8')
   })
 
   // Workspace

@@ -15,7 +15,8 @@ export function useCueRunner() {
       setSelected: select,
       setRunning,
       clearAllRunning,
-      syncCueDuration
+      syncCueDuration,
+      getWorkspacePath: () => useStore.getState().workspacePath
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration])
 

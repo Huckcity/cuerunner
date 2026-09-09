@@ -57,7 +57,8 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
     setSelected,
     setRunning,
     clearAllRunning: vi.fn(),
-    syncCueDuration: vi.fn()
+    syncCueDuration: vi.fn(),
+    getWorkspacePath: () => null
   })
 
   const cues = initialCues
@@ -501,6 +502,127 @@ describe('CueRunner — script cue', () => {
     expect(() => runner.go()).not.toThrow()
     expect(console.error).toHaveBeenCalled()
   })
+
+  it('passes include function as a parameter to the script', () => {
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'capturedInclude = typeof include'
+    }
+    ;(globalThis as any).capturedInclude = undefined
+    const { runner } = setup([scriptCue])
+    runner.go()
+    expect((globalThis as any).capturedInclude).toBe('function')
+    delete (globalThis as any).capturedInclude
+  })
+
+  it('include() calls window.winslab.script.readFile with resolved path', async () => {
+    const readFileSpy = vi.fn().mockResolvedValue('// included code')
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { readFile: readFileSpy } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'include("./lib.js")'
+    }
+
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab'
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(readFileSpy).toHaveBeenCalledWith('./lib.js', '/shows/my-show.wlab')
+  })
+
+  it('include() executes the returned code in global scope', async () => {
+    const readFileSpy = vi.fn().mockResolvedValue('globalThis.includedRan = true')
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { readFile: readFileSpy } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'include("./lib.js")'
+    }
+
+    ;(globalThis as any).includedRan = false
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab'
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect((globalThis as any).includedRan).toBe(true)
+    delete (globalThis as any).includedRan
+  })
+
+  it('include() chains — included file can use include() itself', async () => {
+    const readFileSpy = vi.fn()
+      .mockResolvedValueOnce('include("./third.js")')
+      .mockResolvedValueOnce('globalThis.chainRan = true')
+
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { readFile: readFileSpy } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'include("./lib.js")'
+    }
+
+    ;(globalThis as any).chainRan = false
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab'
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(readFileSpy).toHaveBeenCalledTimes(2)
+    expect(readFileSpy).toHaveBeenCalledWith('./lib.js', '/shows/my-show.wlab')
+    expect(readFileSpy).toHaveBeenCalledWith('./third.js', '/shows/my-show.wlab')
+    expect((globalThis as any).chainRan).toBe(true)
+    delete (globalThis as any).chainRan
+  })
 })
 
 describe('CueRunner — panic details', () => {
@@ -562,13 +684,14 @@ describe('CueRunner — fireCueFromOffset fallback', () => {
     const setRunning = vi.fn()
     const runner = new CueRunner()
     runner.init({
-      getCues: () => [group, oscCue],
-      getSelected: () => 'g1',
-      setSelected: vi.fn(),
-      setRunning,
-      clearAllRunning: vi.fn(),
-      syncCueDuration: vi.fn(),
-    })
+          getCues: () => [group, oscCue],
+          getSelected: () => 'g1',
+          setSelected: vi.fn(),
+          setRunning,
+          clearAllRunning: vi.fn(),
+          syncCueDuration: vi.fn(),
+          getWorkspacePath: () => null
+        })
 
     // Seek past the osc cue's offset — fireCueFromOffset will hit the else branch (onDone)
     runner.seekTimeline('g1', 100)
