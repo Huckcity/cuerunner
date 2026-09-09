@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/Huckcity/winslab/compare/v0.5.1...v0.6.0) (2026-09-09)
+
+
+### Features
+
+* **script:** add include() for executing local JS files from script cues ([#50](https://github.com/Huckcity/winslab/issues/50)) ([41f19ca](https://github.com/Huckcity/winslab/commit/41f19ca760a81b85053e4b0ff5aebabe868b35ee))
+
 ## [0.5.1](https://github.com/Huckcity/winslab/compare/v0.5.0...v0.5.1) (2026-09-04)
 
 
