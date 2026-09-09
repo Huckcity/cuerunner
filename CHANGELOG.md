@@ -1,3 +1,10 @@
+## [0.6.1](https://github.com/Huckcity/winslab/compare/v0.6.0...v0.6.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **build:** add allowScripts allowlist for npm 11.16+/v12 installs ([#49](https://github.com/Huckcity/winslab/issues/49)) ([#52](https://github.com/Huckcity/winslab/issues/52)) ([f9ce926](https://github.com/Huckcity/winslab/commit/f9ce926cd8e3f41bd97e26f7d4c8abba49109107))
+
 # [0.6.0](https://github.com/Huckcity/winslab/compare/v0.5.1...v0.6.0) (2026-09-09)
 
 
