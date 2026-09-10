@@ -74,6 +74,13 @@ export function CueRow({ cue, depth, isSelected, runState, collapsed, onToggleCo
   }
 
   const commitEdit = (e: React.FocusEvent | React.KeyboardEvent) => {
+    // Escape cancels the rename and stays out of the list-level Escape (deselect)
+    if ('key' in e && e.key === 'Escape') {
+      e.stopPropagation()
+      if (inputRef.current) inputRef.current.value = cue.name
+      setEditing(false)
+      return
+    }
     if ('key' in e && e.key !== 'Enter') return
     const val = inputRef.current?.value.trim()
     if (val !== undefined) updateCue(cue.id, { name: val })

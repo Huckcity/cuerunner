@@ -176,6 +176,12 @@ export function CueList() {
 
   // ── Cue-reorder handlers ──────────────────────────────────────────────────
 
+  // Clicking the empty space below the last row drops the selection — otherwise the
+  // selected group keeps receiving every new cue.
+  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) select(null)
+  }, [select])
+
   const handleRowDragStart = useCallback((e: React.DragEvent, renderIndex: number) => {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('application/x-cue-render-index', String(renderIndex))
@@ -259,6 +265,9 @@ export function CueList() {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       if (ctxMenu) { closeCtxMenu(); return }
+      // Escape drops the selection, so the next cue is created outside the current group
+      select(null)
+      return
     }
 
     if (e.key === 'z' && e.metaKey && !e.shiftKey) {
@@ -332,6 +341,7 @@ export function CueList() {
       <div
         ref={parentRef}
         className="cue-list-scroll"
+        onClick={handleBackgroundClick}
         onDragOver={handleScrollDragOver}
         onDrop={handleReorderDrop}
         onScroll={() => ctxMenu && closeCtxMenu()}
