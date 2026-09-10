@@ -1,3 +1,10 @@
+## [0.7.1](https://github.com/Huckcity/winslab/compare/v0.7.0...v0.7.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **linux:** self-healing electron install + AppImage CI ([#49](https://github.com/Huckcity/winslab/issues/49)) ([#56](https://github.com/Huckcity/winslab/issues/56)) ([fd97252](https://github.com/Huckcity/winslab/commit/fd972528b2c0d719758e13f19d09868bfcb86303))
+
 # [0.7.0](https://github.com/Huckcity/winslab/compare/v0.6.2...v0.7.0) (2026-09-10)
 
 
