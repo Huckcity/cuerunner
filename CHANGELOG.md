@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/Huckcity/winslab/compare/v0.6.2...v0.7.0) (2026-09-10)
+
+
+### Features
+
+* **script:** add shell() for executing system commands from script cues ([#54](https://github.com/Huckcity/winslab/issues/54)) ([#55](https://github.com/Huckcity/winslab/issues/55)) ([0c1f294](https://github.com/Huckcity/winslab/commit/0c1f29421550a07f800714212020577a9a2ffa11))
+
 ## [0.6.2](https://github.com/Huckcity/winslab/compare/v0.6.1...v0.6.2) (2026-09-10)
 
 
