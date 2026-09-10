@@ -5,7 +5,6 @@ import { audioPlayer } from './AudioPlayer'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
 import type { Cue, WaitCue, AudioCue, MidiCue, FadeCue, StopCue, NetworkCue, ScriptCue } from '../types/cue'
-import type { RunningCue } from '../store'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -47,7 +46,7 @@ function makeAudio(overrides: Partial<AudioCue> = {}): AudioCue {
     filePath: '/test.mp3', startTime: 0, endTime: null,
     fadeInDuration: 0,
     outputs: [{ volume: 1, pan: 0 }],
-    loopCount: 0,
+    loopCount: 0, playbackRate: 1, trim: 1,
     ...overrides
   }
 }
@@ -365,7 +364,7 @@ describe('CueRunner — fade cue', () => {
   it('calls audioPlayer.setVolume with target value and duration', () => {
     const fadeCue: FadeCue = {
       id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 2000,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 2000,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0,
       curve: 'linear', stopTargetWhenDone: false
@@ -378,7 +377,7 @@ describe('CueRunner — fade cue', () => {
   it('calls audioPlayer.setPan with target value and duration', () => {
     const fadeCue: FadeCue = {
       id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 1000,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 1000,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeProperty: 'pan', targetValue: 0.5,
       curve: 'linear', stopTargetWhenDone: false
@@ -391,7 +390,7 @@ describe('CueRunner — fade cue', () => {
   it('stops the target cue after fading when stopTargetWhenDone is true', () => {
     const fadeCue: FadeCue = {
       id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 500,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 500,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0,
       curve: 'linear', stopTargetWhenDone: true
@@ -405,7 +404,7 @@ describe('CueRunner — fade cue', () => {
   it('passes the cue curve through to the audio player', () => {
     const fadeCue: FadeCue = {
       id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 750,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 750,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0.25,
       curve: 'sCurve', stopTargetWhenDone: false
@@ -423,7 +422,7 @@ describe('CueRunner — stop cue', () => {
   it('stop cue targeting "all" calls audioPlayer.stopAll', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop All', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'all', fadeOut: false, fadeOutDuration: 500, waitForFade: false
     }
@@ -435,7 +434,7 @@ describe('CueRunner — stop cue', () => {
   it('stop cue with fadeOut passes fadeOutDuration to stopAll', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop All', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'all', fadeOut: true, fadeOutDuration: 1500, waitForFade: false
     }
@@ -447,7 +446,7 @@ describe('CueRunner — stop cue', () => {
   it('stop cue targeting a specific cue calls audioPlayer.stop without fade', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop Specific', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeOut: false, fadeOutDuration: 0, waitForFade: false
     }
@@ -459,7 +458,7 @@ describe('CueRunner — stop cue', () => {
   it('stop cue targeting a specific cue with fadeOut passes fadeOutDuration', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop Specific Fade', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeOut: true, fadeOutDuration: 800, waitForFade: false
     }
@@ -471,7 +470,7 @@ describe('CueRunner — stop cue', () => {
   it('fires the next cue only after the fade when waitForFade is on', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop With Fade', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'on-end', isArmed: true, notes: '',
       targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true
     }
@@ -490,7 +489,7 @@ describe('CueRunner — stop cue', () => {
   it('fires the next cue immediately when waitForFade is off', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop Without Wait', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'on-end', isArmed: true, notes: '',
       targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: false
     }
@@ -505,7 +504,7 @@ describe('CueRunner — stop cue', () => {
   it('stop() cancels a pending wait-for-fade timer', () => {
     const stopCue: StopCue = {
       id: 's1', number: '1', name: 'Stop With Fade', type: 'stop',
-      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'on-end', isArmed: true, notes: '',
       targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true
     }
@@ -568,7 +567,7 @@ describe('CueRunner — network cue', () => {
   it('calls fetch with url, method, headers, body, and a timeout signal', () => {
     const networkCue: NetworkCue = {
       id: 'n1', number: '1', name: 'Network', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'POST',
       url: 'https://example.com/api',
@@ -590,7 +589,7 @@ describe('CueRunner — network cue', () => {
   it('uses default 5000ms timeout when cue.timeout is not set', () => {
     const networkCue: NetworkCue = {
       id: 'n2', number: '2', name: 'Default Timeout', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com',
@@ -612,7 +611,7 @@ describe('CueRunner — network cue', () => {
   it('calls onDone after fetch completes', async () => {
     const networkCue: NetworkCue = {
       id: 'n3', number: '3', name: 'Network', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'on-end', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com',
@@ -639,7 +638,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n4', number: '4', name: 'Failing Network', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'on-end', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com',
@@ -671,7 +670,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n7', number: '7', name: 'Ping', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com/ping',
@@ -698,7 +697,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n5', number: '5', name: 'Network', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com',
@@ -725,7 +724,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n6', number: '6', name: 'Network', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com',
@@ -752,7 +751,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n8', number: '8', name: 'Body', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com/body',
@@ -778,7 +777,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n9', number: '9', name: 'Long Body', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com/long',
@@ -801,7 +800,7 @@ describe('CueRunner — network cue', () => {
 
     const networkCue: NetworkCue = {
       id: 'n10', number: '10', name: 'Empty Body', type: 'network',
-      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
       method: 'GET',
       url: 'https://example.com/empty',
@@ -953,7 +952,7 @@ describe('CueRunner — panic details', () => {
 
     // Exactly one stopAll, with the fade. A hard stopAll() first would leave the
     // player's active map empty and the fade would never be scheduled.
-    expect(audioPlayer.stopAll.mock.calls).toEqual([[200]])
+    expect(vi.mocked(audioPlayer.stopAll).mock.calls).toEqual([[200]])
     expect(clearAllRunning).toHaveBeenCalled()
 
     vi.advanceTimersByTime(10_000)

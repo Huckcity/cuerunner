@@ -172,8 +172,9 @@ html, body, #root {
 
 /* ─── Failure surfaces ───────────────────────────────────────────────────── */
 
-/* Banner across the top after a renderer crash was recovered by a reload. */
-.crash-notice {
+/* Operator-facing bars across the top: a recovered crash, unsaved work found on disk,
+   a failed save. One shape, distinguished by kind. */
+.app-notice {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -184,9 +185,17 @@ html, body, #root {
   font-size: var(--text-base);
 }
 
-.crash-notice-text { flex: 1; }
+.app-notice[data-kind='recovery'] {
+  background: var(--accent-amber-bg);
+  border-bottom-color: var(--accent-amber);
+}
 
-.crash-notice-dismiss {
+.app-notice-text { flex: 1; }
+
+.app-notice-actions { display: flex; gap: var(--space-2); }
+
+.app-notice-action,
+.app-notice-dismiss {
   padding: var(--space-1) var(--space-3);
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -196,7 +205,8 @@ html, body, #root {
   cursor: pointer;
 }
 
-.crash-notice-dismiss:hover { background: var(--bg-hover); }
+.app-notice-action:hover,
+.app-notice-dismiss:hover { background: var(--bg-hover); }
 
 /* Full-window replacement when a React render error leaves nothing else to show. */
 .crash-screen {

@@ -11,6 +11,7 @@ import {
   saveWorkspaceAs,
   getRecentFiles
 } from '../workspace/WorkspaceManager'
+import { clearRecovery, readRecovery, writeRecovery } from '../workspace/recovery'
 import { openDemoWorkspace } from '../workspace/demo'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
@@ -126,6 +127,19 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:recent', async () => {
     return getRecentFiles()
+  })
+
+  // Autosave goes to the recovery snapshot, never over the operator's file.
+  ipcMain.handle('workspace:autosave', async (_, workspace: Workspace, sourcePath: string | null) => {
+    await writeRecovery(workspace, sourcePath)
+  })
+
+  ipcMain.handle('workspace:recovery', async () => {
+    return readRecovery()
+  })
+
+  ipcMain.handle('workspace:clearRecovery', async () => {
+    await clearRecovery()
   })
 
   ipcMain.handle('workspace:setTitle', async (event, title: string) => {

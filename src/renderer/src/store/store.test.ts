@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
+import type { AudioCue } from '../types/cue'
 
 function resetStore() {
   useStore.setState({
@@ -462,7 +463,7 @@ describe('store — addAudioCuesFromFiles', () => {
       { filePath: '/a.wav', name: 'Sound A' },
       { filePath: '/b.wav', name: 'Sound B' }
     ])
-    const cues = useStore.getState().cues
+    const cues = useStore.getState().cues as AudioCue[]
     expect(cues).toHaveLength(2)
     expect(cues[0].type).toBe('audio')
     expect(cues[0].filePath).toBe('/a.wav')
@@ -669,7 +670,6 @@ describe('store — loadWorkspace', () => {
     useStore.getState().addCue('wait')
     useStore.getState().addCue('audio')
     const waitId = useStore.getState().cues[0].id
-    const audioId = useStore.getState().cues[1].id
 
     useStore.getState().loadWorkspace(
       useStore.getState().cues.map(c => ({ ...c, parentId: null })),

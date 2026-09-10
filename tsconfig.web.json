@@ -1,11 +1,11 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
-  "include": ["src/renderer/src/**/*"],
+  "include": ["src/renderer/src/**/*", "src/test/**/*"],
   "compilerOptions": {
     "composite": true,
-    "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["src/renderer/src/*"]
-    }
+      "@renderer/*": ["./src/renderer/src/*"]
+    },
+    "types": ["vitest/globals"]
   }
 }

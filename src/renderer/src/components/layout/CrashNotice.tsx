@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatClock } from '../../utils/cueDefaults'
+import { NoticeBar } from './NoticeBar'
 
 interface RendererCrash {
   reason: string
@@ -21,14 +22,9 @@ export function CrashNotice() {
   if (!crash) return null
 
   return (
-    <div className="crash-notice" role="alert">
-      <span className="crash-notice-text">
-        The interface stopped unexpectedly at {formatClock(crash.at)} ({crash.reason}) and was
-        reloaded. Anything unsaved is gone; the workspace file on disk is untouched.
-      </span>
-      <button className="crash-notice-dismiss" onClick={() => setCrash(null)}>
-        Dismiss
-      </button>
-    </div>
+    <NoticeBar kind="crash" onDismiss={() => setCrash(null)}>
+      The interface stopped unexpectedly at {formatClock(crash.at)} ({crash.reason}) and was
+      reloaded. Anything unsaved is gone; the workspace file on disk is untouched.
+    </NoticeBar>
   )
 }

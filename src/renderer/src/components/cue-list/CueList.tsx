@@ -1,7 +1,6 @@
 import { useRef, useCallback, useState, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore } from '../../store'
-import type { GroupCue } from '../../types/cue'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
 import { groupDurationMs } from '../../utils/cueDuration'

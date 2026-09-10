@@ -162,10 +162,9 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.winslab')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
-  // GPU and utility processes are Chromium's to restart; the renderer is covered
-  // above. Either way the operator should be able to read that it happened.
+  // GPU and utility processes are Chromium's to restart, and they do not come through
+  // render-process-gone; either way the operator should be able to read that it happened.
   app.on('child-process-gone', (_event, details) => {
-    if (details.type === 'Renderer') return
     reportMainError(`[main] ${details.type} process gone: ${details.reason}`)
   })
   

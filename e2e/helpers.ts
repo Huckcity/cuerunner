@@ -1,14 +1,27 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
+import { mkdirSync, mkdtempSync } from 'fs'
 import path from 'path'
 
-export async function launchApp(): Promise<{ app: ElectronApplication; page: Page }> {
+// Every instance gets its own user-data directory: recent files, window state and
+// recovery snapshots live there, and tests that write them must not leak into the
+// instances running alongside them. Pass the same directory back in to relaunch an
+// instance that should see what the previous one left behind.
+export async function launchApp(
+  options: { userDataDir?: string } = {}
+): Promise<{ app: ElectronApplication; page: Page; userDataDir: string }> {
+  let userDataDir = options.userDataDir
+  if (!userDataDir) {
+    mkdirSync('test-results', { recursive: true })
+    userDataDir = mkdtempSync(path.join('test-results', 'userdata-'))
+  }
+
   const app = await electron.launch({
-    args: [path.join(process.cwd(), 'out/main/index.js')],
+    args: [path.join(process.cwd(), 'out/main/index.js'), `--user-data-dir=${userDataDir}`],
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
-  return { app, page }
+  return { app, page, userDataDir }
 }
 
 // Force-exits the Electron process, bypassing the beforeunload dirty-check dialog.

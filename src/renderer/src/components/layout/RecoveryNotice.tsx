@@ -1,0 +1,66 @@
+import { useEffect, useState } from 'react'
+import { useStore } from '../../store'
+import type { Workspace } from '../../types/workspace'
+import { formatClock } from '../../utils/cueDefaults'
+import { NoticeBar } from './NoticeBar'
+
+interface Snapshot {
+  workspace: Workspace
+  savedAt: number
+  sourcePath: string | null
+}
+
+// Autosave writes snapshots to the user-data folder rather than over the operator's
+// file. If one is waiting, the session ended without saving — offer the work back
+// instead of applying it silently.
+export function RecoveryNotice() {
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
+
+  useEffect(() => {
+    window.winslab.workspace
+      .recovery()
+      .then(found => { if (found) setSnapshot(found) })
+      .catch(() => { /* no snapshot, nothing to offer */ })
+  }, [])
+
+  if (!snapshot) return null
+
+  const name = snapshot.workspace.name || 'Untitled'
+
+  const recover = (): void => {
+    const store = useStore.getState()
+    store.loadWorkspace(
+      snapshot.workspace.cues,
+      name,
+      snapshot.sourcePath,
+      snapshot.workspace.audioSettings,
+      snapshot.workspace.midiSettings
+    )
+    // Recovered work is unsaved by definition: the file on disk is older than this. The
+    // title bar's dot is the app's usual signal for that.
+    store.markDirty()
+    window.winslab.workspace.clearRecovery().catch(() => {})
+    setSnapshot(null)
+  }
+
+  const discard = (): void => {
+    window.winslab.workspace.clearRecovery().catch(() => {})
+    setSnapshot(null)
+  }
+
+  return (
+    <NoticeBar
+      kind="recovery"
+      onDismiss={discard}
+      actions={
+        <>
+          <button className="app-notice-action" onClick={recover}>Recover</button>
+          <button className="app-notice-action" onClick={discard}>Discard</button>
+        </>
+      }
+    >
+      Unsaved work from “{name}” ({formatClock(snapshot.savedAt)}) was found after the last
+      session ended without saving.
+    </NoticeBar>
+  )
+}

@@ -7,12 +7,29 @@ import { WaveformPanel } from './components/waveform/WaveformPanel'
 import { TimelineEditor } from './components/timeline/TimelineEditor'
 import { SettingsDialog } from './components/layout/SettingsDialog'
 import { CrashNotice } from './components/layout/CrashNotice'
+import { RecoveryNotice } from './components/layout/RecoveryNotice'
+import { NoticeBar } from './components/layout/NoticeBar'
+import { useAutosave } from './hooks/useAutosave'
 import { LogPanel } from './components/log/LogPanel'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
 import './App.css'
 
+// Store-backed notice bar: save and open failures land here, where a packaged build
+// can actually show them.
+function NoticeHost() {
+  const notice = useStore(s => s.notice)
+  const setNotice = useStore(s => s.setNotice)
+  if (!notice) return null
+  return (
+    <NoticeBar kind="error" onDismiss={() => setNotice(null)}>
+      {notice}
+    </NoticeBar>
+  )
+}
+
 export function App() {
+  useAutosave()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [timelineExpanded, setTimelineExpanded] = useState(false)
   const [logOpen, setLogOpen] = useState(false)
@@ -56,6 +73,8 @@ export function App() {
   return (
     <div className={shellClass}>
       <CrashNotice />
+      <RecoveryNotice />
+      <NoticeHost />
       <Toolbar onOpenSettings={() => setSettingsOpen(true)} />
       <div className="app-main">
         <CueList />

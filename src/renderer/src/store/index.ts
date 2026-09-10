@@ -100,6 +100,13 @@ interface CueListState {
   appendLog: (entries: LogEntryInput[]) => void
   clearLog: () => void
 
+  /** Operator-facing message shown in the notice bar: a failed save or open. */
+  notice: string | null
+  setNotice: (message: string | null) => void
+
+  /** Marks the session as having unsaved changes, e.g. after recovering a snapshot. */
+  markDirty: () => void
+
   // Settings
   updateAudioSettings: (patch: Partial<AudioSettings>) => void
   updateMidiSettings: (patch: Partial<MidiSettings>) => void
@@ -183,6 +190,7 @@ export const useStore = create<CueListState>((set) => ({
   running: new Map(),
   lastRuns: {},
   log: [],
+  notice: null,
   past: [],
   future: [],
 
@@ -376,6 +384,10 @@ export const useStore = create<CueListState>((set) => ({
 
   clearLog: () => set({ log: [] }),
 
+  setNotice: (message) => set({ notice: message }),
+
+  markDirty: () => set({ isDirty: true }),
+
   loadWorkspace: (cues, name, path, audioSettings, midiSettings) => set({
     cues,
     workspaceName: name,
@@ -384,6 +396,7 @@ export const useStore = create<CueListState>((set) => ({
     selectedId: cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null,
     running: new Map(),
     lastRuns: {},
+    notice: null,
     audioSettings: audioSettings ?? { ...defaultAudioSettings },
     midiSettings: midiSettings ?? { ...defaultMidiSettings },
     past: [],

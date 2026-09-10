@@ -1,22 +1,13 @@
 import { useCallback, useEffect } from 'react'
 import { useStore } from '../store'
 import type { Workspace } from '../types/workspace'
+import { buildWorkspace } from '../utils/workspace'
 
-function buildWorkspace(
-  name: string,
-  cues: Workspace['cues'],
-  audioSettings: Workspace['audioSettings'],
-  midiSettings: Workspace['midiSettings'],
-): Workspace {
-  return {
-    version: 1,
-    id: crypto.randomUUID(),
-    name,
-    createdAt: new Date().toISOString(),
-    audioSettings,
-    midiSettings,
-    cues
-  }
+/** Reports a failure the operator has to know about, in the notice bar and the log. */
+function reportFailure(message: string): void {
+  const store = useStore.getState()
+  store.setNotice(message)
+  store.appendLog([{ level: 'error', message }])
 }
 
 // The File menu and the cue list's empty state both open the demo, so the flows read the
@@ -30,11 +21,26 @@ async function guardDirty(): Promise<boolean> {
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
-    const savedPath = await window.winslab.workspace.save(ws, workspacePath)
+    let savedPath: string | null
+    try {
+      savedPath = await window.winslab.workspace.save(ws, workspacePath)
+    } catch (e) {
+      // Closing without a save would lose the show, so the close stops here and says why.
+      reportFailure(`Could not save before closing: ${message(e)}`)
+      return false
+    }
     if (!savedPath) return false     // User cancelled save dialog
     saveSucceeded(savedPath, workspaceName)
+    await window.winslab.workspace.clearRecovery().catch(() => {})
+  } else {
+    // "Don't Save" discards the session, including its recovery snapshot.
+    await window.winslab.workspace.clearRecovery().catch(() => {})
   }
   return true
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function loadIntoStore(workspace: Workspace, path: string | null): void {
@@ -54,12 +60,12 @@ export async function openDemoWorkspace(): Promise<void> {
   try {
     loadIntoStore(await window.winslab.workspace.openDemo(), null)
   } catch (e) {
-    alert(`Could not open the demo workspace: ${e instanceof Error ? e.message : String(e)}`)
+    reportFailure(`Could not open the demo workspace: ${message(e)}`)
   }
 }
 
 export function useWorkspace() {
-  const { workspaceName, workspacePath, isDirty, loadWorkspace, saveSucceeded, setWorkspaceName } = useStore()
+  const { workspaceName, workspacePath, isDirty, loadWorkspace, setWorkspaceName } = useStore()
 
   // Keep window title in sync
   useEffect(() => {
@@ -84,17 +90,24 @@ export function useWorkspace() {
 
   const openWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
-    const result = await window.winslab.workspace.open()
-    if (!result) return
-    loadIntoStore(result.workspace, result.path)
+    try {
+      const result = await window.winslab.workspace.open()
+      if (!result) return
+      loadIntoStore(result.workspace, result.path)
+    } catch (e) {
+      reportFailure(`Could not open the workspace: ${message(e)}`)
+    }
   }, [])
 
   const openRecent = useCallback(async (filePath: string) => {
     if (!await guardDirty()) return
     try {
-      loadIntoStore(await window.winslab.workspace.openPath(filePath), filePath)
-    } catch {
-      alert(`Could not open file: ${filePath}`)
+      // The bridge hands back the file it read alongside the workspace; the store wants
+      // the workspace itself.
+      const opened = await window.winslab.workspace.openPath(filePath)
+      loadIntoStore(opened.workspace, opened.path)
+    } catch (e) {
+      reportFailure(`Could not open ${filePath}: ${message(e)}`)
     }
   }, [])
 
@@ -102,19 +115,32 @@ export function useWorkspace() {
     const { workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded } =
       useStore.getState()
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
-    const savedPath = await window.winslab.workspace.save(ws, workspacePath)
-    if (!savedPath) return false
-    saveSucceeded(savedPath, workspaceName)
-    return true
+    try {
+      const savedPath = await window.winslab.workspace.save(ws, workspacePath)
+      if (!savedPath) return false
+      saveSucceeded(savedPath, workspaceName)
+      // The session is on disk now, so there is nothing left to recover.
+      await window.winslab.workspace.clearRecovery().catch(() => {})
+      return true
+    } catch (e) {
+      reportFailure(`Could not save the workspace: ${message(e)}`)
+      return false
+    }
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
     const { workspaceName, cues, audioSettings, midiSettings, saveSucceeded } = useStore.getState()
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
-    const savedPath = await window.winslab.workspace.saveAs(ws)
-    if (!savedPath) return false
-    saveSucceeded(savedPath, workspaceName)
-    return true
+    try {
+      const savedPath = await window.winslab.workspace.saveAs(ws)
+      if (!savedPath) return false
+      saveSucceeded(savedPath, workspaceName)
+      await window.winslab.workspace.clearRecovery().catch(() => {})
+      return true
+    } catch (e) {
+      reportFailure(`Could not save the workspace: ${message(e)}`)
+      return false
+    }
   }, [])
 
   return { workspaceName, workspacePath, isDirty, newWorkspace, openWorkspace, openRecent, save, saveAs, setWorkspaceName }

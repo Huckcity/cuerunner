@@ -1,7 +1,7 @@
 // jsdom has no Worker, and the host exists to manage one, so the worker is faked here:
 // the test plays the script's side of the protocol. The real worker is exercised end to
 // end by the E2E suite, which runs scripts in the built app.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { HostMessage, WorkerMessage } from './scriptProtocol'
 
@@ -46,7 +46,7 @@ function lastWorker(): FakeWorker {
 }
 
 describe('scriptHost', () => {
-  let onLog: ReturnType<typeof vi.fn>
+  let onLog: Mock
 
   beforeEach(() => {
     FakeWorker.instances = []

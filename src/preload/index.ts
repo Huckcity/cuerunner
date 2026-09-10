@@ -64,6 +64,12 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke('workspace:saveAs', workspace),
     recent: (): Promise<string[]> =>
       ipcRenderer.invoke('workspace:recent'),
+    autosave: (workspace: Workspace, sourcePath: string | null): Promise<void> =>
+      ipcRenderer.invoke('workspace:autosave', workspace, sourcePath),
+    recovery: (): Promise<{ workspace: Workspace; savedAt: number; sourcePath: string | null } | null> =>
+      ipcRenderer.invoke('workspace:recovery'),
+    clearRecovery: (): Promise<void> =>
+      ipcRenderer.invoke('workspace:clearRecovery'),
     setTitle: (title: string): Promise<void> =>
       ipcRenderer.invoke('workspace:setTitle', title),
     confirmClose: (workspaceName: string): Promise<0 | 1 | 2> =>

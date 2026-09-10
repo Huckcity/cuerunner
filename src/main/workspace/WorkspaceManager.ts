@@ -1,8 +1,15 @@
 import { app, dialog, BrowserWindow } from 'electron'
-import { readFile, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { readFile, mkdir, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import { writeFileAtomically } from './recovery'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { Cue } from '../../renderer/src/types/cue'
+
+// Cues come out of a JSON file, so they can still carry fields a previous version
+// wrote and this one no longer knows about. Read and delete those through here.
+function legacyFields(value: object): Record<string, unknown> {
+  return value as unknown as Record<string, unknown>
+}
 
 function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   if (cue.advance === undefined) cue.advance = 'none'
@@ -18,8 +25,8 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
     if (cue.trim === undefined) cue.trim = 1.0
     // Per-cue device and channel-pair routing was never wired to the audio graph.
     for (const output of cue.outputs ?? []) {
-      delete (output as Record<string, unknown>).deviceId
-      delete (output as Record<string, unknown>).channelPair
+      delete legacyFields(output).deviceId
+      delete legacyFields(output).channelPair
     }
   }
   if (cue.type === 'stop' && cue.waitForFade === undefined) cue.waitForFade = false
@@ -36,11 +43,11 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
   // Pass 2: convert legacy childIds → parentId
   // Groups that still have childIds haven't been converted yet
   const needsConversion = cues.filter(
-    c => c.type === 'group' && Array.isArray((c as Record<string, unknown>).childIds)
+    c => c.type === 'group' && Array.isArray(legacyFields(c).childIds)
   )
 
   for (const group of needsConversion) {
-    const childIds: string[] = (group as Record<string, unknown>).childIds as string[]
+    const childIds: string[] = legacyFields(group).childIds as string[]
     // Mark children with this parentId
     for (const cue of cues) {
       if (childIds.includes(cue.id)) cue.parentId = group.id
@@ -58,7 +65,7 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
     const newGroupIdx = cues.findIndex(c => c.id === group.id)
     cues.splice(newGroupIdx + 1, 0, ...children)
     // Remove the now-obsolete childIds field
-    delete (group as Record<string, unknown>).childIds
+    delete legacyFields(group).childIds
   }
 
   workspace.cues = cues
@@ -82,7 +89,9 @@ async function readRecent(): Promise<string[]> {
 }
 
 async function writeRecent(paths: string[]): Promise<void> {
-  await writeFile(recentFilePath(), JSON.stringify(paths), 'utf-8')
+  const filePath = recentFilePath()
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, JSON.stringify(paths), 'utf-8')
 }
 
 async function addToRecent(filePath: string): Promise<void> {
@@ -138,8 +147,13 @@ export async function saveWorkspace(
     filePath = result.filePath
   }
 
-  await writeFile(filePath, JSON.stringify(workspace, null, 2), 'utf-8')
-  await addToRecent(filePath)
+  // Serialise first: a workspace that cannot be turned into JSON must not touch the
+  // file, and the write itself goes through a temporary file plus a rename.
+  const contents = JSON.stringify(workspace, null, 2)
+  await writeFileAtomically(filePath, contents)
+  // The recent list is a convenience. The workspace is on disk at this point, and
+  // reporting a failure here would tell the operator their show was not saved.
+  await addToRecent(filePath).catch(() => {})
   return filePath
 }
 

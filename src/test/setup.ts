@@ -21,7 +21,21 @@ Object.defineProperty(window, 'winslab', {
       startListener: vi.fn(() => Promise.resolve())
     },
     script: {
-      readFile: vi.fn(() => Promise.resolve(''))
+      readFile: vi.fn(() => Promise.resolve('')),
+      shell: vi.fn(() => Promise.resolve({ stdout: '', stderr: '', code: 0, signal: null }))
+    },
+    workspace: {
+      open: vi.fn(() => Promise.resolve(null)),
+      openPath: vi.fn(),
+      openDemo: vi.fn(),
+      save: vi.fn(() => Promise.resolve(null)),
+      saveAs: vi.fn(() => Promise.resolve(null)),
+      recent: vi.fn(() => Promise.resolve([])),
+      autosave: vi.fn(() => Promise.resolve()),
+      recovery: vi.fn(() => Promise.resolve(null)),
+      clearRecovery: vi.fn(() => Promise.resolve()),
+      setTitle: vi.fn(() => Promise.resolve()),
+      confirmClose: vi.fn(() => Promise.resolve(0))
     }
   },
   writable: true

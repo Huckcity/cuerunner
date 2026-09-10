@@ -79,7 +79,7 @@ export function Toolbar({ onOpenSettings }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [save, saveAs, openWorkspace, newWorkspace, onOpenSettings])
 
-  const handleMenuAction = async (action: () => void | Promise<void>) => {
+  const handleMenuAction = async (action: () => unknown): Promise<void> => {
     setFileMenuOpen(false)
     await action()
   }

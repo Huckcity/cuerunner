@@ -815,7 +815,7 @@ describe('AudioPlayer.stop', () => {
     mockGainParam = makeAudioParam()
     stopMock = vi.fn()
     source = { onended: null, stop: stopMock, playbackRate: makeAudioParam() }
-    gain = { gain: mockGainParam }
+    gain = { gain: mockGainParam, value: 0.8 }
 
     // Set the gain.value so that setValueAtTime gets it
     Object.defineProperty(mockGainParam, 'value', { get: () => 0.8, configurable: true })

@@ -3,7 +3,12 @@
 // or timeout.
 import type { HostMessage, ShellOptions, ShellResult, WorkerMessage } from './scriptProtocol'
 
-const scope = self as unknown as DedicatedWorkerGlobalScope
+// The renderer project is typed against the DOM lib, which has no worker global scope.
+// This is the whole of the worker's own runtime surface.
+const scope = self as unknown as {
+  postMessage(message: WorkerMessage): void
+  onmessage: ((event: MessageEvent<HostMessage>) => void) | null
+}
 
 let nextId = 1
 const callbacks = new Map<number, (reply: HostMessage) => void>()

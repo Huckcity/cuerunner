@@ -13,7 +13,7 @@ export function SettingsDialog({ onClose }: Props) {
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
   const [midiPorts, setMidiPorts] = useState<string[]>([])
   // Context values are fixed for the life of the AudioContext, so read them once on mount.
-  const [contextInfo, setContextInfo] = useState(() => audioPlayer.getContextInfo())
+  const [contextInfo] = useState(() => audioPlayer.getContextInfo())
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(devices => {

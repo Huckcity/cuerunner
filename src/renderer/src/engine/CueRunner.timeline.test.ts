@@ -40,7 +40,7 @@ function makeAudio(id: string, parentId: string, overrides: Partial<AudioCue> = 
     filePath: '/test.wav', startTime: 0, endTime: null,
     fadeInDuration: 0,
     outputs: [{ volume: 1, pan: 0 }],
-    loopCount: 0,
+    loopCount: 0, playbackRate: 1, trim: 1,
     ...overrides
   }
 }
@@ -57,7 +57,8 @@ function setup(cues: Cue[]) {
     syncCueDuration: vi.fn(),
     setLastRun: vi.fn(),
     appendLog: vi.fn(),
-    getMidiDefaultPort: () => ''
+    getWorkspacePath: () => null,
+    getMidiDefaultPort: () => 'default-midi-port'
   })
   return { runner, setRunning }
 }

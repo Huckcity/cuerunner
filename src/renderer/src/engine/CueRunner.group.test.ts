@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
 import { CueRunner } from './CueRunner'
 import type { Cue, WaitCue, GroupCue } from '../types/cue'
-import type { RunningCue } from '../store'
 
 vi.mock('./AudioPlayer', () => ({
   audioPlayer: { play: vi.fn(), stop: vi.fn(), stopAll: vi.fn(), setVolume: vi.fn() }
@@ -40,7 +39,9 @@ function setup(cues: Cue[]) {
     clearAllRunning: vi.fn(),
     syncCueDuration: vi.fn(),
     setLastRun: vi.fn(),
-    appendLog: vi.fn()
+    appendLog: vi.fn(),
+    getWorkspacePath: () => null,
+    getMidiDefaultPort: () => 'default-midi-port'
   })
   return { runner, setRunning, setSelected }
 }
@@ -245,6 +246,8 @@ describe('CueRunner — selection skips group children', () => {
       syncCueDuration: vi.fn(),
       setLastRun: vi.fn(),
       appendLog: vi.fn(),
+      getWorkspacePath: () => null,
+      getMidiDefaultPort: () => 'default-midi-port'
     })
 
     runner.go()

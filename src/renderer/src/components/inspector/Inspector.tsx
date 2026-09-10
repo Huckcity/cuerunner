@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useSelectedCue, useStore } from '../../store'
+import { useSelectedCue } from '../../store'
 import { BasicTab } from './BasicTab'
 import { AudioInspector } from './AudioInspector'
 import { MidiInspector } from './MidiInspector'

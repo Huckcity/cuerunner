@@ -44,7 +44,7 @@ test('recovers from a renderer crash with an explanation', async () => {
     { timeout: 30_000 }
   ).toBe(true)
 
-  const banner = await readRecovered("document.querySelector('.crash-notice')?.textContent ?? null")
+  const banner = await readRecovered("document.querySelector('[data-kind=\"crash\"]')?.textContent ?? null")
   expect(banner).toContain('The interface stopped unexpectedly')
   expect(banner).toContain('Anything unsaved is gone')
   expect(banner).toContain('killed')
