@@ -12,7 +12,7 @@ Built with Electron, React, TypeScript, and Zustand. Licensed under [MIT](./LICE
 - **OSC Integration**: Send Open Sound Control messages for networked control
 - **Show Sequencing**: Group cues, set auto-advance, pre/post-wait delays, and arm/disarm
 - **Workspace Management**: Save/load `.wlab` JSON workspaces with full undo/redo
-- **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds
+- **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds, plus an experimental Linux AppImage
 - **Timeline Mode**: Visual timeline-based show layout (alternative to list view)
 
 ## Getting Started
@@ -21,7 +21,7 @@ Built with Electron, React, TypeScript, and Zustand. Licensed under [MIT](./LICE
 
 - Node.js 20+ (Node 24 also supported)
 - npm or yarn
-- macOS 10.15+ or Windows 10+ (for building)
+- macOS 10.15+, Windows 10+, or Linux (for building)
 
 ### Installation
 
@@ -30,14 +30,14 @@ Built with Electron, React, TypeScript, and Zustand. Licensed under [MIT](./LICE
 git clone https://github.com/Huckcity/winslab.git
 cd winslab
 
-# Install dependencies
-npm install --legacy-peer-deps
+# Install dependencies (add --legacy-peer-deps if npm reports ERESOLVE)
+npm install
 
 # Start dev server with hot reload
 npm run dev
 ```
 
-> **npm 11.16+ / v12**: Install scripts (native compilation for `midi`, Electron binary download, `esbuild` binary) require explicit approval. This project ships an `allowScripts` allowlist in `package.json` that pre-approves these packages. If you see "install scripts blocked" warnings (e.g. `Error: Electron uninstall` when launching), run `npm approve-scripts --all` to regenerate the allowlist from your current dependency tree, then `npm install` again.
+> **npm 11.16+ / v12**: Install scripts (native compilation for `midi`, Electron binary download, `esbuild` binary) require explicit approval. This project ships an `allowScripts` allowlist in `package.json` that pre-approves these packages. If you see "install scripts blocked" warnings or `Error: Electron uninstall` when launching, the new `check-electron.js` postinstall step will detect the missing binary, attempt automatic repair, and print manual recovery steps if needed.
 
 ### Development Commands
 
@@ -54,6 +54,62 @@ npm run preview           # Preview built app without packaging
 npm run dist              # Build and package for all platforms
 npm run dist:win          # Build and package for Windows only
 npm run dist:mac          # Build and package for macOS only
+npm run dist:linux        # Build and package for Linux only (AppImage)
+```
+
+## Linux
+
+WinsLab ships an **experimental Linux AppImage**. Audio, OSC, network, and script cues work
+normally. MIDI cues are **unavailable** on Linux unless you install ALSA development headers
+(`libasound2-dev`) before installing dependencies — the native `midi` module needs them at
+build time.
+
+### Build from source
+
+```bash
+# Install ALSA headers (for MIDI support — optional otherwise)
+sudo apt-get install -y libasound2-dev
+
+# Clone and install
+git clone https://github.com/Huckcity/winslab.git
+cd winslab
+npm install --legacy-peer-deps
+
+# Run in development
+npm run dev
+
+# Package an AppImage into dist/
+npm run dist:linux
+```
+
+The AppImage is written to `dist/WinsLab-<version>.AppImage`. If your distro has no FUSE,
+extract and run it instead:
+
+```bash
+./dist/WinsLab-*.AppImage --appimage-extract-and-run
+```
+
+### Troubleshooting `Error: Electron uninstall`
+
+`electron-vite` throws this when the Electron binary is missing from
+`node_modules/electron/dist` — usually because the Electron postinstall script didn't run
+or its binary download failed (network error, corporate proxy, npm cache issue).
+
+The project's postinstall step now runs a check that prints recovery steps if this happens.
+In short:
+
+```bash
+# 1. Verify electron is actually installed
+npx electron --version
+
+# 2. If not, force a re-download of the binary
+rm -rf node_modules/electron/dist
+node node_modules/electron/install.js
+
+# 3. Last resort — clean reinstall
+npm cache clean --force
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
 ```
 
 ## Architecture

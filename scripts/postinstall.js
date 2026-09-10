@@ -24,3 +24,6 @@ if (!src.includes(before)) {
 
 fs.writeFileSync(target, src.replace(before, after))
 console.log('postinstall: patched @electron/rebuild node-gyp.js ✓')
+
+// Verify the Electron binary is present (catches silent install failures).
+require('./check-electron.js')

@@ -95,8 +95,35 @@ jobs:
           path: dist/*.dmg
           retention-days: 30
 
+  build-linux:
+    needs: [ test, test-e2e ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get install -y libasound2-dev
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build and package
+        run: npm run dist:linux
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinsLab-linux
+          path: dist/*.AppImage
+          retention-days: 30
+
   release:
-    needs: [ build-windows, build-mac ]
+    needs: [ build-windows, build-mac, build-linux ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -128,7 +155,10 @@ jobs:
         run: |
           EXE=$(find artifacts -name "*.exe" | head -1)
           DMG=$(find artifacts -name "*.dmg" | head -1)
+          APPI=$(find artifacts -name "*.AppImage" | head -1)
           aws s3 cp "$EXE" "s3://$R2_BUCKET/versions/$TAG/WinsLab-Setup.exe" --endpoint-url "$R2_ENDPOINT"
           aws s3 cp "$DMG" "s3://$R2_BUCKET/versions/$TAG/WinsLab.dmg"       --endpoint-url "$R2_ENDPOINT"
+          aws s3 cp "$APPI" "s3://$R2_BUCKET/versions/$TAG/WinsLab.AppImage"  --endpoint-url "$R2_ENDPOINT"
           aws s3 cp "$EXE" "s3://$R2_BUCKET/latest/WinsLab-Setup.exe"        --endpoint-url "$R2_ENDPOINT"
           aws s3 cp "$DMG" "s3://$R2_BUCKET/latest/WinsLab.dmg"              --endpoint-url "$R2_ENDPOINT"
+          aws s3 cp "$APPI" "s3://$R2_BUCKET/latest/WinsLab.AppImage"        --endpoint-url "$R2_ENDPOINT"

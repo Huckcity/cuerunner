@@ -16,6 +16,7 @@
     "dist": "electron-vite build && electron-builder",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:linux": "electron-vite build && electron-builder --linux",
     "postinstall": "node scripts/postinstall.js"
   },
   "build": {
@@ -60,10 +61,21 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "AudioVideo",
+      "icon": "resources/logos/png/winslab-icon-512.png"
+    },
     "publish": null
   },
   "allowScripts": {
     "electron": true,
+    "electron-winstaller": true,
     "esbuild": true,
     "midi": true
   },
