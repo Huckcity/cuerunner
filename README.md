@@ -44,6 +44,15 @@ npm run dev
 
 > **npm 11.16+ / v12**: Install scripts (native compilation for `midi`, Electron binary download, `esbuild` binary) require explicit approval. This project ships an `allowScripts` allowlist in `package.json` that pre-approves these packages. If you see "install scripts blocked" warnings or `Error: Electron uninstall` when launching, the project's postinstall step patches the known Node 26 zip-extraction bug, detects a missing Electron binary, repairs it automatically, and prints manual recovery steps if that fails.
 
+### Try the demo workspace
+
+Every build ships a demo show — `resources/demo/Demo Show.wlab` — with one of each cue type
+covered: a sequence group, a timeline group, audio with fades, MIDI, OSC, a network request, a
+script, and a stop cue. Open it from **WinsLab ▾ → Open Demo Workspace**, or from the button in
+an empty cue list. It opens as an unsaved example (so Save asks where to put your copy, and
+never writes over the bundled file) and its audio is copied into the app's user data folder on
+open, which is where its cues read it from.
+
 ### Development Commands
 
 ```bash
@@ -64,9 +73,9 @@ npm run screenshots       # Regenerate website/assets/guide images (requires bui
 npm run site              # Serve website/ locally on http://localhost:8080
 ```
 
-`npm run screenshots` launches the built app, opens a demo show from a temporary file,
-drives the UI, and rewrites every image used by the user guide. Run it after any UI change so
-the guide cannot drift from the product.
+`npm run screenshots` launches the built app, opens the demo workspace that ships with it, and
+rewrites every image used by the user guide. Run it after any UI change so the guide cannot
+drift from the product — and after a demo change, so the guide shows the demo users get.
 
 `npm run site` serves `website/` with no dependencies, so a page can be reviewed locally
 before it deploys. Pass a port to override the default: `npm run site -- 3000`. The
@@ -263,7 +272,7 @@ winslab/
 │           └── index.css
 ├── e2e/                             # Playwright E2E tests
 ├── src/test/                        # Vitest setup & mocks
-├── resources/                       # App icons, installer assets
+├── resources/                       # App icons, installer assets, the demo workspace
 ├── .github/workflows/               # CI/CD (typecheck, tests, build)
 ├── package.json
 ├── tsconfig.json

@@ -3,13 +3,13 @@
 //
 //   npm run build && npm run screenshots
 //
-// Launches the built app, opens a demo show from a temp file, drives the UI, and
-// writes PNGs into website/assets/guide/. Images are captured from the real app so
-// the guide cannot drift from the product; re-run after any UI change.
+// Launches the built app, opens the demo workspace that ships with it, drives the UI,
+// and writes PNGs into website/assets/guide/. Images are captured from the real app
+// showing the real demo, so neither the guide nor the demo can drift from the product;
+// re-run after any UI change.
 import { _electron as electron } from '@playwright/test'
 import fs from 'node:fs'
 import http from 'node:http'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -23,43 +23,10 @@ if (!fs.existsSync(appEntry)) {
 }
 fs.mkdirSync(outDir, { recursive: true })
 
-const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-shots-'))
+/* ── Network cue target ──────────────────────────────────────────────────── */
 
-/* ── Audio for the demo show ─────────────────────────────────────────────── */
-
-// A decaying two-tone blip, so the waveform panel has something to draw.
-function writeWav(file) {
-  const rate = 44100
-  const seconds = 4
-  const total = rate * seconds
-  const pcm = Buffer.alloc(total * 2)
-  for (let i = 0; i < total; i++) {
-    const t = i / rate
-    const env = Math.min(1, t * 5) * Math.exp(-t * 0.8)
-    const v = Math.sin(2 * Math.PI * 220 * t) * 0.6 + Math.sin(2 * Math.PI * 440 * t) * 0.25
-    pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v * env)) * 32767), i * 2)
-  }
-  const header = Buffer.alloc(44)
-  header.write('RIFF', 0)
-  header.writeUInt32LE(36 + pcm.length, 4)
-  header.write('WAVE', 8)
-  header.write('fmt ', 12)
-  header.writeUInt32LE(16, 16)
-  header.writeUInt16LE(1, 20)   // PCM
-  header.writeUInt16LE(1, 22)   // mono
-  header.writeUInt32LE(rate, 24)
-  header.writeUInt32LE(rate * 2, 28)
-  header.writeUInt16LE(2, 32)
-  header.writeUInt16LE(16, 34)
-  header.write('data', 36)
-  header.writeUInt32LE(pcm.length, 40)
-  fs.writeFileSync(file, Buffer.concat([header, pcm]))
-}
-
-/* ── Demo show ───────────────────────────────────────────────────────────── */
-
-// Network cue target: a local server that answers CORS requests, so the guide can
-// show a real 200 response rather than a failure.
+// The demo's network cue posts to this address, so the guide can show a real 200
+// response rather than a failure. 8080 is the port the bundled cue names.
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
@@ -75,106 +42,10 @@ const server = http.createServer((req, res) => {
     res.end('{"ok":true}')
   })
 })
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-const port = server.address().port
-
-const wav = path.join(workDir, 'walk-in.wav')
-writeWav(wav)
-
-const id = () => crypto.randomUUID()
-const base = (number, name, extra) => ({
-  id: id(),
-  number,
-  name,
-  colorLabel: 'none',
-  parentId: null,
-  preWait: 0,
-  postWait: 0,
-  timelineOffset: 0,
-  duration: 0,
-  advance: 'none',
-  isArmed: true,
-  notes: '',
-  ...extra
+await new Promise((resolve, reject) => {
+  server.once('error', reject)
+  server.listen(8080, '127.0.0.1', resolve)
 })
-
-const walkIn = id()
-const groupAct = id()
-const timelineGroup = id()
-
-const cues = [
-  base('1', 'Walk-in Music', {
-    id: walkIn, type: 'audio', colorLabel: 'blue', duration: 4200, advance: 'none',
-    filePath: wav, startTime: 0, endTime: null, fadeInDuration: 800, fadeOutDuration: 1500,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 0.8, pan: 0 }],
-    loopCount: 0, playbackRate: 1, trim: 1,
-    notes: 'Holds under the pre-show loop.'
-  }),
-  base('2', 'Act 1', { id: groupAct, type: 'group', mode: 'sequence', colorLabel: 'orange' }),
-  base('3', 'Count 8', {
-    type: 'wait', parentId: groupAct, duration: 8000, preWait: 500,
-    advance: 'on-end', notes: 'Stage manager calls this.'
-  }),
-  base('4', 'Strings Patch', {
-    type: 'midi', parentId: groupAct,
-    portName: 'IAC Driver Bus 1',
-    messages: [{ kind: 'programChange', channel: 1, program: 12 }]
-  }),
-  base('5', 'LX Cue 12', {
-    type: 'osc', parentId: groupAct, host: '127.0.0.1', port: 53000, address: '/lx/12',
-    args: [{ type: 'i', value: 12 }, { type: 'f', value: 3.5 }]
-  }),
-  base('6', 'Trigger Video', {
-    type: 'network', parentId: groupAct, method: 'POST',
-    url: `http://127.0.0.1:${port}/scene`,
-    body: '{"scene": 3}',
-    headers: { 'Content-Type': 'application/json', 'X-Show': 'demo' },
-    timeout: 5000
-  }),
-  base('7', 'Scene Change', {
-    type: 'audio', parentId: groupAct, duration: 4200,
-    filePath: wav, startTime: 0, endTime: null, fadeInDuration: 300, fadeOutDuration: 0,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 0.6, pan: -0.3 }],
-    loopCount: 0, playbackRate: 1, trim: 1
-  }),
-  base('8', 'Fade Walk-in', {
-    type: 'fade', targetCueId: walkIn, fadeProperty: 'volume', targetValue: 0,
-    curve: 'sCurve', duration: 5000, stopTargetWhenDone: true
-  }),
-  base('9', 'House Lights', {
-    type: 'script', language: 'javascript',
-    script: "console.log('house lights → warm')\nconst r = await shell('echo dimmer 80%')\nconsole.log(r.stdout.trim())"
-  }),
-  base('10', 'Interval', { type: 'wait', duration: 15000, advance: 'on-end' }),
-  base('11', 'Walk-out', { id: timelineGroup, type: 'group', mode: 'timeline', colorLabel: 'purple' }),
-  base('12', 'Walk-out Bed', {
-    type: 'audio', parentId: timelineGroup, timelineOffset: 0, duration: 4200,
-    filePath: wav, startTime: 0, endTime: null, fadeInDuration: 500, fadeOutDuration: 1000,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 0.7, pan: 0 }],
-    loopCount: 0, playbackRate: 1, trim: 1
-  }),
-  base('13', 'Hold', { type: 'wait', parentId: timelineGroup, timelineOffset: 5000, duration: 6000 }),
-  base('14', 'Walk-out Outro', {
-    type: 'audio', parentId: timelineGroup, timelineOffset: 13000, duration: 4200,
-    filePath: wav, startTime: 0, endTime: null, fadeInDuration: 200, fadeOutDuration: 2000,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 0.7, pan: 0 }],
-    loopCount: 0, playbackRate: 1, trim: 1
-  }),
-  base('15', 'End of Show', {
-    type: 'stop', colorLabel: 'red', targetCueId: 'all', fadeOut: true, fadeOutDuration: 2000
-  })
-]
-
-const workspacePath = path.join(workDir, 'Demo Show.wlab')
-fs.writeFileSync(workspacePath, JSON.stringify({
-  version: 1,
-  id: id(),
-  name: 'Demo Show',
-  createdAt: new Date().toISOString(),
-  audioSettings: { outputDeviceId: 'default', sampleRate: 48000, bufferSize: 256 },
-  midiSettings: { outputPortName: '', inputPortName: '' },
-  cues
-}, null, 2))
 
 /* ── Capture ─────────────────────────────────────────────────────────────── */
 
@@ -182,12 +53,9 @@ const app = await electron.launch({ args: [appEntry] })
 const page = await app.firstWindow()
 await page.waitForLoadState('domcontentloaded')
 
-// Point the File > Recent list at the demo show, then open it the way a user would.
-const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
-fs.writeFileSync(path.join(userData, 'recent.json'), JSON.stringify([workspacePath]), 'utf-8')
-
+// Open the demo workspace that ships with the app, the way a user would.
 await page.locator('.toolbar-brand').click()
-await page.locator('.file-menu-recent', { hasText: 'Demo Show' }).click()
+await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
 await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor()
 
 const shot = async (file, selector) => {
@@ -266,5 +134,4 @@ await page.locator('.cue-context-menu').waitFor()
 await shot('10-context-menu.png', '.cue-context-menu')
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
-fs.rmSync(workDir, { recursive: true, force: true })
 console.log('Done.')
