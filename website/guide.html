@@ -297,11 +297,11 @@
           </article>
           <article class="card state-stop">
             <h3>STOP</h3>
-            <p>Cancels every timer, stops all audio, clears all running state. <kbd>Escape</kbd></p>
+            <p>Cancels every timer, stops all audio, clears all running state, and abandons work that is still in flight — a request or script that finishes afterwards cannot restart the show. <kbd>Escape</kbd></p>
           </article>
           <article class="card state-panic">
             <h3>PANIC</h3>
-            <p>Stops everything immediately, with a 200&nbsp;ms audio fade to avoid a click. <kbd>Shift</kbd> + <kbd>Escape</kbd></p>
+            <p>The same, with a 200&nbsp;ms audio fade instead of a cut so it does not click, and it stops a running script. <kbd>Shift</kbd> + <kbd>Escape</kbd></p>
           </article>
         </div>
         <p style="margin-top: 12px">
@@ -578,10 +578,17 @@
       <section id="script" class="panel reveal delay-4">
         <h2>Script cues</h2>
         <p>
-          A script cue runs JavaScript at a cue point. The script is an async function body, so
+          A script cue runs JavaScript at a cue point, on a worker thread of its own — a script
+          that never yields cannot freeze the interface. The script is an async function body, so
           <code>await</code> works and the cue holds the show until the script finishes. A script
           that throws is reported in the log and the cue still completes, so one bad script cannot
           stall a show.
+        </p>
+        <p>
+          The <strong>Timeout</strong> field is the longest the script may run, 60000 ms by
+          default. A script that is still running when it elapses is stopped and reported as a
+          failure; set it to 0 to let a script run for as long as it needs. STOP and PANIC also
+          stop a running script.
         </p>
         <figure class="figure shot-narrow">
           <a href="./assets/guide/06-inspector-script.png" target="_blank" rel="noreferrer">
@@ -616,8 +623,9 @@
 const r = await shell('dimmerctl set 80')
 console.log(r.stdout.trim())</code></pre>
         <div class="note warn">
-          <strong>Script cues are not sandboxed.</strong> They run inside the app with the same
-          access as the application itself. A workspace file is executable code, so only open
+          <strong>Script cues are not sandboxed.</strong> They run in the app, with the same file
+          and process access as the application itself, and the helpers above are their only way
+          to reach it. A workspace file is executable code, so only open
           <code>.wlab</code> files you trust.
         </div>
       </section>
@@ -723,6 +731,23 @@ console.log(r.stdout.trim())</code></pre>
       <section id="troubleshooting" class="panel reveal delay-4">
         <h2>Troubleshooting</h2>
         <div class="faq-list">
+          <article class="card">
+            <h3>A banner says the interface stopped unexpectedly</h3>
+            <p>
+              The window's process died and WinsLab restarted it, which resets the show: the cue
+              list comes back empty and anything unsaved is gone. The <code>.wlab</code> file on
+              disk is untouched, so open it again from <strong>WinsLab ▾ → Open Recent</strong>.
+              Save before a show rather than during one — there is no autosave yet.
+            </p>
+          </article>
+          <article class="card">
+            <h3>A script cue never finishes</h3>
+            <p>
+              It is still running, and the show is waiting for it. Give the cue a shorter Timeout
+              on the Script tab, or press STOP — both stop the script and release the show. A
+              script cannot freeze the app while it runs, so the interface stays usable either way.
+            </p>
+          </article>
           <article class="card">
             <h3>A network cue fails with "Failed to fetch"</h3>
             <p>

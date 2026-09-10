@@ -208,14 +208,19 @@ not the script prints it — this is the only place to read script output in a p
 build, which has no DevTools. The log is a bounded session history (the last 500 entries)
 and is not saved.
 
-**Script cues** run JavaScript in the app window. `await` works, and the cue waits for the
-script to finish. Two helpers are in scope:
+**Script cues** run JavaScript on a worker thread of their own, so a script that never
+yields cannot freeze the interface: the timeout (a cue field, 60000 ms by default, 0 for
+none) stops it and records a failure, and STOP or PANIC stops it early. `await` works, and
+the cue waits for the script to finish. Two helpers are in scope:
 
 - `shell(command, { timeout, cwd, env })` — runs a system command and resolves
   `{ stdout, stderr, code, signal }`. Commands start in the workspace folder and time out
   after 10 s by default.
 - `include('path/to/file.js')` — runs another JavaScript file, resolved relative to the
   workspace file, with the same helpers available.
+
+The script has no access to the interface (no `document`, no `window`); the helpers above
+are the whole surface.
 
 Script cues are not sandboxed — a workspace file is executable code, so only open `.wlab`
 files you trust.
@@ -228,7 +233,8 @@ files you trust.
 2. **Groups**: Can run children sequentially or randomly
 3. **Auto-advance**: Fires next cue either immediately after pre-wait ("on-start") or after completion ("on-end")
 4. **Timers**: Tracked with keys like `"cueId"`, `"cueId:pre"`, `"cueId:post"` for cancellation
-5. **Panic**: 200ms audio fadeout + hard stop all
+5. **STOP / PANIC**: Both abandon in-flight work (a network request or script that settles
+   afterwards cannot resume the show). STOP cuts the audio; PANIC fades it out over 200 ms
 
 ### Audio Engine
 
