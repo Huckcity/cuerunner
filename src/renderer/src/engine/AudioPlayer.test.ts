@@ -87,6 +87,16 @@ function makeAudioCue(overrides: Partial<AudioCue> = {}): AudioCue {
   }
 }
 
+/** The decoded-buffer cache is private; the tests assert its bounds through here. */
+function cachedBuffers(): Map<string, AudioBuffer> {
+  const fields = audioPlayer as unknown as Record<string, unknown>
+  const cache = fields.cache
+  if (!(cache instanceof Map)) {
+    throw new Error('AudioPlayer.cache is not reachable — this test needs updating')
+  }
+  return cache as Map<string, AudioBuffer>
+}
+
 describe('AudioPlayer.setVolume', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -399,18 +409,48 @@ describe('AudioPlayer.load', () => {
     expect(buf2).toBe(buf1)
   })
 
-  it('evicts oldest cache entry when cache exceeds 100 entries', async () => {
-    for (let i = 0; i < 101; i++) {
-      ;(audioPlayer as any).cache.set(`/file${i}.mp3`, { duration: 1 } as any)
-    }
-    expect((audioPlayer as any).cache.size).toBe(101)
+  it('bounds the cache by total decoded bytes, not only by file count', async () => {
+    cachedBuffers().clear()
+    // 5 minutes of stereo at 48 kHz: 115 MB of float samples per file.
+    vi.mocked(mockCtx.decodeAudioData).mockResolvedValue({ duration: 300, length: 48_000 * 300, numberOfChannels: 2 })
+
+    for (let i = 0; i < 10; i++) await audioPlayer.load(`/song${i}.wav`)
+
+    const cache = cachedBuffers()
+    // Ten of those is 1.15 GB of samples, over the 1 GiB budget: the oldest went first,
+    // and eviction stopped as soon as the total was back under it.
+    expect(cache.size).toBe(9)
+    expect(cache.has('/song0.wav')).toBe(false)
+    expect(cache.has('/song9.wav')).toBe(true)
+  })
+
+  it('keeps the only buffer even when it exceeds the budget, and gives it up for the next', async () => {
+    cachedBuffers().clear()
+    // An hour of stereo is 1.4 GB: more than the whole budget on its own.
+    vi.mocked(mockCtx.decodeAudioData).mockResolvedValueOnce({ duration: 3600, length: 48_000 * 3600, numberOfChannels: 2 })
+    await audioPlayer.load('/long-show.wav')
+    expect(cachedBuffers().size).toBe(1)
+
+    vi.mocked(mockCtx.decodeAudioData).mockResolvedValueOnce({ duration: 60, length: 48_000 * 60, numberOfChannels: 2 })
+    await audioPlayer.load('/sting.wav')
+
+    const cache = cachedBuffers()
+    expect(cache.has('/sting.wav')).toBe(true)
+    expect(cache.has('/long-show.wav')).toBe(false)
+  })
+
+  it('keeps the cache bounded when a show opens many files', async () => {
+    const dummy = { duration: 1 } as unknown as AudioBuffer
+    for (let i = 0; i < 101; i++) cachedBuffers().set(`/file${i}.mp3`, dummy)
 
     await audioPlayer.load('/new.mp3')
 
-    expect((audioPlayer as any).cache.size).toBe(101) // evict + add
-    expect((audioPlayer as any).cache.has('/new.mp3')).toBe(true)
-    // The first key (file0.mp3) should have been evicted
-    expect((audioPlayer as any).cache.has('/file0.mp3')).toBe(false)
+    const cache = cachedBuffers()
+    expect(cache.size).toBeLessThanOrEqual(100)
+    expect(cache.has('/new.mp3')).toBe(true)
+    // Oldest evicted first, newest kept.
+    expect(cache.has('/file0.mp3')).toBe(false)
+    expect(cache.has('/file100.mp3')).toBe(true)
   })
 })
 

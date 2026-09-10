@@ -1,98 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useStore, useSelectedCue } from '../../store'
 import { audioPlayer } from '../../engine/AudioPlayer'
+import { DPR, drawWaveform, getPeaks, type WaveformPeaks } from '../../utils/waveform'
 import type { AudioCue } from '../../types/cue'
 import './WaveformPanel.css'
-
-const WAVEFORM_COLOR = '#2a6099'
-const WAVEFORM_COLOR_PLAYED = '#4a9eff'
-const PLAYHEAD_COLOR = '#ffffff'
-const BG_COLOR = '#111'
-const DPR = window.devicePixelRatio || 1
-
-function drawWaveform(
-  canvas: HTMLCanvasElement,
-  buffer: AudioBuffer,
-  playFraction: number,
-  startFraction: number
-) {
-  const width = canvas.width
-  const height = canvas.height
-  const ctx = canvas.getContext('2d')!
-
-  ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = BG_COLOR
-  ctx.fillRect(0, 0, width, height)
-
-  // Center line
-  ctx.strokeStyle = '#1e1e1e'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(0, height / 2)
-  ctx.lineTo(width, height / 2)
-  ctx.stroke()
-
-  // Merge channels (up to stereo) for min/max per column
-  const channels = Math.min(buffer.numberOfChannels, 2)
-  const totalSamples = buffer.length
-  const samplesPerPixel = totalSamples / width
-
-  const playedX = Math.floor(playFraction * width)
-  const startX = Math.floor(startFraction * width)
-
-  for (let x = 0; x < width; x++) {
-    const sampleStart = Math.floor(x * samplesPerPixel)
-    const sampleEnd = Math.min(Math.floor((x + 1) * samplesPerPixel), totalSamples)
-
-    let min = 0, max = 0
-    for (let ch = 0; ch < channels; ch++) {
-      const data = buffer.getChannelData(ch)
-      for (let s = sampleStart; s < sampleEnd; s++) {
-        const v = data[s]
-        if (v < min) min = v
-        if (v > max) max = v
-      }
-    }
-
-    const yMid = height / 2
-    const yMax = yMid - max * yMid
-    const yMin = yMid - min * yMid
-    const barHeight = Math.max(1, yMin - yMax)
-
-    ctx.fillStyle = x <= playedX ? WAVEFORM_COLOR_PLAYED : WAVEFORM_COLOR
-    ctx.fillRect(x, yMax, 1, barHeight)
-  }
-
-  // Start time marker
-  if (startFraction > 0) {
-    ctx.strokeStyle = '#e0a020'
-    ctx.lineWidth = 1 * DPR
-    ctx.setLineDash([4, 4])
-    ctx.beginPath()
-    ctx.moveTo(startX, 0)
-    ctx.lineTo(startX, height)
-    ctx.stroke()
-    ctx.setLineDash([])
-  }
-
-  // Playhead
-  if (playFraction > 0 && playFraction < 1) {
-    ctx.strokeStyle = PLAYHEAD_COLOR
-    ctx.lineWidth = 1.5 * DPR
-    ctx.beginPath()
-    ctx.moveTo(playedX, 0)
-    ctx.lineTo(playedX, height)
-    ctx.stroke()
-
-    // Playhead handle triangle
-    ctx.fillStyle = PLAYHEAD_COLOR
-    ctx.beginPath()
-    ctx.moveTo(playedX - 5, 0)
-    ctx.lineTo(playedX + 5, 0)
-    ctx.lineTo(playedX, 8)
-    ctx.fill()
-  }
-}
 
 function formatTime(ms: number): string {
   const s = ms / 1000
@@ -113,6 +24,9 @@ export function WaveformPanel() {
   const bufferRef = useRef<AudioBuffer | null>(null)
 
   const [buffer, setBuffer] = useState<AudioBuffer | null>(null)
+  // Min/max per bucket, built once per file: the playhead redraw must not depend on how
+  // long the file is.
+  const [peaks, setPeaks] = useState<WaveformPeaks | null>(null)
   const [loading, setLoading] = useState(false)
   const [playFraction, setPlayFraction] = useState(0)
   const [hoverFraction, setHoverFraction] = useState<number | null>(null)
@@ -123,16 +37,28 @@ export function WaveformPanel() {
 
   // Load buffer when selected audio cue or its file changes
   useEffect(() => {
-    if (!audioCue?.filePath) { setBuffer(null); return }
+    if (!audioCue?.filePath) { setBuffer(null); setPeaks(null); return }
 
     const cached = audioPlayer.getBuffer(audioCue.filePath)
-    if (cached) { setBuffer(cached); bufferRef.current = cached; return }
+    if (cached) {
+      setBuffer(cached)
+      bufferRef.current = cached
+      setPeaks(getPeaks(audioCue.filePath, cached))
+      return
+    }
 
     setLoading(true)
     audioPlayer.load(audioCue.filePath).then(buf => {
       setBuffer(buf)
       bufferRef.current = buf
+      setPeaks(getPeaks(audioCue.filePath, buf))
       syncCueDuration(audioCue.id, Math.round(buf.duration * 1000))
+    }).catch(() => {
+      // A file that cannot be read or decoded leaves the panel empty rather than
+      // showing the previous cue's waveform against this cue's timing.
+      setBuffer(null)
+      bufferRef.current = null
+      setPeaks(null)
     }).finally(() => setLoading(false))
   }, [audioCue?.filePath, audioCue?.id, syncCueDuration])
 
@@ -155,10 +81,10 @@ export function WaveformPanel() {
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     const buf = bufferRef.current
-    if (!canvas || !buf) return
+    if (!canvas || !buf || !peaks) return
     const startFrac = audioCue ? audioCue.startTime / 1000 / buf.duration : 0
-    drawWaveform(canvas, buf, playFraction, startFrac)
-  }, [buffer, playFraction, audioCue?.startTime])
+    drawWaveform(canvas, peaks, playFraction, startFrac)
+  }, [buffer, peaks, playFraction, audioCue?.startTime])
 
   useEffect(draw, [draw])
 

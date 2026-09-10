@@ -9,6 +9,18 @@ export interface AudioProgress {
 
 const CURVE_POINTS = 64
 
+// Decoded buffers are held for reuse until this much audio has accumulated (1 GiB), or
+// until this many files have been decoded, whichever comes first.
+const MAX_CACHE_BYTES = 1024 * 1024 * 1024
+const MAX_CACHED_FILES = 100
+
+/** Float32 samples: 4 bytes each, per channel. */
+function decodedBytes(buffer: AudioBuffer): number {
+  const samples = typeof buffer.length === 'number' ? buffer.length : 0
+  const channels = typeof buffer.numberOfChannels === 'number' ? buffer.numberOfChannels : 0
+  return samples * channels * 4
+}
+
 // A fade's 0→1 progression. `linear` is the identity; `sCurve` is a smoothstep
 // (slow at both ends, fastest in the middle); `logarithmic` is the constant-dB
 // style `(1 - e^-4t) / (1 - e^-4)`, which moves most of the way early and then
@@ -63,16 +75,31 @@ class AudioPlayer {
     if (this.cache.has(filePath)) return this.cache.get(filePath)!
     const buffer = await window.winslab.audio.readFile(filePath)
     const decoded = await this.getCtx().decodeAudioData(buffer)
-    if (this.cache.size > 100) {
-      const first = this.cache.keys().next().value
-      if (first) this.cache.delete(first)
-    }
     this.cache.set(filePath, decoded)
+    this.evictDecoded()
     return decoded
   }
 
   getBuffer(filePath: string): AudioBuffer | null {
     return this.cache.get(filePath) ?? null
+  }
+
+  // Decoded audio is the largest thing this app holds: a 5-minute stereo file at 48 kHz
+  // is 115 MB of float samples. Counting entries alone would let a show with a few dozen
+  // songs grow to gigabytes and take the renderer down with it, so the total is what is
+  // bounded — oldest first, and never the last one, which is about to play.
+  private evictDecoded(): void {
+    let total = 0
+    for (const buffer of this.cache.values()) total += decodedBytes(buffer)
+
+    for (const filePath of [...this.cache.keys()]) {
+      if (this.cache.size === 1) break
+      if (this.cache.size <= MAX_CACHED_FILES && total <= MAX_CACHE_BYTES) break
+      const buffer = this.cache.get(filePath)
+      if (!buffer) break
+      this.cache.delete(filePath)
+      total -= decodedBytes(buffer)
+    }
   }
 
   async play(cue: AudioCue, onEnd?: () => void, onDurationKnown?: (durationMs: number) => void): Promise<void> {
