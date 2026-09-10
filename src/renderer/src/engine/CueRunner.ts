@@ -1,5 +1,6 @@
 import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue } from '../types/cue'
 import { audioPlayer } from './AudioPlayer'
+import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
@@ -7,12 +8,6 @@ type ClearAllRunning = () => void
 type GetCues = () => Cue[]
 type GetSelected = () => string | null
 type SetSelected = (id: string | null) => void
-
-// Scripts may return a promise (the body is wrapped in an async IIFE) or a plain value.
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  if (typeof value !== 'object' || value === null || !('then' in value)) return false
-  return typeof value.then === 'function'
-}
 
 // Cap on log lines a single script run may emit, so a chatty script cannot flood the log.
 const MAX_RUN_LOG_LINES = 200
@@ -50,34 +45,6 @@ async function readNetworkBody(response: Response): Promise<string | undefined> 
     return body.slice(0, NETWORK_BODY_LIMIT) + '\n… (truncated)'
   } finally {
     await reader.cancel().catch(() => {})
-  }
-}
-
-function formatLogArg(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (value instanceof Error) return value.message
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
-}
-
-// The console handed to script cues: output is mirrored into the run log so a show
-// operator can read it without opening DevTools (which packaged builds cannot).
-function createScriptConsole(sink: (level: 'output' | 'error', message: string) => void) {
-  const forward = (level: 'output' | 'error', native: (...args: unknown[]) => void) =>
-    (...args: unknown[]): void => {
-      sink(level, args.map(formatLogArg).join(' '))
-      native(...args)
-    }
-
-  return {
-    log: forward('output', console.log.bind(console)),
-    info: forward('output', console.info.bind(console)),
-    debug: forward('output', console.debug.bind(console)),
-    warn: forward('error', console.warn.bind(console)),
-    error: forward('error', console.error.bind(console))
   }
 }
 
@@ -327,7 +294,6 @@ export class CueRunner {
         break
       case 'script': {
         const scriptCue = cue as ScriptCue
-        const workspacePath = this.deps!.getWorkspacePath()
         const label = this.cueLabel(cue)
 
         // Script output is capped per run so a chatty script cannot flood the log.
@@ -340,53 +306,24 @@ export class CueRunner {
             : { level, message, label })
         }
 
-        const shell = async (
-          command: string,
-          options?: { timeout?: number; cwd?: string; env?: Record<string, string> }
-        ): Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }> => {
-          const result = await window.winslab.script.shell(command, {
-            cwd: workspacePath ?? undefined,
-            ...options
-          })
-          // Surface the command's output without requiring the script to log it.
-          const lines = [`$ ${command}`]
-          if (result.stdout.trim()) lines.push(result.stdout.trimEnd())
-          if (result.stderr.trim()) lines.push(result.stderr.trimEnd())
-          if (result.code !== 0) {
-            lines.push(`exited with code ${result.code}${result.signal ? ` (${result.signal})` : ''}`)
-          }
-          if (lines.length > 1) {
-            logOutput(result.code === 0 ? 'output' : 'error', lines.join('\n'))
-          }
-          return result
-        }
-
-        const scriptConsole = createScriptConsole(logOutput)
-        const include = async (relativePath: string): Promise<void> => {
-          const code = await window.winslab.script.readFile(relativePath, workspacePath)
-          const fn = new Function('include', 'shell', 'console', `return (async () => {\n${code}\n})()`)
-          await fn(include, shell, scriptConsole)
-        }
-
-        const fn = new Function(
-          'include', 'shell', 'console',
-          `return (async () => {\n${scriptCue.script}\n})()`
-        )
-        const fail = (e: unknown): void => {
-          report({ outcome: 'error', error: e instanceof Error ? e.message : String(e) })
-          console.error('Script cue error:', e)
-        }
-        try {
-          const result = fn(include, shell, scriptConsole)
-          if (isPromiseLike(result)) {
-            Promise.resolve(result).catch(fail).finally(onDone)
-          } else {
+        // The script runs in a worker: a loop that never yields cannot freeze the
+        // interface, and STOP/PANIC can terminate it. See scriptHost.ts.
+        scriptHost.run({
+          cueId: cue.id,
+          code: scriptCue.script,
+          workspacePath: this.deps!.getWorkspacePath(),
+          timeoutMs: scriptCue.timeout,
+          onLog: logOutput
+        })
+          .then(() => onDone())
+          .catch((e: unknown) => {
+            // A cancelled run is not a failure, and it is not a completion: STOP has
+            // already cleared its state, and nothing may resume from here.
+            if (e instanceof ScriptCancelledError) return
+            report({ outcome: 'error', error: e instanceof Error ? e.message : String(e) })
+            console.error('Script cue error:', e)
             onDone()
-          }
-        } catch (e) {
-          fail(e)
-          onDone()
-        }
+          })
         break
       }
     }
@@ -617,11 +554,13 @@ export class CueRunner {
       clearTimeout(this.timers.get(cueId + ':pre'))
       clearTimeout(this.timers.get(cueId + ':post'))
       clearTimeout(this.timers.get(cueId))
+      scriptHost.cancel(cueId)
       audioPlayer.stop(cueId)
       setRunning(cueId, null)
     } else {
       this.generation++
       this.cancelScheduledWork()
+      scriptHost.cancelAll()
       audioPlayer.stopAll()
       clearAllRunning()
     }
@@ -633,6 +572,7 @@ export class CueRunner {
   panic(): void {
     this.generation++
     this.cancelScheduledWork()
+    scriptHost.cancelAll()
     audioPlayer.stopAll(PANIC_FADE_MS)
     this.deps!.clearAllRunning()
   }

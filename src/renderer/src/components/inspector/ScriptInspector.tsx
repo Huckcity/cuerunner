@@ -29,10 +29,26 @@ export function ScriptInspector({ cue }: Props) {
         onChange={e => set({ script: e.target.value })}
       />
 
+      <div className="field-row">
+        <label>Timeout (ms)</label>
+        <input
+          type="number"
+          min={0}
+          value={cue.timeout}
+          onChange={e => set({ timeout: Number(e.target.value) })}
+        />
+      </div>
+
       <p className="inspector-hint">
-        Runs when the cue fires. <code>await</code> works, and the cue holds the show
-        until the script finishes. <code>console.log()</code> and{' '}
-        <code>console.error()</code> from the script appear in the log panel.
+        Runs when the cue fires, on its own worker thread. <code>await</code> works, and the
+        cue holds the show until the script finishes. A script that runs longer than the
+        timeout — or never finishes at all — is stopped and reported as a failure; 0 waits
+        forever. STOP and PANIC stop it too.
+      </p>
+      <p className="inspector-hint">
+        The script has no access to the interface, only to the helpers below.{' '}
+        <code>console.log()</code> and <code>console.error()</code> from the script appear
+        in the log panel.
       </p>
       <p className="inspector-hint">
         <code>shell(command, options?)</code> runs a system command and resolves{' '}

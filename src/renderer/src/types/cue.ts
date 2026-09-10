@@ -103,6 +103,7 @@ export interface ScriptCue extends CueBase {
   type: 'script'
   language: 'javascript'
   script: string
+  timeout: number  // ms, defaults to 60000; 0 runs without a timeout
 }
 
 export type Cue =

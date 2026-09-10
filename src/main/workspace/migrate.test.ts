@@ -1,7 +1,7 @@
 // Migration runs in the main process on every workspace load. Electron is not
 // available in the test environment, so the module is imported with it stubbed.
 import { describe, it, expect, vi } from 'vitest'
-import type { StopCue, AudioCue } from '../../renderer/src/types/cue'
+import type { StopCue, AudioCue, ScriptCue } from '../../renderer/src/types/cue'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import { migrateWorkspace } from './WorkspaceManager'
 
@@ -35,6 +35,16 @@ describe('migrateWorkspace', () => {
     ])).cues[0] as StopCue
 
     expect(stop.waitForFade).toBe(true)
+  })
+
+  it('gives a script cue the timeout it predates, and keeps one that is set', () => {
+    const [legacy, explicit] = migrateWorkspace(workspaceWith([
+      { id: 'sc1', type: 'script', language: 'javascript', script: 'console.log(1)' },
+      { id: 'sc2', type: 'script', language: 'javascript', script: 'console.log(2)', timeout: 0 }
+    ])).cues as ScriptCue[]
+
+    expect(legacy.timeout).toBe(60000)
+    expect(explicit.timeout).toBe(0)
   })
 
   it('drops the retired per-output device and channel-pair fields', () => {

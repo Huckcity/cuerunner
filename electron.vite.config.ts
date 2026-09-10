@@ -15,6 +15,8 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
+    // Script cues run in a module worker (see engine/scriptWorker.ts).
+    worker: { format: 'es' },
     plugins: [react()]
   }
 })

@@ -15,32 +15,39 @@ test.afterEach(async () => {
 })
 
 test('recovers from a renderer crash with an explanation', async () => {
+  // Recovery plus a React boot is quick alone, but the suite runs eight Electron
+  // instances at once, so this test waits rather than assumes.
+  test.setTimeout(90_000)
+
   await app.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer()
   })
 
+  const readRecovered = (expression: string) => app.evaluate(async ({ BrowserWindow }, code) => {
+    const wc = BrowserWindow.getAllWindows()[0].webContents
+    if (wc.isCrashed()) return null
+    return wc.executeJavaScript(code) as Promise<unknown>
+  }, expression)
+
   // Playwright's page handle stays marked as crashed after the renderer is replaced,
   // so the recovered window is inspected through its own webContents instead. The poll
-  // reads the crash flag only: executeJavaScript issued while the renderer is down
+  // reads the crash flag first: executeJavaScript issued while the renderer is down
   // never settles.
   await expect.poll(
     async () => app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0].webContents.isCrashed()),
-    { timeout: 15_000 }
+    { timeout: 30_000 }
   ).toBe(false)
 
-  const recovered = await app.evaluate(async ({ BrowserWindow }) => {
-    const wc = BrowserWindow.getAllWindows()[0].webContents
-    return {
-      banner: await wc.executeJavaScript("document.querySelector('.crash-notice')?.textContent ?? null"),
-      toolbar: await wc.executeJavaScript("!!document.querySelector('.toolbar')")
-    }
-  })
+  await expect.poll(
+    async () => readRecovered("!!document.querySelector('.toolbar')"),
+    { timeout: 30_000 }
+  ).toBe(true)
 
-  expect(recovered.toolbar).toBe(true)
-  expect(recovered.banner).toContain('The interface stopped unexpectedly')
-  expect(recovered.banner).toContain('Anything unsaved is gone')
-  expect(recovered.banner).toContain('killed')
+  const banner = await readRecovered("document.querySelector('.crash-notice')?.textContent ?? null")
+  expect(banner).toContain('The interface stopped unexpectedly')
+  expect(banner).toContain('Anything unsaved is gone')
+  expect(banner).toContain('killed')
 
   // The interface answers input again, not just renders: the LOG toggle works.
   const logOpened = await app.evaluate(async ({ BrowserWindow }) => {

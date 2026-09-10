@@ -23,6 +23,7 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
     }
   }
   if (cue.type === 'stop' && cue.waitForFade === undefined) cue.waitForFade = false
+  if (cue.type === 'script' && cue.timeout === undefined) cue.timeout = 60000
   delete cue.autoContinue
   delete cue.autoFollow
   return cue

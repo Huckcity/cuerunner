@@ -102,7 +102,8 @@ export function createCue(type: CueType): Cue {
         ...base('Script Cue'),
         type: 'script',
         language: 'javascript',
-        script: ''
+        script: '',
+        timeout: 60000
       } satisfies ScriptCue
   }
 }
