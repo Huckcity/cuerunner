@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/Huckcity/winslab/compare/v0.7.3...v0.8.0) (2026-09-10)
+
+
+### Features
+
+* cue inspectors, run log, user guide, and a sweep of the options that did nothing ([#61](https://github.com/Huckcity/winslab/issues/61)) ([c30182a](https://github.com/Huckcity/winslab/commit/c30182ab09ebfe0e3f551824ea46b525662c1baa))
+
 ## [0.7.3](https://github.com/Huckcity/winslab/compare/v0.7.2...v0.7.3) (2026-09-10)
 
 
