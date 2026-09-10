@@ -240,3 +240,14 @@
 }
 /* Live playback head turns blue */
 .tl-playhead[data-live='true'] { background: var(--accent-blue); }
+
+/* The edge a dragged block has locked onto — same blue as the cue-list drop marker */
+.tl-snap-guide {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent-blue);
+  box-shadow: 0 0 6px var(--accent-blue-overlay);
+  pointer-events: none;
+  z-index: 9;
+}

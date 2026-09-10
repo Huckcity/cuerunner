@@ -515,6 +515,13 @@
           control steps through 5 to 800 pixels per second.
         </p>
         <p>
+          A dragged block snaps to the edges of the other blocks and to the start of the group, so
+          runs of cues lock together end to end without pixel-perfect aim. A blue guide marks the
+          edge a block has locked onto. The pull is measured in screen pixels, not milliseconds, so
+          zooming in narrows it: at the fine zoom levels you can place a block within a few
+          milliseconds by hand, and the Basics tab takes an exact offset.
+        </p>
+        <p>
           Clicking the ruler seeks: the group stops, and playback resumes from that point, with
           audio and waits starting mid-way where they should. Cues that have already passed are not
           replayed — a network or script cue before the playhead will not fire again. The expand

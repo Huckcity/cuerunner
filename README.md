@@ -18,7 +18,7 @@ troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
 - **Session Log**: cue run results, script output, and failures in a bottom panel
 - **Workspace Management**: Save/load `.wlab` JSON workspaces with undo/redo
 - **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds, plus an experimental Linux AppImage
-- **Timeline Mode**: Visual timeline-based show layout (alternative to list view)
+- **Timeline Mode**: Visual timeline-based show layout (alternative to list view), with blocks that snap end to end
 
 ## Getting Started
 

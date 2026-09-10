@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useStore } from '../../store'
 import type { GroupCue, Cue } from '../../types/cue'
 import { cueRunner } from '../../engine/CueRunner'
+import { snapOffset, snapTargetsFor } from '../../utils/timelineSnap'
 import './TimelineEditor.css'
 
 const RULER_H = 22
@@ -76,6 +77,9 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
   // Local active block — decoupled from global selection so dragging doesn't change selectedId
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
 
+  // Edge the dragged block is currently locked onto, drawn as a guide line
+  const [snapGuideMs, setSnapGuideMs] = useState<number | null>(null)
+
   // Cursor + playhead
   const [cursorMs, setCursorMs] = useState<number | null>(null)
   const [playheadMs, setPlayheadMs] = useState<number | null>(null)
@@ -128,26 +132,47 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
   }, [groupRunState])
 
   // Drag — uses pointer capture; never changes global selection
-  const dragRef = useRef<{ cueId: string; startX: number; startOffset: number } | null>(null)
+  const dragRef = useRef<{
+    cueId: string
+    startX: number
+    startOffset: number
+    duration: number
+    // Edges to snap to, frozen at drag start: only the dragged block moves.
+    targets: number[]
+  } | null>(null)
 
   const onBlockPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>, child: Cue) => {
     e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { cueId: child.id, startX: e.clientX, startOffset: child.timelineOffset }
+    dragRef.current = {
+      cueId: child.id,
+      startX: e.clientX,
+      startOffset: child.timelineOffset,
+      duration: child.duration,
+      targets: snapTargetsFor(children, child.id),
+    }
     setActiveBlockId(child.id)
     e.preventDefault()
-  }, [])
+  }, [children])
 
   const onBlockPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return
-    const dx = e.clientX - dragRef.current.startX
-    const newOffset = Math.max(0, Math.round(dragRef.current.startOffset + dx / pxPerMs))
-    updateCue(dragRef.current.cueId, { timelineOffset: newOffset })
+    const drag = dragRef.current
+    if (!drag) return
+    const raw = Math.max(0, drag.startOffset + (e.clientX - drag.startX) / pxPerMs)
+    const { offset, guideMs } = snapOffset(raw, drag.duration, drag.targets, pxPerMs)
+    setSnapGuideMs(guideMs)
+    updateCue(drag.cueId, { timelineOffset: offset })
   }, [pxPerMs, updateCue])
+
+  // A cancelled pointer (Escape, lost capture) ends the drag without a pointerup
+  const endDrag = useCallback(() => {
+    dragRef.current = null
+    setSnapGuideMs(null)
+  }, [])
 
   const onBlockPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.releasePointerCapture(e.pointerId)
-    dragRef.current = null
-  }, [])
+    endDrag()
+  }, [endDrag])
 
   const zoomIn = () => {
     const idx = ZOOM_LEVELS.findIndex(l => l >= zoom)
@@ -245,6 +270,7 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
                       onPointerDown={e => onBlockPointerDown(e, child)}
                       onPointerMove={onBlockPointerMove}
                       onPointerUp={onBlockPointerUp}
+                      onPointerCancel={endDrag}
                     >
                       {blockW >= 24 && (
                         <span className="tl-block-label">{child.name || child.type}</span>
@@ -253,6 +279,13 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
                   </div>
                 )
               })}
+
+              {snapGuideMs !== null && (
+                <div
+                  className="tl-snap-guide"
+                  style={{ left: snapGuideMs * pxPerMs, height: totalH - RULER_H, top: RULER_H }}
+                />
+              )}
 
               {displayHeadMs !== null && (
                 <div
