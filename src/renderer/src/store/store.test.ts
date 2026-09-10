@@ -91,19 +91,19 @@ describe('store — updateCue', () => {
 describe('store — moveCue', () => {
   beforeEach(resetStore)
 
-  it('reorders cues correctly (move down)', () => {
+  it('moves a cue to the end of the list', () => {
     useStore.getState().addCue('wait')
     useStore.getState().addCue('audio')
     useStore.getState().addCue('midi')
 
     const [a, b, c] = useStore.getState().cues.map(c => c.id)
-    useStore.getState().moveCue(0, 2)
+    useStore.getState().moveCue(0, 3)
 
     const ids = useStore.getState().cues.map(c => c.id)
     expect(ids).toEqual([b, c, a])
   })
 
-  it('reorders cues correctly (move up)', () => {
+  it('moves a cue to the front of the list', () => {
     useStore.getState().addCue('wait')
     useStore.getState().addCue('audio')
     useStore.getState().addCue('midi')
@@ -113,6 +113,100 @@ describe('store — moveCue', () => {
 
     const ids = useStore.getState().cues.map(c => c.id)
     expect(ids).toEqual([c, a, b])
+  })
+
+  it('inserts before the given index rather than at it', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('audio')
+    useStore.getState().addCue('midi')
+
+    const [a, b, c] = useStore.getState().cues.map(c => c.id)
+    useStore.getState().moveCue(0, 2)
+
+    const ids = useStore.getState().cues.map(c => c.id)
+    expect(ids).toEqual([b, a, c])
+  })
+
+  it('does not record history for a move that changes nothing', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('audio')
+
+    const before = useStore.getState().cues
+    const pastLength = useStore.getState().past.length
+    useStore.getState().moveCue(0, 0)
+
+    expect(useStore.getState().cues).toBe(before)
+    expect(useStore.getState().past).toHaveLength(pastLength)
+  })
+})
+
+describe('store — moveCue with groups', () => {
+  beforeEach(resetStore)
+
+  // [group, child1, child2, wait] — returns the ids in order.
+  function setupGroupWithChildren() {
+    useStore.getState().addCue('group')
+    const groupId = useStore.getState().cues[0].id
+    useStore.getState().addCue('wait', groupId)
+    useStore.getState().addCue('audio', groupId)
+    useStore.getState().addCue('midi')
+    return { groupId, ids: useStore.getState().cues.map(c => c.id) }
+  }
+
+  it('moves a group together with its children', () => {
+    const { groupId, ids: [g, c1, c2, w] } = setupGroupWithChildren()
+
+    useStore.getState().moveCue(0, 4) // move the group to the end
+
+    const cues = useStore.getState().cues
+    expect(cues.map(c => c.id)).toEqual([w, g, c1, c2])
+    expect(cues[1].parentId).toBeNull()
+    expect(cues[2].parentId).toBe(groupId)
+    expect(cues[3].parentId).toBe(groupId)
+  })
+
+  it('keeps children contiguous when a group moves to the front', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('midi')
+    useStore.getState().addCue('group')
+    const groupId = useStore.getState().cues[2].id
+    useStore.getState().addCue('wait', groupId)
+    const [w1, m1, g, child] = useStore.getState().cues.map(c => c.id)
+
+    useStore.getState().moveCue(2, 0)
+
+    expect(useStore.getState().cues.map(c => c.id)).toEqual([g, child, w1, m1])
+  })
+
+  it('moves a child out of its group to the top level', () => {
+    const { ids: [g, c1, c2, w] } = setupGroupWithChildren()
+
+    useStore.getState().moveCue(1, 0, null) // pull the first child to the top
+
+    const cues = useStore.getState().cues
+    expect(cues.map(c => c.id)).toEqual([c1, g, c2, w])
+    expect(cues[0].parentId).toBeNull()
+  })
+
+  it('ignores a drop inside the moved group (its own rows)', () => {
+    const { groupId, ids: [g] } = setupGroupWithChildren()
+    const before = useStore.getState().cues
+
+    useStore.getState().moveCue(0, 1, g) // dropping a group just below its own header
+
+    expect(useStore.getState().cues).toBe(before)
+    expect(useStore.getState().cues[0].parentId).toBeNull()
+    expect(useStore.getState().cues[0].id).toBe(groupId)
+  })
+
+  it('refuses to make a group a child of itself or of its own descendant', () => {
+    const { ids: [g, c1] } = setupGroupWithChildren()
+
+    useStore.getState().moveCue(0, 0, g)  // itself
+    expect(useStore.getState().cues[0].parentId).toBeNull()
+
+    useStore.getState().moveCue(0, 0, c1) // its own child
+    expect(useStore.getState().cues[0].parentId).toBeNull()
   })
 })
 

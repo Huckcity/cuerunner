@@ -58,7 +58,7 @@ describe('store — isDirty tracking', () => {
     useStore.getState().addCue('wait')
     useStore.getState().addCue('audio')
     useStore.setState({ isDirty: false })
-    useStore.getState().moveCue(0, 1)
+    useStore.getState().moveCue(1, 0)
     expect(useStore.getState().isDirty).toBe(true)
   })
 

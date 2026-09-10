@@ -28,7 +28,8 @@ interface RenderItem {
 }
 
 // Given a drop position between renderItems[dropAt-1] and renderItems[dropAt],
-// return the parentId the dropped cue should receive.
+// return the parentId the dropped cue should receive. May name the dragged cue itself
+// (dropping a group just below its own header); moveCue rejects that as a no-op.
 function dropParentId(items: RenderItem[], dropAt: number): string | null {
   // Either neighbor is a visible child → stay in that group
   if (dropAt < items.length && items[dropAt].depth === 1) {
@@ -235,7 +236,8 @@ export function CueList() {
     if (!fromItem) return
 
     const fromFlat = fromItem.flatIndex
-    const targetFlat = dropRenderIndex < renderItems.length
+    // Index into the pre-move array: the cue the block should land in front of.
+    const beforeFlat = dropRenderIndex < renderItems.length
       ? renderItems[dropRenderIndex].flatIndex
       : cues.length
     const newParent = dropParentId(renderItems, dropRenderIndex)
@@ -243,11 +245,7 @@ export function CueList() {
     setDragRenderIndex(null)
     setDropRenderIndex(null)
 
-    // Compute the post-removal insertion index (store's moveCue splices after removing)
-    const toFlat = fromFlat < targetFlat ? targetFlat - 1 : targetFlat
-    if (fromFlat === toFlat && fromItem.cue.parentId === newParent) return
-
-    moveCue(fromFlat, toFlat, newParent)
+    moveCue(fromFlat, beforeFlat, newParent)
   }, [dropRenderIndex, renderItems, cues.length, moveCue, clearHoverTimer])
 
   const handleRowDragEnd = useCallback(() => {

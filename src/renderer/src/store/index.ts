@@ -47,7 +47,11 @@ interface CueListState {
   addAudioCuesFromFiles: (files: Array<{ filePath: string; name: string }>, afterId?: string) => void
   removeCue: (id: string) => void
   updateCue: (id: string, patch: Partial<Cue>) => void
-  moveCue: (fromIndex: number, toIndex: number, newParentId?: string | null) => void
+  // Places the cue at fromIndex — together with its children when it is a group —
+  // immediately before the cue currently at beforeIndex (cues.length moves it last).
+  // newParentId is ignored when it would make the cue a child of itself or of one of
+  // its own descendants (the cue keeps its current parent).
+  moveCue: (fromIndex: number, beforeIndex: number, newParentId?: string | null) => void
   duplicateCue: (id: string) => void
 
   // Selection
@@ -97,6 +101,32 @@ function lastChildIndex(cues: Cue[], groupId: string): number {
   let last = groupIdx
   while (last + 1 < cues.length && cues[last + 1].parentId === groupId) last++
   return last
+}
+
+// Returns the flat index of the last cue in the subtree rooted at startIndex.
+// Children are stored contiguously behind their parent, so the subtree is a range —
+// this walks the whole tree, not just direct children (groups can contain groups).
+function subtreeEndIndex(cues: Cue[], startIndex: number): number {
+  const subtree = new Set([cues[startIndex].id])
+  let end = startIndex
+  while (end + 1 < cues.length) {
+    const next = cues[end + 1]
+    if (next.parentId === null || !subtree.has(next.parentId)) break
+    subtree.add(next.id)
+    end++
+  }
+  return end
+}
+
+// True when cueId sits somewhere below possibleAncestorId in the parent chain.
+function isDescendant(cues: Cue[], cueId: string, possibleAncestorId: string): boolean {
+  const byId = new Map(cues.map(c => [c.id, c]))
+  let current = byId.get(cueId)
+  while (current?.parentId) {
+    if (current.parentId === possibleAncestorId) return true
+    current = byId.get(current.parentId)
+  }
+  return false
 }
 
 export const useStore = create<CueListState>((set) => ({
@@ -191,12 +221,33 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  // toIndex is the insertion index AFTER fromIndex has been removed from the array.
-  moveCue: (fromIndex, toIndex, newParentId) => set(s => {
+  moveCue: (fromIndex, beforeIndex, newParentId) => set(s => {
+    const moved = s.cues[fromIndex]
+    if (!moved) return s
+
+    // A group travels with its children — they are stored contiguously behind it.
+    const end = subtreeEndIndex(s.cues, fromIndex)
+    // Dropping the block inside itself (e.g. on one of its own rows) changes nothing.
+    if (beforeIndex > fromIndex && beforeIndex <= end) return s
+
+    // Re-parenting a cue to itself or to one of its descendants would make it
+    // unreachable — its own collapse state would hide it. Keep the current parent.
+    const illegalParent = newParentId === moved.id ||
+      (typeof newParentId === 'string' && isDescendant(s.cues, newParentId, moved.id))
+    const parentId = newParentId === undefined || illegalParent ? moved.parentId : newParentId
+
     const cues = [...s.cues]
-    const [moved] = cues.splice(fromIndex, 1)
-    const parentId = newParentId !== undefined ? newParentId : moved.parentId
-    cues.splice(toIndex, 0, { ...moved, parentId })
+    const block = cues.splice(fromIndex, end - fromIndex + 1)
+    block[0] = { ...block[0], parentId }
+    // beforeIndex points into the pre-move array: shift it past the removed block.
+    cues.splice(beforeIndex > end ? beforeIndex - block.length : beforeIndex, 0, ...block)
+
+    const unchanged = cues.every((c, i) => {
+      const prev = s.cues[i]
+      return prev !== undefined && c.id === prev.id && c.parentId === prev.parentId
+    })
+    if (unchanged) return s
+
     return { cues, isDirty: true, past: pushPast(s.past, s.cues), future: [] }
   }),
 
