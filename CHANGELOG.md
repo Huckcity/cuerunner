@@ -1,3 +1,10 @@
+# [0.9.0](https://github.com/Huckcity/winslab/compare/v0.8.0...v0.9.0) (2026-09-10)
+
+
+### Features
+
+* **timeline:** snap dragged blocks to the edges of the other blocks ([#62](https://github.com/Huckcity/winslab/issues/62)) ([e08da9f](https://github.com/Huckcity/winslab/commit/e08da9fcd90042ef935a2b493f6e73e81ad0ff5b))
+
 # [0.8.0](https://github.com/Huckcity/winslab/compare/v0.7.3...v0.8.0) (2026-09-10)
 
 
