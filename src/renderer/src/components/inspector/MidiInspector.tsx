@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import type { MidiCue, MidiMessageKind } from '../../types/cue'
+import { LastRun } from './LastRun'
 
 interface Props { cue: MidiCue }
 
@@ -124,6 +125,7 @@ export function MidiInspector({ cue }: Props) {
         </div>
       ))}
       <button onClick={addMsg} className="inspector-add-btn">+ Add Message</button>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

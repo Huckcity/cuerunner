@@ -33,11 +33,11 @@ contextBridge.exposeInMainWorld('winslab', {
   midi: {
     listPorts: (): Promise<string[]> =>
       ipcRenderer.invoke('midi:listPorts'),
-    send: (cmd: { portName: string; messages: any[] }): Promise<void> =>
+    send: (cmd: { portName: string; messages: any[] }): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke('midi:send', cmd)
   },
   osc: {
-    send: (cmd: { host: string; port: number; address: string; args: any[] }): Promise<void> =>
+    send: (cmd: { host: string; port: number; address: string; args: any[] }): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke('osc:send', cmd),
     startListener: (port: number): Promise<void> =>
       ipcRenderer.invoke('osc:startListener', port)

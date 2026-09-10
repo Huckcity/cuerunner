@@ -1,5 +1,6 @@
 import { useStore } from '../../store'
 import type { GroupCue, GroupMode } from '../../types/cue'
+import { LastRun } from './LastRun'
 
 interface Props { cue: GroupCue }
 
@@ -21,6 +22,7 @@ export function GroupInspector({ cue }: Props) {
       <p className="inspector-hint">
         Expand the group in the cue list to add, remove, or reorder its children.
       </p>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

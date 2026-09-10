@@ -1,5 +1,6 @@
 import { useStore } from '../../store'
 import type { OscCue, OscArg, OscArgType } from '../../types/cue'
+import { LastRun } from './LastRun'
 
 interface Props { cue: OscCue }
 
@@ -64,6 +65,7 @@ export function OscInspector({ cue }: Props) {
         </div>
       ))}
       <button onClick={addArg} className="inspector-add-btn">+ Add Argument</button>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

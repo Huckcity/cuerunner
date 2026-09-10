@@ -4,7 +4,7 @@ import { CueRunner } from './CueRunner'
 import { audioPlayer } from './AudioPlayer'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, FadeCue, StopCue, NetworkCue, ScriptCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue } from '../types/cue'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -47,6 +47,27 @@ function makeAudio(overrides: Partial<AudioCue> = {}): AudioCue {
     fadeInDuration: 0,
     outputs: [{ volume: 1, pan: 0 }],
     loopCount: 0, playbackRate: 1, trim: 1,
+    ...overrides
+  }
+}
+
+function makeMidi(overrides: Partial<MidiCue> = {}): MidiCue {
+  return {
+    id: 'm1', number: '1', name: 'MIDI', type: 'midi',
+    colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: '',
+    portName: '',
+    messages: [{ kind: 'noteOn', channel: 1, note: 60, velocity: 100 }],
+    ...overrides
+  }
+}
+
+function makeOsc(overrides: Partial<OscCue> = {}): OscCue {
+  return {
+    id: 'o1', number: '1', name: 'OSC', type: 'osc',
+    colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: '',
+    host: '127.0.0.1', port: 53000, address: '/cue/1/start', args: [],
     ...overrides
   }
 }
@@ -522,17 +543,6 @@ describe('CueRunner — midi cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  function makeMidi(overrides: Partial<MidiCue> = {}): MidiCue {
-    return {
-      id: 'm1', number: '1', name: 'MIDI', type: 'midi',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      portName: '',
-      messages: [{ kind: 'noteOn', channel: 1, note: 60, velocity: 100 }],
-      ...overrides
-    }
-  }
-
   it('sends to the default output port when the cue does not name one', () => {
     const cue = makeMidi()
     const { runner } = setup([cue])
@@ -551,6 +561,85 @@ describe('CueRunner — midi cue', () => {
       portName: 'Stage Rack',
       messages: cue.messages
     })
+  })
+})
+
+// A cue that could not do what it says must say so: these paths used to complete as
+// successes with nothing sent, played, or answered.
+describe('CueRunner — engine failures are reported', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    console.error = vi.fn()
+    // Each test starts from engines that did what they were asked. `clearAllMocks`
+    // in afterEach keeps implementations, so they are set here.
+    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+    vi.mocked(audioPlayer.play).mockResolvedValue(undefined)
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('reports a MIDI cue that reached no port', async () => {
+    vi.mocked(window.winslab.midi.send).mockResolvedValue({
+      ok: false,
+      error: 'No MIDI output port named "Stage Rack"'
+    })
+    const cue = makeMidi({ id: 'm1', portName: 'Stage Rack' })
+    const { runner, setLastRun, appendLog } = setup([cue])
+
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('m1', expect.objectContaining({
+      outcome: 'error',
+      error: 'No MIDI output port named "Stage Rack"'
+    }))
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'No MIDI output port named "Stage Rack"' })
+    ])
+  })
+
+  it('reports an OSC cue whose send failed', async () => {
+    vi.mocked(window.winslab.osc.send).mockResolvedValue({
+      ok: false,
+      error: 'getaddrinfo ENOTFOUND stage-lights.local'
+    })
+    const cue = makeOsc({ id: 'o1' })
+    const { runner, setLastRun } = setup([cue])
+
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('o1', expect.objectContaining({
+      outcome: 'error',
+      error: 'getaddrinfo ENOTFOUND stage-lights.local'
+    }))
+  })
+
+  it('reports an audio cue whose file will not play', async () => {
+    vi.mocked(audioPlayer.play).mockRejectedValue(new Error('ENOENT: no such file'))
+    const cue = makeAudio({ id: 'a1' })
+    const { runner, setLastRun, appendLog } = setup([cue])
+
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: 'ENOENT: no such file'
+    }))
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'ENOENT: no such file' })
+    ])
+  })
+
+  it('keeps the run successful when the MIDI send went through', async () => {
+    const cue = makeMidi({ id: 'm1' })
+    const { runner, setLastRun } = setup([cue])
+
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('m1', expect.objectContaining({ outcome: 'success' }))
   })
 })
 

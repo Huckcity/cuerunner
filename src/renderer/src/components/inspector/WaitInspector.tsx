@@ -1,5 +1,6 @@
 import { useStore } from '../../store'
 import type { WaitCue } from '../../types/cue'
+import { LastRun } from './LastRun'
 
 interface Props { cue: WaitCue }
 
@@ -21,6 +22,7 @@ export function WaitInspector({ cue }: Props) {
         Wait cues pause the sequence for the specified duration, then continue.
         Set Advance to "On end" on the Basics tab to automatically fire the next cue after waiting.
       </p>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

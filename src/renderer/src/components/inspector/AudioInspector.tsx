@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import type { AudioCue } from '../../types/cue'
+import { LastRun } from './LastRun'
 import { audioPlayer } from '../../engine/AudioPlayer'
 
 interface Props { cue: AudioCue; tab: string }
@@ -66,6 +67,7 @@ export function AudioInspector({ cue, tab }: Props) {
             onChange={e => set({ loopCount: Number(e.target.value) })} />
           <span className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</span>
         </div>
+        <LastRun cueId={cue.id} />
       </div>
     )
   }
@@ -121,6 +123,7 @@ export function AudioInspector({ cue, tab }: Props) {
            output.pan < 0 ? `L${Math.round(-output.pan * 100)}` : 'C'}
         </span>
       </div>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

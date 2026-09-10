@@ -44,13 +44,15 @@ export function registerIpcHandlers(): void {
   // MIDI
   ipcMain.handle('midi:listPorts', () => midi.listOutputPorts())
 
+  // Both return what the engine did, so a cue that reached nothing is reported rather
+  // than looking like every other successful firing.
   ipcMain.handle('midi:send', async (_, cmd: { portName: string; messages: any[] }) => {
-    midi.send(cmd.portName, cmd.messages)
+    return midi.send(cmd.portName, cmd.messages)
   })
 
   // OSC
   ipcMain.handle('osc:send', async (_, cmd: { host: string; port: number; address: string; args: any[] }) => {
-    osc.send(cmd.host, cmd.port, cmd.address, cmd.args)
+    return osc.send(cmd.host, cmd.port, cmd.address, cmd.args)
   })
 
   ipcMain.handle('osc:startListener', async (_, port: number) => {

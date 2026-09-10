@@ -48,6 +48,13 @@ async function readNetworkBody(response: Response): Promise<string | undefined> 
   }
 }
 
+// What a cue's execute() may add to its run result.
+type Report = (patch: Partial<CueRunResult>) => void
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 interface RunnerDeps {
   getCues: GetCues
   getSelected: GetSelected
@@ -241,20 +248,16 @@ export class CueRunner {
     }
   }
 
-  private execute(
-    cue: Cue,
-    onDone: () => void,
-    report: (patch: Partial<CueRunResult>) => void = () => {}
-  ): void {
+  private execute(cue: Cue, onDone: () => void, report: Report = () => {}): void {
     switch (cue.type) {
       case 'audio':
-        this.executeAudio(cue as AudioCue, onDone)
+        this.executeAudio(cue as AudioCue, onDone, report)
         break
       case 'midi':
-        this.executeMidi(cue as MidiCue, onDone)
+        this.executeMidi(cue as MidiCue, onDone, report)
         break
       case 'osc':
-        this.executeOsc(cue as OscCue, onDone)
+        this.executeOsc(cue as OscCue, onDone, report)
         break
       case 'wait':
         this.executeWait(cue as WaitCue, onDone)
@@ -329,25 +332,40 @@ export class CueRunner {
     }
   }
 
-  private executeAudio(cue: AudioCue, onDone: () => void): void {
+  private executeAudio(cue: AudioCue, onDone: () => void, report: Report): void {
     const { syncCueDuration } = this.deps!
+    // A missing file or a file that will not decode fails here; without this the run
+    // was recorded as a success and the operator heard nothing.
     audioPlayer.play(cue, onDone, durationMs => syncCueDuration(cue.id, durationMs))
-      .catch(err => {
-        console.error('Audio playback failed:', err)
+      .catch(error => {
+        report({ outcome: 'error', error: errorMessage(error) })
+        console.error('Audio playback failed:', error)
         onDone()
       })
   }
 
-  private executeMidi(cue: MidiCue, onDone: () => void): void {
+  private executeMidi(cue: MidiCue, onDone: () => void, report: Report): void {
     window.winslab.midi.send({
       portName: cue.portName || this.deps!.getMidiDefaultPort(),
       messages: cue.messages
     })
+      .then(result => {
+        if (!result.ok) {
+          report({ outcome: 'error', error: result.error ?? 'MIDI send failed' })
+        }
+      })
+      .catch(error => report({ outcome: 'error', error: errorMessage(error) }))
       .finally(onDone)
   }
 
-  private executeOsc(cue: OscCue, onDone: () => void): void {
+  private executeOsc(cue: OscCue, onDone: () => void, report: Report): void {
     window.winslab.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })
+      .then(result => {
+        if (!result.ok) {
+          report({ outcome: 'error', error: result.error ?? 'OSC send failed' })
+        }
+      })
+      .catch(error => report({ outcome: 'error', error: errorMessage(error) }))
       .finally(onDone)
   }
 

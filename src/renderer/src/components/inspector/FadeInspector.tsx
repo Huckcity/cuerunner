@@ -1,5 +1,6 @@
 import { useStore } from '../../store'
 import type { FadeCue, FadeCurve } from '../../types/cue'
+import { LastRun } from './LastRun'
 
 interface Props { cue: FadeCue }
 
@@ -60,6 +61,7 @@ export function FadeInspector({ cue }: Props) {
         <input type="checkbox" checked={cue.stopTargetWhenDone}
           onChange={e => set({ stopTargetWhenDone: e.target.checked })} />
       </div>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

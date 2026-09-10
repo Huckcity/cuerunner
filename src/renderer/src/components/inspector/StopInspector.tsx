@@ -1,5 +1,6 @@
 import { useStore } from '../../store'
 import type { StopCue } from '../../types/cue'
+import { LastRun } from './LastRun'
 
 interface Props { cue: StopCue }
 
@@ -51,6 +52,7 @@ export function StopInspector({ cue }: Props) {
         normally completes as soon as it has stopped the target — tick Wait for fade to hold it
         open until the fade has finished.
       </p>
+      <LastRun cueId={cue.id} />
     </div>
   )
 }

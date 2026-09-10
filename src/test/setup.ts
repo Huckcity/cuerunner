@@ -14,10 +14,10 @@ Object.defineProperty(window, 'winslab', {
     },
     midi: {
       listPorts: vi.fn(() => Promise.resolve([])),
-      send: vi.fn(() => Promise.resolve())
+      send: vi.fn(() => Promise.resolve({ ok: true }))
     },
     osc: {
-      send: vi.fn(() => Promise.resolve()),
+      send: vi.fn(() => Promise.resolve({ ok: true })),
       startListener: vi.fn(() => Promise.resolve())
     },
     script: {

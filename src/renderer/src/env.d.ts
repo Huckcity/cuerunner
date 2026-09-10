@@ -18,10 +18,10 @@ interface WinslabBridge {
   }
   midi: {
     listPorts: () => Promise<string[]>
-    send: (cmd: { portName: string; messages: any[] }) => Promise<void>
+    send: (cmd: { portName: string; messages: any[] }) => Promise<{ ok: boolean; error?: string }>
   }
   osc: {
-    send: (cmd: { host: string; port: number; address: string; args: OscArg[] }) => Promise<void>
+    send: (cmd: { host: string; port: number; address: string; args: OscArg[] }) => Promise<{ ok: boolean; error?: string }>
     startListener: (port: number) => Promise<void>
   }
   script: {
