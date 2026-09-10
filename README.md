@@ -17,6 +17,7 @@ troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
 - **Show Sequencing**: Group cues, set auto-advance, pre/post-wait delays, and arm/disarm
 - **Session Log**: cue run results, script output, and failures in a bottom panel
 - **Workspace Management**: Save/load `.wlab` JSON workspaces with undo/redo
+- **Durable Saves**: atomic writes with a `.bak` of the previous version, autosaved recovery snapshots, and a crash banner instead of a silent reset
 - **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds, plus an experimental Linux AppImage
 - **Timeline Mode**: Visual timeline-based show layout (alternative to list view), with blocks that snap end to end
 
@@ -196,10 +197,14 @@ Key fields affecting playback:
 the cue's timeout, 5 s by default) before moving on. Requests are issued from the app
 window, so target servers must return CORS headers.
 
-Both cue types show a **Last Run** section in the inspector: when the cue last fired, how
-long it took, the HTTP status for network cues, the start of the response body for network
-cues (cut off at 4000 characters with a truncation marker), and the reason for any failure.
-Run results are runtime state — they are never written to the `.wlab` file.
+Every cue type shows a **Last Run** section in its own inspector tab: when it last fired,
+how long it took, and the reason for any failure — the HTTP status and start of the
+response body for network cues (cut off at 4000 characters with a truncation marker), the
+message for a script that threw or timed out, or the port an audio, MIDI or OSC cue could
+not reach. A cue that could not do what it says is marked failed rather than passed over;
+an OSC message that leaves the machine and is never received still counts as sent, since
+UDP reports nothing. Run results are runtime state — they are never written to the
+`.wlab` file.
 
 The **log panel** (LOG button in the transport bar) records every firing: when the cue
 started, what it did, the response status, and any failure. Script cues also send their
@@ -235,6 +240,18 @@ files you trust.
 4. **Timers**: Tracked with keys like `"cueId"`, `"cueId:pre"`, `"cueId:post"` for cancellation
 5. **STOP / PANIC**: Both abandon in-flight work (a network request or script that settles
    afterwards cannot resume the show). STOP cuts the audio; PANIC fades it out over 200 ms
+
+### Failure Handling
+
+- Saves go through a temporary file and a rename, and keep the previous version as
+  `<name>.wlab.bak`. A save that fails says so in a notice bar and the log; it never leaves
+  a half-written file.
+- Unsaved work is snapshotted to the user-data folder every 30 s. The next launch offers it
+  back with Recover / Discard, and saving or discarding clears it.
+- A renderer crash reloads the window and explains itself in a banner; the interface's own
+  errors, and the main process's, are logged and mirrored into the session log.
+- STOP and PANIC abandon work that is still in flight — a network request or script that
+  settles afterwards cannot resume the show.
 
 ### Audio Engine
 

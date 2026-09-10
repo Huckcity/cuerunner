@@ -162,6 +162,19 @@
           window, starting a new workspace, or opening another one asks to save first, with Save,
           Don't Save, and Cancel.
         </p>
+        <p>
+          While there are unsaved changes, WinsLab also snapshots the show into the app's user-data
+          folder every 30 seconds. If a session ends without saving — a crash, a force quit, a power
+          cut — the next launch offers the snapshot back with <strong>Recover</strong> and
+          <strong>Discard</strong>. Recovered work counts as unsaved, so the amber dot is still
+          there until you save. Saving, discarding, or closing with Don't Save clears the snapshot.
+        </p>
+        <p>
+          Saving replaces the file in one step and keeps the previous version beside it as
+          <code>show.wlab.bak</code>, so a save that fails part way through cannot leave a
+          half-written show. If a save does fail — a read-only folder, a full disk — the reason
+          appears in a bar at the top of the window, and the run log records it.
+        </p>
 
         <h3>Moving a show between machines</h3>
         <p>
@@ -634,10 +647,18 @@ console.log(r.stdout.trim())</code></pre>
         <h2>Reading results</h2>
         <p>
           Two places tell you what a cue did. The <strong>Last Run</strong> section at the bottom of
-          the Network and Script tabs shows the outcome of that cue's most recent firing: when it
-          started, how long it took, the HTTP status for network cues, the start of the response
-          body for network cues (cut off at 4000 characters with a truncation marker), and the
-          reason for any failure.
+          every cue's own tab shows the outcome of that cue's most recent firing: when it started,
+          how long it took, and the reason for any failure — the HTTP status and the start of the
+          response body for network cues (cut off at 4000 characters with a truncation marker), the
+          message for a script that threw or timed out, or the port an audio, MIDI or OSC cue could
+          not reach.
+        </p>
+        <p>
+          A cue that could not do what it says is reported rather than passed over: an audio cue
+          whose file is missing, a MIDI cue aimed at a port that is not there, and an OSC send that
+          failed all mark the run as failed. Note that a MIDI or OSC cue can only report what the
+          send itself did — OSC is UDP, so a message that leaves the machine and is never received
+          still counts as sent.
         </p>
         <p>
           The <strong>run log</strong> records every firing across the show. Open it with the LOG
