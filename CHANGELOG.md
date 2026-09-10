@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/Huckcity/winslab/compare/v0.9.0...v0.10.0) (2026-09-10)
+
+
+### Features
+
+* **demo:** ship a demo workspace new users can open in one click ([9d00cc1](https://github.com/Huckcity/winslab/commit/9d00cc18616d8d7d7bfa6301a7f2fbf13c63cab1))
+
 # [0.9.0](https://github.com/Huckcity/winslab/compare/v0.8.0...v0.9.0) (2026-09-10)
 
 
