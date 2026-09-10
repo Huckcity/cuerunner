@@ -62,7 +62,7 @@ function repairElectronBinary(rootDir) {
     execFileSync(process.execPath, [installScript], {
       cwd: electronDir,
       stdio: 'inherit',
-      timeout: 120_000, // 2-minute timeout for ~200 MB download
+      timeout: 300_000, // 5 minutes — a cold ~200 MB download can exceed 2 minutes
     })
     return getElectronBinaryState(rootDir).state === 'ok'
   } catch (_err) {
@@ -127,9 +127,8 @@ function ensureElectronBinary(opts = {}) {
   log('')
   log('  Manual recovery steps (try in order):')
   log('')
-  log('  1. Force a fresh electron download:')
-  log('     rm -rf node_modules/electron/dist')
-  log('     node node_modules/electron/install.js')
+  log('  1. Re-run this project\'s postinstall (patches fd-slicer, retries electron):')
+  log('     node scripts/postinstall.js')
   log('')
   log('  2. Verify electron is working:')
   log('     npx electron --version')
@@ -137,7 +136,7 @@ function ensureElectronBinary(opts = {}) {
   log('  3. As a last resort, clear the npm cache and reinstall:')
   log('     npm cache clean --force')
   log('     rm -rf node_modules package-lock.json')
-  log('     npm install --legacy-peer-deps')
+  log('     npm install')
   log('')
 
   return state.state

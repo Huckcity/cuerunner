@@ -116,8 +116,9 @@ describe('ensureElectronBinary', () => {
   it('includes manual recovery steps in output when repair is disabled', () => {
     makeFixture(rootDir, 'dir-only')
     ensureElectronBinary({ rootDir, autoRepair: false, log: logCapture })
-    expect(logs.some((l) => l.includes('node node_modules/electron/install.js'))).toBe(true)
-    expect(logs.some((l) => l.includes('npm install --legacy-peer-deps'))).toBe(true)
+    expect(logs.some((l) => l.includes('node scripts/postinstall.js'))).toBe(true)
+    expect(logs.some((l) => l.includes('npx electron --version'))).toBe(true)
+    expect(logs.some((l) => l.includes('npm install'))).toBe(true)
   })
 
   it('attempts auto-repair when binary is missing (by default)', () => {

@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-> **npm 11.16+ / v12**: Install scripts (native compilation for `midi`, Electron binary download, `esbuild` binary) require explicit approval. This project ships an `allowScripts` allowlist in `package.json` that pre-approves these packages. If you see "install scripts blocked" warnings or `Error: Electron uninstall` when launching, the new `check-electron.js` postinstall step will detect the missing binary, attempt automatic repair, and print manual recovery steps if needed.
+> **npm 11.16+ / v12**: Install scripts (native compilation for `midi`, Electron binary download, `esbuild` binary) require explicit approval. This project ships an `allowScripts` allowlist in `package.json` that pre-approves these packages. If you see "install scripts blocked" warnings or `Error: Electron uninstall` when launching, the project's postinstall step patches the known Node 26 zip-extraction bug, detects a missing Electron binary, repairs it automatically, and prints manual recovery steps if that fails.
 
 ### Development Commands
 
@@ -73,7 +73,7 @@ sudo apt-get install -y libasound2-dev
 # Clone and install
 git clone https://github.com/Huckcity/winslab.git
 cd winslab
-npm install --legacy-peer-deps
+npm install
 
 # Run in development
 npm run dev
@@ -92,25 +92,37 @@ extract and run it instead:
 ### Troubleshooting `Error: Electron uninstall`
 
 `electron-vite` throws this when the Electron binary is missing from
-`node_modules/electron/dist` — usually because the Electron postinstall script didn't run
-or its binary download failed (network error, corporate proxy, npm cache issue).
+`node_modules/electron/dist` (no `path.txt`).
 
-The project's postinstall step now runs a check that prints recovery steps if this happens.
-In short:
+On **Node 26** this happens on every fresh install: the Electron download succeeds, but
+extracting the ~200 MB zip deadlocks inside `extract-zip`'s dependency `fd-slicer@1.1.0`,
+which uses `stream.destroyed` as its own EOF flag — on Node 26 that property is backed by
+stream state, so the extraction stream ends without emitting `end`, the process exits
+silently, and `dist/` is left holding a single half-written file. (Verified: Node 24.9
+extracts the same archive fine, Node 26.7 stalls.) CI builds on Node 24, which is why
+released AppImages are unaffected.
+
+`npm install` fixes this automatically: the project's postinstall patches `fd-slicer`, then
+re-runs Electron's install script if the binary is missing. If you still end up without a
+binary (offline, proxy, corrupt npm cache):
 
 ```bash
-# 1. Verify electron is actually installed
-npx electron --version
+# 1. Re-run the project's postinstall (patches fd-slicer, retries Electron)
+node scripts/postinstall.js
 
-# 2. If not, force a re-download of the binary
-rm -rf node_modules/electron/dist
-node node_modules/electron/install.js
+# 2. Verify Electron is working
+npx electron --version
 
 # 3. Last resort — clean reinstall
 npm cache clean --force
 rm -rf node_modules package-lock.json
-npm install --legacy-peer-deps
+npm install
 ```
+
+If Electron starts but aborts with *"The SUID sandbox helper binary was found, but is not
+configured correctly"*, that's distro-wide Chromium sandbox policy, not WinsLab: either fix
+the helper (`sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod
+4755 node_modules/electron/dist/chrome-sandbox`) or launch with `ELECTRON_DISABLE_SANDBOX=1`.
 
 ## Architecture
 

@@ -10,12 +10,18 @@ env:
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24 = LTS (release toolchain), 26 = current — catches cross-major breakage
+        # like fd-slicer's zip extraction stalling on Node 26 (#49).
+        node-version: [24, 26]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install ALSA dev headers
@@ -28,12 +34,16 @@ jobs:
 
   unit-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24, 26]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install ALSA dev headers
@@ -43,6 +53,40 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+  # Installing the Electron binary exercises npm's install scripts, @electron/get's
+  # 200 MB download and zip extraction — the path that silently produced no binary on
+  # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
+  electron-install:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24, 26]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Electron binary was extracted
+        run: |
+          node -e "
+            const { getElectronBinaryState } = require('./scripts/check-electron.js')
+            const { state, binaryPath } = getElectronBinaryState(process.cwd())
+            console.log('electron state:', state, binaryPath || '')
+            if (state !== 'ok') {
+              console.error('::error::Electron binary missing after npm ci (' + state + ') — the postinstall repair path failed')
+              process.exit(1)
+            }
+          "
 
   e2e:
     runs-on: macos-latest
