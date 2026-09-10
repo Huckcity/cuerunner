@@ -4,6 +4,7 @@ import { useStore } from '../../store'
 import type { GroupCue } from '../../types/cue'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
+import { groupDurationMs } from '../../utils/cueDuration'
 import './CueList.css'
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.wave', '.aiff', '.aif', '.flac', '.ogg', '.m4a', '.aac', '.opus', '.wma'])
@@ -60,8 +61,6 @@ export function CueList() {
   const duplicateCue = useStore(s => s.duplicateCue)
   const moveCue = useStore(s => s.moveCue)
   const addAudioCuesFromFiles = useStore(s => s.addAudioCuesFromFiles)
-  const undo = useStore(s => s.undo)
-  const redo = useStore(s => s.redo)
 
   // Collapse state is local UI state — not persisted to workspace
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(new Set())
@@ -108,6 +107,17 @@ export function CueList() {
     }
     return items
   }, [cues, collapsedGroupIds])
+
+  // Group rows have no stored duration — derive it from the children here, where the
+  // whole cue array is already subscribed. CueRow itself must not subscribe to `cues`
+  // (the list is virtualized, so off-screen rows would re-render on every edit).
+  const groupDurations = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const cue of cues) {
+      if (cue.type === 'group') map.set(cue.id, groupDurationMs(cues, cue.id))
+    }
+    return map
+  }, [cues])
 
   // ── File-drop state ───────────────────────────────────────────────────────
 
@@ -263,6 +273,11 @@ export function CueList() {
   // ── Keyboard ──────────────────────────────────────────────────────────────
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Windows and Linux have no Cmd key, so accept either modifier. The key is
+    // lower-cased because Shift makes e.key upper-case.
+    const mod = e.metaKey || e.ctrlKey
+    const key = e.key.toLowerCase()
+
     if (e.key === 'Escape') {
       if (ctxMenu) { closeCtxMenu(); return }
       // Escape drops the selection, so the next cue is created outside the current group
@@ -270,29 +285,22 @@ export function CueList() {
       return
     }
 
-    if (e.key === 'z' && e.metaKey && !e.shiftKey) {
-      e.preventDefault()
-      undo()
-      return
-    }
-    if (e.key === 'z' && e.metaKey && e.shiftKey) {
-      e.preventDefault()
-      redo()
-      return
-    }
-
+    // Undo and redo are owned by the Edit menu, which registers them as accelerators
+    // so they work wherever focus sits. A keydown can also reach this container for the
+    // same press, and handling it here too would undo twice.
     const renderIdx = renderItems.findIndex(item => item.cue.id === selectedId)
 
     if (e.key === 'ArrowDown' && renderIdx < renderItems.length - 1) {
       select(renderItems[renderIdx + 1].cue.id)
     } else if (e.key === 'ArrowUp' && renderIdx > 0) {
       select(renderItems[renderIdx - 1].cue.id)
-    } else if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) {
+    } else if (e.key === 'Delete' || (key === 'backspace' && mod)) {
       if (selectedId) removeCue(selectedId)
-    } else if (e.key === 'd' && e.metaKey) {
+    } else if (key === 'd' && mod) {
+      e.preventDefault()
       if (selectedId) duplicateCue(selectedId)
     }
-  }, [renderItems, selectedId, select, removeCue, duplicateCue, ctxMenu, closeCtxMenu, undo, redo])
+  }, [renderItems, selectedId, select, removeCue, duplicateCue, ctxMenu, closeCtxMenu])
 
   // ── Drop indicator ────────────────────────────────────────────────────────
 
@@ -367,6 +375,7 @@ export function CueList() {
                   depth={depth}
                   isSelected={cue.id === selectedId}
                   runState={running.get(cue.id) ?? null}
+                  durationMs={groupDurations.get(cue.id)}
                   collapsed={collapsed}
                   onToggleCollapse={cue.type === 'group' ? () => toggleCollapse(cue.id) : undefined}
                   onClick={() => select(cue.id)}

@@ -24,6 +24,10 @@
 .cue-row[data-state='playing']  { background: var(--bg-playing-row); animation: pulse 2s ease-in-out infinite; }
 .cue-row[data-state='pre-wait'] { background: var(--bg-prewait-row); }
 
+/* Disarmed rows: a disarmed cue is skipped by GO, so it must read as inactive at a glance */
+.cue-row[data-armed='false'] .name-text,
+.cue-row[data-armed='false'] .cue-type-icon { color: var(--fg-ghost); }
+
 @keyframes pulse {
   0%, 100% { background: var(--bg-playing-row); }
   50%       { background: #1e3a1e; }
@@ -112,6 +116,18 @@
   border-radius: var(--radius-pill);
   background: var(--pill-bg);
   color: var(--pill-fg);
+  flex-shrink: 0;
+}
+
+/* Same pill family as pre-wait/post-wait, but greyed out — this one is permanent */
+.disarmed-pill {
+  font-size: var(--text-xs);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
   flex-shrink: 0;
 }
 

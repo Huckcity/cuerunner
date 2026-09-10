@@ -7,6 +7,7 @@ interface WinslabBridge {
   getPathForFile: (file: File) => string
   app: {
     onCloseRequested: (callback: () => void) => () => void
+    onMenuAction: (callback: (action: 'undo' | 'redo') => void) => () => void
     confirmClose: () => Promise<void>
   }
   audio: {

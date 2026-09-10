@@ -34,6 +34,8 @@ interface Props {
   depth: number
   isSelected: boolean
   runState: RunningCue | null
+  /** Derived length for group rows — a group's own `duration` is never stored. */
+  durationMs?: number
   collapsed?: boolean
   onToggleCollapse?: () => void
   onClick: () => void
@@ -41,7 +43,7 @@ interface Props {
   renamingId: string | null
 }
 
-export function CueRow({ cue, depth, isSelected, runState, collapsed, onToggleCollapse, onClick, onContextMenu, renamingId }: Props) {
+export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed, onToggleCollapse, onClick, onContextMenu, renamingId }: Props) {
   const updateCue = useStore(s => s.updateCue)
   const [editing, setEditing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -58,7 +60,9 @@ export function CueRow({ cue, depth, isSelected, runState, collapsed, onToggleCo
     const tick = () => {
       const prog = audioPlayer.getProgress(cue.id)
       if (progressFillRef.current) {
-        progressFillRef.current.style.width = `${(prog?.fraction ?? 0) * 100}%`
+        // runFraction spans the whole run (loop repeats included); the waveform
+        // panel keeps using fraction, which is position inside the file.
+        progressFillRef.current.style.width = `${(prog?.runFraction ?? 0) * 100}%`
       }
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -104,6 +108,7 @@ export function CueRow({ cue, depth, isSelected, runState, collapsed, onToggleCo
       data-running={isRunning}
       data-state={runState?.state}
       data-depth={depth}
+      data-armed={cue.isArmed}
       onClick={onClick}
       onDoubleClick={startEdit}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, cue.id) }}
@@ -142,6 +147,9 @@ export function CueRow({ cue, depth, isSelected, runState, collapsed, onToggleCo
         ) : (
           <span className="name-text">{cue.name || <em>untitled</em>}</span>
         )}
+        {!cue.isArmed && (
+          <span className="disarmed-pill">disarmed</span>
+        )}
         {isRunning && runState?.state === 'pre-wait' && (
           <span className="state-pill">pre-wait</span>
         )}
@@ -149,7 +157,7 @@ export function CueRow({ cue, depth, isSelected, runState, collapsed, onToggleCo
           <span className="state-pill">post-wait</span>
         )}
       </span>
-      <span className="col-dur">{formatDuration(cue.duration)}</span>
+      <span className="col-dur">{formatDuration(durationMs ?? cue.duration)}</span>
       <span className="col-pre">{cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}</span>
       <span className="col-post">{cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}</span>
       <span className="col-adv">{cue.advance !== 'none' ? cue.advance : ''}</span>

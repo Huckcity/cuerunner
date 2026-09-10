@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // AudioPlayer uses Web Audio API — mock AudioContext
 const mockSetValueAtTime = vi.fn()
 const mockLinearRamp = vi.fn()
+const mockSetValueCurveAtTime = vi.fn()
 const mockCancelScheduledValues = vi.fn()
 const mockSetSinkId = vi.fn().mockResolvedValue(undefined)
 
@@ -11,6 +12,7 @@ let paramValue = 0.8
 const makeAudioParam = () => ({
   setValueAtTime: mockSetValueAtTime,
   linearRampToValueAtTime: mockLinearRamp,
+  setValueCurveAtTime: mockSetValueCurveAtTime,
   cancelScheduledValues: mockCancelScheduledValues,
   get value() { return paramValue },
   set value(v: number) { paramValue = v },
@@ -21,9 +23,12 @@ const mockPanner = { pan: makeAudioParam() }
 const mockSource = {
   buffer: null as AudioBuffer | null,
   loop: false,
+  loopStart: 0,
+  loopEnd: 0,
   playbackRate: makeAudioParam(),
   connect: vi.fn().mockReturnThis(),
   start: vi.fn(),
+  stop: vi.fn(),
   onended: null as ((ev: Event) => void) | null,
 }
 // Track the last source instance created so tests can fire onended
@@ -32,9 +37,19 @@ let lastSource: typeof mockSource | null = null
 const mockCtx = {
   state: 'running',
   currentTime: 0,
+  sampleRate: 48000,
+  baseLatency: 0.005,
   resume: vi.fn().mockResolvedValue(undefined),
   createBufferSource: vi.fn(() => {
-    lastSource = { ...mockSource, connect: vi.fn().mockReturnThis(), onended: null }
+    // Fresh start/stop mocks per instance — spread copies would share them, and a
+    // previous test's source being stopped would pollute this one's assertions.
+    lastSource = {
+      ...mockSource,
+      connect: vi.fn().mockReturnThis(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: null,
+    }
     return lastSource
   }),
   createGain: vi.fn(() => ({ ...mockGain, gain: makeAudioParam() })),
@@ -54,8 +69,8 @@ Object.defineProperty(window, 'winslab', {
   writable: true,
 })
 
-import { audioPlayer } from './AudioPlayer'
-import type { AudioCue } from '../types/cue'
+import { audioPlayer, shapeCurve } from './AudioPlayer'
+import type { AudioCue, FadeCurve } from '../types/cue'
 
 function makeAudioCue(overrides: Partial<AudioCue> = {}): AudioCue {
   return {
@@ -63,8 +78,8 @@ function makeAudioCue(overrides: Partial<AudioCue> = {}): AudioCue {
     colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
     advance: 'none', isArmed: true, notes: '',
     filePath: '/test.mp3', startTime: 0, endTime: null,
-    fadeInDuration: 0, fadeOutDuration: 0,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 0.8, pan: 0.3 }],
+    fadeInDuration: 0,
+    outputs: [{ volume: 0.8, pan: 0.3 }],
     loopCount: 0,
     playbackRate: 1.0,
     trim: 1.0,
@@ -150,6 +165,107 @@ describe('AudioPlayer.setPan', () => {
     expect(mockSetValueAtTime).not.toHaveBeenCalled()
     expect(mockLinearRamp).not.toHaveBeenCalled()
     expect(mockCancelScheduledValues).not.toHaveBeenCalled()
+  })
+})
+
+describe('AudioPlayer fade curves', () => {
+  let gainParam: ReturnType<typeof makeAudioParam>
+  let panParam: ReturnType<typeof makeAudioParam>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    paramValue = 0.8
+    mockCtx.currentTime = 0
+    gainParam = makeAudioParam()
+    panParam = makeAudioParam()
+    ;(audioPlayer as any).active.set('a1', {
+      source: { onended: null, stop: vi.fn(), playbackRate: makeAudioParam() },
+      gain: { gain: gainParam },
+      trimGain: { gain: makeAudioParam() },
+      panner: { pan: panParam },
+      startContextTime: 0,
+      startOffset: 0,
+      bufferDuration: 5,
+      cue: makeAudioCue(),
+      onEnd: undefined,
+    })
+    ;(audioPlayer as any).ctx = mockCtx
+  })
+
+  it('schedules a 64-point envelope instead of a ramp for a non-linear fade', () => {
+    audioPlayer.setVolume('a1', 0, 2000, 'sCurve')
+
+    expect(gainParam.cancelScheduledValues).toHaveBeenCalledWith(0)
+    expect(gainParam.setValueAtTime).toHaveBeenCalledWith(0.8, 0)
+    expect(gainParam.linearRampToValueAtTime).not.toHaveBeenCalled()
+
+    const [curve, startTime, duration] = mockSetValueCurveAtTime.mock.calls[0]
+    expect(curve).toHaveLength(64)
+    expect(curve[0]).toBeCloseTo(0.8)
+    expect(curve[63]).toBeCloseTo(0)
+    expect(startTime).toBe(0)
+    expect(duration).toBe(2)
+  })
+
+  it('shapes a pan envelope towards the target', () => {
+    audioPlayer.setPan('a1', 1, 500, 'logarithmic')
+
+    const [curve, , duration] = mockSetValueCurveAtTime.mock.calls[0]
+    expect(curve[0]).toBeCloseTo(0.8)
+    expect(curve[63]).toBeCloseTo(1)
+    expect(duration).toBe(0.5)
+    expect(panParam.linearRampToValueAtTime).not.toHaveBeenCalled()
+  })
+
+  it('keeps the linear ramp for the default curve', () => {
+    audioPlayer.setVolume('a1', 0, 2000)
+    expect(gainParam.linearRampToValueAtTime).toHaveBeenCalledWith(0, 2)
+    expect(mockSetValueCurveAtTime).not.toHaveBeenCalled()
+  })
+
+  it('ignores the curve when the fade has no duration', () => {
+    audioPlayer.setVolume('a1', 0.5, 0, 'logarithmic')
+    expect(gainParam.setValueAtTime).toHaveBeenCalledWith(0.5, 0)
+    expect(gainParam.linearRampToValueAtTime).not.toHaveBeenCalled()
+    expect(mockSetValueCurveAtTime).not.toHaveBeenCalled()
+  })
+})
+
+describe('shapeCurve', () => {
+  const curves: FadeCurve[] = ['linear', 'sCurve', 'logarithmic']
+
+  it('pins the first and last sample to the exact endpoints', () => {
+    for (const curve of curves) {
+      const values = shapeCurve(0.2, 0.9, curve, 64)
+      expect(values).toHaveLength(64)
+      expect(values[0]).toBeCloseTo(0.2)
+      expect(values[63]).toBeCloseTo(0.9)
+    }
+  })
+
+  it('is monotonic over a rising fade', () => {
+    for (const curve of curves) {
+      const values = shapeCurve(0, 1, curve, 64)
+      for (let i = 1; i < values.length; i++) {
+        expect(values[i]).toBeGreaterThan(values[i - 1])
+      }
+    }
+  })
+
+  it('is symmetric about the midpoint of the S-curve', () => {
+    const values = shapeCurve(0, 1, 'sCurve', 65)
+    expect(values[32]).toBeCloseTo(0.5)
+    for (let i = 0; i < values.length; i++) {
+      expect(values[i] + values[values.length - 1 - i]).toBeCloseTo(1)
+    }
+  })
+
+  it('falls below the linear line through a falling logarithmic fade', () => {
+    const log = shapeCurve(1, 0, 'logarithmic', 64)
+    const linear = shapeCurve(1, 0, 'linear', 64)
+    for (let i = 1; i < log.length - 1; i++) {
+      expect(log[i]).toBeLessThan(linear[i])
+    }
   })
 })
 
@@ -244,6 +360,22 @@ describe('AudioPlayer.setTrim', () => {
 })
 
 // ─── load() ─────────────────────────────────────────────────────────────
+
+describe('AudioPlayer.getContextInfo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('reports the context sample rate and latency in milliseconds', () => {
+    ;(audioPlayer as any).ctx = mockCtx
+    expect(audioPlayer.getContextInfo()).toEqual({ sampleRate: 48000, baseLatencyMs: 5 })
+  })
+
+  it('rounds the latency to one decimal', () => {
+    ;(audioPlayer as any).ctx = { ...mockCtx, sampleRate: 44100, baseLatency: 0.00215 }
+    expect(audioPlayer.getContextInfo()).toEqual({ sampleRate: 44100, baseLatencyMs: 2.2 })
+  })
+})
 
 describe('AudioPlayer.load', () => {
   beforeEach(() => {
@@ -359,12 +491,27 @@ describe('AudioPlayer.play', () => {
     expect(lastSource!.connect).toHaveBeenCalled()
   })
 
-  it('sets loop=true when loopCount !== 0', async () => {
+  it('loops the trimmed segment and stops after the requested repeats', async () => {
     ;(audioPlayer as any).cache.set('/test.mp3', { duration: 5 } as any)
 
-    await audioPlayer.play(makeAudioCue({ loopCount: 3 }))
+    // Loop count counts repeats: 3 repeats of a 2 s segment is 8 s of playback
+    await audioPlayer.play(makeAudioCue({ loopCount: 3, endTime: 2000 }))
+
     expect(lastSource).not.toBeNull()
     expect(lastSource!.loop).toBe(true)
+    expect(lastSource!.loopStart).toBe(0)
+    expect(lastSource!.loopEnd).toBe(2)
+    expect(lastSource!.stop).toHaveBeenCalledWith(8)
+  })
+
+  it('loops forever with no scheduled stop when loopCount is -1', async () => {
+    ;(audioPlayer as any).cache.set('/test.mp3', { duration: 5 } as any)
+
+    await audioPlayer.play(makeAudioCue({ loopCount: -1 }))
+
+    expect(lastSource).not.toBeNull()
+    expect(lastSource!.loop).toBe(true)
+    expect(lastSource!.stop).not.toHaveBeenCalled()
   })
 
   it('does not loop when loopCount is 0', async () => {
@@ -373,6 +520,7 @@ describe('AudioPlayer.play', () => {
     await audioPlayer.play(makeAudioCue({ loopCount: 0 }))
     expect(lastSource).not.toBeNull()
     expect(lastSource!.loop).toBe(false)
+    expect(lastSource!.stop).not.toHaveBeenCalled()
   })
 
   it('applies fade-in ramp when fadeInDuration > 0', async () => {
@@ -407,12 +555,19 @@ describe('AudioPlayer.play', () => {
     expect((audioPlayer as any).active.has('a1')).toBe(false)
   })
 
-  it('handles looped cue with endTime', async () => {
+  it('loops the trimmed region of a cue with an end time', async () => {
     ;(audioPlayer as any).cache.set('/test.mp3', { duration: 10 } as any)
     const cue = makeAudioCue({ startTime: 1000, endTime: 5000, loopCount: 1 })
+
     await audioPlayer.play(cue)
+
     expect(lastSource).not.toBeNull()
-    expect(lastSource!.start).toHaveBeenCalledWith(0, 1, 4)
+    // The 4 s region from 1 s to 5 s is what repeats
+    expect(lastSource!.loopStart).toBe(1)
+    expect(lastSource!.loopEnd).toBe(5)
+    // A looping source ignores the duration argument, so playback is bounded by stop()
+    expect(lastSource!.start).toHaveBeenCalledWith(0, 1)
+    expect(lastSource!.stop).toHaveBeenCalledWith(8)
   })
 
   it('handles load rejection gracefully', async () => {
@@ -428,7 +583,7 @@ describe('AudioPlayer.play', () => {
   it('uses first output settings when outputs array is non-empty', async () => {
     ;(audioPlayer as any).cache.set('/test.mp3', { duration: 5 } as any)
 
-    await audioPlayer.play(makeAudioCue({ outputs: [{ deviceId: 'hw1', channelPair: [1, 2], volume: 0.5, pan: -0.5 }] }))
+    await audioPlayer.play(makeAudioCue({ outputs: [{ volume: 0.5, pan: -0.5 }] }))
 
     // gain should be set to 0.5 (output.volume, not default 0.8)
     // We can verify the createGain was called; the actual value is set via params
@@ -562,6 +717,47 @@ describe('AudioPlayer.getProgress', () => {
     expect(progress!.elapsedMs).toBe(3000)
     expect(progress!.durationMs).toBe(10000)
     expect(progress!.fraction).toBeCloseTo(0.3)
+    // A one-shot cue has no repeats, so the run fraction is the in-file fraction
+    expect(progress!.runFraction).toBeCloseTo(0.3)
+  })
+
+  it('reports runFraction across every loop repeat', () => {
+    ;(audioPlayer as any).active.set('a1', {
+      source: {},
+      gain: {},
+      trimGain: {},
+      panner: {},
+      startContextTime: 0,
+      startOffset: 0,
+      bufferDuration: 10,
+      cue: makeAudioCue({ loopCount: 3, endTime: 2000 }),
+      onEnd: undefined,
+    })
+
+    // Four passes of a 2 s segment is 8 s of run; 4 s in is halfway through it
+    mockCtx.currentTime = 4
+    const progress = audioPlayer.getProgress('a1')
+    expect(progress!.runFraction).toBeCloseTo(0.5)
+    expect(progress!.fraction).toBeCloseTo(0.4)
+  })
+
+  it('tracks the current pass for a forever-looping cue', () => {
+    ;(audioPlayer as any).active.set('a1', {
+      source: {},
+      gain: {},
+      trimGain: {},
+      panner: {},
+      startContextTime: 0,
+      startOffset: 0,
+      bufferDuration: 10,
+      cue: makeAudioCue({ loopCount: -1, endTime: 2000 }),
+      onEnd: undefined,
+    })
+
+    // 5 s into a 2 s segment is halfway through the third pass, not pinned at 100%
+    mockCtx.currentTime = 5
+    const progress = audioPlayer.getProgress('a1')
+    expect(progress!.runFraction).toBeCloseTo(0.5)
   })
 
   it('caps fraction at 1', () => {

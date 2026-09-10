@@ -9,6 +9,12 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.on('app:close-requested', listener)
       return () => ipcRenderer.off('app:close-requested', listener)
     },
+    onMenuAction: (callback: (action: 'undo' | 'redo') => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: 'undo' | 'redo'): void =>
+        callback(action)
+      ipcRenderer.on('app:menu-action', listener)
+      return () => ipcRenderer.off('app:menu-action', listener)
+    },
     confirmClose: (): Promise<void> => ipcRenderer.invoke('app:confirm-close')
   },
   audio: {

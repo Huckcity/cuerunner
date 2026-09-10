@@ -3,6 +3,15 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 
+// Menu accelerators swallow the keystroke before the renderer sees it, so the
+// renderer decides whether the action belongs to a focused text field or to the
+// cue history. A programmatic click from a test has no focused window, hence the
+// fallback to the first open window.
+function sendMenuAction(action: 'undo' | 'redo'): void {
+  const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  target?.webContents.send('app:menu-action', action)
+}
+
 function createMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
@@ -16,6 +25,23 @@ function createMenu(): void {
         },
         { type: 'separator' },
         { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        {
+          id: 'edit-undo',
+          label: 'Undo',
+          accelerator: 'CmdOrCtrl+Z',
+          click: () => sendMenuAction('undo')
+        },
+        {
+          id: 'edit-redo',
+          label: 'Redo',
+          accelerator: 'Shift+CmdOrCtrl+Z',
+          click: () => sendMenuAction('redo')
+        }
       ]
     }
   ]

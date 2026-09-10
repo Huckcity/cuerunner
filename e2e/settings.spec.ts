@@ -37,6 +37,25 @@ test('settings dialog has Audio and MIDI tabs', async () => {
   await closeSettings(page)
 })
 
+test('Audio tab reports the live sample rate and base latency', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  const sampleRate = dialog.locator('.field-row', { hasText: 'Sample rate' }).locator('.settings-info')
+  const baseLatency = dialog.locator('.field-row', { hasText: 'Base latency' }).locator('.settings-info')
+  await expect(sampleRate).toHaveText(/^[\d,]+ Hz$/)
+  await expect(baseLatency).toHaveText(/^\d+(\.\d+)? ms$/)
+  await closeSettings(page)
+})
+
+test('MIDI tab offers a default output port select', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'MIDI', exact: true }).click()
+  const row = dialog.locator('.field-row', { hasText: 'Default output' })
+  await expect(row.locator('select')).toBeVisible()
+  await closeSettings(page)
+})
+
 test('settings dialog closes with Escape key', async () => {
   await openSettings(page)
   await page.keyboard.press('Escape')

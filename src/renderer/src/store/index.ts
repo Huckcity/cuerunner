@@ -12,15 +12,46 @@ export interface RunningCue {
   progress: number
 }
 
+// Outcome of a cue's most recent execution. Kept beside `running` rather than on the
+// cue itself: run results are not workspace content, so they must not dirty the
+// workspace or enter the undo history.
+export interface CueRunResult {
+  startedAt: number
+  durationMs: number
+  outcome: 'success' | 'error'
+  /** Network cues: status of the response, when one arrived. */
+  status?: number
+  statusText?: string
+  /** Failure detail — a fetch/CORS/timeout error, an HTTP error status, or a thrown script error. */
+  error?: string
+  /** Network cues: the start of the response body, capped at NETWORK_BODY_LIMIT characters. */
+  body?: string
+}
+
+export type LogLevel = 'info' | 'output' | 'error'
+
+export interface LogEntry {
+  id: number
+  at: number
+  level: LogLevel
+  message: string
+  /** Cue identity when the entry was written, e.g. "3 · Network Cue". */
+  label?: string
+}
+
+export type LogEntryInput = Omit<LogEntry, 'id' | 'at'>
+
+// The log is a bounded session history: old entries fall off the top, and a single
+// message is truncated so a runaway script cannot pin memory.
+const LOG_LIMIT = 500
+const LOG_MESSAGE_LIMIT = 4000
+
 const defaultAudioSettings: AudioSettings = {
   outputDeviceId: 'default',
-  sampleRate: 48000,
-  bufferSize: 256,
 }
 
 const defaultMidiSettings: MidiSettings = {
   outputPortName: '',
-  inputPortName: '',
 }
 
 interface CueListState {
@@ -61,6 +92,13 @@ interface CueListState {
   setRunning: (id: string, state: RunningCue | null) => void
   clearAllRunning: () => void
   syncCueDuration: (id: string, durationMs: number) => void
+  lastRuns: Record<string, CueRunResult>
+  setLastRun: (id: string, result: CueRunResult) => void
+
+  // Session log
+  log: LogEntry[]
+  appendLog: (entries: LogEntryInput[]) => void
+  clearLog: () => void
 
   // Settings
   updateAudioSettings: (patch: Partial<AudioSettings>) => void
@@ -77,6 +115,9 @@ interface CueListState {
 }
 
 const HISTORY_LIMIT = 50
+
+// Monotonic id source for log entries — React keys and ordering in the log panel.
+let _logSeq = 0
 
 function pushPast(past: Cue[][], snapshot: Cue[]): Cue[][] {
   return [...past.slice(-(HISTORY_LIMIT - 1)), snapshot]
@@ -140,6 +181,8 @@ export const useStore = create<CueListState>((set) => ({
   cues: [],
   selectedId: null,
   running: new Map(),
+  lastRuns: {},
+  log: [],
   past: [],
   future: [],
 
@@ -205,6 +248,9 @@ export const useStore = create<CueListState>((set) => ({
     return {
       cues: s.cues.filter(c => !toRemove.has(c.id)),
       selectedId: toRemove.has(s.selectedId ?? '') ? null : s.selectedId,
+      lastRuns: Object.fromEntries(
+        Object.entries(s.lastRuns).filter(([cueId]) => !toRemove.has(cueId))
+      ),
       isDirty: true,
       past: pushPast(s.past, s.cues),
       future: [],
@@ -312,6 +358,24 @@ export const useStore = create<CueListState>((set) => ({
     return { cues: s.cues.map(c => c.id === id ? { ...c, duration: durationMs } : c) }
   }),
 
+  setLastRun: (id, result) => set(s => ({ lastRuns: { ...s.lastRuns, [id]: result } })),
+
+  appendLog: (entries) => set(s => {
+    if (entries.length === 0) return s
+    const at = Date.now()
+    const added = entries.map(e => ({
+      ...e,
+      id: ++_logSeq,
+      at,
+      message: e.message.length > LOG_MESSAGE_LIMIT
+        ? e.message.slice(0, LOG_MESSAGE_LIMIT) + '… (truncated)'
+        : e.message
+    }))
+    return { log: [...s.log, ...added].slice(-LOG_LIMIT) }
+  }),
+
+  clearLog: () => set({ log: [] }),
+
   loadWorkspace: (cues, name, path, audioSettings, midiSettings) => set({
     cues,
     workspaceName: name,
@@ -319,6 +383,7 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: false,
     selectedId: cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null,
     running: new Map(),
+    lastRuns: {},
     audioSettings: audioSettings ?? { ...defaultAudioSettings },
     midiSettings: midiSettings ?? { ...defaultMidiSettings },
     past: [],

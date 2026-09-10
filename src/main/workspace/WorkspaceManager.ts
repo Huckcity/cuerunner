@@ -16,13 +16,19 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   if (cue.type === 'audio') {
     if (cue.playbackRate === undefined) cue.playbackRate = 1.0
     if (cue.trim === undefined) cue.trim = 1.0
+    // Per-cue device and channel-pair routing was never wired to the audio graph.
+    for (const output of cue.outputs ?? []) {
+      delete (output as Record<string, unknown>).deviceId
+      delete (output as Record<string, unknown>).channelPair
+    }
   }
+  if (cue.type === 'stop' && cue.waitForFade === undefined) cue.waitForFade = false
   delete cue.autoContinue
   delete cue.autoFollow
   return cue
 }
 
-function migrateWorkspace(workspace: Workspace): Workspace {
+export function migrateWorkspace(workspace: Workspace): Workspace {
   // Pass 1: normalize all cues
   const cues = workspace.cues.map(c => migrateCue(c as Cue & Record<string, unknown>))
 
@@ -39,7 +45,6 @@ function migrateWorkspace(workspace: Workspace): Workspace {
       if (childIds.includes(cue.id)) cue.parentId = group.id
     }
     // Reorder: pull children out and re-insert immediately after the group
-    const groupIdx = cues.findIndex(c => c.id === group.id)
     const children = childIds
       .map(id => cues.find(c => c.id === id))
       .filter((c): c is Cue => c !== undefined)
@@ -59,7 +64,6 @@ function migrateWorkspace(workspace: Workspace): Workspace {
   return workspace
 }
 
-const RECENT_KEY = 'recentWorkspaces'
 const MAX_RECENT = 10
 
 // Simple JSON persistence for recent files (avoids adding electron-store dep complexity)
@@ -151,8 +155,8 @@ export function blankWorkspace(name = 'Untitled'): Workspace {
     id: crypto.randomUUID(),
     name,
     createdAt: new Date().toISOString(),
-    audioSettings: { outputDeviceId: 'default', sampleRate: 48000, bufferSize: 256 },
-    midiSettings: { outputPortName: '', inputPortName: '' },
+    audioSettings: { outputDeviceId: 'default' },
+    midiSettings: { outputPortName: '' },
     cues: []
   }
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { Mock } from 'vitest'
 import { CueRunner } from './CueRunner'
 import { audioPlayer } from './AudioPlayer'
-import type { Cue, WaitCue, AudioCue, FadeCue, StopCue, NetworkCue, ScriptCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, FadeCue, StopCue, NetworkCue, ScriptCue } from '../types/cue'
 import type { RunningCue } from '../store'
 
 vi.mock('./AudioPlayer', () => ({
@@ -31,8 +32,8 @@ function makeAudio(overrides: Partial<AudioCue> = {}): AudioCue {
     colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
     advance: 'none', isArmed: true, notes: '',
     filePath: '/test.mp3', startTime: 0, endTime: null,
-    fadeInDuration: 0, fadeOutDuration: 0,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 1, pan: 0 }],
+    fadeInDuration: 0,
+    outputs: [{ volume: 1, pan: 0 }],
     loopCount: 0,
     ...overrides
   }
@@ -41,8 +42,10 @@ function makeAudio(overrides: Partial<AudioCue> = {}): AudioCue {
 interface TestSetup {
   runner: CueRunner
   cues: Cue[]
-  setRunning: ReturnType<typeof vi.fn>
-  setSelected: ReturnType<typeof vi.fn>
+  setRunning: Mock
+  setSelected: Mock
+  setLastRun: Mock
+  appendLog: Mock
 }
 
 function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
@@ -50,6 +53,8 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
   let selected: string | null = initialSelectedId ?? initialCues[0]?.id ?? null
   const setRunning = vi.fn()
   const setSelected = vi.fn((id: string | null) => { selected = id })
+  const setLastRun = vi.fn()
+  const appendLog = vi.fn()
 
   runner.init({
     getCues: () => cues,
@@ -58,11 +63,14 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
     setRunning,
     clearAllRunning: vi.fn(),
     syncCueDuration: vi.fn(),
-    getWorkspacePath: () => null
+    setLastRun,
+    appendLog,
+    getWorkspacePath: () => null,
+    getMidiDefaultPort: () => 'default-midi-port'
   })
 
   const cues = initialCues
-  return { runner, cues, setRunning, setSelected }
+  return { runner, cues, setRunning, setSelected, setLastRun, appendLog }
 }
 
 describe('CueRunner — basic execution', () => {
@@ -288,7 +296,7 @@ describe('CueRunner — fade cue', () => {
     }
     const { runner } = setup([fadeCue])
     runner.go()
-    expect(audioPlayer.setVolume).toHaveBeenCalledWith('a1', 0, 2000)
+    expect(audioPlayer.setVolume).toHaveBeenCalledWith('a1', 0, 2000, 'linear')
   })
 
   it('calls audioPlayer.setPan with target value and duration', () => {
@@ -301,7 +309,7 @@ describe('CueRunner — fade cue', () => {
     }
     const { runner } = setup([fadeCue])
     runner.go()
-    expect(audioPlayer.setPan).toHaveBeenCalledWith('a1', 0.5, 1000)
+    expect(audioPlayer.setPan).toHaveBeenCalledWith('a1', 0.5, 1000, 'linear')
   })
 
   it('stops the target cue after fading when stopTargetWhenDone is true', () => {
@@ -317,6 +325,19 @@ describe('CueRunner — fade cue', () => {
     vi.advanceTimersByTime(500)
     expect(audioPlayer.stop).toHaveBeenCalledWith('a1')
   })
+
+  it('passes the cue curve through to the audio player', () => {
+    const fadeCue: FadeCue = {
+      id: 'f1', number: '1', name: 'Fade', type: 'fade',
+      colorLabel: 'none', preWait: 0, postWait: 0, duration: 750,
+      advance: 'none', isArmed: true, notes: '',
+      targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0.25,
+      curve: 'sCurve', stopTargetWhenDone: false
+    }
+    const { runner } = setup([fadeCue])
+    runner.go()
+    expect(audioPlayer.setVolume).toHaveBeenCalledWith('a1', 0.25, 750, 'sCurve')
+  })
 })
 
 describe('CueRunner — stop cue', () => {
@@ -328,7 +349,7 @@ describe('CueRunner — stop cue', () => {
       id: 's1', number: '1', name: 'Stop All', type: 'stop',
       colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'all', fadeOut: false, fadeOutDuration: 500
+      targetCueId: 'all', fadeOut: false, fadeOutDuration: 500, waitForFade: false
     }
     const { runner } = setup([stopCue])
     runner.go()
@@ -340,7 +361,7 @@ describe('CueRunner — stop cue', () => {
       id: 's1', number: '1', name: 'Stop All', type: 'stop',
       colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'all', fadeOut: true, fadeOutDuration: 1500
+      targetCueId: 'all', fadeOut: true, fadeOutDuration: 1500, waitForFade: false
     }
     const { runner } = setup([stopCue])
     runner.go()
@@ -352,7 +373,7 @@ describe('CueRunner — stop cue', () => {
       id: 's1', number: '1', name: 'Stop Specific', type: 'stop',
       colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: false, fadeOutDuration: 0
+      targetCueId: 'a1', fadeOut: false, fadeOutDuration: 0, waitForFade: false
     }
     const { runner } = setup([stopCue])
     runner.go()
@@ -364,11 +385,97 @@ describe('CueRunner — stop cue', () => {
       id: 's1', number: '1', name: 'Stop Specific Fade', type: 'stop',
       colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 800
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 800, waitForFade: false
     }
     const { runner } = setup([stopCue])
     runner.go()
     expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 800)
+  })
+
+  it('fires the next cue only after the fade when waitForFade is on', () => {
+    const stopCue: StopCue = {
+      id: 's1', number: '1', name: 'Stop With Fade', type: 'stop',
+      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      advance: 'on-end', isArmed: true, notes: '',
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true
+    }
+    const nextCue = makeWait({ id: 'w2', number: '2' })
+    const { runner, setRunning } = setup([stopCue, nextCue])
+
+    runner.go()
+    vi.advanceTimersByTime(1199)
+    expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
+
+    vi.advanceTimersByTime(1)
+    vi.runAllTimers()
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
+  })
+
+  it('fires the next cue immediately when waitForFade is off', () => {
+    const stopCue: StopCue = {
+      id: 's1', number: '1', name: 'Stop Without Wait', type: 'stop',
+      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      advance: 'on-end', isArmed: true, notes: '',
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: false
+    }
+    const nextCue = makeWait({ id: 'w2', number: '2' })
+    const { runner, setRunning } = setup([stopCue, nextCue])
+
+    runner.go()
+    vi.runAllTimers()
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
+  })
+
+  it('stop() cancels a pending wait-for-fade timer', () => {
+    const stopCue: StopCue = {
+      id: 's1', number: '1', name: 'Stop With Fade', type: 'stop',
+      colorLabel: 'none', preWait: 0, postWait: 0, duration: 0,
+      advance: 'on-end', isArmed: true, notes: '',
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true
+    }
+    const nextCue = makeWait({ id: 'w2', number: '2' })
+    const { runner, setRunning } = setup([stopCue, nextCue])
+
+    runner.go()
+    runner.stop('s1')
+    vi.runAllTimers()
+    expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
+  })
+})
+
+describe('CueRunner — midi cue', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  function makeMidi(overrides: Partial<MidiCue> = {}): MidiCue {
+    return {
+      id: 'm1', number: '1', name: 'MIDI', type: 'midi',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      portName: '',
+      messages: [{ kind: 'noteOn', channel: 1, note: 60, velocity: 100 }],
+      ...overrides
+    }
+  }
+
+  it('sends to the default output port when the cue does not name one', () => {
+    const cue = makeMidi()
+    const { runner } = setup([cue])
+    runner.go()
+    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+      portName: 'default-midi-port',
+      messages: cue.messages
+    })
+  })
+
+  it('lets the cue-specific port override the default', () => {
+    const cue = makeMidi({ portName: 'Stage Rack' })
+    const { runner } = setup([cue])
+    runner.go()
+    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+      portName: 'Stage Rack',
+      messages: cue.messages
+    })
   })
 })
 
@@ -448,6 +555,192 @@ describe('CueRunner — network cue', () => {
     await vi.runAllTimersAsync()
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
+
+  it('logs the error and still advances when the request rejects', async () => {
+    const log = vi.fn()
+    console.error = log
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+
+    const networkCue: NetworkCue = {
+      id: 'n4', number: '4', name: 'Failing Network', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'on-end', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const cue2 = makeWait({ id: 'w2', number: '5' })
+    const { runner, setRunning, setLastRun, appendLog } = setup([networkCue, cue2])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(log).toHaveBeenCalledWith('Network cue failed:', expect.any(Error))
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
+    expect(setLastRun).toHaveBeenCalledWith('n4', expect.objectContaining({
+      outcome: 'error',
+      error: 'network down'
+    }))
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'network down', label: '4 · Failing Network' })
+    ])
+  })
+
+  it('logs the request line with method, url, and status', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('ok', { status: 200, statusText: 'OK' })
+    ))
+
+    const networkCue: NetworkCue = {
+      id: 'n7', number: '7', name: 'Ping', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com/ping',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const { runner, appendLog } = setup([networkCue])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({
+        level: 'info',
+        message: 'GET https://example.com/ping → 200 OK (0ms)',
+        label: '7 · Ping'
+      })
+    ])
+  })
+
+  it('records the response status of a successful run', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })))
+
+    const networkCue: NetworkCue = {
+      id: 'n5', number: '5', name: 'Network', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const { runner, setLastRun } = setup([networkCue])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('n5', expect.objectContaining({
+      outcome: 'success',
+      status: 200,
+      durationMs: expect.any(Number)
+    }))
+  })
+
+  it('records a failed run when the response carries an error status', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('nope', { status: 503, statusText: 'Service Unavailable' })
+    ))
+
+    const networkCue: NetworkCue = {
+      id: 'n6', number: '6', name: 'Network', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const { runner, setLastRun } = setup([networkCue])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('n6', expect.objectContaining({
+      outcome: 'error',
+      status: 503,
+      error: 'HTTP 503 Service Unavailable'
+    }))
+  })
+
+  it('reports the response body on the run result', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('{"ok":true}', { status: 200 })
+    ))
+
+    const networkCue: NetworkCue = {
+      id: 'n8', number: '8', name: 'Body', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com/body',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const { runner, setLastRun } = setup([networkCue])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('n8', expect.objectContaining({
+      outcome: 'success',
+      body: '{"ok":true}'
+    }))
+  })
+
+  it('truncates a body longer than the cap and marks it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('a'.repeat(4500), { status: 200 })
+    ))
+
+    const networkCue: NetworkCue = {
+      id: 'n9', number: '9', name: 'Long Body', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com/long',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const { runner, setLastRun } = setup([networkCue])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalledWith('n9', expect.objectContaining({
+      body: 'a'.repeat(4000) + '\n… (truncated)'
+    }))
+  })
+
+  it('omits the body field for an empty response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })))
+
+    const networkCue: NetworkCue = {
+      id: 'n10', number: '10', name: 'Empty Body', type: 'network',
+      colorLabel: 'none', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET',
+      url: 'https://example.com/empty',
+      body: '',
+      headers: {},
+      timeout: 5000
+    }
+    const { runner, setLastRun } = setup([networkCue])
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).toHaveBeenCalled()
+    expect(setLastRun.mock.calls[0][1]).not.toHaveProperty('body')
+  })
 })
 
 describe('CueRunner — script cue', () => {
@@ -458,7 +751,6 @@ describe('CueRunner — script cue', () => {
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
   it('executes the script string via new Function', () => {
-    let executed = false
     const scriptCue: ScriptCue = {
       id: 'sc1', number: '1', name: 'Script', type: 'script',
       colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
@@ -467,11 +759,11 @@ describe('CueRunner — script cue', () => {
       script: 'executed = true'
     }
     // Make executed accessible in the eval scope
-    ;(globalThis as any).executed = false
+    Reflect.set(globalThis, 'executed', false)
     const { runner } = setup([scriptCue])
     runner.go()
-    expect((globalThis as any).executed).toBe(true)
-    delete (globalThis as any).executed
+    expect(Reflect.get(globalThis, 'executed')).toBe(true)
+    Reflect.deleteProperty(globalThis, 'executed')
   })
 
   it('calls onDone immediately after executing script', async () => {
@@ -498,11 +790,122 @@ describe('CueRunner — script cue', () => {
       language: 'javascript',
       script: 'throw new Error("boom")'
     }
-    const { runner } = setup([scriptCue])
+    const { runner, setLastRun } = setup([scriptCue])
     expect(() => runner.go()).not.toThrow()
     // Error is caught as a Promise rejection, logged via console.error asynchronously
     await vi.runAllTimersAsync()
     expect(console.error).toHaveBeenCalled()
+    expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
+      outcome: 'error',
+      error: 'boom'
+    }))
+  })
+
+  it('mirrors console.log from the script into the log', async () => {
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: "console.log('hello', 42)"
+    }
+    const { runner, appendLog } = setup([scriptCue])
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'output', message: 'hello 42', label: '1 · Script' })
+    ])
+  })
+
+  it('mirrors console.error from the script into the log as an error', async () => {
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: "console.error('bad thing')"
+    }
+    const { runner, appendLog } = setup([scriptCue])
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'bad thing' })
+    ])
+  })
+
+  it('logs shell() output without the script having to log it', async () => {
+    Object.defineProperty(window, 'winslab', {
+      value: {
+        script: {
+          readFile: vi.fn(),
+          shell: vi.fn().mockResolvedValue({ stdout: 'hi\n', stderr: '', code: 0, signal: null })
+        }
+      },
+      writable: true
+    })
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: "await shell('echo hi')"
+    }
+    const { runner, appendLog } = setup([scriptCue])
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'output', message: '$ echo hi\nhi' })
+    ])
+  })
+
+  it('logs a failing shell() command as an error with its exit code', async () => {
+    Object.defineProperty(window, 'winslab', {
+      value: {
+        script: {
+          readFile: vi.fn(),
+          shell: vi.fn().mockResolvedValue({ stdout: '', stderr: 'nope\n', code: 127, signal: null })
+        }
+      },
+      writable: true
+    })
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: "await shell('nope')"
+    }
+    const { runner, appendLog } = setup([scriptCue])
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: '$ nope\nnope\nexited with code 127' })
+    ])
+  })
+
+  it('caps script output per run and says so', async () => {
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'for (let i = 0; i < 250; i++) console.log("line " + i)'
+    }
+    const { runner, appendLog } = setup([scriptCue])
+    runner.go()
+    await vi.runAllTimersAsync()
+
+    const lines = appendLog.mock.calls
+      .map(call => call[0][0])
+      .filter(entry => entry.message.startsWith('line '))
+    expect(lines).toHaveLength(199)
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ message: 'output truncated after 200 lines' })
+    ])
   })
 
   it('passes include function as a parameter to the script', () => {
@@ -513,11 +916,11 @@ describe('CueRunner — script cue', () => {
       language: 'javascript',
       script: 'capturedInclude = typeof include'
     }
-    ;(globalThis as any).capturedInclude = undefined
+    Reflect.set(globalThis, 'capturedInclude', undefined)
     const { runner } = setup([scriptCue])
     runner.go()
-    expect((globalThis as any).capturedInclude).toBe('function')
-    delete (globalThis as any).capturedInclude
+    expect(Reflect.get(globalThis, 'capturedInclude')).toBe('function')
+    Reflect.deleteProperty(globalThis, 'capturedInclude')
   })
 
   it('include() calls window.winslab.script.readFile with resolved path', async () => {
@@ -543,7 +946,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => '/shows/my-show.wlab'
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab',
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -576,7 +982,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => '/shows/my-show.wlab'
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab',
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -613,7 +1022,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => '/shows/my-show.wlab'
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab',
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -664,7 +1076,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => '/shows/my-show.wlab'
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab',
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -698,7 +1113,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => null
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => null,
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -735,7 +1153,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => null
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => null,
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -770,7 +1191,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => null
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => null,
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -806,7 +1230,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => null
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => null,
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -840,7 +1267,10 @@ describe('CueRunner — script cue', () => {
       setRunning: vi.fn(),
       clearAllRunning: vi.fn(),
       syncCueDuration: vi.fn(),
-      getWorkspacePath: () => '/shows/my-show.wlab'
+      setLastRun: vi.fn(),
+      appendLog: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab',
+      getMidiDefaultPort: () => ''
     })
     runner.go()
 
@@ -917,7 +1347,10 @@ describe('CueRunner — fireCueFromOffset fallback', () => {
           setRunning,
           clearAllRunning: vi.fn(),
           syncCueDuration: vi.fn(),
-          getWorkspacePath: () => null
+          setLastRun: vi.fn(),
+          appendLog: vi.fn(),
+          getWorkspacePath: () => null,
+          getMidiDefaultPort: () => ''
         })
 
     // Seek past the osc cue's offset — fireCueFromOffset will hit the else branch (onDone)

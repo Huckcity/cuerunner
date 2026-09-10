@@ -34,8 +34,7 @@ export function createCue(type: CueType): Cue {
         startTime: 0,
         endTime: null,
         fadeInDuration: 0,
-        fadeOutDuration: 0,
-        outputs: [{ deviceId: 'default', channelPair: [1, 2], volume: 1, pan: 0 }],
+        outputs: [{ volume: 1, pan: 0 }],
         loopCount: 0,
         playbackRate: 1.0,
         trim: 1.0
@@ -79,7 +78,8 @@ export function createCue(type: CueType): Cue {
         type: 'stop',
         targetCueId: 'all',
         fadeOut: false,
-        fadeOutDuration: 500
+        fadeOutDuration: 500,
+        waitForFade: false
       } satisfies StopCue
     case 'group':
       return {
@@ -114,4 +114,13 @@ export function formatDuration(ms: number): string {
   const sec = s % 60
   if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, '0')}`
   return `${sec.toFixed(1)}s`
+}
+
+// Wall-clock time of a timestamp, 24h with seconds: "17:10:41". Built from Date parts
+// rather than toLocaleTimeString so the format is stable across locales.
+export function formatClock(ms: number): string {
+  const d = new Date(ms)
+  return [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(n => String(n).padStart(2, '0'))
+    .join(':')
 }

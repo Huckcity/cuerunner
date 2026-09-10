@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createCue, formatDuration } from './cueDefaults'
+import { createCue, formatDuration, formatClock } from './cueDefaults'
 import type { CueType } from '../types/cue'
 
 describe('createCue', () => {
@@ -67,6 +67,20 @@ describe('createCue', () => {
       expect(createCue(type).parentId).toBeNull()
     }
   )
+})
+
+describe('formatClock', () => {
+  it('formats a timestamp as 24h time with seconds', () => {
+    expect(formatClock(new Date(2026, 0, 2, 17, 10, 41).getTime())).toBe('17:10:41')
+  })
+
+  it('pads single-digit hours, minutes, and seconds', () => {
+    expect(formatClock(new Date(2026, 0, 2, 9, 5, 3).getTime())).toBe('09:05:03')
+  })
+
+  it('renders midnight as 00:00:00', () => {
+    expect(formatClock(new Date(2026, 0, 2, 0, 0, 0).getTime())).toBe('00:00:00')
+  })
 })
 
 describe('formatDuration', () => {

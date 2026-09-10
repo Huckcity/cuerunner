@@ -7,6 +7,8 @@ export function useCueRunner() {
   const clearAllRunning = useStore(s => s.clearAllRunning)
   const select = useStore(s => s.select)
   const syncCueDuration = useStore(s => s.syncCueDuration)
+  const setLastRun = useStore(s => s.setLastRun)
+  const appendLog = useStore(s => s.appendLog)
 
   useEffect(() => {
     cueRunner.init({
@@ -16,9 +18,12 @@ export function useCueRunner() {
       setRunning,
       clearAllRunning,
       syncCueDuration,
-      getWorkspacePath: () => useStore.getState().workspacePath
+      setLastRun,
+      appendLog,
+      getWorkspacePath: () => useStore.getState().workspacePath,
+      getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName
     })
-  }, [select, setRunning, clearAllRunning, syncCueDuration])
+  }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 
   const go = useCallback(() => cueRunner.go(), [])
   const stop = useCallback(() => cueRunner.stop(), [])

@@ -1,12 +1,81 @@
 import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue } from '../types/cue'
 import { audioPlayer } from './AudioPlayer'
-import type { RunningCue } from '../store'
+import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
 type ClearAllRunning = () => void
 type GetCues = () => Cue[]
 type GetSelected = () => string | null
 type SetSelected = (id: string | null) => void
+
+// Scripts may return a promise (the body is wrapped in an async IIFE) or a plain value.
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  if (typeof value !== 'object' || value === null || !('then' in value)) return false
+  return typeof value.then === 'function'
+}
+
+// Cap on log lines a single script run may emit, so a chatty script cannot flood the log.
+const MAX_RUN_LOG_LINES = 200
+
+// Response body characters recorded with a network run. Follows the same
+// 4000-character rule as the session log's message cap.
+const NETWORK_BODY_LIMIT = 4000
+
+// Reads a response body without buffering an unbounded stream: at most
+// NETWORK_BODY_LIMIT characters are kept, and the reader is cancelled as soon as the
+// budget is spent. Longer bodies get a truncation marker. Returns undefined for a
+// body-less or empty response.
+async function readNetworkBody(response: Response): Promise<string | undefined> {
+  if (!response.body) return undefined
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let body = ''
+
+  try {
+    while (body.length < NETWORK_BODY_LIMIT) {
+      const { done, value } = await reader.read()
+      if (done) return body || undefined
+      if (value) body += decoder.decode(value, { stream: true })
+    }
+
+    // Budget spent: one more read tells us whether the body continues. Either way the
+    // stream is cancelled, so the remainder is never pulled into memory.
+    const { done } = await reader.read()
+    if (done && body.length <= NETWORK_BODY_LIMIT) return body
+    return body.slice(0, NETWORK_BODY_LIMIT) + '\n… (truncated)'
+  } finally {
+    await reader.cancel().catch(() => {})
+  }
+}
+
+function formatLogArg(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value instanceof Error) return value.message
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+// The console handed to script cues: output is mirrored into the run log so a show
+// operator can read it without opening DevTools (which packaged builds cannot).
+function createScriptConsole(sink: (level: 'output' | 'error', message: string) => void) {
+  const forward = (level: 'output' | 'error', native: (...args: unknown[]) => void) =>
+    (...args: unknown[]): void => {
+      sink(level, args.map(formatLogArg).join(' '))
+      native(...args)
+    }
+
+  return {
+    log: forward('output', console.log.bind(console)),
+    info: forward('output', console.info.bind(console)),
+    debug: forward('output', console.debug.bind(console)),
+    warn: forward('error', console.warn.bind(console)),
+    error: forward('error', console.error.bind(console))
+  }
+}
 
 interface RunnerDeps {
   getCues: GetCues
@@ -15,13 +84,20 @@ interface RunnerDeps {
   setRunning: SetRunning
   clearAllRunning: ClearAllRunning
   syncCueDuration: (id: string, durationMs: number) => void
+  setLastRun: (id: string, result: CueRunResult) => void
+  appendLog: (entries: LogEntryInput[]) => void
   getWorkspacePath: () => string | null
+  // Output port a MIDI cue falls back to when it does not name one itself.
+  getMidiDefaultPort: () => string
 }
 
 export class CueRunner {
   private deps: RunnerDeps | null = null
   private timers = new Map<string, ReturnType<typeof setTimeout>>()
   private groupStartOffsets = new Map<string, number>()
+  // Playlist groups step one child per GO. The cursor holds the index of the child the
+  // next GO will fire; 0 means a pass is complete or has not started.
+  private playlistCursors = new Map<string, number>()
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -49,19 +125,26 @@ export class CueRunner {
       return cues[targetIdx + 1] ?? null
     })()
 
+    // A playlist group holds the selection while it still has children to fire, so
+    // repeated GO presses step through it. On the last step it hands over normally.
+    const steppingPlaylist = cue.type === 'group' && (cue as GroupCue).mode === 'playlist' &&
+      !this.isLastPlaylistStep(cue.id)
+
     // If this cue will auto-fire nextCue, skip selection past it
-    const selectionTarget = cue.advance && cue.advance !== 'none'
-      ? (() => {
-          if (!nextCue) return null
-          const nextIdx = cues.findIndex(c => c.id === nextCue.id)
-          if (nextCue.type === 'group') {
-            let i = nextIdx + 1
-            while (i < cues.length && cues[i].parentId === nextCue.id) i++
-            return cues[i] ?? null
-          }
-          return cues[nextIdx + 1] ?? null
-        })()
-      : nextCue
+    const selectionTarget = steppingPlaylist
+      ? cue
+      : cue.advance && cue.advance !== 'none'
+        ? (() => {
+            if (!nextCue) return null
+            const nextIdx = cues.findIndex(c => c.id === nextCue.id)
+            if (nextCue.type === 'group') {
+              let i = nextIdx + 1
+              while (i < cues.length && cues[i].parentId === nextCue.id) i++
+              return cues[i] ?? null
+            }
+            return cues[nextIdx + 1] ?? null
+          })()
+        : nextCue
     setSelected(selectionTarget?.id ?? null)
 
     // Cancel timers if the cue is already mid-run (prevents stacking)
@@ -69,7 +152,8 @@ export class CueRunner {
     if (this.hasActiveTimers(cue.id)) this.stop(cue.id)
 
     this.fireCue(cue, () => {
-      if (cue.advance === 'on-end' && nextCue) {
+      // A playlist group mid-pass is not finished, so it must not hand over yet
+      if (cue.advance === 'on-end' && nextCue && !this.isMidPlaylist(cue.id)) {
         this.goById(nextCue.id)
       }
     })
@@ -93,22 +177,76 @@ export class CueRunner {
     })
   }
 
+  // Cue identity as it was when the entry was written, e.g. "3 · Network Cue".
+  private cueLabel(cue: Cue): string {
+    return `${cue.number} · ${cue.name}`
+  }
+
+  private armedChildren(groupId: string): Cue[] {
+    return this.deps!.getCues().filter(c => c.parentId === groupId && c.isArmed)
+  }
+
+  // True while a playlist group has fired at least one child but not yet a full pass.
+  private isMidPlaylist(groupId: string): boolean {
+    return (this.playlistCursors.get(groupId) ?? 0) !== 0
+  }
+
+  // True when the next GO fires the final armed child and completes the pass.
+  private isLastPlaylistStep(groupId: string): boolean {
+    const children = this.armedChildren(groupId)
+    if (children.length === 0) return true
+    return (this.playlistCursors.get(groupId) ?? 0) === children.length - 1
+  }
+
+  private log(entry: LogEntryInput): void {
+    this.deps?.appendLog([entry])
+  }
+
   private fireCue(cue: Cue, onDone: () => void): void {
-    const { setRunning } = this.deps!
+    const { setRunning, setLastRun } = this.deps!
+    const label = this.cueLabel(cue)
 
     const run = (state: Omit<RunningCue, 'cueId'>) =>
       setRunning(cue.id, { cueId: cue.id, ...state })
 
     const execute = (): void => {
-      run({ state: 'playing', startedAt: Date.now(), progress: 0 })
+      const startedAt = Date.now()
+      let detail: Partial<CueRunResult> = {}
+      const report = (patch: Partial<CueRunResult>): void => { detail = { ...detail, ...patch } }
+
+      run({ state: 'playing', startedAt, progress: 0 })
+      this.log({ level: 'info', message: 'started', label })
       this.execute(cue, () => {
+        const durationMs = Date.now() - startedAt
+        setLastRun(cue.id, {
+          startedAt,
+          durationMs,
+          outcome: 'success',
+          ...detail
+        })
+
+        // A firing reports as a line in the log: the failure reason, or what the cue did.
+        const networkError = cue.type === 'network' && detail.status === undefined
+        if (detail.outcome === 'error' || networkError) {
+          this.log({ level: 'error', message: detail.error ?? 'request failed', label })
+        } else if (cue.type === 'network' && detail.status !== undefined) {
+          const statusText = detail.statusText ? ` ${detail.statusText}` : ''
+          this.log({
+            level: 'info',
+            message: `${cue.method} ${cue.url} → ${detail.status}${statusText} (${durationMs}ms)`,
+            label
+          })
+        } else {
+          this.log({ level: 'info', message: `completed in ${durationMs}ms`, label })
+        }
+
         run({ state: 'post-wait', startedAt: Date.now(), progress: 1 })
         const t = setTimeout(() => {
           setRunning(cue.id, null)
           onDone()
         }, cue.postWait)
         this.timers.set(cue.id + ':post', t)
-      })
+      }, report)
     }
 
     if (cue.preWait > 0) {
@@ -120,7 +258,11 @@ export class CueRunner {
     }
   }
 
-  private execute(cue: Cue, onDone: () => void): void {
+  private execute(
+    cue: Cue,
+    onDone: () => void,
+    report: (patch: Partial<CueRunResult>) => void = () => {}
+  ): void {
     switch (cue.type) {
       case 'audio':
         this.executeAudio(cue as AudioCue, onDone)
@@ -149,32 +291,84 @@ export class CueRunner {
           headers: cue.headers,
           body: cue.method !== 'GET' ? cue.body : undefined,
           signal: AbortSignal.timeout(cue.timeout ?? 5000)
-        }).finally(() => { this.timers.delete(cue.id); onDone() })
+        })
+          .then(async response => {
+            report({ status: response.status, statusText: response.statusText })
+            if (!response.ok) {
+              report({
+                outcome: 'error',
+                error: `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`
+              })
+            }
+            const body = await readNetworkBody(response)
+            if (body !== undefined) report({ body })
+          })
+          .catch((e: unknown) => {
+            report({ outcome: 'error', error: e instanceof Error ? e.message : String(e) })
+            console.error('Network cue failed:', e)
+          })
+          .finally(() => { this.timers.delete(cue.id); onDone() })
         break
       case 'script': {
         const scriptCue = cue as ScriptCue
         const workspacePath = this.deps!.getWorkspacePath()
-        const include = async (relativePath: string): Promise<void> => {
-          const code = await window.winslab.script.readFile(relativePath, workspacePath)
-          const fn = new Function('include', 'shell', `return (async () => {\n${code}\n})()`)
-          await fn(include, shell)
+        const label = this.cueLabel(cue)
+
+        // Script output is capped per run so a chatty script cannot flood the log.
+        let emitted = 0
+        const logOutput = (level: 'output' | 'error', message: string): void => {
+          if (emitted >= MAX_RUN_LOG_LINES) return
+          emitted++
+          this.log(emitted === MAX_RUN_LOG_LINES
+            ? { level: 'error', message: `output truncated after ${MAX_RUN_LOG_LINES} lines`, label }
+            : { level, message, label })
         }
+
         const shell = async (
           command: string,
           options?: { timeout?: number; cwd?: string; env?: Record<string, string> }
         ): Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }> => {
-          return window.winslab.script.shell(command, { cwd: workspacePath ?? undefined, ...options })
+          const result = await window.winslab.script.shell(command, {
+            cwd: workspacePath ?? undefined,
+            ...options
+          })
+          // Surface the command's output without requiring the script to log it.
+          const lines = [`$ ${command}`]
+          if (result.stdout.trim()) lines.push(result.stdout.trimEnd())
+          if (result.stderr.trim()) lines.push(result.stderr.trimEnd())
+          if (result.code !== 0) {
+            lines.push(`exited with code ${result.code}${result.signal ? ` (${result.signal})` : ''}`)
+          }
+          if (lines.length > 1) {
+            logOutput(result.code === 0 ? 'output' : 'error', lines.join('\n'))
+          }
+          return result
         }
-        const fn = new Function('include', 'shell', `return (async () => {\n${scriptCue.script}\n})()`)
+
+        const scriptConsole = createScriptConsole(logOutput)
+        const include = async (relativePath: string): Promise<void> => {
+          const code = await window.winslab.script.readFile(relativePath, workspacePath)
+          const fn = new Function('include', 'shell', 'console', `return (async () => {\n${code}\n})()`)
+          await fn(include, shell, scriptConsole)
+        }
+
+        const fn = new Function(
+          'include', 'shell', 'console',
+          `return (async () => {\n${scriptCue.script}\n})()`
+        )
+        const fail = (e: unknown): void => {
+          report({ outcome: 'error', error: e instanceof Error ? e.message : String(e) })
+          console.error('Script cue error:', e)
+        }
         try {
-          const result = fn(include, shell)
-          if (result != null && typeof (result as any).then === 'function') {
-            Promise.resolve(result).catch((e: unknown) => console.error('Script cue error:', e)).finally(onDone)
+          const result = fn(include, shell, scriptConsole)
+          if (isPromiseLike(result)) {
+            Promise.resolve(result).catch(fail).finally(onDone)
           } else {
             onDone()
           }
         } catch (e) {
-          console.error('Script cue error:', e)
+          fail(e)
           onDone()
         }
         break
@@ -192,7 +386,10 @@ export class CueRunner {
   }
 
   private executeMidi(cue: MidiCue, onDone: () => void): void {
-    window.winslab.midi.send({ portName: cue.portName, messages: cue.messages })
+    window.winslab.midi.send({
+      portName: cue.portName || this.deps!.getMidiDefaultPort(),
+      messages: cue.messages
+    })
       .finally(onDone)
   }
 
@@ -208,9 +405,9 @@ export class CueRunner {
 
   private executeFade(cue: FadeCue, onDone: () => void): void {
     if (cue.fadeProperty === 'volume') {
-      audioPlayer.setVolume(cue.targetCueId, cue.targetValue, cue.duration)
-    } else if (cue.fadeProperty === 'pan') {
-      audioPlayer.setPan(cue.targetCueId, cue.targetValue, cue.duration)
+      audioPlayer.setVolume(cue.targetCueId, cue.targetValue, cue.duration, cue.curve)
+    } else {
+      audioPlayer.setPan(cue.targetCueId, cue.targetValue, cue.duration, cue.curve)
     }
     const t = setTimeout(() => {
       if (cue.stopTargetWhenDone) this.stop(cue.targetCueId)
@@ -231,8 +428,15 @@ export class CueRunner {
       this.executeGroupTimeline(cue, children, onDone, startOffset)
     } else if (cue.mode === 'random') {
       this.fireCue(children[Math.floor(Math.random() * children.length)], onDone)
+    } else if (cue.mode === 'playlist') {
+      // One child per GO: fire the child at the cursor and advance it. Wrapping to 0
+      // marks the pass complete, which also releases the selection and lets
+      // advance=on-end hand over to the next cue.
+      const index = (this.playlistCursors.get(cue.id) ?? 0) % children.length
+      this.playlistCursors.set(cue.id, (index + 1) % children.length)
+      this.fireCue(children[index], onDone)
     } else {
-      // sequence and playlist both run children in order
+      // sequence
       this.runSequence(children, 0, onDone)
     }
   }
@@ -307,12 +511,20 @@ export class CueRunner {
   }
 
   private executeStop(cue: StopCue, onDone: () => void): void {
+    const fadeMs = cue.fadeOut ? cue.fadeOutDuration : 0
     if (cue.targetCueId === 'all') {
-      audioPlayer.stopAll(cue.fadeOut ? cue.fadeOutDuration : 0)
+      audioPlayer.stopAll(fadeMs)
     } else {
-      audioPlayer.stop(cue.targetCueId, cue.fadeOut ? cue.fadeOutDuration : 0)
+      audioPlayer.stop(cue.targetCueId, fadeMs)
     }
-    onDone()
+    // A wait-for-fade stop keeps the run open until the fade has finished sounding,
+    // so the next cue does not start over it.
+    if (cue.fadeOut && cue.waitForFade) {
+      const t = setTimeout(onDone, cue.fadeOutDuration)
+      this.timers.set(cue.id, t)
+    } else {
+      onDone()
+    }
   }
 
   getGroupStartOffset(groupId: string): number {
@@ -382,6 +594,7 @@ export class CueRunner {
     } else {
       for (const key of this.timers.keys()) clearTimeout(this.timers.get(key))
       this.timers.clear()
+      this.playlistCursors.clear()
       audioPlayer.stopAll()
       clearAllRunning()
     }

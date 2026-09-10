@@ -4,14 +4,19 @@ A cross-platform **QLab alternative** for Windows and macOS — professional sho
 
 Built with Electron, React, TypeScript, and Zustand. Licensed under [MIT](./LICENSE).
 
+**Operator documentation:** the [user guide](https://huckcity.github.io/winslab/guide.html) covers
+running a show — workspaces, timing and advance, every cue type, the run log, and
+troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
+
 ## Features
 
 - **9 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, and Script cues
-- **Audio Playback**: Multi-output audio with per-device volume/pan, fading, and loop control
+- **Audio Playback**: per-cue level, pan, rate, and trim with fade-in, loop counts, and a clickable waveform
 - **MIDI Control**: Send MIDI messages to external instruments and gear
 - **OSC Integration**: Send Open Sound Control messages for networked control
 - **Show Sequencing**: Group cues, set auto-advance, pre/post-wait delays, and arm/disarm
-- **Workspace Management**: Save/load `.wlab` JSON workspaces with full undo/redo
+- **Session Log**: cue run results, script output, and failures in a bottom panel
+- **Workspace Management**: Save/load `.wlab` JSON workspaces with undo/redo
 - **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds, plus an experimental Linux AppImage
 - **Timeline Mode**: Visual timeline-based show layout (alternative to list view)
 
@@ -55,7 +60,18 @@ npm run dist              # Build and package for all platforms
 npm run dist:win          # Build and package for Windows only
 npm run dist:mac          # Build and package for macOS only
 npm run dist:linux        # Build and package for Linux only (AppImage)
+npm run screenshots       # Regenerate website/assets/guide images (requires build)
+npm run site              # Serve website/ locally on http://localhost:8080
 ```
+
+`npm run screenshots` launches the built app, opens a demo show from a temporary file,
+drives the UI, and rewrites every image used by the user guide. Run it after any UI change so
+the guide cannot drift from the product.
+
+`npm run site` serves `website/` with no dependencies, so a page can be reviewed locally
+before it deploys. Pass a port to override the default: `npm run site -- 3000`. The
+[GitHub Pages workflow](./.github/workflows/deploy-website.yml) publishes the same directory
+on every push to `main` that touches `website/**`.
 
 ## Linux
 
@@ -148,7 +164,7 @@ All cues extend `CueBase` and are stored in a flat array with `parentId` pointer
 
 ```typescript
 type CueType = 
-  | "audio"    // Play audio file with outputs, fading, loop control
+  | "audio"    // Play audio file with level/pan, fade-in, loop control
   | "midi"     // Send MIDI messages
   | "osc"      // Send OSC packets over network
   | "wait"     // Pause for specified duration
@@ -164,6 +180,36 @@ Key fields affecting playback:
 - `advance: 'none' | 'on-start' | 'on-end'` — auto-advance behavior
 - `isArmed` — disarmed cues are skipped by GO button
 - `parentId` — null for top-level; otherwise references parent group
+
+### Network and Script Cues
+
+**Network cues** make an HTTP request when they fire. The show waits for the response (or
+the cue's timeout, 5 s by default) before moving on. Requests are issued from the app
+window, so target servers must return CORS headers.
+
+Both cue types show a **Last Run** section in the inspector: when the cue last fired, how
+long it took, the HTTP status for network cues, the start of the response body for network
+cues (cut off at 4000 characters with a truncation marker), and the reason for any failure.
+Run results are runtime state — they are never written to the `.wlab` file.
+
+The **log panel** (LOG button in the transport bar) records every firing: when the cue
+started, what it did, the response status, and any failure. Script cues also send their
+`console.log()` / `console.error()` output there, and `shell()` output is logged whether or
+not the script prints it — this is the only place to read script output in a packaged
+build, which has no DevTools. The log is a bounded session history (the last 500 entries)
+and is not saved.
+
+**Script cues** run JavaScript in the app window. `await` works, and the cue waits for the
+script to finish. Two helpers are in scope:
+
+- `shell(command, { timeout, cwd, env })` — runs a system command and resolves
+  `{ stdout, stderr, code, signal }`. Commands start in the workspace folder and time out
+  after 10 s by default.
+- `include('path/to/file.js')` — runs another JavaScript file, resolved relative to the
+  workspace file, with the same helpers available.
+
+Script cues are not sandboxed — a workspace file is executable code, so only open `.wlab`
+files you trust.
 
 ### Playback Engine
 
@@ -181,8 +227,10 @@ Key fields affecting playback:
 
 - Audio files read via IPC and decoded client-side
 - Decoded `AudioBuffer`s cached (LRU, max 100)
-- Per-cue playback chain: `BufferSource → GainNode (volume + fade) → StereoPannerNode → destination`
-- Multi-output support: each audio cue can route to different device/channel pairs
+- Per-cue playback chain: `BufferSource → GainNode (volume + fade) → trimGain → StereoPannerNode → destination`
+- One shared `AudioContext` for the whole app, feeding the output device chosen in Settings
+  (`AudioContext.setSinkId`). Each audio cue carries a single output with its own level and pan;
+  per-cue device and channel-pair routing does not exist.
 
 ### State Management
 
@@ -237,7 +285,7 @@ Workspaces are saved as `.wlab` files (JSON format matching the `Workspace` inte
       "number": "1",
       "name": "Intro Music",
       "filePath": "/path/to/file.mp3",
-      "outputs": [{"deviceId": "default", "channelPair": [1, 2], "volume": 1, "pan": 0}],
+      "outputs": [{ "volume": 1, "pan": 0 }],
       "preWait": 0,
       "postWait": 0,
       "advance": "on-end",
@@ -245,12 +293,16 @@ Workspaces are saved as `.wlab` files (JSON format matching the `Workspace` inte
       // ... other fields
     }
   ],
-  "audioSettings": { /* master volume, device settings */ },
-  "midiSettings": { /* port mappings */ }
+  "audioSettings": { /* output device */ },
+  "midiSettings": { /* default output port */ }
 }
 ```
 
-`WorkspaceManager` (main process) handles I/O and auto-migrates legacy fields on load.
+`WorkspaceManager` (main process) handles I/O and auto-migrates legacy fields on load: old
+`childIds` arrays become `parentId` pointers, missing timing fields are filled with defaults,
+the pre-`advance` `autoContinue`/`autoFollow` flags are dropped, a stop cue without
+`waitForFade` gains `false`, and the retired per-output `deviceId` and `channelPair` fields are
+dropped.
 
 ## Testing
 
@@ -284,9 +336,28 @@ GitHub Actions workflows in `.github/workflows/`:
 
 ## Known Limitations
 
-- MIDI native module requires ALSA headers on Linux (not officially supported)
-- Network cues require appropriate CORS headers on target servers
+Playback and platform limits:
+
+- MIDI native module requires ALSA headers on Linux (not officially supported), and MIDI cues
+  silently do nothing when the module is unavailable
+- Network cues require appropriate CORS headers on target servers, and hold the cue until the
+  response or timeout
+- Audio cues store absolute file paths, so a `.wlab` moved without its audio loses those links
 - E2E tests require display (run on macOS in CI, headless on Linux requires Xvfb)
+
+Behaviour worth knowing before a show:
+
+- Fixed caps: the run log keeps the last 500 lines, a single script run emits at most 200 lines,
+  and run-log messages and network response bodies are cut off at 4000 characters
+- `include()` has no module semantics — an included script cannot export anything, and each file
+  runs in its own scope
+- A save gives no confirmation beyond the dirty dot clearing
+- Group rows derive their length from their children for timeline and sequence groups; playlist
+  and random groups show `–`
+- OSC is send-only; Winslab cannot receive OSC yet
+
+The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
+these in the context of the feature it affects.
 
 ## Contributing
 

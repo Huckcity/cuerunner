@@ -82,3 +82,27 @@
   background: var(--state-running-bg);
   color: var(--state-running-fg);
 }
+
+.btn-log {
+  margin-left: var(--space-2);
+  height: var(--h-button-sm);
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-brand);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-std);
+}
+
+.btn-log:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.btn-log[data-active='true'] {
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}

@@ -61,15 +61,10 @@ export function AudioInspector({ cue, tab }: Props) {
             onChange={e => set({ fadeInDuration: fromSeconds(Number(e.target.value)) })} />
         </div>
         <div className="field-row">
-          <label>Fade out (s)</label>
-          <input type="number" min={0} step={0.1} value={toSeconds(cue.fadeOutDuration)}
-            onChange={e => set({ fadeOutDuration: fromSeconds(Number(e.target.value)) })} />
-        </div>
-        <div className="field-row">
           <label>Loop count</label>
           <input type="number" min={-1} value={cue.loopCount}
             onChange={e => set({ loopCount: Number(e.target.value) })} />
-          <span className="inspector-hint" style={{ marginTop: 0 }}>-1 = infinite</span>
+          <span className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</span>
         </div>
       </div>
     )

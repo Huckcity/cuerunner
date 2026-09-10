@@ -5,7 +5,9 @@ function resetStore() {
   useStore.setState({
     cues: [],
     selectedId: null,
-    running: new Map()
+    running: new Map(),
+    lastRuns: {},
+    log: []
   })
 }
 
@@ -303,21 +305,19 @@ describe('store — duplicateCue', () => {
 describe('store — settings', () => {
   beforeEach(() => {
     useStore.setState({
-      audioSettings: { outputDeviceId: 'default', sampleRate: 48000, bufferSize: 256 },
-      midiSettings: { outputPortName: '', inputPortName: '' },
+      audioSettings: { outputDeviceId: 'default' },
+      midiSettings: { outputPortName: '' },
     })
   })
 
-  it('updateAudioSettings merges patch into audioSettings', () => {
+  it('updateAudioSettings applies the patch to audioSettings', () => {
     useStore.getState().updateAudioSettings({ outputDeviceId: 'device-123' })
-    expect(useStore.getState().audioSettings.outputDeviceId).toBe('device-123')
-    expect(useStore.getState().audioSettings.sampleRate).toBe(48000)
+    expect(useStore.getState().audioSettings).toEqual({ outputDeviceId: 'device-123' })
   })
 
-  it('updateMidiSettings merges patch into midiSettings', () => {
+  it('updateMidiSettings applies the patch to midiSettings', () => {
     useStore.getState().updateMidiSettings({ outputPortName: 'IAC Driver Bus 1' })
-    expect(useStore.getState().midiSettings.outputPortName).toBe('IAC Driver Bus 1')
-    expect(useStore.getState().midiSettings.inputPortName).toBe('')
+    expect(useStore.getState().midiSettings).toEqual({ outputPortName: 'IAC Driver Bus 1' })
   })
 
   it('updateAudioSettings marks workspace dirty', () => {
@@ -327,8 +327,8 @@ describe('store — settings', () => {
   })
 
   it('loadWorkspace restores audioSettings when provided', () => {
-    const audioSettings = { outputDeviceId: 'hw-1', sampleRate: 44100, bufferSize: 512 }
-    const midiSettings = { outputPortName: 'Port A', inputPortName: '' }
+    const audioSettings = { outputDeviceId: 'hw-1' }
+    const midiSettings = { outputPortName: 'Port A' }
     useStore.getState().loadWorkspace([], 'Test', null, audioSettings, midiSettings)
     expect(useStore.getState().audioSettings).toEqual(audioSettings)
     expect(useStore.getState().midiSettings).toEqual(midiSettings)
@@ -336,8 +336,8 @@ describe('store — settings', () => {
 
   it('loadWorkspace falls back to defaults when settings are omitted', () => {
     useStore.getState().loadWorkspace([], 'Test', null)
-    expect(useStore.getState().audioSettings.outputDeviceId).toBe('default')
-    expect(useStore.getState().midiSettings.outputPortName).toBe('')
+    expect(useStore.getState().audioSettings).toEqual({ outputDeviceId: 'default' })
+    expect(useStore.getState().midiSettings).toEqual({ outputPortName: '' })
   })
 })
 
@@ -577,6 +577,86 @@ describe('store — syncCueDuration', () => {
     const id = useStore.getState().cues[0].id
     useStore.getState().syncCueDuration(id, 0) // initial duration is 0
     expect(useStore.getState().cues[0].duration).toBe(0)
+  })
+})
+
+describe('store — setLastRun', () => {
+  beforeEach(resetStore)
+
+  it('records the result against the cue without dirtying the workspace', () => {
+    useStore.getState().addCue('network')
+    const id = useStore.getState().cues[0].id
+    useStore.setState({ isDirty: false, past: [] })
+
+    useStore.getState().setLastRun(id, {
+      startedAt: 1000, durationMs: 42, outcome: 'success', status: 200, statusText: 'OK'
+    })
+
+    expect(useStore.getState().lastRuns[id]).toMatchObject({ outcome: 'success', status: 200 })
+    // Run results are not workspace content — they must not dirty the file or enter undo
+    expect(useStore.getState().isDirty).toBe(false)
+    expect(useStore.getState().past).toHaveLength(0)
+  })
+
+  it('drops the result when its cue is removed', () => {
+    useStore.getState().addCue('network')
+    const id = useStore.getState().cues[0].id
+    useStore.getState().setLastRun(id, { startedAt: 1, durationMs: 1, outcome: 'success' })
+
+    useStore.getState().removeCue(id)
+
+    expect(useStore.getState().lastRuns[id]).toBeUndefined()
+  })
+
+  it('clears results when a workspace is loaded', () => {
+    useStore.getState().addCue('network')
+    const id = useStore.getState().cues[0].id
+    useStore.getState().setLastRun(id, { startedAt: 1, durationMs: 1, outcome: 'success' })
+
+    useStore.getState().loadWorkspace([], 'Other', null)
+
+    expect(useStore.getState().lastRuns).toEqual({})
+  })
+})
+
+describe('store — appendLog / clearLog', () => {
+  beforeEach(resetStore)
+
+  it('appends entries with increasing ids and a timestamp', () => {
+    useStore.getState().appendLog([{ level: 'info', message: 'started' }])
+    useStore.getState().appendLog([{ level: 'output', message: 'hello', label: '2 · Script Cue' }])
+
+    const log = useStore.getState().log
+    expect(log).toHaveLength(2)
+    expect(log[0].message).toBe('started')
+    expect(log[1]).toMatchObject({ level: 'output', message: 'hello', label: '2 · Script Cue' })
+    expect(log[1].id).toBeGreaterThan(log[0].id)
+    expect(log[1].at).toBeGreaterThan(0)
+  })
+
+  it('keeps only the most recent entries', () => {
+    useStore.getState().appendLog(
+      Array.from({ length: 600 }, (_, i) => ({ level: 'info' as const, message: `line ${i}` }))
+    )
+
+    const log = useStore.getState().log
+    expect(log).toHaveLength(500)
+    expect(log[log.length - 1].message).toBe('line 599')
+    expect(log[0].message).toBe('line 100')
+  })
+
+  it('truncates an over-long message instead of keeping it whole', () => {
+    useStore.getState().appendLog([{ level: 'output', message: 'x'.repeat(9000) }])
+
+    const message = useStore.getState().log[0].message
+    expect(message).toHaveLength(4000 + '… (truncated)'.length)
+    expect(message).toContain('(truncated)')
+  })
+
+  it('clearLog empties the log', () => {
+    useStore.getState().appendLog([{ level: 'info', message: 'started' }])
+    useStore.getState().clearLog()
+    expect(useStore.getState().log).toEqual([])
   })
 })
 

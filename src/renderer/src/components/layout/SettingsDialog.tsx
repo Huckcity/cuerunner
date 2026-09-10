@@ -12,6 +12,8 @@ export function SettingsDialog({ onClose }: Props) {
   const [tab, setTab] = useState<'audio' | 'midi'>('audio')
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
   const [midiPorts, setMidiPorts] = useState<string[]>([])
+  // Context values are fixed for the life of the AudioContext, so read them once on mount.
+  const [contextInfo, setContextInfo] = useState(() => audioPlayer.getContextInfo())
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(devices => {
@@ -74,11 +76,11 @@ export function SettingsDialog({ onClose }: Props) {
               </div>
               <div className="field-row">
                 <label>Sample rate</label>
-                <span className="settings-info">{audioSettings.sampleRate.toLocaleString()} Hz</span>
+                <span className="settings-info">{contextInfo.sampleRate.toLocaleString()} Hz</span>
               </div>
               <div className="field-row">
-                <label>Buffer size</label>
-                <span className="settings-info">{audioSettings.bufferSize} samples</span>
+                <label>Base latency</label>
+                <span className="settings-info">{contextInfo.baseLatencyMs.toFixed(1)} ms</span>
               </div>
             </>
           )}
@@ -98,7 +100,8 @@ export function SettingsDialog({ onClose }: Props) {
                 </select>
               </div>
               <p className="inspector-hint">
-                Individual MIDI cues can override this with a per-cue port selection.
+                MIDI cues without their own port send here; individual cues can override it
+                with a per-cue port selection.
               </p>
             </>
           )}

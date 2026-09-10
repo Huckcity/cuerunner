@@ -17,8 +17,6 @@ export interface CueBase {
 }
 
 export interface AudioOutput {
-  deviceId: string
-  channelPair: [number, number]
   volume: number
   pan: number
 }
@@ -29,7 +27,6 @@ export interface AudioCue extends CueBase {
   startTime: number
   endTime: number | null
   fadeInDuration: number
-  fadeOutDuration: number
   outputs: AudioOutput[]
   loopCount: number
   playbackRate: number
@@ -72,7 +69,7 @@ export type FadeCurve = 'linear' | 'sCurve' | 'logarithmic'
 export interface FadeCue extends CueBase {
   type: 'fade'
   targetCueId: string
-  fadeProperty: 'volume' | 'pan' | 'opacity'
+  fadeProperty: 'volume' | 'pan'
   targetValue: number
   curve: FadeCurve
   stopTargetWhenDone: boolean
@@ -83,6 +80,7 @@ export interface StopCue extends CueBase {
   targetCueId: string | 'all'
   fadeOut: boolean
   fadeOutDuration: number
+  waitForFade: boolean
 }
 
 export type GroupMode = 'playlist' | 'random' | 'sequence' | 'timeline'

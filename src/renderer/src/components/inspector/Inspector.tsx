@@ -7,7 +7,10 @@ import { OscInspector } from './OscInspector'
 import { WaitInspector } from './WaitInspector'
 import { FadeInspector } from './FadeInspector'
 import { GroupInspector } from './GroupInspector'
-import type { Cue } from '../../types/cue'
+import { NetworkInspector } from './NetworkInspector'
+import { ScriptInspector } from './ScriptInspector'
+import { StopInspector } from './StopInspector'
+import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue } from '../../types/cue'
 import './Inspector.css'
 
 const TYPE_TABS: Record<string, string[]> = {
@@ -16,7 +19,7 @@ const TYPE_TABS: Record<string, string[]> = {
   osc: ['Basics', 'OSC'],
   wait: ['Basics', 'Wait'],
   fade: ['Basics', 'Fade'],
-  stop: ['Basics'],
+  stop: ['Basics', 'Stop'],
   group: ['Basics', 'Group'],
   network: ['Basics', 'Network'],
   script: ['Basics', 'Script']
@@ -24,12 +27,15 @@ const TYPE_TABS: Record<string, string[]> = {
 
 function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Basics') return <BasicTab cue={cue} />
-  if (tab === 'Audio' || tab === 'Timing') return <AudioInspector cue={cue as any} tab={tab} />
-  if (tab === 'MIDI') return <MidiInspector cue={cue as any} />
-  if (tab === 'OSC') return <OscInspector cue={cue as any} />
-  if (tab === 'Wait') return <WaitInspector cue={cue as any} />
-  if (tab === 'Fade') return <FadeInspector cue={cue as any} />
-  if (tab === 'Group') return <GroupInspector cue={cue as any} />
+  if (tab === 'Audio' || tab === 'Timing') return <AudioInspector cue={cue as AudioCue} tab={tab} />
+  if (tab === 'MIDI') return <MidiInspector cue={cue as MidiCue} />
+  if (tab === 'OSC') return <OscInspector cue={cue as OscCue} />
+  if (tab === 'Wait') return <WaitInspector cue={cue as WaitCue} />
+  if (tab === 'Fade') return <FadeInspector cue={cue as FadeCue} />
+  if (tab === 'Group') return <GroupInspector cue={cue as GroupCue} />
+  if (tab === 'Network') return <NetworkInspector cue={cue as NetworkCue} />
+  if (tab === 'Script') return <ScriptInspector cue={cue as ScriptCue} />
+  if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

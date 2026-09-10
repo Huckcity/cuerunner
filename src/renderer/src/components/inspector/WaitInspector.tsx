@@ -19,7 +19,7 @@ export function WaitInspector({ cue }: Props) {
       </div>
       <p className="inspector-hint">
         Wait cues pause the sequence for the specified duration, then continue.
-        Set Auto-follow on the Basics tab to automatically fire the next cue after waiting.
+        Set Advance to "On end" on the Basics tab to automatically fire the next cue after waiting.
       </p>
     </div>
   )

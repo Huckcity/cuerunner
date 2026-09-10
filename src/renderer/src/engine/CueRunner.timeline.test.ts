@@ -38,8 +38,8 @@ function makeAudio(id: string, parentId: string, overrides: Partial<AudioCue> = 
     colorLabel: 'none', parentId, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
     advance: 'none', isArmed: true, notes: '',
     filePath: '/test.wav', startTime: 0, endTime: null,
-    fadeInDuration: 0, fadeOutDuration: 0,
-    outputs: [{ deviceId: 'default', channelPair: [1, 2] as [number, number], volume: 1, pan: 0 }],
+    fadeInDuration: 0,
+    outputs: [{ volume: 1, pan: 0 }],
     loopCount: 0,
     ...overrides
   }
@@ -55,6 +55,9 @@ function setup(cues: Cue[]) {
     setRunning,
     clearAllRunning: vi.fn(),
     syncCueDuration: vi.fn(),
+    setLastRun: vi.fn(),
+    appendLog: vi.fn(),
+    getMidiDefaultPort: () => ''
   })
   return { runner, setRunning }
 }

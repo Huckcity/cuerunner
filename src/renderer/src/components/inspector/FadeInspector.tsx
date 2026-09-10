@@ -27,7 +27,6 @@ export function FadeInspector({ cue }: Props) {
         <select value={cue.fadeProperty} onChange={e => set({ fadeProperty: e.target.value as any })}>
           <option value="volume">Volume</option>
           <option value="pan">Pan</option>
-          <option value="opacity">Opacity</option>
         </select>
       </div>
       <div className="field-row">

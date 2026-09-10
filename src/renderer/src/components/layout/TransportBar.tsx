@@ -2,7 +2,12 @@ import { useStore } from '../../store'
 import { useCueRunner, useKeyboard } from '../../hooks/useCueRunner'
 import './TransportBar.css'
 
-export function TransportBar() {
+interface Props {
+  logOpen: boolean
+  onToggleLog: () => void
+}
+
+export function TransportBar({ logOpen, onToggleLog }: Props) {
   const { go, stop, panic } = useCueRunner()
   useKeyboard(go, stop, panic)
 
@@ -19,6 +24,14 @@ export function TransportBar() {
         <span className="running-badge" data-active={runningCount > 0}>
           {runningCount > 0 ? `${runningCount} running` : 'idle'}
         </span>
+        <button
+          className="btn-log"
+          data-active={logOpen}
+          onClick={onToggleLog}
+          title="Show or hide the log"
+        >
+          LOG
+        </button>
       </div>
       <div className="transport-center">
         <button className="btn-stop" onClick={stop} title="Stop All (Esc)">

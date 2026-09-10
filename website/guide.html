@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Guide — Winslab</title>
+  <meta name="description" content="How to run a show with Winslab: workspaces, cue stacks, timing and advance, every cue type, the run log, keyboard reference, and troubleshooting." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Winslab User Guide" />
+  <meta property="og:description" content="How to run a show with Winslab: workspaces, cue stacks, timing and advance, every cue type, the run log, and troubleshooting." />
+  <meta property="og:url" content="https://huckcity.github.io/winslab/guide.html" />
+  <meta property="og:image" content="https://huckcity.github.io/winslab/assets/guide/01-window.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="./assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="Winslab home">
+        <img src="./assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="./guide.html">User Guide</a>
+        <a href="./index.html#download">Download</a>
+        <a href="./index.html#cue-types">Cue Types</a>
+        <a href="#keyboard">Keyboard</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout guide-layout">
+
+    <nav class="toc panel" aria-label="Guide contents">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#workspaces">Workspaces</a></li>
+        <li><a href="#cue-list">Building a cue list</a></li>
+        <li><a href="#timing">Timing and advance</a></li>
+        <li><a href="#transport">Transport and keyboard</a></li>
+        <li><a href="#cue-types">Cue types</a>
+          <ol>
+            <li><a href="#audio">Audio</a></li>
+            <li><a href="#midi">MIDI</a></li>
+            <li><a href="#osc">OSC</a></li>
+            <li><a href="#wait">Wait</a></li>
+            <li><a href="#fade">Fade</a></li>
+            <li><a href="#stop">Stop</a></li>
+            <li><a href="#group">Group</a></li>
+            <li><a href="#network">Network</a></li>
+            <li><a href="#script">Script</a></li>
+          </ol>
+        </li>
+        <li><a href="#results">Reading results</a></li>
+        <li><a href="#settings">Settings</a></li>
+        <li><a href="#keyboard">Keyboard reference</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#limitations">Known limitations</a></li>
+        <li><a href="#cheat-sheet">Show-night cheat sheet</a></li>
+      </ol>
+    </nav>
+
+    <div class="guide-content">
+
+      <section id="overview" class="panel reveal">
+        <h2>Overview</h2>
+        <p>
+          Winslab is a cue stack for live operation. You build a list of cues, arm the ones you
+          want, and fire them with GO. Everything is designed around two questions an operator asks
+          mid-show: <em>what runs next</em>, and <em>what just happened</em>.
+        </p>
+        <p>
+          This guide covers Winslab 0.7 and later. It documents the application as it behaves
+          today, including the rough edges listed under <a href="#limitations">Known limitations</a>.
+        </p>
+
+        <figure class="figure">
+          <a href="./assets/guide/01-window.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/01-window.png" alt="The Winslab window with a demo show loaded: cue list on the left, inspector on the right, waveform below, transport bar at the bottom." />
+          </a>
+          <figcaption>A show loaded for editing. The walk-in music cue is selected.</figcaption>
+        </figure>
+
+        <h3>The window</h3>
+        <ol class="steps">
+          <li><strong>Toolbar</strong> — the WinsLab menu (New, Open, Save, Save As, Recent, Settings), the workspace name with a dirty dot, and the add-cue buttons.</li>
+          <li><strong>Cue list</strong> — the running order. One row per cue, with duration, pre-wait, post-wait, and any auto-advance in the columns on the right.</li>
+          <li><strong>Inspector</strong> — settings for the selected cue. Tabs change with the cue type.</li>
+          <li><strong>Waveform / timeline</strong> — the waveform of the selected audio cue, or the timeline editor when a timeline-mode group is selected.</li>
+          <li><strong>Run log</strong> — hidden by default; the LOG button in the transport bar reveals it.</li>
+          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the LOG toggle, and the selected cue.</li>
+        </ol>
+      </section>
+
+      <section id="install" class="panel reveal delay-1">
+        <h2>Install</h2>
+        <div class="cards two-col">
+          <article class="card download-card">
+            <h3>Windows</h3>
+            <a class="action action-ghost" href="https://pub.winslabapp.com/latest/WinsLab-Setup.exe">Download .exe</a>
+          </article>
+          <article class="card download-card">
+            <h3>macOS</h3>
+            <a class="action action-ghost" href="https://pub.winslabapp.com/latest/WinsLab.dmg">Download .dmg</a>
+          </article>
+        </div>
+        <p style="margin-top: 12px">
+          A Linux AppImage is also published and is experimental. Audio, OSC, network, and script
+          cues work; MIDI cues need ALSA development headers (<code>libasound2-dev</code>) installed
+          before dependencies are installed, because the native <code>midi</code> module is compiled
+          at install time.
+        </p>
+        <p>
+          Winslab is not code-signed for the App Store, so the first launch may warn about an
+          unidentified developer. Downloads come from <code>pub.winslabapp.com</code>.
+        </p>
+      </section>
+
+      <section id="workspaces" class="panel reveal delay-1">
+        <h2>Workspaces</h2>
+        <p>
+          A workspace is one show: the cue list plus audio and MIDI settings. Workspaces are saved
+          as <code>.wlab</code> files, which are plain JSON and safe to keep in version control.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Action</th><th>Where</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>New</td><td>WinsLab menu, <kbd>Ctrl/Cmd</kbd> + <kbd>N</kbd></td><td>Starts an empty show named Untitled.</td></tr>
+              <tr><td>Open</td><td>WinsLab menu, <kbd>Ctrl/Cmd</kbd> + <kbd>O</kbd></td><td>Native file dialog, filtered to <code>.wlab</code>.</td></tr>
+              <tr><td>Save</td><td>WinsLab menu, <kbd>Ctrl/Cmd</kbd> + <kbd>S</kbd></td><td>Writes to the current path, or asks for one the first time.</td></tr>
+              <tr><td>Save As</td><td>WinsLab menu, <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Always asks for a path.</td></tr>
+              <tr><td>Recent</td><td>WinsLab menu</td><td>The last ten workspaces, kept in the app's user data folder.</td></tr>
+              <tr><td>Rename</td><td>Double-click the workspace name</td><td><kbd>Enter</kbd> commits, <kbd>Escape</kbd> cancels.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Unsaved changes</h3>
+        <p>
+          An amber dot next to the workspace name means there are unsaved changes. Closing the
+          window, starting a new workspace, or opening another one asks to save first, with Save,
+          Don't Save, and Cancel.
+        </p>
+
+        <h3>Moving a show between machines</h3>
+        <p>
+          Audio cues store the absolute path of their file. Copying only the
+          <code>.wlab</code> to another machine — or moving the audio files — leaves those cues
+          pointing at a path that no longer exists. Keep the audio next to the workspace and copy
+          the whole folder, or re-point each audio cue with the Browse button.
+        </p>
+        <p>
+          Workspaces written by older versions are migrated on load: missing timing fields are
+          filled in with defaults, the legacy <code>autoContinue</code>/<code>autoFollow</code>
+          flags are dropped (Advance defaults to none), and old group <code>childIds</code> arrays
+          become parent pointers. A stop cue from an older file gains
+          <code>waitForFade: false</code>, and the retired per-output
+          <code>deviceId</code>/<code>channelPair</code> fields are dropped.
+        </p>
+      </section>
+
+      <section id="cue-list" class="panel reveal delay-2">
+        <h2>Building a cue list</h2>
+        <figure class="figure">
+          <a href="./assets/guide/02-cue-list.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/02-cue-list.png" alt="The cue list showing a group, numbered children with type icons, and duration and advance columns." />
+          </a>
+          <figcaption>Act 1 is a group; its children are indented beneath it. The chevron collapses them.</figcaption>
+        </figure>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>To do this</th><th>Do that</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Add a cue</td><td>Audio, Group, Fade, Wait, or Stop from the toolbar; MIDI, OSC, Network, and Script from the More menu.</td></tr>
+              <tr><td>Add audio quickly</td><td>Drag files from the file manager into the cue list. Each becomes an audio cue named after the file.</td></tr>
+              <tr><td>Select</td><td>Click a row. Click the empty space below the list to clear the selection.</td></tr>
+              <tr><td>Move the selection</td><td><kbd>Arrow Up</kbd> / <kbd>Arrow Down</kbd> while the list has focus.</td></tr>
+              <tr><td>Rename</td><td>Double-click the name of an already-selected cue, or use Rename in the right-click menu.</td></tr>
+              <tr><td>Duplicate</td><td>Right-click and choose Duplicate. A group is copied with all of its children.</td></tr>
+              <tr><td>Delete</td><td>Right-click and choose Delete. Deleting a group deletes its children too.</td></tr>
+              <tr><td>Reorder</td><td>Drag a row. A blue line shows where it will land. Dragging a group moves its whole subtree.</td></tr>
+              <tr><td>Make it a child</td><td>Select a group before adding a cue, or drag the cue onto the group's children.</td></tr>
+              <tr><td>Disarm</td><td>Right-click and choose Disarm, or clear Armed on the Basics tab. Disarmed cues are skipped by GO; a disarmed row is marked with a <em>disarmed</em> pill and a dimmed name and type icon.</td></tr>
+              <tr><td>Colour label</td><td>Pick one of the eight swatches on the Basics tab. The colour shows against the left edge of the row.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/10-context-menu.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/10-context-menu.png" alt="The cue context menu showing Rename, Duplicate, Delete, and Disarm." />
+          </a>
+          <figcaption>The right-click menu for a cue.</figcaption>
+        </figure>
+
+        <h3>Columns</h3>
+        <p>
+          <strong>#</strong> is the cue number and type icon. <strong>Name</strong> is the cue name,
+          shown as <em>untitled</em> when empty. <strong>Duration</strong> shows the cue's own
+          duration once it is known — decoded from the audio file, or set directly for waits and
+          fades. <strong>Pre-W</strong> and <strong>Post-W</strong> show the waits either side of the
+          cue. <strong>Advance</strong> shows the auto-advance mode, and stays blank when it is set
+          to none.
+        </p>
+        <p>
+          While a cue runs its row shows a <em>pre-wait</em> or <em>post-wait</em> pill, and a
+          playing audio cue shows a thin progress bar.
+        </p>
+        <p>
+          A group row's duration is derived from its children rather than stored: a timeline group
+          ends at the furthest child, and a sequence group sums its children. Playlist and random
+          groups fire on demand, so their length cannot be known and the column shows
+          <em>–</em>.
+        </p>
+      </section>
+
+      <section id="timing" class="panel reveal delay-2">
+        <h2>Timing and advance</h2>
+        <p>
+          Every cue, whatever its type, has the same timing model on the Basics tab. It is worth
+          understanding once, because groups, auto-advance, and the timeline all build on it.
+        </p>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/04-inspector-basics.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/04-inspector-basics.png" alt="The Basics tab showing Number, Name, Color, Timing fields, Advance, Armed, and Notes." />
+          </a>
+          <figcaption>The Basics tab is shared by every cue type.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Field</th><th>What it does</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Pre-wait</td><td>Delay before the cue fires. The row shows a <em>pre-wait</em> pill while it counts down.</td></tr>
+              <tr><td>Post-wait</td><td>Delay after the cue finishes, before the next one may run.</td></tr>
+              <tr><td>Duration</td><td>How long the cue itself takes. Set directly for waits and fades, detected from the file for audio cues.</td></tr>
+              <tr><td>Advance</td><td>None, On start, or On end — see below.</td></tr>
+              <tr><td>Timeline offset</td><td>Where the cue sits inside a timeline-mode group, in milliseconds from the group's start.</td></tr>
+              <tr><td>Armed</td><td>A disarmed cue is skipped by GO, and excluded from group playback.</td></tr>
+              <tr><td>Notes</td><td>A free-text field for the operator. It never affects playback.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The order of a firing is always: <strong>pre-wait</strong>, then the cue runs, then
+          <strong>post-wait</strong>, then the cue is finished.
+        </p>
+
+        <h3>Advance</h3>
+        <div class="kbd-grid">
+          <div><strong>None</strong> — the cue finishes and stops. The operator presses GO again.</div>
+          <div><strong>On start</strong> — the next cue fires as soon as this one has started, so both run together.</div>
+          <div><strong>On end</strong> — the next cue fires after this one completes, including its post-wait.</div>
+        </div>
+        <p style="margin-top: 10px">
+          Auto-advance is what makes a cue stack playable as a sequence. With Advance set to On end
+          for every cue, a single GO runs the whole show.
+        </p>
+        <p>
+          When you press GO, the selection moves to the cue that will be fired next, skipping over
+          any cue that is about to fire itself. That way the highlighted row is always the next
+          thing GO will fire.
+        </p>
+      </section>
+
+      <section id="transport" class="panel reveal delay-3">
+        <h2>Transport and keyboard</h2>
+        <div class="cards three-col">
+          <article class="card state-go">
+            <h3>GO</h3>
+            <p>Fires the selected cue. <kbd>Space</kbd></p>
+          </article>
+          <article class="card state-stop">
+            <h3>STOP</h3>
+            <p>Cancels every timer, stops all audio, clears all running state. <kbd>Escape</kbd></p>
+          </article>
+          <article class="card state-panic">
+            <h3>PANIC</h3>
+            <p>Stops everything immediately, with a 200&nbsp;ms audio fade to avoid a click. <kbd>Shift</kbd> + <kbd>Escape</kbd></p>
+          </article>
+        </div>
+        <p style="margin-top: 12px">
+          The running indicator next to the LOG button counts the cues currently in pre-wait,
+          playing, or post-wait, and reads <em>idle</em> when nothing is running.
+        </p>
+        <p>
+          These keys are ignored while you are typing in a text field, so editing a cue name will
+          not fire the show.
+        </p>
+      </section>
+
+      <section id="cue-types" class="panel reveal delay-3">
+        <h2>Cue types</h2>
+        <p>
+          Nine cue types share the timing model and differ in what they do when they run. The tabs
+          in the inspector change with the selected cue.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Used for</th><th>Tabs</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Audio</td><td>Playing sound files</td><td>Basics, Audio, Timing</td></tr>
+              <tr><td>MIDI</td><td>Sending MIDI messages to gear</td><td>Basics, MIDI</td></tr>
+              <tr><td>OSC</td><td>Sending OSC messages over the network</td><td>Basics, OSC</td></tr>
+              <tr><td>Wait</td><td>Pausing the sequence</td><td>Basics, Wait</td></tr>
+              <tr><td>Fade</td><td>Ramping another cue's volume or pan</td><td>Basics, Fade</td></tr>
+              <tr><td>Stop</td><td>Stopping audio</td><td>Basics, Stop</td></tr>
+              <tr><td>Group</td><td>Organising and triggering other cues</td><td>Basics, Group</td></tr>
+              <tr><td>Network</td><td>HTTP requests to other systems</td><td>Basics, Network</td></tr>
+              <tr><td>Script</td><td>Running JavaScript at a cue point</td><td>Basics, Script</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="audio" class="panel reveal delay-3">
+        <h2>Audio cues</h2>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/03-inspector-audio.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/03-inspector-audio.png" alt="The Audio tab showing file, Rate, Trim, Volume, and Pan controls." />
+          </a>
+          <figcaption>The Audio tab. Volume and pan apply live to a cue that is already playing.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Field</th><th>Range</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>File</td><td>—</td><td>Browse, or drag files onto the cue list. Picking a file decodes it and fills in the duration.</td></tr>
+              <tr><td>Rate</td><td>0.25x – 4x</td><td>Playback speed. Applies live.</td></tr>
+              <tr><td>Trim</td><td>0 – 200%</td><td>Per-cue gain, separate from Volume. Applies live.</td></tr>
+              <tr><td>Volume</td><td>0 – 100%</td><td>Applies live to the playing cue.</td></tr>
+              <tr><td>Pan</td><td>L100 – R100</td><td>Applies live to the playing cue.</td></tr>
+              <tr><td>Start time</td><td>seconds</td><td>Where playback begins in the file. Also set by clicking the waveform.</td></tr>
+              <tr><td>End time</td><td>seconds</td><td>Leave empty to play to the end of the file.</td></tr>
+              <tr><td>Fade in</td><td>seconds</td><td>Ramps up from silence when the cue starts.</td></tr>
+              <tr><td>Loop count</td><td>-1 or 0+</td><td>0 plays once, a positive number is how many extra times the cue repeats, and -1 repeats until the cue is stopped or the show moves on.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Waveform</h3>
+        <p>
+          Selecting an audio cue shows its waveform below the cue list, with the played part drawn
+          in a lighter blue and a playhead while it runs. Click anywhere on the waveform to set the
+          cue's start time there; if the cue is already playing, it seeks to that point instead. A
+          dashed orange marker shows a non-zero start time, with a reset button in the header.
+        </p>
+        <p>
+          Accepted file types are mp3, wav, ogg, flac, m4a, and aiff in the file picker; the drop
+          zone also accepts wave, aif, aac, opus, and wma.
+        </p>
+      </section>
+
+      <section id="midi" class="panel reveal delay-3">
+        <h2>MIDI cues</h2>
+        <p>
+          A MIDI cue sends a list of messages to one output port. Pick the port from the MIDI tab —
+          the list is read from the system, and the refresh button re-reads it. If you leave the
+          port unset, the cue uses the Default output chosen on the MIDI tab in Settings. If no
+          ports are found, the field becomes a text box you can type a port name into.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Message</th><th>Fields</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Note On</td><td>Channel, Note, Velocity (0–127)</td></tr>
+              <tr><td>Note Off</td><td>Channel, Note, Velocity (0–127)</td></tr>
+              <tr><td>CC</td><td>Channel, Controller, Value (0–127)</td></tr>
+              <tr><td>Program Change</td><td>Channel, Program (0–127)</td></tr>
+              <tr><td>SysEx</td><td>Hex payload bytes; the F0/F7 framing is added for you</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Messages are sent in order, all at once, when the cue runs. Channels are 1–16. On Linux,
+          MIDI needs the native module built against ALSA — see <a href="#install">Install</a>.
+        </p>
+      </section>
+
+      <section id="osc" class="panel reveal delay-4">
+        <h2>OSC cues</h2>
+        <p>
+          An OSC cue sends one message to <strong>host</strong>:<strong>port</strong> at an
+          <strong>address</strong>, with a typed argument list. Each argument is an int, float,
+          string, true, or false; changing an argument's type resets its value.
+        </p>
+        <p>
+          Winslab sends OSC but does not yet listen for it, so incoming OSC cannot trigger cues.
+        </p>
+      </section>
+
+      <section id="wait" class="panel reveal delay-4">
+        <h2>Wait cues</h2>
+        <p>
+          A wait cue holds the sequence for its duration. On its own it does nothing visible; its
+          value is in a sequence, where it is the gap between two things — a scene change, a count
+          for a stage call, or a delay before a network trigger.
+        </p>
+        <p>
+          Set the duration on the Wait tab. Add Advance &gt; On end on the Basics tab if the cue
+          after the wait should fire by itself.
+        </p>
+      </section>
+
+      <section id="fade" class="panel reveal delay-4">
+        <h2>Fade cues</h2>
+        <p>
+          A fade cue ramps another cue's volume or pan over a duration. Choose the target cue from
+          the Fade tab; the list shows every other cue as number and name.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Field</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Target cue</td><td>The cue being ramped. Fades apply to audio cues.</td></tr>
+              <tr><td>Property</td><td>Volume or Pan.</td></tr>
+              <tr><td>Target value</td><td>0 – 1, where 1 is the cue's full level.</td></tr>
+              <tr><td>Duration</td><td>Length of the ramp, in seconds.</td></tr>
+              <tr><td>Curve</td><td>The shape of the ramp. Linear moves evenly; S-Curve eases in and out; Logarithmic moves most of the way early and spends the rest of the ramp in the upper part of the range, like a constant-dB fade.</td></tr>
+              <tr><td>Stop target when done</td><td>Stops the target cue once the ramp finishes.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="stop" class="panel reveal delay-4">
+        <h2>Stop cues</h2>
+        <p>
+          A stop cue halts audio: everything, or a single cue, either cutting instantly or ramping
+          to silence first.
+        </p>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/11-inspector-stop.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/11-inspector-stop.png" alt="The Stop tab showing a Target of All cues, Fade out ticked, a fade duration of 2 seconds, and a Wait for fade checkbox." />
+          </a>
+          <figcaption>The Stop tab. Fade duration and Wait for fade are inert until Fade out is on.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Field</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Target</td><td>All cues, or one specific cue.</td></tr>
+              <tr><td>Fade out</td><td>Ramps the target to silence instead of cutting it dead.</td></tr>
+              <tr><td>Fade duration</td><td>Length of that ramp.</td></tr>
+              <tr><td>Wait for fade</td><td>Inert unless Fade out is ticked. When on, the cue stays open until the fade has finished sounding; when off, it completes as soon as it has stopped the target.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          By default the cue completes as soon as it has stopped the target, so a following cue can
+          run while the tail fades; tick Wait for fade to hold it open until the fade has finished
+          sounding. PANIC does the same thing globally, with a fixed 200&nbsp;ms fade.
+        </p>
+      </section>
+
+      <section id="group" class="panel reveal delay-4">
+        <h2>Group cues</h2>
+        <p>
+          A group holds other cues. Children are stored flat in the list and shown indented under
+          their group; collapse the group with the chevron in its row. Deleting a group deletes its
+          children.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Mode</th><th>Behaviour</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Sequence</td><td>Runs every armed child in order, then completes.</td></tr>
+              <tr><td>Playlist</td><td>Fires one armed child per GO, so the operator steps through the group by hand. The group keeps the selection until the last child has fired, then hands it on to the next cue. STOP returns it to the first child.</td></tr>
+              <tr><td>Random</td><td>Fires one randomly chosen armed child, then completes.</td></tr>
+              <tr><td>Timeline</td><td>Fires children at their Timeline offset, measured from the group's start.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Disarmed children are skipped in every mode, and a group with no armed children completes
+          immediately.
+        </p>
+
+        <h3>Timeline mode</h3>
+        <figure class="figure">
+          <a href="./assets/guide/07-timeline.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/07-timeline.png" alt="The timeline editor showing three child cues as blocks positioned along a time ruler at 50 pixels per second." />
+          </a>
+          <figcaption>Three children laid out on the timeline. Drag a block to change its offset.</figcaption>
+        </figure>
+        <p>
+          Select a timeline group and the timeline editor replaces the waveform. Each child is a
+          block whose position is its offset and whose width is its duration. Drag a block
+          horizontally to retime it, or set the offset numerically on the Basics tab. The zoom
+          control steps through 5 to 800 pixels per second.
+        </p>
+        <p>
+          Clicking the ruler seeks: the group stops, and playback resumes from that point, with
+          audio and waits starting mid-way where they should. Cues that have already passed are not
+          replayed — a network or script cue before the playhead will not fire again. The expand
+          button in the timeline header gives the editor the whole window.
+        </p>
+      </section>
+
+      <section id="network" class="panel reveal delay-4">
+        <h2>Network cues</h2>
+        <p>
+          A network cue makes an HTTP request when it fires, for triggering lighting desks, video
+          servers, or webhooks. The show waits for the response, or for the timeout, before moving
+          on — so a slow or unreachable target holds the cue.
+        </p>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/05-inspector-network.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/05-inspector-network.png" alt="The Network tab showing Method POST, a URL, a 5000 ms timeout, two headers, a JSON body, and a Last Run section reading ok with status 200 OK." />
+          </a>
+          <figcaption>A POST with headers and a JSON body, and the result of its last run.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Field</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Method</td><td>GET, POST, or PUT.</td></tr>
+              <tr><td>URL</td><td>The full address, including the scheme.</td></tr>
+              <tr><td>Timeout</td><td>Milliseconds, 5000 by default. The request is aborted when it elapses.</td></tr>
+              <tr><td>Headers</td><td>Any number of name/value pairs. Add Header adds a row; the ✕ removes one.</td></tr>
+              <tr><td>Body</td><td>Sent for POST and PUT. Disabled for GET, which cannot carry one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <strong>Requests come from the app window, so the target server must allow cross-origin
+          requests.</strong> A server that does not return CORS headers makes the cue fail with
+          <em>Failed to fetch</em>. A non-2xx response is reported as a failure in the log and the
+          Last Run section, but the show still advances.
+        </div>
+      </section>
+
+      <section id="script" class="panel reveal delay-4">
+        <h2>Script cues</h2>
+        <p>
+          A script cue runs JavaScript at a cue point. The script is an async function body, so
+          <code>await</code> works and the cue holds the show until the script finishes. A script
+          that throws is reported in the log and the cue still completes, so one bad script cannot
+          stall a show.
+        </p>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/06-inspector-script.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/06-inspector-script.png" alt="The Script tab with a monospace editor containing a script that logs a message and awaits a shell command." />
+          </a>
+          <figcaption>The Script tab, with the helper reference below the editor.</figcaption>
+        </figure>
+        <h3>Helpers</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Helper</th><th>What it does</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>await shell(command, options?)</code></td>
+                <td>Runs a system command and resolves <code>{ stdout, stderr, code, signal }</code>. Options are <code>timeout</code> (milliseconds, 10000 by default), <code>cwd</code>, and <code>env</code>. Commands start in the workspace folder.</td>
+              </tr>
+              <tr>
+                <td><code>await include('path/to/file.js')</code></td>
+                <td>Runs another JavaScript file, resolved relative to the workspace file, with the same helpers available.</td>
+              </tr>
+              <tr>
+                <td><code>console.log()</code>, <code>console.error()</code></td>
+                <td>Write to the run log, so output is visible without DevTools.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>An example that calls a system tool and reports what it said:</p>
+        <pre class="code"><code>console.log('house lights → warm')
+const r = await shell('dimmerctl set 80')
+console.log(r.stdout.trim())</code></pre>
+        <div class="note warn">
+          <strong>Script cues are not sandboxed.</strong> They run inside the app with the same
+          access as the application itself. A workspace file is executable code, so only open
+          <code>.wlab</code> files you trust.
+        </div>
+      </section>
+
+      <section id="results" class="panel reveal delay-4">
+        <h2>Reading results</h2>
+        <p>
+          Two places tell you what a cue did. The <strong>Last Run</strong> section at the bottom of
+          the Network and Script tabs shows the outcome of that cue's most recent firing: when it
+          started, how long it took, the HTTP status for network cues, the start of the response
+          body for network cues (cut off at 4000 characters with a truncation marker), and the
+          reason for any failure.
+        </p>
+        <p>
+          The <strong>run log</strong> records every firing across the show. Open it with the LOG
+          button in the transport bar.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/08-run-log.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/08-run-log.png" alt="The run log showing start and completion lines for a script cue, its console output, the output of a shell command, and a failed network request in red." />
+          </a>
+          <figcaption>Script output, a shell command, and a failed request, each attributed to its cue.</figcaption>
+        </figure>
+        <p>
+          Log lines are coloured by kind: cue lifecycle in the normal text colour, script and shell
+          output in monospace, and failures in red. Each line carries the time, the cue it belongs
+          to, and the message. Clear empties the log.
+        </p>
+        <p>
+          The log is a session history, capped at the last 500 lines, and a single script run emits
+          at most 200 lines before it is truncated. It is not written to the workspace file, and it
+          is not kept when the app closes.
+        </p>
+        <div class="note">
+          In a packaged build there is no developer console, so the log panel is the only place to
+          read script output. Running from source, the same failures also appear in the terminal as
+          <code>[renderer] …</code> lines.
+        </div>
+      </section>
+
+      <section id="settings" class="panel reveal delay-4">
+        <h2>Settings</h2>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/09-settings.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/09-settings.png" alt="The Settings dialog showing the Audio tab with an output device selector and read-only sample rate and base latency readouts." />
+          </a>
+          <figcaption>Settings is opened from the WinsLab menu or with <kbd>Ctrl/Cmd</kbd> + <kbd>,</kbd>.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Tab</th><th>Setting</th><th>Effect</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Audio</td><td>Output device</td><td>Routes all playback to the chosen system output.</td></tr>
+              <tr><td>Audio</td><td>Sample rate, Base latency</td><td>Read-only readouts of the running audio engine: the sample rate in Hz and the base latency in ms. They report the live AudioContext and cannot be changed.</td></tr>
+              <tr><td>MIDI</td><td>Default output</td><td>Used by MIDI cues that do not name a port of their own; a cue with its own port overrides it.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Settings belong to the workspace, so they travel with the show, and changing them marks it
+          as unsaved.
+        </p>
+      </section>
+
+      <section id="keyboard" class="panel reveal delay-4">
+        <h2>Keyboard reference</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Keys</th><th>Action</th><th>Where</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue</td><td>Anywhere except a text field</td></tr>
+              <tr><td><kbd>Escape</kbd></td><td>STOP — stop everything</td><td>Anywhere except a text field</td></tr>
+              <tr><td><kbd>Shift</kbd> + <kbd>Escape</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>N</kbd></td><td>New workspace</td><td>Anywhere</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>O</kbd></td><td>Open workspace</td><td>Anywhere</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>S</kbd></td><td>Save</td><td>Anywhere</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Save As</td><td>Anywhere</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>,</kbd></td><td>Open Settings</td><td>Anywhere</td></tr>
+              <tr><td><kbd>Arrow Up</kbd> / <kbd>Arrow Down</kbd></td><td>Move the cue selection</td><td>Cue list</td></tr>
+              <tr><td><kbd>Escape</kbd></td><td>Clear the selection, or close the context menu</td><td>Cue list</td></tr>
+              <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue</td><td>Cue list</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd></td><td>Undo</td><td>Anywhere except a text field</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Redo</td><td>Anywhere except a text field</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>D</kbd></td><td>Duplicate the selected cue</td><td>Cue list</td></tr>
+              <tr><td><kbd>Enter</kbd> / <kbd>Escape</kbd></td><td>Commit / cancel a rename</td><td>Renaming a cue</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          Undo and redo are Edit-menu accelerators, so they work wherever focus sits; in a focused
+          text field the field's own undo applies instead. Duplicate
+          (<kbd>Ctrl/Cmd</kbd> + <kbd>D</kbd>) and delete
+          (<kbd>Ctrl/Cmd</kbd> + <kbd>Backspace</kbd> or <kbd>Delete</kbd>) still need the cue list
+          focused. The panel keeps the last 50 edits and folds rapid changes to the same cue into
+          one step, so a few Ctrl+Z presses reach a sensible earlier state.
+        </div>
+      </section>
+
+      <section id="troubleshooting" class="panel reveal delay-4">
+        <h2>Troubleshooting</h2>
+        <div class="faq-list">
+          <article class="card">
+            <h3>A network cue fails with "Failed to fetch"</h3>
+            <p>
+              The request never got a usable response. Three usual causes: the target server does
+              not return CORS headers, nothing is listening on the host and port, or the URL is
+              missing its scheme. Check the log for the exact message, and confirm the URL in a
+              browser on the same machine.
+            </p>
+          </article>
+          <article class="card">
+            <h3>A network cue succeeds but the show stalls</h3>
+            <p>
+              The server is not answering and the cue is waiting for its timeout — 5 seconds by
+              default. Lower the timeout on the Network tab if the target should respond quickly.
+            </p>
+          </article>
+          <article class="card">
+            <h3>A MIDI cue does nothing</h3>
+            <p>
+              Check the cue's port on the MIDI tab; if the cue does not name one, it falls back to
+              the Default output set on the MIDI tab in Settings. On Linux, MIDI silently does
+              nothing unless the native module was built with ALSA headers available.
+            </p>
+          </article>
+          <article class="card">
+            <h3>An audio cue went silent after moving files</h3>
+            <p>
+              Audio cues store absolute paths, so moving the show or its audio breaks the link.
+              Re-point the cue with Browse, or keep the audio beside the workspace and move the
+              folder together.
+            </p>
+          </article>
+          <article class="card">
+            <h3>A script cue does nothing</h3>
+            <p>
+              An empty script completes instantly and logs nothing but its start and completion
+              lines. If the script is meant to produce output, look for an error line in the log —
+              thrown errors are reported there and the cue still finishes.
+            </p>
+          </article>
+          <article class="card">
+            <h3>GO skips a cue</h3>
+            <p>
+              That cue is disarmed, or it is a group child whose parent is running it. Disarmed
+              cues are skipped by GO and excluded from groups.
+            </p>
+          </article>
+          <article class="card">
+            <h3>The cue list looks empty after opening a show</h3>
+            <p>
+              If the file is not valid JSON, or opening it failed, Winslab reports
+              "Could not open file" and leaves the current show in place. Validate the
+              <code>.wlab</code> file in a text editor.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Where are the error messages?</h3>
+            <p>
+              In the run log (LOG button). Failures, HTTP statuses, and script output all land
+              there. See <a href="#results">Reading results</a>.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="limitations" class="panel reveal delay-4">
+        <h2>Known limitations</h2>
+        <p>
+          These are behaviours and limits in the current build that differ from what the interface
+          implies. They are listed so nothing surprises you during a show.
+        </p>
+        <ul class="tight-list">
+          <li><strong>Fixed caps.</strong> The run log keeps the last 500 lines, a single script run emits at most 200 lines, and run-log messages and network response bodies are cut off at 4000 characters.</li>
+          <li><strong><code>include()</code> has no module semantics.</strong> An included script cannot export anything, and each file runs in its own scope.</li>
+          <li><strong>Saves are silent.</strong> Nothing confirms a successful save beyond the dirty dot clearing.</li>
+          <li><strong>Group length is unknown for playlist and random groups.</strong> Their Duration column shows <em>–</em>, because the length depends on how the operator steps through them.</li>
+          <li><strong>OSC is send-only.</strong> Winslab cannot yet receive OSC.</li>
+          <li><strong>Script cues are unsandboxed.</strong> Treat a workspace file as executable code.</li>
+        </ul>
+      </section>
+
+      <section id="cheat-sheet" class="panel reveal delay-4">
+        <h2>Show-night cheat sheet</h2>
+        <div class="cheat-sheet">
+          <h3>Setting up</h3>
+          <ol class="tight-list">
+            <li>WinsLab &gt; New, then name the workspace by double-clicking the title.</li>
+            <li>Drag your audio files into the cue list.</li>
+            <li>Add waits, fades, OSC, MIDI, network, and script cues around them.</li>
+            <li>Group a run of cues if you want them to fire as one, or to place them on a timeline.</li>
+            <li>Set Advance to On end on each cue that should hand over to the next.</li>
+            <li>Save.</li>
+          </ol>
+        </div>
+        <div class="cheat-sheet" style="margin-top: 12px">
+          <h3>Running</h3>
+          <ul class="tight-list">
+            <li><kbd>Space</kbd> fires the highlighted cue.</li>
+            <li>The highlight moves to whatever GO will fire next.</li>
+            <li><kbd>Escape</kbd> stops everything; <kbd>Shift</kbd> + <kbd>Escape</kbd> stops with a fade.</li>
+            <li>If something looks wrong, open the LOG and read the red lines.</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>Winslab user guide. Screenshots are generated from the application itself — see <code>scripts/capture-screenshots.mjs</code>.</p>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,106 @@
+.log-panel {
+  display: flex;
+  flex-direction: column;
+  height: var(--h-log);
+  flex-shrink: 0;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--h-waveform-header);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.log-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.log-count {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+.log-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.log-btn {
+  height: 18px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.log-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-primary); }
+.log-btn:disabled { opacity: 0.3; cursor: default; }
+
+.log-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.log-empty {
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+.log-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 1px var(--space-3);
+  font-size: var(--text-base);
+  line-height: var(--line-height-base);
+}
+
+.log-row:hover { background: var(--bg-card); }
+
+.log-time {
+  color: var(--fg-ghost);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.log-label {
+  width: 150px;
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-message {
+  color: var(--fg-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Script output is program output — monospace, and dimmer than cue lifecycle lines. */
+.log-row[data-level='output'] .log-message {
+  font-family: var(--font-mono);
+  color: var(--fg-tertiary);
+}
+
+.log-row[data-level='error'] .log-message { color: var(--cue-color-red); }
+.log-row[data-level='error'] .log-time    { color: var(--cue-color-red); }
