@@ -1,3 +1,10 @@
+## [0.7.2](https://github.com/Huckcity/winslab/compare/v0.7.1...v0.7.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **build:** stop Node 26 zip-extraction deadlock leaving Electron uninstalled ([#57](https://github.com/Huckcity/winslab/issues/57)) ([5e00569](https://github.com/Huckcity/winslab/commit/5e00569c63283343132b5b2bbd80048a8e2de119)), closes [#49](https://github.com/Huckcity/winslab/issues/49)
+
 ## [0.7.1](https://github.com/Huckcity/winslab/compare/v0.7.0...v0.7.1) (2026-09-10)
 
 
