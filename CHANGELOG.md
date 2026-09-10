@@ -1,3 +1,10 @@
+## [0.6.2](https://github.com/Huckcity/winslab/compare/v0.6.1...v0.6.2) (2026-09-10)
+
+
+### Bug Fixes
+
+* **build:** resolve vite peer dep conflict and make midi optional for Linux ([#49](https://github.com/Huckcity/winslab/issues/49)) ([#53](https://github.com/Huckcity/winslab/issues/53)) ([76d0dff](https://github.com/Huckcity/winslab/commit/76d0dffdf3d28d098398b4192411bba5915a0f09))
+
 ## [0.6.1](https://github.com/Huckcity/winslab/compare/v0.6.0...v0.6.1) (2026-09-09)
 
 
