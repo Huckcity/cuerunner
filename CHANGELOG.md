@@ -1,3 +1,11 @@
+## [0.7.3](https://github.com/Huckcity/winslab/compare/v0.7.2...v0.7.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **cue-list:** allow dropping the selection so cues can be created outside a group ([#60](https://github.com/Huckcity/winslab/issues/60)) ([ffabdff](https://github.com/Huckcity/winslab/commit/ffabdff72b03e9802c470883ee11e91593bb9794))
+* **cue-list:** move a group's children when reordering it ([#59](https://github.com/Huckcity/winslab/issues/59)) ([a271a00](https://github.com/Huckcity/winslab/commit/a271a00dbe1cd437cd26c180fb76261c4e9501ee))
+
 ## [0.7.2](https://github.com/Huckcity/winslab/compare/v0.7.1...v0.7.2) (2026-09-10)
 
 
