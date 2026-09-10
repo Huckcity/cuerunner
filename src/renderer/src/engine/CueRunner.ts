@@ -21,6 +21,10 @@ const MAX_RUN_LOG_LINES = 200
 // 4000-character rule as the session log's message cap.
 const NETWORK_BODY_LIMIT = 4000
 
+// PANIC cuts the audio with a short fade rather than at zero-crossing; the guide
+// documents this as 200 ms.
+const PANIC_FADE_MS = 200
+
 // Reads a response body without buffering an unbounded stream: at most
 // NETWORK_BODY_LIMIT characters are kept, and the reader is cancelled as soon as the
 // budget is spent. Longer bodies get a truncation marker. Returns undefined for a
@@ -98,6 +102,10 @@ export class CueRunner {
   // Playlist groups step one child per GO. The cursor holds the index of the child the
   // next GO will fire; 0 means a pass is complete or has not started.
   private playlistCursors = new Map<string, number>()
+  // Bumped by a global STOP or PANIC. Every continuation captures the generation it
+  // was started under and does nothing once it is stale, so work that settles after
+  // STOP — a network request, a script — cannot resume the show.
+  private generation = 0
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -205,18 +213,26 @@ export class CueRunner {
   private fireCue(cue: Cue, onDone: () => void): void {
     const { setRunning, setLastRun } = this.deps!
     const label = this.cueLabel(cue)
+    // Everything below belongs to this run of the show: if STOP or PANIC lands while
+    // the cue is in flight, the continuations are dropped instead of firing the next cue.
+    const generation = this.generation
 
     const run = (state: Omit<RunningCue, 'cueId'>) =>
       setRunning(cue.id, { cueId: cue.id, ...state })
 
     const execute = (): void => {
+      if (this.isStale(generation)) return
       const startedAt = Date.now()
       let detail: Partial<CueRunResult> = {}
-      const report = (patch: Partial<CueRunResult>): void => { detail = { ...detail, ...patch } }
+      // A stopped run records nothing: no run result, no completion line in the log.
+      const report = (patch: Partial<CueRunResult>): void => {
+        if (!this.isStale(generation)) detail = { ...detail, ...patch }
+      }
 
       run({ state: 'playing', startedAt, progress: 0 })
       this.log({ level: 'info', message: 'started', label })
       this.execute(cue, () => {
+        if (this.isStale(generation)) return
         const durationMs = Date.now() - startedAt
         setLastRun(cue.id, {
           startedAt,
@@ -569,6 +585,18 @@ export class CueRunner {
            this.timers.has(cueId + ':timeline')
   }
 
+  // True when a global STOP or PANIC has happened since the given generation started.
+  private isStale(generation: number): boolean {
+    return generation !== this.generation
+  }
+
+  // Shared by STOP and PANIC: no timer started before this call may fire afterwards.
+  private cancelScheduledWork(): void {
+    for (const key of this.timers.keys()) clearTimeout(this.timers.get(key))
+    this.timers.clear()
+    this.playlistCursors.clear()
+  }
+
   stop(cueId?: string): void {
     const { setRunning, clearAllRunning } = this.deps!
     if (cueId) {
@@ -592,17 +620,21 @@ export class CueRunner {
       audioPlayer.stop(cueId)
       setRunning(cueId, null)
     } else {
-      for (const key of this.timers.keys()) clearTimeout(this.timers.get(key))
-      this.timers.clear()
-      this.playlistCursors.clear()
+      this.generation++
+      this.cancelScheduledWork()
       audioPlayer.stopAll()
       clearAllRunning()
     }
   }
 
+  // PANIC is the one place that wants the tails: stop() cuts immediately, panic counts
+  // down with a fixed fade so the cut does not click. It must not call stop() first —
+  // that would silence every source before the fade could be scheduled.
   panic(): void {
-    this.stop()
-    audioPlayer.stopAll(200)
+    this.generation++
+    this.cancelScheduledWork()
+    audioPlayer.stopAll(PANIC_FADE_MS)
+    this.deps!.clearAllRunning()
   }
 }
 

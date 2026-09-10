@@ -46,6 +46,7 @@ interface TestSetup {
   setSelected: Mock
   setLastRun: Mock
   appendLog: Mock
+  clearAllRunning: Mock
 }
 
 function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
@@ -55,13 +56,14 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
   const setSelected = vi.fn((id: string | null) => { selected = id })
   const setLastRun = vi.fn()
   const appendLog = vi.fn()
+  const clearAllRunning = vi.fn()
 
   runner.init({
     getCues: () => cues,
     getSelected: () => selected,
     setSelected,
     setRunning,
-    clearAllRunning: vi.fn(),
+    clearAllRunning,
     syncCueDuration: vi.fn(),
     setLastRun,
     appendLog,
@@ -70,7 +72,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
   })
 
   const cues = initialCues
-  return { runner, cues, setRunning, setSelected, setLastRun, appendLog }
+  return { runner, cues, setRunning, setSelected, setLastRun, appendLog, clearAllRunning }
 }
 
 describe('CueRunner — basic execution', () => {
@@ -279,6 +281,67 @@ describe('CueRunner — stop and panic', () => {
 
     const states = setRunning.mock.calls.map(c => c[1]?.state ?? null)
     expect(states).not.toContain('playing')
+  })
+})
+
+// A cue that is in flight when STOP lands must not resume the show when it settles.
+describe('CueRunner — STOP abandons in-flight work', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  function networkCue(overrides: Partial<NetworkCue> = {}): NetworkCue {
+    return {
+      id: 'n1', number: '1', name: 'Network', type: 'network',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      method: 'GET', url: 'http://example.com/hook', body: '', headers: {}, timeout: 5000,
+      ...overrides
+    }
+  }
+
+  it('stop() during a network request neither advances nor records a run', async () => {
+    const request = Promise.withResolvers<Response>()
+    vi.stubGlobal('fetch', vi.fn(() => request.promise))
+
+    const fired = networkCue({ advance: 'on-end' })
+    const next = makeWait({ id: 'w2', number: '2' })
+    const { runner, setRunning, setLastRun } = setup([fired, next])
+
+    runner.go()
+    runner.stop()
+    request.resolve(new Response('ok', { status: 200 }))
+    await vi.runAllTimersAsync()
+
+    expect(setLastRun).not.toHaveBeenCalled()
+    expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
+  })
+
+  it('panic() during a network request also abandons it', async () => {
+    const request = Promise.withResolvers<Response>()
+    vi.stubGlobal('fetch', vi.fn(() => request.promise))
+
+    const fired = networkCue({ advance: 'on-end' })
+    const next = makeWait({ id: 'w2', number: '2' })
+    const { runner, setRunning } = setup([fired, next])
+
+    runner.go()
+    runner.panic()
+    request.resolve(new Response('ok', { status: 200 }))
+    await vi.runAllTimersAsync()
+
+    expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
+  })
+
+  it('fires normally again after a stop', () => {
+    const cue = makeWait({ id: 'w1', duration: 500 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    runner.stop()
+    runner.go()
+    vi.advanceTimersByTime(500)
+
+    expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
   })
 })
 
@@ -1286,12 +1349,21 @@ describe('CueRunner — panic details', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('panic calls this.stop() then audioPlayer.stopAll(200)', () => {
-    const { runner } = setup([makeWait({ duration: 5000 })])
-    const stopSpy = vi.spyOn(runner, 'stop')
+  it('fades the audio instead of cutting it, and drops pending cues', () => {
+    const cue1 = makeWait({ id: 'w1', duration: 5000, advance: 'on-end' })
+    const cue2 = makeWait({ id: 'w2' })
+    const { runner, setRunning, clearAllRunning } = setup([cue1, cue2])
+
+    runner.go()
     runner.panic()
-    expect(stopSpy).toHaveBeenCalledWith()
-    expect(audioPlayer.stopAll).toHaveBeenCalledWith(200)
+
+    // Exactly one stopAll, with the fade. A hard stopAll() first would leave the
+    // player's active map empty and the fade would never be scheduled.
+    expect(audioPlayer.stopAll.mock.calls).toEqual([[200]])
+    expect(clearAllRunning).toHaveBeenCalled()
+
+    vi.advanceTimersByTime(10_000)
+    expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
   })
 })
 
