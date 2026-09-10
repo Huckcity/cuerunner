@@ -6,6 +6,7 @@ import { Inspector } from './components/inspector/Inspector'
 import { WaveformPanel } from './components/waveform/WaveformPanel'
 import { TimelineEditor } from './components/timeline/TimelineEditor'
 import { SettingsDialog } from './components/layout/SettingsDialog'
+import { CrashNotice } from './components/layout/CrashNotice'
 import { LogPanel } from './components/log/LogPanel'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
@@ -44,8 +45,17 @@ export function App() {
     })
   }, [])
 
+  // Main-process failures (IPC handlers, the native modules, a crashed child process)
+  // have no console a packaged build can show, so they land in the session log.
+  useEffect(() => {
+    return window.winslab.app.onMainError((message) => {
+      useStore.getState().appendLog([{ level: 'error', message }])
+    })
+  }, [])
+
   return (
     <div className={shellClass}>
+      <CrashNotice />
       <Toolbar onOpenSettings={() => setSettingsOpen(true)} />
       <div className="app-main">
         <CueList />

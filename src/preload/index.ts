@@ -15,7 +15,14 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.on('app:menu-action', listener)
       return () => ipcRenderer.off('app:menu-action', listener)
     },
-    confirmClose: (): Promise<void> => ipcRenderer.invoke('app:confirm-close')
+    confirmClose: (): Promise<void> => ipcRenderer.invoke('app:confirm-close'),
+    rendererCrash: (): Promise<{ reason: string; at: number } | null> =>
+      ipcRenderer.invoke('app:renderer-crash'),
+    onMainError: (callback: (message: string) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, message: string): void => callback(message)
+      ipcRenderer.on('app:main-error', listener)
+      return () => ipcRenderer.off('app:main-error', listener)
+    }
   },
   audio: {
     readFile: (filePath: string): Promise<ArrayBuffer> =>

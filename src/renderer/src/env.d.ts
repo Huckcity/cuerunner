@@ -9,6 +9,8 @@ interface WinslabBridge {
     onCloseRequested: (callback: () => void) => () => void
     onMenuAction: (callback: (action: 'undo' | 'redo') => void) => () => void
     confirmClose: () => Promise<void>
+    rendererCrash: () => Promise<{ reason: string; at: number } | null>
+    onMainError: (callback: (message: string) => void) => () => void
   }
   audio: {
     readFile: (filePath: string) => Promise<ArrayBuffer>
