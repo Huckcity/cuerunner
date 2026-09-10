@@ -23,6 +23,10 @@ interface WinslabBridge {
   }
   script: {
     readFile: (relativePath: string, workspacePath: string | null) => Promise<string>
+    shell: (
+      command: string,
+      options?: { timeout?: number; cwd?: string; env?: Record<string, string> }
+    ) => Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }>
   }
   workspace: {
     open: () => Promise<{ path: string; workspace: Workspace } | null>

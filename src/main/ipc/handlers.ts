@@ -1,5 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
+import { exec } from 'child_process'
 import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import { OscEngine } from '../osc/OscEngine'
@@ -61,6 +62,45 @@ export function registerIpcHandlers(): void {
       : path.resolve(workspacePath ? path.dirname(workspacePath) : process.cwd(), relativePath)
     return await readFile(resolved, 'utf-8')
   })
+
+  ipcMain.handle(
+    'script:shell',
+    async (
+      _,
+      command: string,
+      options: { timeout?: number; cwd?: string; env?: Record<string, string> }
+    ): Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }> => {
+      const timeout = options.timeout ?? 10000
+      // If cwd is a file path (e.g. workspace file), resolve to its directory
+      const cwd = options.cwd
+        ? path.extname(options.cwd) ? path.dirname(options.cwd) : options.cwd
+        : process.cwd()
+      const env = { ...process.env, ...options.env }
+
+      return new Promise(resolve => {
+        const child = exec(command, { cwd, env, timeout, killSignal: 'SIGTERM' })
+
+        let stdout = ''
+        let stderr = ''
+
+        child.stdout?.on('data', (data: string) => {
+          stdout += data
+        })
+
+        child.stderr?.on('data', (data: string) => {
+          stderr += data
+        })
+
+        child.on('close', (code: number | null, signal: string | null) => {
+          resolve({ stdout, stderr, code, signal })
+        })
+
+        child.on('error', (err: Error & { code?: string }) => {
+          resolve({ stdout, stderr: err.message, code: 1, signal: null })
+        })
+      })
+    }
+  )
 
   // Workspace
   ipcMain.handle('workspace:open', async (event) => {

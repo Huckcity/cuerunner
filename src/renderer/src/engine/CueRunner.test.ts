@@ -474,7 +474,7 @@ describe('CueRunner — script cue', () => {
     delete (globalThis as any).executed
   })
 
-  it('calls onDone immediately after executing script', () => {
+  it('calls onDone immediately after executing script', async () => {
     const scriptCue: ScriptCue = {
       id: 'sc1', number: '1', name: 'Script', type: 'script',
       colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
@@ -485,12 +485,12 @@ describe('CueRunner — script cue', () => {
     const cue2 = makeWait({ id: 'w2', number: '2' })
     const { runner, setRunning } = setup([scriptCue, cue2])
     runner.go()
-    // Script execute calls onDone synchronously, but post-wait timeout fires asynchronously
-    vi.runAllTimers()
+    // Script executes in async IIFE — onDone fires via microtask, then post-wait timeout
+    await vi.runAllTimersAsync()
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
 
-  it('does not throw when script throws', () => {
+  it('does not throw when script throws', async () => {
     const scriptCue: ScriptCue = {
       id: 'sc1', number: '1', name: 'Script', type: 'script',
       colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
@@ -500,6 +500,8 @@ describe('CueRunner — script cue', () => {
     }
     const { runner } = setup([scriptCue])
     expect(() => runner.go()).not.toThrow()
+    // Error is caught as a Promise rejection, logged via console.error asynchronously
+    await vi.runAllTimersAsync()
     expect(console.error).toHaveBeenCalled()
   })
 
@@ -622,6 +624,231 @@ describe('CueRunner — script cue', () => {
     expect(readFileSpy).toHaveBeenCalledWith('./third.js', '/shows/my-show.wlab')
     expect((globalThis as any).chainRan).toBe(true)
     delete (globalThis as any).chainRan
+  })
+
+  it('passes shell function as a parameter to the script', () => {
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'capturedShell = typeof shell'
+    }
+    ;(globalThis as any).capturedShell = undefined
+    const { runner } = setup([scriptCue])
+    runner.go()
+    expect((globalThis as any).capturedShell).toBe('function')
+    delete (globalThis as any).capturedShell
+  })
+
+  it('shell() calls window.winslab.script.shell with command and workspace-derived cwd', async () => {
+    const shellSpy = vi.fn().mockResolvedValue({ stdout: 'hello', stderr: '', code: 0, signal: null })
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { shell: shellSpy, readFile: vi.fn().mockResolvedValue('// nop') } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'await shell("echo hello")'
+    }
+
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab'
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(shellSpy).toHaveBeenCalledWith('echo hello', { cwd: '/shows/my-show.wlab' })
+  })
+
+  it('shell() can capture stdout', async () => {
+    const shellSpy = vi.fn().mockResolvedValue({ stdout: 'hello world\n', stderr: '', code: 0, signal: null })
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { shell: shellSpy, readFile: vi.fn() } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'const result = await shell("whoami"); globalThis.shellStdout = result.stdout; globalThis.shellCode = result.code'
+    }
+
+    ;(globalThis as any).shellStdout = ''
+    ;(globalThis as any).shellCode = -1
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => null
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect((globalThis as any).shellStdout).toBe('hello world\n')
+    expect((globalThis as any).shellCode).toBe(0)
+    delete (globalThis as any).shellStdout
+    delete (globalThis as any).shellCode
+  })
+
+  it('shell() propagates non-zero exit codes', async () => {
+    const shellSpy = vi.fn().mockResolvedValue({ stdout: '', stderr: 'command not found', code: 127, signal: null })
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { shell: shellSpy, readFile: vi.fn() } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'const r = await shell("nonexistent"); globalThis.exitCode = r.code; globalThis.errOut = r.stderr'
+    }
+
+    ;(globalThis as any).exitCode = -1
+    ;(globalThis as any).errOut = ''
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => null
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect((globalThis as any).exitCode).toBe(127)
+    expect((globalThis as any).errOut).toBe('command not found')
+    delete (globalThis as any).exitCode
+    delete (globalThis as any).errOut
+  })
+
+  it('shell() passes through timeout and env options', async () => {
+    const shellSpy = vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0, signal: null })
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { shell: shellSpy, readFile: vi.fn() } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'await shell("ffplay video.mp4", { timeout: 30000, env: { DISPLAY: ":0.1" } })'
+    }
+
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => null
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(shellSpy).toHaveBeenCalledWith('ffplay video.mp4', {
+      cwd: undefined,
+      timeout: 30000,
+      env: { DISPLAY: ':0.1' }
+    })
+  })
+
+  it('shell() with no workspace path passes undefined cwd', async () => {
+    const shellSpy = vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0, signal: null })
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { shell: shellSpy, readFile: vi.fn() } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'await shell("pwd")'
+    }
+
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => null
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect(shellSpy).toHaveBeenCalledWith('pwd', { cwd: undefined })
+  })
+
+  it('include() can use shell inside included files', async () => {
+    const readFileSpy = vi.fn().mockResolvedValue('const r = await shell("id"); globalThis.includedShell = r.code')
+    const shellSpy = vi.fn().mockResolvedValue({ stdout: 'uid=1000', stderr: '', code: 0, signal: null })
+    Object.defineProperty(window, 'winslab', {
+      value: { script: { readFile: readFileSpy, shell: shellSpy } },
+      writable: true
+    })
+
+    const scriptCue: ScriptCue = {
+      id: 'sc1', number: '1', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript',
+      script: 'await include("./lib.js")'
+    }
+
+    ;(globalThis as any).includedShell = undefined
+    const runner = new CueRunner()
+    runner.init({
+      getCues: () => [scriptCue],
+      getSelected: () => 'sc1',
+      setSelected: vi.fn(),
+      setRunning: vi.fn(),
+      clearAllRunning: vi.fn(),
+      syncCueDuration: vi.fn(),
+      getWorkspacePath: () => '/shows/my-show.wlab'
+    })
+    runner.go()
+
+    await vi.runAllTimersAsync()
+
+    expect((globalThis as any).includedShell).toBe(0)
+    expect(shellSpy).toHaveBeenCalledWith('id', { cwd: '/shows/my-show.wlab' })
+    delete (globalThis as any).includedShell
   })
 })
 

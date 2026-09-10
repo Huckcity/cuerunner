@@ -156,12 +156,18 @@ export class CueRunner {
         const workspacePath = this.deps!.getWorkspacePath()
         const include = async (relativePath: string): Promise<void> => {
           const code = await window.winslab.script.readFile(relativePath, workspacePath)
-          const fn = new Function('include', code)
-          await fn(include)
+          const fn = new Function('include', 'shell', `return (async () => {\n${code}\n})()`)
+          await fn(include, shell)
         }
-        const fn = new Function('include', scriptCue.script)
+        const shell = async (
+          command: string,
+          options?: { timeout?: number; cwd?: string; env?: Record<string, string> }
+        ): Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }> => {
+          return window.winslab.script.shell(command, { cwd: workspacePath ?? undefined, ...options })
+        }
+        const fn = new Function('include', 'shell', `return (async () => {\n${scriptCue.script}\n})()`)
         try {
-          const result = fn(include)
+          const result = fn(include, shell)
           if (result != null && typeof (result as any).then === 'function') {
             Promise.resolve(result).catch((e: unknown) => console.error('Script cue error:', e)).finally(onDone)
           } else {
