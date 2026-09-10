@@ -144,12 +144,15 @@ test('Script tab stores the script and shell() runs it on GO', async () => {
   await expect(page.locator('.last-run-badge')).toHaveText('ok')
 })
 
-test('script cue runs another file through include()', async () => {
+test('script cue runs another file through include(), which can include its own', async () => {
   test.skip(process.platform === 'win32', 'uses a POSIX shell command')
 
   const marker = tempPath('include.txt')
   const included = tempPath('included.js')
-  fs.writeFileSync(included, `await shell('printf included > "${marker}"')`)
+  const nested = tempPath('nested.js')
+  // Two levels deep: the helper has to be handed down to the included file.
+  fs.writeFileSync(nested, `await shell('printf included > "${marker}"')`)
+  fs.writeFileSync(included, `await include(${JSON.stringify(nested)})`)
 
   await addCueFromMoreMenu(page, 'Script')
   await page.locator('.inspector-tab', { hasText: 'Script' }).click()
