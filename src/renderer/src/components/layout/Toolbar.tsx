@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../store'
-import { useWorkspace } from '../../hooks/useWorkspace'
+import { useWorkspace, openDemoWorkspace } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
 import './Toolbar.css'
 
@@ -108,6 +108,9 @@ export function Toolbar({ onOpenSettings }: Props) {
               </button>
               <button onClick={() => handleMenuAction(openWorkspace)}>
                 <span>Open…</span><kbd>⌘O</kbd>
+              </button>
+              <button onClick={() => handleMenuAction(openDemoWorkspace)}>
+                <span>Open Demo Workspace</span>
               </button>
               <div className="file-menu-separator" />
               <button onClick={() => handleMenuAction(save)}>

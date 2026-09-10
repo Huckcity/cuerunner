@@ -5,6 +5,7 @@ import type { GroupCue } from '../../types/cue'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
 import { groupDurationMs } from '../../utils/cueDuration'
+import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import './CueList.css'
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.wave', '.aiff', '.aif', '.flac', '.ogg', '.m4a', '.aac', '.opus', '.wma'])
@@ -395,7 +396,10 @@ export function CueList() {
       </div>
       {renderItems.length === 0 && !isDragOver && (
         <div className="cue-list-empty">
-          No cues. Add cues using the toolbar above, or drag audio files here.
+          <div>No cues. Add cues using the toolbar above, or drag audio files here.</div>
+          <button className="cue-list-empty-demo" onClick={() => openDemoWorkspace()}>
+            Open Demo Workspace
+          </button>
         </div>
       )}
       {isDragOver && (

@@ -33,6 +33,12 @@
       "out/**/*",
       "!out/**/*.map"
     ],
+    "extraResources": [
+      {
+        "from": "resources/demo",
+        "to": "demo"
+      }
+    ],
     "win": {
       "target": [
         {

@@ -43,6 +43,26 @@
   font-size: var(--text-md);
 }
 
+.cue-list-empty-demo {
+  margin-top: var(--space-3);
+  height: var(--h-button-md);
+  padding: 0 11px;
+  font-family: inherit;
+  font-size: var(--text-base);
+  color: var(--fg-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.cue-list-empty-demo:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-input);
+  color: var(--fg-primary);
+}
+
 .cue-list-container[data-drag-over='true'] {
   outline: 2px solid var(--accent-blue);
   outline-offset: -2px;

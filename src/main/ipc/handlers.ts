@@ -11,6 +11,7 @@ import {
   saveWorkspaceAs,
   getRecentFiles
 } from '../workspace/WorkspaceManager'
+import { openDemoWorkspace } from '../workspace/demo'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
 const midi = new MidiEngine()
@@ -109,6 +110,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:openPath', async (_, filePath: string) => {
     return openWorkspaceFromPath(filePath)
+  })
+
+  ipcMain.handle('workspace:openDemo', async () => {
+    return openDemoWorkspace()
   })
 
   ipcMain.handle('workspace:save', async (event, workspace: Workspace, existingPath: string | null) => {

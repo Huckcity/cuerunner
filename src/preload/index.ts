@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke('workspace:open'),
     openPath: (filePath: string): Promise<{ path: string; workspace: Workspace }> =>
       ipcRenderer.invoke('workspace:openPath', filePath),
+    openDemo: (): Promise<Workspace> =>
+      ipcRenderer.invoke('workspace:openDemo'),
     save: (workspace: Workspace, existingPath: string | null): Promise<string | null> =>
       ipcRenderer.invoke('workspace:save', workspace, existingPath),
     saveAs: (workspace: Workspace): Promise<string | null> =>

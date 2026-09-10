@@ -32,6 +32,7 @@ interface WinslabBridge {
   workspace: {
     open: () => Promise<{ path: string; workspace: Workspace } | null>
     openPath: (filePath: string) => Promise<{ path: string; workspace: Workspace }>
+    openDemo: () => Promise<Workspace>
     save: (workspace: Workspace, existingPath: string | null) => Promise<string | null>
     saveAs: (workspace: Workspace) => Promise<string | null>
     recent: () => Promise<string[]>

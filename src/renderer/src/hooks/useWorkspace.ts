@@ -19,8 +19,47 @@ function buildWorkspace(
   }
 }
 
+// The File menu and the cue list's empty state both open the demo, so the flows read the
+// store imperatively instead of closing over hook state.
+async function guardDirty(): Promise<boolean> {
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded } =
+    useStore.getState()
+  if (!isDirty) return true
+
+  const response = await window.winslab.workspace.confirmClose(workspaceName)
+  if (response === 2) return false   // Cancel
+  if (response === 0) {              // Save
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
+    const savedPath = await window.winslab.workspace.save(ws, workspacePath)
+    if (!savedPath) return false     // User cancelled save dialog
+    saveSucceeded(savedPath, workspaceName)
+  }
+  return true
+}
+
+function loadIntoStore(workspace: Workspace, path: string | null): void {
+  useStore.getState().loadWorkspace(
+    workspace.cues,
+    workspace.name || 'Untitled',
+    path,
+    workspace.audioSettings,
+    workspace.midiSettings
+  )
+}
+
+// The demo opens with no path: it is an example rather than a file the user owns, so
+// saving it asks where to put a copy instead of writing over the bundled one.
+export async function openDemoWorkspace(): Promise<void> {
+  if (!await guardDirty()) return
+  try {
+    loadIntoStore(await window.winslab.workspace.openDemo(), null)
+  } catch (e) {
+    alert(`Could not open the demo workspace: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 export function useWorkspace() {
-  const { workspaceName, workspacePath, isDirty, cues, audioSettings, midiSettings, loadWorkspace, saveSucceeded, setWorkspaceName } = useStore()
+  const { workspaceName, workspacePath, isDirty, loadWorkspace, saveSucceeded, setWorkspaceName } = useStore()
 
   // Keep window title in sync
   useEffect(() => {
@@ -29,19 +68,6 @@ export function useWorkspace() {
     window.winslab.workspace.setTitle(title)
   }, [workspaceName, isDirty])
 
-  const guardDirty = useCallback(async (): Promise<boolean> => {
-    if (!isDirty) return true
-    const response = await window.winslab.workspace.confirmClose(workspaceName)
-    if (response === 2) return false   // Cancel
-    if (response === 0) {              // Save
-      const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
-      const savedPath = await window.winslab.workspace.save(ws, workspacePath)
-      if (!savedPath) return false     // User cancelled save dialog
-      saveSucceeded(savedPath, workspaceName)
-    }
-    return true
-  }, [isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded])
-
   // When the main process intercepts the OS close button, run the dirty check.
   useEffect(() => {
     const off = window.winslab.app.onCloseRequested(async () => {
@@ -49,47 +75,47 @@ export function useWorkspace() {
       if (canClose) window.winslab.app.confirmClose()
     })
     return off
-  }, [guardDirty])
+  }, [])
 
   const newWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
     loadWorkspace([], 'Untitled', null)
-  }, [guardDirty, loadWorkspace])
+  }, [loadWorkspace])
 
   const openWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
     const result = await window.winslab.workspace.open()
     if (!result) return
-    const name = result.workspace.name || 'Untitled'
-    loadWorkspace(result.workspace.cues, name, result.path, result.workspace.audioSettings, result.workspace.midiSettings)
-  }, [guardDirty, loadWorkspace])
+    loadIntoStore(result.workspace, result.path)
+  }, [])
 
   const openRecent = useCallback(async (filePath: string) => {
     if (!await guardDirty()) return
     try {
-      const result = await window.winslab.workspace.openPath(filePath)
-      const name = result.workspace.name || 'Untitled'
-      loadWorkspace(result.workspace.cues, name, result.path, result.workspace.audioSettings, result.workspace.midiSettings)
+      loadIntoStore(await window.winslab.workspace.openPath(filePath), filePath)
     } catch {
       alert(`Could not open file: ${filePath}`)
     }
-  }, [guardDirty, loadWorkspace])
+  }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded } =
+      useStore.getState()
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
     const savedPath = await window.winslab.workspace.save(ws, workspacePath)
     if (!savedPath) return false
     saveSucceeded(savedPath, workspaceName)
     return true
-  }, [workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded])
+  }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
+    const { workspaceName, cues, audioSettings, midiSettings, saveSucceeded } = useStore.getState()
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
     const savedPath = await window.winslab.workspace.saveAs(ws)
     if (!savedPath) return false
     saveSucceeded(savedPath, workspaceName)
     return true
-  }, [workspaceName, cues, audioSettings, midiSettings, saveSucceeded])
+  }, [])
 
   return { workspaceName, workspacePath, isDirty, newWorkspace, openWorkspace, openRecent, save, saveAs, setWorkspaceName }
 }
