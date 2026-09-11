@@ -360,10 +360,11 @@ npm run test:e2e
 GitHub Actions workflows in `.github/workflows/`:
 
 - **`ci.yml`**: Runs on pull requests
-  - Typecheck, unit tests (Ubuntu), E2E tests (macOS)
-  - Node 20 with `--legacy-peer-deps`
-- **`build.yml`**: Runs on version tags (`v*`)
-  - Tests + builds Windows (NSIS) and macOS (DMG) installers
+  - Typecheck, unit tests, and the Electron-install contract on Ubuntu, on Node 24 (LTS)
+    and 26 (current)
+  - E2E tests on Windows, macOS, and Linux (Ubuntu under Xvfb)
+- **`build.yml`**: Runs when a release is published, or manually
+  - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
   - Uploads to R2 (Cloudflare) and GitHub Releases
 - **`release.yml`**: Semantic versioning with `semantic-release`
 
@@ -376,7 +377,8 @@ Playback and platform limits:
 - Network cues require appropriate CORS headers on target servers, and hold the cue until the
   response or timeout
 - Audio cues store absolute file paths, so a `.wlab` moved without its audio loses those links
-- E2E tests require display (run on macOS in CI, headless on Linux requires Xvfb)
+- E2E tests open a real window, so they need a display. CI runs them on Windows, macOS and
+  Linux; on a headless Linux box locally, `xvfb-run -a npm run test:e2e` does the same
 
 Behaviour worth knowing before a show:
 
