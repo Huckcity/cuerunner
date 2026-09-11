@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Workspace } from '../renderer/src/types/workspace'
-import type { ShowEvent, ShowSettings, ShowSnapshot } from '../renderer/src/types/show'
+import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../renderer/src/types/show'
 
 contextBridge.exposeInMainWorld('winslab', {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke('script:readFile', relativePath, workspacePath, base),
     pickFile: (): Promise<string | null> =>
       ipcRenderer.invoke('script:pickFile'),
+    readDocument: (filePath: string, workspacePath: string | null): Promise<ScriptDocument> =>
+      ipcRenderer.invoke('script:readDocument', filePath, workspacePath),
     shell: (
       command: string,
       options?: { timeout?: number; cwd?: string; env?: Record<string, string> }

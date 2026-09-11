@@ -36,12 +36,16 @@ function scriptFile(): string {
  * dialog is answered in the main process and everything after it — reading the file,
  * rendering the lines, pinning a cue — runs for real.
  */
-async function chooseScript(file: string): Promise<void> {
+async function pickScript(file: string): Promise<void> {
   await app.evaluate(async ({ dialog }, picked) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [picked] })
   }, file)
   await page.locator('.btn-script').click()
   await page.locator('.script-choose').click()
+}
+
+async function chooseScript(file: string): Promise<void> {
+  await pickScript(file)
   await expect(page.locator('.script-line')).toHaveCount(4)
 }
 
@@ -73,6 +77,41 @@ test('the script follows the cue the operator would fire next', async () => {
   await page.locator('.script-line[data-line="4"] .script-line-no').click()
   await expect(page.locator('.script-line[data-line="4"]')).toHaveAttribute('data-current', 'true')
   await expect(page.locator('.script-line[data-line="2"]')).not.toHaveAttribute('data-current', 'true')
+})
+
+test('a document that is not a script is refused without taking the window down', async () => {
+  // This is the crash: a PDF opened as a script became a million-line document, the
+  // panel rendered every line, and the window's process reached 3 GB and stopped
+  // answering. Both guards are exercised here, because both were reachable.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-not-a-script-'))
+  tempDirs.push(dir)
+
+  const binary = path.join(dir, 'libretto.pdf')
+  fs.writeFileSync(binary, Buffer.concat([
+    Buffer.from('%PDF-1.7\n'),
+    Buffer.from([0x00, 0x01, 0x02, 0x03])
+  ]))
+
+  await toolbarCueBtn(page, 'Wait').click()
+  await pickScript(binary)
+
+  const refusal = page.locator('.script-error')
+  await expect(refusal).toContainText('not a text file')
+  await expect(page.locator('.script-line')).toHaveCount(0)
+
+  // The window is still a window: another panel opens and the transport still answers.
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toBeVisible()
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.btn-go')).toBeEnabled()
+
+  // And the size guard, on a text file that is simply too big to be a script.
+  const enormous = path.join(dir, 'endless.txt')
+  fs.writeFileSync(enormous, 'line\n'.repeat(400_000))
+
+  await pickScript(enormous)
+
+  await expect(refusal).toContainText('the script panel opens documents up to')
 })
 
 test('the companion serves the show to a tablet, and only with the token', async () => {

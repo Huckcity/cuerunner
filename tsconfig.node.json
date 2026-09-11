@@ -5,6 +5,7 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/renderer/src/types/**/*",
+    "src/renderer/src/utils/scriptDocument.ts",
     "e2e/**/*",
     "scripts/**/*"
   ],

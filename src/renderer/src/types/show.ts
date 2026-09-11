@@ -235,6 +235,15 @@ export interface ScriptSettings {
   fontSize: number
 }
 
+/**
+ * What the script panel is given when it asks for a document: its lines, or the reason
+ * it cannot be shown. The refusal is a result rather than an error because "that PDF is
+ * not a script" is a thing to put on the screen, not a failure to recover from.
+ */
+export type ScriptDocument =
+  | { ok: true; lines: string[] }
+  | { ok: false; error: string }
+
 export interface CompanionSettings {
   enabled: boolean
   port: number

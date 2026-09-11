@@ -2,7 +2,7 @@
 
 import type { OscArg } from './types/cue'
 import type { Workspace } from './types/workspace'
-import type { ShowEvent, ShowSettings, ShowSnapshot } from './types/show'
+import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from './types/show'
 
 interface WinslabBridge {
   getPathForFile: (file: File) => string
@@ -44,6 +44,7 @@ interface WinslabBridge {
       base?: string
     ) => Promise<{ code: string; path: string }>
     pickFile: () => Promise<string | null>
+    readDocument: (filePath: string, workspacePath: string | null) => Promise<ScriptDocument>
     shell: (
       command: string,
       options?: { timeout?: number; cwd?: string; env?: Record<string, string> }

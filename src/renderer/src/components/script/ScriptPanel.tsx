@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useStore } from '../../store'
-import { scriptLines } from '../../utils/scriptDocument'
 import type { Cue } from '../../types/cue'
 import './ScriptPanel.css'
 
@@ -43,6 +42,7 @@ export function ScriptPanel({ onClose }: Props) {
   const updateScriptSettings = useStore(s => s.updateScriptSettings)
 
   const [lines, setLines] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [following, setFollowing] = useState(true)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -54,18 +54,21 @@ export function ScriptPanel({ onClose }: Props) {
   // means switching documents never leaves the previous script's lines on screen.
   useEffect(() => {
     setLines([])
+    setError(null)
     if (path === '') return
 
     let cancelled = false
     window.winslab.script
-      .readFile(path, useStore.getState().workspacePath)
-      .then(doc => {
-        if (!cancelled) setLines(scriptLines(doc.code))
+      .readDocument(path, useStore.getState().workspacePath)
+      .then(document => {
+        if (cancelled) return
+        if (document.ok) setLines(document.lines)
+        // A document that cannot be shown says why. Opening a PDF by mistake is a
+        // sentence on the screen, not an empty panel and not a dead window.
+        else setError(document.error)
       })
-      .catch(() => {
-        // A script that cannot be read leaves the panel empty rather than stale; the
-        // operator still sees which document it tried to open.
-        if (!cancelled) setLines([])
+      .catch(reason => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason))
       })
 
     return () => {
@@ -175,6 +178,13 @@ export function ScriptPanel({ onClose }: Props) {
           <span>No script loaded. Open a document to pin cues to its lines.</span>
           <button className="script-choose" onClick={chooseFile}>
             Choose file…
+          </button>
+        </div>
+      ) : error !== null ? (
+        <div className="script-error">
+          <span className="script-error-message">{error}</span>
+          <button className="script-choose" onClick={chooseFile}>
+            Choose another…
           </button>
         </div>
       ) : (

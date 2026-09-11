@@ -68,6 +68,17 @@
   color: var(--fg-ghost);
 }
 
+/* A document that cannot be shown: the same shape as the empty state, in the colour of
+   something the operator has to act on rather than something waiting to happen. */
+.script-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--accent-amber);
+}
+
 .script-choose {
   height: 22px;
   padding: 0 var(--space-3);

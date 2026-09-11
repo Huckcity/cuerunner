@@ -1069,6 +1069,7 @@ console.log(r.stdout.trim())</code></pre>
         </p>
         <ul class="tight-list">
           <li><strong>Fixed caps.</strong> The run log keeps the last 500 lines, a single script run emits at most 200 lines, and run-log messages and network response bodies are cut off at 4000 characters.</li>
+          <li><strong>The script panel opens plain text only.</strong> A document over 1&nbsp;MB, longer than 10,000 lines, or containing binary data — a PDF, a Word file, an image — is refused with the reason on screen instead of being rendered. That refusal is what stops a document that was never a script from taking the window down with it.</li>
           <li><strong>Saves are silent.</strong> Nothing confirms a successful save beyond the dirty dot clearing.</li>
           <li><strong>Group length is unknown for playlist and random groups.</strong> Their Duration column shows <em>–</em>, because the length depends on how the operator steps through them.</li>
           <li><strong>Listeners are listen-only.</strong> OSC input and MIDI input receive, show, and can fire cues — but WinsLab does not act as a MIDI or OSC destination that other software queries.</li>

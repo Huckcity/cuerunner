@@ -15,6 +15,7 @@ import { clearRecovery, readRecovery, writeRecovery } from '../workspace/recover
 import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime } from '../show/runtime'
 import { drainMainErrors } from '../errors'
+import { loadScriptDocument } from '../script/document'
 import { defaultShowSettings } from '../../renderer/src/types/show'
 import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
 import type { Workspace } from '../../renderer/src/types/workspace'
@@ -124,6 +125,13 @@ export function registerIpcHandlers(): void {
         : process.cwd()
     const resolved = path.isAbsolute(relativePath) ? relativePath : path.resolve(from, relativePath)
     return { code: await readFile(resolved, 'utf-8'), path: resolved }
+  })
+
+  // The script panel's reader. It refuses what it cannot show — a binary file, or a
+  // document far larger than any script — because rendering one is what took the
+  // window's process to 3 GB and stopped the interface answering.
+  ipcMain.handle('script:readDocument', async (_, filePath: string, workspacePath: string | null) => {
+    return loadScriptDocument(filePath, workspacePath)
   })
 
   // The script panel reads the document the same way a script cue reads its includes.

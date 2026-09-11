@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useStore } from '../store'
-import { scriptLines } from '../utils/scriptDocument'
 import type { CompanionCue, CompanionState } from '../types/show'
 import type { Cue } from '../types/cue'
 
@@ -53,12 +52,15 @@ export function useCompanionPublisher(): void {
         return
       }
       try {
-        const file = await window.winslab.script.readFile(
+        const document = await window.winslab.script.readDocument(
           scriptPath,
           useStore.getState().workspacePath
         )
         if (cancelled) return
-        lines = scriptLines(file.code)
+        // A document the panel refuses is refused here too: the tablet is served the
+        // same script, and it must not be the thing that carries a huge file over the
+        // network to a device with less memory than the desk.
+        lines = document.ok ? document.lines : null
       } catch {
         // A script that cannot be read leaves the tablet without one; the rest of the
         // show is still worth serving.

@@ -7,6 +7,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScriptPanel, pinMap } from './ScriptPanel'
 import { useStore } from '../../store'
+import { scriptLines } from '../../utils/scriptDocument'
 import { defaultShowSettings } from '../../types/show'
 import type { Cue } from '../../types/cue'
 
@@ -66,7 +67,7 @@ describe('ScriptPanel', () => {
   let container: HTMLDivElement
   let root: Root
   let onClose: Mock
-  let readFile: Mock
+  let readDocument: Mock
   let pickFile: Mock
   let scrollIntoView: Mock
 
@@ -78,11 +79,11 @@ describe('ScriptPanel', () => {
     root = createRoot(container)
     onClose = vi.fn()
 
-    readFile = window.winslab.script.readFile as unknown as Mock
+    readDocument = window.winslab.script.readDocument as unknown as Mock
     pickFile = window.winslab.script.pickFile as unknown as Mock
-    readFile.mockReset()
+    readDocument.mockReset()
     pickFile.mockReset()
-    readFile.mockResolvedValue({ code: SCRIPT, path: '/shows/Act One.txt' })
+    readDocument.mockResolvedValue({ ok: true, lines: SCRIPT.split('\n') })
     pickFile.mockResolvedValue(null)
 
     scrollIntoView = vi.fn()
@@ -106,12 +107,18 @@ describe('ScriptPanel', () => {
     path?: string
     fontSize?: number
     code?: string
+    /** A document the main process refused, and why. */
+    refusal?: string
     cues?: Cue[]
     selectedId?: string | null
   }
 
   async function show(state: PanelState = {}): Promise<void> {
-    if (state.code !== undefined) readFile.mockResolvedValue({ code: state.code, path: state.path ?? '' })
+    if (state.refusal !== undefined) {
+      readDocument.mockResolvedValue({ ok: false, error: state.refusal })
+    } else if (state.code !== undefined) {
+      readDocument.mockResolvedValue({ ok: true, lines: scriptLines(state.code) })
+    }
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
@@ -184,7 +191,7 @@ describe('ScriptPanel', () => {
   it('reads the document into numbered lines as text', async () => {
     await show({ path: 'Act One.txt', code: 'Enter, stage left.\n<b>not markup</b>\n\nExit.' })
 
-    expect(readFile).toHaveBeenCalledWith('Act One.txt', WORKSPACE)
+    expect(readDocument).toHaveBeenCalledWith('Act One.txt', WORKSPACE)
     expect(
       [...container.querySelectorAll('.script-line')].map(line => line.getAttribute('data-line'))
     ).toEqual(['1', '2', '3', '4'])
@@ -192,6 +199,32 @@ describe('ScriptPanel', () => {
     expect(texts('.script-line-text')).toEqual(['Enter, stage left.', '<b>not markup</b>', '', 'Exit.'])
     // The document is text: markup inside it must not become elements.
     expect(container.querySelector('.script-line-text b')).toBeNull()
+  })
+
+  it('says why a document cannot be shown instead of rendering it', async () => {
+    // The crash this covers: a PDF opened as a script became a million rendered lines.
+    // The refusal is what the operator sees, and the panel stays usable.
+    await show({
+      path: 'libretto.pdf',
+      refusal: 'libretto.pdf is not a text file — the script panel shows plain text'
+    })
+
+    expect(texts('.script-error-message')).toEqual([
+      'libretto.pdf is not a text file — the script panel shows plain text'
+    ])
+    expect(container.querySelectorAll('.script-line')).toHaveLength(0)
+    expect(container.querySelector('.script-empty')).toBeNull()
+    expect(texts('.script-path')).toEqual(['libretto.pdf'])
+  })
+
+  it('clears a refusal when another document is chosen', async () => {
+    await show({ path: 'libretto.pdf', refusal: 'not a text file' })
+    expect(container.querySelector('.script-error')).not.toBeNull()
+
+    await show({ path: 'Act One.txt', code: 'ACT TWO' })
+
+    expect(container.querySelector('.script-error')).toBeNull()
+    expect(texts('.script-line-text')).toEqual(['ACT TWO'])
   })
 
   it('shows the cues pinned to a line', async () => {
