@@ -1,12 +1,14 @@
 import { useStore } from '../../store'
 import type { OscCue, OscArg, OscArgType } from '../../types/cue'
 import { LastRun } from './LastRun'
+import { ResetButton } from './ResetButton'
+import { OSC_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: OscCue }
 
 export function OscInspector({ cue }: Props) {
   const update = useStore(s => s.updateCue)
-  const set = (patch: Partial<OscCue>) => update(cue.id, patch as any)
+  const set = (patch: Partial<OscCue>) => update(cue.id, patch)
 
   const addArg = () => {
     const arg: OscArg = { type: 'f', value: 0 }
@@ -25,15 +27,21 @@ export function OscInspector({ cue }: Props) {
       <div className="field-row">
         <label>Host</label>
         <input value={cue.host} onChange={e => set({ host: e.target.value })} />
+        <ResetButton label="Host" value={cue.host} defaultValue={OSC_DEFAULTS.host}
+          onReset={() => set({ host: OSC_DEFAULTS.host })} />
       </div>
       <div className="field-row">
         <label>Port</label>
         <input type="number" min={1} max={65535} value={cue.port}
           onChange={e => set({ port: Number(e.target.value) })} />
+        <ResetButton label="Port" value={cue.port} defaultValue={OSC_DEFAULTS.port}
+          onReset={() => set({ port: OSC_DEFAULTS.port })} />
       </div>
       <div className="field-row">
         <label>Address</label>
         <input value={cue.address} onChange={e => set({ address: e.target.value })} />
+        <ResetButton label="Address" value={cue.address} defaultValue={OSC_DEFAULTS.address}
+          onReset={() => set({ address: OSC_DEFAULTS.address })} />
       </div>
       <div className="field-section-title">Arguments</div>
       {cue.args.map((arg, i) => (

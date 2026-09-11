@@ -1,5 +1,7 @@
 import { useStore } from '../../store'
 import type { Cue, CueColor } from '../../types/cue'
+import { ResetButton } from './ResetButton'
+import { BASE_DEFAULTS } from '../../utils/cueDefaults'
 
 const COLORS: CueColor[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']
 const COLOR_VAR: Record<CueColor, string> = {
@@ -55,6 +57,8 @@ export function BasicTab({ cue }: Props) {
             const v = Number(e.target.value)
             if (!isNaN(v) && v >= 0) set({ timelineOffset: v })
           }} />
+        <ResetButton label="Timeline offset" value={cue.timelineOffset} defaultValue={BASE_DEFAULTS.timelineOffset}
+          onReset={() => set({ timelineOffset: BASE_DEFAULTS.timelineOffset })} />
       </div>
       <div className="field-row">
         <label>Pre-wait (s)</label>
@@ -63,6 +67,8 @@ export function BasicTab({ cue }: Props) {
             const s = parseFloat(e.target.value)
             if (!isNaN(s) && s >= 0) set({ preWait: Math.round(s * 1000) })
           }} />
+        <ResetButton label="Pre-wait" value={cue.preWait} defaultValue={BASE_DEFAULTS.preWait}
+          onReset={() => set({ preWait: BASE_DEFAULTS.preWait })} />
       </div>
       <div className="field-row">
         <label>Post-wait (s)</label>
@@ -71,19 +77,25 @@ export function BasicTab({ cue }: Props) {
             const s = parseFloat(e.target.value)
             if (!isNaN(s) && s >= 0) set({ postWait: Math.round(s * 1000) })
           }} />
+        <ResetButton label="Post-wait" value={cue.postWait} defaultValue={BASE_DEFAULTS.postWait}
+          onReset={() => set({ postWait: BASE_DEFAULTS.postWait })} />
       </div>
       <div className="field-row">
         <label>Advance</label>
-        <select value={cue.advance ?? 'none'} onChange={e => set({ advance: e.target.value as Cue['advance'] })}>
+        <select value={cue.advance ?? BASE_DEFAULTS.advance} onChange={e => set({ advance: e.target.value as Cue['advance'] })}>
           <option value="none">None</option>
           <option value="on-start">On start</option>
           <option value="on-end">On end</option>
         </select>
+        <ResetButton label="Advance" value={cue.advance ?? BASE_DEFAULTS.advance} defaultValue={BASE_DEFAULTS.advance}
+          onReset={() => set({ advance: BASE_DEFAULTS.advance })} />
       </div>
       <div className="field-row">
         <label>Armed</label>
         <input type="checkbox" checked={cue.isArmed}
           onChange={e => set({ isArmed: e.target.checked })} />
+        <ResetButton label="Armed" value={cue.isArmed} defaultValue={BASE_DEFAULTS.isArmed}
+          onReset={() => set({ isArmed: BASE_DEFAULTS.isArmed })} />
       </div>
       <div className="field-section-title">Notes</div>
       <div className="field-row">

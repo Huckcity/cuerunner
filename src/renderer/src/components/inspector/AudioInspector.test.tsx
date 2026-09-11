@@ -6,6 +6,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { AudioInspector } from './AudioInspector'
 import { useStore } from '../../store'
+import { audioPlayer } from '../../engine/AudioPlayer'
 import type { AudioCue } from '../../types/cue'
 
 class FakeAudioContext {
@@ -77,7 +78,56 @@ describe('AudioInspector', () => {
     act(() => root.unmount())
     container.remove()
     warn.mockRestore()
+    vi.restoreAllMocks()
     useStore.setState({ cues: [] })
+  })
+
+  async function show(cue: AudioCue, tab = 'Audio'): Promise<void> {
+    useStore.setState({ cues: [cue] })
+    await act(async () => { root.render(<AudioInspector cue={cue} tab={tab} />) })
+  }
+
+  function resetButton(label: string): HTMLButtonElement {
+    const button = container.querySelector<HTMLButtonElement>(`button[title="Reset ${label} to default"]`)
+    if (!button) throw new Error(`no reset button for ${label}`)
+    return button
+  }
+
+  it('restores rate and trim to 1x through the player, not just the store', async () => {
+    const cue = audioCue({ playbackRate: 2, trim: 0.4 })
+    await show(cue)
+    const setPlaybackRate = vi.spyOn(audioPlayer, 'setPlaybackRate')
+    const setTrim = vi.spyOn(audioPlayer, 'setTrim')
+
+    await act(async () => { resetButton('Rate').click() })
+    await act(async () => { resetButton('Trim').click() })
+
+    expect(useStore.getState().cues[0]).toMatchObject({ playbackRate: 1, trim: 1 })
+    expect(setPlaybackRate).toHaveBeenCalledWith('a1', 1)
+    expect(setTrim).toHaveBeenCalledWith('a1', 1)
+  })
+
+  it('restores volume and pan on the cue output through the player', async () => {
+    await show(audioCue({ outputs: [{ volume: 0.2, pan: -0.7 }] }))
+    const setVolume = vi.spyOn(audioPlayer, 'setVolume')
+    const setPan = vi.spyOn(audioPlayer, 'setPan')
+
+    await act(async () => { resetButton('Volume').click() })
+    // The panel re-renders from the store after each edit, so feed the updated cue back in.
+    await show(useStore.getState().cues[0] as AudioCue)
+    await act(async () => { resetButton('Pan').click() })
+
+    expect(useStore.getState().cues[0]).toMatchObject({ outputs: [{ volume: 1, pan: 0 }] })
+    expect(setVolume).toHaveBeenCalledWith('a1', 1)
+    expect(setPan).toHaveBeenCalledWith('a1', 0)
+  })
+
+  it('leaves the Timing resets inert until the field is changed', async () => {
+    const cue = audioCue({ startTime: 0, endTime: null })
+    await show(cue, 'Timing')
+
+    expect(container.querySelector('button[title="Start time is at its default"]')).toHaveProperty('disabled', true)
+    expect(container.querySelector('button[title="End time is at its default"]')).toHaveProperty('disabled', true)
   })
 
   async function browse(cue: AudioCue): Promise<void> {

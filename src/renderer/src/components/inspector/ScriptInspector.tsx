@@ -1,6 +1,8 @@
 import { useStore } from '../../store'
 import type { ScriptCue } from '../../types/cue'
 import { LastRun } from './LastRun'
+import { ResetButton } from './ResetButton'
+import { SCRIPT_DEFAULTS } from '../../utils/cueDefaults'
 
 const LANGUAGES: ScriptCue['language'][] = ['javascript']
 
@@ -37,6 +39,8 @@ export function ScriptInspector({ cue }: Props) {
           value={cue.timeout}
           onChange={e => set({ timeout: Number(e.target.value) })}
         />
+        <ResetButton label="Timeout" value={cue.timeout} defaultValue={SCRIPT_DEFAULTS.timeout}
+          onReset={() => set({ timeout: SCRIPT_DEFAULTS.timeout })} />
       </div>
 
       <p className="inspector-hint">

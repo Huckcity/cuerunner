@@ -1,6 +1,8 @@
 import { useStore } from '../../store'
 import type { NetworkCue } from '../../types/cue'
 import { LastRun } from './LastRun'
+import { ResetButton } from './ResetButton'
+import { NETWORK_DEFAULTS } from '../../utils/cueDefaults'
 
 const METHODS: NetworkCue['method'][] = ['GET', 'POST', 'PUT']
 
@@ -39,6 +41,8 @@ export function NetworkInspector({ cue }: Props) {
         <select value={cue.method} onChange={e => set({ method: e.target.value as NetworkCue['method'] })}>
           {METHODS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
+        <ResetButton label="Method" value={cue.method} defaultValue={NETWORK_DEFAULTS.method}
+          onReset={() => set({ method: NETWORK_DEFAULTS.method })} />
       </div>
       <div className="field-row">
         <label>URL</label>
@@ -60,6 +64,8 @@ export function NetworkInspector({ cue }: Props) {
             if (!isNaN(v) && v > 0) set({ timeout: v })
           }}
         />
+        <ResetButton label="Timeout" value={cue.timeout} defaultValue={NETWORK_DEFAULTS.timeout}
+          onReset={() => set({ timeout: NETWORK_DEFAULTS.timeout })} />
       </div>
 
       <div className="field-section-title">Headers</div>

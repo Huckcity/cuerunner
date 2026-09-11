@@ -1,6 +1,76 @@
 import type {
-  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, Cue, CueType
+  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, Cue, CueType,
+  AudioOutput
 } from '../types/cue'
+
+// Every field a new cue is born with. createCue builds on these, and the inspector's
+// reset controls restore them — one definition, so the two can never drift apart.
+
+type BaseDefaults = Pick<
+  Cue,
+  'colorLabel' | 'preWait' | 'postWait' | 'timelineOffset' | 'duration' | 'advance' | 'isArmed'
+>
+
+export const BASE_DEFAULTS: BaseDefaults = {
+  colorLabel: 'none',
+  preWait: 0,
+  postWait: 0,
+  timelineOffset: 0,
+  duration: 0,
+  advance: 'none',
+  isArmed: true
+}
+
+export const AUDIO_DEFAULTS = {
+  startTime: 0,
+  endTime: null as number | null,
+  fadeInDuration: 0,
+  loopCount: 0,
+  playbackRate: 1,
+  trim: 1
+}
+
+export const AUDIO_OUTPUT_DEFAULTS: AudioOutput = { volume: 1, pan: 0 }
+
+export const OSC_DEFAULTS = {
+  host: '127.0.0.1',
+  port: 53000,
+  address: '/cue/1/start'
+}
+
+export const WAIT_DEFAULTS = { duration: 2000 }
+
+export const FADE_DEFAULTS = {
+  targetCueId: '',
+  fadeProperty: 'volume' as const,
+  targetValue: 0,
+  curve: 'linear' as const,
+  stopTargetWhenDone: true,
+  duration: 3000
+}
+
+export const STOP_DEFAULTS = {
+  targetCueId: 'all',
+  fadeOut: false,
+  fadeOutDuration: 500,
+  waitForFade: false
+}
+
+export const GROUP_DEFAULTS = { mode: 'sequence' as const }
+
+export const NETWORK_DEFAULTS = {
+  method: 'GET' as const,
+  url: 'http://',
+  body: '',
+  headers: {},
+  timeout: 5000
+}
+
+export const SCRIPT_DEFAULTS = {
+  language: 'javascript' as const,
+  script: '',
+  timeout: 60000
+}
 
 let _counter = 1
 function nextNumber(): string {
@@ -9,17 +79,11 @@ function nextNumber(): string {
 
 function base(name: string): Omit<Cue, 'type'> {
   return {
+    ...BASE_DEFAULTS,
     id: crypto.randomUUID(),
     number: nextNumber(),
     name,
-    colorLabel: 'none',
     parentId: null,
-    preWait: 0,
-    postWait: 0,
-    timelineOffset: 0,
-    duration: 0,
-    advance: 'none',
-    isArmed: true,
     notes: ''
   }
 }
@@ -31,13 +95,8 @@ export function createCue(type: CueType): Cue {
         ...base('Audio Cue'),
         type: 'audio',
         filePath: '',
-        startTime: 0,
-        endTime: null,
-        fadeInDuration: 0,
-        outputs: [{ volume: 1, pan: 0 }],
-        loopCount: 0,
-        playbackRate: 1.0,
-        trim: 1.0
+        ...AUDIO_DEFAULTS,
+        outputs: [{ ...AUDIO_OUTPUT_DEFAULTS }]
       } satisfies AudioCue
     case 'midi':
       return {
@@ -50,60 +109,44 @@ export function createCue(type: CueType): Cue {
       return {
         ...base('OSC Cue'),
         type: 'osc',
-        host: '127.0.0.1',
-        port: 53000,
-        address: '/cue/1/start',
+        ...OSC_DEFAULTS,
         args: []
       } satisfies OscCue
     case 'wait':
       return {
         ...base('Wait'),
         type: 'wait',
-        duration: 2000
+        ...WAIT_DEFAULTS
       } satisfies WaitCue
     case 'fade':
       return {
         ...base('Fade Cue'),
         type: 'fade',
-        targetCueId: '',
-        fadeProperty: 'volume',
-        targetValue: 0,
-        curve: 'linear',
-        stopTargetWhenDone: true,
-        duration: 3000
+        ...FADE_DEFAULTS
       } satisfies FadeCue
     case 'stop':
       return {
         ...base('Stop Cue'),
         type: 'stop',
-        targetCueId: 'all',
-        fadeOut: false,
-        fadeOutDuration: 500,
-        waitForFade: false
+        ...STOP_DEFAULTS
       } satisfies StopCue
     case 'group':
       return {
         ...base('Group'),
         type: 'group',
-        mode: 'sequence',
+        ...GROUP_DEFAULTS
       } satisfies GroupCue
     case 'network':
       return {
         ...base('Network Cue'),
         type: 'network',
-        method: 'GET',
-        url: 'http://',
-        body: '',
-        headers: {},
-        timeout: 5000
+        ...NETWORK_DEFAULTS
       } satisfies NetworkCue
     case 'script':
       return {
         ...base('Script Cue'),
         type: 'script',
-        language: 'javascript',
-        script: '',
-        timeout: 60000
+        ...SCRIPT_DEFAULTS
       } satisfies ScriptCue
   }
 }

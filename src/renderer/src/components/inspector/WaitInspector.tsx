@@ -1,6 +1,8 @@
 import { useStore } from '../../store'
 import type { WaitCue } from '../../types/cue'
 import { LastRun } from './LastRun'
+import { ResetButton } from './ResetButton'
+import { WAIT_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: WaitCue }
 
@@ -17,6 +19,8 @@ export function WaitInspector({ cue }: Props) {
           value={cue.duration}
           onChange={e => update(cue.id, { duration: Number(e.target.value) })}
         />
+        <ResetButton label="Duration" value={cue.duration} defaultValue={WAIT_DEFAULTS.duration}
+          onReset={() => update(cue.id, { duration: WAIT_DEFAULTS.duration })} />
       </div>
       <p className="inspector-hint">
         Wait cues pause the sequence for the specified duration, then continue.

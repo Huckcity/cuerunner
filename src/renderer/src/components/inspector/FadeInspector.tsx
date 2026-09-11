@@ -1,13 +1,15 @@
 import { useStore } from '../../store'
 import type { FadeCue, FadeCurve } from '../../types/cue'
 import { LastRun } from './LastRun'
+import { ResetButton } from './ResetButton'
+import { FADE_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: FadeCue }
 
 export function FadeInspector({ cue }: Props) {
   const update = useStore(s => s.updateCue)
   const cues = useStore(s => s.cues)
-  const set = (patch: Partial<FadeCue>) => update(cue.id, patch as any)
+  const set = (patch: Partial<FadeCue>) => update(cue.id, patch)
 
   const otherCues = cues.filter(c => c.id !== cue.id)
 
@@ -25,15 +27,19 @@ export function FadeInspector({ cue }: Props) {
       </div>
       <div className="field-row">
         <label>Property</label>
-        <select value={cue.fadeProperty} onChange={e => set({ fadeProperty: e.target.value as any })}>
+        <select value={cue.fadeProperty} onChange={e => set({ fadeProperty: e.target.value as FadeCue['fadeProperty'] })}>
           <option value="volume">Volume</option>
           <option value="pan">Pan</option>
         </select>
+        <ResetButton label="Property" value={cue.fadeProperty} defaultValue={FADE_DEFAULTS.fadeProperty}
+          onReset={() => set({ fadeProperty: FADE_DEFAULTS.fadeProperty })} />
       </div>
       <div className="field-row">
         <label>Target value</label>
         <input type="number" min={0} max={1} step={0.01} value={cue.targetValue}
           onChange={e => set({ targetValue: Number(e.target.value) })} />
+        <ResetButton label="Target value" value={cue.targetValue} defaultValue={FADE_DEFAULTS.targetValue}
+          onReset={() => set({ targetValue: FADE_DEFAULTS.targetValue })} />
       </div>
       <div className="field-row">
         <label>Duration (s)</label>
@@ -47,6 +53,8 @@ export function FadeInspector({ cue }: Props) {
             if (!isNaN(s) && s >= 0) set({ duration: Math.round(s * 1000) })
           }}
         />
+        <ResetButton label="Duration" value={cue.duration} defaultValue={FADE_DEFAULTS.duration}
+          onReset={() => set({ duration: FADE_DEFAULTS.duration })} />
       </div>
       <div className="field-row">
         <label>Curve</label>
@@ -55,11 +63,15 @@ export function FadeInspector({ cue }: Props) {
           <option value="sCurve">S-Curve</option>
           <option value="logarithmic">Logarithmic</option>
         </select>
+        <ResetButton label="Curve" value={cue.curve} defaultValue={FADE_DEFAULTS.curve}
+          onReset={() => set({ curve: FADE_DEFAULTS.curve })} />
       </div>
       <div className="field-row">
         <label>Stop target when done</label>
         <input type="checkbox" checked={cue.stopTargetWhenDone}
           onChange={e => set({ stopTargetWhenDone: e.target.checked })} />
+        <ResetButton label="Stop target when done" value={cue.stopTargetWhenDone} defaultValue={FADE_DEFAULTS.stopTargetWhenDone}
+          onReset={() => set({ stopTargetWhenDone: FADE_DEFAULTS.stopTargetWhenDone })} />
       </div>
       <LastRun cueId={cue.id} />
     </div>

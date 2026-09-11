@@ -229,6 +229,30 @@
 
 .inspector-btn-icon:hover { color: var(--fg-primary); }
 
+/* Per-field reset (↻). Inert and dim while the field holds its default, so the
+   arrows that are live are exactly the fields this cue has changed. */
+.inspector-reset-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--fg-tertiary);
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+}
+
+.inspector-reset-btn[data-default='true'] { opacity: 0.2; }
+.inspector-reset-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-primary); }
+
 /* Full-width dashed "add" button */
 .inspector-add-btn {
   width: 100%;
