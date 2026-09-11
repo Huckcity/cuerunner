@@ -17,6 +17,7 @@ const MORE_CUES: { type: CueType; icon: string; label: string }[] = [
   { type: 'osc',     icon: 'O',    label: 'OSC'     },
   { type: 'network', icon: '⊕',   label: 'Network' },
   { type: 'script',  icon: '{ }', label: 'Script'  },
+  { type: 'scene',   icon: '▤',   label: 'Scene'   },
 ]
 
 interface Props {

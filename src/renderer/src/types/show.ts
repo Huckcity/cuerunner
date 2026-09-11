@@ -164,6 +164,46 @@ export interface RfPack {
   channelId: string | null
   performerId: string | null
   notes: string
+  /**
+   * The desk channel this mic feeds — the DCA or input it is grouped under — or null when
+   * the show does not drive the desk from here. Optional on disk: a plot saved before
+   * scenes existed has none.
+   */
+  deskChannelId?: string | null
+}
+
+// ── Scenes: who is on, and what that does to the desk ───────────────────────
+//
+// A scene is who is open on stage. Recalling one tells the desk the difference: only the
+// groups whose state actually changes are sent, so a scene recall is a handful of
+// messages rather than a slam of every fader on the desk.
+
+export type DeskMessage =
+  | { kind: 'midi'; portName: string; message: MidiMessageKind }
+  | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
+
+/** A group on the desk — a DCA, a mute group — and how it is opened and closed. */
+export interface DeskChannel {
+  id: string
+  /** What the desk calls it: "DCA 2 — Ensemble". */
+  label: string
+  /** How the desk is told to close it. Null leaves the group alone on a recall. */
+  mute: DeskMessage | null
+  /** How the desk is told to open it. */
+  unmute: DeskMessage | null
+}
+
+export interface MicScene {
+  id: string
+  name: string
+  /** The packs that are open in this scene. Everything else the plot knows about closes. */
+  live: string[]
+  notes: string
+}
+
+export interface ScenesSettings {
+  channels: DeskChannel[]
+  list: MicScene[]
 }
 
 export interface RfPlot {
@@ -256,6 +296,7 @@ export interface ShowSettings {
   presence: PresenceSettings
   script: ScriptSettings
   companion: CompanionSettings
+  scenes: ScenesSettings
 }
 
 // ── The script, and the tablet reading it ───────────────────────────────────
@@ -363,12 +404,18 @@ export function defaultShowSettings(): ShowSettings {
     rf: defaultRfSettings(),
     presence: defaultPresenceSettings(),
     script: defaultScriptSettings(),
-    companion: defaultCompanionSettings()
+    companion: defaultCompanionSettings(),
+    scenes: defaultScenesSettings()
   }
 }
 
 export function defaultScriptSettings(): ScriptSettings {
   return { path: '', fontSize: 13 }
+}
+
+/** A show with no scenes still has a desk; the list starts empty rather than guessed at. */
+export function defaultScenesSettings(): ScenesSettings {
+  return { channels: [], list: [] }
 }
 
 /** The companion is off until it is asked for: it puts the show on the network. */
@@ -401,6 +448,10 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
     },
     presence: { ...defaults.presence, ...settings?.presence },
     script: { ...defaults.script, ...settings?.script },
-    companion: { ...defaults.companion, ...settings?.companion }
+    companion: { ...defaults.companion, ...settings?.companion },
+    scenes: {
+      channels: settings?.scenes?.channels ?? defaults.scenes.channels,
+      list: settings?.scenes?.list ?? defaults.scenes.list
+    }
   }
 }

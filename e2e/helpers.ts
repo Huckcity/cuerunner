@@ -150,3 +150,58 @@ export async function sendOsc(
     })
   })
 }
+
+export interface OscMessage {
+  address: string
+  args: Array<number | string | boolean>
+}
+
+function readOscString(buffer: Buffer, offset: number): { value: string; next: number } {
+  const end = buffer.indexOf(0, offset)
+  const value = buffer.toString('utf8', offset, end === -1 ? buffer.length : end)
+  return { value, next: Math.ceil((end + 1) / 4) * 4 }
+}
+
+/** Just enough of a decoder to read back what the app sent. */
+export function decodeOscMessage(buffer: Buffer): OscMessage {
+  const address = readOscString(buffer, 0)
+  const tags = readOscString(buffer, address.next)
+  const args: Array<number | string | boolean> = []
+  let offset = tags.next
+
+  for (const tag of tags.value.replace(',', '')) {
+    if (tag === 'i') {
+      args.push(buffer.readInt32BE(offset))
+      offset += 4
+    } else if (tag === 'f') {
+      args.push(buffer.readFloatBE(offset))
+      offset += 4
+    } else if (tag === 's') {
+      const text = readOscString(buffer, offset)
+      args.push(text.value)
+      offset = text.next
+    } else if (tag === 'T' || tag === 'F') {
+      args.push(tag === 'T')
+    }
+  }
+
+  return { address: address.value, args }
+}
+
+/**
+ * A port that receives OSC, so a test can prove what the app actually put on the wire
+ * rather than what it meant to.
+ */
+export async function listenOsc(
+  port: number
+): Promise<{ port: number; received: OscMessage[]; close: () => Promise<void> }> {
+  const socket = createSocket('udp4')
+  const received: OscMessage[] = []
+  socket.on('message', buffer => received.push(decodeOscMessage(buffer)))
+  await new Promise<void>(resolve => socket.bind(port, '127.0.0.1', resolve))
+  return {
+    port,
+    received,
+    close: () => new Promise<void>(resolve => socket.close(() => resolve()))
+  }
+}

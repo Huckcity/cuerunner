@@ -63,6 +63,7 @@
         <li><a href="#wireless">Wireless and the mic plot</a></li>
         <li><a href="#triggers">Triggers</a></li>
         <li><a href="#script-panel">The script, and the tablet</a></li>
+        <li><a href="#scenes">Scenes, and the desk</a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -99,8 +100,8 @@
           <li><strong>Inspector</strong> — settings for the selected cue. Tabs change with the cue type.</li>
           <li><strong>Waveform / timeline</strong> — the waveform of the selected audio cue, or the timeline editor when a timeline-mode group is selected.</li>
           <li><strong>Run log</strong> — hidden by default; the LOG button in the transport bar reveals it.</li>
-          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF, SCRIPT) and the selected cue.</li>
-          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, the wireless panel, or the script. Whichever button is lit is the one showing.</li>
+          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF, SCRIPT, SCENES) and the selected cue.</li>
+          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, the wireless panel, the script, or the scenes. Whichever button is lit is the one showing.</li>
         </ol>
       </section>
 
@@ -942,6 +943,79 @@ console.log(r.stdout.trim())</code></pre>
           control surface. Anyone on the same network who has the token can watch, so treat it the
           way you would treat a script left open on the desk.
         </p>
+      </section>
+
+      <section id="scenes" class="panel reveal delay-4">
+        <h2>Scenes, and the desk</h2>
+        <p>
+          The part of a musical that a cue stack does not handle on its own is the mics: at the top
+          of a number four people walk on, two others walk off, and the desk has to follow. A
+          <strong>scene</strong> is who is open on stage. Recalling one tells the desk the
+          difference.
+        </p>
+        <h3>The plot, the groups, the scenes</h3>
+        <p>
+          Three things, and they live where you would expect to find them. The <strong>mic plot</strong>
+          (RF → Edit plot…) says who wears which pack, and which group on the desk that pack feeds.
+          The <strong>groups</strong> (Scenes → Edit scenes…) are the desk's DCAs or mute groups, each
+          with the message that opens it and the message that closes it. The <strong>scenes</strong>
+          say which packs are open, and the desk follows from the groups those packs feed — so a mic
+          moving between performers is a change in one place, not a re-patch of every scene.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/19-scene-editor.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/19-scene-editor.png" alt="The scene editor: a list of scenes, a grid of mics ticked open for the selected scene, and a desk group with its OSC open and close messages spelled out." />
+          </a>
+          <figcaption>Two scenes, the mics open in the selected one, and the group they feed with both messages spelled out.</figcaption>
+        </figure>
+        <p>
+          The SCENES button opens the panel the operator works from during the show: the scenes in
+          order with how many mics each one opens, which of them the desk is currently set to, and
+          the groups below it with what they are carrying.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/18-scenes.png" alt="The scenes panel: two scenes with their mic counts, the recalled one marked, and a desk group listed as live with the packs it carries and the message that opened it." />
+          </a>
+          <figcaption>The recalled scene, and the group it opened on the desk.</figcaption>
+        </figure>
+        <h3>What a recall sends</h3>
+        <p>
+          Only what changed. A group whose mics are all closed is closed, a group with any one of its
+          mics open is opened, and a group already in the right state is not mentioned at all — a
+          recall should be three messages, not a sweep of every fader on the desk. Groups that no mic
+          is assigned to are left alone entirely, because the desk may well be doing something else
+          with them.
+        </p>
+        <p>
+          Editing a scene does not move the desk. The panel marks a scene whose mics have changed
+          since it was last recalled, so the operator can see what is still to apply and choose the
+          moment. <strong>Mics off</strong> closes everything the plot drives: the panic button for
+          mics rather than for sound.
+        </p>
+        <h3>Following the show</h3>
+        <p>
+          A recall can be a button press or a cue. Add a <strong>Scene</strong> cue from the toolbar's
+          More menu, point it at a scene, and the desk moves when GO reaches it — pre-wait, post-wait,
+          advance and triggers all behave as they do for any other cue. A cue that has not been
+          pointed at a scene refuses rather than being read as “close everything”, and the run log
+          carries the recall under the cue's own label, so the log reads as one story.
+        </p>
+        <h3>Telling the desk</h3>
+        <p>
+          A group is opened and closed by a MIDI message or an OSC message, whichever the desk takes.
+          MIDI is the common case — one note per group, open on note-on and closed on note-off — and
+          OSC covers desks that prefer it, with the open and the close value on the same address.
+          Whatever is configured, the editor shows the exact message it will send and the run log
+          records each recall with what it did.
+        </p>
+        <div class="note">
+          A recall only remembers what the desk accepted. A message that could not be delivered is
+          reported in the run log and left unapplied, so the next recall tries it again instead of
+          assuming it arrived. The desk's state belongs to the session rather than the workspace: a
+          show that has just loaded has not told the desk anything yet, which is why the first recall
+          sends everything the plot drives.
+        </div>
       </section>
 
       <section id="settings" class="panel reveal delay-4">

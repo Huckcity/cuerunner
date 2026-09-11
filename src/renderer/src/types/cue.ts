@@ -1,6 +1,16 @@
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
-export type CueType = 'audio' | 'midi' | 'osc' | 'wait' | 'fade' | 'stop' | 'group' | 'network' | 'script'
+export type CueType =
+  | 'audio'
+  | 'midi'
+  | 'osc'
+  | 'wait'
+  | 'fade'
+  | 'stop'
+  | 'group'
+  | 'network'
+  | 'script'
+  | 'scene'
 
 /**
  * A message a cue answers to, when nobody's hand is on the GO button.
@@ -135,6 +145,17 @@ export interface ScriptCue extends CueBase {
   timeout: number  // ms, defaults to 60000; 0 runs without a timeout
 }
 
+/**
+ * A cue that puts the desk where the scene says it should be: GO moves the show on and
+ * the mics with it. The work — which groups change, and the messages that change them —
+ * belongs to the scene, so this cue only names one.
+ */
+export interface SceneCue extends CueBase {
+  type: 'scene'
+  /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
+  sceneId: string
+}
+
 export type Cue =
   | AudioCue
   | MidiCue
@@ -145,3 +166,4 @@ export type Cue =
   | GroupCue
   | NetworkCue
   | ScriptCue
+  | SceneCue

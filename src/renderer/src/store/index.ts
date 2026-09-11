@@ -10,6 +10,7 @@ import type {
   OscInSettings,
   PresenceSettings,
   RfSettings,
+  ScenesSettings,
   ScriptSettings,
   ServiceEvent,
   ServiceStatus,
@@ -153,6 +154,14 @@ interface CueListState {
   updatePresenceSettings: (patch: Partial<PresenceSettings>) => void
   updateScriptSettings: (patch: Partial<ScriptSettings>) => void
   updateCompanionSettings: (patch: Partial<CompanionSettings>) => void
+  updateScenesSettings: (patch: Partial<ScenesSettings>) => void
+
+  // Where the desk was left. Session state, not workspace content: a show that has just
+  // loaded has not told the desk anything yet, and saying otherwise would stop the first
+  // recall from sending what it needs to.
+  deskState: Record<string, boolean>
+  deskSceneId: string | null
+  setDeskState: (deskState: Record<string, boolean>, deskSceneId: string | null) => void
 
   // Undo / redo
   undo: () => void
@@ -271,6 +280,8 @@ export const useStore = create<CueListState>((set) => ({
   showDevices: [],
   showAlerts: [],
   showEvents: [],
+  deskState: {},
+  deskSceneId: null,
   notice: null,
   past: [],
   future: [],
@@ -506,6 +517,9 @@ export const useStore = create<CueListState>((set) => ({
     audioSettings: audioSettings ?? { ...defaultAudioSettings },
     midiSettings: midiSettings ?? { ...defaultMidiSettings },
     showSettings: showSettings ?? defaultShowSettings(),
+    // Nothing has been told to this show's desk yet.
+    deskState: {},
+    deskSceneId: null,
     past: [],
     future: [],
   }),
@@ -556,7 +570,14 @@ export const useStore = create<CueListState>((set) => ({
   updateCompanionSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, companion: { ...s.showSettings.companion, ...patch } },
     isDirty: true
-  }))
+  })),
+
+  updateScenesSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, scenes: { ...s.showSettings.scenes, ...patch } },
+    isDirty: true
+  })),
+
+  setDeskState: (deskState, deskSceneId) => set({ deskState, deskSceneId })
 }))
 
 export function useSelectedCue(): Cue | null {

@@ -3,7 +3,7 @@ import { createCue, formatDuration, formatClock } from './cueDefaults'
 import type { CueType } from '../types/cue'
 
 describe('createCue', () => {
-  const types: CueType[] = ['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script']
+  const types: CueType[] = ['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script', 'scene']
 
   it.each(types)('creates a %s cue with correct type', (type) => {
     expect(createCue(type).type).toBe(type)
@@ -62,7 +62,7 @@ describe('createCue', () => {
     expect(cue.parentId).toBeNull()
   })
 
-  it.each(['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script'] as CueType[])(
+  it.each(['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script', 'scene'] as CueType[])(
     '%s cue has parentId null by default', (type) => {
       expect(createCue(type).parentId).toBeNull()
     }

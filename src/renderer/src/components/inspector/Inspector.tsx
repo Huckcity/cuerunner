@@ -9,8 +9,9 @@ import { FadeInspector } from './FadeInspector'
 import { GroupInspector } from './GroupInspector'
 import { NetworkInspector } from './NetworkInspector'
 import { ScriptInspector } from './ScriptInspector'
+import { SceneInspector } from './SceneInspector'
 import { StopInspector } from './StopInspector'
-import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue } from '../../types/cue'
+import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue } from '../../types/cue'
 import './Inspector.css'
 
 const TYPE_TABS: Record<string, string[]> = {
@@ -22,7 +23,8 @@ const TYPE_TABS: Record<string, string[]> = {
   stop: ['Basics', 'Stop'],
   group: ['Basics', 'Group'],
   network: ['Basics', 'Network'],
-  script: ['Basics', 'Script']
+  script: ['Basics', 'Script'],
+  scene: ['Basics', 'Scene']
 }
 
 function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
@@ -35,6 +37,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Group') return <GroupInspector cue={cue as GroupCue} />
   if (tab === 'Network') return <NetworkInspector cue={cue as NetworkCue} />
   if (tab === 'Script') return <ScriptInspector cue={cue as ScriptCue} />
+  if (tab === 'Scene') return <SceneInspector cue={cue as SceneCue} />
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }

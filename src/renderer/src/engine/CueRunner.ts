@@ -1,6 +1,7 @@
-import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue } from '../types/cue'
+import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue } from '../types/cue'
 import { audioPlayer } from './AudioPlayer'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
+import { recallScene } from './scenes'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
@@ -230,7 +231,9 @@ export class CueRunner {
             message: `${cue.method} ${cue.url} → ${detail.status}${statusText} (${durationMs}ms)`,
             label
           })
-        } else {
+        } else if (cue.type !== 'scene') {
+          // A scene recall writes its own line — what the desk was told — so a duration
+          // here would only say the same thing twice.
           this.log({ level: 'info', message: `completed in ${durationMs}ms`, label })
         }
 
@@ -299,6 +302,26 @@ export class CueRunner {
           })
           .finally(() => { this.timers.delete(cue.id); onDone() })
         break
+      case 'scene': {
+        const sceneCue = cue as SceneCue
+        const label = this.cueLabel(cue)
+        if (sceneCue.sceneId === '') {
+          // A cue pointed at nothing must not be read as "close every mic": that would be
+          // a silent, and very loud, surprise in the middle of a show.
+          this.log({ level: 'error', message: 'no scene chosen', label })
+          report({ outcome: 'error', error: 'no scene chosen' })
+          onDone()
+          break
+        }
+        // The recall logs what the desk was told, under this cue's label.
+        void recallScene(sceneCue.sceneId, label).then(result => {
+          if (result.failures.length > 0) {
+            report({ outcome: 'error', error: result.failures.join(', ') })
+          }
+          onDone()
+        })
+        break
+      }
       case 'script': {
         const scriptCue = cue as ScriptCue
         const label = this.cueLabel(cue)
@@ -447,7 +470,7 @@ export class CueRunner {
         // Skip if we know the cue has already finished
         if (child.duration > 0 && seekOffsetMs >= child.duration) continue
         // Fire-and-forget types have already happened — don't replay
-        if (child.type === 'midi' || child.type === 'osc' ||
+        if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
             child.type === 'network' || child.type === 'script' || child.type === 'stop') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }

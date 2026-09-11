@@ -213,5 +213,55 @@ await page.locator('.script-pin').waitFor()
 await page.evaluate(() => document.documentElement.style.setProperty('--h-script', '430px'))
 await shot('15-script.png', '.script-panel')
 
+// The desk side of the plot: scenes, and the groups they drive. The group is pointed at a
+// local port so the figure shows a real message rather than a delivery failure.
+await page.locator('.btn-scenes').click()
+await page.locator('.scenes-edit-btn').click()
+const sceneDialog = page.locator('.scene-dialog')
+await sceneDialog.locator('.group-add').click()
+const groupLabel = sceneDialog.locator('.group-label').first()
+await groupLabel.fill('DCA 2 — Ensemble')
+await groupLabel.blur()
+await sceneDialog.locator('.group-delivery').first().selectOption('osc')
+await sceneDialog.locator('.group-host').first().fill('127.0.0.1')
+await sceneDialog.locator('.group-osc-port').first().fill('9000')
+await sceneDialog.locator('.group-osc-port').first().blur()
+await sceneDialog.locator('.group-address').first().fill('/dca/2/mute')
+await sceneDialog.locator('.group-address').first().blur()
+
+const openMics = async (from, to) => {
+  for (let i = from; i <= to; i++) {
+    await sceneDialog.locator('.scene-mic-row').nth(i).locator('.scene-mic-toggle').check()
+  }
+}
+await sceneDialog.locator('.scene-add').click()
+const actOne = sceneDialog.locator('.scene-name-input').first()
+await actOne.fill('Act One')
+await actOne.blur()
+await openMics(0, 3)
+await sceneDialog.locator('.scene-add').click()
+const wedding = sceneDialog.locator('.scene-name-input').nth(1)
+await wedding.fill('Wedding')
+await wedding.blur()
+await openMics(4, 7)
+await shot('19-scene-editor.png', '.scene-dialog')
+await sceneDialog.locator('.scene-close').click()
+
+// The packs that feed that group, so the figure shows a desk with something on it.
+await page.locator('.btn-rf').click()
+await page.locator('.rf-edit').click()
+const plotDialog = page.locator('.plot-dialog')
+for (let i = 0; i < 8; i++) {
+  await plotDialog.locator('.plot-pack-desk').nth(i).selectOption({ label: 'DCA 2 — Ensemble' })
+}
+await plotDialog.locator('.plot-close').click()
+await page.locator('.btn-rf').click()
+await page.locator('.btn-scenes').click()
+
+await page.locator('.scene-recall').last().click()
+await page.locator('.desk-row[data-live="true"]').first().waitFor()
+await shot('18-scenes.png', '.scenes-panel')
+await page.locator('.scenes-actions .scenes-btn', { hasText: '✕' }).click()
+
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
 console.log('Done.')

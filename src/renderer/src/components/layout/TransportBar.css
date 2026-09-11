@@ -86,7 +86,8 @@
 .btn-log,
 .btn-monitor,
 .btn-rf,
-.btn-script {
+.btn-script,
+.btn-scenes {
   margin-left: var(--space-2);
   height: var(--h-button-sm);
   padding: 0 var(--space-2);
@@ -105,12 +106,14 @@
 .btn-log:hover,
 .btn-monitor:hover,
 .btn-rf:hover,
-.btn-script:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.btn-script:hover,
+.btn-scenes:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 .btn-log[data-active='true'],
 .btn-monitor[data-active='true'],
 .btn-rf[data-active='true'],
-.btn-script[data-active='true'] {
+.btn-script[data-active='true'],
+.btn-scenes[data-active='true'] {
   background: var(--accent-blue-glow);
   border-color: var(--accent-blue-dim);
   color: var(--accent-blue);

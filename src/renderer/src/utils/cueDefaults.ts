@@ -1,5 +1,5 @@
 import type {
-  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, Cue, CueType,
+  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, Cue, CueType,
   AudioOutput
 } from '../types/cue'
 
@@ -148,6 +148,14 @@ export function createCue(type: CueType): Cue {
         type: 'script',
         ...SCRIPT_DEFAULTS
       } satisfies ScriptCue
+    case 'scene':
+      return {
+        ...base('Scene Cue'),
+        type: 'scene',
+        // Empty until the operator points it at one: a cue with no scene must not close
+        // every mic on the desk, so the runner refuses it instead.
+        sceneId: ''
+      } satisfies SceneCue
   }
 }
 

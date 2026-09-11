@@ -4,7 +4,10 @@ import { CueRunner } from './CueRunner'
 import { audioPlayer } from './AudioPlayer'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
+import { useStore } from '../store'
+import { defaultShowSettings } from '../types/show'
+import { midiNoteMessages } from '../utils/scenes'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -643,7 +646,92 @@ describe('CueRunner — engine failures are reported', () => {
   })
 })
 
-describe('CueRunner — network cue', () => {
+// A scene cue puts the desk where the scene says it should be, at the moment GO reaches
+// it — which is the whole point of having it in the stack rather than on a panel.
+describe('CueRunner — scene cues', () => {
+  function withDesk(sceneId = 's-1'): SceneCue {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        rf: {
+          ...defaults.rf,
+          plot: {
+            performers: [],
+            packs: [{
+              id: 'pack-1', label: 'Pack 1', channelId: null,
+              performerId: null, notes: '', deskChannelId: 'dca-1'
+            }]
+          }
+        },
+        scenes: {
+          channels: [{
+            id: 'dca-1',
+            label: 'DCA 1 — Principals',
+            ...midiNoteMessages('Yamaha', 1, 36)
+          }],
+          list: [{ id: 's-1', name: 'Wedding', live: ['pack-1'], notes: '' }]
+        }
+      },
+      deskState: {},
+      deskSceneId: null,
+      log: []
+    })
+
+    return {
+      id: 'sc1', number: '12', name: 'Wedding Scene', type: 'scene',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      sceneId
+    }
+  }
+
+  beforeEach(() => {
+    // The bridge mocks are shared with every other case in this file, so their call
+    // history has to go before each one.
+    vi.clearAllMocks()
+    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+  })
+
+  it('recalls the scene the cue names, and says so under the cue', async () => {
+    const { runner, appendLog } = setup([withDesk()])
+
+    runner.go()
+    // Wait for the recall to finish rather than for the first message: the log line and
+    // the remembered desk state come after the sends.
+    await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
+
+    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
+    })
+    // The runner says the cue started; the recall says what it did to the desk, under the
+    // same label, so the log reads as one story.
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ message: 'started' })])
+    expect(useStore.getState().log.map(entry => [entry.label, entry.message])).toEqual([
+      ['12 · Wedding Scene', 'Scene "Wedding" — 1 opened']
+    ])
+    expect(useStore.getState().deskSceneId).toBe('s-1')
+  })
+
+  it('refuses a cue pointed at no scene rather than closing every mic', async () => {
+    // An unfinished cue must not be read as "mics off": that would be a silent, and very
+    // loud, surprise halfway through a number.
+    const { runner, appendLog } = setup([withDesk('')])
+
+    runner.go()
+    await vi.waitFor(() => expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'no scene chosen' })
+    ]))
+
+    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(useStore.getState().deskState).toEqual({})
+    expect(useStore.getState().deskSceneId).toBeNull()
+  })
+})
+
+describe('CueRunner — network cues', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })))

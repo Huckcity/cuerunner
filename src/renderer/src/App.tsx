@@ -14,6 +14,7 @@ import { LogPanel } from './components/log/LogPanel'
 import { MonitorPanel } from './components/monitor/MonitorPanel'
 import { RfPanel } from './components/rf/RfPanel'
 import { ScriptPanel } from './components/script/ScriptPanel'
+import { ScenesPanel } from './components/scenes/ScenesPanel'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
@@ -121,6 +122,7 @@ export function App() {
       {strip === 'monitor' && <MonitorPanel onClose={() => setStrip(null)} />}
       {strip === 'rf' && <RfPanel onClose={() => setStrip(null)} />}
       {strip === 'script' && <ScriptPanel onClose={() => setStrip(null)} />}
+      {strip === 'scenes' && <ScenesPanel onClose={() => setStrip(null)} />}
       {strip === 'log' && <LogPanel onClose={() => setStrip(null)} />}
       <TransportBar
         strip={strip}
