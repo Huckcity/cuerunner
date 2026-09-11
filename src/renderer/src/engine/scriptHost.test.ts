@@ -190,15 +190,35 @@ describe('scriptHost', () => {
 
   it('resolves include() paths against the workspace', async () => {
     const readFile = window.winslab.script.readFile as ReturnType<typeof vi.fn>
-    readFile.mockResolvedValue('await shell("id")')
+    readFile.mockResolvedValue({ code: 'return 1', path: '/shows/lib.js' })
 
     const settled = run()
     const worker = lastWorker()
     worker.emit({ type: 'readFile', id: 9, path: './lib.js' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
 
-    expect(readFile).toHaveBeenCalledWith('./lib.js', '/shows/My Show.wlab')
-    expect(worker.posted).toContainEqual({ type: 'readFileResult', id: 9, code: 'await shell("id")' })
+    expect(readFile).toHaveBeenCalledWith('./lib.js', '/shows/My Show.wlab', undefined)
+    expect(worker.posted).toContainEqual({
+      type: 'readFileResult',
+      id: 9,
+      code: 'return 1',
+      path: '/shows/lib.js'
+    })
+
+    worker.emit({ type: 'settled', error: null })
+    await settled
+  })
+
+  it('names the including file, so an include inside it resolves against that file', async () => {
+    const readFile = window.winslab.script.readFile as ReturnType<typeof vi.fn>
+    readFile.mockResolvedValue({ code: 'return 2', path: '/shows/cues/lamp.js' })
+
+    const settled = run()
+    const worker = lastWorker()
+    worker.emit({ type: 'readFile', id: 10, path: './lamp.js', base: '/shows/cues/kit.js' })
+    await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
+
+    expect(readFile).toHaveBeenCalledWith('./lamp.js', '/shows/My Show.wlab', '/shows/cues/kit.js')
 
     worker.emit({ type: 'settled', error: null })
     await settled

@@ -63,11 +63,22 @@ export function registerIpcHandlers(): void {
   })
 
   // Script
-  ipcMain.handle('script:readFile', async (_, relativePath: string, workspacePath: string | null) => {
-    const resolved = relativePath.startsWith('/')
-      ? relativePath
-      : path.resolve(workspacePath ? path.dirname(workspacePath) : process.cwd(), relativePath)
-    return await readFile(resolved, 'utf-8')
+  // include() resolves against the file that is doing the including, or the workspace
+  // directory for the script body itself; the resolved path goes back so the file's own
+  // includes can be resolved against it.
+  ipcMain.handle('script:readFile', async (
+    _,
+    relativePath: string,
+    workspacePath: string | null,
+    base?: string
+  ) => {
+    const from = base !== undefined
+      ? path.dirname(base)
+      : workspacePath !== null
+        ? path.dirname(workspacePath)
+        : process.cwd()
+    const resolved = path.isAbsolute(relativePath) ? relativePath : path.resolve(from, relativePath)
+    return { code: await readFile(resolved, 'utf-8'), path: resolved }
   })
 
   ipcMain.handle(

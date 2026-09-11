@@ -43,8 +43,12 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke('osc:startListener', port)
   },
   script: {
-    readFile: (relativePath: string, workspacePath: string | null): Promise<string> =>
-      ipcRenderer.invoke('script:readFile', relativePath, workspacePath),
+    readFile: (
+      relativePath: string,
+      workspacePath: string | null,
+      base?: string
+    ): Promise<{ code: string; path: string }> =>
+      ipcRenderer.invoke('script:readFile', relativePath, workspacePath, base),
     shell: (
       command: string,
       options?: { timeout?: number; cwd?: string; env?: Record<string, string> }

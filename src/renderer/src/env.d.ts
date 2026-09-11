@@ -25,7 +25,11 @@ interface WinslabBridge {
     startListener: (port: number) => Promise<void>
   }
   script: {
-    readFile: (relativePath: string, workspacePath: string | null) => Promise<string>
+    readFile: (
+      relativePath: string,
+      workspacePath: string | null,
+      base?: string
+    ) => Promise<{ code: string; path: string }>
     shell: (
       command: string,
       options?: { timeout?: number; cwd?: string; env?: Record<string, string> }

@@ -2,6 +2,7 @@
 // yields blocks this worker and nothing else — the host terminates it on STOP, PANIC
 // or timeout.
 import type { HostMessage, ShellOptions, ShellResult, WorkerMessage } from './scriptProtocol'
+import { createModuleSystem, type EvaluateModule, type ModuleSource } from './scriptModules'
 
 // The renderer project is typed against the DOM lib, which has no worker global scope.
 // This is the whole of the worker's own runtime surface.
@@ -25,15 +26,15 @@ function shell(command: string, options?: ShellOptions): Promise<ShellResult> {
   return promise
 }
 
-async function readFile(path: string): Promise<string> {
+async function readModule(path: string, base?: string): Promise<ModuleSource> {
   const id = nextId++
-  const { promise, resolve, reject } = Promise.withResolvers<string>()
+  const { promise, resolve, reject } = Promise.withResolvers<ModuleSource>()
   callbacks.set(id, (reply) => {
     callbacks.delete(id)
-    if (reply.type === 'readFileResult') resolve(reply.code)
+    if (reply.type === 'readFileResult') resolve({ code: reply.code, path: reply.path })
     else if (reply.type === 'rpcError') reject(new Error(reply.message))
   })
-  scope.postMessage({ type: 'readFile', id, path } satisfies WorkerMessage)
+  scope.postMessage({ type: 'readFile', id, path, base } satisfies WorkerMessage)
   return promise
 }
 
@@ -59,20 +60,18 @@ const scriptConsole = {
   error: (...args: unknown[]) => emit('error', args)
 }
 
-async function include(relativePath: string): Promise<void> {
-  const source = await readFile(relativePath)
-  const fn = new Function('include', 'shell', 'console', `return (async () => {\n${source}\n})()`)
-  await fn(include, shell, scriptConsole)
+// The script body is wrapped the same way it always was: `await` works at the top level
+// and the cue waits for the returned promise. An included file is wrapped the same way,
+// so its own `return` is what include() hands back to whoever included it.
+const evaluateModule: EvaluateModule = async (code, include) => {
+  const fn = new Function('include', 'shell', 'console', `return (async () => {\n${code}\n})()`)
+  return await fn(include, shell, scriptConsole)
 }
 
-// The script body is wrapped the same way it always was: `await` works at the top level
-// and the cue waits for the returned promise.
+const include = createModuleSystem(readModule, evaluateModule)
+
 async function runScript(code: string): Promise<void> {
-  const fn = new Function('include', 'shell', 'console', `return (async () => {\n${code}\n})()`)
-  const result: unknown = fn(include, shell, scriptConsole)
-  if (result !== null && typeof result === 'object' && 'then' in result) {
-    await (result as PromiseLike<unknown>)
-  }
+  await evaluateModule(code, include)
 }
 
 scope.onmessage = (event: MessageEvent<HostMessage>): void => {

@@ -117,11 +117,12 @@ class ScriptHost {
   ): Promise<void> {
     let reply: HostMessage
     try {
-      reply = {
-        type: 'readFileResult',
-        id: message.id,
-        code: await window.winslab.script.readFile(message.path, run.workspacePath)
-      }
+      const source = await window.winslab.script.readFile(
+        message.path,
+        run.workspacePath,
+        message.base
+      )
+      reply = { type: 'readFileResult', id: message.id, code: source.code, path: source.path }
     } catch (error) {
       reply = { type: 'rpcError', id: message.id, message: describe(error) }
     }

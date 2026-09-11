@@ -20,12 +20,14 @@ export interface ShellResult {
 export type WorkerMessage =
   | { type: 'log'; level: 'output' | 'error'; message: string }
   | { type: 'shell'; id: number; command: string; options?: ShellOptions }
-  | { type: 'readFile'; id: number; path: string }
+  /** `base` is the resolved path of the file doing the including, when there is one. */
+  | { type: 'readFile'; id: number; path: string; base?: string }
   | { type: 'settled'; error: string | null }
 
 /** Host → worker. */
 export type HostMessage =
   | { type: 'run'; code: string }
   | { type: 'shellResult'; id: number; result: ShellResult }
-  | { type: 'readFileResult'; id: number; code: string }
+  /** `path` is where the file was found, so includes inside it can be resolved. */
+  | { type: 'readFileResult'; id: number; code: string; path: string }
   | { type: 'rpcError'; id: number; message: string }
