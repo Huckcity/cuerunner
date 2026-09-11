@@ -43,7 +43,7 @@ export function ScriptInspector({ cue }: Props) {
         Runs when the cue fires, on its own worker thread. <code>await</code> works, and the
         cue holds the show until the script finishes. A script that runs longer than the
         timeout — or never finishes at all — is stopped and reported as a failure; 0 waits
-        forever. STOP and PANIC stop it too.
+        forever. STOP, PANIC, and a stop cue aimed at this one stop it too.
       </p>
       <p className="inspector-hint">
         The script has no access to the interface, only to the helpers below.{' '}
@@ -57,9 +57,10 @@ export function ScriptInspector({ cue }: Props) {
         Commands start in the workspace folder.
       </p>
       <p className="inspector-hint">
-        <code>include('path/to/file.js')</code> runs another JavaScript file, resolved
-        relative to the workspace file, with the same <code>include</code> and{' '}
-        <code>shell</code> available.
+        <code>include('path/to/file.js')</code> runs another JavaScript file and resolves
+        what that file returned, so a helper file can hand back values. Each file runs once
+        per cue, however many times it is included, and an include inside a file resolves
+        relative to that file.
       </p>
       <p className="inspector-hint">
         An empty script does nothing and completes immediately.

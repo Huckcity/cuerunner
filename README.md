@@ -221,8 +221,9 @@ the cue waits for the script to finish. Two helpers are in scope:
 - `shell(command, { timeout, cwd, env })` — runs a system command and resolves
   `{ stdout, stderr, code, signal }`. Commands start in the workspace folder and time out
   after 10 s by default.
-- `include('path/to/file.js')` — runs another JavaScript file, resolved relative to the
-  workspace file, with the same helpers available.
+- `include('path/to/file.js')` — runs another JavaScript file and resolves what it returned.
+  Each file is read and run once per script run, wherever it is included from; an include inside
+  an included file resolves against that file, and a cycle between files is reported as an error.
 
 The script has no access to the interface (no `document`, no `window`); the helpers above
 are the whole surface.
@@ -381,8 +382,6 @@ Behaviour worth knowing before a show:
 
 - Fixed caps: the run log keeps the last 500 lines, a single script run emits at most 200 lines,
   and run-log messages and network response bodies are cut off at 4000 characters
-- `include()` has no module semantics — an included script cannot export anything, and each file
-  runs in its own scope
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`

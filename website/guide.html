@@ -471,8 +471,9 @@
       <section id="stop" class="panel reveal delay-4">
         <h2>Stop cues</h2>
         <p>
-          A stop cue halts audio: everything, or a single cue, either cutting instantly or ramping
-          to silence first.
+          A stop cue halts a running cue: everything, or a single cue, either cutting instantly or
+          ramping to silence first. Audio fades; a script cue is stopped and its run released,
+          because a script runs on a worker of its own that no fade can reach.
         </p>
         <figure class="figure shot-narrow">
           <a href="./assets/guide/11-inspector-stop.png" target="_blank" rel="noreferrer">
@@ -601,7 +602,7 @@
           The <strong>Timeout</strong> field is the longest the script may run, 60000 ms by
           default. A script that is still running when it elapses is stopped and reported as a
           failure; set it to 0 to let a script run for as long as it needs. STOP and PANIC also
-          stop a running script.
+          stop a running script, as does a stop cue aimed at it.
         </p>
         <figure class="figure shot-narrow">
           <a href="./assets/guide/06-inspector-script.png" target="_blank" rel="noreferrer">
@@ -622,7 +623,7 @@
               </tr>
               <tr>
                 <td><code>await include('path/to/file.js')</code></td>
-                <td>Runs another JavaScript file, resolved relative to the workspace file, with the same helpers available.</td>
+                <td>Runs another JavaScript file and resolves what that file returned, so a helper file can hand back values. Each file is read and run once per cue, however many times it is included; an include inside an included file resolves relative to that file. A cycle — two files including each other — is reported as an error.</td>
               </tr>
               <tr>
                 <td><code>console.log()</code>, <code>console.error()</code></td>
@@ -842,7 +843,6 @@ console.log(r.stdout.trim())</code></pre>
         </p>
         <ul class="tight-list">
           <li><strong>Fixed caps.</strong> The run log keeps the last 500 lines, a single script run emits at most 200 lines, and run-log messages and network response bodies are cut off at 4000 characters.</li>
-          <li><strong><code>include()</code> has no module semantics.</strong> An included script cannot export anything, and each file runs in its own scope.</li>
           <li><strong>Saves are silent.</strong> Nothing confirms a successful save beyond the dirty dot clearing.</li>
           <li><strong>Group length is unknown for playlist and random groups.</strong> Their Duration column shows <em>–</em>, because the length depends on how the operator steps through them.</li>
           <li><strong>OSC is send-only.</strong> Winslab cannot yet receive OSC.</li>
