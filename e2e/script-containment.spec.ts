@@ -89,3 +89,34 @@ test('a stop cue aimed at a script takes that run away too', async () => {
   await page.getByRole('button', { name: /GO/ }).click()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 })
+
+test('a stop cue aimed at a group reaches the scripts inside it', async () => {
+  // A group whose children both never yield: stopping the group has to stop the one
+  // that is running and keep the sequence from firing the next one.
+  await page.locator('.toolbar-cue-btn', { hasText: 'Group' }).click()
+  await addScriptCue('while (true) {}', 120_000)
+  await addScriptCue('while (true) {}', 120_000)
+  await expect(page.locator('.cue-row[data-depth="1"]')).toHaveCount(2)
+
+  await page.locator('.cue-row').first().click()
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(page.locator('.running-badge')).toContainText('running')
+
+  // The stop cue lands outside the group, aimed at the group itself.
+  await page.locator('.cue-list-scroll').click({ position: { x: 60, y: 200 } })
+  await page.locator('.toolbar-cue-btn', { hasText: 'Stop' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
+  await page.locator('.field-row').filter({ hasText: 'Target' }).locator('select').selectOption({ index: 1 })
+  await page.locator('.cue-row').last().click()
+  await page.getByRole('button', { name: /GO/ }).click()
+
+  // Both children are gone, and the group does not carry on to the second.
+  await expect(page.locator('.running-badge')).toHaveText('idle')
+  await page.waitForTimeout(1000)
+  await expect(page.locator('.running-badge')).toHaveText('idle')
+
+  // The child that was stopped records nothing: nothing was wrong with it.
+  await page.locator('.cue-row[data-depth="1"]').first().click()
+  await page.locator('.inspector-tab', { hasText: 'Script' }).click()
+  await expect(page.locator('.last-run-badge')).toHaveCount(0)
+})

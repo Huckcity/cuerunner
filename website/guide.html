@@ -473,7 +473,9 @@
         <p>
           A stop cue halts a running cue: everything, or a single cue, either cutting instantly or
           ramping to silence first. Audio fades; a script cue is stopped and its run released,
-          because a script runs on a worker of its own that no fade can reach.
+          because a script runs on a worker of its own that no fade can reach. Aimed at a group it
+          stops everything under it, however deeply the group nests, and the group does not carry
+          on to its next child.
         </p>
         <figure class="figure shot-narrow">
           <a href="./assets/guide/11-inspector-stop.png" target="_blank" rel="noreferrer">
@@ -487,7 +489,7 @@
               <tr><th>Field</th><th>Notes</th></tr>
             </thead>
             <tbody>
-              <tr><td>Target</td><td>All cues, or one specific cue.</td></tr>
+              <tr><td>Target</td><td>All cues, one specific cue, or a group — which stops everything under it.</td></tr>
               <tr><td>Fade out</td><td>Ramps the target to silence instead of cutting it dead.</td></tr>
               <tr><td>Fade duration</td><td>Length of that ramp.</td></tr>
               <tr><td>Wait for fade</td><td>Inert unless Fade out is ticked. When on, the cue stays open until the fade has finished sounding; when off, it completes as soon as it has stopped the target.</td></tr>

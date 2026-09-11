@@ -4,7 +4,7 @@ import { CueRunner } from './CueRunner'
 import { audioPlayer } from './AudioPlayer'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue } from '../types/cue'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -419,7 +419,7 @@ describe('CueRunner — fade cue', () => {
     const { runner } = setup([fadeCue])
     runner.go()
     vi.advanceTimersByTime(500)
-    expect(audioPlayer.stop).toHaveBeenCalledWith('a1')
+    expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 0)
   })
 
   it('passes the cue curve through to the audio player', () => {
@@ -1171,5 +1171,154 @@ describe('CueRunner — fireCueFromOffset fallback', () => {
     // and it's a fire-and-forget type so it gets skipped entirely (line 234: child.type === 'osc' → continue)
     // Let's verify that the osc was skipped by checking createBufferSource not called
     expect(setRunning.mock.calls.filter(c => c[0] === 'oc1')).toHaveLength(0)
+  })
+})
+
+describe('CueRunner — stopping a group', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    console.error = vi.fn()
+    scriptHostMock.run.mockReset()
+    scriptHostMock.cancel.mockReset()
+    scriptHostMock.cancelAll.mockReset()
+    scriptHostMock.run.mockResolvedValue(undefined)
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  function makeGroup(overrides: Partial<GroupCue> = {}): GroupCue {
+    return {
+      id: 'g1', number: '1', name: 'Group', type: 'group',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      mode: 'sequence',
+      ...overrides
+    }
+  }
+
+  function makeStop(overrides: Partial<StopCue> = {}): StopCue {
+    return {
+      id: 's1', number: '9', name: 'Stop', type: 'stop',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      targetCueId: 'g1', fadeOut: false, fadeOutDuration: 0, waitForFade: false,
+      ...overrides
+    }
+  }
+
+  function makeScript(overrides: Partial<ScriptCue> = {}): ScriptCue {
+    return {
+      id: 'sc1', number: '3', name: 'Script', type: 'script',
+      colorLabel: 'none', parentId: 'g1', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      language: 'javascript', script: 'console.log(1)', timeout: 60000,
+      ...overrides
+    }
+  }
+
+  const fired = (setRunning: Mock): string[] => setRunning.mock.calls
+    .filter(c => c[1]?.state === 'playing')
+    .map(c => c[0])
+
+  it('takes the children with it and stops the sequence', () => {
+    const group = makeGroup()
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 1000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const { runner, setRunning } = setup([group, c1, c2, makeStop()])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    expect(fired(setRunning)).toContain('c1')
+
+    runner.goById('s1')
+
+    expect(setRunning).toHaveBeenCalledWith('c1', null)
+    expect(setRunning).toHaveBeenCalledWith('g1', null)
+    expect(audioPlayer.stop).toHaveBeenCalledWith('c1', 0)
+
+    // The run is abandoned: the child that was stopped cannot hand over to the next.
+    vi.runAllTimers()
+    expect(fired(setRunning)).not.toContain('c2')
+  })
+
+  it('fades the children it stops when the cue asks for a fade', () => {
+    const group = makeGroup()
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 1000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const { runner } = setup([group, c1, c2, makeStop({ fadeOut: true, fadeOutDuration: 800 })])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    runner.goById('s1')
+
+    expect(audioPlayer.stop).toHaveBeenCalledWith('c1', 800)
+    expect(audioPlayer.stop).toHaveBeenCalledWith('c2', 800)
+  })
+
+  it('cancels the scripts under it', () => {
+    const run = Promise.withResolvers<void>()
+    scriptHostMock.run.mockReturnValue(run.promise)
+    const group = makeGroup()
+    const script = makeScript()
+    const { runner, setRunning, setLastRun } = setup([group, script, makeStop()])
+
+    runner.go()
+    expect(scriptHostMock.run).toHaveBeenCalled()
+
+    runner.goById('s1')
+
+    expect(scriptHostMock.cancel).toHaveBeenCalledWith('sc1')
+    expect(setRunning).toHaveBeenCalledWith('sc1', null)
+    expect(setLastRun).not.toHaveBeenCalledWith('sc1', expect.anything())
+  })
+
+  it('reaches a nested group', () => {
+    const outer = makeGroup({ id: 'g1' })
+    const inner = makeGroup({ id: 'g2', parentId: 'g1' })
+    const child = makeWait({ id: 'w1', parentId: 'g2', duration: 1000 })
+    const next = makeWait({ id: 'w2', parentId: 'g2', duration: 1000 })
+    const { runner, setRunning } = setup([outer, inner, child, next, makeStop()])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    expect(fired(setRunning)).toContain('w1')
+
+    runner.goById('s1')
+
+    expect(setRunning).toHaveBeenCalledWith('w1', null)
+    expect(setRunning).toHaveBeenCalledWith('g2', null)
+    vi.runAllTimers()
+    expect(fired(setRunning)).not.toContain('w2')
+  })
+
+  it('takes a running group with it when it stops everything', () => {
+    const group = makeGroup()
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 1000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const { runner, setRunning } = setup([group, c1, c2, makeStop({ targetCueId: 'all' })])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    runner.goById('s1')
+
+    vi.runAllTimers()
+    expect(fired(setRunning)).not.toContain('c2')
+  })
+
+  it('stop() on a group takes its children with it too', () => {
+    const run = Promise.withResolvers<void>()
+    scriptHostMock.run.mockReturnValue(run.promise)
+    const group = makeGroup()
+    const script = makeScript()
+    const tail = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const { runner, setRunning } = setup([group, script, tail])
+
+    runner.go()
+    runner.stop('g1')
+
+    expect(scriptHostMock.cancel).toHaveBeenCalledWith('sc1')
+    expect(setRunning).toHaveBeenCalledWith('sc1', null)
+    expect(setRunning).toHaveBeenCalledWith('g1', null)
+    vi.runAllTimers()
+    expect(fired(setRunning)).not.toContain('c2')
   })
 })

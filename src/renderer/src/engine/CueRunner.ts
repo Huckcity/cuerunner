@@ -76,6 +76,10 @@ export class CueRunner {
   // Playlist groups step one child per GO. The cursor holds the index of the child the
   // next GO will fire; 0 means a pass is complete or has not started.
   private playlistCursors = new Map<string, number>()
+  // The run a group is currently on. Stopping a group replaces or drops the token, and
+  // every continuation the group started compares against it, so a child that finishes
+  // after the stop cannot carry the sequence — or the show — on.
+  private groupRuns = new Map<string, symbol>()
   // Bumped by a global STOP or PANIC. Every continuation captures the generation it
   // was started under and does nothing once it is stale, so work that settles after
   // STOP — a network request, a script — cannot resume the show.
@@ -393,26 +397,38 @@ export class CueRunner {
 
     if (children.length === 0) { onDone(); return }
 
+    const run = Symbol('group run')
+    this.groupRuns.set(cue.id, run)
+    const stillRunning = (): boolean => this.groupRuns.get(cue.id) === run
+    // A group that was stopped finishes nothing: no run result, no post-wait, no advance.
+    const done = (): void => { if (stillRunning()) onDone() }
+
     if (cue.mode === 'timeline') {
       const startOffset = this.groupStartOffsets.get(cue.id) ?? 0
       this.groupStartOffsets.delete(cue.id)
-      this.executeGroupTimeline(cue, children, onDone, startOffset)
+      this.executeGroupTimeline(cue, children, done, startOffset, stillRunning)
     } else if (cue.mode === 'random') {
-      this.fireCue(children[Math.floor(Math.random() * children.length)], onDone)
+      this.fireCue(children[Math.floor(Math.random() * children.length)], done)
     } else if (cue.mode === 'playlist') {
       // One child per GO: fire the child at the cursor and advance it. Wrapping to 0
       // marks the pass complete, which also releases the selection and lets
       // advance=on-end hand over to the next cue.
       const index = (this.playlistCursors.get(cue.id) ?? 0) % children.length
       this.playlistCursors.set(cue.id, (index + 1) % children.length)
-      this.fireCue(children[index], onDone)
+      this.fireCue(children[index], done)
     } else {
       // sequence
-      this.runSequence(children, 0, onDone)
+      this.runSequence(children, 0, done, stillRunning)
     }
   }
 
-  private executeGroupTimeline(cue: GroupCue, children: Cue[], onDone: () => void, startOffset: number): void {
+  private executeGroupTimeline(
+    cue: GroupCue,
+    children: Cue[],
+    onDone: () => void,
+    startOffset: number,
+    stillRunning: () => boolean
+  ): void {
     const { setRunning } = this.deps!
 
     // Correct startedAt so the playhead reflects the seek position
@@ -445,6 +461,7 @@ export class CueRunner {
         const { child, delay } = item
         const t = setTimeout(() => {
           this.timers.delete(child.id + ':timeline')
+          if (!stillRunning()) return
           this.fireCue(child, () => { remaining--; if (remaining === 0) onDone() })
         }, delay)
         this.timers.set(child.id + ':timeline', t)
@@ -476,9 +493,41 @@ export class CueRunner {
     }
   }
 
-  private runSequence(cues: Cue[], index: number, onDone: () => void): void {
+  private runSequence(
+    cues: Cue[],
+    index: number,
+    onDone: () => void,
+    stillRunning: () => boolean
+  ): void {
+    if (!stillRunning()) return
     if (index >= cues.length) { onDone(); return }
-    this.fireCue(cues[index], () => this.runSequence(cues, index + 1, onDone))
+    this.fireCue(cues[index], () => this.runSequence(cues, index + 1, onDone, stillRunning))
+  }
+
+  /**
+   * Takes one cue's run away: its timers, its script, its audio, and its run state.
+   * `fadeMs` is the stop cue's fade; 0 cuts.
+   */
+  private stopCue(cueId: string, fadeMs: number): void {
+    for (const key of [cueId, cueId + ':pre', cueId + ':post', cueId + ':timeline']) {
+      clearTimeout(this.timers.get(key))
+      this.timers.delete(key)
+    }
+    scriptHost.cancel(cueId)
+    audioPlayer.stop(cueId, fadeMs)
+    this.deps!.setRunning(cueId, null)
+  }
+
+  /**
+   * A group and everything under it, however deep. The run token goes first: a child
+   * that ends while the tree is being walked must not be able to carry the group on.
+   */
+  private stopGroup(group: GroupCue, fadeMs: number): void {
+    this.groupRuns.delete(group.id)
+    for (const child of this.deps!.getCues().filter(c => c.parentId === group.id)) {
+      this.stopCue(child.id, fadeMs)
+      if (child.type === 'group') this.stopGroup(child as GroupCue, fadeMs)
+    }
   }
 
   private executeStop(cue: StopCue, onDone: () => void): void {
@@ -486,16 +535,22 @@ export class CueRunner {
     if (cue.targetCueId === 'all') {
       audioPlayer.stopAll(fadeMs)
       // A script runs in a worker of its own, so stopping the audio cannot reach it:
-      // "everything" has to take the scripts the way STOP does.
+      // "everything" has to take the scripts and the groups the way STOP does.
       scriptHost.cancelAll()
+      this.groupRuns.clear()
     } else {
-      audioPlayer.stop(cue.targetCueId, fadeMs)
       const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
-      if (target?.type === 'script') {
-        scriptHost.cancel(target.id)
-        // A cancelled run records nothing and never completes, so the cue it was
-        // running for has to be released here, or it stays lit for the rest of the show.
-        this.deps!.setRunning(target.id, null)
+      if (target?.type === 'group') {
+        this.stopGroup(target as GroupCue, fadeMs)
+        this.stopCue(target.id, fadeMs)
+      } else {
+        audioPlayer.stop(cue.targetCueId, fadeMs)
+        if (target?.type === 'script') {
+          scriptHost.cancel(target.id)
+          // A cancelled run records nothing and never completes, so the cue it was
+          // running for has to be released here, or it stays lit for the rest of the show.
+          this.deps!.setRunning(target.id, null)
+        }
       }
     }
     // A wait-for-fade stop keeps the run open until the fade has finished sounding,
@@ -563,28 +618,13 @@ export class CueRunner {
   }
 
   stop(cueId?: string): void {
-    const { setRunning, clearAllRunning } = this.deps!
+    const { clearAllRunning } = this.deps!
     if (cueId) {
-      // For timeline groups, cancel all pending child offset timers and stop active children
-      const cues = this.deps!.getCues()
-      const cue = cues.find(c => c.id === cueId)
-      if (cue?.type === 'group' && cue.mode === 'timeline') {
-        for (const child of cues.filter(c => c.parentId === cueId)) {
-          clearTimeout(this.timers.get(child.id + ':timeline'))
-          this.timers.delete(child.id + ':timeline')
-          clearTimeout(this.timers.get(child.id + ':pre'))
-          clearTimeout(this.timers.get(child.id + ':post'))
-          clearTimeout(this.timers.get(child.id))
-          audioPlayer.stop(child.id)
-          setRunning(child.id, null)
-        }
-      }
-      clearTimeout(this.timers.get(cueId + ':pre'))
-      clearTimeout(this.timers.get(cueId + ':post'))
-      clearTimeout(this.timers.get(cueId))
-      scriptHost.cancel(cueId)
-      audioPlayer.stop(cueId)
-      setRunning(cueId, null)
+      // A group is stopped with its children: leaving them running would be a name that
+      // does nothing, and a sequence would keep firing them.
+      const cue = this.deps!.getCues().find(c => c.id === cueId)
+      if (cue?.type === 'group') this.stopGroup(cue as GroupCue, 0)
+      this.stopCue(cueId, 0)
     } else {
       this.generation++
       this.cancelScheduledWork()
