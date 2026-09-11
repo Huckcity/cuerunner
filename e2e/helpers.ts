@@ -162,49 +162,36 @@ export async function liveRack(page: Page): Promise<void> {
   await page.locator('.btn-rf').click()
 }
 
-export async function openScenes(page: Page): Promise<void> {
-  await page.locator('.btn-scenes').click()
-  await expect(page.locator('.scenes-panel')).toBeVisible()
-}
-
-export async function openSceneEditor(page: Page): Promise<void> {
-  await page.locator('.scenes-actions .scenes-btn', { hasText: 'Edit scenes' }).click()
-  await expect(page.locator('.scene-dialog')).toBeVisible()
-}
-
-/** Points the first pack in the plot at a desk group, the way an operator patches it. */
-export async function firstPackFeeds(page: Page, label: string): Promise<void> {
-  await page.locator('.btn-rf').click()
-  await page.locator('.rf-edit').click()
-  await page.locator('.plot-dialog .plot-pack-desk').first().selectOption({ label })
-  await page.locator('.plot-close').click()
-  await page.locator('.btn-rf').click()
+/** The Scenes view is where the show is run and the only place it is edited. */
+export async function openScenesView(page: Page): Promise<void> {
+  await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+  await expect(page.locator('.scenes-view')).toBeVisible()
 }
 
 /**
- * A group on the desk driven over OSC at a port the test owns, one scene with the first
- * mic open in it, and the pack feeding that group — in the order an operator would do it.
+ * A show set up through the view, in the order an operator would do it: a group on the
+ * desk driven over OSC at a port the test owns, a scene with the first mic open in it,
+ * and the pack feeding that group.
  */
 export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await liveRack(page)
-  await openScenes(page)
-  await openSceneEditor(page)
+  await openScenesView(page)
 
-  const dialog = page.locator('.scene-dialog')
-  await dialog.locator('.group-add').click()
-  await dialog.locator('.group-delivery').first().selectOption('osc')
-  await dialog.locator('.group-host').first().fill('127.0.0.1')
-  await dialog.locator('.group-osc-port').first().fill(String(port))
-  await dialog.locator('.group-osc-port').first().blur()
-  await dialog.locator('.group-address').first().fill('/dca/1/mute')
-  await dialog.locator('.group-address').first().blur()
-  await expect(dialog.locator('.group-summary').first()).toContainText('/dca/1/mute')
+  await page.locator('.scenes-groups-toggle').click()
+  const groups = page.locator('.scenes-groups')
+  await groups.locator('.group-add').click()
+  await groups.locator('.group-delivery').first().selectOption('osc')
+  await groups.locator('.group-host').first().fill('127.0.0.1')
+  await groups.locator('.group-osc-port').first().fill(String(port))
+  await groups.locator('.group-osc-port').first().blur()
+  await groups.locator('.group-address').first().fill('/dca/1/mute')
+  await groups.locator('.group-address').first().blur()
+  await expect(groups.locator('.group-summary').first()).toContainText('/dca/1/mute')
 
-  await dialog.locator('.scene-add').click()
-  await dialog.locator('.scene-mic-row').first().locator('.scene-mic-toggle').check()
-  await dialog.locator('.scene-close').click()
-
-  await firstPackFeeds(page, 'DCA 1')
+  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
+  await page.locator('.matrix-row').first().locator('.matrix-group-select')
+    .selectOption({ label: 'DCA 1' })
 }
 
 /** A free-ish port for a test that needs to listen for OSC. */

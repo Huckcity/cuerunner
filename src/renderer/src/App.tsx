@@ -14,13 +14,12 @@ import { LogPanel } from './components/log/LogPanel'
 import { MonitorPanel } from './components/monitor/MonitorPanel'
 import { RfPanel } from './components/rf/RfPanel'
 import { ScriptPanel } from './components/script/ScriptPanel'
-import { ScenesPanel } from './components/scenes/ScenesPanel'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import type { ShowStrip } from './components/layout/TransportBar'
 import type { AppView } from './components/layout/Toolbar'
-import { MatrixView } from './components/matrix/MatrixView'
+import { ScenesView } from './components/scenes/ScenesView'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
 import './App.css'
@@ -49,8 +48,8 @@ export function App() {
   // list too little room to be a cue list. One at a time: opening one closes the other,
   // and the same button closes the one it opened.
   const [strip, setStrip] = useState<ShowStrip | null>(null)
-  // Which view fills the window. The matrix is what the show is run from; the cue stack
-  // is where it is built, and switching between them is one click at curtain up.
+  // Which view fills the window. The scenes view is what the show is run from and where
+  // it is edited; the cue stack is the other half, one click away at curtain up.
   const [view, setView] = useState<AppView>('cues')
   const selected = useSelectedCue()
 
@@ -117,8 +116,8 @@ export function App() {
         onSwitchView={setView}
       />
       <div className="app-main" data-view={view}>
-        {view === 'matrix' ? (
-          <MatrixView />
+        {view === 'scenes' ? (
+          <ScenesView />
         ) : (
           <>
             <CueList />
@@ -137,7 +136,6 @@ export function App() {
       {strip === 'monitor' && <MonitorPanel onClose={() => setStrip(null)} />}
       {strip === 'rf' && <RfPanel onClose={() => setStrip(null)} />}
       {strip === 'script' && <ScriptPanel onClose={() => setStrip(null)} />}
-      {strip === 'scenes' && <ScenesPanel onClose={() => setStrip(null)} />}
       {strip === 'log' && <LogPanel onClose={() => setStrip(null)} />}
       <TransportBar
         strip={strip}

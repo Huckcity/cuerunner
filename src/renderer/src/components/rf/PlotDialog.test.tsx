@@ -9,7 +9,7 @@ import { PlotDialog } from './PlotDialog'
 import { useStore } from '../../store'
 import { defaultShowSettings } from '../../types/show'
 import { formatClock } from '../../utils/cueDefaults'
-import type { DeskChannel, DeviceState, RfPack, RfPerformer, RfPlot, RfSwap } from '../../types/show'
+import type { DeviceState, RfPack, RfPerformer, RfPlot, RfSwap } from '../../types/show'
 
 const AT = 1_700_000_000_000
 
@@ -60,8 +60,6 @@ describe('PlotDialog', () => {
     plot?: RfPlot
     devices?: DeviceState[]
     swaps?: RfSwap[]
-    /** The desk groups a pack can be pointed at. */
-    deskChannels?: DeskChannel[]
   }
 
   async function show(state: DialogState = {}): Promise<void> {
@@ -74,8 +72,7 @@ describe('PlotDialog', () => {
             ...defaults.rf,
             plot: state.plot ?? EMPTY_PLOT,
             swaps: state.swaps ?? []
-          },
-          scenes: { ...defaults.scenes, channels: state.deskChannels ?? [] }
+          }
         },
         showDevices: state.devices ?? []
       })
@@ -132,29 +129,6 @@ describe('PlotDialog', () => {
 
     await act(async () => { container.querySelector<HTMLButtonElement>('.plot-close')!.click() })
     expect(onClose).toHaveBeenCalledTimes(3)
-  })
-
-  it('points a pack at the desk group it feeds', async () => {
-    // The assignment the scene recall is built on: this mic is in that group on the desk.
-    await show({
-      plot: { performers: [], packs: [pack({ id: 'p1' })] },
-      deskChannels: [
-        { id: 'dca-1', label: 'DCA 1 — Principals', mute: null, unmute: null },
-        { id: 'dca-2', label: 'DCA 2 — Ensemble', mute: null, unmute: null }
-      ]
-    })
-
-    const select = field<HTMLSelectElement>('.plot-pack-desk')
-    expect(select.value).toBe('')
-    expect(Array.from(select.options).map(option => option.textContent))
-      .toEqual(['— no group —', 'DCA 1 — Principals', 'DCA 2 — Ensemble'])
-
-    await choose(select, 'dca-2')
-    expect(rf().plot.packs[0].deskChannelId).toBe('dca-2')
-
-    // And back off it, which is the same as never having been on it.
-    await choose(select, '')
-    expect(rf().plot.packs[0].deskChannelId).toBeNull()
   })
 
   it('adds a performer and a pack', async () => {

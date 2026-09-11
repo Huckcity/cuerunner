@@ -212,62 +212,63 @@ await page.locator('.script-line[data-line="5"] .script-line-no').click()
 await page.locator('.script-pin').waitFor()
 await page.evaluate(() => document.documentElement.style.setProperty('--h-script', '430px'))
 await shot('15-script.png', '.script-panel')
+// The strip gives the window back: the scenes view wants all of it.
+await page.locator('.btn-script').click()
 
-// The desk side of the plot: scenes, and the groups they drive. The group is pointed at a
-// local port so the figure shows a real message rather than a delivery failure.
-await page.locator('.btn-scenes').click()
-await page.locator('.scenes-edit-btn').click()
-const sceneDialog = page.locator('.scene-dialog')
-await sceneDialog.locator('.group-add').click()
-const groupLabel = sceneDialog.locator('.group-label').first()
+// The scenes view: the show as a matrix, edited in place. This is where the show is run
+// from and the only place it is edited, so the two figures are the same surface twice —
+// once as the operator watches it, once with the groups open for editing.
+await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+await page.locator('.scenes-view').waitFor()
+
+// A group on the desk, pointed at a local port so the figure shows a real message.
+await page.locator('.scenes-groups-toggle').click()
+const groups = page.locator('.scenes-groups')
+await groups.locator('.group-add').click()
+const groupLabel = groups.locator('.group-label').first()
 await groupLabel.fill('DCA 2 — Ensemble')
 await groupLabel.blur()
-await sceneDialog.locator('.group-delivery').first().selectOption('osc')
-await sceneDialog.locator('.group-host').first().fill('127.0.0.1')
-await sceneDialog.locator('.group-osc-port').first().fill('9000')
-await sceneDialog.locator('.group-osc-port').first().blur()
-await sceneDialog.locator('.group-address').first().fill('/dca/2/mute')
-await sceneDialog.locator('.group-address').first().blur()
+await groups.locator('.group-delivery').first().selectOption('osc')
+await groups.locator('.group-host').first().fill('127.0.0.1')
+await groups.locator('.group-osc-port').first().fill('9000')
+await groups.locator('.group-osc-port').first().blur()
+await groups.locator('.group-address').first().fill('/dca/2/mute')
+await groups.locator('.group-address').first().blur()
+await groups.locator('.group-summary').first().waitFor()
+// Closed again while the show is built, so the grid has the window to itself.
+await page.locator('.scenes-groups-toggle').click()
 
-const openMics = async (from, to) => {
+const openMics = async (column, from, to) => {
   for (let i = from; i <= to; i++) {
-    await sceneDialog.locator('.scene-mic-row').nth(i).locator('.scene-mic-toggle').check()
+    await page.locator('.matrix-row').nth(i).locator('.matrix-cell').nth(column).click()
   }
 }
-await sceneDialog.locator('.scene-add').click()
-const actOne = sceneDialog.locator('.scene-name-input').first()
-await actOne.fill('Act One')
-await actOne.blur()
-await openMics(0, 3)
-await sceneDialog.locator('.scene-add').click()
-const wedding = sceneDialog.locator('.scene-name-input').nth(1)
-await wedding.fill('Wedding')
-await wedding.blur()
-await openMics(4, 7)
-await shot('19-scene-editor.png', '.scene-dialog')
-await sceneDialog.locator('.scene-close').click()
+const nameScene = async (index, name) => {
+  const field = page.locator('.matrix-scene').nth(index).locator('.scene-name-field')
+  await field.fill(name)
+  await field.blur()
+}
+
+await page.locator('.scenes-add').click()
+await nameScene(0, 'Act One')
+await openMics(0, 0, 3)
+await page.locator('.scenes-add').click()
+await nameScene(1, 'Wedding')
+await openMics(1, 4, 7)
 
 // The packs that feed that group, so the figure shows a desk with something on it.
-await page.locator('.btn-rf').click()
-await page.locator('.rf-edit').click()
-const plotDialog = page.locator('.plot-dialog')
 for (let i = 0; i < 8; i++) {
-  await plotDialog.locator('.plot-pack-desk').nth(i).selectOption({ label: 'DCA 2 — Ensemble' })
+  await page.locator('.matrix-row').nth(i).locator('.matrix-group-select')
+    .selectOption({ label: 'DCA 2 — Ensemble' })
 }
-await plotDialog.locator('.plot-close').click()
-await page.locator('.btn-rf').click()
-await page.locator('.btn-scenes').click()
 
-await page.locator('.scene-recall').last().click()
-await page.locator('.desk-row[data-live="true"]').first().waitFor()
-await shot('18-scenes.png', '.scenes-panel')
-await page.locator('.scenes-actions .scenes-btn', { hasText: '✕' }).click()
+await page.locator('.matrix-recall').last().click()
+await page.locator('.matrix-scene[data-current="true"]').waitFor()
+await shot('18-scenes.png', '.scenes-view')
 
-// The view the show is run from: the same show, as a matrix, filling the window.
-await page.locator('.toolbar-view-btn', { hasText: 'Matrix' }).click()
-await page.locator('.matrix-view').waitFor()
-await page.evaluate(() => document.documentElement.style.setProperty('--h-scenes', '0px'))
-await shot('20-matrix.png', '.matrix-view')
+await page.locator('.scenes-groups-toggle').click()
+await groups.waitFor()
+await shot('19-scenes-groups.png', '.scenes-view')
 await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))

@@ -73,9 +73,6 @@ function CommitInput({
 export function PlotDialog({ onClose }: Props) {
   const plot = useStore(s => s.showSettings.rf.plot)
   const swaps = useStore(s => s.showSettings.rf.swaps)
-  // The groups a pack can feed. They are made in the scene editor; a pack points at one
-  // here, which is where the operator thinks of it: this mic goes to that group.
-  const deskChannels = useStore(s => s.showSettings.scenes.channels)
   const devices = useStore(s => s.showDevices)
   const updateRfSettings = useStore(s => s.updateRfSettings)
   const appendLog = useStore(s => s.appendLog)
@@ -184,17 +181,6 @@ export function PlotDialog({ onClose }: Props) {
                   <option value="">— unassigned —</option>
                   {plot.performers.map(performer => (
                     <option key={performer.id} value={performer.id}>{performer.name}</option>
-                  ))}
-                </select>
-                <select
-                  className="plot-pack-desk"
-                  value={pack.deskChannelId ?? ''}
-                  aria-label="Pack desk group"
-                  onChange={e => apply(updatePack(plot, pack.id, { deskChannelId: e.target.value || null }))}
-                >
-                  <option value="">— no group —</option>
-                  {deskChannels.map(channel => (
-                    <option key={channel.id} value={channel.id}>{channel.label}</option>
                   ))}
                 </select>
                 <CommitInput

@@ -64,7 +64,6 @@
         <li><a href="#triggers">Triggers</a></li>
         <li><a href="#script-panel">The script, and the tablet</a></li>
         <li><a href="#scenes">Scenes, and the desk</a></li>
-        <li><a href="#matrix">Running the show: the matrix</a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -101,8 +100,8 @@
           <li><strong>Inspector</strong> — settings for the selected cue. Tabs change with the cue type.</li>
           <li><strong>Waveform / timeline</strong> — the waveform of the selected audio cue, or the timeline editor when a timeline-mode group is selected.</li>
           <li><strong>Run log</strong> — hidden by default; the LOG button in the transport bar reveals it.</li>
-          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF, SCRIPT, SCENES) and the selected cue.</li>
-          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, the wireless panel, the script, or the scenes. Whichever button is lit is the one showing.</li>
+          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF, SCRIPT) and the selected cue.</li>
+          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, the wireless panel or the script. Whichever button is lit is the one showing.</li>
         </ol>
       </section>
 
@@ -954,44 +953,58 @@ console.log(r.stdout.trim())</code></pre>
           <strong>scene</strong> is who is open on stage. Recalling one tells the desk the
           difference.
         </p>
-        <h3>The plot, the groups, the scenes</h3>
         <p>
-          Three things, and they live where you would expect to find them. The <strong>mic plot</strong>
-          (RF → Edit plot…) says who wears which pack, and which group on the desk that pack feeds.
-          The <strong>groups</strong> (Scenes → Edit scenes…) are the desk's DCAs or mute groups, each
-          with the message that opens it and the message that closes it. The <strong>scenes</strong>
-          say which packs are open, and the desk follows from the groups those packs feed — so a mic
-          moving between performers is a change in one place, not a re-patch of every scene.
-        </p>
-        <figure class="figure">
-          <a href="./assets/guide/19-scene-editor.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/19-scene-editor.png" alt="The scene editor: a list of scenes, a grid of mics ticked open for the selected scene, and a desk group with its OSC open and close messages spelled out." />
-          </a>
-          <figcaption>Two scenes, the mics open in the selected one, and the group they feed with both messages spelled out.</figcaption>
-        </figure>
-        <p>
-          The SCENES button opens the panel the operator works from during the show: the scenes in
-          order with how many mics each one opens, which of them the desk is currently set to, and
-          the groups below it with what they are carrying.
+          The <strong>Scenes</strong> switch at the top right opens the view it all happens in: the
+          same show as a grid, filling the window in place of the cue list, with the transport bar —
+          GO, STOP, PANIC — exactly where it was. It is where the show is <em>run</em> and the only
+          place any of it is <em>edited</em>. There is nothing to open and no dialog to confirm,
+          because a second way to edit the same thing is a second way to get it wrong.
         </p>
         <figure class="figure">
           <a href="./assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/18-scenes.png" alt="The scenes panel: two scenes with their mic counts, the recalled one marked, and a desk group listed as live with the packs it carries and the message that opened it." />
+            <img src="./assets/guide/18-scenes.png" alt="The scenes view: scenes as columns with their mic counts and recall buttons, mics as rows with their performers and desk groups, filled cells for the mics open in each scene, and the recalled scene's column tinted." />
           </a>
-          <figcaption>The recalled scene, and the group it opened on the desk.</figcaption>
+          <figcaption>Two scenes across, twelve mics down: the recalled scene's column, and the people it has open.</figcaption>
         </figure>
+        <h3>Reading it</h3>
+        <p>
+          A filled cell is a mic that is open in that scene. The column of the scene the desk is set
+          to is tinted and the rows it opens are brightened, which together answer the question asked
+          most often in a radio-mic show: <em>who is on right now?</em> Each column carries the
+          scene's name and how many mics it opens, and a <strong>Recall</strong> button.
+        </p>
+        <h3>Editing it</h3>
+        <p>
+          Click a cell to open or close that mic in that scene. <strong>Add scene</strong> appends a
+          column, the name is edited in the column header where it is read, and the ✕ beside it
+          removes the scene. On each row, the group select is the patch: which group on the desk that
+          mic feeds.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/19-scenes-groups.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/19-scenes-groups.png" alt="The same view with the desk groups drawer open below the grid: a group with its label, OSC delivery and the two messages it sends, and what it is carrying." />
+          </a>
+          <figcaption>The same view, with the desk groups open: what each one carries, and the messages it opens and closes with.</figcaption>
+        </figure>
+        <h3>The desk groups</h3>
+        <p>
+          <strong>Desk groups (N)</strong> opens a drawer along the bottom: each group's label, how
+          the desk is told to open and close it, the exact messages it will send, what is feeding it
+          and whether it is open now. MIDI is the common case — one note per group, open on note-on
+          and closed on note-off — and OSC covers desks that prefer it, with the open and the close
+          value on one address.
+        </p>
         <h3>What a recall sends</h3>
         <p>
           Only what changed. A group whose mics are all closed is closed, a group with any one of its
           mics open is opened, and a group already in the right state is not mentioned at all — a
-          recall should be three messages, not a sweep of every fader on the desk. Groups that no mic
-          is assigned to are left alone entirely, because the desk may well be doing something else
-          with them.
+          recall should be three messages, not a sweep of every fader. Groups that no mic is assigned
+          to are left alone entirely, because the desk may well be doing something else with them.
         </p>
         <p>
-          Editing a scene does not move the desk. The panel marks a scene whose mics have changed
-          since it was last recalled, so the operator can see what is still to apply and choose the
-          moment. <strong>Mics off</strong> closes everything the plot drives: the panic button for
+          Editing never moves the desk. When the scene on stage has drifted from where the desk was
+          left, the view offers <strong>Apply to desk (N)</strong> with the number of groups behind,
+          and waits. <strong>Mics off</strong> closes everything the plot drives: the panic button for
           mics rather than for sound.
         </p>
         <h3>Following the show</h3>
@@ -1002,64 +1015,19 @@ console.log(r.stdout.trim())</code></pre>
           pointed at a scene refuses rather than being read as “close everything”, and the run log
           carries the recall under the cue's own label, so the log reads as one story.
         </p>
-        <h3>Telling the desk</h3>
-        <p>
-          A group is opened and closed by a MIDI message or an OSC message, whichever the desk takes.
-          MIDI is the common case — one note per group, open on note-on and closed on note-off — and
-          OSC covers desks that prefer it, with the open and the close value on the same address.
-          Whatever is configured, the editor shows the exact message it will send and the run log
-          records each recall with what it did.
-        </p>
-        <div class="note">
-          A recall only remembers what the desk accepted. A message that could not be delivered is
-          reported in the run log and left unapplied, so the next recall tries it again instead of
-          assuming it arrived. The desk's state belongs to the session rather than the workspace: a
-          show that has just loaded has not told the desk anything yet, which is why the first recall
-          sends everything the plot drives.
-        </div>
-      </section>
-
-      <section id="matrix" class="panel reveal delay-4">
-        <h2>Running the show: the matrix</h2>
-        <p>
-          The cue stack is where a show is built. The <strong>Matrix</strong> switch at the top right
-          is where it is run from: the same show as a grid of scenes and mics, filling the window in
-          place of the cue list. Learning the show happens in one view and playing it happens in the
-          other, and the transport bar — GO, STOP, PANIC — stays where it is either way.
-        </p>
-        <figure class="figure">
-          <a href="./assets/guide/20-matrix.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/20-matrix.png" alt="The matrix: scenes as columns with recall buttons and mic counts, mics as rows with performer names and desk groups, filled cells for the mics open in each scene, and the recalled scene's column tinted with its rows brightened." />
-          </a>
-          <figcaption>Two scenes across, twelve mics down: the recalled scene's column, and the people it has open.</figcaption>
-        </figure>
-        <h3>Reading it</h3>
-        <p>
-          A filled cell is a mic that is open in that scene. The column of the scene the desk is set
-          to is tinted, and the rows it opens are brightened — which together answer the question
-          asked most often in a radio-mic show: <em>who is on right now?</em> Each row carries the
-          pack, the performer wearing it and the group on the desk it feeds; each column carries the
-          scene's name and how many mics it opens.
-        </p>
-        <h3>Editing it</h3>
-        <p>
-          Click a cell to open or close that mic in that scene, exactly as you would in the editor —
-          the matrix is the editor, laid out the way the show is thought about. An edit never moves
-          the desk: the desk is told when you recall a scene, or when you press
-          <strong>Apply to desk (N)</strong>, which appears when the scene on stage has drifted from
-          where the desk was left and tells you how many groups are behind.
-        </p>
         <h3>Locking it</h3>
         <p>
-          <strong>Lock</strong> at the top right is for curtain up. While it is on, recalling stays
-          live — that is the point of the view — and every way of changing the show is closed: the
-          cells cannot be moved, and the mic plot and scene editors cannot be opened from the panels
-          either. A stray click during a number cannot change who is open.
+          <strong>Lock</strong> is for curtain up. While it is on, recalling and applying stay live —
+          that is the point of the view — and every way of changing the show closes: the cells cannot
+          be moved, scenes cannot be added, renamed or removed, and the groups cannot be edited. A
+          stray click during a number cannot change who is open.
         </p>
         <div class="note">
           The lock is saved with the workspace, so a show that was locked when the app last closed
           comes back locked — including after a crash and recovery, which is exactly when you do not
-          want to be one click away from editing the plot.
+          want to be one click away from editing the plot. The desk's own state is different: it
+          belongs to the session, and a recall only remembers what the desk accepted, so a message
+          that could not be delivered is reported and tried again next time.
         </div>
       </section>
 

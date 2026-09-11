@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** The panels that live along the bottom of the window, one at a time. */
-export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script' | 'scenes'
+export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script'
 
 export function TransportBar({ strip, onToggleStrip }: Props) {
   const { go, stop, panic } = useCueRunner()
@@ -59,14 +59,6 @@ export function TransportBar({ strip, onToggleStrip }: Props) {
           title="Show or hide the script"
         >
           SCRIPT
-        </button>
-        <button
-          className="btn-scenes"
-          data-active={strip === 'scenes'}
-          onClick={() => onToggleStrip('scenes')}
-          title="Show or hide the scenes"
-        >
-          SCENES
         </button>
       </div>
       <div className="transport-center">

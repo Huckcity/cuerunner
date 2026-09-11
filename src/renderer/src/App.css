@@ -112,7 +112,6 @@
   --h-monitor:         220px;
   --h-rf:              220px;
   --h-script:          260px;
-  --h-scenes:          240px;
   --h-timeline:        200px;
   --h-button-sm:        26px;
   --h-button-md:        28px;
@@ -165,13 +164,15 @@ html, body, #root {
 .app-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr var(--inspector-width);
+  /* minmax(0, 1fr) rather than 1fr: a plain 1fr track takes its minimum from its content,
+     so a wide grid inside it pushes the window wider instead of scrolling in place. */
+  grid-template-columns: minmax(0, 1fr) var(--inspector-width);
   min-height: 0;
   overflow: hidden;
 }
 
-/* The matrix is one surface, not a cue list with an inspector beside it. */
-.app-main[data-view='matrix'] { grid-template-columns: 1fr; }
+/* The scenes view is one surface, not a cue list with an inspector beside it. */
+.app-main[data-view='scenes'] { grid-template-columns: minmax(0, 1fr); }
 
 /* Timeline fullscreen mode */
 .app-shell.timeline-fullscreen .app-main { display: none; }

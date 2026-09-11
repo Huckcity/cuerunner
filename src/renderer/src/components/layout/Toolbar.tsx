@@ -27,10 +27,10 @@ interface Props {
 }
 
 /**
- * What fills the middle of the window: the cue stack the show is built in, or the matrix
- * the show is run from.
+ * What fills the middle of the window: the cue stack the show is built in, or the scenes
+ * the show is run from and edited in.
  */
-export type AppView = 'cues' | 'matrix'
+export type AppView = 'cues' | 'scenes'
 
 export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
@@ -218,12 +218,12 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
         <button
           className="toolbar-view-btn"
           role="tab"
-          aria-selected={view === 'matrix'}
-          data-active={view === 'matrix'}
-          onClick={() => onSwitchView('matrix')}
+          aria-selected={view === 'scenes'}
+          data-active={view === 'scenes'}
+          onClick={() => onSwitchView('scenes')}
           title="Scenes and mics, for running the show"
         >
-          Matrix
+          Scenes
         </button>
       </div>
     </div>
