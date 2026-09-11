@@ -21,4 +21,10 @@ test('Audio Timing tab has no Fade out field and states the loop range', async (
   await expect(page.locator('.inspector')).not.toContainText('Fade out')
   await expect(page.locator('.field-row').filter({ hasText: 'Fade in' })).toBeVisible()
   await expect(page.locator('.inspector')).toContainText('0 = play once, -1 = forever')
+
+  // The loop hint sits under its field rather than beside it: sharing the row squeezed
+  // the input to a couple of characters once the reset arrow joined the row too.
+  const fadeIn = await page.locator('.field-row').filter({ hasText: 'Fade in' }).locator('input').boundingBox()
+  const loop = await page.locator('.field-row').filter({ hasText: 'Loop count' }).locator('input').boundingBox()
+  expect(loop!.width).toBeGreaterThan(fadeIn!.width - 2)
 })

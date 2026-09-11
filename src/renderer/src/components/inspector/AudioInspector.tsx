@@ -88,8 +88,8 @@ export function AudioInspector({ cue, tab }: Props) {
             onChange={e => set({ loopCount: Number(e.target.value) })} />
           <ResetButton label="Loop count" value={cue.loopCount} defaultValue={AUDIO_DEFAULTS.loopCount}
             onReset={() => set({ loopCount: AUDIO_DEFAULTS.loopCount })} />
-          <span className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</span>
         </div>
+        <p className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</p>
         <LastRun cueId={cue.id} />
       </div>
     )
