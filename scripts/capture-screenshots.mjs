@@ -256,11 +256,17 @@ await page.locator('.scenes-add').click()
 await nameScene(1, 'Wedding')
 await openMics(1, 4, 7)
 
-// The packs that feed that group, so the figure shows a desk with something on it.
+// The patch, in the editor the rest of the mic plot is set up in: the packs that feed that
+// group, so the figure shows a desk with something on it.
+await page.locator('.btn-rf').click()
+await page.locator('.rf-edit').click()
+const plotDialog = page.locator('.plot-dialog')
 for (let i = 0; i < 8; i++) {
-  await page.locator('.matrix-row').nth(i).locator('.matrix-group-select')
+  await plotDialog.locator('.plot-pack-row').nth(i).locator('.plot-pack-group')
     .selectOption({ label: 'DCA 2 — Ensemble' })
 }
+await plotDialog.locator('.plot-close').click()
+await page.locator('.btn-rf').click()
 
 // The first number, so the header shows both the scene the desk is on and the one coming.
 await page.locator('.matrix-recall').first().click()

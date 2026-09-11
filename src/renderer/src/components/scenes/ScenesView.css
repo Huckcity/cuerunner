@@ -6,7 +6,7 @@
   /* The view is a grid item in a minmax(0, 1fr) track; without this its content's
      min-content width would push the window wider instead of scrolling inside. */
   min-width: 0;
-  --matrix-mic-width: 300px;
+  --matrix-mic-width: 170px;
   --matrix-cell-width: 88px;
   --matrix-cell-height: 34px;
 
@@ -281,23 +281,26 @@
   opacity: 1;
 }
 
-.matrix-scene-count {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-ghost);
+/* The column's presses: recall, which is a symbol because the column has no room to say
+   what its only verb is, and remove beside it. */
+.matrix-scene-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: 2px;
 }
 
 .matrix-recall {
+  flex: 1;
   height: 18px;
-  margin-top: 2px;
-  padding: 0 var(--space-2);
+  padding: 0;
   background: transparent;
   border: 1px solid var(--border-input);
   border-radius: var(--radius-sm);
   color: var(--fg-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-family: inherit;
+  line-height: 1;
   cursor: pointer;
   transition: var(--transition-fast);
 }
@@ -307,7 +310,7 @@
 /* Removing a scene is the one destructive edit in the view, so it is small and never
    armed by accident: it reads as a mark beside the name, not as a press to make. */
 .matrix-scene-remove {
-  align-self: flex-start;
+  flex: none;
   width: 20px;
   height: 16px;
   padding: 0;
@@ -330,10 +333,8 @@
   position: sticky;
   left: 0;
   z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 56px) minmax(0, 1fr) minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: var(--space-2);
   height: var(--matrix-cell-height);
   padding: 0 var(--space-2);
   background: var(--bg-base);
@@ -341,54 +342,29 @@
   border-right: 1px solid var(--border);
 }
 
-.matrix-pack {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  color: var(--fg-tertiary);
-}
-
+/* The row is a name: who is wearing this mic is what the operator reads down the side of
+   the plot, and it is the only thing about a mic that changes at the interval. A pack
+   nobody is wearing falls back to its label rather than reading as a blank row. */
 .matrix-performer {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--text-base);
+  color: var(--fg-body);
+}
+
+.matrix-performer[data-unassigned='true'] {
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--fg-ghost);
 }
-
-/* Which group a mic feeds is the decision the whole feature is about, and this row is
-   where it is made: the plot editor no longer carries the field. */
-.matrix-group-select {
-  min-width: 0;
-  width: 100%;
-  height: 22px;
-  padding: 0 4px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-sm);
-  color: var(--fg-dim);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  outline: none;
-}
-
-.matrix-group-select:focus { border-color: var(--border-focus); }
-
-.matrix-group-select:disabled { opacity: 0.6; cursor: default; }
 
 /* A pack that is open in the current scene brightens its whole row: this is the glance
    the view exists for — the column and the people it opens, read together. */
 .matrix-row[data-on='true'] .matrix-mic { background: var(--bg-card); }
 
-.matrix-row[data-on='true'] .matrix-pack {
-  color: var(--fg-primary);
-  font-weight: var(--fw-bold);
-}
-
-.matrix-row[data-on='true'] .matrix-performer { color: var(--fg-secondary); }
+.matrix-row[data-on='true'] .matrix-performer { color: var(--fg-primary); }
 
 .matrix-cell {
   height: var(--matrix-cell-height);

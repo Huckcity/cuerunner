@@ -153,11 +153,13 @@ describe('ScenesView', () => {
     return column
   }
 
-  function rowFor(label: string): Element {
+  // Rows are found by who is wearing the mic; a pack nobody is wearing falls back to its
+  // label, which is what the view shows for it too.
+  function rowFor(who: string): Element {
     const row = [...container.querySelectorAll('.matrix-row')].find(
-      candidate => candidate.querySelector('.matrix-pack')?.textContent === label
+      candidate => candidate.querySelector('.matrix-performer')?.textContent === who
     )
-    if (!row) throw new Error(`no mic row for ${label}`)
+    if (!row) throw new Error(`no mic row for ${who}`)
     return row
   }
 
@@ -220,7 +222,7 @@ describe('ScenesView', () => {
     })
   }
 
-  it('gives every pack a row and every scene a column, with the counts', async () => {
+  it('gives every mic a row of who is wearing it, and every scene a named column', async () => {
     await show({
       scenes: settings([OPENING, scene('s3', 'Finale', ['p2', 'p3']), INTERVAL]),
       plot: PLOT
@@ -232,13 +234,15 @@ describe('ScenesView', () => {
     expect(columns.map(column =>
       column.querySelector<HTMLInputElement>('.scene-name-field')?.value))
       .toEqual(['Opening', 'Finale', 'Interval'])
-    expect(columns.map(column => column.querySelector('.matrix-scene-count')?.textContent))
-      .toEqual(['1 mic', '2 mics', '1 mic'])
 
+    // The row is a name, and the column says the name and the two presses: how many mics a
+    // scene opens is already the block of colour beside it.
     const rows = [...container.querySelectorAll('.matrix-row')]
-    expect(rows.map(row => row.querySelector('.matrix-pack')?.textContent))
-      .toEqual(['Pack 1', 'Pack 2', 'Pack 3'])
+    expect(rows.map(row => row.querySelector('.matrix-performer')?.textContent))
+      .toEqual(['Ada', 'Pack 2', 'Bea'])
     expect(rows.map(row => row.querySelectorAll('.matrix-cell').length)).toEqual([3, 3, 3])
+    expect(columns.every(column => column.querySelector('.matrix-scene-count') === null))
+      .toBe(true)
   })
 
   it('counts a lone mic and scene in the singular', async () => {
@@ -248,53 +252,21 @@ describe('ScenesView', () => {
     })
 
     expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('1 mic · 1 scene')
-    expect(container.querySelector('.matrix-scene-count')?.textContent).toBe('1 mic')
   })
 
-  it('reads each mic cell as pack, performer and desk group', async () => {
+  it('reads each row as who is wearing the mic, and marks the ones nobody is', async () => {
     await show({ scenes: settings([OPENING]), plot: PLOT })
 
-    expect(rowFor('Pack 1').querySelector('.matrix-performer')?.textContent).toBe('Ada')
-    expect(rowFor('Pack 2').querySelector('.matrix-performer')?.textContent).toBe('unassigned')
-    expect(rowFor('Pack 3').querySelector('.matrix-performer')?.textContent).toBe('Bea')
+    expect(rowFor('Ada').querySelector('.matrix-performer')?.getAttribute('data-unassigned'))
+      .toBe('false')
+    expect(rowFor('Bea').querySelector('.matrix-performer')?.getAttribute('data-unassigned'))
+      .toBe('false')
 
-    const group = (label: string): HTMLSelectElement =>
-      rowFor(label).querySelector<HTMLSelectElement>('.matrix-group-select')!
-    expect(group('Pack 1').value).toBe('dca-ensemble')
-    expect(group('Pack 1').options[group('Pack 1').selectedIndex].textContent)
-      .toBe('DCA 1 — Ensemble')
-    expect(group('Pack 2').value).toBe('dca-ensemble')
-    expect(group('Pack 3').value).toBe('dca-band')
-    expect(group('Pack 3').options[group('Pack 3').selectedIndex].textContent)
-      .toBe('DCA 2 — Band')
-  })
-
-  it('reads a mic with no group on the desk as a dash', async () => {
-    await show({
-      scenes: settings([OPENING]),
-      plot: { performers: [], packs: [pack('p9', 'Pack 9', null)] }
-    })
-
-    expect(container.querySelector('.matrix-performer')?.textContent).toBe('unassigned')
-    const group = container.querySelector<HTMLSelectElement>('.matrix-group-select')!
-    expect(group.value).toBe('')
-    expect(group.options[0].textContent).toBe('— no group —')
-  })
-
-  it('assigns a desk group to a mic, and clears it back to no group', async () => {
-    await show({ scenes: settings([OPENING]), plot: PLOT })
-
-    const select = rowFor('Pack 2').querySelector<HTMLSelectElement>('.matrix-group-select')!
-    expect([...select.options].map(option => option.textContent))
-      .toEqual(['— no group —', 'DCA 1 — Ensemble', 'DCA 2 — Band'])
-
-    await choose(select, 'dca-band')
-    expect(useStore.getState().showSettings.rf.plot.packs.find(entry => entry.id === 'p2')?.deskChannelId)
-      .toBe('dca-band')
-
-    await choose(select, '')
-    expect(useStore.getState().showSettings.rf.plot.packs.find(entry => entry.id === 'p2')?.deskChannelId)
-      .toBeNull()
+    // A pack nobody is wearing is still a row the show has to have: it reads as its label.
+    const spare = rowFor('Pack 2')
+    expect(spare.querySelector('.matrix-performer')?.getAttribute('data-unassigned')).toBe('true')
+    // And no row carries the patch any more: which group a mic feeds is set up with the plot.
+    expect(spare.querySelector('.matrix-group-select')).toBeNull()
   })
 
   it('toggles a mic in a scene through to the store', async () => {
@@ -676,7 +648,7 @@ describe('ScenesView', () => {
 
     expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
     expect(disabled('.matrix-scene-remove').every(Boolean)).toBe(true)
-    expect(disabled('.matrix-group-select').every(Boolean)).toBe(true)
+    expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
     expect(disabled('.matrix-cell').every(Boolean)).toBe(true)
     expect(container.querySelector<HTMLButtonElement>('.scenes-add')?.disabled).toBe(true)
     expect(disabled('.group-label').every(Boolean)).toBe(true)

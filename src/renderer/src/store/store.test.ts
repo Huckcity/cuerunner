@@ -1,14 +1,29 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
 import type { AudioCue } from '../types/cue'
+import { defaultShowSettings } from '../types/show'
 import type {
   AlertEvent,
   AlertLevel,
+  DeskChannel,
   DeviceEvent,
   DeviceState,
+  MicScene,
+  RfPack,
   ServiceEvent,
   ShowEvent
 } from '../types/show'
+
+const DESK_GROUP: DeskChannel = { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null }
+const WORN_PACK: RfPack = {
+  id: 'p1',
+  label: 'Pack 1',
+  channelId: null,
+  performerId: null,
+  notes: '',
+  deskChannelId: 'dca-1'
+}
+const NUMBER: MicScene = { id: 's1', name: 'Bows', live: ['p1'], notes: '' }
 
 function resetStore() {
   useStore.setState({
@@ -450,6 +465,53 @@ describe('store — undo/redo', () => {
     useStore.getState().undo()
     expect(useStore.getState().cues.find(c => c.id === c2.id)?.name).not.toBe('Second')
     expect(useStore.getState().cues.find(c => c.id === c1.id)?.name).toBe('First')
+  })
+
+  it('undo after removing a desk group brings the group and its packs back together', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        scenes: { ...defaults.scenes, channels: [DESK_GROUP], list: [NUMBER] },
+        rf: { ...defaults.rf, plot: { performers: [], packs: [WORN_PACK] } }
+      }
+    })
+
+    useStore.getState().removeDeskGroup(DESK_GROUP.id)
+
+    // The group goes and the pack that fed it is unpicked in the same edit: a pack pointing
+    // at a group that is gone is a mic nothing on the desk opens.
+    expect(useStore.getState().showSettings.scenes.channels).toEqual([])
+    expect(useStore.getState().showSettings.rf.plot.packs[0].deskChannelId).toBeNull()
+
+    // One undo, rather than half of the edit and then the other half.
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.scenes.channels.map(channel => channel.id))
+      .toEqual([DESK_GROUP.id])
+    expect(useStore.getState().showSettings.rf.plot.packs[0].deskChannelId).toBe('dca-1')
+  })
+
+  it('undo after deleting a scene restores it with the mics it opens', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] } }
+    })
+
+    useStore.getState().updateScenesSettings({ list: [] })
+    expect(useStore.getState().showSettings.scenes.list).toEqual([])
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.scenes.list).toEqual([NUMBER])
+  })
+
+  it('the lock is not an edit: it does not enter the history', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({ showSettings: defaults })
+    const before = useStore.getState().past.length
+
+    useStore.getState().updateScenesSettings({ locked: true })
+
+    expect(useStore.getState().past).toHaveLength(before)
   })
 
   it('loadWorkspace clears undo and redo stacks', () => {

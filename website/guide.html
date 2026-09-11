@@ -970,8 +970,10 @@ console.log(r.stdout.trim())</code></pre>
         <p>
           A filled cell is a mic that is open in that scene. The column of the scene the desk is set
           to is tinted and the rows it opens are brightened, which together answer the question asked
-          most often in a radio-mic show: <em>who is on right now?</em> Each column carries the
-          scene's name and how many mics it opens, and a <strong>Recall</strong> button.
+          most often in a radio-mic show: <em>who is on right now?</em> Each column is a name and two
+          presses: <strong>→</strong> sends that scene to the desk, and the ✕ beside it removes the
+          scene. How many mics a scene opens is the block of colour under it, so nothing spells it
+          out.
         </p>
         <h3>Following the show</h3>
         <p>
@@ -991,9 +993,15 @@ console.log(r.stdout.trim())</code></pre>
         <h3>Editing it</h3>
         <p>
           Click a cell to open or close that mic in that scene. <strong>Add scene</strong> appends a
-          column, the name is edited in the column header where it is read, and the ✕ beside it
-          removes the scene. On each row, the group select is the patch: which group on the desk that
-          mic feeds.
+          column and the name is edited in the column header, where it is read. The rows are the
+          people wearing the mics; the pack's label and the desk group it feeds are set once at
+          setup, in the mic plot editor with the rest of the plot, so the grid carries no field for
+          them.
+        </p>
+        <p>
+          A deleted scene is not gone: <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> puts it back where it was,
+          with the mics it opens. The same undo covers the cues, the scenes and the mic plot, so an
+          edit made in either view is one press from being back.
         </p>
         <figure class="figure">
           <a href="./assets/guide/19-scenes-groups.png" target="_blank" rel="noreferrer">
@@ -1108,8 +1116,9 @@ console.log(r.stdout.trim())</code></pre>
           text field the field's own undo applies instead. Duplicate
           (<kbd>Ctrl/Cmd</kbd> + <kbd>D</kbd>) and delete
           (<kbd>Ctrl/Cmd</kbd> + <kbd>Backspace</kbd> or <kbd>Delete</kbd>) still need the cue list
-          focused. The panel keeps the last 50 edits and folds rapid changes to the same cue into
-          one step, so a few Ctrl+Z presses reach a sensible earlier state.
+          focused. The history is one stack for the three things an edit destroys — the cue stack,
+          the scenes with their desk groups, and the mic plot — so an undo is never half a change,
+          and it keeps the last 50 edits.
         </div>
       </section>
 

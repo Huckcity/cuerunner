@@ -4,11 +4,14 @@ import type { AudioSettings, MidiSettings } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
   CompanionSettings,
+  DeskChannel,
   DeviceState,
   DeviceEvent,
+  MicScene,
   MidiInSettings,
   OscInSettings,
   PresenceSettings,
+  RfPlot,
   RfSettings,
   ScenesSettings,
   ScriptSettings,
@@ -20,6 +23,7 @@ import type {
   ShowSnapshot
 } from '../types/show'
 import { createCue } from '../utils/cueDefaults'
+import { removeDeskChannel } from '../utils/scenes'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
 
@@ -92,9 +96,9 @@ interface CueListState {
   selectedId: string | null
   running: Map<string, RunningCue>
 
-  // Undo / redo history (snapshots of cues[])
-  past: Cue[][]
-  future: Cue[][]
+  // Undo / redo history
+  past: EditSnapshot[]
+  future: EditSnapshot[]
 
   // Cue CRUD
   addCue: (type: CueType, afterId?: string) => void
@@ -155,6 +159,12 @@ interface CueListState {
   updateScriptSettings: (patch: Partial<ScriptSettings>) => void
   updateCompanionSettings: (patch: Partial<CompanionSettings>) => void
   updateScenesSettings: (patch: Partial<ScenesSettings>) => void
+  /**
+   * Removing a desk group takes the group and unpicks the packs that fed it, as one edit:
+   * a pack pointing at a group that is gone is a mic nothing on the desk opens, and an
+   * undo that put half of it back would be the same thing with the operator's blessing.
+   */
+  removeDeskGroup: (channelId: string) => void
 
   // Where the desk was left. Session state, not workspace content: a show that has just
   // loaded has not told the desk anything yet, and saying otherwise would stop the first
@@ -175,10 +185,45 @@ interface CueListState {
 
 const HISTORY_LIMIT = 50
 
+/**
+ * What an undo puts back: the three things an edit in this app destroys. Together, because
+ * one edit can span them — removing a desk group clears the pointer on every pack that fed
+ * it, and half an undo of that would be a lie.
+ */
+interface EditSnapshot {
+  cues: Cue[]
+  scenes: { list: MicScene[]; channels: DeskChannel[] }
+  plot: RfPlot
+}
+
+function snapshotOf(state: CueListState): EditSnapshot {
+  return {
+    cues: state.cues,
+    scenes: {
+      list: state.showSettings.scenes.list,
+      channels: state.showSettings.scenes.channels
+    },
+    plot: state.showSettings.rf.plot
+  }
+}
+
+/** The show settings an undo puts back, leaving the rest of them where they are. */
+function restoreSettings(showSettings: ShowSettings, snapshot: EditSnapshot): ShowSettings {
+  return {
+    ...showSettings,
+    scenes: {
+      ...showSettings.scenes,
+      list: snapshot.scenes.list,
+      channels: snapshot.scenes.channels
+    },
+    rf: { ...showSettings.rf, plot: snapshot.plot }
+  }
+}
+
 // Monotonic id source for log entries — React keys and ordering in the log panel.
 let _logSeq = 0
 
-function pushPast(past: Cue[][], snapshot: Cue[]): Cue[][] {
+function pushPast(past: EditSnapshot[], snapshot: EditSnapshot): EditSnapshot[] {
   return [...past.slice(-(HISTORY_LIMIT - 1)), snapshot]
 }
 
@@ -307,7 +352,7 @@ export const useStore = create<CueListState>((set) => ({
     }
 
     cues.splice(insertIdx, 0, cue)
-    return { cues, selectedId: cue.id, isDirty: true, past: pushPast(s.past, s.cues), future: [] }
+    return { cues, selectedId: cue.id, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
   addAudioCuesFromFiles: (files, afterId) => set(s => {
@@ -336,7 +381,7 @@ export const useStore = create<CueListState>((set) => ({
     }))
     cues.splice(insertIdx, 0, ...newCues)
     const lastAdded = newCues[newCues.length - 1]
-    return { cues, selectedId: lastAdded.id, isDirty: true, past: pushPast(s.past, s.cues), future: [] }
+    return { cues, selectedId: lastAdded.id, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
   removeCue: (id) => set(s => {
@@ -352,7 +397,7 @@ export const useStore = create<CueListState>((set) => ({
         Object.entries(s.lastRuns).filter(([cueId]) => !toRemove.has(cueId))
       ),
       isDirty: true,
-      past: pushPast(s.past, s.cues),
+      past: pushPast(s.past, snapshotOf(s)),
       future: [],
     }
   }),
@@ -362,7 +407,7 @@ export const useStore = create<CueListState>((set) => ({
     return {
       cues: s.cues.map(c => c.id === id ? { ...c, ...patch } as Cue : c),
       isDirty: true,
-      past: record ? pushPast(s.past, s.cues) : s.past,
+      past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
       future: record ? [] : s.future,
     }
   }),
@@ -394,7 +439,7 @@ export const useStore = create<CueListState>((set) => ({
     })
     if (unchanged) return s
 
-    return { cues, isDirty: true, past: pushPast(s.past, s.cues), future: [] }
+    return { cues, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
   duplicateCue: (id) => set(s => {
@@ -424,21 +469,31 @@ export const useStore = create<CueListState>((set) => ({
     const insertAfter = isGroup ? lastChildIndex([...s.cues], id) : srcIdx
     const cues = [...s.cues]
     cues.splice(insertAfter + 1, 0, ...copies)
-    return { cues, selectedId: copies[0].id, isDirty: true, past: pushPast(s.past, s.cues), future: [] }
+    return { cues, selectedId: copies[0].id, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
   undo: () => set(s => {
     if (s.past.length === 0) return s
     const past = [...s.past]
-    const cues = past.pop()!
-    return { cues, past, future: [s.cues, ...s.future.slice(0, HISTORY_LIMIT - 1)] }
+    const snapshot = past.pop()!
+    return {
+      cues: snapshot.cues,
+      showSettings: restoreSettings(s.showSettings, snapshot),
+      past,
+      future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)]
+    }
   }),
 
   redo: () => set(s => {
     if (s.future.length === 0) return s
     const future = [...s.future]
-    const cues = future.shift()!
-    return { cues, future, past: pushPast(s.past, s.cues) }
+    const snapshot = future.shift()!
+    return {
+      cues: snapshot.cues,
+      showSettings: restoreSettings(s.showSettings, snapshot),
+      future,
+      past: pushPast(s.past, snapshotOf(s))
+    }
   }),
 
   select: (id) => set({ selectedId: id }),
@@ -552,8 +607,13 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
+  // The plot is edited in a handful of places and is stored whole, so a patch is either a
+  // change to the plot or a change to the settings around it. Only the plot is an edit an
+  // operator would want back; a battery threshold is a preference, not a mistake.
   updateRfSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, rf: { ...s.showSettings.rf, ...patch } },
+    past: 'plot' in patch ? pushPast(s.past, snapshotOf(s)) : s.past,
+    future: 'plot' in patch ? [] : s.future,
     isDirty: true
   })),
 
@@ -572,8 +632,30 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
+  // Scenes and their mics are the grid's work, so a delete or a stray cell is one undo
+  // away from being back. The desk groups and the lock are set up once and are not.
   updateScenesSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, scenes: { ...s.showSettings.scenes, ...patch } },
+    past: 'list' in patch ? pushPast(s.past, snapshotOf(s)) : s.past,
+    future: 'list' in patch ? [] : s.future,
+    isDirty: true
+  })),
+
+  removeDeskGroup: (channelId) => set(s => ({
+    showSettings: {
+      ...s.showSettings,
+      scenes: removeDeskChannel(s.showSettings.scenes, channelId),
+      rf: {
+        ...s.showSettings.rf,
+        plot: {
+          ...s.showSettings.rf.plot,
+          packs: s.showSettings.rf.plot.packs.map(pack =>
+            pack.deskChannelId === channelId ? { ...pack, deskChannelId: null } : pack)
+        }
+      }
+    },
+    past: pushPast(s.past, snapshotOf(s)),
+    future: [],
     isDirty: true
   })),
 

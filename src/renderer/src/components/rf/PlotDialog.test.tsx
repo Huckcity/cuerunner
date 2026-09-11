@@ -9,7 +9,14 @@ import { PlotDialog } from './PlotDialog'
 import { useStore } from '../../store'
 import { defaultShowSettings } from '../../types/show'
 import { formatClock } from '../../utils/cueDefaults'
-import type { DeviceState, RfPack, RfPerformer, RfPlot, RfSwap } from '../../types/show'
+import type {
+  DeskChannel,
+  DeviceState,
+  RfPack,
+  RfPerformer,
+  RfPlot,
+  RfSwap
+} from '../../types/show'
 
 const AT = 1_700_000_000_000
 
@@ -27,6 +34,10 @@ function device(overrides: Partial<DeviceState> = {}): DeviceState {
 
 function swap(overrides: Partial<RfSwap> = {}): RfSwap {
   return { at: AT, packId: 'pack-1', packLabel: 'Pack 1', from: null, to: 'Aldonza', ...overrides }
+}
+
+function group(overrides: Partial<DeskChannel> = {}): DeskChannel {
+  return { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null, ...overrides }
 }
 
 const EMPTY_PLOT: RfPlot = { performers: [], packs: [] }
@@ -60,6 +71,7 @@ describe('PlotDialog', () => {
     plot?: RfPlot
     devices?: DeviceState[]
     swaps?: RfSwap[]
+    groups?: DeskChannel[]
   }
 
   async function show(state: DialogState = {}): Promise<void> {
@@ -72,7 +84,8 @@ describe('PlotDialog', () => {
             ...defaults.rf,
             plot: state.plot ?? EMPTY_PLOT,
             swaps: state.swaps ?? []
-          }
+          },
+          scenes: { ...defaults.scenes, channels: state.groups ?? [] }
         },
         showDevices: state.devices ?? []
       })
@@ -291,6 +304,29 @@ describe('PlotDialog', () => {
     await type(field('.plot-channel'), 'ch-99')
     await leave(field('.plot-channel'))
     expect(rf().plot.packs[0].channelId).toBe('ch-99')
+  })
+
+  it('patches a pack to a desk group, and lets it go again', async () => {
+    await show({
+      plot: { performers: [], packs: [pack()] },
+      groups: [
+        group({ id: 'dca-1', label: 'DCA 1 — Ensemble' }),
+        group({ id: 'dca-2', label: 'DCA 2 — Band' })
+      ]
+    })
+
+    const select = field<HTMLSelectElement>('.plot-pack-group')
+    expect([...select.querySelectorAll('option')].map(option => option.textContent))
+      .toEqual(['— no group —', 'DCA 1 — Ensemble', 'DCA 2 — Band'])
+
+    await choose(select, 'dca-2')
+    expect(rf().plot.packs[0].deskChannelId).toBe('dca-2')
+
+    // Which group a mic feeds is a patch, not a change of cast: no swap is recorded.
+    expect(rf().swaps).toEqual([])
+
+    await choose(select, '')
+    expect(rf().plot.packs[0].deskChannelId).toBeNull()
   })
 
   it('lists the last swaps newest first, or says there are none', async () => {

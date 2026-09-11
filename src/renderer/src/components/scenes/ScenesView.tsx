@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type CSSProperties, type InputHTMLAttribut
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
 import { OSC_DEFAULTS } from '../../utils/cueDefaults'
-import { updatePack } from '../../utils/rfPlot'
 import {
   addDeskChannel,
   addScene,
@@ -10,7 +9,6 @@ import {
   deskSummary,
   midiNoteMessages,
   oscMessages,
-  removeDeskChannel,
   removeScene,
   sceneChanges,
   setPackLive,
@@ -30,6 +28,12 @@ const GROUP_OSC_DEFAULTS = { ...OSC_DEFAULTS, address: '/dca/1' }
 // 128, so there is no range to check and no out-of-range value to drop on the floor.
 const MIDI_CHANNELS = Array.from({ length: 16 }, (_, index) => index + 1)
 const MIDI_NOTES = Array.from({ length: 128 }, (_, index) => index)
+
+// A scene name is what its column is read by, so the field asks for about a name's worth of
+// room and no more. An input's default width is what sets a column's width, and a column
+// wide enough for the browser's taste is one that pushes the numbers after it off the side
+// of the window.
+const SCENE_NAME_SIZE = 11
 
 type Delivery = 'midi' | 'osc' | 'none'
 
@@ -157,7 +161,7 @@ export function ScenesView() {
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
   const updateScenesSettings = useStore(s => s.updateScenesSettings)
-  const updateRfSettings = useStore(s => s.updateRfSettings)
+  const removeDeskGroup = useStore(s => s.removeDeskGroup)
 
   const [groupsOpen, setGroupsOpen] = useState(false)
   const [ports, setPorts] = useState<string[]>([])
@@ -182,21 +186,25 @@ export function ScenesView() {
   // desk — so the view follows it: the scene the desk has just gone to is parked at the left
   // of the visible columns, which is where the ones after it are laid out for the next press.
   // A short number cannot leave the next scene off the side of a long show. Scrolling by hand
-  // is left alone until the show moves again; `deskState` is a dependency rather than read
-  // because being handed a new one is how the store says a recall happened, including a
-  // second recall of the scene the desk is already on.
+  // is left alone until the show moves again, and so is an edit: this runs on a recall — the
+  // desk was just handed a new state, or a second one for the scene it is already on — and
+  // never on the list changing under it, which is how deleting a scene used to drag the view
+  // back to wherever the show was.
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const scroller = scrollerRef.current
-    if (scroller === null || currentIndex === -1) return
-    const column = scroller.querySelectorAll<HTMLElement>('.matrix-scene')[currentIndex]
+    // Found rather than taken from the render: which column a scene sits in is the list's
+    // business, and the list is not what this follows.
+    const index = scenes.list.findIndex(scene => scene.id === deskSceneId)
+    if (scroller === null || index === -1) return
+    const column = scroller.querySelectorAll<HTMLElement>('.matrix-scene')[index]
     const plotColumn = scroller.querySelector<HTMLElement>('.matrix-mic')
     if (column === undefined || plotColumn === null) return
     // Measured rather than assumed: the current scene is parked against the plot column, and
     // the width behind that column is a CSS variable anyone is free to change.
     const left = column.getBoundingClientRect().left - scroller.getBoundingClientRect().left
     scroller.scrollLeft += left - plotColumn.getBoundingClientRect().width
-  }, [currentIndex, deskState])
+  }, [deskSceneId, deskState])
 
   // The desk's question, asked for the header: what would a recall of the current scene
   // change? Nothing means the desk is where the show left it.
@@ -214,20 +222,9 @@ export function ScenesView() {
   const writeChannels = (next: ScenesSettings): void =>
     updateScenesSettings({ channels: next.channels })
 
-  const removeGroup = (channel: DeskChannel): void => {
-    writeChannels(removeDeskChannel(scenes, channel.id))
-    // Removing the group is only half of it: a pack still pointing at it would be a mic
-    // nothing on the desk opens, so the plot is cleared in the same edit.
-    if (plot.packs.some(pack => pack.deskChannelId === channel.id)) {
-      updateRfSettings({
-        plot: {
-          ...plot,
-          packs: plot.packs.map(pack =>
-            pack.deskChannelId === channel.id ? { ...pack, deskChannelId: null } : pack)
-        }
-      })
-    }
-  }
+  // The group and the packs that fed it go in one edit, so the undo to come has one step
+  // to take rather than half of two.
+  const removeGroup = (channel: DeskChannel): void => removeDeskGroup(channel.id)
 
   const setMidi = (
     channel: DeskChannel,
@@ -388,6 +385,7 @@ export function ScenesView() {
                     value={scene.name}
                     placeholder="Scene name"
                     aria-label="Scene name"
+                    size={SCENE_NAME_SIZE}
                     disabled={locked}
                     // A scene without a name is a row nobody can find again, so the old
                     // name stays until something is actually typed.
@@ -396,55 +394,48 @@ export function ScenesView() {
                       writeList(updateScene(scenes, scene.id, { name }))
                     }}
                   />
-                  <span className="matrix-scene-count">{micCount(scene.live.length)}</span>
-                  <button
-                    className="matrix-recall"
-                    onClick={() => { void recallScene(scene.id) }}
-                    title="Send this scene to the desk"
-                  >
-                    Recall
-                  </button>
-                  <button
-                    className="matrix-scene-remove"
-                    aria-label={`Remove ${scene.name}`}
-                    disabled={locked}
-                    onClick={() => writeList(removeScene(scenes, scene.id))}
-                  >
-                    ✕
-                  </button>
+                  {/* How many mics a scene opens is the block of colour next to it, so the
+                      column says a name and two presses and nothing else. */}
+                  <div className="matrix-scene-actions">
+                    <button
+                      className="matrix-recall"
+                      onClick={() => { void recallScene(scene.id) }}
+                      title="Send this scene to the desk"
+                      aria-label={`Recall ${scene.name}`}
+                    >
+                      →
+                    </button>
+                    <button
+                      className="matrix-scene-remove"
+                      aria-label={`Remove ${scene.name}`}
+                      title="Remove this scene — undo puts it back"
+                      disabled={locked}
+                      onClick={() => writeList(removeScene(scenes, scene.id))}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               )
             })}
 
             {plot.packs.map(pack => {
+              const performer = pack.performerId === null
+                ? null
+                : performerNames[pack.performerId]?.trim() || null
               const channelId = pack.deskChannelId ?? null
               const on = current !== null && current.live.includes(pack.id)
-              const performer =
-                pack.performerId === null ? null : performerNames[pack.performerId] ?? null
 
               return (
                 <div key={pack.id} className="matrix-row" data-on={on}>
-                  {/* The plot down the side: which pack, who is wearing it, and which group
-                      it feeds — the three facts a swap at the interval is made from. The
-                      group is a picker here because this is where a mic is put on the desk. */}
+                  {/* Who is wearing this mic, which is what the rows are read by. The label on
+                      the pack and the group it feeds are set once at setup, with the rest of
+                      the plot, and are edited in the mic plot editor. A pack nobody is wearing
+                      is still a row the show has to have, so it falls back to its label. */}
                   <div className="matrix-mic">
-                    <span className="matrix-pack">{pack.label}</span>
-                    <span className="matrix-performer">{performer?.trim() || 'unassigned'}</span>
-                    <select
-                      className="matrix-group-select"
-                      aria-label={`Desk group for ${pack.label}`}
-                      value={channelId ?? ''}
-                      disabled={locked}
-                      onChange={e =>
-                        updateRfSettings({
-                          plot: updatePack(plot, pack.id, { deskChannelId: e.target.value || null })
-                        })}
-                    >
-                      <option value="">— no group —</option>
-                      {scenes.channels.map(channel => (
-                        <option key={channel.id} value={channel.id}>{channel.label}</option>
-                      ))}
-                    </select>
+                    <span className="matrix-performer" data-unassigned={performer === null}>
+                      {performer ?? pack.label}
+                    </span>
                   </div>
                   {scenes.list.map(scene => {
                     const live = scene.live.includes(pack.id)

@@ -170,8 +170,8 @@ export async function openScenesView(page: Page): Promise<void> {
 
 /**
  * A show set up through the view, in the order an operator would do it: a group on the
- * desk driven over OSC at a port the test owns, a scene with the first mic open in it,
- * and the pack feeding that group.
+ * desk driven over OSC at a port the test owns, the pack that feeds it patched in the mic
+ * plot, and a scene with that mic open in it.
  */
 export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await liveRack(page)
@@ -188,10 +188,17 @@ export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await groups.locator('.group-address').first().blur()
   await expect(groups.locator('.group-summary').first()).toContainText('/dca/1/mute')
 
+  // Which group a mic feeds is set up with the plot, not in the grid the show is run from.
+  await page.locator('.btn-rf').click()
+  await page.locator('.rf-edit').click()
+  const dialog = page.locator('.plot-dialog')
+  await dialog.locator('.plot-pack-row').first().locator('.plot-pack-group')
+    .selectOption({ label: 'DCA 1' })
+  await dialog.locator('.plot-close').click()
+  await page.locator('.btn-rf').click()
+
   await page.locator('.scenes-add').click()
   await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
-  await page.locator('.matrix-row').first().locator('.matrix-group-select')
-    .selectOption({ label: 'DCA 1' })
 }
 
 /** A free-ish port for a test that needs to listen for OSC. */

@@ -17,7 +17,7 @@
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:linux": "electron-vite build && electron-builder --linux",
-    "screenshots": "node scripts/capture-screenshots.mjs",
+    "screenshots": "electron-vite build && node scripts/capture-screenshots.mjs",
     "site": "node scripts/serve-website.mjs",
     "postinstall": "node scripts/postinstall.js"
   },

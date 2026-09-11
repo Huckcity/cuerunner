@@ -66,11 +66,10 @@ test('the show is edited in the view, not in a dialog', async () => {
   await page.locator('.matrix-scene').nth(2).locator('.matrix-scene-remove').click()
   await expect(page.locator('.matrix-scene')).toHaveCount(2)
 
-  // The group a mic feeds is a select on its row: this is the patch, where the mic is.
-  const firstRow = page.locator('.matrix-row').first()
-  await firstRow.locator('.matrix-group-select').selectOption('')
-  await expect(firstRow.locator('.matrix-group-select')).toHaveValue('')
-  await firstRow.locator('.matrix-group-select').selectOption({ label: 'DCA 1' })
+  // The row is who is wearing the mic. Which group that mic feeds is a patch, set up with
+  // the rest of the plot rather than in the grid the show is run from.
+  await expect(page.locator('.matrix-performer').first()).toHaveText('Aldonza')
+  await expect(page.locator('.matrix-row').first().locator('select')).toHaveCount(0)
 })
 
 test('a show with many scenes still fits the window', async () => {
@@ -149,14 +148,21 @@ test('the view follows the show past the side of the window', async () => {
 
   // Mid-show, where the grid can still move: the recalled scene is parked at the left of the
   // columns, so everything after it is laid out to the right for the next press.
-  await page.locator('.matrix-scene').nth(14).locator('.matrix-recall').click()
-  await expect(page.locator('.matrix-scene').nth(14)).toHaveAttribute('data-current', 'true')
+  await page.locator('.matrix-scene').nth(4).locator('.matrix-recall').click()
+  await expect(page.locator('.matrix-scene').nth(4)).toHaveAttribute('data-current', 'true')
   const gap = await page.evaluate(() => {
     const column = document.querySelector('.matrix-scene[data-current="true"]')!.getBoundingClientRect()
     const plot = document.querySelector('.matrix-mic')!.getBoundingClientRect()
     return Math.round(column.left - plot.right)
   })
   expect(Math.abs(gap)).toBeLessThanOrEqual(1)
+
+  // Deep in the show, where there is nothing left to scroll: the scene the desk is on and
+  // the one after it are both on screen, which is what following has to guarantee.
+  await page.locator('.matrix-scene').nth(14).locator('.matrix-recall').click()
+  await expect(page.locator('.matrix-scene').nth(14)).toHaveAttribute('data-current', 'true')
+  await expect(page.locator('.matrix-scene').nth(14)).toBeInViewport({ ratio: 1 })
+  await expect(page.locator('.matrix-scene').nth(15)).toBeInViewport({ ratio: 1 })
 
   // Scrolling by hand belongs to the operator: the view does not drag it back while nothing
   // is moving the show.
@@ -168,6 +174,54 @@ test('the view follows the show past the side of the window', async () => {
   await expect(page.locator('.scenes-now')).toContainText('Number 19')
   await expect(page.locator('.matrix-scene').nth(18)).toHaveAttribute('data-current', 'true')
   await expect(page.locator('.matrix-scene').nth(18)).toBeInViewport({ ratio: 1 })
+})
+
+test('deleting a scene leaves the view where it is, and undo puts it back', async () => {
+  test.setTimeout(120_000)
+
+  await buildDeskShow(page, freePort())
+
+  // Fifteen numbers, one of them named for what it does and with a mic of its own.
+  for (let i = 0; i < 14; i++) {
+    await page.locator('.scenes-add').click()
+    const field = page.locator('.matrix-scene').last().locator('.scene-name-field')
+    await field.fill(`Number ${i + 2}`)
+    await field.blur()
+  }
+  const vows = page.locator('.matrix-scene').nth(2).locator('.scene-name-field')
+  await vows.fill('Vows')
+  await vows.blur()
+  await page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(2).click()
+
+  // The show reaches the fifteenth through the cue stack.
+  await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
+  await addCueFromMoreMenu(page, 'Scene')
+  await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
+  await page.locator('#scene-cue-select').selectOption({ label: 'Number 15' })
+  await page.locator('.btn-go').click()
+  await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+  await expect(page.locator('.matrix-scene').nth(14)).toHaveAttribute('data-current', 'true')
+
+  // The operator scrolls back to the top of the show and deletes a scene they do not want.
+  // That is an edit: the desk has not moved, so the view must not either — it used to snap
+  // back to wherever the show was, as though the delete had been a recall.
+  await page.locator('.matrix-scroll').evaluate(el => { el.scrollLeft = 0 })
+  await page.locator('.matrix-scene').nth(2).locator('.matrix-scene-remove').click()
+  await expect(page.locator('.matrix-scene')).toHaveCount(14)
+  expect(await page.locator('.matrix-scroll').evaluate(el => el.scrollLeft)).toBe(0)
+  await expect(page.locator('.matrix-scene').nth(14)).not.toBeInViewport()
+
+  // Undo returns it where it was, with the mic it opens.
+  await app.evaluate(({ Menu, BrowserWindow }) => {
+    Menu.getApplicationMenu()
+      ?.getMenuItemById('edit-undo')
+      ?.click(undefined, BrowserWindow.getAllWindows()[0])
+  })
+  await expect(page.locator('.matrix-scene')).toHaveCount(15)
+  await expect(page.locator('.matrix-scene').nth(2).locator('.scene-name-field'))
+    .toHaveValue('Vows')
+  await expect(page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(2))
+    .toHaveAttribute('data-live', 'true')
 })
 
 test('editing a cell moves the scene, and the desk is told only when asked', async () => {
@@ -265,7 +319,7 @@ test('locking stops editing and leaves recalling alone', async () => {
     await cell.click({ force: true })
     await expect(cell).toHaveAttribute('data-live', 'false')
     await expect(page.locator('.scenes-add')).toBeDisabled()
-    await expect(page.locator('.matrix-row').first().locator('.matrix-group-select')).toBeDisabled()
+    await expect(page.locator('.matrix-scene-remove').first()).toBeDisabled()
     await expect(page.locator('.scenes-groups .group-label').first()).toBeDisabled()
 
     // Recalling is what the lock is for: it stays live, so does applying.

@@ -73,6 +73,9 @@ function CommitInput({
 export function PlotDialog({ onClose }: Props) {
   const plot = useStore(s => s.showSettings.rf.plot)
   const swaps = useStore(s => s.showSettings.rf.swaps)
+  // Which group on the desk a pack feeds is set once, with the rest of the plot, so it is
+  // edited here rather than in the grid the show is run from.
+  const deskGroups = useStore(s => s.showSettings.scenes.channels)
   const devices = useStore(s => s.showDevices)
   const updateRfSettings = useStore(s => s.updateRfSettings)
   const appendLog = useStore(s => s.appendLog)
@@ -181,6 +184,19 @@ export function PlotDialog({ onClose }: Props) {
                   <option value="">— unassigned —</option>
                   {plot.performers.map(performer => (
                     <option key={performer.id} value={performer.id}>{performer.name}</option>
+                  ))}
+                </select>
+                <select
+                  className="plot-pack-group"
+                  value={pack.deskChannelId ?? ''}
+                  aria-label="Pack desk group"
+                  onChange={e => apply(updatePack(plot, pack.id, {
+                    deskChannelId: e.target.value || null
+                  }))}
+                >
+                  <option value="">— no group —</option>
+                  {deskGroups.map(group => (
+                    <option key={group.id} value={group.id}>{group.label}</option>
                   ))}
                 </select>
                 <CommitInput
