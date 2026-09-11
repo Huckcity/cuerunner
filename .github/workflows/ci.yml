@@ -112,8 +112,11 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+      # Electron tests use the app's own Chromium, so nothing is downloaded; Linux still
+      # needs the system libraries a Chromium process links against.
+      - name: Install runtime dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install-deps
 
       - name: E2E tests
         if: runner.os != 'Linux'
