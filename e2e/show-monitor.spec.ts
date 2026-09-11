@@ -77,7 +77,7 @@ test('moving the OSC port rebinds the listener in place', async () => {
   await field.blur()
   // The dialog reports the service's own state, so the rebind is visible on the screen
   // that asked for it.
-  await expect(dialog.locator('.settings-service').first()).toContainText(String(port))
+  await expect(dialog.locator('.settings-service[data-service="osc-in"]')).toContainText(String(port))
   await dialog.getByRole('button', { name: 'Close' }).click()
 
   await openMonitor(page)
@@ -93,7 +93,7 @@ test('enabling MIDI input starts the service and reports what it found', async (
   // A test machine with no MIDI inputs has a service that says so rather than one that
   // pretends to listen; a machine that has them reports running. Either way it is no
   // longer stopped, which is what enabling the checkbox asked for.
-  const state = dialog.locator('.settings-service').last()
+  const state = dialog.locator('.settings-service[data-service="midi-in"]')
   await expect(state).toHaveAttribute('data-state', /^(running|degraded)$/)
   await dialog.getByRole('button', { name: 'Close' }).click()
 
@@ -101,8 +101,7 @@ test('enabling MIDI input starts the service and reports what it found', async (
   await expect(service(page, 'MIDI input')).toHaveAttribute('data-state', /^(running|degraded)$/)
 })
 
-test('a port another program holds is reported instead of swallowed', async () => {
-  // Hold the port the way another app on the machine would: without SO_REUSEADDR, so
+test('a port another program holds is reported instead of swallowed', async () => {  // Hold the port the way another app on the machine would: without SO_REUSEADDR, so
   // the app's bind is the one that fails.
   const squatter = createSocket('udp4')
   const port = 48000 + Math.floor(Math.random() * 5000)
@@ -114,7 +113,7 @@ test('a port another program holds is reported instead of swallowed', async () =
     await field.fill(String(port))
     await field.blur()
 
-    const state = dialog.locator('.settings-service').first()
+    const state = dialog.locator('.settings-service[data-service="osc-in"]')
     await expect(state).toHaveAttribute('data-state', 'degraded')
     await expect(state).toContainText('EADDRINUSE')
     await dialog.getByRole('button', { name: 'Close' }).click()
@@ -126,4 +125,18 @@ test('a port another program holds is reported instead of swallowed', async () =
   } finally {
     squatter.close()
   }
+})
+
+test('enabling network presence starts the service and reports what it found', async () => {
+  const dialog = await openShowSettings(page)
+  await dialog.locator('#settings-presence').check()
+
+  // A runner with no mDNS responder and a runner with one both end up somewhere
+  // useful: browsing, or saying why it cannot. Stopped is the only wrong answer.
+  const state = dialog.locator('.settings-service[data-service="presence"]')
+  await expect(state).toHaveAttribute('data-state', /^(running|degraded)$/)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+
+  await openMonitor(page)
+  await expect(service(page, 'Network devices')).toHaveAttribute('data-state', /^(running|degraded)$/)
 })

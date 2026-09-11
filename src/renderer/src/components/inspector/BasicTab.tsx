@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import type { Cue, CueColor } from '../../types/cue'
 import { ResetButton } from './ResetButton'
+import { Triggers } from './Triggers'
 import { BASE_DEFAULTS } from '../../utils/cueDefaults'
 
 const COLORS: CueColor[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']
@@ -102,6 +103,7 @@ export function BasicTab({ cue }: Props) {
         <label></label>
         <textarea value={cue.notes} onChange={e => set({ notes: e.target.value })} rows={3} />
       </div>
+      <Triggers cue={cue} />
     </div>
   )
 }

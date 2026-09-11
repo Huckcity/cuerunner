@@ -13,7 +13,7 @@ export function SettingsDialog({ onClose }: Props) {
   const {
     audioSettings, midiSettings, showSettings, showServices,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
-    updateRfSettings
+    updateRfSettings, updatePresenceSettings
   } = useStore()
   const [tab, setTab] = useState<'audio' | 'midi' | 'show'>('audio')
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
@@ -76,6 +76,29 @@ export function SettingsDialog({ onClose }: Props) {
 
   const oscService = showServices.find(service => service.id === 'osc-in')
   const midiService = showServices.find(service => service.id === 'midi-in')
+  const presenceService = showServices.find(service => service.id === 'presence')
+  const rfService = showServices.find(service => service.id === 'rf')
+
+  // Both of these are lists the operator types, so they are committed on the way out of
+  // the field: rebuilding the input from the store on every keystroke would eat the
+  // comma or the space that was about to become the next entry.
+  const [servicesDraft, setServicesDraft] = useState<string | null>(null)
+  const [goneDraft, setGoneDraft] = useState<string | null>(null)
+
+  const commitServices = (): void => {
+    if (servicesDraft === null) return
+    const services = servicesDraft.split(',').map(entry => entry.trim()).filter(Boolean)
+    if (services.length > 0) updatePresenceSettings({ services })
+    setServicesDraft(null)
+  }
+
+  const commitGone = (): void => {
+    const seconds = Number(goneDraft)
+    if (goneDraft !== null && Number.isFinite(seconds) && seconds >= 5 && seconds <= 3600) {
+      updatePresenceSettings({ goneAfterSeconds: Math.round(seconds) })
+    }
+    setGoneDraft(null)
+  }
 
   // Dismiss on Escape
   useEffect(() => {
@@ -195,7 +218,7 @@ export function SettingsDialog({ onClose }: Props) {
                 />
               </div>
               {oscService && (
-                <div className="settings-service" data-state={oscService.state}>
+                <div className="settings-service" data-service={oscService.id} data-state={oscService.state}>
                   {oscService.state} — {oscService.detail}
                 </div>
               )}
@@ -233,7 +256,7 @@ export function SettingsDialog({ onClose }: Props) {
                 out mid-show is reported in the show monitor.
               </p>
               {midiService && (
-                <div className="settings-service" data-state={midiService.state}>
+                <div className="settings-service" data-service={midiService.id} data-state={midiService.state}>
                   {midiService.state} — {midiService.detail}
                 </div>
               )}
@@ -292,6 +315,63 @@ export function SettingsDialog({ onClose }: Props) {
                 own API only has to emit them. Thresholds that raise the alarms live in the
                 workspace alongside the plot.
               </p>
+              {rfService && (
+                <div className="settings-service" data-service={rfService.id} data-state={rfService.state}>
+                  {rfService.state} — {rfService.detail}
+                </div>
+              )}
+
+              <div className="field-section-title">Network presence</div>
+              <div className="field-row">
+                <label htmlFor="settings-presence">Browse</label>
+                <input
+                  id="settings-presence"
+                  type="checkbox"
+                  checked={showSettings.presence.enabled}
+                  onChange={e => updatePresenceSettings({ enabled: e.target.checked })}
+                />
+                <span className="settings-info">Watch the show network for devices</span>
+              </div>
+              <div className="field-row">
+                <label htmlFor="settings-presence-services">Services</label>
+                <input
+                  id="settings-presence-services"
+                  value={servicesDraft ?? showSettings.presence.services.join(', ')}
+                  disabled={!showSettings.presence.enabled}
+                  onChange={e => setServicesDraft(e.target.value)}
+                  onBlur={commitServices}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitServices()
+                  }}
+                />
+              </div>
+              <div className="field-row">
+                <label htmlFor="settings-presence-gone">Gone after</label>
+                <input
+                  id="settings-presence-gone"
+                  type="number"
+                  min={5}
+                  max={3600}
+                  value={goneDraft ?? String(showSettings.presence.goneAfterSeconds)}
+                  disabled={!showSettings.presence.enabled}
+                  onChange={e => setGoneDraft(e.target.value)}
+                  onBlur={commitGone}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitGone()
+                  }}
+                />
+                <span className="settings-info">seconds without an announcement</span>
+              </div>
+              <p className="inspector-hint">
+                Devices that announce themselves over mDNS — a Dante endpoint, an interface,
+                an amplifier — appear in the show monitor while they are there, and raise an
+                alarm when they leave.
+              </p>
+              {presenceService && (
+                <div className="settings-service" data-service={presenceService.id} data-state={presenceService.state}>
+                  {presenceService.state} — {presenceService.detail}
+                </div>
+              )}
             </>
           )}
         </div>

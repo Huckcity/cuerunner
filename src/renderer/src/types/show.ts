@@ -217,6 +217,24 @@ export interface ShowSettings {
   oscIn: OscInSettings
   midiIn: MidiInSettings
   rf: RfSettings
+  presence: PresenceSettings
+}
+
+// ── Presence: what is on the show network ───────────────────────────────────
+//
+// Some of the show is only ever visible as a name on the network: an audio interface,
+// a Dante endpoint, an amplifier. None of them answer a poll, so the service browses
+// for them the way the machine already does, and reports what answers and what stops.
+
+export interface PresenceSettings {
+  enabled: boolean
+  /**
+   * mDNS service types to browse. The defaults are what Dante devices advertise; any
+   * other gear a show uses can be added by its own service type.
+   */
+  services: string[]
+  /** Seconds without an announcement before a device counts as gone. */
+  goneAfterSeconds: number
 }
 
 /** QLab listens for OSC on 53000, and so does every operator who has ever patched one. */
@@ -248,7 +266,18 @@ export function defaultShowSettings(): ShowSettings {
     // No port can be assumed to exist, and opening every input would answer to the
     // whole room's traffic. The operator picks the ports.
     midiIn: { enabled: false, portNames: [] },
-    rf: defaultRfSettings()
+    rf: defaultRfSettings(),
+    presence: defaultPresenceSettings()
+  }
+}
+
+/** Browsing the network is off until the operator asks for it: it is the noisiest
+ *  service here, and a show that has no Dante in it should not have the traffic. */
+export function defaultPresenceSettings(): PresenceSettings {
+  return {
+    enabled: false,
+    services: ['_netaudio-arc._udp.local', '_netaudio-cmc._udp.local'],
+    goneAfterSeconds: 30
   }
 }
 
@@ -263,6 +292,7 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
       plot: { ...defaults.rf.plot, ...rf?.plot },
       sources: rf?.sources ?? defaults.rf.sources,
       thresholds: { ...defaults.rf.thresholds, ...rf?.thresholds }
-    }
+    },
+    presence: { ...defaults.presence, ...settings?.presence }
   }
 }

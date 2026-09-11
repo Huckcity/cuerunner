@@ -7,6 +7,7 @@ import type {
   DeviceEvent,
   MidiInSettings,
   OscInSettings,
+  PresenceSettings,
   RfSettings,
   ServiceEvent,
   ServiceStatus,
@@ -147,6 +148,7 @@ interface CueListState {
   updateOscInSettings: (patch: Partial<OscInSettings>) => void
   updateMidiInSettings: (patch: Partial<MidiInSettings>) => void
   updateRfSettings: (patch: Partial<RfSettings>) => void
+  updatePresenceSettings: (patch: Partial<PresenceSettings>) => void
 
   // Undo / redo
   undo: () => void
@@ -534,6 +536,11 @@ export const useStore = create<CueListState>((set) => ({
 
   updateRfSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, rf: { ...s.showSettings.rf, ...patch } },
+    isDirty: true
+  })),
+
+  updatePresenceSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, presence: { ...s.showSettings.presence, ...patch } },
     isDirty: true
   }))
 }))

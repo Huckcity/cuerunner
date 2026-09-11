@@ -59,6 +59,9 @@
           </ol>
         </li>
         <li><a href="#results">Reading results</a></li>
+        <li><a href="#show-services">The show around the cue stack</a></li>
+        <li><a href="#wireless">Wireless and the mic plot</a></li>
+        <li><a href="#triggers">Triggers</a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -95,7 +98,8 @@
           <li><strong>Inspector</strong> — settings for the selected cue. Tabs change with the cue type.</li>
           <li><strong>Waveform / timeline</strong> — the waveform of the selected audio cue, or the timeline editor when a timeline-mode group is selected.</li>
           <li><strong>Run log</strong> — hidden by default; the LOG button in the transport bar reveals it.</li>
-          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the LOG toggle, and the selected cue.</li>
+          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF) and the selected cue.</li>
+          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, or the wireless panel. Whichever button is lit is the one showing.</li>
         </ol>
       </section>
 
@@ -690,6 +694,159 @@ console.log(r.stdout.trim())</code></pre>
         </div>
       </section>
 
+      <section id="show-services" class="panel reveal delay-4">
+        <h2>The show around the cue stack</h2>
+        <p>
+          A cue stack is only part of what is happening in the room. WinsLab also listens: it takes
+          OSC and MIDI from the desks, tablets and cue lights around it, watches wireless
+          transmitters against the mic plot, and notices when something on the network stops
+          answering. Those are the <strong>show services</strong>, and the MONITOR button opens the
+          panel that shows what they are doing.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/12-show-monitor.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/12-show-monitor.png" alt="The show monitor: a services column reading OSC input running, a devices column, and an event river listing OSC messages with their senders and arguments." />
+          </a>
+          <figcaption>OSC arriving from a desk, with the services that are listening and the devices they know about beside it.</figcaption>
+        </figure>
+        <h3>The monitor</h3>
+        <p>
+          Three columns, left to right. <strong>Services</strong> is what is listening and what it
+          is doing — a service that failed says why, and a restart button sits next to it.
+          <strong>Devices</strong> is what is on stage or on the network, with the readings each one
+          reports. <strong>Events</strong> is what just arrived, newest last; scrolling up releases
+          the auto-follow so the view stops moving while you read.
+        </p>
+        <p>
+          Alarms appear above the columns and are also written to the run log, so an alarm outlives
+          the panel being closed. A failing service never stops the cue stack: a wireless poller that
+          cannot reach its rack, or an OSC port another program is holding, degrades that one
+          service and says so while GO keeps working.
+        </p>
+        <h3>What can be listened to</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Service</th><th>What it does</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>OSC input</td><td>Listens for OSC on a port of its own (53000 by default) and publishes every message with its sender and arguments. A port another program holds is reported rather than taken.</td></tr>
+              <tr><td>MIDI input</td><td>Opens the input ports you choose (all of them if you choose none) and decodes what arrives. An interface that disappears mid-show is reported, because the cue that played a note down it will silently play nowhere.</td></tr>
+              <tr><td>Wireless</td><td>Polls your receiver telemetry and joins it to the mic plot. See <a href="#wireless">Wireless and the mic plot</a>.</td></tr>
+              <tr><td>Network presence</td><td>Browses the network over mDNS for devices that announce themselves — Dante endpoints among them — and reports one that leaves.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          Every service is off or idle until it is asked for, except OSC input, which comes up on its
+          default port so a desk can talk to a new workspace without any setup.
+        </div>
+      </section>
+
+      <section id="wireless" class="panel reveal delay-4">
+        <h2>Wireless and the mic plot</h2>
+        <p>
+          The wireless panel answers the two questions asked most often in a radio-mic show: who is
+          wearing which pack, and which one is about to die. The RF button opens it.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/13-wireless.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/13-wireless.png" alt="The wireless panel showing twelve packs with performer names, battery and RF bars, sorted so the pack with a critical battery is at the top, and an alarm naming the performer." />
+          </a>
+          <figcaption>The demo rack: twelve packs, the one in trouble at the top, and the alarm naming who is wearing it.</figcaption>
+        </figure>
+        <h3>The plot</h3>
+        <p>
+          A pack has a label, the receiver channel it is patched to, and the performer wearing it. The
+          panel sorts by trouble rather than by number: a pack at a critical battery first, then one
+          that has gone quiet, then one that is low, with everything healthy below and unassigned
+          packs at the bottom. A row shows the battery and RF as bars beside the numbers, the
+          frequency, whether the channel is muted, and the performer's role.
+        </p>
+        <p>
+          The wording is deliberate. A pack with no channel assigned is
+          <strong>unpatched</strong> — a patch waiting to be made, not an alarm. A pack that is
+          assigned but has never reported is <strong>silent</strong>: the rack may still be booting,
+          or the transmitter may be switched off. A pack that stops reporting for longer than the
+          threshold is <strong>offline</strong>, and that is when it raises an alarm — including a
+          pack the rack never reported at all, because the plot is the expectation.
+        </p>
+        <h3>Where the readings come from</h3>
+        <p>
+          WinsLab does not speak a receiver's own protocol. A source returns a JSON document with
+          this shape, over HTTP or from a file on disk:
+        </p>
+        <pre><code>{
+  "channels": [
+    { "id": "ulxd-1", "name": "Pack 1", "batteryPercent": 42,
+      "batteryMinutes": 95, "rfDbm": -62, "audioLevel": 71,
+      "muted": false, "frequencyMhz": 606.5 }
+  ]
+}</code></pre>
+        <p>
+          The field names are the contract: a bridge written against a receiver's own API only has to
+          emit them, and any field a channel does not report is simply left out — the panel shows
+          nothing for a reading that was never made rather than a zero. Add sources on the Show tab
+          in Settings, where the service also reports what it is doing.
+        </p>
+        <p>
+          <strong>Demo rack</strong> loads a simulated twelve-pack show with a pack in trouble, one
+          that is low and one that never reports, so the panel and its alarms can be seen without a
+          receiver on the bench. It replaces the source list rather than adding to it, and it is
+          plainly a simulation — the packs are not real hardware.
+        </p>
+        <h3>Thresholds and alarms</h3>
+        <p>
+          Alarms are raised on a crossing, not on every poll: a pack that sits at 8% for an hour says
+          so once, and only says so again if it recovers and falls again. The defaults are a warning
+          at 25% and critical at 10% battery, a warning below -75 dBm, and six seconds of silence
+          before a channel counts as gone. They live in the workspace with the plot, so a show
+          carries its own idea of what is bad.
+        </p>
+        <p>
+          The alarm names the performer because the plot says who is wearing the pack:
+          <em>"Pack 1 (Aldonza) battery critical — 6% left"</em> is a sentence you can act on, where a
+          channel number is one you have to look up.
+        </p>
+      </section>
+
+      <section id="triggers" class="panel reveal delay-4">
+        <h2>Triggers</h2>
+        <p>
+          A cue usually fires when the operator presses GO. A <strong>trigger</strong> lets a message
+          from somewhere else fire it: the lighting desk, a tablet, a footswitch, a show-control
+          macro. Triggers live on the Basics tab, under the fields every cue shares.
+        </p>
+        <figure class="figure shot-narrow">
+          <a href="./assets/guide/14-triggers.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/14-triggers.png" alt="The Basics tab with a Triggers section listing an OSC trigger and offering add and learn buttons for OSC and MIDI." />
+          </a>
+          <figcaption>One OSC trigger on a cue, with the add and learn controls below.</figcaption>
+        </figure>
+        <h3>OSC and MIDI triggers</h3>
+        <p>
+          An OSC trigger is an address, matched exactly — <code>/eos/cue/12/fire</code> fires the cue
+          it is on and nothing else. A MIDI trigger is a message on an input port: a note-on or
+          note-off (any velocity), a controller (any value), or a program change. The value a desk
+          sends is how it expresses itself, not which cue it means, so it is not part of the match.
+        </p>
+        <p>
+          <strong>Learn</strong> is usually faster than typing: press it, then send the message from
+          the desk, and the trigger is written from what arrived — the address, or the port, channel
+          and message.
+        </p>
+        <p>
+          A trigger fires the cue the same way GO does: pre-wait, post-wait, advance and grouping all
+          behave normally, and the log line says what fired it, so a triggered cue reads differently
+          from one the operator fired. Disarming a cue stops its triggers too — that is what
+          disarming is for.
+        </p>
+        <div class="note">
+          Nothing about a trigger can interrupt the show: a cue that is already running keeps running,
+          and a message that nothing answers to is shown in the monitor and otherwise ignored.
+        </div>
+      </section>
+
       <section id="settings" class="panel reveal delay-4">
         <h2>Settings</h2>
         <figure class="figure shot-narrow">
@@ -707,6 +864,10 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td>Audio</td><td>Output device</td><td>Routes all playback to the chosen system output.</td></tr>
               <tr><td>Audio</td><td>Sample rate, Base latency</td><td>Read-only readouts of the running audio engine: the sample rate in Hz and the base latency in ms. They report the live AudioContext and cannot be changed.</td></tr>
               <tr><td>MIDI</td><td>Default output</td><td>Used by MIDI cues that do not name a port of their own; a cue with its own port overrides it.</td></tr>
+              <tr><td>Show</td><td>OSC input</td><td>The port WinsLab listens on for OSC, and whether it listens at all. 53000 matches the convention QLab uses, so one patch sheet covers both.</td></tr>
+              <tr><td>Show</td><td>MIDI input</td><td>Which input ports are opened. With none selected every available input is opened, and a port that appears later is opened when it arrives.</td></tr>
+              <tr><td>Show</td><td>Wireless telemetry</td><td>The sources the wireless panel reads, one row per source: a name, HTTP or file, and the URL or path. Each section also reports what its service is doing, so a change is confirmed on the screen that made it.</td></tr>
+              <tr><td>Show</td><td>Network presence</td><td>Whether to browse the network, which mDNS service types to browse, and how long a device may stay quiet before it counts as gone.</td></tr>
             </tbody>
           </table>
         </div>
@@ -828,6 +989,25 @@ console.log(r.stdout.trim())</code></pre>
             </p>
           </article>
           <article class="card">
+            <h3>A trigger does not fire the cue</h3>
+            <p>
+              Three usual causes. The cue is disarmed — triggers respect arming. The OSC address is
+              not exactly the one being sent (<code>/eos/cue/12</code> does not match
+              <code>/eos/cue/12/fire</code>). Or a MIDI trigger names a different input port from the
+              one the message arrived on; the monitor lists every message with the port it came in
+              on, which is the name to match.
+            </p>
+          </article>
+          <article class="card">
+            <h3>The wireless panel shows no readings</h3>
+            <p>
+              The plot is there but no source is reporting. The Show tab in Settings reports what the
+              wireless service is doing, including why a source failed. A source has to return JSON
+              with a <code>channels</code> array — the shape is in
+              <a href="#wireless">Wireless and the mic plot</a>.
+            </p>
+          </article>
+          <article class="card">
             <h3>Where are the error messages?</h3>
             <p>
               In the run log (LOG button). Failures, HTTP statuses, and script output all land
@@ -847,7 +1027,10 @@ console.log(r.stdout.trim())</code></pre>
           <li><strong>Fixed caps.</strong> The run log keeps the last 500 lines, a single script run emits at most 200 lines, and run-log messages and network response bodies are cut off at 4000 characters.</li>
           <li><strong>Saves are silent.</strong> Nothing confirms a successful save beyond the dirty dot clearing.</li>
           <li><strong>Group length is unknown for playlist and random groups.</strong> Their Duration column shows <em>–</em>, because the length depends on how the operator steps through them.</li>
-          <li><strong>OSC is send-only.</strong> Winslab cannot yet receive OSC.</li>
+          <li><strong>Listeners are listen-only.</strong> OSC input and MIDI input receive, show, and can fire cues — but WinsLab does not act as a MIDI or OSC destination that other software queries.</li>
+          <li><strong>Wireless telemetry needs a source that speaks the documented JSON.</strong> Shure's System API, Sennheiser's receiver protocol and Dante's control protocol are not spoken directly, so a rack needs a small bridge between it and WinsLab — or the demo rack, which needs nothing. See <a href="#wireless">Wireless and the mic plot</a>.</li>
+          <li><strong>Presence reports, it does not route.</strong> The network service notices that a device is there and when it leaves. Subscriptions, clocking and patching stay in Dante Controller or the device's own software.</li>
+          <li><strong>Recording is not built in.</strong> WinsLab does not capture multitrack audio; a recorder runs alongside it. Triggers and OSC are how the two are tied together — a cue that arms the recorder, or a message from it that fires a cue.</li>
           <li><strong>Script cues are unsandboxed.</strong> Treat a workspace file as executable code.</li>
         </ul>
       </section>

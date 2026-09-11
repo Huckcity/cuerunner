@@ -14,6 +14,7 @@ import { LogPanel } from './components/log/LogPanel'
 import { MonitorPanel } from './components/monitor/MonitorPanel'
 import { RfPanel } from './components/rf/RfPanel'
 import { useShowBridge } from './hooks/useShowBridge'
+import { useCueTriggers } from './hooks/useCueTriggers'
 import type { ShowStrip } from './components/layout/TransportBar'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
@@ -35,6 +36,7 @@ function NoticeHost() {
 export function App() {
   useAutosave()
   useShowBridge()
+  useCueTriggers()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [timelineExpanded, setTimelineExpanded] = useState(false)
   // The panels along the bottom share the space, and together they would leave the cue

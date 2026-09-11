@@ -12,6 +12,7 @@ import {
   DEMO_PACK_COUNT,
   DEMO_SOURCE_ID,
   defaultRfThresholds,
+  defaultShowSettings,
   demoChannelId
 } from '../../renderer/src/types/show'
 import type {
@@ -79,6 +80,7 @@ function settings(
   thresholds: RfThresholds = defaultRfThresholds()
 ): ShowSettings {
   return {
+    ...defaultShowSettings(),
     oscIn: { enabled: false, port: 53000 },
     midiIn: { enabled: false, portNames: [] },
     rf: { plot, sources, thresholds }

@@ -11,6 +11,7 @@
 // The capture is pinned to CSS pixels, so the figures are the same size whichever
 // display the script runs on.
 import { _electron as electron } from '@playwright/test'
+import { Client } from 'node-osc'
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
@@ -137,6 +138,39 @@ await page.keyboard.press('Escape')
 await page.locator('.cue-row', { hasText: 'Count 8' }).click({ button: 'right' })
 await page.locator('.cue-context-menu').waitFor()
 await shot('10-context-menu.png', '.cue-context-menu')
+await page.keyboard.press('Escape')
+
+// ── Show services ─────────────────────────────────────────────────────────
+// The monitor with something in it: a desk sending OSC to the app, which is what the
+// panel exists to show.
+const client = new Client('127.0.0.1', 53000)
+client.send('/eos/cue/12/fire')
+client.send('/mixer/fader', 3, -6.5)
+client.send('/rf/pack12/battery', 42)
+
+await page.locator('.btn-monitor').click()
+await page.locator('.monitor-event[data-kind="osc"]').first().waitFor()
+await shot('12-show-monitor.png', '.monitor-panel')
+await page.locator('.btn-monitor').click()
+await client.close()
+
+// The wireless panel with the demo rack, so the figure shows a plot with a pack in
+// trouble rather than an empty table. Twelve packs need more height than the strip
+// holds by default.
+await page.evaluate(() => document.documentElement.style.setProperty('--h-rf', '430px'))
+await page.locator('.btn-rf').click()
+await page.locator('.rf-panel').waitFor()
+await page.locator('.rf-demo-btn').click()
+await page.locator('.rf-row[data-state="critical"]').waitFor()
+await shot('13-wireless.png', '.rf-panel')
+await page.locator('.rf-btn', { hasText: '✕' }).click()
+
+// Triggers live on the Basics tab, under the fields every cue shares.
+await selectCue('Walk-in Music')
+await page.locator('#trigger-osc-address').fill('/eos/cue/12/fire')
+await page.locator('.trigger-section[data-kind="osc"] .trigger-add').click()
+await page.locator('.trigger-row[data-kind="osc"]').waitFor()
+await shot('14-triggers.png', '.inspector')
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
 console.log('Done.')

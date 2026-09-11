@@ -3,10 +3,16 @@ import { ServiceHost, type CommandResult, type ShowService } from '../bus/Servic
 import { OscInputService } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
 import { WirelessService } from '../services/WirelessService'
+import { PresenceService } from '../services/PresenceService'
 import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../renderer/src/types/show'
 
 export function defaultServices(): ShowService[] {
-  return [new OscInputService(), new MidiInputService(), new WirelessService()]
+  return [
+    new OscInputService(),
+    new MidiInputService(),
+    new WirelessService(),
+    new PresenceService()
+  ]
 }
 
 export interface ShowRuntime {
