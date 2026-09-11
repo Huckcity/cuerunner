@@ -1,3 +1,15 @@
+# [0.13.0](https://github.com/Huckcity/winslab/compare/v0.12.0...v0.13.0) (2026-09-11)
+
+
+### Bug Fixes
+
+* **inspector:** move the loop-count hint under its field ([b4d7dd5](https://github.com/Huckcity/winslab/commit/b4d7dd576bbb2ac7ccb6d48c415f51045ea5a1d5))
+
+
+### Features
+
+* **inspector:** reset any cue field to its new-cue default ([b1fdf3a](https://github.com/Huckcity/winslab/commit/b1fdf3a58dbc453df895e343f65ca97358b15abe))
+
 # [0.12.0](https://github.com/Huckcity/winslab/compare/v0.11.0...v0.12.0) (2026-09-11)
 
 
