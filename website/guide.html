@@ -964,7 +964,7 @@ console.log(r.stdout.trim())</code></pre>
           <a href="./assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
             <img src="./assets/guide/18-scenes.png" alt="The scenes view: scenes as columns with their mic counts and recall buttons, mics as rows with their performers and desk groups, filled cells for the mics open in each scene, and the recalled scene's column tinted." />
           </a>
-          <figcaption>Two scenes across, twelve mics down: the recalled scene's column, and the people it has open.</figcaption>
+          <figcaption>Two scenes across, twelve mics down: the recalled scene's column lit with the people it has open, and the header naming where the desk is and what is coming.</figcaption>
         </figure>
         <h3>Reading it</h3>
         <p>
@@ -972,6 +972,21 @@ console.log(r.stdout.trim())</code></pre>
           to is tinted and the rows it opens are brightened, which together answer the question asked
           most often in a radio-mic show: <em>who is on right now?</em> Each column carries the
           scene's name and how many mics it opens, and a <strong>Recall</strong> button.
+        </p>
+        <h3>Following the show</h3>
+        <p>
+          A musical is wider than the window: thirty numbers at a readable width run several screens
+          across. So the view follows the show instead of waiting to be scrolled — when a scene cue,
+          a trigger or a press moves the desk to a scene, that column is brought to the left of the
+          grid with the ones after it laid out to the right. A short number cannot leave the next
+          scene off the side of the screen.
+        </p>
+        <p>
+          The header carries the same answer in words, in the one part of the view that never
+          scrolls: <strong>now</strong> with the scene the desk is on, and <strong>next</strong> with
+          the one after it in the running order. Before the show starts, <em>now</em> says nothing
+          recalled and <em>next</em> names the opener. Scrolling by hand is left alone — the view
+          moves when the show does, and not otherwise.
         </p>
         <h3>Editing it</h3>
         <p>

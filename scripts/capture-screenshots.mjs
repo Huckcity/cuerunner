@@ -262,7 +262,8 @@ for (let i = 0; i < 8; i++) {
     .selectOption({ label: 'DCA 2 — Ensemble' })
 }
 
-await page.locator('.matrix-recall').last().click()
+// The first number, so the header shows both the scene the desk is on and the one coming.
+await page.locator('.matrix-recall').first().click()
 await page.locator('.matrix-scene[data-current="true"]').waitFor()
 await shot('18-scenes.png', '.scenes-view')
 

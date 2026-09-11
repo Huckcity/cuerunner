@@ -33,7 +33,7 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
 
       {scenes.length === 0 ? (
         <p className="inspector-hint">
-          No scenes yet. Make them in the SCENES panel, with the groups they drive.
+          No scenes yet. Make them in the Scenes view, with the groups they drive.
         </p>
       ) : scene === null ? (
         <p className="inspector-hint">

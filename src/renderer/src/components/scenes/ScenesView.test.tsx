@@ -177,6 +177,19 @@ describe('ScenesView', () => {
     return container.querySelector('.group-summary')!.textContent ?? ''
   }
 
+  // The header readout as the operator reads it: the two labels and what they point at.
+  function where(): { now: string; next: string | null } {
+    const slot = (position: string): string | null => {
+      const element = container.querySelector(position)
+      if (element === null) return null
+      return [...element.children]
+        .filter(child => !child.classList.contains('scenes-where-label'))
+        .map(child => child.textContent)
+        .join(' ')
+    }
+    return { now: slot('.scenes-now') ?? '', next: slot('.scenes-next') }
+  }
+
   async function openGroups(): Promise<void> {
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.scenes-groups-toggle')!.click()
@@ -415,6 +428,29 @@ describe('ScenesView', () => {
     expect(columnFor('Interval').getAttribute('data-current')).toBe('true')
     expect([...container.querySelectorAll('.matrix-row')].map(row => row.getAttribute('data-on')))
       .toEqual(['false', 'false', 'true'])
+  })
+
+  it('names the scene the desk is on and the one coming, where the grid cannot', async () => {
+    const three = settings([OPENING, INTERVAL, scene('s3', 'Finale', ['p3'])])
+
+    // Nothing recalled: the show has not started, so the first scene is what is coming.
+    await show({ scenes: three, plot: PLOT })
+    expect(where()).toEqual({ now: 'nothing recalled', next: '1 Opening' })
+
+    await show({ scenes: three, plot: PLOT, deskSceneId: 's2', deskState: { 'dca-band': true } })
+    expect(where()).toEqual({ now: '2 Interval', next: '3 Finale' })
+
+    // The last scene has nothing after it, so the slot goes rather than naming a scene
+    // that is not there.
+    await show({ scenes: three, plot: PLOT, deskSceneId: 's3', deskState: { 'dca-band': true } })
+    expect(where()).toEqual({ now: '3 Finale', next: null })
+  })
+
+  it('leaves the header to the empty state when there are no scenes to name', async () => {
+    await show({ plot: PLOT })
+
+    expect(container.querySelector('.scenes-where')).toBeNull()
+    expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet')
   })
 
   it('marks the scene pending after an edit and applies exactly that change', async () => {

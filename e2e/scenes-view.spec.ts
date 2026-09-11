@@ -104,6 +104,72 @@ test('a show with many scenes still fits the window', async () => {
   await expect(page.locator('.matrix-scene').last()).toBeInViewport()
 })
 
+test('the view follows the show past the side of the window', async () => {
+  test.setTimeout(120_000)
+
+  await buildDeskShow(page, freePort())
+
+  // Twenty numbers: a musical is wider than any window, so the scene the show is in can sit
+  // thousands of pixels off the side.
+  const first = page.locator('.matrix-scene').first().locator('.scene-name-field')
+  await first.fill('Number 1')
+  await first.blur()
+  for (let i = 0; i < 19; i++) {
+    await page.locator('.scenes-add').click()
+    const field = page.locator('.matrix-scene').last().locator('.scene-name-field')
+    await field.fill(`Number ${i + 2}`)
+    await field.blur()
+  }
+
+  // The show reaches the nineteenth through the cue stack: the operator is watching the
+  // stage, and nothing has been clicked in the grid at all.
+  await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
+  await addCueFromMoreMenu(page, 'Scene')
+  await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
+  await page.locator('#scene-cue-select').selectOption({ label: 'Number 19' })
+  await page.locator('.btn-go').click()
+  await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+
+  const current = page.locator('.matrix-scene[data-current="true"]')
+  await expect(current).toHaveCount(1)
+  // The nineteenth of twenty: both the scene the desk is in and the one after it are on
+  // screen, which is the point of following at all — a short number cannot hide the next.
+  await expect(current).toBeInViewport({ ratio: 1 })
+  await expect(page.locator('.matrix-scene').nth(18)).toBeInViewport({ ratio: 1 })
+  await expect(page.locator('.scenes-now')).toContainText('Number 19')
+  await expect(page.locator('.scenes-next')).toContainText('Number 20')
+
+  // Never behind the plot column either: what is on screen is the scene, not a sliver of it.
+  const hidden = await page.evaluate(() => {
+    const column = document.querySelector('.matrix-scene[data-current="true"]')!.getBoundingClientRect()
+    const plot = document.querySelector('.matrix-mic')!.getBoundingClientRect()
+    return Math.round(plot.right - column.left)
+  })
+  expect(hidden).toBeLessThanOrEqual(0)
+
+  // Mid-show, where the grid can still move: the recalled scene is parked at the left of the
+  // columns, so everything after it is laid out to the right for the next press.
+  await page.locator('.matrix-scene').nth(14).locator('.matrix-recall').click()
+  await expect(page.locator('.matrix-scene').nth(14)).toHaveAttribute('data-current', 'true')
+  const gap = await page.evaluate(() => {
+    const column = document.querySelector('.matrix-scene[data-current="true"]')!.getBoundingClientRect()
+    const plot = document.querySelector('.matrix-mic')!.getBoundingClientRect()
+    return Math.round(column.left - plot.right)
+  })
+  expect(Math.abs(gap)).toBeLessThanOrEqual(1)
+
+  // Scrolling by hand belongs to the operator: the view does not drag it back while nothing
+  // is moving the show.
+  await page.locator('.matrix-scroll').evaluate(el => { el.scrollLeft = 0 })
+  await expect(page.locator('.matrix-scene').nth(14)).not.toBeInViewport()
+
+  // And the next recall brings it back to the show, whichever hand moved the desk.
+  await page.locator('.btn-go').click()
+  await expect(page.locator('.scenes-now')).toContainText('Number 19')
+  await expect(page.locator('.matrix-scene').nth(18)).toHaveAttribute('data-current', 'true')
+  await expect(page.locator('.matrix-scene').nth(18)).toBeInViewport({ ratio: 1 })
+})
+
 test('editing a cell moves the scene, and the desk is told only when asked', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())

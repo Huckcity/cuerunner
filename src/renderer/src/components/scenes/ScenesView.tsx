@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type InputHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes } from 'react'
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
 import { OSC_DEFAULTS } from '../../utils/cueDefaults'
@@ -169,7 +169,34 @@ export function ScenesView() {
   }, [])
 
   const locked = scenes.locked
-  const current = scenes.list.find(scene => scene.id === deskSceneId) ?? null
+  const currentIndex = scenes.list.findIndex(scene => scene.id === deskSceneId)
+  const current = currentIndex === -1 ? null : scenes.list[currentIndex]
+
+  // The running order is the show order, so what comes next is the scene after this one —
+  // and before anything has been recalled, the first one. Which scene it is belongs in the
+  // header rather than only in the grid: the columns scroll, this does not.
+  const nextIndex = currentIndex === -1 ? 0 : currentIndex + 1
+  const next = scenes.list[nextIndex] ?? null
+
+  // The show moves without a hand on the grid — a scene cue, a trigger, someone else at the
+  // desk — so the view follows it: the scene the desk has just gone to is parked at the left
+  // of the visible columns, which is where the ones after it are laid out for the next press.
+  // A short number cannot leave the next scene off the side of a long show. Scrolling by hand
+  // is left alone until the show moves again; `deskState` is a dependency rather than read
+  // because being handed a new one is how the store says a recall happened, including a
+  // second recall of the scene the desk is already on.
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (scroller === null || currentIndex === -1) return
+    const column = scroller.querySelectorAll<HTMLElement>('.matrix-scene')[currentIndex]
+    const plotColumn = scroller.querySelector<HTMLElement>('.matrix-mic')
+    if (column === undefined || plotColumn === null) return
+    // Measured rather than assumed: the current scene is parked against the plot column, and
+    // the width behind that column is a CSS variable anyone is free to change.
+    const left = column.getBoundingClientRect().left - scroller.getBoundingClientRect().left
+    scroller.scrollLeft += left - plotColumn.getBoundingClientRect().width
+  }, [currentIndex, deskState])
 
   // The desk's question, asked for the header: what would a recall of the current scene
   // change? Nothing means the desk is where the show left it.
@@ -254,6 +281,28 @@ export function ScenesView() {
     <div className="scenes-view" data-locked={locked}>
       <div className="scenes-header">
         <span className="scenes-title">Scenes</span>
+        {scenes.list.length > 0 && (
+          <div className="scenes-where">
+            <span className="scenes-now">
+              <span className="scenes-where-label">now</span>{' '}
+              {current === null ? (
+                <span className="scenes-where-none">nothing recalled</span>
+              ) : (
+                <>
+                  <strong className="scenes-where-number">{currentIndex + 1}</strong>{' '}
+                  <span className="scenes-where-name" title={current.name}>{current.name}</span>
+                </>
+              )}
+            </span>
+            {next !== null && (
+              <span className="scenes-next">
+                <span className="scenes-where-label">next</span>{' '}
+                <strong className="scenes-where-number">{nextIndex + 1}</strong>{' '}
+                <span className="scenes-where-name" title={next.name}>{next.name}</span>
+              </span>
+            )}
+          </div>
+        )}
         <span className="scenes-subtitle">
           {`${micCount(plot.packs.length)} · ${scenes.list.length} scene${scenes.list.length === 1 ? '' : 's'}`}
         </span>
@@ -312,7 +361,7 @@ export function ScenesView() {
       ) : plot.packs.length === 0 ? (
         <div className="matrix-empty">The mic plot is empty — add packs in the RF panel.</div>
       ) : (
-        <div className="matrix-scroll">
+        <div className="matrix-scroll" ref={scrollerRef}>
           <div
             className="matrix-grid"
             style={{
