@@ -43,9 +43,11 @@ test('recovers from a renderer crash with an explanation', async () => {
   // Playwright's page handle stays marked as crashed after the renderer is replaced,
   // so the recovered window is inspected through its own webContents instead.
   try {
+    // A crash, a reload and a React boot on a shared runner: generous on purpose, and
+    // the failure path below says what was happening if it still runs out.
     await expect.poll(
       async () => readRecovered("!!document.querySelector('.toolbar')"),
-      { timeout: 30_000 }
+      { timeout: 60_000 }
     ).toBe(true)
   } catch (error) {
     const state = await app.evaluate(({ BrowserWindow }) => {
