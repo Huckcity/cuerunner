@@ -1,3 +1,23 @@
+# [0.11.0](https://github.com/Huckcity/winslab/compare/v0.10.0...v0.11.0) (2026-09-11)
+
+
+### Bug Fixes
+
+* **engine:** abandon in-flight work on STOP and fade audio on PANIC ([d7ad968](https://github.com/Huckcity/winslab/commit/d7ad968715669e5168a50c49240e8edcec0bf99f))
+* save durably, offer unsaved work back, and make typecheck check ([31b2fb0](https://github.com/Huckcity/winslab/commit/31b2fb0238f5f1cecdd1cf2bff0d199123ddc566))
+
+
+### Features
+
+* **engine:** report what audio, MIDI and OSC cues actually did ([ea98ab8](https://github.com/Huckcity/winslab/commit/ea98ab81319658545351d2b93e5bf59525a3dba7))
+* **script:** run script cues in a worker with a timeout ([0b4bdbf](https://github.com/Huckcity/winslab/commit/0b4bdbf34d414abc650783ecc62f82541a6f714f))
+* survive renderer and main-process failures ([9dee15b](https://github.com/Huckcity/winslab/commit/9dee15b42999d78f2522c0f0f372167483bee17a))
+
+
+### Performance Improvements
+
+* bound decoded audio by bytes and draw waveforms from an envelope ([3439e8f](https://github.com/Huckcity/winslab/commit/3439e8f7e38877c9c758d8f9a7c1f633249360ee))
+
 # [0.10.0](https://github.com/Huckcity/winslab/compare/v0.9.0...v0.10.0) (2026-09-10)
 
 
