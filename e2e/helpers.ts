@@ -24,9 +24,22 @@ export async function launchApp(
   return { app, page, userDataDir }
 }
 
-// Force-exits the Electron process, bypassing the beforeunload dirty-check dialog.
+// Force-exits the Electron process, bypassing the beforeunload dirty-check dialog. A
+// crashed renderer can leave the app unable to answer, so a stuck exit is killed rather
+// than left to time the worker out.
 export async function closeApp(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
+  const proc = app.process()
+  const exited = Promise.withResolvers<void>()
+  if (proc.exitCode !== null || proc.signalCode !== null) exited.resolve()
+  else proc.once('exit', () => exited.resolve())
+
+  await app.evaluate(({ app: electronApp }) => electronApp.exit(0)).catch(() => {})
+  const kill = setTimeout(() => {
+    proc.kill('SIGKILL')
+    exited.resolve()
+  }, 5000)
+  await exited.promise
+  clearTimeout(kill)
 }
 
 // Scoped to the toolbar to avoid matching the inspector "Wait" tab button.

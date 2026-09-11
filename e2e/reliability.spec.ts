@@ -19,6 +19,12 @@ test('recovers from a renderer crash with an explanation', async () => {
   // instances at once, so this test waits rather than assumes.
   test.setTimeout(90_000)
 
+  // Everything the main process says about the crash, so a failure here is readable
+  // rather than a bare timeout.
+  const mainLog: string[] = []
+  app.process().stdout?.on('data', chunk => mainLog.push(String(chunk)))
+  app.process().stderr?.on('data', chunk => mainLog.push(String(chunk)))
+
   await app.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer()
   })
@@ -36,10 +42,19 @@ test('recovers from a renderer crash with an explanation', async () => {
 
   // Playwright's page handle stays marked as crashed after the renderer is replaced,
   // so the recovered window is inspected through its own webContents instead.
-  await expect.poll(
-    async () => readRecovered("!!document.querySelector('.toolbar')"),
-    { timeout: 30_000 }
-  ).toBe(true)
+  try {
+    await expect.poll(
+      async () => readRecovered("!!document.querySelector('.toolbar')"),
+      { timeout: 30_000 }
+    ).toBe(true)
+  } catch (error) {
+    const state = await app.evaluate(({ BrowserWindow }) => {
+      const wc = BrowserWindow.getAllWindows()[0]?.webContents
+      if (!wc) return 'no window'
+      return `crashed=${wc.isCrashed()} destroyed=${wc.isDestroyed()} loading=${wc.isLoading()} url=${wc.getURL()} pid=${wc.getOSProcessId()}`
+    }).catch(e => `window state unavailable: ${String(e)}`)
+    throw new Error(`${String(error)}\nwindow: ${state}\nmain process said:\n${mainLog.join('')}`)
+  }
 
   const banner = await readRecovered("document.querySelector('[data-kind=\"crash\"]')?.textContent ?? null")
   expect(banner).toContain('The interface stopped unexpectedly')

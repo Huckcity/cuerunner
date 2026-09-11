@@ -82,10 +82,11 @@ test('a stop cue aimed at a script takes that run away too', async () => {
   await page.locator('.inspector-tab', { hasText: 'Script' }).click()
   await expect(page.locator('.last-run-badge')).toHaveCount(0)
 
-  // The interface answered throughout, and the show still runs.
+  // The interface answered throughout, and the show still runs: a fresh script cue
+  // fires and stays running. A wait cue would do the same job only if the runner were
+  // quick enough to see it — this one cannot finish before the assertion.
   await expect.poll(() => page.evaluate(() => 1 + 1)).toBe(2)
-  await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
-  await page.locator('.cue-row').nth(2).click()
+  await addScriptCue('while (true) {}', 120_000)
   await page.getByRole('button', { name: /GO/ }).click()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 })
