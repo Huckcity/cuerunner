@@ -42,7 +42,7 @@ test('expanding the group shows its children again', async () => {
 
 test('deleting the selected child removes it from the group', async () => {
   await page.locator('.cue-row[data-depth="1"]').click()
-  await page.locator('.cue-list-container').press('Meta+Backspace')
+  await page.locator('.cue-list-container').press('Control+Backspace')
   await expect(page.locator('.cue-row')).toHaveCount(1)
   await expect(page.locator('.cue-row[data-depth="1"]')).toHaveCount(0)
 })

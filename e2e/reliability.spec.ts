@@ -23,22 +23,19 @@ test('recovers from a renderer crash with an explanation', async () => {
     BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer()
   })
 
+  // executeJavaScript issued while the renderer is being torn down never settles, and
+  // isCrashed() can still read false for a moment after the crash is requested — so a
+  // single read can hang the poll for its whole timeout. Race every read against a
+  // deadline and let the poll try again.
   const readRecovered = (expression: string) => app.evaluate(async ({ BrowserWindow }, code) => {
     const wc = BrowserWindow.getAllWindows()[0].webContents
     if (wc.isCrashed()) return null
-    return wc.executeJavaScript(code) as Promise<unknown>
+    const deadline = new Promise(resolve => setTimeout(() => resolve(null), 2000))
+    return Promise.race([wc.executeJavaScript(code).catch(() => null), deadline]) as Promise<unknown>
   }, expression)
 
   // Playwright's page handle stays marked as crashed after the renderer is replaced,
-  // so the recovered window is inspected through its own webContents instead. The poll
-  // reads the crash flag first: executeJavaScript issued while the renderer is down
-  // never settles.
-  await expect.poll(
-    async () => app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0].webContents.isCrashed()),
-    { timeout: 30_000 }
-  ).toBe(false)
-
+  // so the recovered window is inspected through its own webContents instead.
   await expect.poll(
     async () => readRecovered("!!document.querySelector('.toolbar')"),
     { timeout: 30_000 }
@@ -47,7 +44,10 @@ test('recovers from a renderer crash with an explanation', async () => {
   const banner = await readRecovered("document.querySelector('[data-kind=\"crash\"]')?.textContent ?? null")
   expect(banner).toContain('The interface stopped unexpectedly')
   expect(banner).toContain('Anything unsaved is gone')
-  expect(banner).toContain('killed')
+  expect(banner).toContain('was reloaded')
+  // Which reason Electron reports depends on the platform ('killed' on macOS, 'crashed'
+  // on Linux), so the contract is that the banner says why, not which word it picks.
+  expect(banner).toMatch(/\((crashed|killed|oom|launch-failed|integrity-failure)\)/)
 
   // The interface answers input again, not just renders: the LOG toggle works.
   const logOpened = await app.evaluate(async ({ BrowserWindow }) => {
