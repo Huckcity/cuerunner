@@ -27,15 +27,17 @@ export function AudioInspector({ cue, tab }: Props) {
     if (!path) return
     set({ filePath: path })
     setLoading(true)
+    // A decoding context is a resource the browser caps: one left open on the failure
+    // path is never reclaimed, so it is closed whatever the decode does.
+    const ctx = new AudioContext()
     try {
       const arrayBuffer = await window.winslab.audio.readFile(path)
-      const ctx = new AudioContext()
       const decoded = await ctx.decodeAudioData(arrayBuffer)
-      ctx.close()
       set({ filePath: path, duration: Math.round(decoded.duration * 1000) })
     } catch (e) {
       console.warn('Could not decode audio for duration:', e)
     } finally {
+      void ctx.close()
       setLoading(false)
     }
   }
