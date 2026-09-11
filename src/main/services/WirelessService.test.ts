@@ -16,6 +16,7 @@ import {
   demoChannelId
 } from '../../renderer/src/types/show'
 import type {
+  DeviceEvent,
   DeviceState,
   RfPlot,
   RfThresholds,
@@ -83,7 +84,7 @@ function settings(
     ...defaultShowSettings(),
     oscIn: { enabled: false, port: 53000 },
     midiIn: { enabled: false, portNames: [] },
-    rf: { plot, sources, thresholds }
+    rf: { plot, sources, swaps: [], thresholds }
   }
 }
 
@@ -95,6 +96,15 @@ function messages(bus: ShowBus): string[] {
   return bus.snapshot().alerts.map((alert: ShowAlert) => alert.message)
 }
 
+/** Every device event the bus kept for one channel, in the order it saw them. */
+function deviceEvents(bus: ShowBus, channelId: string): DeviceEvent[] {
+  return bus
+    .snapshot()
+    .events.filter(
+      (event): event is DeviceEvent => event.kind === 'device' && event.device.id === `rf:${channelId}`
+    )
+}
+
 interface Harness {
   service: WirelessService
   fetchJson: Mock
@@ -104,11 +114,16 @@ interface Harness {
   bus: ShowBus
 }
 
-function harness(): Harness {
+/**
+ * `now` pins the bus's own clock by default, so a test of the service never races it.
+ * A test that needs the bus to let ordinary readings through — it rate-limits them —
+ * passes a live clock instead.
+ */
+function harness(now: () => number = () => 1000): Harness {
   const fetchJson = vi.fn()
   const readText = vi.fn()
   const service = new WirelessService({ fetchJson, readText })
-  const bus = new ShowBus({ now: () => 1000 })
+  const bus = new ShowBus({ now })
   const setState = vi.fn()
   return { service, fetchJson, readText, context: { bus, setState }, setState, bus }
 }
@@ -526,6 +541,216 @@ describe('WirelessService', () => {
     await vi.advanceTimersByTimeAsync(4000)
     expect(device(bus, 'ch-12')?.online).toBe(false)
     expect(messages(bus)).toEqual(['Shure rack: fetch failed', 'Channel 12 went quiet'])
+  })
+
+  it('remembers the lowest battery a pack reached, and when it got there', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    const at = (percent: number) =>
+      response(document(channel('ch-12', { name: 'Channel 12', batteryPercent: percent })))
+
+    fetchJson.mockResolvedValue(at(80))
+    service.start(context, settings([httpSource()]))
+    await flush()
+    // The reading is a poll's; the floor is the night's, and the two live apart.
+    expect(device(bus, 'ch-12')?.battery).toEqual({ percent: 80 })
+    expect(device(bus, 'ch-12')?.history).toEqual({ lowestPercent: 80, lowestAt: BASE, dropouts: 0 })
+
+    fetchJson.mockResolvedValue(at(40))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'ch-12')?.history).toEqual({
+      lowestPercent: 40,
+      lowestAt: BASE + DEFAULT_POLL_MS,
+      dropouts: 0
+    })
+
+    // A recovered battery does not carry the floor back up, and a reading above it leaves
+    // the time of the floor alone rather than restamping it with the latest poll.
+    fetchJson.mockResolvedValue(at(95))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    fetchJson.mockResolvedValue(at(60))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'ch-12')?.battery).toEqual({ percent: 60 })
+    expect(device(bus, 'ch-12')?.history).toEqual({
+      lowestPercent: 40,
+      lowestAt: BASE + DEFAULT_POLL_MS,
+      dropouts: 0
+    })
+  })
+
+  it('has no floor for a channel that reports no battery, and no floor of zero for the first one it does', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    fetchJson.mockResolvedValue(
+      response(document(channel('bare', { name: 'Bare', rfDbm: -60 })))
+    )
+
+    service.start(context, settings([httpSource()]))
+    await flush()
+    expect(device(bus, 'bare')?.battery).toBeUndefined()
+    expect(device(bus, 'bare')?.history).toBeUndefined()
+
+    // The first reading is the floor, not a zero the pack never showed.
+    fetchJson.mockResolvedValue(
+      response(document(channel('bare', { name: 'Bare', batteryPercent: 74 })))
+    )
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'bare')?.battery).toEqual({ percent: 74 })
+    expect(device(bus, 'bare')?.history).toEqual({
+      lowestPercent: 74,
+      lowestAt: BASE + DEFAULT_POLL_MS,
+      dropouts: 0
+    })
+  })
+
+  it('starts a plot-seeded pack with no floor until the rack says what it is', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    const plot: RfPlot = {
+      performers: [],
+      packs: [{ id: 'slot-12', label: 'Pack 12', channelId: 'ch-12', performerId: null, notes: '' }]
+    }
+
+    fetchJson.mockResolvedValue(response(document()))
+    service.start(context, settings([httpSource()], plot))
+    await flush()
+
+    // Expected by the plot and never heard from: no device is published at all, so
+    // nothing can pass off a made-up floor as the pack's.
+    expect(device(bus, 'ch-12')).toBeUndefined()
+
+    fetchJson.mockResolvedValue(response(document(channel('ch-12', { batteryPercent: 74 }))))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'ch-12')?.history).toEqual({
+      lowestPercent: 74,
+      lowestAt: BASE + DEFAULT_POLL_MS,
+      dropouts: 0
+    })
+  })
+
+  it('counts a dropout for a plot-seeded pack the rack never names, with no floor invented', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    const plot: RfPlot = {
+      performers: [],
+      packs: [{ id: 'slot-12', label: 'Pack 12', channelId: 'ch-12', performerId: null, notes: '' }]
+    }
+
+    fetchJson.mockResolvedValue(response(document()))
+    service.start(context, settings([httpSource()], plot))
+    await vi.advanceTimersByTimeAsync(6000)
+
+    // Quiet and counted: the dropout is published with no floor beside it, because a
+    // reading the rack never sent is not a reading, and the report must not read this
+    // pack as uneventful.
+    expect(device(bus, 'ch-12')).toMatchObject({ online: false, name: 'Pack 12' })
+    expect(device(bus, 'ch-12')?.battery).toBeUndefined()
+    expect(device(bus, 'ch-12')?.history).toEqual({ dropouts: 1 })
+    expect(messages(bus)).toEqual(['Pack 12 went quiet'])
+
+    // Heard from at last: the floor is that reading rather than anything seeded, and the
+    // dropout it arrives with is the one the silence earned.
+    fetchJson.mockResolvedValue(
+      response(document(channel('ch-12', { name: 'Pack 12', batteryPercent: 55 })))
+    )
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'ch-12')).toMatchObject({ online: true, battery: { percent: 55 } })
+    expect(device(bus, 'ch-12')?.history).toEqual({
+      lowestPercent: 55,
+      lowestAt: BASE + 8000,
+      dropouts: 1
+    })
+  })
+
+  it('counts one dropout per age-out and keeps it when the channel returns', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    const reported = response(document(channel('ch-12', { name: 'Channel 12', batteryPercent: 70 })))
+
+    fetchJson.mockResolvedValue(reported)
+    service.start(context, settings([httpSource()]))
+    await flush()
+    expect(deviceEvents(bus, 'ch-12').map(event => event.device.history?.dropouts)).toEqual([0])
+
+    // The rack stops naming the channel: the silence is one dropout, said once. The
+    // pack publishes no reading now, and the night it had is what the event carries.
+    fetchJson.mockResolvedValue(response(document()))
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(device(bus, 'ch-12')).toMatchObject({ online: false })
+    expect(device(bus, 'ch-12')?.battery).toBeUndefined()
+    expect(device(bus, 'ch-12')?.history).toEqual({
+      lowestPercent: 70,
+      lowestAt: BASE,
+      dropouts: 1
+    })
+
+    // Still gone several sweeps later: the count does not drift with the sweeps.
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(device(bus, 'ch-12')?.history?.dropouts).toBe(1)
+
+    // Back on air: the count and the floor are the night's, not the last poll's.
+    fetchJson.mockResolvedValue(reported)
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'ch-12')).toMatchObject({
+      online: true,
+      battery: { percent: 70 },
+      history: { lowestPercent: 70, lowestAt: BASE, dropouts: 1 }
+    })
+
+    fetchJson.mockResolvedValue(response(document()))
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(device(bus, 'ch-12')?.history?.dropouts).toBe(2)
+    expect(deviceEvents(bus, 'ch-12').map(event => event.device.history?.dropouts)).toEqual([0, 1, 1, 2])
+  })
+
+  it('carries the night on every later device event for the channel', async () => {
+    // The bus drops ordinary readings that arrive inside its rate limit, so this one
+    // runs on a clock that moves with the polls.
+    const { service, fetchJson, context, bus } = harness(() => Date.now())
+    const at = (percent: number) => response(document(channel('ch-12', { batteryPercent: percent })))
+
+    fetchJson.mockResolvedValue(at(70))
+    service.start(context, settings([httpSource()]))
+    await flush()
+
+    fetchJson.mockResolvedValue(response(document()))
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(device(bus, 'ch-12')?.history?.dropouts).toBe(1)
+
+    fetchJson.mockResolvedValue(at(70))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    fetchJson.mockResolvedValue(at(68))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(deviceEvents(bus, 'ch-12').map(event => event.device.history?.dropouts)).toEqual([0, 1, 1, 1])
+  })
+
+  it('keeps the floor and the dropout count across a settings change', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    const at = (percent: number) =>
+      response(document(channel('ch-12', { name: 'Channel 12', batteryPercent: percent })))
+    const show = settings([httpSource()])
+
+    fetchJson.mockResolvedValue(at(70))
+    service.start(context, show)
+    await flush()
+
+    fetchJson.mockResolvedValue(at(12))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    expect(device(bus, 'ch-12')?.history).toMatchObject({
+      lowestPercent: 12,
+      lowestAt: BASE + DEFAULT_POLL_MS
+    })
+
+    fetchJson.mockResolvedValue(response(document()))
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(device(bus, 'ch-12')?.history?.dropouts).toBe(1)
+
+    // A settings change stops and starts every service; the morning's report must not
+    // be what this restart costs.
+    fetchJson.mockResolvedValue(at(88))
+    service.start(context, show)
+    await flush()
+
+    expect(device(bus, 'ch-12')).toMatchObject({
+      online: true,
+      battery: { percent: 88 },
+      history: { lowestPercent: 12, lowestAt: BASE + DEFAULT_POLL_MS, dropouts: 1 }
+    })
   })
 
   it('keeps the healthy sources running when one dies', async () => {

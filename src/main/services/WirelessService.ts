@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises'
 import { defaultRfThresholds } from '../../renderer/src/types/show'
 import type {
+  DeviceHistory,
   DeviceState,
   RfPlot,
   RfThresholds,
@@ -58,6 +59,19 @@ interface ChannelState {
 }
 
 /**
+ * What a channel did over the whole night rather than in its last poll: the floor its
+ * battery reached, when it got there, and how often the channel went quiet. A settings
+ * change restarts the service and the show report is read the morning after, so these
+ * outlive stop() — only a new service instance, which is what an app restart makes,
+ * starts a channel over.
+ */
+interface ChannelHistory {
+  /** The lowest reading the pack has shown, and when it arrived. Absent until it reports one. */
+  floor?: { percent: number; at: number }
+  dropouts: number
+}
+
+/**
  * Watches the show's transmitters.
  *
  * A wireless rack is polled rather than listened to, and every source stands on its own:
@@ -77,6 +91,8 @@ export class WirelessService implements ShowService {
   private timers: Timer[] = []
   private inFlight = new Set<AbortController>()
   private channels = new Map<string, ChannelState>()
+  /** The night's facts per channel, keyed the same way and kept across a restart. */
+  private history = new Map<string, ChannelHistory>()
   /** Source ids whose last poll failed, mapped to the reason they gave. */
   private failed = new Map<string, string>()
 
@@ -139,6 +155,9 @@ export class WirelessService implements ShowService {
     this.context = null
     this.sources = []
     this.channels.clear()
+    // The history is deliberately left alone: stop() is what a settings change does to
+    // every service, and the floor and the dropout count are the show's record rather
+    // than the stopped service's.
     this.failed.clear()
   }
 
@@ -229,6 +248,7 @@ export class WirelessService implements ShowService {
     state.offline = false
 
     const percent = channel.batteryPercent
+    const history = this.historyOf(channel.id)
     const device: DeviceState = {
       id: `rf:${channel.id}`,
       service: this.id,
@@ -239,12 +259,20 @@ export class WirelessService implements ShowService {
     // Each group is present only when the channel reported it: a wired pack has no RF
     // line, and a receiver with telemetry off has no battery rather than a zero.
     if (percent !== undefined) {
+      // The floor belongs to the pack rather than the poll: a reading above it leaves it
+      // where it was, and it keeps the time the lowest reading arrived, not the time of
+      // the poll that followed. A recovered battery does not un-drain.
+      const floor = history.floor
+      if (floor === undefined || percent < floor.percent) history.floor = { percent, at: now }
       device.battery = {
         percent,
         ...(channel.batteryMinutes === undefined ? {} : { minutes: channel.batteryMinutes }),
         ...(channel.charging === undefined ? {} : { charging: channel.charging })
       }
     }
+    // The night goes on every reading, including the one a pack sends after a silence.
+    const night = this.nightOf(channel.id)
+    if (night) device.history = night
     if (channel.rfDbm !== undefined) device.rf = { level: channel.rfDbm, unit: 'dBm' }
     if (channel.audioLevel !== undefined) {
       device.audio = {
@@ -297,15 +325,51 @@ export class WirelessService implements ShowService {
     for (const [id, state] of this.channels) {
       if (state.offline || now - state.lastSeen < after) continue
       state.offline = true
+      // The count moves at the same moment the alarm does: a dropout is the offline
+      // transition, not the number of polls that noticed the silence after it.
+      const history = this.historyOf(id)
+      history.dropouts += 1
       const deviceId = `rf:${id}`
-      context.bus.device({
+      const device: DeviceState = {
         id: deviceId,
         service: this.id,
         name: state.name,
         online: false,
         lastSeen: state.lastSeen
-      })
+      }
+      // The whole point of the history group: the pack is quiet, so there is no reading
+      // to publish, but the night it had is still the thing the morning asks about.
+      const night = this.nightOf(id)
+      if (night) device.history = night
+      context.bus.device(device)
       context.bus.alert('critical', this.id, `${this.plotName(id, state.name)} went quiet`, deviceId)
+    }
+  }
+
+  /** The night's record for a channel, begun the first time it is heard from or ages out. */
+  private historyOf(channelId: string): ChannelHistory {
+    let history = this.history.get(channelId)
+    if (!history) {
+      history = { dropouts: 0 }
+      this.history.set(channelId, history)
+    }
+    return history
+  }
+
+  /**
+   * The night as a device carries it, or nothing when there is nothing to carry. A floor
+   * on its own is a night; so is a dropout on a pack nobody ever got a reading from, and
+   * that one has to be published without a floor rather than dressed up with one — the
+   * report would otherwise call a pack that went quiet uneventful.
+   */
+  private nightOf(channelId: string): DeviceHistory | undefined {
+    const history = this.history.get(channelId)
+    if (!history) return undefined
+    const { floor } = history
+    if (floor === undefined && history.dropouts === 0) return undefined
+    return {
+      ...(floor === undefined ? {} : { lowestPercent: floor.percent, lowestAt: floor.at }),
+      dropouts: history.dropouts
     }
   }
 

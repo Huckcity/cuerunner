@@ -1,6 +1,10 @@
+import { useMemo, useState } from 'react'
 import { useStore } from '../../store'
 import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
 import { demoPlot, demoSource } from '../../utils/rfDemo'
+import { buildReport, reportText } from '../../utils/rfPlot'
+import { formatClock } from '../../utils/cueDefaults'
+import { PlotDialog } from './PlotDialog'
 import './RfPanel.css'
 
 export type RfPackState = 'ok' | 'low' | 'critical' | 'offline' | 'silent' | 'unpatched'
@@ -120,6 +124,26 @@ export function RfPanel({ onClose }: Props) {
   const alerts = useStore(s => s.showAlerts)
   const updateRfSettings = useStore(s => s.updateRfSettings)
   const dismissAlert = useStore(s => s.dismissAlert)
+  const appendLog = useStore(s => s.appendLog)
+
+  // Two views of the same plot: what the packs are doing now, and what the night did to
+  // them. The second one is what gets read the next morning, so it is a view rather
+  // than something you have to export before closing the app.
+  const [mode, setMode] = useState<'live' | 'report'>('live')
+  const [editing, setEditing] = useState(false)
+
+  const report = useMemo(
+    () => buildReport(rf.plot, devices, rf.swaps),
+    [rf.plot, devices, rf.swaps]
+  )
+
+  const copyReport = (): void => {
+    navigator.clipboard.writeText(reportText(report, Date.now())).catch(() => {
+      // A clipboard the app cannot reach is worth saying once, in the log where the
+      // operator will look if the paste comes out empty.
+      appendLog([{ level: 'error', message: 'Could not copy the wireless report to the clipboard' }])
+    })
+  }
 
   // Only the alarms raised against a wireless channel belong here; the monitor keeps
   // the rest of the show's troubles.
@@ -139,9 +163,15 @@ export function RfPanel({ onClose }: Props) {
     .sort((a, b) => BAND_ORDER[a.state] - BAND_ORDER[b.state] || a.index - b.index)
 
   const addDemo = (): void => {
-    // The demo rack replaces the source list rather than adding to it, so one click
-    // shows the whole feature and a second click cannot stack a duplicate rack.
-    updateRfSettings({ sources: [demoSource()], plot: demoPlot() })
+    // The demo rack replaces the source list rather than adding to it, so one click shows
+    // the whole feature and a second click cannot stack a duplicate rack. It brings its
+    // own plot only when there is none: a cast somebody typed in is not the demo's to
+    // throw away.
+    const keepsPlot = plot.packs.length > 0
+    updateRfSettings({
+      sources: [demoSource()],
+      ...(keepsPlot ? {} : { plot: demoPlot() })
+    })
   }
 
   return (
@@ -150,6 +180,26 @@ export function RfPanel({ onClose }: Props) {
         <span className="rf-title">Wireless</span>
         <span className="rf-count">{plot.packs.length === 0 ? 'empty' : `${plot.packs.length} packs`}</span>
         <div className="rf-actions">
+          <button
+            className="rf-btn rf-mode"
+            data-active={mode === 'report'}
+            onClick={() => setMode(current => current === 'live' ? 'report' : 'live')}
+            title={mode === 'live' ? 'What the night did to each pack' : 'Back to live readings'}
+          >
+            {mode === 'live' ? 'Report' : 'Live'}
+          </button>
+          {mode === 'report' && (
+            <button className="rf-btn rf-copy" onClick={copyReport} title="Copy the report">
+              Copy
+            </button>
+          )}
+          <button
+            className="rf-btn rf-edit"
+            onClick={() => setEditing(true)}
+            title="Enter the cast, packs and patches"
+          >
+            Edit plot…
+          </button>
           <button className="rf-btn" onClick={addDemo} title="Load the demo rack">
             Demo rack
           </button>
@@ -177,9 +227,41 @@ export function RfPanel({ onClose }: Props) {
       )}
 
       <div className="rf-list">
-        {plot.packs.length === 0 ? (
+        {mode === 'report' ? (
+          report.length === 0 ? (
+            <div className="rf-empty">
+              <span>No packs in the plot yet. Enter the cast and their packs to keep a report.</span>
+            </div>
+          ) : (
+            report.map(row => (
+              <div key={row.packId} className="rf-report-row">
+                <span className="rf-report-label">{row.label}</span>
+                <span className="rf-report-who">{row.performer ?? 'unassigned'}</span>
+                <span className="rf-report-role">{row.role ?? ''}</span>
+                <span className="rf-report-battery">
+                  {row.lowestPercent === null
+                    ? 'no reading'
+                    : `lowest ${row.lowestPercent}%${row.lowestAt === null ? '' : ` at ${formatClock(row.lowestAt)}`}`}
+                </span>
+                <span className="rf-report-dropouts">
+                  {row.dropouts === 0
+                    ? 'no dropouts'
+                    : `${row.dropouts} dropout${row.dropouts === 1 ? '' : 's'}`}
+                </span>
+                <span className="rf-report-swaps">
+                  {row.swaps.length === 0
+                    ? ''
+                    : `${row.swaps.length} swap${row.swaps.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+            ))
+          )
+        ) : plot.packs.length === 0 ? (
           <div className="rf-empty">
-            <span>No packs in the plot. Add a rack to see who is wearing what.</span>
+            <span>No packs in the plot. Enter the cast and their packs, or load the demo rack.</span>
+            <button className="rf-edit-btn" onClick={() => setEditing(true)}>
+              Edit plot…
+            </button>
             <button className="rf-demo-btn" onClick={addDemo}>
               Add demo rack
             </button>
@@ -201,6 +283,8 @@ export function RfPanel({ onClose }: Props) {
           })
         )}
       </div>
+
+      {editing && <PlotDialog onClose={() => setEditing(false)} />}
     </div>
   )
 }

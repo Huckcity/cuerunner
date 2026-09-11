@@ -50,6 +50,22 @@ export interface BatteryState {
 }
 
 /**
+ * What the show has done to this channel, kept for the report read the next morning.
+ *
+ * It is a group of its own rather than part of `battery` on purpose: a channel that has
+ * gone quiet publishes no reading — nobody is hearing it — but it still has a night
+ * behind it, and that is precisely the pack someone wants to ask about.
+ */
+export interface DeviceHistory {
+  /** The lowest battery percent seen since the app started, once one has been reported. */
+  lowestPercent?: number
+  /** When that reading was taken. */
+  lowestAt?: number
+  /** How many times this channel has gone quiet. */
+  dropouts: number
+}
+
+/**
  * A device as the show sees it right now. Optional groups are present only when the
  * device reports that measurement — a wired IEM pack has no RF reading, and a receiver
  * whose battery telemetry is off has no battery.
@@ -69,6 +85,8 @@ export interface DeviceState {
   audio?: { level: number; muted?: boolean }
   /** Carrier frequency in MHz. */
   frequency?: number
+  /** What the night has done to this channel, once anything has been heard from it. */
+  history?: DeviceHistory
   /** Anything else worth showing in the panel, already formatted. */
   detail?: Record<string, string>
 }
@@ -153,6 +171,22 @@ export interface RfPlot {
   packs: RfPack[]
 }
 
+/**
+ * A pack changing hands. Recorded because the show report is read the next morning, and
+ * "who was wearing 12 at 20:14" is a question a swap log answers and a live panel cannot.
+ */
+export interface RfSwap {
+  at: number
+  packId: string
+  packLabel: string
+  /**
+   * Names as they were when the swap happened: renaming someone in the plot afterwards
+   * must not rewrite what the report says happened on the night.
+   */
+  from: string | null
+  to: string | null
+}
+
 export interface RfThresholds {
   /** Percent at or below which a pack is worth watching. */
   batteryWarning: number
@@ -201,6 +235,8 @@ export interface RfSettings {
   plot: RfPlot
   sources: TelemetrySource[]
   thresholds: RfThresholds
+  /** The swaps made this session, newest last, capped. */
+  swaps: RfSwap[]
 }
 
 /** The demo rack's channel ids, so the simulated rack and the demo plot agree. */
@@ -313,6 +349,7 @@ export function defaultRfSettings(): RfSettings {
     // is one click away for anyone who wants to see what the panel does.
     plot: { performers: [], packs: [] },
     sources: [],
+    swaps: [],
     thresholds: defaultRfThresholds()
   }
 }
@@ -359,6 +396,7 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
     rf: {
       plot: { ...defaults.rf.plot, ...rf?.plot },
       sources: rf?.sources ?? defaults.rf.sources,
+      swaps: rf?.swaps ?? defaults.rf.swaps,
       thresholds: { ...defaults.rf.thresholds, ...rf?.thresholds }
     },
     presence: { ...defaults.presence, ...settings?.presence },

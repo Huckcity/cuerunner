@@ -139,6 +139,43 @@
 
 .rf-demo-btn:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
+.rf-edit-btn {
+  height: 22px;
+  padding: 0 var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--accent-blue-dim);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.rf-edit-btn:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* The report is a different kind of row from the live one: nothing is sorted by trouble
+   because the show is over, and the columns read as a sentence about each pack. */
+.rf-report-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 110px 190px 120px 80px;
+  align-items: center;
+  gap: var(--space-2);
+  height: 22px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.rf-report-label { color: var(--fg-primary); font-weight: var(--fw-medium); }
+.rf-report-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-report-role { color: var(--fg-dim); }
+.rf-report-battery,
+.rf-report-dropouts,
+.rf-report-swaps { font-family: var(--font-mono); }
+.rf-report-swaps { color: var(--accent-amber); }
+
 /* One row per pack. The band colours the left edge — the one thing an operator scans
    for — and the columns stay in the same order so a row does not reshuffle. */
 .rf-row {

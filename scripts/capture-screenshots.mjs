@@ -164,6 +164,20 @@ await page.locator('.rf-panel').waitFor()
 await page.locator('.rf-demo-btn').click()
 await page.locator('.rf-row[data-state="critical"]').waitFor()
 await shot('13-wireless.png', '.rf-panel')
+
+// The editor, with a swap made so the figure shows the record rather than an empty list.
+await page.locator('.rf-edit').click()
+await page.locator('.plot-dialog').waitFor()
+await page.locator('.plot-pack-row').first().locator('.plot-pack-performer').selectOption({ index: 2 })
+await page.locator('.plot-swaps').waitFor()
+await shot('16-plot.png', '.plot-dialog')
+await page.locator('.plot-close').click()
+
+// And the report the same session leaves behind.
+await page.locator('.rf-mode').click()
+await page.locator('.rf-report-row').first().waitFor()
+await shot('17-report.png', '.rf-panel')
+await page.locator('.rf-mode').click()
 await page.locator('.rf-btn', { hasText: '✕' }).click()
 
 // Triggers live on the Basics tab, under the fields every cue shares.

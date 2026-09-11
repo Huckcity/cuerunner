@@ -145,15 +145,25 @@ describe('RfPanel', () => {
     expect(useStore.getState().showSettings.rf.plot.packs).toHaveLength(DEMO_PACK_COUNT)
   })
 
-  it('loads the demo rack from the header without duplicating the source', async () => {
-    await show({ plot: { performers: [], packs: [pack()] } })
+  it('loads the demo rack from the header, and does not throw a real plot away', async () => {
+    await show({ plot: { performers: [], packs: [pack({ id: 'p-mine', label: 'My pack' })] } })
 
     await act(async () => { headerButton('Demo rack').click() })
     await act(async () => { headerButton('Demo rack').click() })
 
     const settings = useStore.getState().showSettings.rf
+    // The source list is replaced rather than stacked, but a cast somebody typed in is
+    // not the demo's to overwrite: only an empty plot gets the demo one.
     expect(settings.sources).toEqual([demoSource()])
-    expect(settings.plot.packs).toHaveLength(DEMO_PACK_COUNT)
+    expect(settings.plot.packs.map(entry => entry.label)).toEqual(['My pack'])
+  })
+
+  it('loads the demo plot from the header when there is nothing to overwrite', async () => {
+    await show()
+
+    await act(async () => { headerButton('Demo rack').click() })
+
+    expect(useStore.getState().showSettings.rf.plot.packs).toHaveLength(DEMO_PACK_COUNT)
   })
 
   it('closes from the header', async () => {

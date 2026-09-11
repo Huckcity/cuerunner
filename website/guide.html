@@ -793,9 +793,55 @@ console.log(r.stdout.trim())</code></pre>
         <p>
           <strong>Demo rack</strong> loads a simulated twelve-pack show with a pack in trouble, one
           that is low and one that never reports, so the panel and its alarms can be seen without a
-          receiver on the bench. It replaces the source list rather than adding to it, and it is
-          plainly a simulation — the packs are not real hardware.
+          receiver on the bench. It replaces the source list rather than adding to it, and it
+          brings its own cast only when the plot is empty — a plot somebody entered is not the
+          demo's to overwrite. The packs are plainly a simulation and not real hardware.
         </p>
+        <h3>Entering your plot</h3>
+        <p>
+          <strong>Edit plot…</strong> opens the cast and the packs. A performer is a name and a
+          role; a pack is a label, the receiver channel it is patched to, and the performer
+          wearing it. Channels are offered from what the wireless service is already hearing, so
+          a patch is picked rather than typed from memory — but the field stays free text,
+          because a pack that is switched off today is still part of tonight's plot.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/16-plot.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/16-plot.png" alt="The mic plot editor: a cast list of names, roles and notes above a pack list with labels, receiver channels and performer assignments." />
+          </a>
+          <figcaption>The cast and the packs, with a pack just handed to a different performer.</figcaption>
+        </figure>
+        <p>
+          Text fields commit when you leave them, so nothing is rewritten mid-word. Every change
+          goes through the same operations the rest of the app uses, which is what makes the next
+          part work without anything extra.
+        </p>
+        <h3>Swaps</h3>
+        <p>
+          Handing a pack to someone else — or taking it off them — is recorded as a
+          <strong>swap</strong>: the pack, who it came off, who it went to, and when. A swap is
+          written to the run log at the moment it happens and kept in its own list, so a quick
+          change at 20:14 can be answered long after the fact. Removing a performer releases
+          every pack they were wearing, and each release is a swap in its own right.
+        </p>
+        <h3>The report</h3>
+        <p>
+          <strong>Report</strong> reads the night back: for each pack, the performer, the lowest
+          battery it reached and when, how many times it went quiet, and how many times it
+          changed hands. The same text can be copied to the clipboard, which is what goes in the
+          show file or the email about which packs need charging.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/17-report.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/17-report.png" alt="The wireless panel in report mode, one row per pack showing the performer, the lowest battery reached and when, dropouts and swaps." />
+          </a>
+          <figcaption>The night read back: what each pack got down to, and what changed hands.</figcaption>
+        </figure>
+        <div class="note">
+          The report is read from the running session: the battery floor and the dropout count
+          are kept by the wireless service as it polls, and the swaps are kept in the workspace.
+          Closing the app ends the session, so copy the report before you do.
+        </div>
         <h3>Thresholds and alarms</h3>
         <p>
           Alarms are raised on a crossing, not on every poll: a pack that sits at 8% for an hour says
