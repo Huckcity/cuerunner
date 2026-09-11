@@ -64,6 +64,7 @@
         <li><a href="#triggers">Triggers</a></li>
         <li><a href="#script-panel">The script, and the tablet</a></li>
         <li><a href="#scenes">Scenes, and the desk</a></li>
+        <li><a href="#matrix">Running the show: the matrix</a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -1015,6 +1016,50 @@ console.log(r.stdout.trim())</code></pre>
           assuming it arrived. The desk's state belongs to the session rather than the workspace: a
           show that has just loaded has not told the desk anything yet, which is why the first recall
           sends everything the plot drives.
+        </div>
+      </section>
+
+      <section id="matrix" class="panel reveal delay-4">
+        <h2>Running the show: the matrix</h2>
+        <p>
+          The cue stack is where a show is built. The <strong>Matrix</strong> switch at the top right
+          is where it is run from: the same show as a grid of scenes and mics, filling the window in
+          place of the cue list. Learning the show happens in one view and playing it happens in the
+          other, and the transport bar — GO, STOP, PANIC — stays where it is either way.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/20-matrix.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/20-matrix.png" alt="The matrix: scenes as columns with recall buttons and mic counts, mics as rows with performer names and desk groups, filled cells for the mics open in each scene, and the recalled scene's column tinted with its rows brightened." />
+          </a>
+          <figcaption>Two scenes across, twelve mics down: the recalled scene's column, and the people it has open.</figcaption>
+        </figure>
+        <h3>Reading it</h3>
+        <p>
+          A filled cell is a mic that is open in that scene. The column of the scene the desk is set
+          to is tinted, and the rows it opens are brightened — which together answer the question
+          asked most often in a radio-mic show: <em>who is on right now?</em> Each row carries the
+          pack, the performer wearing it and the group on the desk it feeds; each column carries the
+          scene's name and how many mics it opens.
+        </p>
+        <h3>Editing it</h3>
+        <p>
+          Click a cell to open or close that mic in that scene, exactly as you would in the editor —
+          the matrix is the editor, laid out the way the show is thought about. An edit never moves
+          the desk: the desk is told when you recall a scene, or when you press
+          <strong>Apply to desk (N)</strong>, which appears when the scene on stage has drifted from
+          where the desk was left and tells you how many groups are behind.
+        </p>
+        <h3>Locking it</h3>
+        <p>
+          <strong>Lock</strong> at the top right is for curtain up. While it is on, recalling stays
+          live — that is the point of the view — and every way of changing the show is closed: the
+          cells cannot be moved, and the mic plot and scene editors cannot be opened from the panels
+          either. A stray click during a number cannot change who is open.
+        </p>
+        <div class="note">
+          The lock is saved with the workspace, so a show that was locked when the app last closed
+          comes back locked — including after a crash and recovery, which is exactly when you do not
+          want to be one click away from editing the plot.
         </div>
       </section>
 

@@ -665,6 +665,7 @@ describe('CueRunner — scene cues', () => {
           }
         },
         scenes: {
+          locked: false,
           channels: [{
             id: 'dca-1',
             label: 'DCA 1 — Principals',

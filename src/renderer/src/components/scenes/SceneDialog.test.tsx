@@ -68,7 +68,7 @@ describe('SceneDialog', () => {
       useStore.setState({
         showSettings: {
           ...defaults,
-          scenes: { list: state.scenes ?? [], channels: state.channels ?? [] },
+          scenes: { list: state.scenes ?? [], channels: state.channels ?? [], locked: false },
           rf: {
             ...defaults.rf,
             plot: { performers: state.performers ?? [], packs: state.packs ?? [] }

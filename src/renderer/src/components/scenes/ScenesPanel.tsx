@@ -21,6 +21,9 @@ interface Props {
 export function ScenesPanel({ onClose }: Props) {
   const scenes = useStore(s => s.showSettings.scenes)
   const plot = useStore(s => s.showSettings.rf.plot)
+  // While the show is locked the editors are unreachable from anywhere: the panels keep
+  // working — recall above all — but nothing can be changed by a stray click.
+  const locked = scenes.locked
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
 
@@ -39,8 +42,9 @@ export function ScenesPanel({ onClose }: Props) {
         <div className="scenes-actions">
           <button
             className="scenes-btn"
+            disabled={locked}
             onClick={() => setEditing(true)}
-            title="Enter the scenes and desk groups"
+            title={locked ? 'Locked for the show — unlock in the matrix view' : 'Enter the scenes and desk groups'}
           >
             Edit scenes…
           </button>
@@ -114,7 +118,12 @@ export function ScenesPanel({ onClose }: Props) {
       {scenes.list.length === 0 && (
         <div className="scenes-empty">
           <span>No scenes yet. A scene is who is open on stage.</span>
-          <button className="scenes-edit-btn" onClick={() => setEditing(true)}>
+          <button
+            className="scenes-edit-btn"
+            disabled={locked}
+            title={locked ? 'Locked for the show — unlock in the matrix view' : undefined}
+            onClick={() => setEditing(true)}
+          >
             Edit scenes…
           </button>
         </div>

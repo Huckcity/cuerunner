@@ -1,4 +1,4 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import { createSocket } from 'dgram'
 import { mkdirSync, mkdtempSync } from 'fs'
@@ -149,6 +149,67 @@ export async function sendOsc(
       else resolve()
     })
   })
+}
+
+// ── The desk show, for the specs that need one ───────────────────────────────
+// Setting a show up through the UI is a dozen steps; the scene and matrix specs both need
+// the same show, so it is built here once.
+
+export async function liveRack(page: Page): Promise<void> {
+  await page.locator('.btn-rf').click()
+  await page.locator('.rf-demo-btn').click()
+  await expect(page.locator('.rf-row')).toHaveCount(12)
+  await page.locator('.btn-rf').click()
+}
+
+export async function openScenes(page: Page): Promise<void> {
+  await page.locator('.btn-scenes').click()
+  await expect(page.locator('.scenes-panel')).toBeVisible()
+}
+
+export async function openSceneEditor(page: Page): Promise<void> {
+  await page.locator('.scenes-actions .scenes-btn', { hasText: 'Edit scenes' }).click()
+  await expect(page.locator('.scene-dialog')).toBeVisible()
+}
+
+/** Points the first pack in the plot at a desk group, the way an operator patches it. */
+export async function firstPackFeeds(page: Page, label: string): Promise<void> {
+  await page.locator('.btn-rf').click()
+  await page.locator('.rf-edit').click()
+  await page.locator('.plot-dialog .plot-pack-desk').first().selectOption({ label })
+  await page.locator('.plot-close').click()
+  await page.locator('.btn-rf').click()
+}
+
+/**
+ * A group on the desk driven over OSC at a port the test owns, one scene with the first
+ * mic open in it, and the pack feeding that group — in the order an operator would do it.
+ */
+export async function buildDeskShow(page: Page, port: number): Promise<void> {
+  await liveRack(page)
+  await openScenes(page)
+  await openSceneEditor(page)
+
+  const dialog = page.locator('.scene-dialog')
+  await dialog.locator('.group-add').click()
+  await dialog.locator('.group-delivery').first().selectOption('osc')
+  await dialog.locator('.group-host').first().fill('127.0.0.1')
+  await dialog.locator('.group-osc-port').first().fill(String(port))
+  await dialog.locator('.group-osc-port').first().blur()
+  await dialog.locator('.group-address').first().fill('/dca/1/mute')
+  await dialog.locator('.group-address').first().blur()
+  await expect(dialog.locator('.group-summary').first()).toContainText('/dca/1/mute')
+
+  await dialog.locator('.scene-add').click()
+  await dialog.locator('.scene-mic-row').first().locator('.scene-mic-toggle').check()
+  await dialog.locator('.scene-close').click()
+
+  await firstPackFeeds(page, 'DCA 1')
+}
+
+/** A free-ish port for a test that needs to listen for OSC. */
+export function freePort(): number {
+  return 43600 + Math.floor(Math.random() * 2000)
 }
 
 export interface OscMessage {

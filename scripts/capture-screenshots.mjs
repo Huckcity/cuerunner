@@ -263,5 +263,12 @@ await page.locator('.desk-row[data-live="true"]').first().waitFor()
 await shot('18-scenes.png', '.scenes-panel')
 await page.locator('.scenes-actions .scenes-btn', { hasText: '✕' }).click()
 
+// The view the show is run from: the same show, as a matrix, filling the window.
+await page.locator('.toolbar-view-btn', { hasText: 'Matrix' }).click()
+await page.locator('.matrix-view').waitFor()
+await page.evaluate(() => document.documentElement.style.setProperty('--h-scenes', '0px'))
+await shot('20-matrix.png', '.matrix-view')
+await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
+
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
 console.log('Done.')

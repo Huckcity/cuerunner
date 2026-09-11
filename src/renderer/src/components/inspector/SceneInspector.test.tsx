@@ -50,6 +50,7 @@ describe('SceneInspector', () => {
           }
         },
         scenes: {
+          locked: false,
           channels: [{ id: 'dca-1', label: 'DCA 1', ...note }],
           list: scenes.list ?? [scene('s-1', 'Wedding', ['pack-1'])]
         }

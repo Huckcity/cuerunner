@@ -19,6 +19,8 @@ import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import type { ShowStrip } from './components/layout/TransportBar'
+import type { AppView } from './components/layout/Toolbar'
+import { MatrixView } from './components/matrix/MatrixView'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
 import './App.css'
@@ -47,6 +49,9 @@ export function App() {
   // list too little room to be a cue list. One at a time: opening one closes the other,
   // and the same button closes the one it opened.
   const [strip, setStrip] = useState<ShowStrip | null>(null)
+  // Which view fills the window. The matrix is what the show is run from; the cue stack
+  // is where it is built, and switching between them is one click at curtain up.
+  const [view, setView] = useState<AppView>('cues')
   const selected = useSelectedCue()
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
@@ -106,19 +111,29 @@ export function App() {
       <CrashNotice />
       <RecoveryNotice />
       <NoticeHost />
-      <Toolbar onOpenSettings={() => setSettingsOpen(true)} />
-      <div className="app-main">
-        <CueList />
-        <Inspector />
+      <Toolbar
+        onOpenSettings={() => setSettingsOpen(true)}
+        view={view}
+        onSwitchView={setView}
+      />
+      <div className="app-main" data-view={view}>
+        {view === 'matrix' ? (
+          <MatrixView />
+        ) : (
+          <>
+            <CueList />
+            <Inspector />
+          </>
+        )}
       </div>
-      {timelineGroupCue
+      {view === 'cues' && (timelineGroupCue
         ? <TimelineEditor
             cue={timelineGroupCue}
             expanded={timelineExpanded}
             onToggleExpand={() => setTimelineExpanded(e => !e)}
           />
         : <WaveformPanel />
-      }
+      )}
       {strip === 'monitor' && <MonitorPanel onClose={() => setStrip(null)} />}
       {strip === 'rf' && <RfPanel onClose={() => setStrip(null)} />}
       {strip === 'script' && <ScriptPanel onClose={() => setStrip(null)} />}

@@ -57,7 +57,7 @@ const OPENING = scene('s1', 'Opening', ['p1'])
 const INTERVAL = scene('s2', 'Interval', ['p3'])
 
 function settings(list: MicScene[], channels: DeskChannel[] = [ENSEMBLE, BAND, SPARE]): ScenesSettings {
-  return { channels, list }
+  return { channels, list, locked: false }
 }
 
 describe('ScenesPanel', () => {

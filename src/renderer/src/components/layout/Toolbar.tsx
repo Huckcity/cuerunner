@@ -22,9 +22,17 @@ const MORE_CUES: { type: CueType; icon: string; label: string }[] = [
 
 interface Props {
   onOpenSettings: () => void
+  view: AppView
+  onSwitchView: (view: AppView) => void
 }
 
-export function Toolbar({ onOpenSettings }: Props) {
+/**
+ * What fills the middle of the window: the cue stack the show is built in, or the matrix
+ * the show is run from.
+ */
+export type AppView = 'cues' | 'matrix'
+
+export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
   const selectedId = useStore(s => s.selectedId)
 
@@ -194,6 +202,29 @@ export function Toolbar({ onOpenSettings }: Props) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="toolbar-view" role="tablist" aria-label="View">
+        <button
+          className="toolbar-view-btn"
+          role="tab"
+          aria-selected={view === 'cues'}
+          data-active={view === 'cues'}
+          onClick={() => onSwitchView('cues')}
+          title="The cue stack"
+        >
+          Cues
+        </button>
+        <button
+          className="toolbar-view-btn"
+          role="tab"
+          aria-selected={view === 'matrix'}
+          data-active={view === 'matrix'}
+          onClick={() => onSwitchView('matrix')}
+          title="Scenes and mics, for running the show"
+        >
+          Matrix
+        </button>
       </div>
     </div>
   )
