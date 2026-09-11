@@ -62,3 +62,30 @@ test('STOP takes a running script away with it', async () => {
   await page.getByRole('button', { name: /GO/ }).click()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 })
+
+test('a stop cue aimed at a script takes that run away too', async () => {
+  await addScriptCue('while (true) {}', 120_000)
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(page.locator('.running-badge')).toContainText('1 running')
+
+  // A stop cue for the script alone, not for everything.
+  await page.locator('.toolbar-cue-btn', { hasText: 'Stop' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
+  await page.locator('.field-row').filter({ hasText: 'Target' }).locator('select').selectOption({ index: 1 })
+
+  await page.locator('.cue-row').nth(1).click()
+  await page.getByRole('button', { name: /GO/ }).click()
+
+  // The script is gone, and it records nothing: nothing was wrong with it.
+  await expect(page.locator('.running-badge')).toHaveText('idle')
+  await page.locator('.cue-row').first().click()
+  await page.locator('.inspector-tab', { hasText: 'Script' }).click()
+  await expect(page.locator('.last-run-badge')).toHaveCount(0)
+
+  // The interface answered throughout, and the show still runs.
+  await expect.poll(() => page.evaluate(() => 1 + 1)).toBe(2)
+  await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
+  await page.locator('.cue-row').nth(2).click()
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(page.locator('.running-badge')).toContainText('1 running')
+})

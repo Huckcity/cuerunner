@@ -485,8 +485,18 @@ export class CueRunner {
     const fadeMs = cue.fadeOut ? cue.fadeOutDuration : 0
     if (cue.targetCueId === 'all') {
       audioPlayer.stopAll(fadeMs)
+      // A script runs in a worker of its own, so stopping the audio cannot reach it:
+      // "everything" has to take the scripts the way STOP does.
+      scriptHost.cancelAll()
     } else {
       audioPlayer.stop(cue.targetCueId, fadeMs)
+      const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
+      if (target?.type === 'script') {
+        scriptHost.cancel(target.id)
+        // A cancelled run records nothing and never completes, so the cue it was
+        // running for has to be released here, or it stays lit for the rest of the show.
+        this.deps!.setRunning(target.id, null)
+      }
     }
     // A wait-for-fade stop keeps the run open until the fade has finished sounding,
     // so the next cue does not start over it.

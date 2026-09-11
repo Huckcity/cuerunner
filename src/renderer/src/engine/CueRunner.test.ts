@@ -928,6 +928,16 @@ describe('CueRunner — script cue', () => {
     }
   }
 
+  function makeStop(overrides: Partial<StopCue> = {}): StopCue {
+    return {
+      id: 's1', number: '1', name: 'Stop', type: 'stop',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      targetCueId: 'all', fadeOut: false, fadeOutDuration: 0, waitForFade: false,
+      ...overrides
+    }
+  }
+
   it('holds the cue open until the script settles, then completes it', async () => {
     const script = Promise.withResolvers<void>()
     scriptHostMock.run.mockReturnValue(script.promise)
@@ -1024,6 +1034,51 @@ describe('CueRunner — script cue', () => {
     scriptHostMock.cancelAll.mockClear()
     runner.panic()
     expect(scriptHostMock.cancelAll).toHaveBeenCalled()
+  })
+
+  it('lets a stop cue take a script run away, and releases the cue', () => {
+    const run = Promise.withResolvers<void>()
+    scriptHostMock.run.mockReturnValue(run.promise)
+    const script = makeScript({ id: 'sc1', number: '1' })
+    const stop = makeStop({ id: 's1', number: '2', targetCueId: 'sc1' })
+    const { runner, setRunning, setLastRun } = setup([script, stop])
+
+    runner.go()
+    expect(setRunning).toHaveBeenCalledWith('sc1', expect.objectContaining({ state: 'playing' }))
+
+    // The stop cue is fired on its own: the script it aims at is the running one.
+    runner.goById('s1')
+
+    expect(scriptHostMock.cancel).toHaveBeenCalledWith('sc1')
+    expect(setRunning).toHaveBeenCalledWith('sc1', null)
+    // Cancelled is not failed and not finished: the script records no run result, as with STOP.
+    expect(setLastRun).not.toHaveBeenCalledWith('sc1', expect.anything())
+  })
+
+  it('lets a stop cue that stops everything take running scripts with it', () => {
+    const run = Promise.withResolvers<void>()
+    scriptHostMock.run.mockReturnValue(run.promise)
+    const script = makeScript({ id: 'sc1' })
+    const stop = makeStop({ id: 's1', targetCueId: 'all' })
+    const { runner } = setup([script, stop])
+
+    runner.go()
+    runner.goById('s1')
+
+    expect(scriptHostMock.cancelAll).toHaveBeenCalled()
+  })
+
+  it('leaves a cue of another type to its own run when a stop cue targets it', () => {
+    const audio = makeAudio({ id: 'a1' })
+    const stop = makeStop({ id: 's1', number: '2', targetCueId: 'a1' })
+    const { runner, setRunning } = setup([audio, stop])
+
+    runner.goById('s1')
+
+    expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 0)
+    // The run stays lit until the audio actually ends; only scripts are taken away here.
+    expect(scriptHostMock.cancel).not.toHaveBeenCalled()
+    expect(setRunning).not.toHaveBeenCalledWith('a1', null)
   })
 })
 
