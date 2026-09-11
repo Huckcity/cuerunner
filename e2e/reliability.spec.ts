@@ -25,9 +25,12 @@ test('recovers from a renderer crash with an explanation', async () => {
   app.process().stdout?.on('data', chunk => mainLog.push(String(chunk)))
   app.process().stderr?.on('data', chunk => mainLog.push(String(chunk)))
 
-  await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0].webContents.forcefullyCrashRenderer()
-  })
+  // A real crash: the renderer process is killed outright. Electron's
+  // forcefullyCrashRenderer() goes through Chromium's hung-process path instead, which
+  // on a GPU-less runner leaves the window with no renderer and nothing reloading it.
+  const rendererPid = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.getOSProcessId())
+  process.kill(rendererPid, 'SIGKILL')
 
   // executeJavaScript issued while the renderer is being torn down never settles, and
   // isCrashed() can still read false for a moment after the crash is requested — so a
