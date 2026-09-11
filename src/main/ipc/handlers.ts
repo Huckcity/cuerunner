@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { app, ipcMain, dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
 import { exec } from 'child_process'
 import * as path from 'path'
@@ -23,6 +23,9 @@ function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
 }
 
 export function registerIpcHandlers(): void {
+  // OSC keeps a socket open per destination, so the process has to let go of them.
+  app.on('before-quit', () => osc.close())
+
   // Audio
   ipcMain.handle('audio:readFile', async (_, filePath: string) => {
     const buf = await readFile(filePath)
