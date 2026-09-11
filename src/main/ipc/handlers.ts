@@ -126,6 +126,19 @@ export function registerIpcHandlers(): void {
     return { code: await readFile(resolved, 'utf-8'), path: resolved }
   })
 
+  // The script panel reads the document the same way a script cue reads its includes.
+  ipcMain.handle('script:pickFile', async (event) => {
+    const result = await dialog.showOpenDialog(getWin(event), {
+      title: 'Select Script',
+      filters: [
+        { name: 'Script', extensions: ['txt', 'md', 'markdown', 'fountain', 'cue'] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : result.filePaths[0] ?? null
+  })
+
   ipcMain.handle(
     'script:shell',
     async (

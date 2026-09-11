@@ -13,8 +13,10 @@ import { useAutosave } from './hooks/useAutosave'
 import { LogPanel } from './components/log/LogPanel'
 import { MonitorPanel } from './components/monitor/MonitorPanel'
 import { RfPanel } from './components/rf/RfPanel'
+import { ScriptPanel } from './components/script/ScriptPanel'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
+import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import type { ShowStrip } from './components/layout/TransportBar'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
@@ -37,6 +39,7 @@ export function App() {
   useAutosave()
   useShowBridge()
   useCueTriggers()
+  useCompanionPublisher()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [timelineExpanded, setTimelineExpanded] = useState(false)
   // The panels along the bottom share the space, and together they would leave the cue
@@ -117,6 +120,7 @@ export function App() {
       }
       {strip === 'monitor' && <MonitorPanel onClose={() => setStrip(null)} />}
       {strip === 'rf' && <RfPanel onClose={() => setStrip(null)} />}
+      {strip === 'script' && <ScriptPanel onClose={() => setStrip(null)} />}
       {strip === 'log' && <LogPanel onClose={() => setStrip(null)} />}
       <TransportBar
         strip={strip}

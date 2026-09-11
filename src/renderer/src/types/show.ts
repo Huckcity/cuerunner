@@ -218,6 +218,54 @@ export interface ShowSettings {
   midiIn: MidiInSettings
   rf: RfSettings
   presence: PresenceSettings
+  script: ScriptSettings
+  companion: CompanionSettings
+}
+
+// ── The script, and the tablet reading it ───────────────────────────────────
+//
+// A script lives open beside the cue stack, and cues are pinned to the lines they fire
+// on. The companion serves that view — and the running order with it — over the local
+// network, so the tablet on the music stand needs no app of its own.
+
+export interface ScriptSettings {
+  /** Path to the script document. Empty means none is loaded. */
+  path: string
+  /** Point size in the panel and on the companion, so it reads from a music stand. */
+  fontSize: number
+}
+
+export interface CompanionSettings {
+  enabled: boolean
+  port: number
+  /**
+   * Shared secret carried in the URL. Anyone on the network with it can watch the show;
+   * nobody without it can, and nothing on the companion can change anything.
+   */
+  token: string
+}
+
+/** What the tablet is shown. Published by the renderer, served by the companion. */
+export interface CompanionCue {
+  id: string
+  number: string
+  name: string
+  type: string
+  parentId: string | null
+  /** Line of the script this cue fires on, when it is pinned to one. */
+  scriptLine: number | null
+}
+
+export interface CompanionState {
+  /** When this snapshot was published, so a stale page can say so. */
+  at: number
+  workspaceName: string
+  /** The cue GO would fire next. */
+  nextCue: CompanionCue | null
+  running: Array<{ id: string; number: string; name: string; state: string }>
+  cues: CompanionCue[]
+  script: { path: string; lines: string[] } | null
+  alerts: Array<{ id: number; level: AlertLevel; message: string }>
 }
 
 // ── Presence: what is on the show network ───────────────────────────────────
@@ -267,8 +315,19 @@ export function defaultShowSettings(): ShowSettings {
     // whole room's traffic. The operator picks the ports.
     midiIn: { enabled: false, portNames: [] },
     rf: defaultRfSettings(),
-    presence: defaultPresenceSettings()
+    presence: defaultPresenceSettings(),
+    script: defaultScriptSettings(),
+    companion: defaultCompanionSettings()
   }
+}
+
+export function defaultScriptSettings(): ScriptSettings {
+  return { path: '', fontSize: 13 }
+}
+
+/** The companion is off until it is asked for: it puts the show on the network. */
+export function defaultCompanionSettings(): CompanionSettings {
+  return { enabled: false, port: 53100, token: '' }
 }
 
 /** Browsing the network is off until the operator asks for it: it is the noisiest
@@ -293,6 +352,8 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
       sources: rf?.sources ?? defaults.rf.sources,
       thresholds: { ...defaults.rf.thresholds, ...rf?.thresholds }
     },
-    presence: { ...defaults.presence, ...settings?.presence }
+    presence: { ...defaults.presence, ...settings?.presence },
+    script: { ...defaults.script, ...settings?.script },
+    companion: { ...defaults.companion, ...settings?.companion }
   }
 }

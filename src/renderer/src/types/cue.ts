@@ -38,6 +38,11 @@ export interface CueBase {
    * existed has none, and the migration fills the list in.
    */
   triggers?: CueTrigger[]
+  /**
+   * The line of the script this cue fires on, 1-based, for the script panel and the
+   * tablet reading it. Null or absent means it is not pinned to anything.
+   */
+  scriptLine?: number | null
 }
 
 export interface AudioOutput {

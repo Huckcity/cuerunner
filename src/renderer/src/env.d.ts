@@ -43,6 +43,7 @@ interface WinslabBridge {
       workspacePath: string | null,
       base?: string
     ) => Promise<{ code: string; path: string }>
+    pickFile: () => Promise<string | null>
     shell: (
       command: string,
       options?: { timeout?: number; cwd?: string; env?: Record<string, string> }

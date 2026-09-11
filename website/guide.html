@@ -62,6 +62,7 @@
         <li><a href="#show-services">The show around the cue stack</a></li>
         <li><a href="#wireless">Wireless and the mic plot</a></li>
         <li><a href="#triggers">Triggers</a></li>
+        <li><a href="#script-panel">The script, and the tablet</a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -98,8 +99,8 @@
           <li><strong>Inspector</strong> — settings for the selected cue. Tabs change with the cue type.</li>
           <li><strong>Waveform / timeline</strong> — the waveform of the selected audio cue, or the timeline editor when a timeline-mode group is selected.</li>
           <li><strong>Run log</strong> — hidden by default; the LOG button in the transport bar reveals it.</li>
-          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF) and the selected cue.</li>
-          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, or the wireless panel. Whichever button is lit is the one showing.</li>
+          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF, SCRIPT) and the selected cue.</li>
+          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, the wireless panel, or the script. Whichever button is lit is the one showing.</li>
         </ol>
       </section>
 
@@ -847,6 +848,48 @@ console.log(r.stdout.trim())</code></pre>
         </div>
       </section>
 
+      <section id="script-panel" class="panel reveal delay-4">
+        <h2>The script, and the tablet</h2>
+        <p>
+          Most operators keep the script open while they work. The SCRIPT button puts it in the
+          strip: the document, the cue that fires on each line pinned to it, and the line the next
+          GO will fire from marked as the show moves.
+        </p>
+        <figure class="figure">
+          <a href="./assets/guide/15-script.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/15-script.png" alt="The script panel showing numbered lines of a script with a cue number pinned to one line and the line of the next cue highlighted." />
+          </a>
+          <figcaption>A cue pinned to the line it fires on, with the next cue's line marked.</figcaption>
+        </figure>
+        <h3>Pinning cues to lines</h3>
+        <p>
+          Choose the file, then select a cue and click the number of the line it fires on. The line
+          lists the cues pinned to it, and clicking the number again unpins. The line is stored on
+          the cue, so the pins travel with the workspace — and a script that is replaced by a later
+          draft keeps them, because a line number is a line number.
+        </p>
+        <h3>Following the show</h3>
+        <p>
+          The line of the cue GO would fire next is highlighted and scrolled into view. Scroll the
+          document yourself and the follow releases, so reading ahead is not yanked back; the
+          follow button returns to the show. <strong>A−</strong> and <strong>A+</strong> set the
+          size, which is remembered in the workspace.
+        </p>
+        <h3>The tablet</h3>
+        <p>
+          The companion serves a read-only view of the show — the running order, the next cue, what
+          is running now, the script with the current line marked, and the recent alarms — to
+          anything on the same network with a browser. There is nothing to install: open the address
+          the Show tab reports, with the token on the end of it.
+        </p>
+        <p>
+          It is off until it is switched on, and it refuses every request that does not carry the
+          token. Nothing on the companion can change anything: it is a window on the show, not a
+          control surface. Anyone on the same network who has the token can watch, so treat it the
+          way you would treat a script left open on the desk.
+        </p>
+      </section>
+
       <section id="settings" class="panel reveal delay-4">
         <h2>Settings</h2>
         <figure class="figure shot-narrow">
@@ -868,6 +911,7 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td>Show</td><td>MIDI input</td><td>Which input ports are opened. With none selected every available input is opened, and a port that appears later is opened when it arrives.</td></tr>
               <tr><td>Show</td><td>Wireless telemetry</td><td>The sources the wireless panel reads, one row per source: a name, HTTP or file, and the URL or path. Each section also reports what its service is doing, so a change is confirmed on the screen that made it.</td></tr>
               <tr><td>Show</td><td>Network presence</td><td>Whether to browse the network, which mDNS service types to browse, and how long a device may stay quiet before it counts as gone.</td></tr>
+              <tr><td>Show</td><td>Tablet companion</td><td>Whether to serve the show on the network, on which port, and with which token. The address to open on the tablet is reported underneath once the service is running.</td></tr>
             </tbody>
           </table>
         </div>

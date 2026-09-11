@@ -71,6 +71,8 @@ contextBridge.exposeInMainWorld('winslab', {
       base?: string
     ): Promise<{ code: string; path: string }> =>
       ipcRenderer.invoke('script:readFile', relativePath, workspacePath, base),
+    pickFile: (): Promise<string | null> =>
+      ipcRenderer.invoke('script:pickFile'),
     shell: (
       command: string,
       options?: { timeout?: number; cwd?: string; env?: Record<string, string> }

@@ -13,7 +13,7 @@ export function SettingsDialog({ onClose }: Props) {
   const {
     audioSettings, midiSettings, showSettings, showServices,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
-    updateRfSettings, updatePresenceSettings
+    updateRfSettings, updatePresenceSettings, updateCompanionSettings
   } = useStore()
   const [tab, setTab] = useState<'audio' | 'midi' | 'show'>('audio')
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
@@ -78,6 +78,20 @@ export function SettingsDialog({ onClose }: Props) {
   const midiService = showServices.find(service => service.id === 'midi-in')
   const presenceService = showServices.find(service => service.id === 'presence')
   const rfService = showServices.find(service => service.id === 'rf')
+  const companionService = showServices.find(service => service.id === 'companion')
+
+  const [companionPortDraft, setCompanionPortDraft] = useState<string | null>(null)
+
+  const commitCompanionPort = (): void => {
+    const port = Number(companionPortDraft)
+    if (
+      companionPortDraft !== null &&
+      Number.isInteger(port) && port >= 1 && port <= 65535
+    ) {
+      updateCompanionSettings({ port })
+    }
+    setCompanionPortDraft(null)
+  }
 
   // Both of these are lists the operator types, so they are committed on the way out of
   // the field: rebuilding the input from the store on every keystroke would eat the
@@ -370,6 +384,59 @@ export function SettingsDialog({ onClose }: Props) {
               {presenceService && (
                 <div className="settings-service" data-service={presenceService.id} data-state={presenceService.state}>
                   {presenceService.state} — {presenceService.detail}
+                </div>
+              )}
+
+              <div className="field-section-title">Tablet companion</div>
+              <div className="field-row">
+                <label htmlFor="settings-companion">Serve</label>
+                <input
+                  id="settings-companion"
+                  type="checkbox"
+                  checked={showSettings.companion.enabled}
+                  onChange={e => updateCompanionSettings({ enabled: e.target.checked })}
+                />
+                <span className="settings-info">A read-only view of the show on the local network</span>
+              </div>
+              <div className="field-row">
+                <label htmlFor="settings-companion-port">Port</label>
+                <input
+                  id="settings-companion-port"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={companionPortDraft ?? String(showSettings.companion.port)}
+                  disabled={!showSettings.companion.enabled}
+                  onChange={e => setCompanionPortDraft(e.target.value)}
+                  onBlur={commitCompanionPort}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitCompanionPort()
+                  }}
+                />
+              </div>
+              <div className="field-row">
+                <label htmlFor="settings-companion-token">Token</label>
+                <input
+                  id="settings-companion-token"
+                  value={showSettings.companion.token}
+                  placeholder="required — anyone without it is refused"
+                  onChange={e => updateCompanionSettings({ token: e.target.value })}
+                />
+                <button
+                  className="inspector-btn"
+                  onClick={() => updateCompanionSettings({ token: crypto.randomUUID().slice(0, 8) })}
+                >
+                  New
+                </button>
+              </div>
+              <p className="inspector-hint">
+                The address to open on the tablet is reported below once the service is
+                running. Nothing on the companion can change the show: it is a window, not
+                a control surface. Anyone on the same network who has the token can watch it.
+              </p>
+              {companionService && (
+                <div className="settings-service" data-service={companionService.id} data-state={companionService.state}>
+                  {companionService.state} — {companionService.detail}
                 </div>
               )}
             </>

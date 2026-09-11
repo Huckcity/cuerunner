@@ -13,6 +13,7 @@
 import { _electron as electron } from '@playwright/test'
 import { Client } from 'node-osc'
 import fs from 'node:fs'
+import os from 'node:os'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -171,6 +172,32 @@ await page.locator('#trigger-osc-address').fill('/eos/cue/12/fire')
 await page.locator('.trigger-section[data-kind="osc"] .trigger-add').click()
 await page.locator('.trigger-row[data-kind="osc"]').waitFor()
 await shot('14-triggers.png', '.inspector')
+
+// The script panel, with a cue pinned to the line it fires on. The picker is the OS's,
+// so it is answered directly and everything after it — reading the file, rendering the
+// lines, pinning the cue — happens for real.
+const scriptPath = path.join(os.tmpdir(), 'winslab-guide-script.txt')
+fs.writeFileSync(scriptPath, [
+  'ACT ONE',
+  '',
+  'The house lights dim. WALK-IN MUSIC under.',
+  '',
+  'ALDonza enters downstage left, dragging the chair.',
+  '',
+  'SANCHO: I am Sancho Panza, and this is my master.',
+  '',
+  'The windmill turns. LIGHTING: cue 12 on "master".'
+].join('\n'))
+await app.evaluate(async ({ dialog }, picked) => {
+  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [picked] })
+}, scriptPath)
+await page.locator('.btn-script').click()
+await page.locator('.script-choose').click()
+await page.locator('.script-line').first().waitFor()
+await page.locator('.script-line[data-line="5"] .script-line-no').click()
+await page.locator('.script-pin').waitFor()
+await page.evaluate(() => document.documentElement.style.setProperty('--h-script', '430px'))
+await shot('15-script.png', '.script-panel')
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
 console.log('Done.')

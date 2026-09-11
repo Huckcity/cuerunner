@@ -3,12 +3,14 @@ import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
 import type { AudioSettings, MidiSettings } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
+  CompanionSettings,
   DeviceState,
   DeviceEvent,
   MidiInSettings,
   OscInSettings,
   PresenceSettings,
   RfSettings,
+  ScriptSettings,
   ServiceEvent,
   ServiceStatus,
   ShowAlert,
@@ -149,6 +151,8 @@ interface CueListState {
   updateMidiInSettings: (patch: Partial<MidiInSettings>) => void
   updateRfSettings: (patch: Partial<RfSettings>) => void
   updatePresenceSettings: (patch: Partial<PresenceSettings>) => void
+  updateScriptSettings: (patch: Partial<ScriptSettings>) => void
+  updateCompanionSettings: (patch: Partial<CompanionSettings>) => void
 
   // Undo / redo
   undo: () => void
@@ -541,6 +545,16 @@ export const useStore = create<CueListState>((set) => ({
 
   updatePresenceSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, presence: { ...s.showSettings.presence, ...patch } },
+    isDirty: true
+  })),
+
+  updateScriptSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, script: { ...s.showSettings.script, ...patch } },
+    isDirty: true
+  })),
+
+  updateCompanionSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, companion: { ...s.showSettings.companion, ...patch } },
     isDirty: true
   }))
 }))

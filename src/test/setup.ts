@@ -32,6 +32,7 @@ Object.defineProperty(window, 'winslab', {
     },
     script: {
       readFile: vi.fn(() => Promise.resolve({ code: '', path: '' })),
+      pickFile: vi.fn(() => Promise.resolve(null)),
       shell: vi.fn(() => Promise.resolve({ stdout: '', stderr: '', code: 0, signal: null }))
     },
     workspace: {

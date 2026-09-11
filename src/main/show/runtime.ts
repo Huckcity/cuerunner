@@ -4,6 +4,7 @@ import { OscInputService } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
 import { WirelessService } from '../services/WirelessService'
 import { PresenceService } from '../services/PresenceService'
+import { CompanionService } from '../services/CompanionService'
 import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../renderer/src/types/show'
 
 export function defaultServices(): ShowService[] {
@@ -11,7 +12,8 @@ export function defaultServices(): ShowService[] {
     new OscInputService(),
     new MidiInputService(),
     new WirelessService(),
-    new PresenceService()
+    new PresenceService(),
+    new CompanionService()
   ]
 }
 
