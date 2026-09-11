@@ -1,3 +1,18 @@
+# [0.12.0](https://github.com/Huckcity/winslab/compare/v0.11.0...v0.12.0) (2026-09-11)
+
+
+### Bug Fixes
+
+* **engine:** let a stop cue take a script run away ([9316e64](https://github.com/Huckcity/winslab/commit/9316e64b03a4085b53bf05b2b0b03f7822487364))
+* **engine:** stop a group with its children ([6fa9d7a](https://github.com/Huckcity/winslab/commit/6fa9d7ae83f7cbacac40c287ab9c5f8e2e1b3015))
+* **inspector:** close the decoding context when a file will not decode ([b9fc854](https://github.com/Huckcity/winslab/commit/b9fc8540277dc4a122237955abc1d1481e0aa4a2))
+* **osc:** keep one socket per destination instead of one per send ([951a200](https://github.com/Huckcity/winslab/commit/951a20015722075cb97269c6416a86ee88757f03))
+
+
+### Features
+
+* **script:** give include() module semantics ([9036a3f](https://github.com/Huckcity/winslab/commit/9036a3f1bd0306bdaa75c53c80653557013168b0))
+
 # [0.11.0](https://github.com/Huckcity/winslab/compare/v0.10.0...v0.11.0) (2026-09-11)
 
 
