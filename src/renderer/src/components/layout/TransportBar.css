@@ -83,7 +83,9 @@
   color: var(--state-running-fg);
 }
 
-.btn-log {
+.btn-log,
+.btn-monitor,
+.btn-rf {
   margin-left: var(--space-2);
   height: var(--h-button-sm);
   padding: 0 var(--space-2);
@@ -99,9 +101,13 @@
   transition: var(--transition-std);
 }
 
-.btn-log:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.btn-log:hover,
+.btn-monitor:hover,
+.btn-rf:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
-.btn-log[data-active='true'] {
+.btn-log[data-active='true'],
+.btn-monitor[data-active='true'],
+.btn-rf[data-active='true'] {
   background: var(--accent-blue-glow);
   border-color: var(--accent-blue-dim);
   color: var(--accent-blue);

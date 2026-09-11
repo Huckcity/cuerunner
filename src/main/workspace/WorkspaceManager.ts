@@ -4,6 +4,7 @@ import { dirname, join } from 'path'
 import { writeFileAtomically } from './recovery'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { Cue } from '../../renderer/src/types/cue'
+import { defaultShowSettings, normalizeShowSettings } from '../../renderer/src/types/show'
 
 // Cues come out of a JSON file, so they can still carry fields a previous version
 // wrote and this one no longer knows about. Read and delete those through here.
@@ -20,6 +21,7 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   if (cue.isArmed === undefined) cue.isArmed = true
   if (cue.notes === undefined) cue.notes = ''
   if (cue.parentId === undefined) cue.parentId = null
+  if (cue.triggers === undefined) cue.triggers = []
   if (cue.type === 'audio') {
     if (cue.playbackRate === undefined) cue.playbackRate = 1.0
     if (cue.trim === undefined) cue.trim = 1.0
@@ -69,6 +71,9 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
   }
 
   workspace.cues = cues
+  // A workspace written before the show services existed has no port settings; the
+  // defaults bring it up listening where a new one would.
+  workspace.showSettings = normalizeShowSettings(workspace.showSettings)
   return workspace
 }
 
@@ -172,6 +177,7 @@ export function blankWorkspace(name = 'Untitled'): Workspace {
     createdAt: new Date().toISOString(),
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
+    showSettings: defaultShowSettings(),
     cues: []
   }
 }

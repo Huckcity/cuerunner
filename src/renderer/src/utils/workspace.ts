@@ -7,6 +7,7 @@ export function buildWorkspace(
   cues: Workspace['cues'],
   audioSettings: Workspace['audioSettings'],
   midiSettings: Workspace['midiSettings'],
+  showSettings: Workspace['showSettings'],
 ): Workspace {
   return {
     version: 1,
@@ -15,6 +16,7 @@ export function buildWorkspace(
     createdAt: new Date().toISOString(),
     audioSettings,
     midiSettings,
+    showSettings,
     cues
   }
 }

@@ -13,14 +13,14 @@ function reportFailure(message: string): void {
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 async function guardDirty(): Promise<boolean> {
-  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded } =
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
 
   const response = await window.winslab.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
     let savedPath: string | null
     try {
       savedPath = await window.winslab.workspace.save(ws, workspacePath)
@@ -49,7 +49,8 @@ function loadIntoStore(workspace: Workspace, path: string | null): void {
     workspace.name || 'Untitled',
     path,
     workspace.audioSettings,
-    workspace.midiSettings
+    workspace.midiSettings,
+    workspace.showSettings
   )
 }
 
@@ -112,9 +113,9 @@ export function useWorkspace() {
   }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, saveSucceeded } =
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, saveSucceeded } =
       useStore.getState()
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
     try {
       const savedPath = await window.winslab.workspace.save(ws, workspacePath)
       if (!savedPath) return false
@@ -129,8 +130,9 @@ export function useWorkspace() {
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, cues, audioSettings, midiSettings, saveSucceeded } = useStore.getState()
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings)
+    const { workspaceName, cues, audioSettings, midiSettings, showSettings, saveSucceeded } =
+      useStore.getState()
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
     try {
       const savedPath = await window.winslab.workspace.saveAs(ws)
       if (!savedPath) return false

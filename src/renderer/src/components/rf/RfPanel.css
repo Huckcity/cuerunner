@@ -1,0 +1,253 @@
+/* The wireless panel is the mic plot with the telemetry joined to it: who is wearing
+   which pack, and which pack is in trouble. It is sorted worst-first, so the row that
+   needs a body on stage is always the one at the top of the list. */
+.rf-panel {
+  display: flex;
+  flex-direction: column;
+  height: var(--h-monitor);
+  flex-shrink: 0;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+.rf-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--h-waveform-header);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.rf-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.rf-count {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+.rf-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.rf-btn {
+  height: 18px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.rf-btn:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* Alarms sit between the header and the plot for the same reason they do in the
+   monitor: a pack about to die must not be something the operator scrolls to find. */
+.rf-alerts {
+  display: flex;
+  flex-direction: column;
+  max-height: 72px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: var(--bg-well);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.rf-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  border-left: 2px solid var(--fg-dim);
+  font-size: var(--text-base);
+}
+
+.rf-alert[data-level='info']     { border-left-color: var(--accent-blue); }
+.rf-alert[data-level='warning']  { border-left-color: var(--accent-amber); }
+.rf-alert[data-level='critical'] { border-left-color: var(--cue-color-red); }
+
+.rf-alert-message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-alert[data-level='info'] .rf-alert-message     { color: var(--fg-muted); }
+.rf-alert[data-level='warning'] .rf-alert-message  { color: var(--fg-body); }
+.rf-alert[data-level='critical'] .rf-alert-message { color: var(--fg-primary); }
+
+.rf-alert-dismiss {
+  flex-shrink: 0;
+  height: 16px;
+  padding: 0 var(--space-1);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--fg-dim);
+  font-size: var(--text-xs);
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.rf-alert-dismiss:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.rf-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--space-1);
+}
+
+.rf-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+.rf-demo-btn {
+  height: 22px;
+  padding: 0 var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.rf-demo-btn:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* One row per pack. The band colours the left edge — the one thing an operator scans
+   for — and the columns stay in the same order so a row does not reshuffle. */
+.rf-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 84px 128px 128px 140px 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  border-left: 2px solid transparent;
+  font-size: var(--text-base);
+}
+
+.rf-row:hover { background: var(--bg-card); }
+
+.rf-row[data-state='critical']  { border-left-color: var(--cue-color-red); }
+.rf-row[data-state='offline']   { border-left-color: var(--fg-dim); }
+.rf-row[data-state='silent']    { border-left-color: var(--border-input); }
+.rf-row[data-state='low']       { border-left-color: var(--accent-amber); }
+.rf-row[data-state='ok']        { border-left-color: var(--state-running-fg); }
+.rf-row[data-state='unpatched'] { border-left-color: var(--border-soft); }
+
+.rf-name {
+  color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The pack in trouble wears the colour; the rest stay quiet. */
+.rf-row[data-state='critical'] .rf-name { color: var(--cue-color-red); font-weight: var(--fw-medium); }
+.rf-row[data-state='low'] .rf-name      { color: var(--fg-primary); }
+.rf-row[data-state='unpatched'] .rf-name { color: var(--fg-dim); }
+
+.rf-performer {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-body);
+}
+
+.rf-row[data-state='unpatched'] .rf-performer { color: var(--fg-dim); }
+
+.rf-role {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+/* Battery and RF read the same way: a small bar with its number beside it. A pack
+   that reports neither leaves the cell empty rather than drawing a zero. */
+.rf-battery,
+.rf-rf {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rf-bar-track {
+  flex: 1;
+  min-width: 24px;
+  height: 6px;
+  background: var(--bg-well);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.rf-bar {
+  display: block;
+  height: 100%;
+  background: var(--fg-muted);
+}
+
+.rf-row[data-state='ok'] .rf-bar        { background: var(--state-running-fg); }
+.rf-row[data-state='low'] .rf-bar       { background: var(--accent-amber); }
+.rf-row[data-state='critical'] .rf-bar  { background: var(--cue-color-red); }
+.rf-row[data-state='offline'] .rf-bar,
+.rf-row[data-state='silent'] .rf-bar,
+.rf-row[data-state='unpatched'] .rf-bar { background: var(--fg-dim); }
+
+.rf-bar-value {
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-tertiary);
+}
+
+.rf-readout {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-tertiary);
+}
+
+.rf-notes {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}

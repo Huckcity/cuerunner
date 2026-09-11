@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
 import type { AudioCue } from '../types/cue'
+import type {
+  AlertEvent,
+  AlertLevel,
+  DeviceEvent,
+  DeviceState,
+  ServiceEvent,
+  ShowEvent
+} from '../types/show'
 
 function resetStore() {
   useStore.setState({
@@ -760,5 +768,135 @@ describe('store — hooks logic', () => {
     const cue = state.cues.find(c => c.id === 'nonexistent')
     const parent = cue?.parentId ? state.cues.find(c => c.id === cue.parentId) : null
     expect(parent).toBeNull()
+  })
+})
+
+// ── Show services ────────────────────────────────────────────────────────────
+// The renderer's view of what the main process reports: devices on stage, service
+// state, and the alarms. A batch of events arrives 20 times a second during a show,
+// so what it does NOT do to state matters as much as what it does.
+
+let alertSeq = 0
+
+function deviceEvent(device: Partial<DeviceState> & { id: string; name: string }): DeviceEvent {
+  return {
+    kind: 'device',
+    at: 1000,
+    device: { service: 'test', online: true, lastSeen: 1000, ...device }
+  }
+}
+
+function serviceEvent(id: string, state: ServiceEvent['service']['state'], detail: string): ServiceEvent {
+  return { kind: 'service', at: 1000, service: { id, label: id, state, detail, since: 1000 } }
+}
+
+function alertEvent(level: AlertLevel, source: string, message: string): AlertEvent {
+  return {
+    kind: 'alert',
+    at: 1000,
+    alert: { id: ++alertSeq, at: 1000, level, source, message }
+  }
+}
+
+function oscEvent(address: string): ShowEvent {
+  return { kind: 'osc', at: 1000, from: '10.0.0.5:8000', address, args: [] }
+}
+
+describe('store — show services', () => {
+  beforeEach(() => {
+    resetStore()
+    useStore.setState({ showServices: [], showDevices: [], showAlerts: [], showEvents: [] })
+  })
+
+  it('keeps the newest reading of each device, in the order the devices appeared', () => {
+    useStore.getState().applyShowEvents([
+      deviceEvent({ id: 'rf:1', name: 'Pack 1', battery: { percent: 90 } }),
+      deviceEvent({ id: 'rf:2', name: 'Pack 2', battery: { percent: 80 } })
+    ])
+    useStore.getState().applyShowEvents([
+      deviceEvent({ id: 'rf:1', name: 'Pack 1', battery: { percent: 20 } })
+    ])
+
+    const devices = useStore.getState().showDevices
+    expect(devices.map(device => device.name)).toEqual(['Pack 1', 'Pack 2'])
+    expect(devices[0].battery?.percent).toBe(20)
+  })
+
+  it('replaces a service entry rather than adding a second row for it', () => {
+    useStore.getState().applyShowEvents([serviceEvent('osc-in', 'starting', 'binding')])
+    useStore.getState().applyShowEvents([serviceEvent('osc-in', 'running', 'listening on 0.0.0.0:53000')])
+
+    expect(useStore.getState().showServices).toEqual([
+      expect.objectContaining({ id: 'osc-in', state: 'running', detail: 'listening on 0.0.0.0:53000' })
+    ])
+  })
+
+  it('does not churn the device list for a batch that carries no device news', () => {
+    useStore.getState().applyShowEvents([deviceEvent({ id: 'rf:1', name: 'Pack 1' })])
+    const before = useStore.getState().showDevices
+
+    useStore.getState().applyShowEvents([oscEvent('/go')])
+
+    expect(useStore.getState().showDevices).toBe(before)
+  })
+
+  it('writes an alarm to the session log, where it outlives the monitor being closed', () => {
+    useStore.getState().applyShowEvents([
+      alertEvent('critical', 'rf', 'Pack 12 battery critical — Aldonza is on in 2 cues')
+    ])
+
+    expect(useStore.getState().log).toEqual([
+      expect.objectContaining({
+        level: 'error',
+        label: 'rf',
+        message: 'Pack 12 battery critical — Aldonza is on in 2 cues'
+      })
+    ])
+  })
+
+  it('keeps an informational alarm informational in the log', () => {
+    useStore.getState().applyShowEvents([alertEvent('info', 'midi-in', 'MIDI input: off')])
+
+    expect(useStore.getState().log[0].level).toBe('info')
+  })
+
+  it('drops the oldest events once the river is full', () => {
+    const events = Array.from({ length: 305 }, (_, i) => oscEvent(`/event/${i}`))
+    useStore.getState().applyShowEvents(events)
+
+    const river = useStore.getState().showEvents
+    expect(river).toHaveLength(300)
+    expect(river[0]).toMatchObject({ address: '/event/5' })
+    expect(river[299]).toMatchObject({ address: '/event/304' })
+  })
+
+  it('dismisses an alarm without touching the log entry it wrote', () => {
+    useStore.getState().applyShowEvents([alertEvent('warning', 'rf', 'Pack 3 RF low')])
+    const id = useStore.getState().showAlerts[0].id
+
+    useStore.getState().dismissAlert(id)
+
+    expect(useStore.getState().showAlerts).toEqual([])
+    expect(useStore.getState().log).toHaveLength(1)
+  })
+
+  it('replaces the world from a snapshot, and keeps only the newest events of it', () => {
+    useStore.getState().applyShowEvents([deviceEvent({ id: 'rf:1', name: 'Stale pack' })])
+
+    useStore.getState().setShowSnapshot({
+      at: 5000,
+      services: [
+        { id: 'osc-in', label: 'OSC input', state: 'running', detail: 'listening', since: 4000 }
+      ],
+      devices: [deviceEvent({ id: 'rf:2', name: 'Pack 2' }).device],
+      alerts: [],
+      events: Array.from({ length: 302 }, (_, i) => oscEvent(`/snapshot/${i}`))
+    })
+
+    const state = useStore.getState()
+    expect(state.showDevices.map(device => device.name)).toEqual(['Pack 2'])
+    expect(state.showServices.map(service => service.state)).toEqual(['running'])
+    expect(state.showEvents).toHaveLength(300)
+    expect(state.showEvents[0]).toMatchObject({ address: '/snapshot/2' })
   })
 })

@@ -1,5 +1,6 @@
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
+import { createSocket } from 'dgram'
 import { mkdirSync, mkdtempSync } from 'fs'
 import path from 'path'
 
@@ -99,4 +100,53 @@ export async function startServer(): Promise<TestServer> {
     hits,
     close: () => new Promise<void>(resolve => server.close(() => resolve()))
   }
+}
+
+// ── OSC ──────────────────────────────────────────────────────────────────────
+// The tests have to speak to the app the way a console does. An OSC message is an
+// address, a type tag string, and the arguments, each padded to a 4-byte boundary —
+// a dozen lines, which is less to carry than a dependency the app only needs on the
+// receiving end.
+
+function oscString(value: string): Buffer {
+  const bytes = Buffer.from(`${value}\0`, 'utf8')
+  const padded = Buffer.alloc(Math.ceil(bytes.length / 4) * 4)
+  bytes.copy(padded)
+  return padded
+}
+
+function oscArgument(value: number | string): Buffer {
+  if (typeof value === 'string') return oscString(value)
+  const bytes = Buffer.alloc(4)
+  if (Number.isInteger(value)) bytes.writeInt32BE(value)
+  else bytes.writeFloatBE(value)
+  return bytes
+}
+
+export function encodeOscMessage(address: string, ...args: Array<number | string>): Buffer {
+  const tags = args
+    .map(arg => typeof arg === 'string' ? 's' : Number.isInteger(arg) ? 'i' : 'f')
+    .join('')
+  return Buffer.concat([
+    oscString(address),
+    oscString(`,${tags}`),
+    ...args.map(oscArgument)
+  ])
+}
+
+/** Sends one message to a port on this machine, resolving once it is on the wire. */
+export async function sendOsc(
+  port: number,
+  address: string,
+  ...args: Array<number | string>
+): Promise<void> {
+  const socket = createSocket('udp4')
+  const message = encodeOscMessage(address, ...args)
+  return new Promise((resolve, reject) => {
+    socket.send(message, port, '127.0.0.1', error => {
+      socket.close()
+      if (error) reject(error)
+      else resolve()
+    })
+  })
 }

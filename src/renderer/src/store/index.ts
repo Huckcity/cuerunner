@@ -1,6 +1,20 @@
 import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
 import type { AudioSettings, MidiSettings } from '../types/workspace'
+import { defaultShowSettings } from '../types/show'
+import type {
+  DeviceState,
+  DeviceEvent,
+  MidiInSettings,
+  OscInSettings,
+  RfSettings,
+  ServiceEvent,
+  ServiceStatus,
+  ShowAlert,
+  ShowEvent,
+  ShowSettings,
+  ShowSnapshot
+} from '../types/show'
 import { createCue } from '../utils/cueDefaults'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
@@ -45,6 +59,11 @@ export type LogEntryInput = Omit<LogEntry, 'id' | 'at'>
 // message is truncated so a runaway script cannot pin memory.
 const LOG_LIMIT = 500
 const LOG_MESSAGE_LIMIT = 4000
+
+// The show monitor is a window on what is happening now, not a transcript — the session
+// log keeps the record. Both are bounded so a chatty console cannot pin memory.
+const SHOW_EVENT_LIMIT = 300
+const SHOW_ALERT_LIMIT = 200
 
 const defaultAudioSettings: AudioSettings = {
   outputDeviceId: 'default',
@@ -100,6 +119,21 @@ interface CueListState {
   appendLog: (entries: LogEntryInput[]) => void
   clearLog: () => void
 
+  // Show services. Everything here is reported by the main process and rendered by the
+  // monitor panel: what is listening, what is on stage, and what has gone wrong. None
+  // of it is workspace content, so none of it dirties the show or enters undo.
+  showSettings: ShowSettings
+  showServices: ServiceStatus[]
+  showDevices: DeviceState[]
+  showAlerts: ShowAlert[]
+  showEvents: ShowEvent[]
+  /** Folds a batch from the main process into state; alarms also reach the session log. */
+  applyShowEvents: (events: ShowEvent[]) => void
+  /** Replaces the world wholesale, for a renderer that just reloaded mid-show. */
+  setShowSnapshot: (snapshot: ShowSnapshot) => void
+  dismissAlert: (id: number) => void
+  clearShowEvents: () => void
+
   /** Operator-facing message shown in the notice bar: a failed save or open. */
   notice: string | null
   setNotice: (message: string | null) => void
@@ -110,13 +144,16 @@ interface CueListState {
   // Settings
   updateAudioSettings: (patch: Partial<AudioSettings>) => void
   updateMidiSettings: (patch: Partial<MidiSettings>) => void
+  updateOscInSettings: (patch: Partial<OscInSettings>) => void
+  updateMidiInSettings: (patch: Partial<MidiInSettings>) => void
+  updateRfSettings: (patch: Partial<RfSettings>) => void
 
   // Undo / redo
   undo: () => void
   redo: () => void
 
   // Workspace lifecycle
-  loadWorkspace: (cues: Cue[], name: string, path: string | null, audioSettings?: AudioSettings, midiSettings?: MidiSettings) => void
+  loadWorkspace: (cues: Cue[], name: string, path: string | null, audioSettings?: AudioSettings, midiSettings?: MidiSettings, showSettings?: ShowSettings) => void
   saveSucceeded: (path: string, name: string) => void
   setWorkspaceName: (name: string) => void
 }
@@ -128,6 +165,39 @@ let _logSeq = 0
 
 function pushPast(past: Cue[][], snapshot: Cue[]): Cue[][] {
   return [...past.slice(-(HISTORY_LIMIT - 1)), snapshot]
+}
+
+// One truncation rule for every writer: the session log, cue runs and show alarms.
+function appendToLog(log: LogEntry[], entries: LogEntryInput[]): LogEntry[] {
+  const at = Date.now()
+  const added = entries.map(e => ({
+    ...e,
+    id: ++_logSeq,
+    at,
+    message: e.message.length > LOG_MESSAGE_LIMIT
+      ? e.message.slice(0, LOG_MESSAGE_LIMIT) + '… (truncated)'
+      : e.message
+  }))
+  return [...log, ...added].slice(-LOG_LIMIT)
+}
+
+// Devices and services are keyed lists that only ever grow by identity: a batch either
+// updates an entry in place or adds one. Returning the previous array when a batch
+// carries none of them keeps the panels from re-rendering on every OSC message.
+function mergeDevices(previous: DeviceState[], events: ShowEvent[]): DeviceState[] {
+  const updates = events.filter((event): event is DeviceEvent => event.kind === 'device')
+  if (updates.length === 0) return previous
+  const byId = new Map(previous.map(device => [device.id, device]))
+  for (const update of updates) byId.set(update.device.id, update.device)
+  return [...byId.values()]
+}
+
+function mergeServices(previous: ServiceStatus[], events: ShowEvent[]): ServiceStatus[] {
+  const updates = events.filter((event): event is ServiceEvent => event.kind === 'service')
+  if (updates.length === 0) return previous
+  const byId = new Map(previous.map(service => [service.id, service]))
+  for (const update of updates) byId.set(update.service.id, update.service)
+  return [...byId.values()]
 }
 
 // Coalesce rapid updateCue calls for the same cue into one history entry.
@@ -190,6 +260,11 @@ export const useStore = create<CueListState>((set) => ({
   running: new Map(),
   lastRuns: {},
   log: [],
+  showSettings: defaultShowSettings(),
+  showServices: [],
+  showDevices: [],
+  showAlerts: [],
+  showEvents: [],
   notice: null,
   past: [],
   future: [],
@@ -370,25 +445,50 @@ export const useStore = create<CueListState>((set) => ({
 
   appendLog: (entries) => set(s => {
     if (entries.length === 0) return s
-    const at = Date.now()
-    const added = entries.map(e => ({
-      ...e,
-      id: ++_logSeq,
-      at,
-      message: e.message.length > LOG_MESSAGE_LIMIT
-        ? e.message.slice(0, LOG_MESSAGE_LIMIT) + '… (truncated)'
-        : e.message
-    }))
-    return { log: [...s.log, ...added].slice(-LOG_LIMIT) }
+    return { log: appendToLog(s.log, entries) }
   }),
 
   clearLog: () => set({ log: [] }),
+
+  applyShowEvents: (events) => set(s => {
+    if (events.length === 0) return s
+
+    const alerts = events.flatMap(event => event.kind === 'alert' ? [event.alert] : [])
+    return {
+      showEvents: [...s.showEvents, ...events].slice(-SHOW_EVENT_LIMIT),
+      showServices: mergeServices(s.showServices, events),
+      showDevices: mergeDevices(s.showDevices, events),
+      showAlerts: alerts.length === 0
+        ? s.showAlerts
+        : [...s.showAlerts, ...alerts].slice(-SHOW_ALERT_LIMIT),
+      // An alarm the operator did not see is the same as no alarm: it goes to the log
+      // as well as the monitor, where it survives the monitor being closed.
+      log: alerts.length === 0
+        ? s.log
+        : appendToLog(s.log, alerts.map(alert => ({
+            level: alert.level === 'info' ? 'info' as const : 'error' as const,
+            message: alert.message,
+            label: alert.source
+          })))
+    }
+  }),
+
+  setShowSnapshot: (snapshot) => set(() => ({
+    showServices: snapshot.services,
+    showDevices: snapshot.devices,
+    showAlerts: snapshot.alerts,
+    showEvents: snapshot.events.slice(-SHOW_EVENT_LIMIT)
+  })),
+
+  dismissAlert: (id) => set(s => ({ showAlerts: s.showAlerts.filter(a => a.id !== id) })),
+
+  clearShowEvents: () => set({ showEvents: [] }),
 
   setNotice: (message) => set({ notice: message }),
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings) => set({
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings) => set({
     cues,
     workspaceName: name,
     workspacePath: path,
@@ -399,6 +499,7 @@ export const useStore = create<CueListState>((set) => ({
     notice: null,
     audioSettings: audioSettings ?? { ...defaultAudioSettings },
     midiSettings: midiSettings ?? { ...defaultMidiSettings },
+    showSettings: showSettings ?? defaultShowSettings(),
     past: [],
     future: [],
   }),
@@ -418,6 +519,21 @@ export const useStore = create<CueListState>((set) => ({
 
   updateMidiSettings: (patch) => set(s => ({
     midiSettings: { ...s.midiSettings, ...patch },
+    isDirty: true
+  })),
+
+  updateOscInSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, oscIn: { ...s.showSettings.oscIn, ...patch } },
+    isDirty: true
+  })),
+
+  updateMidiInSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, midiIn: { ...s.showSettings.midiIn, ...patch } },
+    isDirty: true
+  })),
+
+  updateRfSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, rf: { ...s.showSettings.rf, ...patch } },
     isDirty: true
   }))
 }))

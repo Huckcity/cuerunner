@@ -3,11 +3,15 @@ import { useCueRunner, useKeyboard } from '../../hooks/useCueRunner'
 import './TransportBar.css'
 
 interface Props {
-  logOpen: boolean
-  onToggleLog: () => void
+  /** Which bottom strip is open, or none. They share the space, so only one at a time. */
+  strip: ShowStrip | null
+  onToggleStrip: (strip: ShowStrip) => void
 }
 
-export function TransportBar({ logOpen, onToggleLog }: Props) {
+/** The panels that live along the bottom of the window, one at a time. */
+export type ShowStrip = 'log' | 'monitor' | 'rf'
+
+export function TransportBar({ strip, onToggleStrip }: Props) {
   const { go, stop, panic } = useCueRunner()
   useKeyboard(go, stop, panic)
 
@@ -26,11 +30,27 @@ export function TransportBar({ logOpen, onToggleLog }: Props) {
         </span>
         <button
           className="btn-log"
-          data-active={logOpen}
-          onClick={onToggleLog}
+          data-active={strip === 'log'}
+          onClick={() => onToggleStrip('log')}
           title="Show or hide the log"
         >
           LOG
+        </button>
+        <button
+          className="btn-monitor"
+          data-active={strip === 'monitor'}
+          onClick={() => onToggleStrip('monitor')}
+          title="Show or hide the show monitor"
+        >
+          MONITOR
+        </button>
+        <button
+          className="btn-rf"
+          data-active={strip === 'rf'}
+          onClick={() => onToggleStrip('rf')}
+          title="Show or hide the wireless panel"
+        >
+          RF
         </button>
       </div>
       <div className="transport-center">

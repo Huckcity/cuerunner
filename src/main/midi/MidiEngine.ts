@@ -33,6 +33,21 @@ export class MidiEngine {
     }
   }
 
+  listInputPorts(): string[] {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const midi = require('midi')
+      const input = new midi.Input()
+      const count = input.getPortCount()
+      const ports: string[] = []
+      for (let i = 0; i < count; i++) ports.push(input.getPortName(i))
+      input.closePort()
+      return ports
+    } catch {
+      return []
+    }
+  }
+
   private getOutput(portName: string): any {
     if (this.outputs.has(portName)) return this.outputs.get(portName)
     try {

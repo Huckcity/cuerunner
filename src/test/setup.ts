@@ -4,6 +4,7 @@ Object.defineProperty(window, 'winslab', {
     app: {
       rendererCrash: vi.fn(() => Promise.resolve(null)),
       onMainError: vi.fn(() => () => {}),
+      drainMainErrors: vi.fn(() => Promise.resolve([])),
       onCloseRequested: vi.fn(() => () => {}),
       onMenuAction: vi.fn(() => () => {}),
       confirmClose: vi.fn(() => Promise.resolve())
@@ -14,11 +15,20 @@ Object.defineProperty(window, 'winslab', {
     },
     midi: {
       listPorts: vi.fn(() => Promise.resolve([])),
+      listInputPorts: vi.fn(() => Promise.resolve([])),
       send: vi.fn(() => Promise.resolve({ ok: true }))
     },
     osc: {
-      send: vi.fn(() => Promise.resolve({ ok: true })),
-      startListener: vi.fn(() => Promise.resolve())
+      send: vi.fn(() => Promise.resolve({ ok: true }))
+    },
+    show: {
+      snapshot: vi.fn(() => Promise.resolve({
+        at: Date.now(), services: [], devices: [], alerts: [], events: []
+      })),
+      configure: vi.fn(() => Promise.resolve()),
+      command: vi.fn(() => Promise.resolve({ ok: true })),
+      restart: vi.fn(() => Promise.resolve({ ok: true })),
+      onEvents: vi.fn(() => () => {})
     },
     script: {
       readFile: vi.fn(() => Promise.resolve({ code: '', path: '' })),

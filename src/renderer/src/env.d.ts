@@ -2,6 +2,7 @@
 
 import type { OscArg } from './types/cue'
 import type { Workspace } from './types/workspace'
+import type { ShowEvent, ShowSettings, ShowSnapshot } from './types/show'
 
 interface WinslabBridge {
   getPathForFile: (file: File) => string
@@ -11,6 +12,7 @@ interface WinslabBridge {
     confirmClose: () => Promise<void>
     rendererCrash: () => Promise<{ reason: string; at: number } | null>
     onMainError: (callback: (message: string) => void) => () => void
+    drainMainErrors: () => Promise<string[]>
   }
   audio: {
     readFile: (filePath: string) => Promise<ArrayBuffer>
@@ -18,11 +20,22 @@ interface WinslabBridge {
   }
   midi: {
     listPorts: () => Promise<string[]>
+    listInputPorts: () => Promise<string[]>
     send: (cmd: { portName: string; messages: any[] }) => Promise<{ ok: boolean; error?: string }>
   }
   osc: {
     send: (cmd: { host: string; port: number; address: string; args: OscArg[] }) => Promise<{ ok: boolean; error?: string }>
-    startListener: (port: number) => Promise<void>
+  }
+  show: {
+    snapshot: () => Promise<ShowSnapshot>
+    configure: (settings: ShowSettings) => Promise<void>
+    command: (
+      service: string,
+      action: string,
+      payload?: unknown
+    ) => Promise<{ ok: boolean; result?: unknown; error?: string }>
+    restart: (service: string) => Promise<{ ok: boolean; result?: unknown; error?: string }>
+    onEvents: (callback: (events: ShowEvent[]) => void) => () => void
   }
   script: {
     readFile: (

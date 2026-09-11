@@ -1,5 +1,24 @@
+/** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 export type CueType = 'audio' | 'midi' | 'osc' | 'wait' | 'fade' | 'stop' | 'group' | 'network' | 'script'
+
+/**
+ * A message a cue answers to, when nobody's hand is on the GO button.
+ *
+ * A MIDI trigger is identity, not value: a note fires whatever its velocity and a knob
+ * fires whatever it is turned to. The desk decides when something happens; the cue only
+ * decides whether it is the thing being talked to.
+ */
+export type TriggerMidiMessage =
+  | { kind: 'noteOn'; channel: number; note: number }
+  | { kind: 'noteOff'; channel: number; note: number }
+  | { kind: 'cc'; channel: number; controller: number }
+  | { kind: 'programChange'; channel: number; program: number }
+
+export type CueTrigger =
+  | { id: string; kind: 'osc'; address: string }
+  /** `device` is the MIDI input port name, as the service reports it. */
+  | { id: string; kind: 'midi'; device: string; message: TriggerMidiMessage }
 
 export interface CueBase {
   id: string
@@ -14,6 +33,11 @@ export interface CueBase {
   advance: 'none' | 'on-start' | 'on-end'
   isArmed: boolean
   notes: string
+  /**
+   * What fires this cue besides GO. Optional on disk: a workspace saved before triggers
+   * existed has none, and the migration fills the list in.
+   */
+  triggers?: CueTrigger[]
 }
 
 export interface AudioOutput {

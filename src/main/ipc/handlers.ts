@@ -13,10 +13,27 @@ import {
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, readRecovery, writeRecovery } from '../workspace/recovery'
 import { openDemoWorkspace } from '../workspace/demo'
+import { createShowRuntime } from '../show/runtime'
+import { drainMainErrors } from '../errors'
+import { defaultShowSettings } from '../../renderer/src/types/show'
+import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
 const midi = new MidiEngine()
 const osc = new OscEngine()
+const show = createShowRuntime()
+
+// One batch, every window that is still alive. A window that is mid-reload has no
+// listener yet; it catches up from the snapshot it asks for on startup.
+function broadcastShowEvents(events: ShowEvent[]): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('show:events', events)
+    }
+  }
+}
+
+show.subscribe(broadcastShowEvents)
 
 function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
   return BrowserWindow.fromWebContents(event.sender)!
@@ -25,6 +42,14 @@ function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
 export function registerIpcHandlers(): void {
   // OSC keeps a socket open per destination, so the process has to let go of them.
   app.on('before-quit', () => osc.close())
+  // The services hold sockets and poll timers of their own.
+  app.on('before-quit', () => show.close())
+
+  // The services come up with the defaults, before the window has finished loading:
+  // a console that is already sending when the operator launches the app should not
+  // have its first cues fall on the floor. The renderer re-sends its own settings —
+  // which may come from the workspace — as soon as it has them.
+  void show.configure(defaultShowSettings())
 
   // Audio
   ipcMain.handle('audio:readFile', async (_, filePath: string) => {
@@ -46,6 +71,7 @@ export function registerIpcHandlers(): void {
 
   // MIDI
   ipcMain.handle('midi:listPorts', () => midi.listOutputPorts())
+  ipcMain.handle('midi:listInputPorts', () => midi.listInputPorts())
 
   // Both return what the engine did, so a cue that reached nothing is reported rather
   // than looking like every other successful firing.
@@ -58,8 +84,27 @@ export function registerIpcHandlers(): void {
     return osc.send(cmd.host, cmd.port, cmd.address, cmd.args)
   })
 
-  ipcMain.handle('osc:startListener', async (_, port: number) => {
-    osc.startListener(port)
+  // Show services. The renderer never talks to a service directly: it configures the
+  // set, reads a snapshot, and sends a command to one by id, so a service can be added
+  // without a new IPC channel.
+  ipcMain.handle('show:snapshot', async () => {
+    return show.snapshot()
+  })
+
+  // Failures the main process reported before the window was listening. The renderer
+  // takes them on startup so a broken launch is explained rather than silent.
+  ipcMain.handle('app:drainMainErrors', () => drainMainErrors())
+
+  ipcMain.handle('show:configure', async (_, settings: ShowSettings) => {
+    await show.configure(settings)
+  })
+
+  ipcMain.handle('show:command', async (_, cmd: { service: string; action: string; payload?: unknown }) => {
+    return show.command(cmd.service, cmd.action, cmd.payload)
+  })
+
+  ipcMain.handle('show:restart', async (_, service: string) => {
+    return show.restart(service)
   })
 
   // Script

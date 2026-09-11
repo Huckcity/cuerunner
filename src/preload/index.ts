@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Workspace } from '../renderer/src/types/workspace'
+import type { ShowEvent, ShowSettings, ShowSnapshot } from '../renderer/src/types/show'
 
 contextBridge.exposeInMainWorld('winslab', {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
@@ -22,7 +23,9 @@ contextBridge.exposeInMainWorld('winslab', {
       const listener = (_event: Electron.IpcRendererEvent, message: string): void => callback(message)
       ipcRenderer.on('app:main-error', listener)
       return () => ipcRenderer.off('app:main-error', listener)
-    }
+    },
+    drainMainErrors: (): Promise<string[]> =>
+      ipcRenderer.invoke('app:drainMainErrors')
   },
   audio: {
     readFile: (filePath: string): Promise<ArrayBuffer> =>
@@ -33,14 +36,33 @@ contextBridge.exposeInMainWorld('winslab', {
   midi: {
     listPorts: (): Promise<string[]> =>
       ipcRenderer.invoke('midi:listPorts'),
+    listInputPorts: (): Promise<string[]> =>
+      ipcRenderer.invoke('midi:listInputPorts'),
     send: (cmd: { portName: string; messages: any[] }): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke('midi:send', cmd)
   },
   osc: {
     send: (cmd: { host: string; port: number; address: string; args: any[] }): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke('osc:send', cmd),
-    startListener: (port: number): Promise<void> =>
-      ipcRenderer.invoke('osc:startListener', port)
+      ipcRenderer.invoke('osc:send', cmd)
+  },
+  show: {
+    snapshot: (): Promise<ShowSnapshot> =>
+      ipcRenderer.invoke('show:snapshot'),
+    configure: (settings: ShowSettings): Promise<void> =>
+      ipcRenderer.invoke('show:configure', settings),
+    command: (
+      service: string,
+      action: string,
+      payload?: unknown
+    ): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+      ipcRenderer.invoke('show:command', { service, action, payload }),
+    restart: (service: string): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+      ipcRenderer.invoke('show:restart', service),
+    onEvents: (callback: (events: ShowEvent[]) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, events: ShowEvent[]): void => callback(events)
+      ipcRenderer.on('show:events', listener)
+      return () => ipcRenderer.off('show:events', listener)
+    }
   },
   script: {
     readFile: (

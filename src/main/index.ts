@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
+import { onMainError, reportMainError } from './errors'
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -14,15 +15,16 @@ let rendererCrash: { reason: string; at: number } | null = null
 const RENDERER_RESTART_DELAY_MS = 500
 
 // A packaged build has no visible console and no crash reporter, so main-process
-// failures go to stdout and into the session log via the renderer.
-function reportMainError(message: string): void {
-  console.error(message)
+// failures go to stdout and into the session log via the renderer. errors.ts keeps them
+// until a window is listening: the window subscribes a moment after it loads, and a
+// failure during startup would otherwise be pushed to nobody.
+onMainError(message => {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
       win.webContents.send('app:main-error', message)
     }
   }
-}
+})
 
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`

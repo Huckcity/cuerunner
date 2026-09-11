@@ -74,4 +74,25 @@ describe('migrateWorkspace', () => {
     expect(cues.slice(1).map(c => c.parentId)).toEqual(['g1', 'g1'])
     expect((cues[0] as unknown as Record<string, unknown>).childIds).toBeUndefined()
   })
+
+  it('gives a workspace that predates the show services their listener defaults', () => {
+    const workspace = migrateWorkspace(workspaceWith([]))
+
+    // Without this, a workspace saved before the services existed would hand each of
+    // them `undefined` instead of a port to listen on and a plot to alarm against.
+    expect(workspace.showSettings?.oscIn).toEqual({ enabled: true, port: 53000 })
+    expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
+    expect(workspace.showSettings?.rf.sources).toEqual([])
+    expect(workspace.showSettings?.rf.thresholds.batteryCritical).toBe(10)
+  })
+
+  it('keeps the show ports a workspace already carries, and fills the gaps around them', () => {
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: { oscIn: { enabled: false } } as Workspace['showSettings']
+    })
+
+    expect(workspace.showSettings?.oscIn).toEqual({ enabled: false, port: 53000 })
+    expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
+  })
 })

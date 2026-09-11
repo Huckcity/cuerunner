@@ -11,6 +11,10 @@ import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
 import { useAutosave } from './hooks/useAutosave'
 import { LogPanel } from './components/log/LogPanel'
+import { MonitorPanel } from './components/monitor/MonitorPanel'
+import { RfPanel } from './components/rf/RfPanel'
+import { useShowBridge } from './hooks/useShowBridge'
+import type { ShowStrip } from './components/layout/TransportBar'
 import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from './types/cue'
 import './App.css'
@@ -30,9 +34,13 @@ function NoticeHost() {
 
 export function App() {
   useAutosave()
+  useShowBridge()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [timelineExpanded, setTimelineExpanded] = useState(false)
-  const [logOpen, setLogOpen] = useState(false)
+  // The panels along the bottom share the space, and together they would leave the cue
+  // list too little room to be a cue list. One at a time: opening one closes the other,
+  // and the same button closes the one it opened.
+  const [strip, setStrip] = useState<ShowStrip | null>(null)
   const selected = useSelectedCue()
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
@@ -65,9 +73,26 @@ export function App() {
   // Main-process failures (IPC handlers, the native modules, a crashed child process)
   // have no console a packaged build can show, so they land in the session log.
   useEffect(() => {
-    return window.winslab.app.onMainError((message) => {
+    // A failure in the main process can land before this runs — during startup, which is
+    // when a native module or a port is most likely to fail — so the backlog is taken as
+    // well as the subscription. Subscribing first means a failure in between is caught
+    // by one of the two; the set keeps it from being logged twice.
+    const delivered = new Set<string>()
+    const off = window.winslab.app.onMainError((message) => {
+      delivered.add(message)
       useStore.getState().appendLog([{ level: 'error', message }])
     })
+    void window.winslab.app.drainMainErrors()
+      .then(messages => {
+        for (const message of messages) {
+          if (delivered.has(message)) continue
+          useStore.getState().appendLog([{ level: 'error', message }])
+        }
+      })
+      // A renderer that cannot read the backlog still runs the show; it just starts
+      // with whatever the subscription catches.
+      .catch(() => {})
+    return off
   }, [])
 
   return (
@@ -88,8 +113,13 @@ export function App() {
           />
         : <WaveformPanel />
       }
-      {logOpen && <LogPanel onClose={() => setLogOpen(false)} />}
-      <TransportBar logOpen={logOpen} onToggleLog={() => setLogOpen(v => !v)} />
+      {strip === 'monitor' && <MonitorPanel onClose={() => setStrip(null)} />}
+      {strip === 'rf' && <RfPanel onClose={() => setStrip(null)} />}
+      {strip === 'log' && <LogPanel onClose={() => setStrip(null)} />}
+      <TransportBar
+        strip={strip}
+        onToggleStrip={next => setStrip(current => current === next ? null : next)}
+      />
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   )
