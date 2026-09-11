@@ -7,6 +7,9 @@
 // and writes PNGs into website/assets/guide/. Images are captured from the real app
 // showing the real demo, so neither the guide nor the demo can drift from the product;
 // re-run after any UI change.
+//
+// The capture is pinned to CSS pixels, so the figures are the same size whichever
+// display the script runs on.
 import { _electron as electron } from '@playwright/test'
 import fs from 'node:fs'
 import http from 'node:http'
@@ -60,7 +63,9 @@ await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor()
 
 const shot = async (file, selector) => {
   const target = selector ? page.locator(selector) : page
-  await target.screenshot({ path: path.join(outDir, file) })
+  // 'css' pins the output to CSS pixels: the app fixes its window size, so the figures
+  // come out the same size whichever display they were captured on.
+  await target.screenshot({ path: path.join(outDir, file), scale: 'css' })
   console.log(`  ${file}`)
 }
 
