@@ -56,6 +56,38 @@ test('MIDI tab offers a default output port select', async () => {
   await closeSettings(page)
 })
 
+test('the Show tab sets the wireless alarms, and refuses a value that would misfire', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+
+  const quiet = dialog.locator('#settings-rf-gone')
+  await expect(quiet).toHaveValue('6')
+
+  // Six seconds is the default; a show whose packs are switched off between scenes wants
+  // a longer window, and that is a setting rather than an edit to the workspace file.
+  await quiet.fill('30')
+  await quiet.blur()
+  await expect(quiet).toHaveValue('30')
+
+  // Zero would alarm on every poll. An out-of-range value is dropped, not written.
+  await quiet.fill('0')
+  await quiet.blur()
+  await expect(quiet).toHaveValue('30')
+
+  await dialog.locator('#settings-rf-battery-critical').fill('15')
+  await dialog.locator('#settings-rf-battery-critical').blur()
+  await expect(dialog.locator('#settings-rf-battery-critical')).toHaveValue('15')
+
+  await closeSettings(page)
+  // It is workspace state, not dialog state, so it is still there next time.
+  await openSettings(page)
+  await page.getByRole('dialog', { name: 'Settings' })
+    .getByRole('button', { name: 'Show', exact: true }).click()
+  await expect(page.locator('#settings-rf-gone')).toHaveValue('30')
+  await closeSettings(page)
+})
+
 test('settings dialog closes with Escape key', async () => {
   await openSettings(page)
   await page.keyboard.press('Escape')

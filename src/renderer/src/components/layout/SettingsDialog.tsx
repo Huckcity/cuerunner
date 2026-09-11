@@ -2,11 +2,57 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import { audioPlayer } from '../../engine/AudioPlayer'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
-import type { TelemetrySource, TelemetrySourceKind } from '../../types/show'
+import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
 import './SettingsDialog.css'
 
 interface Props {
   onClose: () => void
+}
+
+interface NumberFieldProps {
+  id: string
+  label: string
+  value: number
+  min: number
+  max: number
+  disabled?: boolean
+  onCommit: (value: number) => void
+}
+
+/**
+ * An integer field that commits when it is left rather than on every keystroke: binding
+ * "5" on the way to "53000" would move a listener somewhere nobody asked for, and an
+ * out-of-range value is dropped rather than written.
+ */
+function NumberField({ id, label, value, min, max, disabled, onCommit }: NumberFieldProps) {
+  const [draft, setDraft] = useState<string | null>(null)
+
+  const commit = (): void => {
+    const parsed = Number(draft)
+    if (draft !== null && Number.isFinite(parsed) && parsed >= min && parsed <= max) {
+      onCommit(Math.round(parsed))
+    }
+    setDraft(null)
+  }
+
+  return (
+    <div className="field-row">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type="number"
+        min={min}
+        max={max}
+        value={draft ?? String(value)}
+        disabled={disabled}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') commit()
+        }}
+      />
+    </div>
+  )
 }
 
 export function SettingsDialog({ onClose }: Props) {
@@ -21,9 +67,6 @@ export function SettingsDialog({ onClose }: Props) {
   const [midiInputPorts, setMidiInputPorts] = useState<string[]>([])
   // Context values are fixed for the life of the AudioContext, so read them once on mount.
   const [contextInfo] = useState(() => audioPlayer.getContextInfo())
-  // The port is committed when the field is left, not on every keystroke: binding to
-  // "5" on the way to "53000" would move the listener somewhere nobody asked for.
-  const [portDraft, setPortDraft] = useState<string | null>(null)
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(devices => {
@@ -32,14 +75,6 @@ export function SettingsDialog({ onClose }: Props) {
     window.winslab.midi.listPorts().then(setMidiPorts)
     window.winslab.midi.listInputPorts().then(setMidiInputPorts)
   }, [])
-
-  const commitPort = (): void => {
-    const port = Number(portDraft)
-    if (portDraft !== null && Number.isInteger(port) && port >= 1 && port <= 65535) {
-      updateOscInSettings({ port })
-    }
-    setPortDraft(null)
-  }
 
   const toggleInputPort = (port: string, on: boolean): void => {
     const selected = showSettings.midiIn.portNames
@@ -74,44 +109,26 @@ export function SettingsDialog({ onClose }: Props) {
     })
   }
 
+  const setThresholds = (patch: Partial<RfThresholds>): void => {
+    updateRfSettings({ thresholds: { ...showSettings.rf.thresholds, ...patch } })
+  }
+
   const oscService = showServices.find(service => service.id === 'osc-in')
   const midiService = showServices.find(service => service.id === 'midi-in')
   const presenceService = showServices.find(service => service.id === 'presence')
   const rfService = showServices.find(service => service.id === 'rf')
   const companionService = showServices.find(service => service.id === 'companion')
 
-  const [companionPortDraft, setCompanionPortDraft] = useState<string | null>(null)
-
-  const commitCompanionPort = (): void => {
-    const port = Number(companionPortDraft)
-    if (
-      companionPortDraft !== null &&
-      Number.isInteger(port) && port >= 1 && port <= 65535
-    ) {
-      updateCompanionSettings({ port })
-    }
-    setCompanionPortDraft(null)
-  }
-
-  // Both of these are lists the operator types, so they are committed on the way out of
-  // the field: rebuilding the input from the store on every keystroke would eat the
-  // comma or the space that was about to become the next entry.
+  // The service list is a list the operator types, so it commits on the way out of the
+  // field: rebuilding the input from the store on every keystroke would eat the comma
+  // or the space that was about to become the next entry.
   const [servicesDraft, setServicesDraft] = useState<string | null>(null)
-  const [goneDraft, setGoneDraft] = useState<string | null>(null)
 
   const commitServices = (): void => {
     if (servicesDraft === null) return
     const services = servicesDraft.split(',').map(entry => entry.trim()).filter(Boolean)
     if (services.length > 0) updatePresenceSettings({ services })
     setServicesDraft(null)
-  }
-
-  const commitGone = (): void => {
-    const seconds = Number(goneDraft)
-    if (goneDraft !== null && Number.isFinite(seconds) && seconds >= 5 && seconds <= 3600) {
-      updatePresenceSettings({ goneAfterSeconds: Math.round(seconds) })
-    }
-    setGoneDraft(null)
   }
 
   // Dismiss on Escape
@@ -215,22 +232,15 @@ export function SettingsDialog({ onClose }: Props) {
                 />
                 <span className="settings-info">Listen for OSC from consoles and tablets</span>
               </div>
-              <div className="field-row">
-                <label htmlFor="settings-osc-port">Port</label>
-                <input
-                  id="settings-osc-port"
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={portDraft ?? String(showSettings.oscIn.port)}
-                  disabled={!showSettings.oscIn.enabled}
-                  onChange={e => setPortDraft(e.target.value)}
-                  onBlur={commitPort}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitPort()
-                  }}
-                />
-              </div>
+              <NumberField
+                id="settings-osc-port"
+                label="Port"
+                value={showSettings.oscIn.port}
+                min={1}
+                max={65535}
+                disabled={!showSettings.oscIn.enabled}
+                onCommit={port => updateOscInSettings({ port })}
+              />
               {oscService && (
                 <div className="settings-service" data-service={oscService.id} data-state={oscService.state}>
                   {oscService.state} — {oscService.detail}
@@ -329,6 +339,45 @@ export function SettingsDialog({ onClose }: Props) {
                 own API only has to emit them. Thresholds that raise the alarms live in the
                 workspace alongside the plot.
               </p>
+              <div className="field-section-title">Alarms</div>
+              <NumberField
+                id="settings-rf-battery-warning"
+                label="Battery low (%)"
+                value={showSettings.rf.thresholds.batteryWarning}
+                min={1}
+                max={99}
+                onCommit={batteryWarning => setThresholds({ batteryWarning })}
+              />
+              <NumberField
+                id="settings-rf-battery-critical"
+                label="Battery critical (%)"
+                value={showSettings.rf.thresholds.batteryCritical}
+                min={1}
+                max={99}
+                onCommit={batteryCritical => setThresholds({ batteryCritical })}
+              />
+              <NumberField
+                id="settings-rf-rf-warning"
+                label="RF weak (dBm)"
+                value={showSettings.rf.thresholds.rfWarningDbm}
+                min={-120}
+                max={-20}
+                onCommit={rfWarningDbm => setThresholds({ rfWarningDbm })}
+              />
+              <NumberField
+                id="settings-rf-gone"
+                label="Quiet after (s)"
+                value={showSettings.rf.thresholds.offlineAfterSeconds}
+                min={2}
+                max={600}
+                onCommit={offlineAfterSeconds => setThresholds({ offlineAfterSeconds })}
+              />
+              <p className="inspector-hint">
+                A pack that stops being reported is marked quiet and warned about once this
+                long has passed. Packs switched off between scenes are normal, so a longer
+                window is a fair choice — the row's colour turns as soon as the silence
+                starts, whatever this is set to.
+              </p>
               {rfService && (
                 <div className="settings-service" data-service={rfService.id} data-state={rfService.state}>
                   {rfService.state} — {rfService.detail}
@@ -359,23 +408,15 @@ export function SettingsDialog({ onClose }: Props) {
                   }}
                 />
               </div>
-              <div className="field-row">
-                <label htmlFor="settings-presence-gone">Gone after</label>
-                <input
-                  id="settings-presence-gone"
-                  type="number"
-                  min={5}
-                  max={3600}
-                  value={goneDraft ?? String(showSettings.presence.goneAfterSeconds)}
-                  disabled={!showSettings.presence.enabled}
-                  onChange={e => setGoneDraft(e.target.value)}
-                  onBlur={commitGone}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitGone()
-                  }}
-                />
-                <span className="settings-info">seconds without an announcement</span>
-              </div>
+              <NumberField
+                id="settings-presence-gone"
+                label="Gone after (s)"
+                value={showSettings.presence.goneAfterSeconds}
+                min={5}
+                max={3600}
+                disabled={!showSettings.presence.enabled}
+                onCommit={goneAfterSeconds => updatePresenceSettings({ goneAfterSeconds })}
+              />
               <p className="inspector-hint">
                 Devices that announce themselves over mDNS — a Dante endpoint, an interface,
                 an amplifier — appear in the show monitor while they are there, and raise an
@@ -398,22 +439,15 @@ export function SettingsDialog({ onClose }: Props) {
                 />
                 <span className="settings-info">A read-only view of the show on the local network</span>
               </div>
-              <div className="field-row">
-                <label htmlFor="settings-companion-port">Port</label>
-                <input
-                  id="settings-companion-port"
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={companionPortDraft ?? String(showSettings.companion.port)}
-                  disabled={!showSettings.companion.enabled}
-                  onChange={e => setCompanionPortDraft(e.target.value)}
-                  onBlur={commitCompanionPort}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitCompanionPort()
-                  }}
-                />
-              </div>
+              <NumberField
+                id="settings-companion-port"
+                label="Port"
+                value={showSettings.companion.port}
+                min={1}
+                max={65535}
+                disabled={!showSettings.companion.enabled}
+                onCommit={port => updateCompanionSettings({ port })}
+              />
               <div className="field-row">
                 <label htmlFor="settings-companion-token">Token</label>
                 <input

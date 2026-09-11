@@ -847,8 +847,16 @@ console.log(r.stdout.trim())</code></pre>
           Alarms are raised on a crossing, not on every poll: a pack that sits at 8% for an hour says
           so once, and only says so again if it recovers and falls again. The defaults are a warning
           at 25% and critical at 10% battery, a warning below -75 dBm, and six seconds of silence
-          before a channel counts as gone. They live in the workspace with the plot, so a show
-          carries its own idea of what is bad.
+          before a channel counts as gone. All four are set on the Show tab in Settings, and they
+          live in the workspace with the plot, so a show carries its own idea of what is bad.
+        </p>
+        <p>
+          The silence window is the one worth thinking about. Six seconds is long enough that a
+          dropped poll does not read as a lost pack, and short enough to notice a transmitter that
+          has actually died before its performer is halfway through a line. A show whose packs get
+          switched off between scenes is normally happier with a longer window — thirty seconds is
+          a common choice — because the row's colour already turns the moment the silence starts,
+          and the warning is what is being held back, not the news.
         </p>
         <p>
           The alarm names the performer because the plot says who is wearing the pack:

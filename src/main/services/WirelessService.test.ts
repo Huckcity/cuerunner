@@ -465,8 +465,10 @@ describe('WirelessService', () => {
     await vi.advanceTimersByTimeAsync(6000)
 
     expect(device(bus, 'ch-12')).toMatchObject({ online: false, name: 'Channel 12' })
+    // A warning: silence is worth noticing, and a pack off between scenes is not a
+    // failure. The battery alarm is the one that stays critical.
     expect(quiet()).toEqual([
-      expect.objectContaining({ level: 'critical', source: 'rf', deviceId: 'rf:ch-12' })
+      expect.objectContaining({ level: 'warning', source: 'rf', deviceId: 'rf:ch-12' })
     ])
 
     await vi.advanceTimersByTimeAsync(6000)

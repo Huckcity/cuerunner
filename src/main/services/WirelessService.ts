@@ -342,7 +342,10 @@ export class WirelessService implements ShowService {
       const night = this.nightOf(id)
       if (night) device.history = night
       context.bus.device(device)
-      context.bus.alert('critical', this.id, `${this.plotName(id, state.name)} went quiet`, deviceId)
+      // A warning, not a critical: a pack is switched off between scenes all night long,
+      // and what an operator needs is to notice the silence, not to be told the show has
+      // failed. The row's own colour says the same thing on the panel.
+      context.bus.alert('warning', this.id, `${this.plotName(id, state.name)} went quiet`, deviceId)
     }
   }
 
