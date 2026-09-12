@@ -80,6 +80,10 @@ SocketServer::~SocketServer() { close(); }
 
 bool SocketServer::listen(const std::string& path, std::string& error) {
 #if defined(_WIN32)
+  // The first instance is created here so a bad name fails before the app is told the
+  // engine is up. The accept loop takes it at the start of `serve()` and owns it from
+  // then on: a connectable instance no thread is reading is exactly the trap — Windows
+  // hands a connecting client the oldest waiting instance.
   const int bufferBytes = 1 << 20;
   HANDLE handle = CreateNamedPipeA(
       path.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
@@ -129,15 +133,33 @@ void SocketServer::serve() {
 }
 
 void SocketServer::acceptLoop() {
+#if defined(_WIN32)
+  // `listen()` created this instance before any thread existed; from here the accept loop
+  // owns it like every other one. Nothing else reads `listenHandle_`.
+  HANDLE pendingInstance = static_cast<HANDLE>(listenHandle_);
+  listenHandle_ = nullptr;
+#endif
   while (!stopping_.load(std::memory_order_acquire)) {
 #if defined(_WIN32)
     auto* client = new Client();
-    client->handle = CreateNamedPipeA(path_.c_str(), PIPE_ACCESS_DUPLEX,
-                                      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES,
-                                      1 << 20, 1 << 20, 0, nullptr);
+    if (pendingInstance != nullptr) {
+      client->handle = pendingInstance;
+      pendingInstance = nullptr;
+    } else {
+      client->handle = CreateNamedPipeA(path_.c_str(), PIPE_ACCESS_DUPLEX,
+                                        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES,
+                                        1 << 20, 1 << 20, 0, nullptr);
+    }
     if (client->handle == INVALID_HANDLE_VALUE) {
       delete client;
       Sleep(20);
+      continue;
+    }
+    if (stopping_.load(std::memory_order_acquire)) {
+      // Asked to stop while the instance was being created: let it go rather than block
+      // in a ConnectNamedPipe nobody is left to wake.
+      CloseHandle(static_cast<HANDLE>(client->handle));
+      delete client;
       continue;
     }
     const BOOL connected = ConnectNamedPipe(static_cast<HANDLE>(client->handle), nullptr);
@@ -168,6 +190,11 @@ void SocketServer::acceptLoop() {
     client->thread.detach();
     noteClientCount();
   }
+#if defined(_WIN32)
+  // A stop asked for before the first accept leaves the instance from `listen()`
+  // unconsumed; the accept loop is its last owner, so it lets it go here.
+  if (pendingInstance != nullptr) CloseHandle(pendingInstance);
+#endif
 }
 
 void SocketServer::handleClient(Client* client) {
@@ -251,10 +278,12 @@ void SocketServer::broadcast(const std::string& line) {
 void SocketServer::requestStop() {
   stopping_.store(true, std::memory_order_release);
 #if defined(_WIN32)
-  if (listenHandle_ != nullptr) {
-    // Wake a blocked ConnectNamedPipe by connecting to our own instance.
-    CloseHandle(static_cast<HANDLE>(listenHandle_));
-    listenHandle_ = nullptr;
+  // A blocked ConnectNamedPipe is woken by a client arriving, not by anything being
+  // closed: connect to our own pipe and let the pending instance report
+  // ERROR_PIPE_CONNECTED, which is what lets the accept loop notice it is stopping.
+  if (!path_.empty()) {
+    HANDLE wake = CreateFileA(path_.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (wake != INVALID_HANDLE_VALUE) CloseHandle(wake);
   }
 #else
   if (listenFd_ >= 0) {
@@ -278,6 +307,9 @@ void SocketServer::close() {
 #endif
     }
   }
+  // `listen()` may have created the first instance and the accept loop never taken it
+  // (a stop before the first accept, or a serve() that never ran). This runs on the same
+  // thread that owns the lifecycle, so the handle is released here rather than leaking.
 #if defined(_WIN32)
   if (listenHandle_ != nullptr) {
     CloseHandle(static_cast<HANDLE>(listenHandle_));

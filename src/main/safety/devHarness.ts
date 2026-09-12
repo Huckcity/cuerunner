@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import type { AudioEngineEvent, AudioEngineInfo } from '../../shared/audio'
+import type { AudioEngineStatus } from '../audio/AudioEngine'
 import type { PlaybackSafety, PlaybackSafetyState } from './PlaybackSafety'
 
 // A window into the main process for the end-to-end suite.
@@ -27,6 +28,12 @@ export interface PlaybackDevHarness {
    * and the timing specs are the ones that measure it.
    */
   keepAwakeHeld: () => boolean
+  /**
+   * Whether the engine came up, and what it said if it did not. An engine that dies at
+   * startup fails specs far away from the cause, and on Windows neither the app's stderr
+   * nor the engine's reaches the runner.
+   */
+  engineStatus: () => AudioEngineStatus
 }
 
 declare global {
@@ -42,6 +49,8 @@ export interface PlaybackDevHarnessDeps {
     info: () => AudioEngineInfo | Promise<AudioEngineInfo>
     /** Engine-level facts, only ever installed by a build running from the source tree. */
     recentEvents: () => AudioEngineEvent[]
+    /** How the engine's own startup went, and what it said if it did not. */
+    status: () => AudioEngineStatus
   }
 }
 
@@ -51,6 +60,7 @@ export function installPlaybackDevHarness(deps: PlaybackDevHarnessDeps): void {
   globalThis.__winslabDevHarness = {
     safety: () => deps.safety.state(),
     keepAwakeHeld: deps.keepAwakeHeld,
+    engineStatus: deps.engine.status,
     engineInfo: () => deps.engine.info(),
     engineEvents: () => deps.engine.recentEvents()
   }

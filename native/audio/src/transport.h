@@ -48,6 +48,7 @@ class SocketServer {
   std::vector<Client*> clients_;
   std::function<void(int)> clientCountCallback_;
 #if defined(_WIN32)
+  /** The first pipe instance, created before any thread exists and taken by the accept loop. */
   void* listenHandle_ = nullptr;
 #else
   int listenFd_ = -1;

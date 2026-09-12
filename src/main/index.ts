@@ -224,7 +224,11 @@ app.whenReady().then(() => {
   installPlaybackDevHarness({
     safety: playbackSafety,
     keepAwakeHeld,
-    engine: { info: () => audioEngine.info(), recentEvents: recentEngineEvents }
+    engine: {
+      info: () => audioEngine.info(),
+      recentEvents: recentEngineEvents,
+      status: () => audioEngine.status()
+    }
   })
   app.on('before-quit', () => playbackSafety.close())
   // The engine owns a child process; quitting without asking it to go leaves that child

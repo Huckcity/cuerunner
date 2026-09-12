@@ -81,7 +81,16 @@ export interface AudioEngineStatus {
   restarts: number
   lastError: string | null
   started: boolean
+  /**
+   * The engine's own last words. Kept because the app's stderr does not always reach
+   * whoever needs the reason — on a Windows runner none of it does — and an engine that
+   * dies at startup otherwise fails every test downstream without saying why.
+   */
+  stderrTail: string[]
 }
+
+/** How many of the engine's lines are kept, so a failure can explain itself. */
+const STDERR_TAIL_LINES = 12
 
 export class AudioEngineError extends Error {
   readonly code: string
@@ -152,9 +161,12 @@ export class NativeAudioEngine {
     binaryPath: null,
     restarts: 0,
     lastError: null,
-    started: false
+    started: false,
+    stderrTail: []
   }
   private shuttingDown = false
+  /** The engine's stderr, bounded: what it said before it stopped being there. */
+  private stderrTail: string[] = []
   private restartTimer: NodeJS.Timeout | null = null
   private exitHookInstalled = false
 
@@ -171,7 +183,17 @@ export class NativeAudioEngine {
   }
 
   status(): AudioEngineStatus {
-    return { ...this.lastStatus, connected: this.socket !== null && !this.socket.destroyed }
+    return {
+      ...this.lastStatus,
+      connected: this.socket !== null && !this.socket.destroyed,
+      stderrTail: [...this.stderrTail]
+    }
+  }
+
+  /** `message` with the engine's own last words under it, when it had any. */
+  private withStderrTail(message: string): string {
+    if (this.stderrTail.length === 0) return message
+    return `${message}\n${this.stderrTail.join('\n')}`
   }
 
   async ensureStarted(): Promise<void> {
@@ -322,6 +344,10 @@ export class NativeAudioEngine {
     child.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString().trimEnd()
       if (text === '') return
+      for (const line of text.split('\n')) this.stderrTail.push(line)
+      if (this.stderrTail.length > STDERR_TAIL_LINES) {
+        this.stderrTail.splice(0, this.stderrTail.length - STDERR_TAIL_LINES)
+      }
       // The engine already prefixes its own diagnostics; do not stack a second tag.
       process.stderr.write(text.startsWith('[winslab-audio]') ? `${text}\n` : `[winslab-audio] ${text}\n`)
     })
@@ -342,7 +368,7 @@ export class NativeAudioEngine {
       this.teardown()
       this.killChild()
       this.shuttingDown = false
-      this.lastStatus.lastError = describeError(error)
+      this.lastStatus.lastError = this.withStderrTail(describeError(error))
       throw error
     }
     this.lastStatus.started = true

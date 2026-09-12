@@ -43,3 +43,16 @@ test('the app holds the OS off its timers', async () => {
 
   expect(held).toBe(true)
 })
+
+test('the audio engine is running', async () => {
+  // A machine with no audio device still gets an engine — the silent backend — so this
+  // holds everywhere the suite runs. The assertion reports the whole status on failure,
+  // which carries the engine's own last words (its stderr, kept by main): on a Windows
+  // runner none of that output reaches the log any other way.
+  await expect
+    .poll(async () => app.evaluate(() => globalThis.__winslabDevHarness?.engineStatus() ?? null), {
+      timeout: 10_000,
+      message: 'the audio engine should be up and connected'
+    })
+    .toMatchObject({ started: true, connected: true })
+})
