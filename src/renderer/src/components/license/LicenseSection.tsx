@@ -92,6 +92,11 @@ export function LicenseSection() {
               }}
             />
           </div>
+
+          {/* Directly under the field it belongs to: the reason a paste was refused is
+              about what is in the box above it, not about the button below. */}
+          {error !== null && <p className="license-error" role="alert">{error}</p>}
+
           <div className="field-row">
             <label />
             <div className="license-actions">
@@ -110,8 +115,6 @@ export function LicenseSection() {
           </p>
         </>
       )}
-
-      {error !== null && <p className="license-error" role="alert">{error}</p>}
     </>
   )
 }

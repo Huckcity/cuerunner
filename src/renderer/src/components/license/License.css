@@ -86,9 +86,13 @@
   gap: var(--space-3);
 }
 
-/* A strip: one line, the height of a closed panel rather than of an open one. */
+/* A strip: one line, the height of a closed panel rather than of an open one. The close
+   button is a sibling of the row rather than a corner control, so it sits at the end of
+   the line instead of over the button. */
 .pro-lock[data-variant='strip'] {
   height: 88px;
+  flex-direction: row;
+  align-items: center;
   flex-shrink: 0;
   padding: 0 var(--space-3);
   background: var(--bg-raised);
@@ -96,6 +100,7 @@
 }
 
 .pro-lock[data-variant='strip'] .pro-lock-body {
+  flex: 1;
   flex-direction: row;
   align-items: center;
   gap: var(--space-3);
@@ -103,6 +108,13 @@
 
 .pro-lock[data-variant='strip'] .pro-lock-blurb { max-width: none; }
 .pro-lock[data-variant='strip'] .pro-lock-unlock { margin-top: 0; margin-left: auto; }
+
+.pro-lock[data-variant='strip'] .pro-lock-close {
+  position: static;
+  order: 1;
+  margin-left: var(--space-3);
+  flex-shrink: 0;
+}
 
 /* Inside the inspector: a panel body, not a page. */
 .pro-lock[data-variant='inspector'] {
@@ -168,6 +180,10 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   line-height: 1.5;
+  /* A key is one long token: it wraps where it likes rather than scrolling out of the
+     box, so a paste can be read back before it is activated. */
+  white-space: pre-wrap;
+  word-break: break-all;
   resize: none;
 }
 
@@ -188,7 +204,7 @@
 .license-actions {
   display: flex;
   gap: var(--space-2);
-  margin: var(--space-2) 0 0 90px;
+  margin-top: var(--space-1);
 }
 
 .license-action {
