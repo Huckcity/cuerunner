@@ -10,6 +10,7 @@ import {
   AUDIO_CHANNELS,
   type AudioCancelPayload,
   type AudioCancelResult,
+  type AudioClockReading,
   type AudioCommandResult,
   type AudioConfigurePayload,
   type AudioCrosspoint,
@@ -121,7 +122,7 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke(AUDIO_CHANNELS.progress, { cueId } satisfies AudioProgressPayload),
     panic: (fadeMs: number): Promise<AudioPanicResult> =>
       ipcRenderer.invoke(AUDIO_CHANNELS.panic, { fadeMs } satisfies AudioPanicPayload),
-    clock: (): Promise<number> =>
+    clock: (): Promise<AudioClockReading> =>
       ipcRenderer.invoke(AUDIO_CHANNELS.clock),
     info: (): Promise<AudioEngineInfo> =>
       ipcRenderer.invoke(AUDIO_CHANNELS.info),

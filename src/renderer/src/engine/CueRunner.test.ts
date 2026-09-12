@@ -541,7 +541,8 @@ describe('CueRunner — sample-clock scheduling', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(1000)
     emitEngineEvent({
-      type: 'ended', cueId: 'a1', runId: 'run-a1', at: Date.now(), reason: 'complete', loopsCompleted: 0
+      type: 'ended', cueId: 'a1', runId: 'run-a1', at: Date.now(), reason: 'complete', loopsCompleted: 0,
+      sessionId: 'test-session'
     })
     await vi.advanceTimersByTimeAsync(0)
 
@@ -859,7 +860,8 @@ describe('CueRunner — engine failures are reported', () => {
     runner.go()
     vi.advanceTimersByTime(200)
     emitEngineEvent({
-      type: 'error', cueId: 'a1', runId: 'run-a1', at: Date.now(), code: 'engine', message: 'device lost'
+      type: 'error', cueId: 'a1', runId: 'run-a1', at: Date.now(), code: 'engine', message: 'device lost',
+      sessionId: 'test-session'
     })
     await vi.advanceTimersByTimeAsync(0)
 
@@ -867,6 +869,23 @@ describe('CueRunner — engine failures are reported', () => {
       outcome: 'error',
       error: 'device lost'
     }))
+  })
+
+  it('tells the operator when the engine was replaced under the show', () => {
+    const { appendLog } = setup([makeWait({ id: 'w1' })])
+
+    // The client keeps the show clock continuous across the restart; the runner's half
+    // is the line that explains it, so a gap in the show is never a mystery.
+    for (const [handler] of engine.onSessionChange.mock.calls) {
+      handler({ previousSessionId: 'session-a', sessionId: 'session-b', showMs: 5_405_000 })
+    }
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({
+        level: 'error',
+        message: 'audio engine restarted (session session-b); the show clock carried on'
+      })
+    ])
   })
 
   it('keeps the run successful when the MIDI send went through', async () => {

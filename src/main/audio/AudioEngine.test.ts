@@ -93,7 +93,8 @@ afterAll(async () => {
 describe('audioEngine client (against the real engine)', () => {
   it('reports the engine it actually started', async () => {
     const info = await audioEngine.info()
-    expect(info.protocol).toBe(1)
+    expect(info.protocol).toBe(2)
+    expect(info.sessionId).toMatch(/^[0-9a-f]{16}$/)
     expect(info.backend).toBe('silent')
     expect(info.sampleRate).toBe(48000)
     expect(info.active).toBe(false)
@@ -102,19 +103,35 @@ describe('audioEngine client (against the real engine)', () => {
   })
 
   it('advances the sample clock without a device', async () => {
-    const first = await audioEngine.clock()
+    const first = (await audioEngine.clock()).clockMs
     const second = await waitUntil('the clock to advance', async () => {
-      const value = await audioEngine.clock()
+      const value = (await audioEngine.clock()).clockMs
       return value > first ? value : null
     })
     expect(second).toBeGreaterThan(first)
+  })
+
+  it('names the session every time it reports, so a reading can be trusted', async () => {
+    const info = await audioEngine.info()
+    const reading = await audioEngine.clock()
+    expect(reading.sessionId).toBe(info.sessionId)
+
+    // Events carry it too: a listener can tell which engine produced a line even when
+    // the process was replaced under it.
+    await audioEngine.prepare('s1', workFilePath)
+    await audioEngine.start('s1', (await audioEngine.clock()).clockMs + 10, loopOptions())
+    await audioEngine.stop('s1', 0)
+    const ended = await waitUntil('the ended event', async () =>
+      events.find((event) => event.type === 'ended' && event.cueId === 's1') ?? null
+    )
+    expect(ended.sessionId).toBe(info.sessionId)
   })
 
   it('prepares, plays, reports progress and stops with events carrying the run id', async () => {
     const metadata = await audioEngine.prepare('a1', workFilePath)
     expect(metadata).toMatchObject({ sampleRate: 48000, channels: 2, frames: 48000, format: 'wav' })
 
-    const start = await audioEngine.start('a1', (await audioEngine.clock()) + 10, loopOptions())
+    const start = await audioEngine.start('a1', (await audioEngine.clock()).clockMs + 10, loopOptions())
     expect(start.runId).toMatch(/^run-/)
     expect(audioEngine.snapshot()?.active).toBe(true)
 
@@ -136,7 +153,7 @@ describe('audioEngine client (against the real engine)', () => {
 
   it('schedules a future start and cancels it before it is audible', async () => {
     await audioEngine.prepare('a2', workFilePath)
-    const start = await audioEngine.start('a2', (await audioEngine.clock()) + 400, loopOptions())
+    const start = await audioEngine.start('a2', (await audioEngine.clock()).clockMs + 400, loopOptions())
     expect(start.state).toBe('scheduled')
     const canceled = await audioEngine.cancel('a2')
     expect(canceled.canceled).toBeGreaterThanOrEqual(1)
@@ -153,7 +170,7 @@ describe('audioEngine client (against the real engine)', () => {
 
   it('moves a live matrix with routing() and reports what panic silenced', async () => {
     await audioEngine.prepare('a3', workFilePath)
-    await audioEngine.start('a3', (await audioEngine.clock()) + 10, loopOptions())
+    await audioEngine.start('a3', (await audioEngine.clock()).clockMs + 10, loopOptions())
     await waitUntil('a3 to play', async () => {
       const progress = await audioEngine.progress('a3')
       return progress !== null && progress.playing ? progress : null

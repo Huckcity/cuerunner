@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
   AudioCancelResult,
+  AudioClockReading,
   AudioErrorCode,
   AudioCommandResult,
   AudioCrosspoint,
@@ -156,6 +157,12 @@ export class NativeAudioEngine {
   private pending = new Map<number, PendingRequest>()
   private listeners = new Set<(event: AudioEngineEvent) => void>()
   private lastInfo: AudioEngineInfo | null = null
+  /**
+   * The engine session last heard from. Every clock reply, info read and event carries
+   * it, and what this process synthesizes itself — a restart reason, a spawn failure —
+   * is tagged with it so a listener can tell which engine actually said what.
+   */
+  private lastSessionId: string | null = null
   private lastStatus: AudioEngineStatus = {
     connected: false,
     binaryPath: null,
@@ -282,14 +289,16 @@ export class NativeAudioEngine {
     return this.request('panic', { fadeMs }) as Promise<AudioPanicResult>
   }
 
-  async clock(): Promise<number> {
-    const result = (await this.request('clock', {})) as { clockMs: number }
-    return result.clockMs
+  async clock(): Promise<AudioClockReading> {
+    const result = (await this.request('clock', {})) as AudioClockReading
+    if (typeof result.sessionId === 'string' && result.sessionId !== '') this.lastSessionId = result.sessionId
+    return result
   }
 
   async info(): Promise<AudioEngineInfo> {
     const result = (await this.request('info', {})) as AudioEngineInfo
     this.lastInfo = result
+    if (typeof result.sessionId === 'string' && result.sessionId !== '') this.lastSessionId = result.sessionId
     return result
   }
 
@@ -456,8 +465,12 @@ export class NativeAudioEngine {
     const typed = this.normalizeEvent(event)
     if (typed === null) return
     // Keep the synchronous snapshot honest: the watchdog reads `active` at heartbeat
-    // time, long before anyone would await info().
-    if (typed.type === 'state' && this.lastInfo !== null) {
+    // time, long before anyone would await info(). Only the live engine's lines may
+    // move it — a dead engine's last `active: false`, arriving late behind a batch,
+    // would otherwise disarm the safety net while the replacement is playing.
+    const aboutLiveEngine =
+      typed.sessionId === '' || this.lastInfo === null || this.lastInfo.sessionId === typed.sessionId
+    if (typed.type === 'state' && this.lastInfo !== null && aboutLiveEngine) {
       this.lastInfo = { ...this.lastInfo, active: typed.active }
     }
     for (const listener of this.listeners) {
@@ -472,6 +485,12 @@ export class NativeAudioEngine {
   private normalizeEvent(event: Record<string, unknown>): AudioEngineEvent | null {
     const type = event.type
     const at = typeof event.at === 'number' ? event.at : 0
+    // The engine tags everything it says with its session. The tag rides through
+    // untouched: events are batched on their way here, so a dead engine's last words
+    // can arrive after its replacement is live, and they must not overwrite which
+    // session this process believes it is talking to — that is what `clock()` and
+    // `info()` answers, from the engine that is answering now, are for.
+    const sessionId = typeof event.sessionId === 'string' ? event.sessionId : ''
     switch (type) {
       case 'ended':
         return {
@@ -480,7 +499,8 @@ export class NativeAudioEngine {
           runId: typeof event.runId === 'string' ? event.runId : '',
           at,
           reason: (event.reason as AudioEndReason) ?? 'complete',
-          loopsCompleted: typeof event.loopsCompleted === 'number' ? event.loopsCompleted : 0
+          loopsCompleted: typeof event.loopsCompleted === 'number' ? event.loopsCompleted : 0,
+          sessionId
         }
       case 'error':
         return {
@@ -489,10 +509,11 @@ export class NativeAudioEngine {
           cueId: typeof event.cueId === 'string' ? event.cueId : null,
           runId: typeof event.runId === 'string' ? event.runId : null,
           code: typeof event.code === 'string' ? (event.code as AudioErrorCode) : 'engine',
-          message: typeof event.message === 'string' ? event.message : 'audio engine error'
+          message: typeof event.message === 'string' ? event.message : 'audio engine error',
+          sessionId
         }
       case 'panic':
-        return { type: 'panic', at, fadeMs: typeof event.fadeMs === 'number' ? event.fadeMs : 0 }
+        return { type: 'panic', at, fadeMs: typeof event.fadeMs === 'number' ? event.fadeMs : 0, sessionId }
       case 'state':
         return {
           type: 'state',
@@ -501,7 +522,8 @@ export class NativeAudioEngine {
           cueId: typeof event.cueId === 'string' ? event.cueId : null,
           runId: typeof event.runId === 'string' ? event.runId : null,
           playing: event.playing === true,
-          state: (event.state as AudioVoiceState | null) ?? null
+          state: (event.state as AudioVoiceState | null) ?? null,
+          sessionId
         }
       default:
         return null
@@ -557,7 +579,9 @@ export class NativeAudioEngine {
       cueId: null,
       runId: null,
       code,
-      message
+      message,
+      // The session this process last heard from: the fault is about leaving it.
+      sessionId: this.lastSessionId ?? ''
     }
     for (const listener of this.listeners) {
       try {
@@ -582,6 +606,18 @@ export class NativeAudioEngine {
     const child = this.child
     this.child = null
     if (child !== null && child.exitCode === null && child.signalCode === null) child.kill()
+  }
+
+  /**
+   * Kills the engine child outright, for the restart path's own acceptance test: what
+   * the show must survive is the engine dying, not the engine being asked to stop, so
+   * this is a hard kill and no shutdown verb goes out first. Reachable only through the
+   * dev harness, which a packaged build never installs.
+   */
+  crashForTest(): void {
+    const child = this.child
+    if (child === null || child.exitCode !== null || child.signalCode !== null) return
+    child.kill('SIGKILL')
   }
 
   private failPending(error: Error): void {

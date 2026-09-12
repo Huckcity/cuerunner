@@ -34,6 +34,12 @@ export interface PlaybackDevHarness {
    * nor the engine's reaches the runner.
    */
   engineStatus: () => AudioEngineStatus
+  /**
+   * Kills the engine child outright, the way a crash would — not a graceful shutdown.
+   * The restart path is the one the show has to survive, and a spec cannot reach the
+   * child from the outside on every platform.
+   */
+  killEngine: () => void
 }
 
 declare global {
@@ -51,6 +57,8 @@ export interface PlaybackDevHarnessDeps {
     recentEvents: () => AudioEngineEvent[]
     /** How the engine's own startup went, and what it said if it did not. */
     status: () => AudioEngineStatus
+    /** A hard kill of the engine child; a packaged build never gets the harness. */
+    kill: () => void
   }
 }
 
@@ -62,6 +70,7 @@ export function installPlaybackDevHarness(deps: PlaybackDevHarnessDeps): void {
     keepAwakeHeld: deps.keepAwakeHeld,
     engineStatus: deps.engine.status,
     engineInfo: () => deps.engine.info(),
-    engineEvents: () => deps.engine.recentEvents()
+    engineEvents: () => deps.engine.recentEvents(),
+    killEngine: () => deps.engine.kill()
   }
 }

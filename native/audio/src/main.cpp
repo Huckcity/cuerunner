@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     return 2;
   }
   if (version) {
-    std::printf("{\"name\":\"winslab-audio\",\"version\":\"%s\",\"protocol\":1}\n", ws::kEngineVersion);
+    std::printf("{\"name\":\"winslab-audio\",\"version\":\"%s\",\"protocol\":2}\n", ws::kEngineVersion);
     return 0;
   }
   if (!scriptPath.empty()) {
@@ -205,8 +205,8 @@ int main(int argc, char** argv) {
 
   ws::SocketServer server(*engine);
   g_server = &server;
-  engine->setEventCallback([&server](const ws::Event& event) {
-    const std::string line = ws::eventLine(event);
+  engine->setEventCallback([&server, &engine](const ws::Event& event) {
+    const std::string line = ws::eventLine(event, engine->sessionId());
     if (!line.empty()) server.broadcast(line);
   });
 

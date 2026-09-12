@@ -29,6 +29,8 @@ export const audioEngine = {
     }
   },
   onEvent: vi.fn(() => () => {}),
+  onSessionChange: vi.fn(() => () => {}),
+  sessionWarnings: vi.fn(() => []),
   prepare: vi.fn(async (cueId: string, filePath: string) => ({
     cueId,
     filePath,
@@ -60,11 +62,12 @@ export const audioEngine = {
   fade: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   progress: vi.fn(async () => null),
   panic: vi.fn(async (at: number) => ({ ok: true as const, at, stoppedVoices: 0 })),
-  clock: vi.fn(async () => Date.now()),
+  clock: vi.fn(async () => ({ clockMs: Date.now(), sessionId: 'test-session' })),
   info: vi.fn(async () => ({
     name: 'test',
     version: '0',
-    protocol: 1,
+    protocol: 2,
+    sessionId: 'test-session',
     backend: 'silent' as const,
     deviceId: null,
     deviceName: 'Default',

@@ -14,8 +14,14 @@
  * every `whenMs` is absolute on that timeline. A `whenMs` in the past means "now".
  */
 
-/** Protocol version of the JSON command/event wire format between main and native. */
-export const AUDIO_PROTOCOL_VERSION = 1
+/**
+ * Protocol version of the JSON command/event wire format between main and native.
+ *
+ * 2 added the engine session identity (`clock()` replies, `info()`, every event), which
+ * a build must not silently do without: the renderer's clock epoch is meaningless
+ * against an engine that cannot say which session a reading came from.
+ */
+export const AUDIO_PROTOCOL_VERSION = 2
 
 /** Default stream format. The engine reports what it actually achieved in `info()`. */
 export const AUDIO_DEFAULT_SAMPLE_RATE = 48000
@@ -262,6 +268,8 @@ export interface AudioEndedEvent {
   at: number
   reason: AudioEndReason
   loopsCompleted: number
+  /** The engine session that produced it; a new id means the engine was replaced. */
+  sessionId: string
 }
 
 export interface AudioErrorEvent {
@@ -272,6 +280,7 @@ export interface AudioErrorEvent {
   runId: string | null
   code: AudioErrorCode
   message: string
+  sessionId: string
 }
 
 export type AudioErrorCode =
@@ -287,6 +296,7 @@ export interface AudioPanicEvent {
   type: 'panic'
   at: number
   fadeMs: number
+  sessionId: string
 }
 
 /**
@@ -302,6 +312,20 @@ export interface AudioStateEvent {
   runId: string | null
   playing: boolean
   state: AudioVoiceState | null
+  sessionId: string
+}
+
+/**
+ * One reading of the engine's sample clock, carrying the identity of the session that
+ * produced it. The renderer keeps an epoch so its show clock is continuous across an
+ * engine restart: `showNow = clockMs + epoch`, with the epoch absorbing the fact that
+ * a respawned engine counts from zero again.
+ */
+export interface AudioClockReading {
+  /** Sample-clock ms in the engine session that produced this reading. */
+  clockMs: number
+  /** Changes whenever the engine process is replaced. */
+  sessionId: string
 }
 
 export type AudioEngineEvent = AudioEndedEvent | AudioErrorEvent | AudioPanicEvent | AudioStateEvent
@@ -397,6 +421,8 @@ export interface AudioEngineInfo {
   name: string
   version: string
   protocol: number
+  /** The running engine's session identity; changes when the process is replaced. */
+  sessionId: string
   backend: AudioBackend
   deviceId: string | null
   deviceName: string
@@ -491,8 +517,8 @@ export interface AudioEngineBridge {
   progress(cueId: string): Promise<AudioProgress | null>
   /** Fade every voice to silence and stop it. The main-process panic path calls this directly. */
   panic(fadeMs: number): Promise<AudioPanicResult>
-  /** Current sample-clock ms. */
-  clock(): Promise<number>
+  /** Current sample-clock ms, with the session identity it belongs to. */
+  clock(): Promise<AudioClockReading>
   info(): Promise<AudioEngineInfo>
   devices(): Promise<AudioDeviceInfo[]>
   /** Apply device options. Rejects (with the reason) when the request cannot be honoured. */

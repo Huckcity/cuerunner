@@ -130,7 +130,10 @@ struct WaveformDTO {
 struct InfoDTO {
   std::string name = "winslab-audio";
   std::string version;
-  int protocol = 1;
+  int protocol = 2;
+  /** This process's identity. A respawned engine has a different one and counts from
+   *  zero again; callers use it to tell a new session from a discontinuity. */
+  std::string sessionId;
   std::string backend = "none";
   std::string deviceId;
   std::string deviceName;
@@ -218,6 +221,8 @@ class Engine {
   bool panic(double fadeMs, PanicResultDTO& out, EngineError& error);
   bool progress(const std::string& cueId, VoiceSnapshot& out, bool& found) const;
   double clockMs() const;
+  /** The identity minted when this engine instance was constructed. */
+  const std::string& sessionId() const { return sessionId_; }
   InfoDTO info() const;
   bool devices(std::vector<DeviceDTO>& out, EngineError& error) const;
   bool configureDevice(const DeviceRequest& request, EngineError& error);
@@ -264,6 +269,7 @@ class Engine {
   std::string deviceIdString() const;
 
   EngineOptions options_;
+  std::string sessionId_;
   DecodedCache cache_;
   StreamPool streams_;
   SpscQueue<Command, 512> commands_;

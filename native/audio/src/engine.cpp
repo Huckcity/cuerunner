@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <random>
 #include <thread>
 
 #define MA_NO_DECODING
@@ -30,6 +31,18 @@ constexpr int kBackgroundTickMs = 2;
 constexpr int kAckTimeoutMs = 2000;
 
 std::string maResultText(ma_result result) { return std::string(ma_result_description(result)); }
+
+// The session identity is minted per process, not derived from the clock: a respawned
+// engine starts its frame counter at zero again, and the id is the only thing that says
+// so. Random rather than monotonic because nothing persists across a respawn — a
+// collision would need two live engines, which cannot happen on one socket.
+std::string mintSessionId() {
+  std::random_device device;
+  const uint64_t value = (static_cast<uint64_t>(device()) << 32) ^ static_cast<uint64_t>(device());
+  char buffer[17] = {};
+  std::snprintf(buffer, sizeof(buffer), "%016llx", static_cast<unsigned long long>(value));
+  return std::string(buffer);
+}
 
 std::string formatNameOf(ma_format format) {
   switch (format) {
@@ -159,6 +172,7 @@ void deviceNotificationCallback(const ma_device_notification* notification) {
 
 Engine::Engine() : mixer_(cache_, streams_, events_, reclaim_) {
   cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
+  sessionId_ = mintSessionId();
 }
 
 Engine::~Engine() { stop(); }
@@ -971,7 +985,8 @@ InfoDTO Engine::info() const {
   std::lock_guard<std::mutex> lock(deviceMutex_);
   InfoDTO out;
   out.version = kEngineVersion;
-  out.protocol = 1;
+  out.protocol = 2;
+  out.sessionId = sessionId_;
   MixSnapshot snapshot;
   copySnapshot(snapshot);
   out.active = snapshot.active;

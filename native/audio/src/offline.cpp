@@ -117,7 +117,7 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
   auto engine = std::make_unique<Engine>();
   std::vector<std::string> eventLines;
   engine->setEventCallback([&](const Event& event) {
-    const std::string line = eventLine(event);
+    const std::string line = eventLine(event, engine->sessionId());
     if (!line.empty()) eventLines.push_back(line);
   });
   EngineError error;

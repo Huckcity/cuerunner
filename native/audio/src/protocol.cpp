@@ -164,6 +164,7 @@ cJSON* infoToJson(const InfoDTO& info) {
   cJSON_AddStringToObject(object, "name", info.name.c_str());
   cJSON_AddStringToObject(object, "version", info.version.c_str());
   cJSON_AddNumberToObject(object, "protocol", info.protocol);
+  cJSON_AddStringToObject(object, "sessionId", info.sessionId.c_str());
   cJSON_AddStringToObject(object, "backend", info.backend.c_str());
   if (info.deviceId.empty()) cJSON_AddNullToObject(object, "deviceId");
   else cJSON_AddStringToObject(object, "deviceId", info.deviceId.c_str());
@@ -230,10 +231,11 @@ std::string infoJson(const InfoDTO& info) {
   return out;
 }
 
-std::string eventLine(const Event& event) {
+std::string eventLine(const Event& event, const std::string& sessionId) {
   if (event.kind == Event::Ack) return {};
   cJSON* root = cJSON_CreateObject();
   cJSON* body = cJSON_CreateObject();
+  cJSON_AddStringToObject(body, "sessionId", sessionId.c_str());
   switch (event.kind) {
     case Event::Ended:
       cJSON_AddStringToObject(body, "type", "ended");
@@ -472,6 +474,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "clock") {
     cJSON* body = cJSON_CreateObject();
     cJSON_AddNumberToObject(body, "clockMs", engine.clockMs());
+    cJSON_AddStringToObject(body, "sessionId", engine.sessionId().c_str());
     out = replyOk(id, body);
   } else if (verb == "info") {
     InfoDTO info = engine.info();

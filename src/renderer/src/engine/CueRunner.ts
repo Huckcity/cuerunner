@@ -2,7 +2,12 @@ import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue
 } from '../types/cue'
 import { audioEngine } from './audioEngineClient'
-import type { AudioEngineEvent, AudioFadeParam, AudioStartOptions } from './audioEngineClient'
+import type {
+  AudioEngineEvent,
+  AudioEngineSessionChange,
+  AudioFadeParam,
+  AudioStartOptions
+} from './audioEngineClient'
 import { SampleScheduler, SCHEDULER_LOOKAHEAD_MS } from './scheduler'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
@@ -130,6 +135,7 @@ export class CueRunner {
   private deps: RunnerDeps | null = null
   private scheduler: SampleScheduler | null = null
   private unsubscribeEvents: (() => void) | null = null
+  private unsubscribeSession: (() => void) | null = null
   private runs = new Map<string, CueRun>()
   // Starts scheduled at a timeline offset, kept per child so stopping the child (or the
   // group above it) takes the pending start away before it fires.
@@ -152,6 +158,7 @@ export class CueRunner {
     // the moment they name.
     this.scheduler = new SampleScheduler(() => audioEngine.nowMs(), cb => audioEngine.onTick(cb))
     this.unsubscribeEvents = audioEngine.onEvent(event => this.handleEngineEvent(event))
+    this.unsubscribeSession = audioEngine.onSessionChange(change => this.handleSessionChange(change))
     void audioEngine.syncClock().catch(() => {
       // No clock reading yet: the first tick anchors it. Commands carry absolute times
       // either way.
@@ -161,6 +168,8 @@ export class CueRunner {
   dispose(): void {
     this.unsubscribeEvents?.()
     this.unsubscribeEvents = null
+    this.unsubscribeSession?.()
+    this.unsubscribeSession = null
     this.scheduler?.dispose()
     this.scheduler = null
     this.runs.clear()
@@ -1179,6 +1188,20 @@ export class CueRunner {
         console.error('Audio seek failed:', error)
         run.finish(this.now(), { outcome: 'error', error: errorMessage(error) })
       })
+  }
+
+  /**
+   * The engine process was replaced. Nothing is re-timed here: every time the show
+   * holds is in show time, and the client kept that clock continuous across the change,
+   * so a wait cue mid-count keeps the rest of its time and a cue scheduled for later is
+   * still due at the time it named. What the operator must have is the explanation —
+   * the engine's own fault line says it died, and this one says the show carried on.
+   */
+  private handleSessionChange(change: AudioEngineSessionChange): void {
+    this.log({
+      level: 'error',
+      message: `audio engine restarted (session ${change.sessionId}); the show clock carried on`
+    })
   }
 
   /**
