@@ -26,7 +26,7 @@
     "postinstall": "node scripts/postinstall.js",
     "build:native": "node scripts/build-native-audio.mjs",
     "build:ffmpeg": "node scripts/build-ffmpeg-linux.mjs",
-    "test:native": "node native/audio/tests/offline.mjs",
+    "test:native": "node native/audio/tests/offline.mjs && node native/audio/tests/pace.mjs",
     "test:native:device": "node native/audio/tests/device-smoke.mjs",
     "predev": "node scripts/ensure-native.mjs",
     "prebuild": "node scripts/ensure-native.mjs",

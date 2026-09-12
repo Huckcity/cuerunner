@@ -534,12 +534,15 @@ void Engine::silentLoop() {
   while (!silentStop_.load(std::memory_order_acquire)) {
     renderAudio(silentScratch_.data(), block);
     const double now = steadyNowMs();
-    if (next > now) {
-      sleepMs(next - now);
-      next += blockMs;
-    } else {
-      next = now + blockMs;
-    }
+    // A real device consumes frames in real time whatever the engine is doing, and this
+    // loop stands in for that device: the deadline advances by exactly one block however
+    // late the machine made the iteration, so a starved pacer renders the blocks it owes
+    // until it is back in phase. Rebasing the deadline to `now` after a late iteration —
+    // what this used to do — threw that wall time away for good, and the show clock, which
+    // only advances with rendered frames, ran slow with it: a cue's 3000 ms wait then took
+    // 5-9 s of wall time on a contended runner.
+    if (next > now) sleepMs(next - now);
+    next += blockMs;
   }
 }
 
