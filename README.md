@@ -79,8 +79,8 @@ npm run typecheck          # TypeScript type check (no emit)
 npm test                   # Run unit tests (Vitest)
 npm run test:watch        # Run tests in watch mode
 npm run test:coverage     # Generate coverage report
-npm run test:e2e          # Run E2E tests (Playwright, requires build)
-npm run test:e2e:headed   # Run E2E tests with visible browser
+npm run test:e2e          # Run E2E tests (Playwright, requires build; private display on Linux)
+npm run test:e2e:headed   # Run E2E tests on your own display, so you can watch them
 npm run build             # Build TypeScript/React only (no packaging)
 npm run preview           # Preview built app without packaging
 npm run dist              # Build and package for all platforms
@@ -435,6 +435,14 @@ dropped.
   - Tests UI interactions, drag/drop, playback flow
   - Location: `e2e/`
   - Use helpers from `e2e/helpers.ts`
+  - The suite opens real Electron windows. On Linux it runs on a private Xvfb display
+    (`scripts/run-e2e.js`), so no window ever appears on your desktop and a run over ssh
+    behaves the same as one at the keyboard. Electron auto-selects a Wayland session's
+    compositor and ignores `DISPLAY`, so every test launch passes `--ozone-platform=x11`;
+    without that the windows would ignore the virtual display and open over whatever you
+    are doing. `npm run test:e2e:headed` is the opt-in to run it on the display you are
+    using instead.
+  - Single spec: `npm run test:e2e -- e2e/<spec>.spec.ts`
 
 **Before committing**:
 ```bash
@@ -465,8 +473,9 @@ Playback and platform limits:
 - Network cues require appropriate CORS headers on target servers, and hold the cue until the
   response or timeout
 - Audio cues store absolute file paths, so a `.wlab` moved without its audio loses those links
-- E2E tests open a real window, so they need a display. CI runs them on Windows, macOS and
-  Linux; on a headless Linux box locally, `xvfb-run -a npm run test:e2e` does the same
+- E2E tests open real windows: on Linux they run on a private Xvfb display, so they never
+  take over the desktop and work over ssh. Windows and macOS runs use the session's display,
+  and `npm run test:e2e:headed` runs the suite on your own display deliberately
 
 Behaviour worth knowing before a show:
 

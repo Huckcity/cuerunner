@@ -114,8 +114,7 @@ jobs:
           "
 
   # The app ships for Windows, macOS and Linux, so the interface is exercised on all
-  # three. The Windows lane matters most of all — it is the platform the product is for —
-  # and Linux needs a display, which a runner does not have.
+  # three. The Windows lane matters most of all — it is the platform the product is for.
   e2e:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -149,14 +148,10 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
+      # Electron opens a real window; the wrapper gives it a private Xvfb display on
+      # Linux, where a runner has none of its own (scripts/run-e2e.js).
       - name: E2E tests
-        if: runner.os != 'Linux'
         run: npm run test:e2e
-
-      # Electron opens a real window, so Linux needs a display server of its own.
-      - name: E2E tests (under Xvfb)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" npm run test:e2e
 
       - name: Upload test results
         if: failure()

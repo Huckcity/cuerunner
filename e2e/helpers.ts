@@ -110,6 +110,14 @@ export async function launchApp(
     args: [
       path.join(process.cwd(), 'out/main/index.js'),
       `--user-data-dir=${userDataDir}`,
+      // Electron 28+ auto-selects the session's Wayland compositor and ignores DISPLAY,
+      // so on a Wayland desk every test instance would open its window on the developer's
+      // desktop instead of the display the suite was given — dozens of windows in quick
+      // succession, each taking focus, for the length of the run. The command line is the
+      // only lever that works (`ELECTRON_OZONE_PLATFORM_HINT` is no longer read); with
+      // this, the window goes to the runner's Xvfb, or to the desk's own X server for a
+      // headed run a developer asked to watch.
+      '--ozone-platform=x11',
       ...(options.args ?? [])
     ],
     env: {

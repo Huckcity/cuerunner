@@ -1,5 +1,5 @@
 // What main does when the show is on the line and the window is not: sequencing that
-// keeps time while the window is minimized, a panic that lands without the renderer,
+// keeps time while the window is off screen, a panic that lands without the renderer,
 // a watchdog that notices a dead renderer, network cues that do not need CORS headers,
 // and MIDI that says so when it is not there.
 //
@@ -168,7 +168,23 @@ async function playAndConfirmSound(
 
 // ── Sequencing while the window is not on screen ───────────────────────────────
 
-test('a 3000 ms wait fires its follow-on cue while the window is minimized', async () => {
+// Takes the app's window off screen. `minimize()` needs a window manager to iconify the
+// window, and the suite runs on a bare Xvfb with none — there `isMinimized()` never turns
+// true and a test would fail on its own precondition. Hiding puts the window in the same
+// state the operator produces by minimizing: unmapped, with its page marked hidden.
+//
+// The harness also launches Electron with --disable-background-timer-throttling, so a
+// timer that Chromium would drag out to a whole second on the desk is not dragged here:
+// these tests hold the sequencing contract — waits and chains keep their time with the
+// window gone — not the clamp that motivated `backgroundThrottling: false` in main.
+async function takeWindowOffScreen(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.hide())
+  await expect.poll(
+    () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible() ?? true)
+  ).toBe(false)
+}
+
+test('a 3000 ms wait fires its follow-on cue while the window is off screen', async () => {
   const { app, page } = await launchApp()
   const port = freePort()
   const listener = await listenOsc(port)
@@ -190,17 +206,14 @@ test('a 3000 ms wait fires its follow-on cue while the window is minimized', asy
     const startedAt = performance.now()
     await page.getByRole('button', { name: /GO/ }).click()
 
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.minimize())
-    await expect.poll(
-      () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMinimized() ?? false)
-    ).toBe(true)
+    await takeWindowOffScreen(app)
 
     await expect.poll(() => listener.received.length, { timeout: 12_000 }).toBe(1)
     // Stamped when the datagram landed, on the same monotonic clock as `startedAt`.
     const elapsed = listener.receivedAt[0] - startedAt
 
     expect(listener.received[0].address).toBe('/winslab/handoff')
-    // 3000 ms of wait plus the click, the minimize and the send.
+    // 3000 ms of wait plus the click, taking the window off screen, and the send.
     expect(elapsed).toBeGreaterThanOrEqual(2900)
     expect(elapsed).toBeLessThan(3800)
   } finally {
@@ -209,16 +222,15 @@ test('a 3000 ms wait fires its follow-on cue while the window is minimized', asy
   }
 })
 
-test('chained short waits keep time while the window is minimized', async () => {
+test('chained short waits keep time while the window is off screen', async () => {
   const { app, page } = await launchApp()
   const port = freePort()
   const listener = await listenOsc(port)
 
   try {
     // Six 400 ms steps chained inside a group, then the OSC cue that proves the chain
-    // finished. A backgrounded window that is throttled clamps each of those timers to
-    // a whole second, so the chain would take six seconds or more: the bound below
-    // separates "kept time" from "was clamped", not merely from "never fired".
+    // finished. The bound below holds the whole chain under four seconds, which separates
+    // "kept time" from "the chain stalled" — not merely from "never fired".
     await page.locator('.toolbar-cue-btn', { hasText: 'Group' }).click()
     const groupRow = page.locator('.cue-row[data-depth="0"]').first()
     await groupRow.click()
@@ -238,18 +250,15 @@ test('chained short waits keep time while the window is minimized', async () => 
     const startedAt = performance.now()
     await page.getByRole('button', { name: /GO/ }).click()
 
-    // The real window, minimized the way the operator minimizes it.
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.minimize())
-    await expect.poll(
-      () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isMinimized() ?? false)
-    ).toBe(true)
+    // The real window, taken off screen the way the operator's minimized one is.
+    await takeWindowOffScreen(app)
 
     await expect.poll(() => listener.received.length, { timeout: 12_000 }).toBe(1)
     // Stamped when the datagram landed, not when the poll noticed.
     const elapsed = listener.receivedAt[0] - startedAt
 
     expect(listener.received[0].address).toBe('/winslab/handoff')
-    // 2400 ms of waits, plus the click, the minimize and the send.
+    // 2400 ms of waits, plus the click, taking the window off screen, and the send.
     expect(elapsed).toBeGreaterThanOrEqual(2300)
     expect(elapsed).toBeLessThan(3800)
   } finally {
