@@ -1,13 +1,15 @@
 # Handoff
 
 Branch: `feat/playback-engine-handoff` — PR [#68](https://github.com/Huckcity/winslab/pull/68), a
-draft against `main`. 28 commits, all pushed, tree clean. Nothing is merged.
+draft against `main`. 31 commits, all pushed, tree clean. Nothing is merged.
 
-`main` is `b22e226 chore(release): 0.13.0`, and the branch carries **twenty-eight** commits: the
-eighteen before this workstream are the WinsLab Pro and show-services work (`a4cddad` …
-`d989880` — licence, scenes, triggers, wireless, the script panel and its companion) that this
-branch was built on and that `main` does not have yet. The ten after them are the playback
-rewrite.
+`main` is `b22e226 chore(release): 0.13.0`, and the branch carries **thirty-one** commits
+(`git rev-list --count origin/main..HEAD` — recount it rather than trusting this line). The first
+eighteen are the WinsLab Pro and show-services work (`a4cddad` … `d989880` — licence, scenes,
+triggers, wireless, the script panel and its companion) that this branch was built on and that `main`
+does not have yet. The thirteen after them are the playback rewrite (ten, `5fa7112` … `a88ebde`),
+the two handoff rewrites (`b9c3f2c`, and this update — no hash, it would change with it) and the
+keep-awake fix (`9d6bb3d`).
 
 The branch is the playback rewrite: the renderer stopped owning audio. Device I/O, the sample clock,
 the scheduler, streaming and the decoded cache moved into a native engine, and the desk drives it
@@ -35,27 +37,46 @@ Latest release is still `v0.13.0`. Before that change, merging this branch would
 | `e164ac6` | `NOMINMAX`: `windows.h`'s `min`/`max` macros vs `std::min`/`std::max` (MSVC C2589). |
 | `08033fe` | Five headers include what they use (`<string>`, `<memory>`, `<vector>`, `<atomic>`, `<utility>`). |
 | `a88ebde` | The E2E wrapper runs the Playwright CLI directly — Node refuses to spawn `npx.cmd` without a shell (EINVAL), which is why Windows never ran a test. |
+| `9d6bb3d` | `prevent-app-suspension` held for the app's whole life (`src/main/safety/keepAwake.ts`), asserted at launch through the dev harness. Tried against problem 1; what it does not fix is recorded there. |
 
 ### Verified locally (Linux)
 
-`npm run typecheck`; `npm test` 902; `npm run test:e2e` 176; `npm run test:native` 74/74;
+`npm run typecheck`; `npm test` 905; `npm run test:e2e` 177 with `--workers=1` — re-run on Ubuntu
+24.04 / Node 24.21 against the keep-awake tree, on the private Xvfb display (`e2e: Electron windows
+open on a private virtual display; nothing appears on your screen`). `npm run test:native` 74/74;
 `npm run test:native:device` 26/26 against an isolated 8-channel null sink; a packaged build played
 the demo walk-in twice with no inspector opened. Watching a full suite run from outside: the app's
 window sits on the virtual display (`:99`), no Electron process holds the session's Wayland socket,
 and 399 samples of the real display saw no new window.
+
+Two things learned about running the suite locally, both worth keeping:
+
+- **Playwright's default worker count is not safe for this app on macOS.** Locally
+  `workers: process.env.CI ? 1 : undefined`, so a full run starts as many Electron instances as the
+  machine can take; instances die at MIDI init (`MidiInCore::initialize: error creating OS-X MIDI
+  client object (-304)`, then an uncaught `RtMidiError` terminates the process) and every assertion
+  waiting on that window fails with it. The failing set moves run to run — seven specs in one full
+  run, three of the same specs (different tests in them) in the next — which is what a dead window
+  looks like rather than what a broken feature looks like. Fewer instances at once is
+  the obvious lever and CI already pulls it (`workers: 1` under `CI`); the local serial run here was
+  cancelled before it reported, so that is a hypothesis rather than a measurement. The uncaught
+  `RtMidiError` taking main down is its own finding: a missing MIDI client is a condition to report,
+  not to die of.
+- **macOS has no private display.** `scripts/run-e2e.js` gives Linux its Xvfb; on a Mac the suite
+  opens real windows on the logged-in desktop, so run it there only when that is wanted.
 
 ### CI on PR #68
 
 | Lane | State |
 |---|---|
 | typecheck, unit-test, native-engine, electron-install | green on both Node versions |
-| **e2e (ubuntu-latest)** | **green** |
-| e2e (windows-latest) | engine now compiles and links with MSVC; suite ran for the first time — **149 passed, 23 failed** (see below) |
-| e2e (macos-latest) | 8–11 failures, all timing (see below) |
+| **e2e (ubuntu-latest)** | 175 passed, **1 failed** — `main-safety.spec.ts:358`, a network cue's CORS test that passed on macOS in the same run and in every local run: flaky, not this change |
+| e2e (windows-latest) | engine compiles and links with MSVC; **150 passed, 23 failed** — the same set as before, so nothing has moved (problem 2) |
+| e2e (macos-latest) | **168 passed, 9 failed** — still the timing class, with the keep-awake blocker verified held (problem 1) |
 
 ---
 
-## Open problem 1 — macOS stalls the renderer's timers (product question, unresolved)
+## Open problem 1 — macOS stalls the renderer's timers (one round taken, unresolved)
 
 **Do not loosen the timing bounds to make this pass.** The bounds are the detector.
 
@@ -67,27 +88,38 @@ The chain, in code:
   `new SampleScheduler(() => audioEngine.nowMs(), cb => audioEngine.onTick(cb))`.
 - `nowMs()` extrapolates the engine's sample time with `performance.now()`, so *times* are right;
   what can be late is the *dispatch*, which rides a renderer timer.
-- `grep -rn 'powerSaveBlocker\|powerMonitor' src/ native/` → nothing. The app never asks macOS to
-  stay awake.
+- Main now holds `prevent-app-suspension` for the app's whole life (`src/main/safety/keepAwake.ts`,
+  `9d6bb3d`). The stall survives it: see below.
 
-Measured on macOS runners: a 3000 ms wait took **8006 ms**; six 400 ms waits took **7114 ms**; the
-first macOS CI run on the same commit took 5232 ms. That is a systematic 2–3× stretch, not jitter,
-and it lands on waits and chains while audio playback stays sample-exact (the engine owns that
-clock). Main-era CI was green on these same specs because Web Audio played *in the renderer* —
-audible audio keeps an app out of App Nap. Audio now plays in a separate native process, so nothing
-holds it off.
+Measured on macOS runners: a 3000 ms wait took **5232 ms**, then **8006 ms** on the same commit
+without the blocker, then **8662 ms** with it held; six 400 ms waits took **7114 ms**. That is a
+systematic 2–3× stretch, not jitter, and it lands on waits and chains while audio playback stays
+sample-exact (the engine owns that clock). Main-era CI was green on these same specs, and the
+difference since is where the audio is played.
 
-Two ways out, both for the owner of the product's stage behaviour to pick:
+### The blocker round, and what it settled
 
-1. `powerSaveBlocker.start('prevent-app-suspension')` in main (recommended first try — one small
-   change, and one CI round falsifies or confirms it). A show controller that gets napped while its
-   window is hidden or nothing is playing is a stage risk in its own right.
-2. Take dispatch off renderer timers — engine-pushed ticks, or dispatch `due` from main. Bigger, but
-   immune by construction.
+The starting hypothesis was App Nap: Web Audio used to play in the renderer, audible audio holds an
+app out of App Nap, and the audio now plays in a separate native process. The round disfavours it.
+The held state is not an assumption — the launch assertion added with the blocker
+(`e2e/smoke.spec.ts:36`, reading Electron's own `isStarted` through `__winslabDevHarness`) passes on
+the macOS runner — and the stall stayed: the 8662 ms above, and nine timing specs failed in the same
+round — `main-safety.spec.ts` (187, 225), `playlist-group.spec.ts` (27, 55), `sequencing.spec.ts`
+(51, 93, 158), `timeline-playback.spec.ts` (196, 219). The round before also caught `sequencing` 72,
+125, 188 and `timeline-playback` 244 — the set moves between rounds, the class does not.
 
-Affected specs (all of them predate this branch and were green on `main`-era CI): `sequencing.spec.ts`
-(51, 72, 93, 125, 158, 188), `timeline-playback.spec.ts` (196, 219, 244), `playlist-group.spec.ts`
-(27, 55), and the two off-screen tests in `main-safety.spec.ts` (187, 225).
+So App Nap on the app process is not the mechanism, or not all of it. **What remains is the path the
+due cues take to the renderer**: they ride the 25 ms renderer timer, and on a runner whose window is
+never really on screen something still stretches that timer past any use of it.
+
+The next change is therefore the other option: take dispatch off renderer timers — engine-pushed
+ticks, or dispatching `due` from main. Bigger, but immune by construction.
+
+The blocker stays regardless of the CI number. A desk that can be napped while its window is hidden
+is a stage risk on its own terms, it costs one call at startup, and the suite now holds the app to
+it. What is retracted is the causal claim only: it is not what fixes the timing class.
+
+All of these specs predate this branch and were green on `main`-era CI.
 
 ## Open problem 2 — the engine dies at startup on Windows
 
@@ -155,12 +187,12 @@ pactl unload-module <id>                   # afterwards
 Engine env overrides: `WINSLAB_AUDIO_BIN`, `WINSLAB_AUDIO_BACKEND`, `WINSLAB_AUDIO_DEVICE`,
 `WINSLAB_AUDIO_EXCLUSIVE`, `WINSLAB_AUDIO_SAMPLE_RATE`, `WINSLAB_AUDIO_SOCKET`,
 `WINSLAB_TEST_AUDIO_CAPTURE` (dev builds, writes a WAV tee). Dev harness: `__winslabDevHarness`
-(`safety()`, `engineInfo()`, `engineEvents()`), non-packaged builds only.
+(`safety()`, `engineInfo()`, `engineEvents()`, `keepAwakeHeld()`), non-packaged builds only.
 
 ## What to do next, in order
 
-1. macOS: decide between `powerSaveBlocker` and engine-side dispatch (problem 1), then take one CI
-   round to see whether the stall goes.
+1. macOS: take dispatch off renderer timers (problem 1) — engine-pushed ticks, or dispatching `due`
+   from main. The `powerSaveBlocker` round is done and the timing class is still there.
 2. Windows: capture the engine's stderr (problem 2), read its reason, fix it, re-run the lane.
 3. Then the Windows failures still standing: `show-monitor` port semantics, `media-footprint-warning`,
    `script-containment`, and the timing class once playback works there.
