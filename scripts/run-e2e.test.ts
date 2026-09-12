@@ -55,11 +55,21 @@ describe('findExecutable', () => {
 describe('resolveE2eRun', () => {
   it('runs the suite under xvfb on Linux when xvfb-run is available', () => {
     const xvfbRun = installFake('xvfb-run')
-    const run = resolveE2eRun({ platform: 'linux', pathEnv: binDir, argv: [] })
+    const run = resolveE2eRun({ platform: 'linux', pathEnv: binDir, argv: [], node: '/node', cli: '/pw/cli.js' })
 
     expect(run.mode).toBe('virtual')
     expect(run.command).toBe(xvfbRun)
-    expect(run.args).toEqual(['-a', '-s', `-screen 0 ${XVFB_SCREEN}`, 'npx', 'playwright', 'test'])
+    expect(run.args).toEqual(['-a', '-s', `-screen 0 ${XVFB_SCREEN}`, '/node', '/pw/cli.js', 'test'])
+  })
+
+  it('runs the installed Playwright CLI under this node, not through a shell', () => {
+    // `npx` is a .cmd on Windows, which Node will not spawn without a shell — the whole
+    // suite then fails with EINVAL instead of running.
+    const run = resolveE2eRun({ platform: 'darwin', argv: [] })
+
+    expect(run.command).toBe(process.execPath)
+    expect(run.args[0]).toMatch(/playwright[\\/]cli\.js$/)
+    expect(run.args.slice(1)).toEqual(['test'])
   })
 
   it('passes spec filters through to Playwright', () => {
@@ -72,11 +82,11 @@ describe('resolveE2eRun', () => {
 
   it('uses the real display when the run asked to be watched', () => {
     installFake('xvfb-run')
-    const run = resolveE2eRun({ platform: 'linux', pathEnv: binDir, argv: ['--headed'] })
+    const run = resolveE2eRun({ platform: 'linux', pathEnv: binDir, argv: ['--headed'], node: '/node', cli: '/pw/cli.js' })
 
     expect(run.mode).toBe('direct')
-    expect(run.command).toBe('npx')
-    expect(run.args).toEqual(['playwright', 'test', '--headed'])
+    expect(run.command).toBe('/node')
+    expect(run.args).toEqual(['/pw/cli.js', 'test', '--headed'])
   })
 
   it('honours an explicit headed flag over argv', () => {

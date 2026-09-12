@@ -60,6 +60,22 @@ function withoutWayland(env) {
 }
 
 /**
+ * The Playwright CLI to run, resolved from the installed package.
+ *
+ * Not `npx`: Node refuses to spawn a `.cmd` without a shell (EINVAL), which is what the
+ * Windows lane got instead of a test run, and going through a shell would put the
+ * arguments through another round of quoting. This is the same file `npx playwright`
+ * would run.
+ */
+function playwrightCli() {
+  try {
+    return path.join(path.dirname(require.resolve('playwright/package.json')), 'cli.js')
+  } catch {
+    throw new Error('Playwright is not installed — run `npm install` before the E2E suite.')
+  }
+}
+
+/**
  * Decide how to start Playwright.
  *
  * @param {object} [opts]
@@ -67,6 +83,8 @@ function withoutWayland(env) {
  * @param {NodeJS.Platform} [opts.platform] - defaults to the running platform
  * @param {string} [opts.pathEnv] - PATH to search for xvfb-run; defaults to this process's
  * @param {NodeJS.ProcessEnv} [opts.env] - environment to hand the run; defaults to this process's
+ * @param {string} [opts.cli] - Playwright CLI to run; defaults to the installed one
+ * @param {string} [opts.node] - interpreter for it; defaults to this one
  * @param {boolean} [opts.headed] - force the real display; defaults to `--headed` in argv
  * @returns {{ mode: 'virtual' | 'direct', command: string, args: string[], env: NodeJS.ProcessEnv }}
  * @throws {Error} on Linux without xvfb-run, unless the run asked for the real display
@@ -77,18 +95,19 @@ function resolveE2eRun(opts = {}) {
     platform = process.platform,
     pathEnv = process.env.PATH,
     env = process.env,
+    cli = playwrightCli(),
+    node = process.execPath,
     headed = argv.includes('--headed'),
   } = opts
 
-  const playwright = platform === 'win32' ? 'npx.cmd' : 'npx'
-  const playwrightArgs = ['playwright', 'test', ...argv]
+  const playwrightArgs = [cli, 'test', ...argv]
 
   // A run that asked to be watched belongs on the display the developer is using,
   // compositor and all.
-  if (headed) return { mode: 'direct', command: playwright, args: playwrightArgs, env }
+  if (headed) return { mode: 'direct', command: node, args: playwrightArgs, env }
 
   // Only Linux has an Xvfb to borrow; elsewhere the session display is all there is.
-  if (platform !== 'linux') return { mode: 'direct', command: playwright, args: playwrightArgs, env }
+  if (platform !== 'linux') return { mode: 'direct', command: node, args: playwrightArgs, env }
 
   const xvfbRun = findExecutable('xvfb-run', pathEnv)
   if (xvfbRun === null) {
@@ -102,7 +121,7 @@ function resolveE2eRun(opts = {}) {
   return {
     mode: 'virtual',
     command: xvfbRun,
-    args: ['-a', '-s', `-screen 0 ${XVFB_SCREEN}`, playwright, ...playwrightArgs],
+    args: ['-a', '-s', `-screen 0 ${XVFB_SCREEN}`, node, ...playwrightArgs],
     env: withoutWayland(env),
   }
 }
@@ -136,6 +155,7 @@ if (require.main === module) {
 module.exports = {
   XVFB_SCREEN,
   findExecutable,
+  playwrightCli,
   withoutWayland,
   resolveE2eRun,
 }
