@@ -217,7 +217,7 @@ describe('CueRunner — timeline group mode', () => {
     expect(done).toBe(true)
   })
 
-  it('seek while stopped: in-progress audio cue plays from correct file offset', () => {
+  it('seek while stopped: in-progress audio cue plays from correct file offset', async () => {
     const group = makeGroup('g1')
     // audio at offset 0, seek to 5000ms → should play from startTime+5000 in the file
     const a1 = makeAudio('a1', 'g1', { timelineOffset: 0, startTime: 1000 })
@@ -225,14 +225,14 @@ describe('CueRunner — timeline group mode', () => {
 
     runner.seekTimeline('g1', 5000)
     runner.go()
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
 
     expect(audioEngine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
       startTime: 6000   // 1000 + 5000
     }))
   })
 
-  it('seek while stopped: audio at non-zero timeline offset is played with correct seek', () => {
+  it('seek while stopped: audio at non-zero timeline offset is played with correct seek', async () => {
     const group = makeGroup('g1')
     // audio starts at 10000ms in the timeline; seek to 12000ms → 2000ms into the cue
     const a1 = makeAudio('a1', 'g1', { timelineOffset: 10000, startTime: 0 })
@@ -241,14 +241,14 @@ describe('CueRunner — timeline group mode', () => {
 
     runner.seekTimeline('g1', 12000)
     runner.go()
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
 
     // a1 is in-progress: should start 2000ms into the file
     expect(audioEngine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
       startTime: 2000
     }))
     // a2 hasn't started yet: it plays from its own startTime when its offset arrives
-    vi.advanceTimersByTime(9000)
+    await vi.advanceTimersByTimeAsync(9000)
     expect(audioEngine.start).toHaveBeenCalledWith('a2', expect.any(Number), expect.objectContaining({
       startTime: 0
     }))
@@ -281,16 +281,17 @@ describe('CueRunner — timeline group mode', () => {
     expect(setRunning.mock.calls.some(c => c[0] === 'c1' && c[1] === null)).toBe(true)
   })
 
-  it('seek while playing: still works when all timeline timers have already fired (audio actively playing)', () => {
+  it('seek while playing: still works when all timeline timers have already fired (audio actively playing)', async () => {
     const group = makeGroup('g1')
     const a1 = makeAudio('a1', 'g1', { timelineOffset: 0 })
     const a2 = makeAudio('a2', 'g1', { timelineOffset: 5000 })
     const { runner } = setup([group, a1, a2])
 
     runner.go()
-    vi.advanceTimersByTime(6000) // both children have fired and are still playing
+    await vi.advanceTimersByTimeAsync(6000) // both children have fired and are still playing
     vi.mocked(audioEngine.start).mockClear()
     runner.seekTimeline('g1', 7000) // a2 started at 5s, so 2s in; a1 started at 0, 7s in
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(audioEngine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
       startTime: 7000

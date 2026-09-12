@@ -487,37 +487,57 @@ export class CueRunner {
         // The run's end is planned from the options right away rather than after the
         // engine's reply: a short cue's chain must be known before the cue is over.
         this.armAudioEnd(cue, run, at, options, finish)
-        void audioEngine.start(cue.id, at, options)
-          .then(result => {
-            // The engine's identity for this run, so a replaced run's stale events are
-            // not mistaken for the new one's.
-            run.engineRunId = result.runId
-          })
-          .catch(error => {
-            if (run.cancelled) return
-            console.error('Audio playback failed:', error)
-            finish(Math.max(at, this.now()), { outcome: 'error', error: errorMessage(error) })
-          })
+        void this.prepareAndPlay(cue, run, at, options, finish)
       }
     }))
   }
 
-  private armAudioEnd(cue: AudioCue, run: CueRun, at: number, options: AudioStartOptions, finish: Finish): void {
-    if (cue.duration > 0) {
-      this.scheduleAudioEnd(run, at, options, cue.duration, finish)
+  /**
+   * The engine plays a cue it has decoded first, and the inspector is not the only way
+   * into a cue: a saved show can be fired without its Audio tab ever being drawn. The
+   * prepare ahead of the start is what makes GO independent of which surfaces were
+   * opened; on a file that is already warm it is a cache hit, not a second decode.
+   */
+  private async prepareAndPlay(
+    cue: AudioCue,
+    run: CueRun,
+    at: number,
+    options: AudioStartOptions,
+    finish: Finish
+  ): Promise<void> {
+    try {
+      const metadata = await audioEngine.prepare(cue.id, cue.filePath)
+      if (metadata.durationMs > 0) this.deps!.syncCueDuration(cue.id, metadata.durationMs)
+      // The cue did not carry a length when its end had to be planned; now the engine
+      // has said what it is, so the run still ends at a known time.
+      if (metadata.durationMs > 0) {
+        this.scheduleAudioEnd(run, at, options, metadata.durationMs, finish)
+      }
+    } catch (error) {
+      if (run.cancelled) return
+      console.error('Audio playback failed:', error)
+      finish(Math.max(at, this.now()), { outcome: 'error', error: errorMessage(error) })
       return
     }
-    // The length is not known yet: the engine has it, and until it answers the run's
-    // end belongs to the engine's `ended` event.
-    void audioEngine.prepare(cue.id, cue.filePath)
-      .then(metadata => {
-        if (metadata.durationMs > 0) this.deps!.syncCueDuration(cue.id, metadata.durationMs)
-        if (run.cancelled || run.phase === 'post-wait' || run.phase === 'done') return
-        this.scheduleAudioEnd(run, at, options, metadata.durationMs, finish)
+
+    if (run.cancelled || run.phase === 'post-wait' || run.phase === 'done') return
+    void audioEngine.start(cue.id, at, options)
+      .then(result => {
+        // The engine's identity for this run, so a replaced run's stale events are
+        // not mistaken for the new one's.
+        run.engineRunId = result.runId
       })
-      .catch(() => {
-        // No metadata: the engine's ended event has to close the run.
+      .catch(error => {
+        if (run.cancelled) return
+        console.error('Audio playback failed:', error)
+        finish(Math.max(at, this.now()), { outcome: 'error', error: errorMessage(error) })
       })
+  }
+
+  private armAudioEnd(cue: AudioCue, run: CueRun, at: number, options: AudioStartOptions, finish: Finish): void {
+    // A length the cue already carries is planned now, before the engine is asked for
+    // anything; without one the end is planned once the prepare has answered.
+    if (cue.duration > 0) this.scheduleAudioEnd(run, at, options, cue.duration, finish)
   }
 
   private scheduleAudioEnd(

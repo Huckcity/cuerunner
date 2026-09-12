@@ -254,7 +254,7 @@ files you trust.
 
 1. **Execution sequence**: pre-wait → execute → post-wait → onDone callback
 2. **Groups**: Can run children sequentially or randomly
-3. **Auto-advance**: Fires next cue either immediately after pre-wait ("on-start") or after completion ("on-end")
+3. **Auto-advance**: Fires next cue either immediately after pre-wait ("on-start") or after completion ("on-end"). Handing over is one-way: a cue stopped before its end releases nothing, so an on-end cue that is stopped never fires the next cue, and an on-start successor — already fired at start — is a run of its own, so stopping the first cue does not recall it.
 4. **Timers**: Tracked with keys like `"cueId"`, `"cueId:pre"`, `"cueId:post"` for cancellation
 5. **STOP / PANIC**: Both abandon in-flight work (a network request or script that settles
    afterwards cannot resume the show). STOP cuts the audio; PANIC fades it out over 200 ms.

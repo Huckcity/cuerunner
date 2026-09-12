@@ -152,11 +152,13 @@ describe('CueRunner — basic execution', () => {
     expect(setRunning).toHaveBeenLastCalledWith('w1', null)
   })
 
-  it('sends an audio cue to the engine at the moment it is fired', () => {
+  it('sends an audio cue to the engine at the moment it is fired', async () => {
     const cue = makeAudio()
     const { runner } = setup([cue])
     const firedAt = Date.now()
     runner.go()
+    // The engine is asked to prepare the cue first; the start goes out once it has answered.
+    await vi.advanceTimersByTimeAsync(0)
     expect(engine.start).toHaveBeenCalledWith('a1', firedAt, expect.objectContaining({
       startTime: 0,
       loopCount: 0,
@@ -166,6 +168,21 @@ describe('CueRunner — basic execution', () => {
       outputs: null,
       fadeInDuration: 0
     }))
+  })
+
+  it('prepares an audio cue whose length is already known before playing it', async () => {
+    // The inspector is not the only way into a cue: a saved show can be fired without
+    // its Audio tab ever being drawn, and the engine refuses a start it was not prepared
+    // for. The prepare has to happen on the way in, not only when the length is unknown.
+    const cue = makeAudio({ id: 'a1', duration: 4000 })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.prepare).toHaveBeenCalledWith('a1', cue.filePath)
+    expect(engine.prepare.mock.invocationCallOrder[0])
+      .toBeLessThan(engine.start.mock.invocationCallOrder[0])
   })
 
   it('does not fire a disarmed cue', () => {
@@ -259,7 +276,7 @@ describe('CueRunner — pre-wait and post-wait', () => {
     expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
   })
 
-  it('keeps the cue start at its absolute time even when the tick arrives late', () => {
+  it('keeps the cue start at its absolute time even when the tick arrives late', async () => {
     // The pre-wait ends at 500 on the sample clock. Whatever the ticker did in
     // between, the cue's own times are the ones that were planned.
     const wait = makeWait({ id: 'w1', preWait: 500, duration: 400 })
@@ -270,7 +287,7 @@ describe('CueRunner — pre-wait and post-wait', () => {
     runner.go()
     runner.goById('a1', firedAt + 500)
     // The command goes out a lookahead before the cue's own time, carrying that time.
-    vi.advanceTimersByTime(400)
+    await vi.advanceTimersByTimeAsync(400)
 
     expect(engine.start).toHaveBeenCalledWith('a1', firedAt + 500, expect.anything())
   })
@@ -317,7 +334,7 @@ describe('CueRunner — auto-continue and auto-follow', () => {
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
 
-  it('schedules the next cue at the exact time the first one is due to end', () => {
+  it('schedules the next cue at the exact time the first one is due to end', async () => {
     // Both cues are audio, so the whole chain is known at GO: the second start carries
     // the first one's end time, whatever the ticker does in between.
     const first = makeAudio({ id: 'a1', number: '1', duration: 4000, advance: 'on-end' })
@@ -326,13 +343,14 @@ describe('CueRunner — auto-continue and auto-follow', () => {
 
     const firedAt = Date.now()
     runner.go()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(engine.start).toHaveBeenCalledWith('a1', firedAt, expect.anything())
     // The handover is released a lookahead early, and the second start names the exact
     // end of the first run rather than "now plus a little".
-    vi.advanceTimersByTime(3900)
+    await vi.advanceTimersByTimeAsync(3900)
     expect(engine.start).toHaveBeenCalledWith('a2', firedAt + 4000, expect.anything())
-    vi.advanceTimersByTime(100)
+    await vi.advanceTimersByTimeAsync(100)
     expect(setRunning.mock.calls.map(c => c[0])).toContain('a2')
   })
 })
@@ -469,7 +487,7 @@ describe('CueRunner — sample-clock scheduling', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('keeps the intended start times when the clock advances unevenly', () => {
+  it('keeps the intended start times when the clock advances unevenly', async () => {
     // The ticker is not the clock: a late tick must not push a cue's own time.
     const first = makeAudio({ id: 'a1', number: '1', duration: 1000, advance: 'on-end' })
     const second = makeAudio({ id: 'a2', number: '2', duration: 1000 })
@@ -478,15 +496,15 @@ describe('CueRunner — sample-clock scheduling', () => {
     const firedAt = Date.now()
     runner.go()
     // A jump of 37 ms, then a long stretch that swallows several ticks at once.
-    vi.advanceTimersByTime(37)
-    vi.advanceTimersByTime(900)
-    vi.advanceTimersByTime(63)
+    await vi.advanceTimersByTimeAsync(37)
+    await vi.advanceTimersByTimeAsync(900)
+    await vi.advanceTimersByTimeAsync(63)
 
     expect(engine.start).toHaveBeenNthCalledWith(1, 'a1', firedAt, expect.anything())
     expect(engine.start).toHaveBeenNthCalledWith(2, 'a2', firedAt + 1000, expect.anything())
   })
 
-  it('closes a run the engine ends before its planned end', () => {
+  it('closes a run the engine ends before its planned end', async () => {
     // A file that turns out to be shorter than the metadata said: the engine has the
     // last word, and the cue after it starts from where the run really ended.
     const first = makeAudio({ id: 'a1', number: '1', duration: 5000, advance: 'on-end' })
@@ -494,11 +512,11 @@ describe('CueRunner — sample-clock scheduling', () => {
     const { runner, setLastRun } = setup([first, second])
 
     runner.go()
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     emitEngineEvent({
       type: 'ended', cueId: 'a1', runId: 'run-a1', at: Date.now(), reason: 'complete', loopsCompleted: 0
     })
-    vi.advanceTimersByTime(0)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({ outcome: 'success' }))
     // Only the first cue was ever sent to the engine, and its run was closed at the
@@ -507,28 +525,28 @@ describe('CueRunner — sample-clock scheduling', () => {
     expect(setLastRun.mock.calls[0][1].durationMs).toBeLessThan(5000)
   })
 
-  it('re-times a finite run when the operator changes its rate', () => {
+  it('re-times a finite run when the operator changes its rate', async () => {
     const cue = makeAudio({ id: 'a1', duration: 4000, advance: 'on-end' })
     const next = makeAudio({ id: 'a2', duration: 1000 })
     const { runner } = setup([cue, next])
 
     const firedAt = Date.now()
     runner.go()
-    vi.advanceTimersByTime(1000)
+    await vi.advanceTimersByTimeAsync(1000)
     // A quarter through the cue the operator doubles the rate: the remaining 3000 ms of
     // playback now take 1500 ms, so the next cue starts at +2500, not +4000.
     runner.setLiveParameter('a1', 'rate', 2)
-    vi.advanceTimersByTime(1400)
+    await vi.advanceTimersByTimeAsync(1400)
 
     expect(engine.start).toHaveBeenCalledWith('a2', firedAt + 2500, expect.anything())
   })
 
-  it('drops the playhead without fading the cue in again', () => {
+  it('drops the playhead without fading the cue in again', async () => {
     const cue = makeAudio({ id: 'a1', duration: 4000, fadeInDuration: 1500 })
     const { runner } = setup([cue])
 
     runner.go()
-    vi.advanceTimersByTime(500)
+    await vi.advanceTimersByTimeAsync(500)
     runner.seekCue('a1', 2000)
 
     // The engine moves the position; the renderer does not start the cue again, which
@@ -790,6 +808,21 @@ describe('CueRunner — engine failures are reported', () => {
     expect(appendLog).toHaveBeenCalledWith([
       expect.objectContaining({ level: 'error', message: 'ENOENT: no such file' })
     ])
+  })
+
+  it('reports a cue the engine could not prepare, and never asks it to play', async () => {
+    engine.prepare.mockRejectedValueOnce(new Error('ENOENT: no such file'))
+    const cue = makeAudio({ id: 'a1', duration: 4000 })
+    const { runner, setLastRun } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).not.toHaveBeenCalled()
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: 'ENOENT: no such file'
+    }))
   })
 
   it('reports an error the engine raises while the cue plays', async () => {
