@@ -2,7 +2,7 @@
 
 A cross-platform **QLab alternative** for Windows and macOS — professional show-control software for managing audio, MIDI, OSC, and network cues in live performance and broadcast environments.
 
-Built with Electron, React, TypeScript, and Zustand. Licensed under [MIT](./LICENSE).
+Built with Electron, React, TypeScript, and Zustand. Source-available under the [Functional Source License 1.1, MIT future licence](./LICENSE) — see [Licence](#licence).
 
 **Operator documentation:** the [user guide](https://huckcity.github.io/winslab/guide.html) covers
 running a show — workspaces, timing and advance, every cue type, the run log, and
@@ -406,3 +406,13 @@ See `CLAUDE.md` for detailed development guidelines.
 
 - **Issues**: [GitHub Issues](https://github.com/Huckcity/winslab/issues)
 - **Feedback**: The fastest way to shape Winslab is to file an issue with your use case — "I run sound for X and need Y" directly drives the roadmap.
+
+## Licence
+
+Winslab is source-available under the [Functional Source License 1.1, MIT future licence](./LICENSE) (FSL-1.1-MIT). In short:
+
+- **Use it for anything, including paid work.** Running a show, a tour, a venue, a broadcast — commercial use is permitted, and so are internal tools and professional services built around it.
+- **Don't sell it as a competing product.** You may not offer Winslab, or something substantially similar, as a commercial product or service of your own.
+- **Every release becomes MIT two years after it is published**, irrevocably. FSL exists to keep this product alive while it is being built, not to hold it back forever.
+
+The versions published before this licence (up to and including v0.13.0) were released under MIT and stay under MIT — that grant cannot be withdrawn.

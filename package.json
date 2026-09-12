@@ -1,6 +1,7 @@
 {
   "name": "winslab",
   "version": "0.13.0",
+  "license": "FSL-1.1-MIT",
   "description": "QLab-style show control for Windows",
   "main": "out/main/index.js",
   "scripts": {
