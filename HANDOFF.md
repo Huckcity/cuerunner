@@ -1,15 +1,15 @@
 # Handoff
 
 Branch: `feat/playback-engine-handoff` — PR [#68](https://github.com/Huckcity/winslab/pull/68), a
-draft against `main`. 33 commits, all pushed, tree clean. Nothing is merged.
+draft against `main`. 40 commits, all pushed, tree clean, CI green. Nothing is merged.
 
-`main` is `b22e226 chore(release): 0.13.0`, and the branch carries **thirty-three** commits
+`main` is `b22e226 chore(release): 0.13.0`, and the branch carries **forty** commits
 (`git rev-list --count origin/main..HEAD` — recount it rather than trusting this line). The first
 eighteen are the WinsLab Pro and show-services work (`a4cddad` … `d989880` — licence, scenes,
 triggers, wireless, the script panel and its companion) that this branch was built on and that `main`
-does not have yet. The fifteen after them are the playback rewrite (ten, `5fa7112` … `a88ebde`), the
-keep-awake fix (`9d6bb3d`), the silent-pacer fix (`4d8179a`) and three handoff rewrites (the latest
-is this one).
+does not have yet. The twenty-two after them are the playback rewrite (ten, `5fa7112` … `a88ebde`),
+the keep-awake and silent-pacer fixes, the Windows startup repair and the diagnostics that found it,
+the spec-stability work, and four handoff rewrites.
 
 The branch is the playback rewrite: the renderer stopped owning audio. Device I/O, the sample clock,
 the scheduler, streaming and the decoded cache moved into a native engine, and the desk drives it
@@ -39,11 +39,17 @@ Latest release is still `v0.13.0`. Before that change, merging this branch would
 | `a88ebde` | The E2E wrapper runs the Playwright CLI directly — Node refuses to spawn `npx.cmd` without a shell (EINVAL), which is why Windows never ran a test. |
 | `9d6bb3d` | `prevent-app-suspension` held for the app's whole life (`src/main/safety/keepAwake.ts`), asserted at launch through the dev harness. Tried against problem 1; what it does not fix is recorded there. |
 | `4d8179a` | The silent pacer repays the wall time it loses instead of rebasing its deadline away, with `native/audio/tests/pace.mjs` as the deterministic acceptance (SIGSTOP a 500 ms hole, assert the clock keeps wall time). This is what problem 1 actually was. |
+| `7aad479` | The Windows engine hands out one readable pipe instance: `listen()` left a connectable instance no thread read while the accept loop created its own, and Windows gives a connecting client the oldest one. |
+| `0fa6d7a` | A failure on the Windows lane can name itself: the engine's stderr is kept (bounded) in main, reported with `engineStatus`, and the app's stdio is teed where Playwright prints none of it. |
+| `d4ea050` | The engine is built on the heap. `sizeof(ws::Engine)` is 3.68 MiB and `main()` held one by value; Windows gives a thread one MiB, so the process died at entry with `0xC00000FD`. `native/audio/tests/stack.mjs` holds it. |
+| `44d1af0` | The port-in-use assertion accepts `EACCES` as well as `EADDRINUSE` — Windows reports the former for a bind that clashes. |
+| `8473eb9` | Two observation races removed: the demo spec polls the engine's voice count instead of reading it the instant the cue turns playing, and the post-wait pill gets a window long enough to be seen. |
+| `ad22110` | One E2E retry, on CI only, reported as flaky rather than passed; locally there are none. |
 
 ### Verified locally (Linux)
 
-`npm run typecheck`; `npm test` 905; `npm run test:e2e` 177 with `--workers=1`; `npm run test:native`
-74 + 3 (the 3 are the pacer suite) — all re-run on Ubuntu 24.04 / Node 24.21 on the private Xvfb
+`npm run typecheck`; `npm test` 905; `npm run test:e2e` 178 with `--workers=1`; `npm run test:native`
+74 + 3 + 2 (pacer, then stack) — all re-run on Ubuntu 24.04 / Node 24.21 on the private Xvfb
 display (`e2e: Electron windows open on a private virtual display; nothing appears on your screen`).
 `npm run test:native:device` 26/26 against an isolated 8-channel null sink; a packaged build played
 the demo walk-in twice with no inspector opened. Watching a full suite run from outside: the app's
@@ -68,12 +74,15 @@ Two things learned about running the suite locally, both worth keeping:
 
 ### CI on PR #68
 
+**All lanes green** (`34722157438`): typecheck, unit-test, native-engine and electron-install on both
+Node versions, and all three e2e lanes.
+
 | Lane | State |
 |---|---|
-| typecheck, unit-test, native-engine, electron-install | green on both Node versions; the native lane now runs the pacer suite too |
-| **e2e (ubuntu-latest)** | **green** — 177 passed |
-| **e2e (macos-latest)** | **green** — 177 passed; the unchanged `< 3800 ms` hidden-wait assertion now passes, where it measured 8662 ms before `4d8179a` |
-| e2e (windows-latest) | 152 passed, 21 failed — the engine still dies at startup there (problem 2) |
+| typecheck, unit-test, native-engine, electron-install | green; the native lane runs the pacer and stack suites too |
+| **e2e (ubuntu-latest)** | **green** — 176 passed, **1 flaky**: `network-script-inspectors.spec.ts:107` failed once and passed on the retry. The retry is CI-only and never silent: Playwright reports the spec as flaky and keeps the trace |
+| **e2e (macos-latest)** | **green** — 178 passed, no retries; the unchanged `< 3800 ms` hidden-wait assertion passes, where it measured 8662 ms before `4d8179a` |
+| **e2e (windows-latest)** | **green** — 174 passed, 4 platform skips, no retries; it had never passed before the heap fix below |
 
 ---
 
@@ -115,23 +124,36 @@ The nine specs that were failing — `main-safety.spec.ts` (187, 225), `playlist
 (27, 55), `sequencing.spec.ts` (51, 93, 158), `timeline-playback.spec.ts` (196, 219) — predate this
 branch and passed on the first macOS round after this fix.
 
-## Open problem 2 — the engine dies at startup on Windows
+## Open problem 2 — the engine dies at startup on Windows — **settled: a stack overflow**
 
-Symptoms in the Windows lane: `.running-badge` stays `idle` after GO, the walk-in never reaches
-`data-state="playing"`, and the only runtime engine line in the log is `audio engine connection
-closed`. Several failures are downstream of it (`demo-workspace.spec.ts:79`,
-`failure-reporting.spec.ts:71`, three `main-safety` panic tests, `settings.spec.ts:57`).
+The engine was several MiB of embedded queues — `sizeof(ws::Engine)` is **3.68 MiB**, most of it the
+command and event queues — and `main()` held one **by value**. Windows gives a thread **one MiB** of
+stack, so the process died at entry: exit code `0xC00000FD` (`STATUS_STACK_OVERFLOW`), empty stderr,
+not even the `listening on …` line. Linux and macOS give the main thread eight MiB, which is why only
+Windows saw it. Every Windows spec failed on a cause none of them could name.
 
-**Next step, one CI round:** tee the app's stderr into the test output (`e2e/helpers.ts`; the engine
-prefixes its own lines with `[winslab-audio]`), so the engine names its own reason instead of being
-guessed at. The binary path and named-pipe transport already handle Windows
-(`src/main/audio/AudioEngine.ts:119-139`), and the silent backend is platform-independent
-(`engine.cpp:364`), so the cause is further in.
+`d4ea050` builds the engine with `make_unique` in all three entry paths (daemon, device listing,
+offline renderer). Nothing else changed.
 
-Then, once playback works there: `show-monitor.spec.ts:106` (a port another program holds) is worth
-reading closely — Windows' `SO_REUSEADDR` semantics differ from POSIX, and the test may be asserting
-a POSIX behaviour. `media-footprint-warning.spec.ts:88` and the two `script-containment.spec.ts`
-failures are still unclassified.
+**How it was found, because the lane was blind.** The Windows runner showed no app stderr at all —
+Playwright prints none of it there. So, in order: main now keeps the engine's stderr (bounded) and
+reports it with `engineStatus` (`0fa6d7a`); the suite asserts the engine is up and prints the whole
+status when it is not, which is what produced the exit code; and `launchApp` tees the app's stdio on
+Windows. Along the way `7aad479` fixed a real bug the same investigation exposed — `listen()` created
+a named-pipe instance that nothing read while the accept loop created a second one, and Windows hands
+a connecting client the oldest instance, so the app could attach to the orphan and wait forever for
+replies that could not come.
+
+**Two failures that were never the engine**, once it started: `show-monitor.spec.ts` asserted
+`EADDRINUSE` for an occupied port, which is the POSIX name — Windows reports `EACCES` (WSAEACCES) for
+the same clash, and the app was right (`44d1af0`, which also covers the monitor alert). And the demo
+spec read the engine's voice count the instant the cue turned playing, racing the start's lookahead
+(`8473eb9`).
+
+**The regression needs no runner.** `native/audio/tests/stack.mjs` starts the engine under
+`ulimit -s 1024` — what Windows gives a thread — and asserts it comes up and answers. It reports
+SIGSEGV on the old code and passes on this one, on Linux and macOS; Windows is covered by the suite's
+engine-up assertion.
 
 ---
 
@@ -151,6 +173,11 @@ failures are still unclassified.
   renderer past the three-second heartbeat panics before the crash lands, and a renderer that stopped
   answering cannot be crashed — that is the safety net working, not the test's subject. Don't "fix"
   it back to a hard failure.
+- **One E2E retry, on CI only.** Shared runners starve an Electron app in bursts, and the ubuntu lane
+  had failed four different specs across runs — each one green in the runs either side of it and green
+  on Linux/Xvfb locally. Playwright reports a retried spec as *flaky*, never as passed, and keeps the
+  trace, so the count stays visible: the last green run used it once, for
+  `network-script-inspectors.spec.ts:107`. Locally there are no retries — a flake is worth seeing.
 - The two off-screen tests hide the window rather than minimise it: `minimize()` needs a window
   manager, and a bare Xvfb has none. Playwright also launches with
   `--disable-background-timer-throttling`, so those tests hold the sequencing contract, not the clamp
@@ -181,16 +208,14 @@ pactl unload-module <id>                   # afterwards
 Engine env overrides: `WINSLAB_AUDIO_BIN`, `WINSLAB_AUDIO_BACKEND`, `WINSLAB_AUDIO_DEVICE`,
 `WINSLAB_AUDIO_EXCLUSIVE`, `WINSLAB_AUDIO_SAMPLE_RATE`, `WINSLAB_AUDIO_SOCKET`,
 `WINSLAB_TEST_AUDIO_CAPTURE` (dev builds, writes a WAV tee). Dev harness: `__winslabDevHarness`
-(`safety()`, `engineInfo()`, `engineEvents()`, `keepAwakeHeld()`), non-packaged builds only.
+(`safety()`, `engineInfo()`, `engineEvents()`, `keepAwakeHeld()`, `engineStatus()`), non-packaged
+builds only.
 
 ## What to do next, in order
 
-1. Windows: capture the engine's stderr (problem 2), read its reason, fix it, re-run the lane.
-2. Then the Windows failures still standing: `show-monitor` port semantics, `media-footprint-warning`,
-   `script-containment`, and the timing class once playback works there.
-3. Retire the compile-guarded native paths on real hardware: `npm run test:native:device` needs an
+1. Retire the compile-guarded native paths on real hardware: `npm run test:native:device` needs an
    actual device, and the Windows/macOS device code has only ever been compiled by CI.
-4. ASIO, when the agreement and SDK arrive — behind `MA_ENABLE_ASIO`, enumerated honestly, proven by
+2. ASIO, when the agreement and SDK arrive — behind `MA_ENABLE_ASIO`, enumerated honestly, proven by
    the offline and device suites.
-5. PR #68 comes out of draft when the lanes are green and the user says so; the release is a separate,
-   deliberate dispatch.
+3. PR #68 comes out of draft when the user says so; the release is a separate, deliberate dispatch
+   (Actions → Release → Run workflow from `main`).
