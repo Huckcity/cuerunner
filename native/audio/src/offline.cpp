@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -111,14 +112,16 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
   });
 
   engineOptions.backend = "offline";
-  Engine engine;
+  // Several MiB of embedded queues: heap, so a one-MiB thread stack (Windows) cannot
+  // overflow before the render starts.
+  auto engine = std::make_unique<Engine>();
   std::vector<std::string> eventLines;
-  engine.setEventCallback([&](const Event& event) {
+  engine->setEventCallback([&](const Event& event) {
     const std::string line = eventLine(event);
     if (!line.empty()) eventLines.push_back(line);
   });
   EngineError error;
-  if (!engine.start(engineOptions, error)) {
+  if (!engine->start(engineOptions, error)) {
     std::fprintf(stderr, "cannot start offline engine: %s (%s)\n", error.message.c_str(), error.code.c_str());
     cJSON_Delete(script);
     return 2;
@@ -128,7 +131,7 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
   std::string writerError;
   if (!writer.open(options.outPath, engineOptions.sampleRate, engineOptions.channels, writerError)) {
     std::fprintf(stderr, "%s\n", writerError.c_str());
-    engine.stop();
+    engine->stop();
     cJSON_Delete(script);
     return 2;
   }
@@ -146,7 +149,7 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
                               1000.0 / static_cast<double>(engineOptions.sampleRate);
     while (nextCommand < commands.size() && commands[nextCommand].atMs <= blockEndMs) {
       bool shutdown = false;
-      const std::string reply = handleRequestLine(engine, commands[nextCommand].request, shutdown);
+      const std::string reply = handleRequestLine(*engine, commands[nextCommand].request, shutdown);
       cJSON* parsed = cJSON_Parse(reply.c_str());
       if (parsed != nullptr) {
         cJSON* stored = cJSON_CreateObject();
@@ -159,21 +162,21 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
       anyCommandRan = true;
       nextCommand++;
     }
-    engine.pump();
+    engine->pump();
     const int framesThisBlock = static_cast<int>(block.size()) / engineOptions.channels;
     std::fill(block.begin(), block.end(), 0.0f);
-    engine.renderOfflineBlock(block.data(), framesThisBlock);
+    engine->renderOfflineBlock(block.data(), framesThisBlock);
     if (!writer.writeFrames(block.data(), framesThisBlock)) {
       std::fprintf(stderr, "cannot write output WAV\n");
       writer.finalize();
-      engine.stop();
+      engine->stop();
       cJSON_Delete(script);
       return 2;
     }
     rendered += framesThisBlock;
 
     if (stopWhenIdle) {
-      const InfoDTO info = engine.info();
+      const InfoDTO info = engine->info();
       if (!info.active) {
         idleBlocks++;
         if (idleBlocks > 8 && anyCommandRan && nextCommand >= commands.size()) break;
@@ -187,7 +190,7 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
     // mistake is visible rather than silently dropped.
     while (nextCommand < commands.size()) {
       bool shutdown = false;
-      const std::string reply = handleRequestLine(engine, commands[nextCommand].request, shutdown);
+      const std::string reply = handleRequestLine(*engine, commands[nextCommand].request, shutdown);
       cJSON* parsed = cJSON_Parse(reply.c_str());
       if (parsed != nullptr) {
         cJSON* stored = cJSON_CreateObject();
@@ -201,9 +204,9 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
     }
   }
 
-  const InfoDTO finalInfo = engine.info();
+  const InfoDTO finalInfo = engine->info();
   writer.finalize();
-  engine.stop();
+  engine->stop();
   cJSON_Delete(script);
 
   cJSON* summary = cJSON_CreateObject();

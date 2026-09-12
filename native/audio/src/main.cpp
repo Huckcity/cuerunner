@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -167,10 +168,13 @@ int main(int argc, char** argv) {
     return ws::runOfflineRender(engineOptions, options);
   }
   if (listDevices) {
-    ws::Engine engine;
+    // The engine is several MiB of embedded queues, and Windows gives a thread one MiB of
+    // stack: every Engine lives on the heap, on every path, so startup cannot overflow
+    // before the process has printed a word. (It did: main died with 0xC00000FD.)
+    auto engine = std::make_unique<ws::Engine>();
     std::vector<ws::DeviceDTO> devices;
     ws::EngineError error;
-    if (!engine.devices(devices, error)) {
+    if (!engine->devices(devices, error)) {
       std::fprintf(stderr, "cannot enumerate devices: %s\n", error.message.c_str());
       return 3;
     }
@@ -191,17 +195,17 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  ws::Engine engine;
+  auto engine = std::make_unique<ws::Engine>();
   ws::EngineError startError;
-  if (!engine.start(engineOptions, startError)) {
+  if (!engine->start(engineOptions, startError)) {
     std::fprintf(stderr, "audio engine failed to start: %s (%s)\n", startError.message.c_str(),
                  startError.code.c_str());
     return 3;
   }
 
-  ws::SocketServer server(engine);
+  ws::SocketServer server(*engine);
   g_server = &server;
-  engine.setEventCallback([&server](const ws::Event& event) {
+  engine->setEventCallback([&server](const ws::Event& event) {
     const std::string line = ws::eventLine(event);
     if (!line.empty()) server.broadcast(line);
   });
@@ -218,7 +222,7 @@ int main(int argc, char** argv) {
   std::string listenError;
   if (!server.listen(socketPath, listenError)) {
     std::fprintf(stderr, "%s\n", listenError.c_str());
-    engine.stop();
+    engine->stop();
     return 3;
   }
 
@@ -240,7 +244,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "[winslab-audio] no client connected; silencing and exiting\n");
         ws::CommandResultDTO ignored;
         ws::EngineError ignoredError;
-        engine.stopAll(0.0, ignored, ignoredError);
+        engine->stopAll(0.0, ignored, ignoredError);
         silenced = true;
         deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kClientGraceSeconds);
         continue;
@@ -252,6 +256,6 @@ int main(int argc, char** argv) {
   watchdog.detach();
 
   server.serve();
-  engine.stop();
+  engine->stop();
   return 0;
 }
