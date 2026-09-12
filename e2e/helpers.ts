@@ -2,7 +2,7 @@ import { _electron as electron, expect, type ElectronApplication, type Page } fr
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import { createSocket } from 'dgram'
 import { generateKeyPairSync } from 'crypto'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import path from 'path'
 // The spec process mints keys with the same codec the app reads them with, so a test
 // cannot pass against a format the app does not actually accept.
@@ -70,7 +70,29 @@ function launchEnv(trustPublicKey?: string): Record<string, string> {
 // instances running alongside them. Pass the same directory back in to relaunch an
 // instance that should see what the previous one left behind.
 export async function launchApp(
-  options: { userDataDir?: string; license?: TestLicense; trustPublicKey?: string } = {}
+  options: {
+    userDataDir?: string
+    license?: TestLicense
+    trustPublicKey?: string
+    /**
+     * Extra environment for the app process. Used for the dev-only harness switches a
+     * spec needs — never for anything the product reads in a packaged build.
+     */
+    env?: Record<string, string>
+    /** Extra argv, for a spec that has to point the app somewhere else. */
+    args?: string[]
+    /**
+     * Native audio engine settings for the run. The suite never touches the operator's
+     * hardware: unless a spec explicitly asks for the device (`backend: 'auto'`, which
+     * only the isolated native device smoke does), the engine runs its real mixer and
+     * scheduler against the silent backend.
+     */
+    audio?: {
+      /** Path to the built engine binary, when it is not the development default. */
+      binPath?: string
+      backend?: 'silent' | 'auto'
+    }
+  } = {}
 ): Promise<{ app: ElectronApplication; page: Page; userDataDir: string }> {
   let userDataDir = options.userDataDir
   if (!userDataDir) {
@@ -85,8 +107,19 @@ export async function launchApp(
   }
 
   const app = await electron.launch({
-    args: [path.join(process.cwd(), 'out/main/index.js'), `--user-data-dir=${userDataDir}`],
-    env: launchEnv(options.license?.publicKeyPem ?? options.trustPublicKey)
+    args: [
+      path.join(process.cwd(), 'out/main/index.js'),
+      `--user-data-dir=${userDataDir}`,
+      ...(options.args ?? [])
+    ],
+    env: {
+      ...launchEnv(options.license?.publicKeyPem ?? options.trustPublicKey),
+      ...(options.audio?.binPath !== undefined ? { WINSLAB_AUDIO_BIN: options.audio.binPath } : {}),
+      // Explicit, not detected: a test run plays no user hardware, and a spec that wants
+      // the real device says so.
+      WINSLAB_AUDIO_BACKEND: options.audio?.backend ?? 'silent',
+      ...options.env
+    }
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
@@ -136,19 +169,26 @@ export interface TestServer {
   close: () => Promise<void>
 }
 
-// Local HTTP server for network cue tests. Serves CORS headers so the renderer's
-// cross-origin fetch passes preflight, answers 500 for "/fail", and records every
+// Local HTTP server for network cue tests. Answers 500 for "/fail" and records every
 // non-preflight request.
-export async function startServer(): Promise<TestServer> {
+//
+// CORS headers are on by default so the older specs keep exercising what they always
+// did. Pass `{ cors: false }` for the case that matters to a network cue: a console on
+// the LAN that has never heard of the page's origin. A renderer-side fetch cannot reach
+// that server, and a request from the main process does not care.
+export async function startServer(options: { cors?: boolean } = {}): Promise<TestServer> {
+  const cors = options.cors ?? true
   const hits: RequestHit[] = []
   const server: Server = createServer((req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', '*')
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204)
-      res.end()
-      return
+    if (cors) {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', '*')
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204)
+        res.end()
+        return
+      }
     }
     let body = ''
     req.on('data', chunk => { body += chunk })
@@ -168,6 +208,37 @@ export async function startServer(): Promise<TestServer> {
     hits,
     close: () => new Promise<void>(resolve => server.close(() => resolve()))
   }
+}
+
+// ── The engine's own output, for the panic tests ──────────────────────────────
+// Launched with WINSLAB_TEST_AUDIO_CAPTURE=<path>, the engine tees its real mixer
+// output to a 32-bit float WAV (data size left as 0xFFFFFFFF while it runs, so the PCM
+// can be read past the header without waiting for a graceful close). A test can then
+// ask the only question that matters for a panic: is the tail of that file silent, or
+// was something still playing?
+
+/** Peak absolute sample in the last `windowMs` of captured output. 0 when there is none. */
+export function capturedOutputPeak(filePath: string, windowMs: number): number {
+  const buffer = readFileSync(filePath)
+  // 12 bytes RIFF header, 24 bytes fmt chunk, 8 bytes data chunk header.
+  const PCM_OFFSET = 44
+  if (buffer.length <= PCM_OFFSET) return 0
+
+  const channels = buffer.readUInt16LE(22) || 2
+  const sampleRate = buffer.readUInt32LE(24) || 48000
+  const bytesPerFrame = 4 * channels
+  const frames = Math.floor((buffer.length - PCM_OFFSET) / bytesPerFrame)
+  if (frames === 0) return 0
+
+  const windowFrames = Math.min(frames, Math.max(1, Math.ceil((sampleRate * windowMs) / 1000)))
+  let peak = 0
+  for (let frame = frames - windowFrames; frame < frames; frame++) {
+    for (let channel = 0; channel < channels; channel++) {
+      const sample = Math.abs(buffer.readFloatLE(PCM_OFFSET + frame * bytesPerFrame + channel * 4))
+      if (sample > peak) peak = sample
+    }
+  }
+  return peak
 }
 
 // ── OSC ──────────────────────────────────────────────────────────────────────
@@ -314,17 +385,26 @@ export function decodeOscMessage(buffer: Buffer): OscMessage {
 /**
  * A port that receives OSC, so a test can prove what the app actually put on the wire
  * rather than what it meant to.
+ *
+ * `receivedAt` stamps each message as it lands, on the monotonic clock the spec also
+ * stamps its own actions with, so a timing test measures the wire and not the wall
+ * clock or a polling interval.
  */
 export async function listenOsc(
   port: number
-): Promise<{ port: number; received: OscMessage[]; close: () => Promise<void> }> {
+): Promise<{ port: number; received: OscMessage[]; receivedAt: number[]; close: () => Promise<void> }> {
   const socket = createSocket('udp4')
   const received: OscMessage[] = []
-  socket.on('message', buffer => received.push(decodeOscMessage(buffer)))
+  const receivedAt: number[] = []
+  socket.on('message', buffer => {
+    received.push(decodeOscMessage(buffer))
+    receivedAt.push(performance.now())
+  })
   await new Promise<void>(resolve => socket.bind(port, '127.0.0.1', resolve))
   return {
     port,
     received,
+    receivedAt,
     close: () => new Promise<void>(resolve => socket.close(() => resolve()))
   }
 }

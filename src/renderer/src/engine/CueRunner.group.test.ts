@@ -3,8 +3,9 @@ import type { Mock } from 'vitest'
 import { CueRunner } from './CueRunner'
 import type { Cue, WaitCue, GroupCue } from '../types/cue'
 
-vi.mock('./AudioPlayer', () => ({
-  audioPlayer: { play: vi.fn(), stop: vi.fn(), stopAll: vi.fn(), setVolume: vi.fn() }
+vi.mock('./audioEngineClient')
+vi.mock('./networkClient', () => ({
+  network: { request: vi.fn(), cancel: vi.fn() }
 }))
 
 function makeGroup(id: string, overrides: Partial<GroupCue> = {}): GroupCue {
@@ -26,6 +27,13 @@ function makeWait(id: string, parentId: string | null, overrides: Partial<WaitCu
   }
 }
 
+// Runners left behind by a test still hold scheduled work; disposing them keeps a
+// later test's clock from firing an earlier test's cues.
+const runners: CueRunner[] = []
+afterEach(() => {
+  for (const runner of runners.splice(0)) runner.dispose()
+})
+
 function setup(cues: Cue[]) {
   const runner = new CueRunner()
   const setRunning = vi.fn()
@@ -44,6 +52,7 @@ function setup(cues: Cue[]) {
     getMidiDefaultPort: () => 'default-midi-port',
     isPro: () => true
   })
+  runners.push(runner)
   return { runner, setRunning, setSelected }
 }
 
@@ -59,7 +68,7 @@ describe('CueRunner — group cue (sequence mode)', () => {
     const { runner, setRunning } = setup([group, c1, c2, c3])
 
     runner.go()
-    vi.runAllTimers()
+    vi.advanceTimersByTime(1000)
 
     const fired = setRunning.mock.calls
       .filter(c => c[1]?.state === 'playing')
@@ -84,7 +93,7 @@ describe('CueRunner — group cue (sequence mode)', () => {
     expect(firedSoFar).toContain('c1')
     expect(firedSoFar).not.toContain('c2')
 
-    vi.runAllTimers()
+    vi.advanceTimersByTime(1000)
     const allFired = setRunning.mock.calls
       .filter(c => c[1]?.state === 'playing')
       .map(c => c[0])
@@ -98,7 +107,7 @@ describe('CueRunner — group cue (sequence mode)', () => {
     const { runner, setRunning } = setup([group, c1, c2])
 
     runner.go()
-    vi.runAllTimers()
+    vi.advanceTimersByTime(1000)
 
     const fired = setRunning.mock.calls.filter(c => c[1]?.state === 'playing').map(c => c[0])
     expect(fired).not.toContain('c1')
@@ -110,7 +119,7 @@ describe('CueRunner — group cue (sequence mode)', () => {
     const { runner, setRunning } = setup([group])
 
     runner.go()
-    vi.runAllTimers()
+    vi.advanceTimersByTime(100)
 
     expect(setRunning).toHaveBeenCalledWith('g1', null)
   })
@@ -128,7 +137,7 @@ describe('CueRunner — group cue (random mode)', () => {
     const { runner, setRunning } = setup([group, c1, c2, c3])
 
     runner.go()
-    vi.runAllTimers()
+    vi.advanceTimersByTime(1000)
 
     const fired = setRunning.mock.calls
       .filter(c => c[1]?.state === 'playing')
@@ -251,6 +260,7 @@ describe('CueRunner — selection skips group children', () => {
       getMidiDefaultPort: () => 'default-midi-port',
       isPro: () => true
     })
+    runners.push(runner)
 
     runner.go()
     expect(setSelected).toHaveBeenCalledWith('next')

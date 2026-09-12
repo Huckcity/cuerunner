@@ -37,13 +37,44 @@ test('settings dialog has Audio and MIDI tabs', async () => {
   await closeSettings(page)
 })
 
-test('Audio tab reports the live sample rate and base latency', async () => {
+test('Audio tab offers the real device options the engine can honour', async () => {
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  const sampleRate = dialog.locator('.field-row', { hasText: 'Sample rate' }).locator('.settings-info')
-  const baseLatency = dialog.locator('.field-row', { hasText: 'Base latency' }).locator('.settings-info')
-  await expect(sampleRate).toHaveText(/^[\d,]+ Hz$/)
-  await expect(baseLatency).toHaveText(/^\d+(\.\d+)? ms$/)
+
+  const device = dialog.locator('.field-row', { hasText: 'Output device' })
+  await expect(device.locator('select')).toBeVisible()
+  await expect(device.locator('option')).toContainText(['Default Output'])
+
+  // Sample rate, buffer and channels are the engine's settings, not the page's guess.
+  await expect(dialog.locator('.field-row', { hasText: 'Sample rate' }).locator('select')).toBeVisible()
+  await expect(dialog.locator('.field-row', { hasText: 'Buffer' }).locator('select')).toBeVisible()
+  await expect(dialog.locator('.field-row', { hasText: 'Channels' }).locator('select')).toBeVisible()
+  await expect(dialog.locator('.field-row', { hasText: 'Exclusive' }).locator('input[type=checkbox]')).toBeVisible()
+
+  await closeSettings(page)
+})
+
+test('Audio tab reports exactly what the engine says it is running', async () => {
+  const info = await app.evaluate(async () => {
+    const harness = globalThis.__winslabDevHarness
+    return harness ? harness.engineInfo() : null
+  })
+  expect(info).not.toBeNull()
+
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+
+  const runningAt = dialog.locator('.field-row', { hasText: 'Running at' }).locator('.settings-info')
+  await expect(runningAt).toContainText(`${info!.sampleRate.toLocaleString()} Hz`)
+
+  // The latency is either a number labelled with how it was arrived at, or it is
+  // honestly unknown — never a number pretending to be measured.
+  const expectedLatency = info!.latencySource === 'unknown' || info!.latencyMs === null
+    ? 'unknown'
+    : `${info!.latencyMs.toFixed(1)} ms (${info!.latencySource})`
+  const latency = dialog.locator('.field-row', { hasText: 'Latency' }).locator('.settings-info')
+  await expect(latency).toHaveText(expectedLatency)
+
   await closeSettings(page)
 })
 

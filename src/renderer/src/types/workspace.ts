@@ -3,6 +3,14 @@ import type { ShowSettings } from './show'
 
 export interface AudioSettings {
   outputDeviceId: string
+  /** Requested sample rate, Hz. Absent leaves the device's own rate. */
+  sampleRate?: number
+  /** Requested output channels. Absent leaves the device's own count. */
+  channels?: number
+  /** Take the device exclusively, where the driver allows it. */
+  exclusive?: boolean
+  /** Requested buffer size in frames. Absent leaves the engine's own. */
+  bufferFrames?: number
 }
 
 export interface MidiSettings {

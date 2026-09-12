@@ -9,7 +9,10 @@ import { SettingsDialog } from './components/layout/SettingsDialog'
 import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
+import { MissingMediaBar } from './components/media/MissingMediaBar'
+import MidiStatusBadge from './components/midi/MidiStatusBadge'
 import { useAutosave } from './hooks/useAutosave'
+import { usePlaybackBridge } from './hooks/usePlaybackBridge'
 import { LogPanel } from './components/log/LogPanel'
 import { MonitorPanel } from './components/monitor/MonitorPanel'
 import { RfPanel } from './components/rf/RfPanel'
@@ -40,6 +43,7 @@ function NoticeHost() {
 
 export function App() {
   useAutosave()
+  usePlaybackBridge()
   useShowBridge()
   useCueTriggers()
   useCompanionPublisher()
@@ -120,11 +124,17 @@ export function App() {
       <CrashNotice />
       <RecoveryNotice />
       <NoticeHost />
+      <MissingMediaBar />
       <Toolbar
         onOpenSettings={() => openSettings('audio')}
         view={view}
         onSwitchView={setView}
       />
+      {/* Machine-level status that has nothing to do with the workspace: whether this
+          build can talk MIDI at all. */}
+      <div className="app-status-row">
+        <MidiStatusBadge />
+      </div>
       <div className="app-main" data-view={view}>
         {view === 'scenes' ? (
           pro ? (

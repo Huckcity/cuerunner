@@ -1,17 +1,42 @@
-import { app, ipcMain, dialog, BrowserWindow } from 'electron'
+import { app, ipcMain, dialog, BrowserWindow, net } from 'electron'
 import { readFile } from 'fs/promises'
 import { exec } from 'child_process'
 import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
+import type { MidiModuleLoader } from '../midi/MidiEngine'
+import { NetworkClient } from '../network/NetworkClient'
+import type { NetworkRequest } from '../../renderer/src/types/network'
+import { audioEngine } from '../audio/AudioEngine'
+import {
+  AUDIO_CHANNELS,
+  type AudioCancelPayload,
+  type AudioConfigurePayload,
+  type AudioEngineEvent,
+  type AudioFadePayload,
+  type AudioPanicPayload,
+  type AudioPreparePayload,
+  type AudioProbePayload,
+  type AudioProgressPayload,
+  type AudioRoutingPayload,
+  type AudioSeekPayload,
+  type AudioStartPayload,
+  type AudioStopAllPayload,
+  type AudioStopPayload,
+  type AudioWaveformPayload
+} from '../../shared/audio'
+import { playbackSafety, noteEngineEvents } from '../safety/runtime'
+import { panicFromShowEvent } from '../safety/panicBindings'
 import { OscEngine } from '../osc/OscEngine'
 import {
   openWorkspace,
   openWorkspaceFromPath,
+  openRecovery,
   saveWorkspace,
   saveWorkspaceAs,
+  relinkWorkspaceMedia,
   getRecentFiles
 } from '../workspace/WorkspaceManager'
-import { clearRecovery, readRecovery, writeRecovery } from '../workspace/recovery'
+import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime } from '../show/runtime'
 import { drainMainErrors } from '../errors'
@@ -24,9 +49,29 @@ import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
 import type { LicenseStatus } from '../../renderer/src/types/license'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
-const midi = new MidiEngine()
+const midi = new MidiEngine(midiModuleLoader())
 const osc = new OscEngine()
 const show = createShowRuntime()
+
+// Network cues are HTTP clients, not page fetches: a console on the LAN has no reason to
+// send CORS headers, and the request has to survive the window being busy or reloaded.
+// Chromium's own stack is used so the operating system's proxy and certificate settings
+// apply exactly as they do everywhere else in the app.
+const network = new NetworkClient({ fetch: (url, init) => net.fetch(url, init) })
+
+/**
+ * The dev-only harness that proves the missing-module path: the E2E suite launches with
+ * the native module withheld, and the badge has to say so. A packaged build never takes
+ * this branch, so nothing here can make a real installation look broken.
+ */
+function midiModuleLoader(): MidiModuleLoader | undefined {
+  if (!app.isPackaged && process.env['WINSLAB_TEST_MIDI_MISSING'] === '1') {
+    return () => {
+      throw new Error("Cannot find module 'midi'")
+    }
+  }
+  return undefined
+}
 
 // The license this machine holds, read once at startup and written only when the
 // operator enters or removes a key. Everything Pro is gated on it from here, in the
@@ -49,15 +94,47 @@ const PRO_REQUIRED = 'WinsLab Pro is required for the show services'
 
 // One batch, every window that is still alive. A window that is mid-reload has no
 // listener yet; it catches up from the snapshot it asks for on startup.
-function broadcastShowEvents(events: ShowEvent[]): void {
+function broadcastToWindows(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-      win.webContents.send('show:events', events)
+      win.webContents.send(channel, payload)
     }
   }
 }
 
-show.subscribe(broadcastShowEvents)
+function broadcastShowEvents(events: ShowEvent[]): void {
+  broadcastToWindows('show:events', events)
+}
+
+// Engine events are batched over a frame: a panic stops every voice at once, and the
+// window wants that as one message rather than one per voice.
+const AUDIO_EVENT_FLUSH_MS = 16
+const pendingAudioEvents: AudioEngineEvent[] = []
+let audioEventFlush: NodeJS.Timeout | null = null
+
+function queueAudioEvents(event: AudioEngineEvent): void {
+  pendingAudioEvents.push(event)
+  if (audioEventFlush !== null) return
+  audioEventFlush = setTimeout(() => {
+    audioEventFlush = null
+    const batch = pendingAudioEvents.splice(0, pendingAudioEvents.length)
+    if (batch.length > 0) broadcastToWindows(AUDIO_CHANNELS.events, batch)
+  }, AUDIO_EVENT_FLUSH_MS)
+  // A flush owes the window nothing if the app is quitting.
+  audioEventFlush.unref?.()
+}
+
+show.subscribe(events => {
+  broadcastShowEvents(events)
+  // The two bindings a show already has for panicking, acted on in the process that
+  // owns the engine rather than the one that owns the screen. These arrive through the
+  // licensed show inputs — the same socket and the same ports as everything else the
+  // panel shows — so nothing new is listening and nothing is loosened to make it work.
+  for (const event of events) {
+    const binding = panicFromShowEvent(event)
+    if (binding) playbackSafety.panic(binding.source, binding.reason)
+  }
+})
 
 /**
  * A license that changes takes the show services with it: entering a key starts what
@@ -88,6 +165,9 @@ function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
 export function registerIpcHandlers(): void {
   // OSC keeps a socket open per destination, so the process has to let go of them.
   app.on('before-quit', () => osc.close())
+  // A request in flight must not outlive the window that asked for it.
+  app.on('before-quit', () => network.close())
+  app.on('before-quit', () => clearTimeout(audioEventFlush ?? undefined))
   // The services hold sockets and poll timers of their own.
   app.on('before-quit', () => show.close())
 
@@ -99,11 +179,6 @@ export function registerIpcHandlers(): void {
   if (isPro(license.status())) void show.configure(defaultShowSettings())
 
   // Audio
-  ipcMain.handle('audio:readFile', async (_, filePath: string) => {
-    const buf = await readFile(filePath)
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
-  })
-
   ipcMain.handle('audio:pickFile', async (event) => {
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Audio File',
@@ -116,9 +191,58 @@ export function registerIpcHandlers(): void {
     return result.canceled ? null : result.filePaths[0]
   })
 
+  // The audio engine's verbs. Every one of them is a command on the sample clock, so
+  // the window can schedule ahead and read back where the sound actually is; no media
+  // ever crosses this boundary. The engine lives in this process, which is what lets
+  // the panic path silence the show without the window's help.
+  ipcMain.handle(AUDIO_CHANNELS.prepare, (_, payload: AudioPreparePayload) =>
+    audioEngine.prepare(payload.cueId, payload.filePath))
+  ipcMain.handle(AUDIO_CHANNELS.start, (_, payload: AudioStartPayload) =>
+    audioEngine.start(payload.cueId, payload.whenMs, payload.options))
+  ipcMain.handle(AUDIO_CHANNELS.stop, (_, payload: AudioStopPayload) =>
+    audioEngine.stop(payload.cueId, payload.fadeMs, payload.whenMs))
+  ipcMain.handle(AUDIO_CHANNELS.stopAll, (_, payload: AudioStopAllPayload) =>
+    audioEngine.stopAll(payload.fadeMs))
+  ipcMain.handle(AUDIO_CHANNELS.seek, (_, payload: AudioSeekPayload) =>
+    audioEngine.seek(payload.cueId, payload.positionMs, payload.whenMs))
+  ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
+    audioEngine.cancel(payload.cueId, payload.whenMs))
+  ipcMain.handle(AUDIO_CHANNELS.routing, (_, payload: AudioRoutingPayload) =>
+    audioEngine.routing(payload.cueId, payload.outputs))
+  ipcMain.handle(AUDIO_CHANNELS.fade, (_, payload: AudioFadePayload) =>
+    audioEngine.fade(payload.cueId, payload.param, payload.value, payload.durationMs, payload.curve, payload.whenMs))
+  ipcMain.handle(AUDIO_CHANNELS.progress, (_, payload: AudioProgressPayload) =>
+    audioEngine.progress(payload.cueId))
+  ipcMain.handle(AUDIO_CHANNELS.panic, (_, payload: AudioPanicPayload) =>
+    audioEngine.panic(payload.fadeMs))
+  ipcMain.handle(AUDIO_CHANNELS.clock, () => audioEngine.clock())
+  ipcMain.handle(AUDIO_CHANNELS.info, () => audioEngine.info())
+  ipcMain.handle(AUDIO_CHANNELS.devices, () => audioEngine.devices())
+  ipcMain.handle(AUDIO_CHANNELS.configure, (_, payload: AudioConfigurePayload) =>
+    audioEngine.configure(payload.options))
+  ipcMain.handle(AUDIO_CHANNELS.waveform, (_, payload: AudioWaveformPayload) =>
+    audioEngine.waveform(payload.filePath, payload.points))
+  // A workspace footprint asks about every cue: headers only, nothing decoded, nothing
+  // cached, nothing counted.
+  ipcMain.handle(AUDIO_CHANNELS.probe, (_, payload: AudioProbePayload) =>
+    audioEngine.probe(payload.filePath))
+
+  // Every engine event is both forwarded to the window and kept for the safety net: a
+  // burst — a panic stopping twenty voices at once — is one message rather than twenty,
+  // and the last few are held so the acceptance tests can read what the engine said.
+  audioEngine.subscribe(event => {
+    noteEngineEvents([event])
+    queueAudioEvents(event)
+  })
+
   // MIDI
   ipcMain.handle('midi:listPorts', () => midi.listOutputPorts())
   ipcMain.handle('midi:listInputPorts', () => midi.listInputPorts())
+
+  // Whether MIDI can work at all in this build. A machine without the optional native
+  // module has to be able to say so, or a cue that reaches nothing looks like one that
+  // worked.
+  ipcMain.handle('midi:status', () => midi.status())
 
   // Both return what the engine did, so a cue that reached nothing is reported rather
   // than looking like every other successful firing.
@@ -129,6 +253,20 @@ export function registerIpcHandlers(): void {
   // OSC
   ipcMain.handle('osc:send', async (_, cmd: { host: string; port: number; address: string; args: any[] }) => {
     return osc.send(cmd.host, cmd.port, cmd.address, cmd.args)
+  })
+
+  // Network cues. No license gate: network cues shipped in the free half of the app, and
+  // this is the same cue making the same request from a process the page's origin does
+  // not apply to. A console on the LAN does not send CORS headers, and the request has
+  // to outlive a busy or reloaded window.
+  ipcMain.handle('network:request', async (_, request: NetworkRequest) => network.request(request))
+  ipcMain.handle('network:cancel', async (_, requestId: string) => network.cancel(requestId))
+
+  // The renderer is alive and the show still has someone at the wheel. The watchdog
+  // silences the engine when these stop arriving while anything is playing, so the
+  // renderer sends one on its own timer whether or not a cue is running.
+  ipcMain.handle('playback:heartbeat', () => {
+    playbackSafety.noteHeartbeat()
   })
 
   // Show services. The renderer never talks to a service directly: it configures the
@@ -254,7 +392,10 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // Workspace
+  // Workspace. Opening, recovering and relinking all resolve the media an audio cue
+  // points at, because a workspace that came from another machine has paths that only
+  // mean something there; the result carries what is missing so the window can offer to
+  // find it rather than firing a cue at a file that is not there.
   ipcMain.handle('workspace:open', async (event) => {
     return openWorkspace(getWin(event))
   })
@@ -265,6 +406,15 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:openDemo', async () => {
     return openDemoWorkspace()
+  })
+
+  ipcMain.handle('workspace:relink', async (
+    event,
+    workspace: Workspace,
+    workspacePath: string | null,
+    cueId: string
+  ) => {
+    return relinkWorkspaceMedia(getWin(event), workspace, workspacePath, cueId)
   })
 
   ipcMain.handle('workspace:save', async (event, workspace: Workspace, existingPath: string | null) => {
@@ -285,7 +435,9 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('workspace:recovery', async () => {
-    return readRecovery()
+    // Recovery resolves the media in the snapshot the same way opening a file does; its
+    // directory is what a relative path in the snapshot is relative to.
+    return openRecovery()
   })
 
   ipcMain.handle('workspace:clearRecovery', async () => {

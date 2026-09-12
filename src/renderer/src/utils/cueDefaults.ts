@@ -1,6 +1,6 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, Cue, CueType,
-  AudioOutput
+  AudioCrosspoint
 } from '../types/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -25,12 +25,18 @@ export const AUDIO_DEFAULTS = {
   startTime: 0,
   endTime: null as number | null,
   fadeInDuration: 0,
+  volume: 1,
+  pan: 0,
+  // Automatic channel routing: the file's own channel layout decides where it goes.
+  // An empty list would be a cue that is deliberately silent, which is not what a new
+  // cue means.
+  outputs: null as AudioCrosspoint[] | null,
   loopCount: 0,
   playbackRate: 1,
   trim: 1
 }
 
-export const AUDIO_OUTPUT_DEFAULTS: AudioOutput = { volume: 1, pan: 0 }
+export const AUDIO_CROSSPOINT_DEFAULTS: AudioCrosspoint = { inputChannel: 0, outputChannel: 0, gain: 1 }
 
 export const OSC_DEFAULTS = {
   host: '127.0.0.1',
@@ -95,8 +101,7 @@ export function createCue(type: CueType): Cue {
         ...base('Audio Cue'),
         type: 'audio',
         filePath: '',
-        ...AUDIO_DEFAULTS,
-        outputs: [{ ...AUDIO_OUTPUT_DEFAULTS }]
+        ...AUDIO_DEFAULTS
       } satisfies AudioCue
     case 'midi':
       return {

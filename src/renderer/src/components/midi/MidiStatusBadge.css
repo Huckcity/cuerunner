@@ -1,0 +1,25 @@
+/* A machine with no MIDI module: one amber pill, in the row under the toolbar. It is
+   the only thing on screen for a state the operator has to know about, so it is allowed
+   to be a colour — but it stays a 26px pill, and it is invisible on a machine where
+   MIDI works. The element is always in the tree so the row never changes height. */
+
+.midi-status {
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--accent-amber);
+  border-radius: var(--radius-pill);
+  background: var(--accent-amber-bg);
+  color: var(--accent-amber);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.midi-status:hover { background: var(--bg-hover); }
+
+/* Nothing to report: present for the layout, invisible and unfocusable. */
+.midi-status[data-state='ok'] {
+  visibility: hidden;
+  cursor: default;
+}

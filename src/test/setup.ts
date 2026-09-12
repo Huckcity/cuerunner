@@ -9,14 +9,85 @@ Object.defineProperty(window, 'winslab', {
       onMenuAction: vi.fn(() => () => {}),
       confirmClose: vi.fn(() => Promise.resolve())
     },
+    playback: {
+      heartbeat: vi.fn(() => undefined),
+      onPanic: vi.fn(() => () => {})
+    },
+    // Plain vi.fn methods shaped like the native service's verbs. The renderer never
+    // decodes or streams media: it schedules commands and reads state back.
     audio: {
-      readFile: vi.fn(() => Promise.resolve(new ArrayBuffer(0))),
+      prepare: vi.fn(() => Promise.resolve({
+        cueId: 'cue', filePath: '', format: 'wav', durationMs: 0, sampleRate: 48000,
+        channels: 2, frames: 0, fileBytes: 0, streaming: false, cacheHit: false, decodedBytes: 0
+      })),
+      start: vi.fn(() => Promise.resolve({
+        cueId: 'cue', runId: 'run', state: 'playing', startAtMs: 0
+      })),
+      stop: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
+      stopAll: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
+      seek: vi.fn(() => Promise.resolve({ ok: true, at: 0, positionMs: 0, state: 'playing' })),
+      cancel: vi.fn(() => Promise.resolve({ ok: true, at: 0, canceled: 0 })),
+      routing: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
+      fade: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
+      progress: vi.fn(() => Promise.resolve(null)),
+      panic: vi.fn(() => Promise.resolve({ ok: true, at: 0, stoppedVoices: 0 })),
+      clock: vi.fn(() => Promise.resolve(Date.now())),
+      info: vi.fn(() => Promise.resolve({
+        name: 'Test engine',
+        version: '0.0.0',
+        protocol: 1,
+        backend: 'silent',
+        deviceId: null,
+        deviceName: 'Silent',
+        sampleRate: 48000,
+        channels: 2,
+        format: 'f32',
+        exclusive: false,
+        bufferFrames: 512,
+        periodFrames: 512,
+        latencyMs: null,
+        latencySource: 'unknown',
+        active: false,
+        activeVoices: 0,
+        activeCues: [],
+        cache: {
+          entries: 0, bytes: 0, limitBytes: 0, maxFiles: 0, maxFileBytes: 0,
+          hits: 0, misses: 0, evictions: 0, bypassed: 0, pinnedEntries: 0, pinnedBytes: 0
+        },
+        media: {
+          activeVoices: 0, streamingVoices: 0, residentBytes: 0, streamBufferBytes: 0,
+          streamBufferLimitBytes: 0, decodeQueueDepth: 0, decodeUnderruns: 0, xruns: 0,
+          droppedFileChunks: 0
+        },
+        lastError: null,
+        warnings: []
+      })),
+      devices: vi.fn(() => Promise.resolve([])),
+      configure: vi.fn(() => Promise.resolve({
+        name: 'Test engine', version: '0.0.0', protocol: 1, backend: 'silent'
+      })),
+      waveform: vi.fn(() => Promise.resolve({
+        filePath: '', buckets: 0, values: [], durationMs: 0,
+        sampleRate: 48000, channels: 2, truncated: false
+      })),
+      probe: vi.fn(() => Promise.resolve({
+        filePath: '', format: 'wav', durationMs: 0, sampleRate: 48000, channels: 2,
+        frames: null, fileBytes: 0, decodedBytes: null, streaming: false, resident: false
+      })),
+      onEvents: vi.fn(() => () => {}),
       pickFile: vi.fn(() => Promise.resolve(null))
     },
     midi: {
       listPorts: vi.fn(() => Promise.resolve([])),
       listInputPorts: vi.fn(() => Promise.resolve([])),
+      status: vi.fn(() => Promise.resolve({ available: true, error: null })),
       send: vi.fn(() => Promise.resolve({ ok: true }))
+    },
+    network: {
+      request: vi.fn(() => Promise.resolve({
+        ok: true, status: 200, statusText: 'OK', body: '', error: null
+      })),
+      cancel: vi.fn(() => Promise.resolve(false))
     },
     osc: {
       send: vi.fn(() => Promise.resolve({ ok: true }))
@@ -48,6 +119,7 @@ Object.defineProperty(window, 'winslab', {
       open: vi.fn(() => Promise.resolve(null)),
       openPath: vi.fn(),
       openDemo: vi.fn(),
+      relink: vi.fn(),
       save: vi.fn(() => Promise.resolve(null)),
       saveAs: vi.fn(() => Promise.resolve(null)),
       recent: vi.fn(() => Promise.resolve([])),

@@ -3,7 +3,7 @@ import type { Cue, CueColor } from '../../types/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
-import { audioPlayer } from '../../engine/AudioPlayer'
+import { audioEngine } from '../../engine/audioEngineClient'
 import './CueRow.css'
 
 const COLOR_MAP: Record<CueColor, string> = {
@@ -58,7 +58,8 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
       return
     }
     const tick = () => {
-      const prog = audioPlayer.getProgress(cue.id)
+      // The engine's own position, cached by the playback client at tick rate.
+      const prog = audioEngine.getProgress(cue.id)
       if (progressFillRef.current) {
         // runFraction spans the whole run (loop repeats included); the waveform
         // panel keeps using fraction, which is position inside the file.

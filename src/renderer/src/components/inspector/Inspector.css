@@ -374,3 +374,32 @@
   color: var(--fg-muted);
   flex-shrink: 0;
 }
+
+/* Routing matrix: one row per crosspoint, file channel → device channel with a gain
+   trim. Rows are as narrow as the panel allows, and the list is not limited to a pair. */
+.routing-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.routing-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.routing-row select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  font-size: var(--text-sm);
+  padding: 2px 4px;
+  font-family: inherit;
+}
+
+.routing-arrow {
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+}

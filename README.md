@@ -257,7 +257,10 @@ files you trust.
 3. **Auto-advance**: Fires next cue either immediately after pre-wait ("on-start") or after completion ("on-end")
 4. **Timers**: Tracked with keys like `"cueId"`, `"cueId:pre"`, `"cueId:post"` for cancellation
 5. **STOP / PANIC**: Both abandon in-flight work (a network request or script that settles
-   afterwards cannot resume the show). STOP cuts the audio; PANIC fades it out over 200 ms
+   afterwards cannot resume the show). STOP cuts the audio; PANIC fades it out over 200 ms.
+   A cue that is stopped — by STOP, by PANIC, or by the engine reporting its voice stopped —
+   runs no post-wait and does not auto-advance, and a stopped group finishes nothing: the
+   cues after it wait for the next GO.
 
 ### Failure Handling
 
@@ -273,14 +276,82 @@ files you trust.
 
 ### Audio Engine
 
-`AudioPlayer` (in `src/renderer/src/engine/AudioPlayer.ts`) uses Web Audio API:
+Playback runs in a native engine — `native/audio/`, built to `native/audio/build/winslab-audio`
+— that the main process starts as a child and talks to over a local socket (Unix domain
+socket, named pipe on Windows) in newline-delimited JSON. The renderer never sees media
+bytes and never touches a decoder: `window.winslab.audio` is a set of execution verbs
+(`prepare`, `start`, `stop`, `stopAll`, `seek`, `cancel`, `routing`, `fade`, `progress`,
+`panic`, `clock`, `info`, `devices`, `configure`, `waveform`) whose times are all
+milliseconds on the engine's own sample clock. `src/shared/audio.ts` is the contract both
+processes and the engine speak.
 
-- Audio files read via IPC and decoded client-side
-- Decoded `AudioBuffer`s cached (LRU, max 100)
-- Per-cue playback chain: `BufferSource → GainNode (volume + fade) → trimGain → StereoPannerNode → destination`
-- One shared `AudioContext` for the whole app, feeding the output device chosen in Settings
-  (`AudioContext.setSinkId`). Each audio cue carries a single output with its own level and pan;
-  per-cue device and channel-pair routing does not exist.
+- **Device I/O**: miniaudio (MIT-0). Windows WASAPI shared **and** exclusive, macOS Core
+  Audio, Linux PulseAudio / ALSA / JACK. Exclusive access is requested, never assumed: if
+  the device or mode asked for cannot be honoured, `configure` fails and says why.
+- **Decoding**: WAV, MP3, FLAC (dr_libs) and Ogg Vorbis (stb_vorbis) are compiled in.
+  M4A/AAC and ALAC use the platform codec — Media Foundation on Windows, AudioToolbox on
+  macOS — and on Linux the LGPL-only FFmpeg helper described under *Packaging
+  prerequisites* below.
+- **Scheduling**: starts, stops and fades are scheduled on the mixer at exact frame
+  indices, so a stalling renderer cannot smear a cue. Seeking moves the position without
+  retriggering a fade-in.
+- **Streaming and cache**: small files are decoded once and cached (bounded by bytes and
+  file count, LRU with genuine hit promotion, pinned while a voice uses them). Files whose
+  decoded size exceeds the per-file limit stream through a bounded pre-roll ring instead,
+  and never evict the warm small files.
+- **Routing**: a cue carries a level, a pan and a crosspoint matrix
+  (`{inputChannel, outputChannel, gain}`, zero-based); `null` means automatic routing and
+  `[]` is deliberate silence.
+- **Honest reporting**: `info()` reports the achieved backend, device, sample rate, channel
+  count, exclusive state, buffer/period frames and a latency marked measured, estimated or
+  unknown — plus cache and streaming pressure for the warnings the UI shows.
+
+#### Packaging prerequisites
+
+- A C++17 toolchain: `cc`/`c++` (or `clang`) on Linux/macOS, MSVC or clang on Windows.
+  `npm run dist:*` builds the engine first through `npm run build:native`.
+- **Linux M4A/AAC**: the app ships an LGPL-only FFmpeg helper (pinned source, SHA-256 and
+  release-signature verified, `--disable-gpl --disable-nonfree --disable-version3`) at
+  `native/audio/build/decoders/ffmpeg`, packaged to `resources/audio/decoders`. Build it
+  with `npm run build:ffmpeg`; without it, M4A files report a visible "decoder unavailable"
+  error instead of failing silently. Windows and macOS need nothing extra.
+- **ASIO**: not shipped. Supporting it requires Steinberg's ASIO SDK present at build time
+  (dual-licensed GPLv3/proprietary) plus `MA_ENABLE_ASIO`; no ASIO device is listed and no
+  ASIO support is claimed until that SDK is available under a signed agreement.
+- Source pins and licences for everything vendored live in
+  `native/audio/third_party/DEPENDENCIES.json`; the FFmpeg helper's notice and licence
+  texts sit next to the binary.
+
+#### Native engine commands
+
+The native artifacts are built **automatically and incrementally** by a pre-step that
+every entrypoint which needs them runs through (`scripts/ensure-native.mjs`): `npm run
+dev`, `build`, `test`, `test:e2e`, `preview`, `screenshots` and `dist*` all call it, so a
+fresh checkout needs no manual build. It rebuilds the engine only when a source, vendored
+header or the build script is newer than the binary — a warm checkout costs one `stat()` —
+and it never rebuilds the pinned FFmpeg helper once it exists.
+
+```bash
+npm run ensure:native       # the pre-step itself: engine + (on Linux) M4A decoder
+npm run build:native        # force an engine build into native/audio/build/
+npm run build:ffmpeg        # force the packaged Linux M4A decoder (LGPL-only FFmpeg)
+npm run test:native         # deterministic offline-render acceptance on real samples
+npm run test:native:device  # live-device smoke (needs a real output device)
+```
+
+Clean-checkout entrypoints, exactly as CI runs them: `npm run typecheck`, `npm test`,
+`npm run test:native`, `npm run test:e2e`, `npm run dist:linux`. On Windows the compiler
+must be on `PATH` (`ilammy/msvc-dev-cmd@v1` does that in CI); on Linux and macOS `cc`/`c++`
+are enough. `dist:linux` and the `test:native` pre-step build the M4A helper on a machine
+that does not have it yet; CI caches `native/audio/build/decoders` under a key derived from
+the build script so an unchanged pin is never rebuilt.
+
+`test:native` drives the real mixer, scheduler, decoders and cache with a caller-owned
+clock and asserts actual output samples: exact start/stop/fade frames, matrix routing,
+loops, seeks, streaming, cache bounds and M4A decoding. It is the acceptance proof for
+playback behaviour, and it needs no audio hardware. `npm run test:native:device` adds the
+live-device checks (real channel counts, exclusive refusal, capture tee, panic silence).
+
 
 ### State Management
 

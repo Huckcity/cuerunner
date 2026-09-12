@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { useStore } from '../store'
+import type { MissingMedia } from '../../../shared/media'
 import type { Workspace } from '../types/workspace'
 import { buildWorkspace } from '../utils/workspace'
 
@@ -43,8 +44,9 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function loadIntoStore(workspace: Workspace, path: string | null): void {
-  useStore.getState().loadWorkspace(
+function loadIntoStore(workspace: Workspace, path: string | null, missingMedia: MissingMedia[]): void {
+  const store = useStore.getState()
+  store.loadWorkspace(
     workspace.cues,
     workspace.name || 'Untitled',
     path,
@@ -52,6 +54,7 @@ function loadIntoStore(workspace: Workspace, path: string | null): void {
     workspace.midiSettings,
     workspace.showSettings
   )
+  store.setMissingMedia(missingMedia)
 }
 
 // The demo opens with no path: it is an example rather than a file the user owns, so
@@ -59,9 +62,40 @@ function loadIntoStore(workspace: Workspace, path: string | null): void {
 export async function openDemoWorkspace(): Promise<void> {
   if (!await guardDirty()) return
   try {
-    loadIntoStore(await window.winslab.workspace.openDemo(), null)
+    // The demo's audio is copied out of the app bundle as it loads, so there is never
+    // anything missing to report.
+    loadIntoStore(await window.winslab.workspace.openDemo(), null, [])
   } catch (e) {
     reportFailure(`Could not open the demo workspace: ${message(e)}`)
+  }
+}
+
+/**
+ * Points one missing file at where it is now. The main process applies the same move to
+ * every other file it accounts for, so one pick can put a whole folder back together.
+ * Whatever is left is reported again for another pick.
+ */
+export async function relinkMissingMedia(cueId: string): Promise<void> {
+  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings } =
+    useStore.getState()
+  const workspace = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
+  try {
+    const result = await window.winslab.workspace.relink(workspace, workspacePath, cueId)
+    // Only cues that actually moved are written back, so an unresolved file keeps the
+    // path it was last seen at instead of losing it.
+    const resolved: Record<string, string> = {}
+    for (const cue of result.workspace.cues) {
+      if (cue.type !== 'audio') continue
+      const current = cues.find(c => c.id === cue.id)
+      if (current?.type === 'audio' && current.filePath !== cue.filePath) {
+        resolved[cue.id] = cue.filePath
+      }
+    }
+    const store = useStore.getState()
+    store.applyRelinkedMedia(resolved)
+    store.setMissingMedia(result.missingMedia)
+  } catch (e) {
+    reportFailure(`Could not relink media: ${message(e)}`)
   }
 }
 
@@ -94,7 +128,7 @@ export function useWorkspace() {
     try {
       const result = await window.winslab.workspace.open()
       if (!result) return
-      loadIntoStore(result.workspace, result.path)
+      loadIntoStore(result.workspace, result.path, result.missingMedia)
     } catch (e) {
       reportFailure(`Could not open the workspace: ${message(e)}`)
     }
@@ -106,7 +140,7 @@ export function useWorkspace() {
       // The bridge hands back the file it read alongside the workspace; the store wants
       // the workspace itself.
       const opened = await window.winslab.workspace.openPath(filePath)
-      loadIntoStore(opened.workspace, opened.path)
+      loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
     } catch (e) {
       reportFailure(`Could not open ${filePath}: ${message(e)}`)
     }

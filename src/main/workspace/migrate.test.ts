@@ -47,7 +47,7 @@ describe('migrateWorkspace', () => {
     expect(explicit.timeout).toBe(0)
   })
 
-  it('drops the retired per-output device and channel-pair fields', () => {
+  it('migrates a legacy outputs list to the cue master level and pan', () => {
     const audio = migrateWorkspace(workspaceWith([
       {
         id: 'a1',
@@ -60,7 +60,21 @@ describe('migrateWorkspace', () => {
       }
     ])).cues[0] as AudioCue
 
-    expect(audio.outputs[0]).toEqual({ volume: 0.5, pan: -0.2 })
+    // Only the first legacy output ever reached the audio graph, so that is what the
+    // cue's master level and pan become, and the dead device routing is dropped.
+    expect(audio.volume).toBe(0.5)
+    expect(audio.pan).toBe(-0.2)
+    expect(audio.outputs).toBeNull()
+  })
+
+  it('reads a legacy empty outputs list as automatic routing, not silence', () => {
+    const audio = migrateWorkspace(workspaceWith([
+      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: [] }
+    ])).cues[0] as AudioCue
+
+    expect(audio.volume).toBe(1)
+    expect(audio.pan).toBe(0)
+    expect(audio.outputs).toBeNull()
   })
 
   it('turns a legacy childIds list into parent pointers in that order', () => {

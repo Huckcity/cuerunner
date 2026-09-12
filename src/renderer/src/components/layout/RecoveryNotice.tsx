@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
+import type { MissingMedia } from '../../../../shared/media'
 import type { Workspace } from '../../types/workspace'
 import { formatClock } from '../../utils/cueDefaults'
 import { NoticeBar } from './NoticeBar'
@@ -8,6 +9,7 @@ interface Snapshot {
   workspace: Workspace
   savedAt: number
   sourcePath: string | null
+  missingMedia: MissingMedia[]
 }
 
 // Autosave writes snapshots to the user-data folder rather than over the operator's
@@ -40,6 +42,9 @@ export function RecoveryNotice() {
       // the next save would write that emptiness over the operator's file.
       snapshot.workspace.showSettings
     )
+    // The files the snapshot names may have moved since it was taken, so the same
+    // missing-media report a normal open gives is shown here too.
+    store.setMissingMedia(snapshot.missingMedia)
     // Recovered work is unsaved by definition: the file on disk is older than this. The
     // title bar's dot is the app's usual signal for that.
     store.markDirty()

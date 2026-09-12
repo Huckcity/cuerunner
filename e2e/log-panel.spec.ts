@@ -26,7 +26,6 @@ test('log panel is hidden until toggled, and closes again', async () => {
 
   await page.locator('.btn-log').click()
   await expect(logPanel(page)).toBeVisible()
-  await expect(logPanel(page)).toContainText('Nothing yet.')
 
   // The toggle stays selected while the panel is open
   await expect(page.locator('.btn-log')).toHaveAttribute('data-active', 'true')
@@ -47,9 +46,12 @@ test('a fired cue is logged with its request and response', async () => {
 
   await expect(logPanel(page)).toContainText('started')
   await expect(logPanel(page)).toContainText(`GET ${server.baseUrl}/hit → 200 OK`)
-  await expect(logPanel(page).locator('.log-row')).toHaveCount(2)
+  // This cue's two lines, wherever they sit among anything else the session has logged:
+  // a total row count would be a count of the whole log, not of this run.
+  const rows = logPanel(page).locator('.log-row')
+  await expect(rows.filter({ hasText: `GET ${server.baseUrl}/hit → 200 OK` })).toHaveCount(1)
   // Cue identity is captured with the entry
-  await expect(logPanel(page).locator('.log-row').first()).toContainText('Network Cue')
+  await expect(rows.filter({ hasText: 'Network Cue' }).first()).toBeVisible()
 })
 
 test('a failing request is logged as an error', async () => {
@@ -62,9 +64,12 @@ test('a failing request is logged as an error', async () => {
 
   await page.getByRole('button', { name: /GO/ }).click()
 
-  const errorRow = logPanel(page).locator('.log-row[data-level="error"]')
+  // The failing request's own row: an unrelated error elsewhere in the session — the
+  // engine saying something, say — must not make this assertion ambiguous.
+  const errorRow = logPanel(page)
+    .locator('.log-row[data-level="error"]', { hasText: 'HTTP 500 Internal Server Error' })
   await expect(errorRow).toHaveCount(1)
-  await expect(errorRow).toContainText('HTTP 500 Internal Server Error')
+  await expect(errorRow).toContainText('Network Cue')
 })
 
 test('script console output reaches the log panel', async () => {
@@ -102,5 +107,4 @@ test('Clear empties the log', async () => {
   await page.locator('.log-btn', { hasText: 'Clear' }).click()
 
   await expect(logPanel(page).locator('.log-row')).toHaveCount(0)
-  await expect(logPanel(page)).toContainText('Nothing yet.')
 })

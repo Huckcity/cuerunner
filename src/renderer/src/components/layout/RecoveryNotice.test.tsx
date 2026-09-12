@@ -6,6 +6,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
+import type { MissingMedia } from '../../../../shared/media'
 import { defaultShowSettings } from '../../types/show'
 import { midiNoteMessages } from '../../utils/scenes'
 import type { Workspace } from '../../types/workspace'
@@ -17,7 +18,12 @@ const cue: Cue = {
   advance: 'none', isArmed: true, notes: ''
 }
 
-function snapshot(): { workspace: Workspace; savedAt: number; sourcePath: string | null } {
+function snapshot(): {
+  workspace: Workspace
+  savedAt: number
+  sourcePath: string | null
+  missingMedia: MissingMedia[]
+} {
   const showSettings = defaultShowSettings()
   showSettings.scenes = {
     locked: false,
@@ -41,7 +47,12 @@ function snapshot(): { workspace: Workspace; savedAt: number; sourcePath: string
       cues: [cue]
     },
     savedAt: Date.parse('2026-01-01T20:00:00Z'),
-    sourcePath: '/shows/demo.wlab'
+    sourcePath: '/shows/demo.wlab',
+    // The file moved while the session was down; recovery says so rather than starting
+    // the show with a cue that cannot play.
+    missingMedia: [
+      { cueId: 'c1', path: 'media/walk-in.wav', originalPath: '/shows/media/walk-in.wav' }
+    ]
   }
 }
 
@@ -54,7 +65,7 @@ describe('RecoveryNotice', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useStore.setState({ cues: [], showSettings: defaultShowSettings(), log: [], notice: null })
+    useStore.setState({ cues: [], showSettings: defaultShowSettings(), log: [], notice: null, missingMedia: [] })
   })
 
   afterEach(() => {
@@ -86,6 +97,10 @@ describe('RecoveryNotice', () => {
     expect(state.showSettings.scenes.channels.map(channel => channel.label))
       .toEqual(['DCA 1 — Principals'])
     expect(state.showSettings.script.path).toBe('/shows/act-one.txt')
+    // A file that cannot be found is part of what the recovered session has to say.
+    expect(state.missingMedia).toEqual([
+      { cueId: 'c1', path: 'media/walk-in.wav', originalPath: '/shows/media/walk-in.wav' }
+    ])
   })
 
   it('offers nothing when there is no snapshot', async () => {

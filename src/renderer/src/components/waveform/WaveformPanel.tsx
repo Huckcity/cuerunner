@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useStore, useSelectedCue } from '../../store'
-import { audioPlayer } from '../../engine/AudioPlayer'
-import { DPR, drawWaveform, getPeaks, type WaveformPeaks } from '../../utils/waveform'
+import { audioEngine } from '../../engine/audioEngineClient'
+import { cueRunner } from '../../engine/CueRunner'
+import { PlaybackWarnings } from '../layout/PlaybackWarnings'
+import { DPR, drawWaveform, PEAK_BUCKETS, type WaveformPeaks } from '../../utils/waveform'
 import type { AudioCue } from '../../types/cue'
 import './WaveformPanel.css'
 
@@ -21,11 +23,11 @@ export function WaveformPanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
-  const bufferRef = useRef<AudioBuffer | null>(null)
+  const peaksRef = useRef<WaveformPeaks | null>(null)
+  const durationRef = useRef(0)
 
-  const [buffer, setBuffer] = useState<AudioBuffer | null>(null)
-  // Min/max per bucket, built once per file: the playhead redraw must not depend on how
-  // long the file is.
+  // The engine's bounded envelope for the file: interleaved min/max buckets, never the
+  // media itself.
   const [peaks, setPeaks] = useState<WaveformPeaks | null>(null)
   const [loading, setLoading] = useState(false)
   const [playFraction, setPlayFraction] = useState(0)
@@ -35,41 +37,51 @@ export function WaveformPanel() {
   const runState = audioCue ? running.get(audioCue.id) : undefined
   const isPlaying = runState?.state === 'playing'
 
-  // Load buffer when selected audio cue or its file changes
+  // Ask the engine for the envelope when the selected audio cue or its file changes
   useEffect(() => {
-    if (!audioCue?.filePath) { setBuffer(null); setPeaks(null); return }
-
-    const cached = audioPlayer.getBuffer(audioCue.filePath)
-    if (cached) {
-      setBuffer(cached)
-      bufferRef.current = cached
-      setPeaks(getPeaks(audioCue.filePath, cached))
+    if (!audioCue?.filePath) {
+      peaksRef.current = null
+      durationRef.current = 0
+      setPeaks(null)
       return
     }
 
+    let current = true
     setLoading(true)
-    audioPlayer.load(audioCue.filePath).then(buf => {
-      setBuffer(buf)
-      bufferRef.current = buf
-      setPeaks(getPeaks(audioCue.filePath, buf))
-      syncCueDuration(audioCue.id, Math.round(buf.duration * 1000))
-    }).catch(() => {
-      // A file that cannot be read or decoded leaves the panel empty rather than
-      // showing the previous cue's waveform against this cue's timing.
-      setBuffer(null)
-      bufferRef.current = null
-      setPeaks(null)
-    }).finally(() => setLoading(false))
+    audioEngine.waveform(audioCue.filePath, PEAK_BUCKETS)
+      .then(data => {
+        if (!current) return
+        const envelope: WaveformPeaks = { values: data.values, buckets: data.buckets }
+        peaksRef.current = envelope
+        durationRef.current = data.durationMs / 1000
+        setPeaks(envelope)
+        if (data.durationMs > 0) syncCueDuration(audioCue.id, Math.round(data.durationMs))
+      })
+      .catch(() => {
+        // A file the engine cannot read leaves the panel empty rather than showing the
+        // previous cue's waveform against this cue's timing.
+        if (!current) return
+        peaksRef.current = null
+        durationRef.current = 0
+        setPeaks(null)
+      })
+      .finally(() => { if (current) setLoading(false) })
+
+    return () => { current = false }
   }, [audioCue?.filePath, audioCue?.id, syncCueDuration])
 
-  // rAF loop for playhead while playing
+  // rAF loop for playhead while playing: the client keeps the engine's last reported
+  // position, so a frame costs nothing across IPC.
   useEffect(() => {
     if (!isPlaying || !audioCue) {
-      if (!isPlaying) setPlayFraction(audioCue ? (audioCue.startTime / 1000) / (buffer?.duration || 1) : 0)
+      if (!isPlaying) {
+        const total = durationRef.current || (audioCue?.duration ?? 0) / 1000
+        setPlayFraction(audioCue && total > 0 ? (audioCue.startTime / 1000) / total : 0)
+      }
       return
     }
     const tick = () => {
-      const prog = audioPlayer.getProgress(audioCue.id)
+      const prog = audioEngine.getProgress(audioCue.id)
       if (prog) setPlayFraction(prog.fraction)
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -77,14 +89,15 @@ export function WaveformPanel() {
     return () => cancelAnimationFrame(rafRef.current)
   }, [isPlaying, audioCue?.id])
 
-  // Redraw canvas whenever buffer, playFraction, or size changes
+  // Redraw canvas whenever the envelope, playFraction, or size changes
   const draw = useCallback(() => {
     const canvas = canvasRef.current
-    const buf = bufferRef.current
-    if (!canvas || !buf || !peaks) return
-    const startFrac = audioCue ? audioCue.startTime / 1000 / buf.duration : 0
-    drawWaveform(canvas, peaks, playFraction, startFrac)
-  }, [buffer, peaks, playFraction, audioCue?.startTime])
+    const envelope = peaksRef.current
+    if (!canvas || !envelope) return
+    const total = durationRef.current || (audioCue?.duration ?? 0) / 1000
+    const startFrac = audioCue && total > 0 ? (audioCue.startTime / 1000) / total : 0
+    drawWaveform(canvas, envelope, playFraction, startFrac)
+  }, [peaks, playFraction, audioCue?.startTime, audioCue?.duration])
 
   useEffect(draw, [draw])
 
@@ -111,19 +124,19 @@ export function WaveformPanel() {
     return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
   }
 
-  const handleClick = async (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!audioCue || !buffer) return
+  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!audioCue) return
+    const total = durationRef.current || audioCue.duration / 1000
+    if (total <= 0) return
     const fraction = fractionFromEvent(e)
-    const timeSeconds = fraction * buffer.duration
-    const timeMs = timeSeconds * 1000
+    const timeMs = fraction * total * 1000
 
     // Always update the cue's startTime
     updateCue(audioCue.id, { startTime: timeMs })
 
-    // If currently playing, seek in-place
-    if (isPlaying) {
-      await audioPlayer.seek(audioCue.id, timeSeconds)
-    }
+    // If currently playing, move the run's playhead — without fading the cue in again
+    // over the position the operator picked.
+    if (isPlaying) cueRunner.seekCue(audioCue.id, timeMs)
 
     setPlayFraction(fraction)
   }
@@ -134,7 +147,7 @@ export function WaveformPanel() {
 
   if (!audioCue) return null
 
-  const totalDuration = buffer?.duration ?? audioCue.duration / 1000
+  const totalDuration = durationRef.current || audioCue.duration / 1000
   const hoverTime = hoverFraction != null ? hoverFraction * totalDuration : null
   const playTime = playFraction * totalDuration
   const startTimeSec = audioCue.startTime / 1000
@@ -145,6 +158,7 @@ export function WaveformPanel() {
         <span className="waveform-filename">
           {audioCue.filePath ? audioCue.filePath.split(/[\\/]/).pop() : 'No file selected'}
         </span>
+        <PlaybackWarnings className="waveform-warning" compact />
         <span className="waveform-times">
           {isPlaying && <span className="waveform-elapsed">{formatTime(playTime * 1000)}</span>}
           {hoverTime != null && !isPlaying && (
@@ -164,8 +178,8 @@ export function WaveformPanel() {
       </div>
       <div ref={containerRef} className="waveform-canvas-container">
         {loading && <div className="waveform-loading">Loading waveform…</div>}
-        {!loading && !buffer && audioCue.filePath && (
-          <div className="waveform-loading">Could not decode audio.</div>
+        {!loading && !peaks && audioCue.filePath && (
+          <div className="waveform-loading">Could not read the waveform.</div>
         )}
         {!audioCue.filePath && (
           <div className="waveform-loading">No audio file selected.</div>
@@ -173,7 +187,7 @@ export function WaveformPanel() {
         <canvas
           ref={canvasRef}
           className="waveform-canvas"
-          style={{ opacity: loading || !buffer ? 0 : 1 }}
+          style={{ opacity: loading || !peaks ? 0 : 1 }}
           onClick={handleClick}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoverFraction(null)}

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useStore, usePro } from '../../store'
-import { audioPlayer } from '../../engine/AudioPlayer'
+import { audioEngine } from '../../engine/audioEngineClient'
+import type { AudioDeviceInfo } from '../../engine/audioEngineClient'
+import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
+import { PlaybackWarnings } from './PlaybackWarnings'
+import { formatBytes } from '../../utils/mediaFootprint'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
 import type { SettingsTab } from '../../store'
@@ -67,16 +71,19 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
   } = useStore()
   const pro = usePro()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
-  const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
+  const [devices, setDevices] = useState<AudioDeviceInfo[]>([])
   const [midiPorts, setMidiPorts] = useState<string[]>([])
   const [midiInputPorts, setMidiInputPorts] = useState<string[]>([])
-  // Context values are fixed for the life of the AudioContext, so read them once on mount.
-  const [contextInfo] = useState(() => audioPlayer.getContextInfo())
+  // The engine reports its own device, sample rate, buffer and latency; the dialogs
+  // show what it says rather than what the page guessed.
+  const { info, available } = useAudioEngineInfo()
 
   useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-      setOutputDevices(devices.filter(d => d.kind === 'audiooutput'))
-    })
+    audioEngine.devices()
+      .then(setDevices)
+      .catch(() => {
+        // No device list: the engine section says so rather than inventing devices.
+      })
     window.winslab.midi.listPorts().then(setMidiPorts)
     window.winslab.midi.listInputPorts().then(setMidiInputPorts)
   }, [])
@@ -122,6 +129,11 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
   const midiService = showServices.find(service => service.id === 'midi-in')
   const presenceService = showServices.find(service => service.id === 'presence')
   const rfService = showServices.find(service => service.id === 'rf')
+  // The device the workspace picked, or the system default while the settings still
+  // say "default": its channel count and sample rates are what the selects offer.
+  const selectedDevice = devices.find(device => device.id === audioSettings.outputDeviceId)
+    ?? devices.find(device => device.isDefault)
+    ?? devices[0]
   const companionService = showServices.find(service => service.id === 'companion')
 
   // The service list is a list the operator types, so it commits on the way out of the
@@ -143,9 +155,10 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const handleOutputDevice = async (deviceId: string) => {
+  // The bridge hook applies audio settings to the engine, so the change is written
+  // where it belongs the moment it is made.
+  const handleOutputDevice = (deviceId: string): void => {
     updateAudioSettings({ outputDeviceId: deviceId })
-    await audioPlayer.setOutputDevice(deviceId)
   }
 
   return (
@@ -188,24 +201,120 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                   value={audioSettings.outputDeviceId}
                   onChange={e => handleOutputDevice(e.target.value)}
                 >
-                  {outputDevices.length === 0 && (
-                    <option value="default">Default Output</option>
-                  )}
-                  {outputDevices.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Output ${d.deviceId.slice(0, 8)}`}
+                  <option value="default">Default Output</option>
+                  {devices.map(device => (
+                    <option key={device.id} value={device.id}>
+                      {device.name}{device.isDefault ? ' (system default)' : ''}
+                      {device.channels > 0 ? ` — ${device.channels} ch` : ''}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="field-row">
                 <label>Sample rate</label>
-                <span className="settings-info">{contextInfo.sampleRate.toLocaleString()} Hz</span>
+                <select
+                  value={audioSettings.sampleRate ?? ''}
+                  onChange={e => updateAudioSettings({
+                    sampleRate: e.target.value ? Number(e.target.value) : undefined
+                  })}
+                >
+                  <option value="">Device default</option>
+                  {selectedDevice?.sampleRates.map(rate => (
+                    <option key={rate} value={rate}>{rate.toLocaleString()} Hz</option>
+                  ))}
+                </select>
               </div>
               <div className="field-row">
-                <label>Base latency</label>
-                <span className="settings-info">{contextInfo.baseLatencyMs.toFixed(1)} ms</span>
+                <label>Buffer</label>
+                <select
+                  value={audioSettings.bufferFrames ?? ''}
+                  onChange={e => updateAudioSettings({
+                    bufferFrames: e.target.value ? Number(e.target.value) : undefined
+                  })}
+                >
+                  <option value="">Engine default</option>
+                  {[128, 256, 512, 1024, 2048].map(frames => (
+                    <option key={frames} value={frames}>{frames} frames</option>
+                  ))}
+                </select>
               </div>
+              <div className="field-row">
+                <label>Channels</label>
+                <select
+                  value={audioSettings.channels ?? ''}
+                  onChange={e => updateAudioSettings({
+                    channels: e.target.value ? Number(e.target.value) : undefined
+                  })}
+                >
+                  <option value="">Device default</option>
+                  {Array.from(
+                    { length: Math.max((selectedDevice?.channels ?? 0) - 1, 0) },
+                    (_, i) => i + 2
+                  ).map(channels => (
+                    <option key={channels} value={channels}>{channels}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field-row">
+                <label htmlFor="settings-exclusive">Exclusive</label>
+                <input
+                  id="settings-exclusive"
+                  type="checkbox"
+                  checked={audioSettings.exclusive ?? false}
+                  onChange={e => updateAudioSettings({ exclusive: e.target.checked })}
+                />
+                <span className="settings-info">Take the device exclusively, where the driver allows it</span>
+              </div>
+
+              <div className="field-section-title">Engine</div>
+              {info ? (
+                <>
+                  <div className="field-row">
+                    <label>Running at</label>
+                    <span className="settings-info">
+                      {info.sampleRate.toLocaleString()} Hz
+                      {info.channels > 0 ? ` · ${info.channels} ch` : ''}
+                      {info.bufferFrames ? ` · ${info.bufferFrames} frames` : ''}
+                    </span>
+                  </div>
+                  <div className="field-row">
+                    <label>Device</label>
+                    <span className="settings-info">
+                      {info.deviceName || info.deviceId || 'Default Output'}
+                      {info.exclusive ? ' · exclusive' : ''}
+                    </span>
+                  </div>
+                  <div className="field-row">
+                    <label>Latency</label>
+                    <span className="settings-info">
+                      {info.latencySource === 'unknown' || info.latencyMs === null
+                        ? 'unknown'
+                        : `${info.latencyMs.toFixed(1)} ms (${info.latencySource})`}
+                    </span>
+                  </div>
+                  <div className="field-row">
+                    <label>Playing</label>
+                    <span className="settings-info">
+                      {info.activeVoices} {info.activeVoices === 1 ? 'voice' : 'voices'}
+                      {` · ${info.media.streamingVoices} ${info.media.streamingVoices === 1 ? 'file' : 'files'} streaming`}
+                    </span>
+                  </div>
+                  <div className="field-row">
+                    <label>Media memory</label>
+                    <span className="settings-info">
+                      {formatBytes(info.media.residentBytes)} resident
+                      {info.cache.limitBytes > 0 ? ` · cache ${formatBytes(info.cache.bytes)} of ${formatBytes(info.cache.limitBytes)}` : ''}
+                    </span>
+                  </div>
+                  <PlaybackWarnings className="settings-warning" />
+                </>
+              ) : (
+                <p className="inspector-hint">
+                  {available === false
+                    ? 'The audio engine is not available in this build.'
+                    : 'Reading the engine…'}
+                </p>
+              )}
             </>
           )}
 

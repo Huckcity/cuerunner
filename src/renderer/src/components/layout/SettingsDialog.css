@@ -183,3 +183,15 @@
   padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
+
+/* A warning the engine is holding until the condition goes away: memory pressure,
+   a stalled stream. It stays on screen while the engine still reports it. */
+.settings-warning {
+  font-size: var(--text-sm);
+  color: var(--accent-amber);
+  background: #2a2418;
+  border: 1px solid #4a3d1a;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}

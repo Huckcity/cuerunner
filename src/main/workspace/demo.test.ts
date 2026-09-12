@@ -35,7 +35,9 @@ function audioCue(id: string, filePath: string): AudioCue {
     startTime: 0,
     endTime: null,
     fadeInDuration: 0,
-    outputs: [{ volume: 1, pan: 0 }],
+    volume: 1,
+    pan: 0,
+    outputs: null,
     loopCount: 0,
     playbackRate: 1,
     trim: 1

@@ -55,9 +55,16 @@ export interface CueBase {
   scriptLine?: number | null
 }
 
-export interface AudioOutput {
-  volume: number
-  pan: number
+/**
+ * One routing crosspoint: the file's channel `inputChannel` feeds the device's channel
+ * `outputChannel` at `gain`. Both channels are zero-based, so a stereo file routed to
+ * the first two device channels is `{inputChannel: 0, outputChannel: 0}` and
+ * `{inputChannel: 1, outputChannel: 1}`.
+ */
+export interface AudioCrosspoint {
+  inputChannel: number
+  outputChannel: number
+  gain: number
 }
 
 export interface AudioCue extends CueBase {
@@ -66,7 +73,16 @@ export interface AudioCue extends CueBase {
   startTime: number
   endTime: number | null
   fadeInDuration: number
-  outputs: AudioOutput[]
+  /** Master level, 0–1, applied to every output. */
+  volume: number
+  /** Master pan, −1 (left) to 1 (right); automatic routing spreads it across the pair. */
+  pan: number
+  /**
+   * Crosspoints, or null for automatic channel routing. An empty list is not "no
+   * routing": it is a cue that is deliberately silent, and it must not be read as
+   * "automatic".
+   */
+  outputs: AudioCrosspoint[] | null
   loopCount: number
   playbackRate: number
   trim: number

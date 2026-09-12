@@ -3,6 +3,9 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 import { onMainError, reportMainError } from './errors'
+import { audioEngine } from './audio/AudioEngine'
+import { playbackSafety, recentEngineEvents } from './safety/runtime'
+import { installPlaybackDevHarness } from './safety/devHarness'
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -80,6 +83,21 @@ function createMenu(): void {
           click: () => sendMenuAction('redo')
         }
       ]
+    },
+    {
+      // Panic, from the menu, without the renderer: this is the shortcut that still
+      // works when the window is wedged, dead, or busy showing something. It silences
+      // the native engine directly and then tells whatever renderer is left to drop its
+      // pending cues.
+      label: 'Playback',
+      submenu: [
+        {
+          id: 'playback-panic',
+          label: 'Panic — Silence Everything',
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: () => playbackSafety.panic('menu', 'Panic from the application menu')
+        }
+      ]
     }
   ]
 
@@ -97,7 +115,12 @@ function createWindow(): void {
     backgroundColor: '#181818',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      // The cue stack is timers and the audio clock, and both have to keep running when
+      // the window is not on screen. Chromium throttles backgrounded windows down to
+      // about one timer a minute, which turns a three-second wait into a stalled show
+      // the moment the operator minimizes the window and walks to the desk.
+      backgroundThrottling: false
     }
   })
 
@@ -117,6 +140,9 @@ function createWindow(): void {
     rendererDead = true
     rendererCrash = { reason: details.reason, at: Date.now() }
     reportMainError(`[main] renderer stopped: ${details.reason} (exit code ${details.exitCode})`)
+    // Before the window is brought back: the engine keeps playing whatever it was told
+    // to, and the only thing that could have stopped it just died.
+    playbackSafety.noteRendererGone(details.reason)
     // The show state lives in the renderer, so there is nothing to restore. A reloaded
     // window plus the CrashNotice banner beats a blank one that cannot be closed.
     setTimeout(() => {
@@ -126,7 +152,12 @@ function createWindow(): void {
 
   win.webContents.on('did-finish-load', () => { rendererDead = false })
 
-  win.webContents.on('unresponsive', () => reportMainError('[main] renderer unresponsive'))
+  win.webContents.on('unresponsive', () => {
+    reportMainError('[main] renderer unresponsive')
+    // A window that has stopped answering cannot be running its cue stack either: if
+    // the engine is still playing, the renderer is no longer in a position to stop it.
+    playbackSafety.noteRendererUnresponsive()
+  })
   win.webContents.on('responsive', () => reportMainError('[main] renderer responsive again'))
 
   ipcMain.removeHandler('app:confirm-close')
@@ -179,6 +210,25 @@ app.whenReady().then(() => {
   
   createMenu()
   registerIpcHandlers()
+  // The engine comes up with the app rather than with the first cue, so a device that
+  // cannot be opened is a visible error at launch instead of a cue that does nothing.
+  void audioEngine.ensureStarted().catch((error: unknown) => {
+    reportMainError(`[main] audio engine did not start: ${String(error)}`)
+  })
+  // The safety net is what panics when the window cannot; the harness is how the
+  // end-to-end suite reads what it did from this process rather than from the page.
+  installPlaybackDevHarness({
+    safety: playbackSafety,
+    engine: { info: () => audioEngine.info(), recentEvents: recentEngineEvents }
+  })
+  app.on('before-quit', () => playbackSafety.close())
+  // The engine owns a child process; quitting without asking it to go leaves that child
+  // behind, which in a test run means an orphan holding the audio device.
+  app.on('before-quit', () => {
+    void audioEngine.shutdown().catch((error: unknown) => {
+      reportMainError(`[main] audio engine did not shut down cleanly: ${String(error)}`)
+    })
+  })
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

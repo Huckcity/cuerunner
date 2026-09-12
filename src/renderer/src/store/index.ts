@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
+import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
@@ -152,6 +153,19 @@ interface CueListState {
   /** Operator-facing message shown in the notice bar: a failed save or open. */
   notice: string | null
   setNotice: (message: string | null) => void
+
+  /**
+   * Audio files the loaded workspace could not find, with the cues that name them.
+   * Workspace content, not session state: it is reported by the main process on load
+   * and cleared by a relink, and it is never saved into the file itself.
+   */
+  missingMedia: MissingMedia[]
+  setMissingMedia: (media: MissingMedia[]) => void
+  /**
+   * Applies the cue paths a relink resolved. One pick can put several cues back at
+   * once, and that is one edit: it dirties the session once and undoes once.
+   */
+  applyRelinkedMedia: (paths: Record<string, string>) => void
 
   // License. The machine's, not the show's: it is read from the main process before
   // the first frame, it never travels in a workspace, and it never dirties one.
@@ -344,6 +358,7 @@ export const useStore = create<CueListState>((set) => ({
   deskState: {},
   deskSceneId: null,
   notice: null,
+  missingMedia: [],
   past: [],
   future: [],
 
@@ -579,6 +594,23 @@ export const useStore = create<CueListState>((set) => ({
 
   setNotice: (message) => set({ notice: message }),
 
+  setMissingMedia: (missingMedia) => set({ missingMedia }),
+
+  applyRelinkedMedia: (paths) => set(s => {
+    const resolved = new Map(Object.entries(paths))
+    if (resolved.size === 0) return s
+    return {
+      cues: s.cues.map(cue =>
+        cue.type === 'audio' && resolved.has(cue.id)
+          ? { ...cue, filePath: resolved.get(cue.id)! }
+          : cue
+      ),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+    }
+  }),
+
   setLicense: (license) => set({ license }),
 
   openSettings: (settingsTab) => set({ settingsTab }),
@@ -596,6 +628,9 @@ export const useStore = create<CueListState>((set) => ({
     running: new Map(),
     lastRuns: {},
     notice: null,
+    // Whatever the last workspace was missing says nothing about this one; the caller
+    // sets this from the open result straight after.
+    missingMedia: [],
     audioSettings: audioSettings ?? { ...defaultAudioSettings },
     midiSettings: midiSettings ?? { ...defaultMidiSettings },
     showSettings: showSettings ?? defaultShowSettings(),
