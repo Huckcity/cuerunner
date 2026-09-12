@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace ws {

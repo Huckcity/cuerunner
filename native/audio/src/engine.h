@@ -11,6 +11,7 @@
 #include "stream.h"
 #include "wsaudio.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
