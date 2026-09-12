@@ -28,7 +28,7 @@ const midi = new MidiEngine()
 const osc = new OscEngine()
 const show = createShowRuntime()
 
-// The licence this machine holds, read once at startup and written only when the
+// The license this machine holds, read once at startup and written only when the
 // operator enters or removes a key. Everything Pro is gated on it from here, in the
 // process that owns the sockets: a window can explain a lock, but only this can be one.
 const license = createLicenseManager({
@@ -55,7 +55,7 @@ function broadcastShowEvents(events: ShowEvent[]): void {
 show.subscribe(broadcastShowEvents)
 
 /**
- * A licence that changes takes the show services with it: entering a key starts what
+ * A license that changes takes the show services with it: entering a key starts what
  * the window had configured, and removing one stops every socket and poller. The
  * window is told as well, so the panels it draws follow the same fact.
  */
@@ -82,7 +82,7 @@ export function registerIpcHandlers(): void {
   // a console that is already sending when the operator launches the app should not
   // have its first cues fall on the floor. The renderer re-sends its own settings —
   // which may come from the workspace — as soon as it has them. Nothing starts without
-  // a licence: the show services are the Pro half of the app.
+  // a license: the show services are the Pro half of the app.
   if (isPro(license.status())) void show.configure(defaultShowSettings())
 
   // Audio
@@ -150,7 +150,7 @@ export function registerIpcHandlers(): void {
     return show.restart(service)
   })
 
-  // Licence. The window reads the status, asks for a key to be checked, and is told
+  // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.
   ipcMain.handle('license:status', () => license.status())
   ipcMain.handle('license:activate', (_, text: string) => license.activate(text))

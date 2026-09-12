@@ -1,7 +1,7 @@
 import type { LicensePayload } from '../renderer/src/types/license'
 
 /**
- * A licence for tests that need a Pro surface to be drawn or a Pro service to run.
+ * A license for tests that need a Pro surface to be drawn or a Pro service to run.
  *
  * Nothing verifies it — the main process is the only thing that checks a signature, and
  * these tests never reach it. What they need is the fact the renderer acts on, so this

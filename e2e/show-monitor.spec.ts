@@ -2,7 +2,7 @@
 // reaches the app. Everything here is the part of a show that is not the cue stack.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createSocket } from 'dgram'
-import { closeApp, launchApp, mintLicence, sendOsc } from './helpers'
+import { closeApp, launchApp, mintLicense, sendOsc } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -10,7 +10,7 @@ let page: Page
 test.beforeEach(async () => {
   // The show services, the scenes view, the panels that read them: everything this spec
   // is about is the licensed half of the app.
-  ;({ app, page } = await launchApp({ licence: mintLicence() }))
+  ;({ app, page } = await launchApp({ license: mintLicense() }))
 })
 
 test.afterEach(async () => {

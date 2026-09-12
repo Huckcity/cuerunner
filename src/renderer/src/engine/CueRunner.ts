@@ -311,7 +311,7 @@ export class CueRunner {
         if (!this.deps!.isPro()) {
           // The cue stays in the file — a show written on a licensed machine opens on an
           // unlicensed one, and nothing is thrown away — but the desk is not driven
-          // without a licence, and a cue that did nothing quietly would be worse.
+          // without a license, and a cue that did nothing quietly would be worse.
           this.log({ level: 'error', message: 'scene cues need WinsLab Pro', label })
           report({ outcome: 'error', error: 'WinsLab Pro is required' })
           onDone()

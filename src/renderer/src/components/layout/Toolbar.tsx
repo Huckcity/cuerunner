@@ -40,7 +40,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const openSettings = useStore(s => s.openSettings)
 
   const handleAddCue = (type: CueType) => {
-    // A scene cue belongs to the scenes the licence unlocks: without one there is
+    // A scene cue belongs to the scenes the license unlocks: without one there is
     // nothing for it to point at, so the click goes to the place that fixes that
     // rather than adding a cue that cannot run.
     if (type === 'scene' && !pro) {

@@ -1,9 +1,9 @@
 // The issuer's tool. It is not part of the app and it never ships: the private key stays
-// on the machine that mints licences, and a build only ever carries the public half.
+// on the machine that mints licenses, and a build only ever carries the public half.
 //
-//   npm run licence:keygen                       write a new pair, print the public half
-//   npm run licence:issue -- --name "Theatre X"  mint a key from the pair on disk
-//   npm run licence:verify -- "WSL1-…"           check a key against the shipped key
+//   npm run license:keygen                       write a new pair, print the public half
+//   npm run license:issue -- --name "Theatre X"  mint a key from the pair on disk
+//   npm run license:verify -- "WSL1-…"           check a key against the shipped key
 //
 // Node runs the TypeScript directly (type stripping), so the tooling and the app share
 // one implementation of the format. Nothing here is imported by the app.
@@ -34,7 +34,7 @@ export interface IssueOptions {
 /** Mints a key. Throws with something to read when the options cannot make one. */
 export function issueKey(options: IssueOptions, privateKeyPem: string): string {
   const licensee = options.licensee.trim()
-  if (licensee.length === 0) throw new Error('A licence needs a name: --name "Theatre X"')
+  if (licensee.length === 0) throw new Error('A license needs a name: --name "Theatre X"')
   if (options.expires !== undefined && !DATE_PATTERN.test(options.expires)) {
     throw new Error(`--expires must be YYYY-MM-DD, not "${options.expires}"`)
   }
@@ -118,7 +118,7 @@ export function runCli(
     out(`Private key written to ${filePath} — back it up somewhere offline.`)
     out('')
     out('Public key. Replace PRODUCT_PUBLIC_KEYS in src/main/license/publicKey.ts with this,')
-    out('then release: every build verifies licences against what is in that file.')
+    out('then release: every build verifies licenses against what is in that file.')
     out('')
     out(publicKey.export({ type: 'spki', format: 'pem' }).toString().trim())
     return
@@ -147,7 +147,7 @@ export function runCli(
 
   if (parsed.command === 'verify') {
     const text = parsed.rest[0]
-    if (text === undefined) throw new Error('verify needs a key: npm run licence:verify -- "WSL1-…"')
+    if (text === undefined) throw new Error('verify needs a key: npm run license:verify -- "WSL1-…"')
     const verified = verifyLicense(text, publicKeys)
     if (!verified.ok) throw new Error(`Refused: ${describeRefusal(verified.reason)}`)
     out(`Signed by the key this build ships, for ${verified.payload.licensee} (${verified.payload.id}).`)
@@ -157,12 +157,12 @@ export function runCli(
     return
   }
 
-  out('WinsLab licence keys')
+  out('WinsLab license keys')
   out('')
-  out('  npm run licence:keygen                        write a new key pair (once)')
-  out('  npm run licence:issue -- --name "Theatre X"   mint a key from that pair')
-  out('  npm run licence:issue -- --name "…" --expires 2027-09-12 --id WSP-ABC123')
-  out('  npm run licence:verify -- "WSL1-…"            check a key against the shipped key')
+  out('  npm run license:keygen                        write a new key pair (once)')
+  out('  npm run license:issue -- --name "Theatre X"   mint a key from that pair')
+  out('  npm run license:issue -- --name "…" --expires 2027-09-12 --id WSP-ABC123')
+  out('  npm run license:verify -- "WSL1-…"            check a key against the shipped key')
 }
 
 /** The public half of a private key, for the check `issue` prints after minting. */

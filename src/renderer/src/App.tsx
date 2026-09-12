@@ -64,7 +64,7 @@ export function App() {
 
   const shellClass = `app-shell${timelineExpanded && timelineGroupCue ? ' timeline-fullscreen' : ''}`
 
-  // The licence can change while the window is open — a key entered in Settings, or one
+  // The license can change while the window is open — a key entered in Settings, or one
   // that ran out overnight — so the panels follow the main process rather than the read
   // taken at startup. The startup read itself happens before the first frame (main.tsx).
   useEffect(() => window.winslab.license.onChanged(setLicense), [setLicense])

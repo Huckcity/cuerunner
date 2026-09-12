@@ -1,7 +1,7 @@
 import { PRODUCT_PUBLIC_KEYS } from './publicKey'
 
 /**
- * Which public keys this process verifies licences against.
+ * Which public keys this process verifies licenses against.
  *
  * A packaged build trusts what it was built with and nothing else, so a shipped installer
  * cannot be talked into trusting a key its owner minted. Development and the E2E suite do

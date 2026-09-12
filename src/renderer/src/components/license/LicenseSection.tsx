@@ -3,7 +3,7 @@ import { useStore } from '../../store'
 import './License.css'
 
 /**
- * The licence this machine holds, and the field that changes it.
+ * The license this machine holds, and the field that changes it.
  *
  * Keys are verified in the main process against a key built into the app, so nothing
  * is asked of the network and a venue with no internet unlocks the same as any other.
@@ -35,7 +35,7 @@ export function LicenseSection() {
       {license.state === 'active' && (
         <>
           <div className="field-row">
-            <label>Licence</label>
+            <label>License</label>
             <span className="settings-info">Licensed to {license.license.licensee}</span>
           </div>
           <div className="field-row">

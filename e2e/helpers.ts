@@ -9,16 +9,16 @@ import path from 'path'
 import { createLicense } from '../src/main/license/key'
 
 /**
- * A licence minted for a test run.
+ * A license minted for a test run.
  *
  * The private half of the product key is deliberately not in the repository, so a spec
- * that needs the Pro surfaces brings a key of its own: `launchApp({ licence })` writes
+ * that needs the Pro surfaces brings a key of its own: `launchApp({ license })` writes
  * it where the app keeps its own and points the app at the public half that signed it.
  * That override is honoured by a build running out of the source tree and ignored by a
  * packaged one — see src/main/license/trustedKeys.ts — so this unlocks a test, never a
  * release.
  */
-export interface TestLicence {
+export interface TestLicense {
   /** The key as an operator would paste it. */
   text: string
   /** The public half, for the app that has to trust it. */
@@ -28,9 +28,9 @@ export interface TestLicence {
   privateKeyPem: string
 }
 
-export function mintLicence(
-  options: { licensee?: string; expires?: string; issuer?: TestLicence } = {}
-): TestLicence {
+export function mintLicense(
+  options: { licensee?: string; expires?: string; issuer?: TestLicense } = {}
+): TestLicense {
   const { privateKeyPem, publicKeyPem } = options.issuer ?? newIssuer()
   const payload = {
     v: 1,
@@ -46,7 +46,7 @@ export function mintLicence(
   }
 }
 
-/** A pair to sign test licences with. Nothing it signs leaves this machine. */
+/** A pair to sign test licenses with. Nothing it signs leaves this machine. */
 function newIssuer(): { privateKeyPem: string; publicKeyPem: string } {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519')
   return {
@@ -55,7 +55,7 @@ function newIssuer(): { privateKeyPem: string; publicKeyPem: string } {
   }
 }
 
-/** Environment for a launch, with any licence override the shell happens to carry removed. */
+/** Environment for a launch, with any license override the shell happens to carry removed. */
 function launchEnv(trustPublicKey?: string): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
@@ -70,7 +70,7 @@ function launchEnv(trustPublicKey?: string): Record<string, string> {
 // instances running alongside them. Pass the same directory back in to relaunch an
 // instance that should see what the previous one left behind.
 export async function launchApp(
-  options: { userDataDir?: string; licence?: TestLicence; trustPublicKey?: string } = {}
+  options: { userDataDir?: string; license?: TestLicense; trustPublicKey?: string } = {}
 ): Promise<{ app: ElectronApplication; page: Page; userDataDir: string }> {
   let userDataDir = options.userDataDir
   if (!userDataDir) {
@@ -79,14 +79,14 @@ export async function launchApp(
   }
 
   // The key goes where the app puts its own, so a licensed spec exercises the same path
-  // an operator's licence takes — and a launch without one starts locked.
-  if (options.licence) {
-    writeFileSync(path.join(userDataDir, 'license.key'), options.licence.text, 'utf-8')
+  // an operator's license takes — and a launch without one starts locked.
+  if (options.license) {
+    writeFileSync(path.join(userDataDir, 'license.key'), options.license.text, 'utf-8')
   }
 
   const app = await electron.launch({
     args: [path.join(process.cwd(), 'out/main/index.js'), `--user-data-dir=${userDataDir}`],
-    env: launchEnv(options.licence?.publicKeyPem ?? options.trustPublicKey)
+    env: launchEnv(options.license?.publicKeyPem ?? options.trustPublicKey)
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')

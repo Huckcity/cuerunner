@@ -7,7 +7,7 @@ import type { ActivationResult, LicensePayload, LicenseStatus } from '../../rend
 /**
  * The key this machine holds, and the only place it is read or written.
  *
- * The licence lives in a file of its own beside `recent.json` rather than inside a
+ * The license lives in a file of its own beside `recent.json` rather than inside a
  * workspace: it belongs to the machine and its operator, not to the show, and a
  * workspace that travels to another machine must not carry an unlock with it.
  */

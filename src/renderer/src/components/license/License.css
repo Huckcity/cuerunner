@@ -161,7 +161,7 @@
   vertical-align: middle;
 }
 
-/* ─── The licence tab in Settings ─────────────────────────────────────────── */
+/* ─── The license tab in Settings ─────────────────────────────────────────── */
 
 .license-warn {
   margin: 0 0 var(--space-3) 90px;
@@ -199,6 +199,19 @@
   margin: var(--space-2) 0 0 90px;
   font-size: var(--text-sm);
   color: var(--fg-dim);
+}
+
+/* A link inside a sentence: the license tab, from the tab that needs one. */
+.license-link {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent-amber);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .license-actions {

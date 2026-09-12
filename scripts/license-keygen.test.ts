@@ -1,4 +1,4 @@
-// The tool that mints licences is the other half of the gate, and the only half that can
+// The tool that mints licenses is the other half of the gate, and the only half that can
 // be wrong in a way nobody notices until a customer cannot unlock. What these tests hold
 // is that a key it prints is a key the app accepts, and that it refuses the mistakes an
 // issuer makes at 2am: no name, a date that is not a date, and overwriting the key pair

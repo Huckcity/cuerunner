@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useStore } from '../../store'
+import { useStore, usePro } from '../../store'
 import { audioPlayer } from '../../engine/AudioPlayer'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
@@ -65,6 +65,7 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
     updateRfSettings, updatePresenceSettings, updateCompanionSettings
   } = useStore()
+  const pro = usePro()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
   const [midiPorts, setMidiPorts] = useState<string[]>([])
@@ -231,6 +232,16 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
 
           {tab === 'show' && (
             <>
+              {!pro && (
+                <p className="inspector-hint license-hint">
+                  These settings belong to the show services, and the show services are
+                  WinsLab Pro. They travel with the show; the listening starts once this
+                  machine is licensed.{' '}
+                  <button className="license-link" onClick={() => setTab('license')}>
+                    Enter a license key
+                  </button>
+                </p>
+              )}
               <div className="field-row">
                 <label htmlFor="settings-osc-in">OSC input</label>
                 <input

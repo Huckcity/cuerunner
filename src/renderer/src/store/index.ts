@@ -153,7 +153,7 @@ interface CueListState {
   notice: string | null
   setNotice: (message: string | null) => void
 
-  // Licence. The machine's, not the show's: it is read from the main process before
+  // License. The machine's, not the show's: it is read from the main process before
   // the first frame, it never travels in a workspace, and it never dirties one.
   license: LicenseStatus
   setLicense: (status: LicenseStatus) => void

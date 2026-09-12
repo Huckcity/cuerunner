@@ -143,7 +143,7 @@ describe('deactivate', () => {
 })
 
 describe('subscribe', () => {
-  it('tells every listener what the licence is now, and stops when unsubscribed', async () => {
+  it('tells every listener what the license is now, and stops when unsubscribed', async () => {
     const license = manager()
     const seen: string[] = []
     const off = license.subscribe(status => seen.push(status.state))

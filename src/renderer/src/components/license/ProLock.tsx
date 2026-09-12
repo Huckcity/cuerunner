@@ -19,7 +19,7 @@ interface Props {
  *
  * The feature is described rather than hidden, because a window with buttons that do
  * nothing is a bug report. Everything behind this is still in the app — it is the
- * licence that turns it on, not another download.
+ * license that turns it on, not another download.
  */
 export function ProLock({ feature, blurb, variant = 'section', onClose }: Props) {
   const license = useStore(s => s.license)

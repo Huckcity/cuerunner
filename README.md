@@ -2,7 +2,7 @@
 
 A cross-platform **QLab alternative** for Windows and macOS — professional show-control software for managing audio, MIDI, OSC, and network cues in live performance and broadcast environments.
 
-Built with Electron, React, TypeScript, and Zustand. Source-available under the [Functional Source License 1.1, MIT future licence](./LICENSE) — see [Licence](#licence).
+Built with Electron, React, TypeScript, and Zustand. Source-available under the [Functional Source License 1.1, MIT future license](./LICENSE) — see [License](#license).
 
 **Operator documentation:** the [user guide](https://huckcity.github.io/winslab/guide.html) covers
 running a show — workspaces, timing and advance, every cue type, the run log, and
@@ -11,7 +11,7 @@ troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
 ## Features
 
 The cue stack is free, and so is everything in it. The show services and the views
-around them are **WinsLab Pro** — one licence key, checked on the machine. See
+around them are **WinsLab Pro** — one license key, checked on the machine. See
 [WinsLab Pro](#winslab-pro) and the [user guide](https://huckcity.github.io/winslab/guide.html#pro).
 
 ### Free
@@ -404,7 +404,7 @@ Behaviour worth knowing before a show:
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`
-- OSC input is part of WinsLab Pro: with no licence the app sends OSC and does not listen
+- OSC input is part of WinsLab Pro: with no license the app sends OSC and does not listen
   for it
 
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
@@ -422,19 +422,19 @@ See `CLAUDE.md` for detailed development guidelines.
 
 ## WinsLab Pro
 
-The Pro features listed above ship in the same app. A licence key turns them on, and
+The Pro features listed above ship in the same app. A license key turns them on, and
 keys are verified on the machine they are entered on:
 
 - **Nothing is sent anywhere.** The key is signed by the issuer and checked against a
   public key compiled into the app, so a venue machine with no internet unlocks exactly
   like any other, and using a key tells nobody that it was used.
-- **Enter it once**: *WinsLab ▾ → Settings… → License*. The licence is kept beside the
+- **Enter it once**: *WinsLab ▾ → Settings… → License*. The license is kept beside the
   app's other settings in the user-data directory (`license.key`) and belongs to that
   machine, not to a workspace.
 - **Show files are never affected.** A workspace written with Pro opens anywhere, keeping
   its scenes, its mic plot and its triggers, and saves back exactly as it arrived. On an
   unlicensed machine the Pro surfaces show a lock, the show services do not start, and a
-  scene cue fired from the stack records that it needs a licence and lets the rest of the
+  scene cue fired from the stack records that it needs a license and lets the rest of the
   show run.
 - **A key can be deactivated**, which returns the machine to the free feature set.
 
@@ -445,10 +445,10 @@ and must never be committed; it lives on the issuer's machine at
 `~/.winslab/license-private.pem` (mode 600).
 
 ```bash
-npm run licence:keygen                                  # once: write a pair, print the public half
-npm run licence:issue -- --name "Theatre X" \
+npm run license:keygen                                  # once: write a pair, print the public half
+npm run license:issue -- --name "Theatre X" \
   --expires 2027-09-12 --id WSP-ABC123                  # mint a key for a customer
-npm run licence:verify -- "WSL1-…"                      # check a key against the shipped public key
+npm run license:verify -- "WSL1-…"                      # check a key against the shipped public key
 ```
 
 `src/main/license/publicKey.ts` holds the public keys a build trusts, so rotating a key
@@ -460,7 +460,7 @@ the end of it).
 **Development and E2E** mint their own keys: `WINSLAB_LICENSE_PUBLIC_KEY` overrides the
 trusted key, and it is honoured only when the app is running from a source tree
 (`!app.isPackaged`). A packaged build ignores it. E2E specs that need the Pro surfaces
-launch with `launchApp({ licence: mintLicence() })`; see `e2e/licence.spec.ts` for the
+launch with `launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the
 gate itself.
 
 ## Support

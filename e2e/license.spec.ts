@@ -1,9 +1,9 @@
-// WinsLab Pro is a licence, not a download: the panels are all there, and the licence is
+// WinsLab Pro is a license, not a download: the panels are all there, and the license is
 // what turns them on. These tests hold both halves of that — the window that draws the
 // lock, and the main process that owns the sockets and refuses the work anyway — and both
 // ways a key arrives: pasted into Settings, or already on the machine at launch.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp, mintLicence, type TestLicence } from './helpers'
+import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
 
 let app: ElectronApplication | undefined
 
@@ -13,7 +13,7 @@ test.afterEach(async () => {
 })
 
 async function start(
-  options: { licence?: TestLicence; trustPublicKey?: string; userDataDir?: string } = {}
+  options: { license?: TestLicense; trustPublicKey?: string; userDataDir?: string } = {}
 ): Promise<{ page: Page; userDataDir: string }> {
   const launched = await launchApp(options)
   app = launched.app
@@ -32,7 +32,7 @@ async function openSettings(page: Page): Promise<void> {
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
 }
 
-async function openLicenceTab(page: Page): Promise<void> {
+async function openLicenseTab(page: Page): Promise<void> {
   await openSettings(page)
   await page.getByRole('dialog', { name: 'Settings' })
     .getByRole('button', { name: 'License', exact: true })
@@ -74,23 +74,33 @@ test('a machine with no key runs the free half and locks the rest', async () => 
     .toEqual({ ok: false, error: 'WinsLab Pro is required for the show services' })
   expect(await inRenderer("window.winslab.script.readDocument('/etc/hosts', null)"))
     .toEqual({ ok: false, error: 'The script panel is part of WinsLab Pro.' })
+
+  // The Show tab says why its services are not listening, and leads to the tab that fixes
+  // it — an operator who has configured a port and sees it stopped deserves the reason.
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await expect(dialog.locator('.license-hint')).toContainText('WinsLab Pro')
+  await dialog.getByRole('button', { name: 'Enter a license key' }).click()
+  await expect(dialog.locator('#license-key')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
 })
 
 test('a key pasted into Settings unlocks without a restart, and stays put', async () => {
   test.setTimeout(60_000)
-  const licence = mintLicence()
+  const license = mintLicense()
 
-  const first = await start({ trustPublicKey: licence.publicKeyPem })
+  const first = await start({ trustPublicKey: license.publicKeyPem })
   let page = first.page
   await page.locator('.btn-rf').click()
   await expect(page.locator('.pro-lock[data-feature="Wireless"]')).toBeVisible()
 
-  // The lock is the way in: its button opens Settings on the licence tab, because that
+  // The lock is the way in: its button opens Settings on the license tab, because that
   // is where the thing it is asking for goes.
   await page.locator('.pro-lock-unlock').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await expect(dialog).toBeVisible()
-  await dialog.locator('#license-key').fill(licence.text)
+  await dialog.locator('#license-key').fill(license.text)
   await dialog.getByRole('button', { name: 'Activate' }).click()
   await expect(dialog.locator('.settings-info', { hasText: 'Licensed to End to End Test' })).toBeVisible()
   await dialog.getByRole('button', { name: 'Close' }).click()
@@ -99,13 +109,19 @@ test('a key pasted into Settings unlocks without a restart, and stays put', asyn
   await expect(page.locator('.rf-panel')).toBeVisible()
   await expect(page.locator('.pro-mark')).toHaveCount(0)
 
+  // The Show tab stops explaining itself and starts reporting the services.
+  await openSettings(page)
+  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await expect(page.locator('.license-hint')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+
   // The next launch reads the key the app wrote for itself. The public half is handed
   // over again only because the test's issuer is not the product's.
   await closeApp(app!)
   app = undefined
   const relaunched = await start({
     userDataDir: first.userDataDir,
-    trustPublicKey: licence.publicKeyPem
+    trustPublicKey: license.publicKeyPem
   })
   page = relaunched.page
   await page.locator('.btn-rf').click()
@@ -113,11 +129,11 @@ test('a key pasted into Settings unlocks without a restart, and stays put', asyn
 })
 
 test('a key issued to somebody else, or mistyped, changes nothing', async () => {
-  const trusted = mintLicence()
-  const stranger = mintLicence()
+  const trusted = mintLicense()
+  const stranger = mintLicense()
   const { page } = await start({ trustPublicKey: trusted.publicKeyPem })
 
-  await openLicenceTab(page)
+  await openLicenseTab(page)
   await page.locator('#license-key').fill(stranger.text)
   await page.getByRole('button', { name: 'Activate' }).click()
   await expect(page.locator('.license-error')).toContainText('not issued by WinsLab')
@@ -132,11 +148,11 @@ test('a key issued to somebody else, or mistyped, changes nothing', async () => 
 })
 
 test('a key that has run out unlocks nothing, and says when it did', async () => {
-  const issuer = mintLicence()
-  const expired = mintLicence({ expires: '2026-02-01', issuer })
+  const issuer = mintLicense()
+  const expired = mintLicense({ expires: '2026-02-01', issuer })
   const { page } = await start({ trustPublicKey: issuer.publicKeyPem })
 
-  await openLicenceTab(page)
+  await openLicenseTab(page)
   await page.locator('#license-key').fill(expired.text)
   await page.getByRole('button', { name: 'Activate' }).click()
   await expect(page.locator('.license-error')).toContainText('expired on 2026-02-01')
@@ -147,9 +163,9 @@ test('a key that has run out unlocks nothing, and says when it did', async () =>
 })
 
 test('deactivating gives the free half back', async () => {
-  const { page } = await start({ licence: mintLicence() })
+  const { page } = await start({ license: mintLicense() })
 
-  await openLicenceTab(page)
+  await openLicenseTab(page)
   await page.getByRole('button', { name: 'Deactivate' }).click()
   // The tab turns back into the field that asks for a key, on the same machine.
   await expect(page.locator('#license-key')).toBeVisible()

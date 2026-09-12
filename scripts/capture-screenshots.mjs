@@ -54,13 +54,13 @@ await new Promise((resolve, reject) => {
   server.listen(8080, '127.0.0.1', resolve)
 })
 
-/* ── Licence ─────────────────────────────────────────────────────────────── */
+/* ── License ─────────────────────────────────────────────────────────────── */
 
 // Most of the figures in the guide are Pro surfaces — the monitor, the wireless panel, the
-// mic plot, the script, the scenes view — so the capture runs on a licence of its own: a
+// mic plot, the script, the scenes view — so the capture runs on a license of its own: a
 // throwaway pair minted here, a key signed with it, and the development-only public-key
 // override that a packaged build ignores. The app is given a private user-data directory
-// for the run, so the operator's own licence is never read, written or shown.
+// for the run, so the operator's own license is never read, written or shown.
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-shots-'))
 fs.writeFileSync(

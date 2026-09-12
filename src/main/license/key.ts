@@ -2,7 +2,7 @@ import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 import type { LicensePayload } from '../../renderer/src/types/license'
 
 /**
- * Licence keys are signed offline and verified against a public key built into the app.
+ * License keys are signed offline and verified against a public key built into the app.
  *
  * The text is `WSL1-` followed by base32 of the payload, a NUL, and the Ed25519
  * signature over those payload bytes. Base32 rather than base64 because a key is
@@ -182,7 +182,7 @@ function readPayload(value: unknown): LicenseDraft | null {
 
 /**
  * When the key stops working, or null for one that does not expire. A key is good for
- * the whole of its last day, in UTC: a show that opens on the day the licence runs out
+ * the whole of its last day, in UTC: a show that opens on the day the license runs out
  * should not stop mid-performance because the operator is east of the issuer.
  */
 export function licenseExpiry(payload: LicensePayload): number | null {
@@ -204,7 +204,7 @@ export function describeRefusal(reason: LicenseRefusal): string {
     case 'version':
       return 'That key was issued for a newer version of WinsLab. Update the app, then try again.'
     case 'payload':
-      return 'That key is missing part of its licence. Paste the whole key.'
+      return 'That key is missing part of its license. Paste the whole key.'
     case 'signature':
       return 'That key was not issued by WinsLab.'
   }
