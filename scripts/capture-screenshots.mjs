@@ -11,12 +11,14 @@
 // The capture is pinned to CSS pixels, so the figures are the same size whichever
 // display the script runs on.
 import { _electron as electron } from '@playwright/test'
+import { generateKeyPairSync } from 'node:crypto'
 import { Client } from 'node-osc'
 import fs from 'node:fs'
 import os from 'node:os'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createLicense } from '../src/main/license/key.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appEntry = path.join(root, 'out/main/index.js')
@@ -52,9 +54,38 @@ await new Promise((resolve, reject) => {
   server.listen(8080, '127.0.0.1', resolve)
 })
 
+/* ── Licence ─────────────────────────────────────────────────────────────── */
+
+// Most of the figures in the guide are Pro surfaces — the monitor, the wireless panel, the
+// mic plot, the script, the scenes view — so the capture runs on a licence of its own: a
+// throwaway pair minted here, a key signed with it, and the development-only public-key
+// override that a packaged build ignores. The app is given a private user-data directory
+// for the run, so the operator's own licence is never read, written or shown.
+const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-shots-'))
+fs.writeFileSync(
+  path.join(userDataDir, 'license.key'),
+  createLicense(
+    {
+      v: 1,
+      id: 'WSP-SHOT01',
+      licensee: 'Guide Screenshots',
+      issued: new Date().toISOString().slice(0, 10)
+    },
+    privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+  ),
+  'utf-8'
+)
+
 /* ── Capture ─────────────────────────────────────────────────────────────── */
 
-const app = await electron.launch({ args: [appEntry] })
+const app = await electron.launch({
+  args: [appEntry, `--user-data-dir=${userDataDir}`],
+  env: {
+    ...process.env,
+    WINSLAB_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString()
+  }
+})
 const page = await app.firstWindow()
 await page.waitForLoadState('domcontentloaded')
 
@@ -279,4 +310,5 @@ await shot('19-scenes-groups.png', '.scenes-view')
 await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
+fs.rmSync(userDataDir, { recursive: true, force: true })
 console.log('Done.')

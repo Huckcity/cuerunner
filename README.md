@@ -10,7 +10,13 @@ troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
 
 ## Features
 
-- **9 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, and Script cues
+The cue stack is free, and so is everything in it. The show services and the views
+around them are **WinsLab Pro** — one licence key, checked on the machine. See
+[WinsLab Pro](#winslab-pro) and the [user guide](https://huckcity.github.io/winslab/guide.html#pro).
+
+### Free
+
+- **9 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, and Script cues (the tenth, Scene, drives the desk from the stack and is part of Pro)
 - **Audio Playback**: per-cue level, pan, rate, and trim with fade-in, loop counts, and a clickable waveform
 - **MIDI Control**: Send MIDI messages to external instruments and gear
 - **OSC Integration**: Send Open Sound Control messages for networked control
@@ -20,6 +26,17 @@ troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
 - **Durable Saves**: atomic writes with a `.bak` of the previous version, autosaved recovery snapshots, and a crash banner instead of a silent reset
 - **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds, plus an experimental Linux AppImage
 - **Timeline Mode**: Visual timeline-based show layout (alternative to list view), with blocks that snap end to end
+
+### WinsLab Pro
+
+Everything below is in the same download and is unlocked by a key, not by another
+installer:
+
+- **The show around the cue stack**: OSC and MIDI input, the show monitor, network presence, and the wireless service that reads a telemetry source
+- **Wireless and the mic plot**: who is wearing which pack, the alarm before a battery dies on someone with an entrance, a swap log, and the night's report
+- **Triggers**: a cue that fires from an OSC address or a MIDI note with nobody's hand on GO
+- **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network
+- **Scenes and the desk**: the view the show is run from, with desk groups driven over MIDI or OSC, and scene cues in the stack
 
 ## Getting Started
 
@@ -387,7 +404,8 @@ Behaviour worth knowing before a show:
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`
-- OSC is send-only; Winslab cannot receive OSC yet
+- OSC input is part of WinsLab Pro: with no licence the app sends OSC and does not listen
+  for it
 
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
 these in the context of the feature it affects.
@@ -401,6 +419,49 @@ these in the context of the feature it affects.
 5. Push and create a pull request
 
 See `CLAUDE.md` for detailed development guidelines.
+
+## WinsLab Pro
+
+The Pro features listed above ship in the same app. A licence key turns them on, and
+keys are verified on the machine they are entered on:
+
+- **Nothing is sent anywhere.** The key is signed by the issuer and checked against a
+  public key compiled into the app, so a venue machine with no internet unlocks exactly
+  like any other, and using a key tells nobody that it was used.
+- **Enter it once**: *WinsLab ▾ → Settings… → License*. The licence is kept beside the
+  app's other settings in the user-data directory (`license.key`) and belongs to that
+  machine, not to a workspace.
+- **Show files are never affected.** A workspace written with Pro opens anywhere, keeping
+  its scenes, its mic plot and its triggers, and saves back exactly as it arrived. On an
+  unlicensed machine the Pro surfaces show a lock, the show services do not start, and a
+  scene cue fired from the stack records that it needs a licence and lets the rest of the
+  show run.
+- **A key can be deactivated**, which returns the machine to the free feature set.
+
+### Issuing keys
+
+Keys are minted offline. The private half of the product key is not in this repository
+and must never be committed; it lives on the issuer's machine at
+`~/.winslab/license-private.pem` (mode 600).
+
+```bash
+npm run licence:keygen                                  # once: write a pair, print the public half
+npm run licence:issue -- --name "Theatre X" \
+  --expires 2027-09-12 --id WSP-ABC123                  # mint a key for a customer
+npm run licence:verify -- "WSL1-…"                      # check a key against the shipped public key
+```
+
+`src/main/license/publicKey.ts` holds the public keys a build trusts, so rotating a key
+means adding the new one there and releasing: existing keys keep verifying as long as
+their public key stays in the list. A key's text is base32 in groups of eight, carrying
+who it is for, an id to match it to a sale, and an optional last day (UTC, good through
+the end of it).
+
+**Development and E2E** mint their own keys: `WINSLAB_LICENSE_PUBLIC_KEY` overrides the
+trusted key, and it is honoured only when the app is running from a source tree
+(`!app.isPackaged`). A packaged build ignores it. E2E specs that need the Pro surfaces
+launch with `launchApp({ licence: mintLicence() })`; see `e2e/licence.spec.ts` for the
+gate itself.
 
 ## Support
 

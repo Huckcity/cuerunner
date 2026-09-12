@@ -528,6 +528,21 @@ figure.figure {
   background: rgba(224, 160, 32, 0.07);
 }
 
+/* Pro marker: the same amber chip the app puts on a surface a licence unlocks. */
+.pro {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(224, 160, 32, 0.1);
+  color: var(--accent-amber);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .code {
   margin: 10px 0 0;
   padding: 10px 12px;

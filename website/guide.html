@@ -41,6 +41,7 @@
       <ol>
         <li><a href="#overview">Overview</a></li>
         <li><a href="#install">Install</a></li>
+        <li><a href="#pro">Free and Pro</a></li>
         <li><a href="#workspaces">Workspaces</a></li>
         <li><a href="#cue-list">Building a cue list</a></li>
         <li><a href="#timing">Timing and advance</a></li>
@@ -59,11 +60,11 @@
           </ol>
         </li>
         <li><a href="#results">Reading results</a></li>
-        <li><a href="#show-services">The show around the cue stack</a></li>
-        <li><a href="#wireless">Wireless and the mic plot</a></li>
-        <li><a href="#triggers">Triggers</a></li>
-        <li><a href="#script-panel">The script, and the tablet</a></li>
-        <li><a href="#scenes">Scenes, and the desk</a></li>
+        <li><a href="#show-services">The show around the cue stack<span class="pro">Pro</span></a></li>
+        <li><a href="#wireless">Wireless and the mic plot<span class="pro">Pro</span></a></li>
+        <li><a href="#triggers">Triggers<span class="pro">Pro</span></a></li>
+        <li><a href="#script-panel">The script, and the tablet<span class="pro">Pro</span></a></li>
+        <li><a href="#scenes">Scenes, and the desk<span class="pro">Pro</span></a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -126,6 +127,32 @@
         <p>
           Winslab is not code-signed for the App Store, so the first launch may warn about an
           unidentified developer. Downloads come from <code>pub.winslabapp.com</code>.
+        </p>
+      </section>
+
+      <section id="pro" class="panel reveal delay-1">
+        <h2>Free and Pro</h2>
+        <p>
+          The cue stack is free, and it is the whole of the free app: every cue type, the
+          timeline, the waveform, the run log, workspaces and the demo show.
+          <strong>WinsLab Pro</strong> is the rest of the show — the services that listen, the
+          views the show is run from, and the panels that read it. Every Pro section in this
+          guide is marked <span class="pro">Pro</span>.
+        </p>
+        <p>
+          Pro is unlocked with a licence key: <em>WinsLab ▾ → Settings… → License</em>, paste
+          the key, Activate. The key is checked on the machine it is entered on and nothing is
+          sent anywhere, so a venue with no internet unlocks the same as any other, and going to
+          air afterwards tells nobody anything. One key covers one machine, and the same tab
+          deactivates it.
+        </p>
+        <p>
+          Show files are never affected by which half you are running. A workspace written with
+          Pro opens on any machine with its scenes, its mic plot and its triggers intact, and
+          saves back exactly as it arrived. Without a key the Pro surfaces show what they are
+          and how to unlock them, the show services do not start, and a scene cue fired from the
+          stack writes that it needs a licence into the run log and lets the rest of the show
+          carry on.
         </p>
       </section>
 
@@ -697,7 +724,7 @@ console.log(r.stdout.trim())</code></pre>
       </section>
 
       <section id="show-services" class="panel reveal delay-4">
-        <h2>The show around the cue stack</h2>
+        <h2>The show around the cue stack<span class="pro">Pro</span></h2>
         <p>
           A cue stack is only part of what is happening in the room. WinsLab also listens: it takes
           OSC and MIDI from the desks, tablets and cue lights around it, watches wireless
@@ -746,7 +773,7 @@ console.log(r.stdout.trim())</code></pre>
       </section>
 
       <section id="wireless" class="panel reveal delay-4">
-        <h2>Wireless and the mic plot</h2>
+        <h2>Wireless and the mic plot<span class="pro">Pro</span></h2>
         <p>
           The wireless panel answers the two questions asked most often in a radio-mic show: who is
           wearing which pack, and which one is about to die. The RF button opens it.
@@ -867,7 +894,7 @@ console.log(r.stdout.trim())</code></pre>
       </section>
 
       <section id="triggers" class="panel reveal delay-4">
-        <h2>Triggers</h2>
+        <h2>Triggers<span class="pro">Pro</span></h2>
         <p>
           A cue usually fires when the operator presses GO. A <strong>trigger</strong> lets a message
           from somewhere else fire it: the lighting desk, a tablet, a footswitch, a show-control
@@ -904,7 +931,7 @@ console.log(r.stdout.trim())</code></pre>
       </section>
 
       <section id="script-panel" class="panel reveal delay-4">
-        <h2>The script, and the tablet</h2>
+        <h2>The script, and the tablet<span class="pro">Pro</span></h2>
         <p>
           Most operators keep the script open while they work. The SCRIPT button puts it in the
           strip: the document, the cue that fires on each line pinned to it, and the line the next
@@ -946,7 +973,7 @@ console.log(r.stdout.trim())</code></pre>
       </section>
 
       <section id="scenes" class="panel reveal delay-4">
-        <h2>Scenes, and the desk</h2>
+        <h2>Scenes, and the desk<span class="pro">Pro</span></h2>
         <p>
           The part of a musical that a cue stack does not handle on its own is the mics: at the top
           of a number four people walk on, two others walk off, and the desk has to follow. A
@@ -1076,12 +1103,14 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td>Show</td><td>Wireless telemetry</td><td>The sources the wireless panel reads, one row per source: a name, HTTP or file, and the URL or path. Each section also reports what its service is doing, so a change is confirmed on the screen that made it.</td></tr>
               <tr><td>Show</td><td>Network presence</td><td>Whether to browse the network, which mDNS service types to browse, and how long a device may stay quiet before it counts as gone.</td></tr>
               <tr><td>Show</td><td>Tablet companion</td><td>Whether to serve the show on the network, on which port, and with which token. The address to open on the tablet is reported underneath once the service is running.</td></tr>
+              <tr><td>License</td><td>License key</td><td>This machine's WinsLab Pro key: what it is licensed to, when it expires, Activate and Deactivate. See <a href="#pro">Free and Pro</a> above.</td></tr>
             </tbody>
           </table>
         </div>
         <p>
           Settings belong to the workspace, so they travel with the show, and changing them marks it
-          as unsaved.
+          as unsaved. The Show tab's settings are the ones the Pro services read: without a licence
+          they are kept with the show exactly as they are, and the services do not start.
         </p>
       </section>
 
