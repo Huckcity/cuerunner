@@ -5,7 +5,6 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import { closeApp, launchApp } from './helpers'
-import type { PlaybackDevHarness } from '../src/main/safety/devHarness'
 
 let app: ElectronApplication
 let page: Page
@@ -88,9 +87,14 @@ test('the demo plays straight from the cue list, with no Audio tab ever opened',
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toHaveAttribute('data-state', 'playing')
   await expect(page.locator('.running-badge')).toHaveText('1 running')
   // The engine's own answer: a voice really is playing, not just a cue marked running.
-  const voices = await app.evaluate(async () => {
-    const harness = (globalThis as unknown as { __winslabDevHarness?: PlaybackDevHarness }).__winslabDevHarness
-    return harness ? (await harness.engineInfo()).activeVoices : null
-  })
-  expect(voices).toBeGreaterThan(0)
+  // Polled, because a start is scheduled on the engine's clock with a lookahead — the
+  // renderer marks the cue running a moment before the engine's voice exists, and a
+  // loaded runner makes that gap longer than one read can cover.
+  await expect
+    .poll(
+      async () =>
+        app.evaluate(async () => (await globalThis.__winslabDevHarness?.engineInfo())?.activeVoices ?? 0),
+      { timeout: 5000, message: 'the engine should have a voice playing' }
+    )
+    .toBeGreaterThan(0)
 })

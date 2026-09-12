@@ -143,8 +143,11 @@ test('advance on-end respects post-wait before firing next cue', async () => {
   await row1.click()
   await page.getByRole('button', { name: /GO/ }).click()
 
-  // Cue 1 enters post-wait after ~50ms
-  await expect(page.locator('.state-pill', { hasText: 'post-wait' })).toBeVisible({ timeout: 500 })
+  // Cue 1 enters post-wait after ~50ms. The pill lives for the post-wait (300ms), and on
+  // a loaded runner the click can take longer than that to reach the renderer, so the
+  // window to observe it is generous: this asserts the state appears, not how quickly —
+  // the ordering that matters is the two cue-2 assertions below.
+  await expect(page.locator('.state-pill', { hasText: 'post-wait' })).toBeVisible({ timeout: 2000 })
 
   // Cue 2 must NOT start during cue 1's post-wait
   await expect(row2).toHaveAttribute('data-running', 'false')
