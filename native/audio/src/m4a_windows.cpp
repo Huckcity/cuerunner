@@ -10,6 +10,9 @@
 #include "util.h"
 
 #define WIN32_LEAN_AND_MEAN
+// windows.h defines `min` and `max` as macros, which breaks the std::min this file uses
+// (MSVC C2589).
+#define NOMINMAX
 #include <windows.h>
 #include <mfapi.h>
 #include <mferror.h>

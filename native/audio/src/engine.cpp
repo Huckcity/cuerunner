@@ -1,3 +1,10 @@
+// windows.h defines `min` and `max` as function-like macros, and miniaudio pulls
+// windows.h in on Windows. Without this, every std::min and std::max in this file is a
+// syntax error there (MSVC C2589: illegal token on right side of '::').
+#if defined(_WIN32)
+#define NOMINMAX
+#endif
+
 #include "engine.h"
 
 #include "util.h"
