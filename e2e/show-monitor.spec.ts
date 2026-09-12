@@ -25,6 +25,12 @@ function service(page: Page, label: string) {
   return monitor(page).locator('.monitor-service', { hasText: label })
 }
 
+// A port another socket already holds is EADDRINUSE on POSIX and EACCES on Windows
+// (WSAEACCES is what a Windows bind reports for the same clash). It is one fact either
+// way, and the assertion is about the app reporting it, not about the platform it was
+// written on.
+const PORT_IN_USE = /EADDRINUSE|EACCES/
+
 async function openMonitor(page: Page): Promise<void> {
   await page.locator('.btn-monitor').click()
   await expect(monitor(page)).toBeVisible()
@@ -117,13 +123,13 @@ test('a port another program holds is reported instead of swallowed', async () =
 
     const state = dialog.locator('.settings-service[data-service="osc-in"]')
     await expect(state).toHaveAttribute('data-state', 'degraded')
-    await expect(state).toContainText('EADDRINUSE')
+    await expect(state).toContainText(PORT_IN_USE)
     await dialog.getByRole('button', { name: 'Close' }).click()
 
     // A service that cannot start is an alarm the operator can read, and the app is
     // still there to show it.
     await openMonitor(page)
-    await expect(monitor(page).locator('.monitor-alert', { hasText: 'EADDRINUSE' })).toBeVisible()
+    await expect(monitor(page).locator('.monitor-alert', { hasText: PORT_IN_USE })).toBeVisible()
   } finally {
     squatter.close()
   }
