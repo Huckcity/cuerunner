@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
 import { CueRunner } from './CueRunner'
 import { audioEngine } from './audioEngineClient'
-import type { AudioEngineEvent } from './audioEngineClient'
+import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
@@ -502,6 +502,33 @@ describe('CueRunner — sample-clock scheduling', () => {
 
     expect(engine.start).toHaveBeenNthCalledWith(1, 'a1', firedAt, expect.anything())
     expect(engine.start).toHaveBeenNthCalledWith(2, 'a2', firedAt + 1000, expect.anything())
+  })
+
+  it('moves a run’s end when a slow prepare pushes its start past the planned time', async () => {
+    const first = makeAudio({ id: 'a1', number: '1', duration: 4000, advance: 'on-end' })
+    const second = makeAudio({ id: 'a2', number: '2', duration: 1000 })
+    const { runner } = setup([first, second])
+
+    const decode = Promise.withResolvers<AudioMetadata>()
+    engine.prepare.mockReturnValueOnce(decode.promise)
+
+    const firedAt = Date.now()
+    runner.go()
+    // A cold file: the decode outlasts the lookahead, so the engine begins the cue after
+    // the time the cue was fired at.
+    await vi.advanceTimersByTimeAsync(300)
+    decode.resolve({
+      cueId: 'a1', filePath: '/shows/a1.wav', format: 'wav', durationMs: 4000,
+      sampleRate: 48000, channels: 2, frames: null, fileBytes: 0,
+      streaming: false, cacheHit: false, decodedBytes: 0
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).toHaveBeenCalledWith('a1', firedAt, expect.anything())
+    // The end moved with the lateness, so the cue after it still starts when the first
+    // run really ends rather than 300 ms before the sound does.
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(engine.start).toHaveBeenCalledWith('a2', firedAt + 4300, expect.anything())
   })
 
   it('closes a run the engine ends before its planned end', async () => {

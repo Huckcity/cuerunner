@@ -521,6 +521,13 @@ export class CueRunner {
     }
 
     if (run.cancelled || run.phase === 'post-wait' || run.phase === 'done') return
+    // A cue handed a time the engine's clock has already passed begins at once, so a
+    // prepare that outlasted the lookahead moves the real start — and the run's end has
+    // to move with it, or the tail is cut and the cue after it goes early. Jitter inside
+    // the lookahead is left alone: those starts land on the next block anyway, and
+    // re-timing every handover by it would make the chain drift.
+    const startedAt = this.now()
+    if (startedAt - at > SCHEDULER_LOOKAHEAD_MS) this.reanchorAudioEnd(run, startedAt, finish)
     void audioEngine.start(cue.id, at, options)
       .then(result => {
         // The engine's identity for this run, so a replaced run's stale events are
@@ -538,6 +545,20 @@ export class CueRunner {
     // A length the cue already carries is planned now, before the engine is asked for
     // anything; without one the end is planned once the prepare has answered.
     if (cue.duration > 0) this.scheduleAudioEnd(run, at, options, cue.duration, finish)
+  }
+
+  /** Moves a run's end with a start that went out later than the time it names. */
+  private reanchorAudioEnd(run: CueRun, startedAt: number, finish: Finish): void {
+    if (run.endAt === null || run.plannedMs === null) return
+    const endAt = startedAt + run.plannedMs
+    if (endAt <= run.endAt) return
+    run.endAt = endAt
+    if (run.releaseTask !== null && !run.released) {
+      this.scheduler!.cancel(run.releaseTask)
+      run.releaseTask = null
+    }
+    this.armAudioEndTask(run, finish)
+    this.planRelease(run, run.endAt)
   }
 
   private scheduleAudioEnd(

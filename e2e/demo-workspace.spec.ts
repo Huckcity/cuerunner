@@ -5,6 +5,7 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import { closeApp, launchApp } from './helpers'
+import type { PlaybackDevHarness } from '../src/main/safety/devHarness'
 
 let app: ElectronApplication
 let page: Page
@@ -73,4 +74,23 @@ test('demo audio is copied out of the app and played from there', async () => {
   // Copied into the app's user-data folder rather than played from the bundle.
   const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
   expect(filePath.startsWith(userData)).toBe(true)
+})
+
+test('the demo plays straight from the cue list, with no Audio tab ever opened', async () => {
+  await openDemoFromFileMenu()
+
+  // Straight from the cue list to GO. Nothing has drawn the cue's Audio inspector, so
+  // the media has to have been prepared by the fire path itself — an engine that was
+  // never asked to prepare it refuses the start.
+  await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
+  await page.getByRole('button', { name: /GO/ }).click()
+
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toHaveAttribute('data-state', 'playing')
+  await expect(page.locator('.running-badge')).toHaveText('1 running')
+  // The engine's own answer: a voice really is playing, not just a cue marked running.
+  const voices = await app.evaluate(async () => {
+    const harness = (globalThis as unknown as { __winslabDevHarness?: PlaybackDevHarness }).__winslabDevHarness
+    return harness ? (await harness.engineInfo()).activeVoices : null
+  })
+  expect(voices).toBeGreaterThan(0)
 })
