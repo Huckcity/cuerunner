@@ -1,6 +1,7 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { launchApp, closeApp } from './helpers'
 import type { PlaybackDevHarness } from '../src/main/safety/devHarness'
+import type { AudioEngineStatus } from '../src/main/audio/AudioEngine'
 
 let app: ElectronApplication
 let page: Page
@@ -46,13 +47,22 @@ test('the app holds the OS off its timers', async () => {
 
 test('the audio engine is running', async () => {
   // A machine with no audio device still gets an engine — the silent backend — so this
-  // holds everywhere the suite runs. The assertion reports the whole status on failure,
-  // which carries the engine's own last words (its stderr, kept by main): on a Windows
-  // runner none of that output reaches the log any other way.
-  await expect
-    .poll(async () => app.evaluate(() => globalThis.__winslabDevHarness?.engineStatus() ?? null), {
-      timeout: 10_000,
-      message: 'the audio engine should be up and connected'
-    })
-    .toMatchObject({ started: true, connected: true })
+  // holds everywhere the suite runs. When it fails, the whole status is printed: it
+  // carries the engine's own last words (its stderr, kept by main), and on a Windows
+  // runner that is the only place they can reach the log.
+  let latest: AudioEngineStatus | null = null
+  try {
+    await expect
+      .poll(
+        async () => {
+          latest = await app.evaluate(() => globalThis.__winslabDevHarness?.engineStatus() ?? null)
+          return latest !== null && latest.started && latest.connected
+        },
+        { timeout: 10_000, message: 'the audio engine should be up and connected' }
+      )
+      .toBe(true)
+  } catch (error) {
+    console.error(`[e2e] the audio engine did not come up:\n${JSON.stringify(latest, null, 2)}`)
+    throw error
+  }
 })

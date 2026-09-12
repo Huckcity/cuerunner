@@ -129,6 +129,15 @@ export async function launchApp(
       ...options.env
     }
   })
+  // On a Windows runner Playwright prints none of the app's stdio, and the engine's own
+  // diagnostics ride it (main re-emits them, and reports its startup failures there too).
+  // Elsewhere Playwright already surfaces it, so the tee stays Windows-only.
+  if (process.platform === 'win32') {
+    const proc = app.process()
+    proc.stdout?.on('data', (chunk: Buffer) => process.stdout.write(chunk))
+    proc.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk))
+  }
+
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   return { app, page, userDataDir }
