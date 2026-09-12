@@ -350,4 +350,39 @@ describe('ServiceHost — restart and stop', () => {
       })
     ])
   })
+
+  it('says stopped afterwards, because a snapshot is read after the fact', async () => {
+    // Suspending the show (a licence removed, a quit) stops services on the host's
+    // instruction, and none of them reports that. A window that asks what is listening
+    // must not be told about a port that was closed.
+    const { host } = harness()
+    host.register(fakeService({ id: 'osc-in' }).service)
+    host.register(fakeService({ id: 'companion' }).service)
+    await host.startAll(showSettings())
+
+    await host.stopAll()
+
+    expect(host.statuses().map(status => [status.id, status.state, status.detail])).toEqual([
+      ['osc-in', 'stopped', 'not started'],
+      ['companion', 'stopped', 'not started']
+    ])
+  })
+
+  it('does not claim a service stopped when its stop failed', async () => {
+    // It may still be holding the socket it could not close.
+    const { host } = harness()
+    host.register(
+      fakeService({
+        id: 'bad',
+        stop: () => {
+          throw new Error('stuck')
+        }
+      }).service
+    )
+    await host.startAll(showSettings())
+
+    await host.stopAll()
+
+    expect(host.status('bad')?.state).toBe('running')
+  })
 })

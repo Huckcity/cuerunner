@@ -71,7 +71,14 @@ export class ServiceHost {
 
   async stopAll(): Promise<void> {
     for (const entry of this.entries.values()) {
-      await this.guard(entry, 'stop', () => entry.service.stop())
+      const stopped = await this.guard(entry, 'stop', () => entry.service.stop())
+      // The host owns the record, and a service stopped on somebody else's instruction
+      // does not report it — a snapshot taken after a suspension has to say stopped
+      // rather than repeat the port it was listening on. A service that already said so
+      // itself, or whose stop threw (it may still be up), is left as it is.
+      if (stopped && entry.status.state !== 'stopped') {
+        this.setState(entry, 'stopped', 'not started')
+      }
     }
   }
 
@@ -148,12 +155,14 @@ export class ServiceHost {
     entry: Entry,
     phase: string,
     action: () => Promise<void> | void
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await action()
+      return true
     } catch (error) {
       const message = describe(error)
       this.bus.alert('warning', entry.service.id, `${entry.service.label} failed to ${phase}: ${message}`)
+      return false
     }
   }
 

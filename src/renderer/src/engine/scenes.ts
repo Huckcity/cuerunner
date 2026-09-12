@@ -27,7 +27,17 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
   const scenes = state.showSettings.scenes
   const scene = sceneId === null
     ? null
-    : scenes.list.find(candidate => candidate.id === sceneId) ?? null
+    : scenes.list.find(candidate => candidate.id === sceneId)
+
+  // A named scene that is no longer in the list is not "close everything". Deleting a
+  // scene leaves the cues that pointed at it pointing at nothing, and remembering that
+  // as mics-off would mute the whole stage on the next GO — the loudest possible
+  // reading of a missing button. Only a null id means mics off.
+  if (scene === undefined) {
+    const message = `no scene by that id — it may have been deleted (${sceneId})`
+    useStore.getState().appendLog([{ level: 'error', label, message }])
+    return { sceneName: null, changes: [], failures: [message] }
+  }
 
   const changes = sceneChanges(
     state.showSettings.rf.plot.packs,

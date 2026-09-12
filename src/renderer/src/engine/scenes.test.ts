@@ -116,6 +116,23 @@ describe('recallScene', () => {
     expect(logMessages()).toEqual(['Mics closed — 2 groups'])
   })
 
+  it('refuses a scene that is gone rather than closing the stage', async () => {
+    // Deleting a scene leaves cues that pointed at it pointing at nothing. Reading that
+    // as "nothing is live" would mute every group the plot drives on the next GO.
+    seed({ 'dca-1': true, 'dca-2': true }, 's-1')
+
+    const result = await recallScene('s-deleted')
+
+    expect(result.failures).toEqual(['no scene by that id — it may have been deleted (s-deleted)'])
+    expect(result.changes).toEqual([])
+    expect(midiSend).not.toHaveBeenCalled()
+    expect(oscSend).not.toHaveBeenCalled()
+    // The desk is where it was, and still remembers which scene put it there.
+    expect(useStore.getState().deskState).toEqual({ 'dca-1': true, 'dca-2': true })
+    expect(useStore.getState().deskSceneId).toBe('s-1')
+    expect(logMessages()).toEqual(['no scene by that id — it may have been deleted (s-deleted)'])
+  })
+
   it('does not pretend a group was told when the desk did not answer', async () => {
     midiSend.mockResolvedValue({ ok: false, error: 'no such port' })
 

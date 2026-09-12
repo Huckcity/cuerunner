@@ -34,7 +34,11 @@ export function RecoveryNotice() {
       name,
       snapshot.sourcePath,
       snapshot.workspace.audioSettings,
-      snapshot.workspace.midiSettings
+      snapshot.workspace.midiSettings,
+      // The snapshot carries the show settings too — the scenes, the plot, the triggers'
+      // ports. Recovering without them would hand back a show with its desk emptied, and
+      // the next save would write that emptiness over the operator's file.
+      snapshot.workspace.showSettings
     )
     // Recovered work is unsaved by definition: the file on disk is older than this. The
     // title bar's dot is the app's usual signal for that.

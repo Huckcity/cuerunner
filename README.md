@@ -429,8 +429,16 @@ keys are verified on the machine they are entered on:
   public key compiled into the app, so a venue machine with no internet unlocks exactly
   like any other, and using a key tells nobody that it was used.
 - **Enter it once**: *WinsLab ▾ → Settings… → License*. The license is kept beside the
-  app's other settings in the user-data directory (`license.key`) and belongs to that
-  machine, not to a workspace.
+  app's other settings in the user-data directory (`license.key`); it belongs to the
+  computer it was entered on, not to a workspace or a show file.
+- **A session keeps the license it started with.** The key is checked when the app starts
+  and when one is entered, so a show that began licensed finishes licensed: a key that
+  runs out overnight locks the next launch rather than the performance.
+- **A key is not bound to a machine.** Verification is offline by design and nothing
+  counts activations, so one key can be entered on more than one computer. Keeping to one
+  machine per operator is a matter of trust between the issuer and the buyer — an
+  activation server, or a machine id collected before the sale, is what changing that
+  would take.
 - **Show files are never affected.** A workspace written with Pro opens anywhere, keeping
   its scenes, its mic plot and its triggers, and saves back exactly as it arrived. On an
   unlicensed machine the Pro surfaces show a lock, the show services do not start, and a

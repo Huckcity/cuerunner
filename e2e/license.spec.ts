@@ -162,6 +162,38 @@ test('a key that has run out unlocks nothing, and says when it did', async () =>
   await expect(page.locator('.pro-lock[data-feature="Scenes"]')).toBeVisible()
 })
 
+test('a key entered mid-session starts the show settings, not the defaults', async () => {
+  test.setTimeout(60_000)
+  const license = mintLicense()
+  const { page } = await start({ trustPublicKey: license.publicKeyPem })
+
+  // A show that does not listen for OSC at all, which is not the default.
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.locator('#settings-osc-in').uncheck()
+
+  // Enter the key on the tab next door.
+  await dialog.getByRole('button', { name: 'License', exact: true }).click()
+  await dialog.locator('#license-key').fill(license.text)
+  await dialog.getByRole('button', { name: 'Activate' }).click()
+  await expect(dialog.locator('.settings-info', { hasText: 'Licensed to End to End Test' })).toBeVisible()
+
+  // The service the show turned off is off: what came up was the workspace's settings,
+  // not the defaults main holds for a launch, which would have opened port 53000 first.
+  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await expect(dialog.locator('.settings-service[data-service="osc-in"]'))
+    .toHaveAttribute('data-state', 'stopped')
+  await dialog.getByRole('button', { name: 'Close' }).click()
+
+  await page.locator('.btn-monitor').click()
+  await expect(page.locator('.monitor-panel')).toBeVisible()
+  await expect(page.locator('.monitor-event[data-kind="service"]', { hasText: 'OSC input running' }))
+    .toHaveCount(0)
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel .log-message', { hasText: 'OSC input:' })).toHaveCount(0)
+})
+
 test('deactivating gives the free half back', async () => {
   const { page } = await start({ license: mintLicense() })
 

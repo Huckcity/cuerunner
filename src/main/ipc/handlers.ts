@@ -39,6 +39,11 @@ const license = createLicenseManager({
 // The last settings the window sent. Kept so a key entered mid-session can start the
 // services the operator had configured, without waiting for the window to re-send them.
 let lastShowSettings: ShowSettings = defaultShowSettings()
+// Whether the window has ever sent them. Until it has, the defaults above are a guess
+// made so a console that is already talking at launch is heard; they are not the show,
+// and starting services on them when a key arrives would bind a port this workspace
+// does not use.
+let settingsReceived = false
 
 const PRO_REQUIRED = 'WinsLab Pro is required for the show services'
 
@@ -58,6 +63,10 @@ show.subscribe(broadcastShowEvents)
  * A license that changes takes the show services with it: entering a key starts what
  * the window had configured, and removing one stops every socket and poller. The
  * window is told as well, so the panels it draws follow the same fact.
+ *
+ * A key entered before the window has sent its settings starts nothing: the window
+ * re-sends them the moment it sees the license, and starting the defaults first would
+ * bind a port on a machine that may not use one.
  */
 license.subscribe((status: LicenseStatus) => {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -65,7 +74,11 @@ license.subscribe((status: LicenseStatus) => {
       win.webContents.send('license:changed', status)
     }
   }
-  void (isPro(status) ? show.configure(lastShowSettings) : show.suspend())
+  if (!isPro(status)) {
+    void show.suspend()
+    return
+  }
+  if (settingsReceived) void show.configure(lastShowSettings)
 })
 
 function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
@@ -133,6 +146,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('show:configure', async (_, settings: ShowSettings) => {
     lastShowSettings = settings
+    settingsReceived = true
     if (!isPro(license.status())) {
       await show.suspend()
       return
