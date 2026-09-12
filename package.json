@@ -23,12 +23,30 @@
     "license:keygen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts keygen",
     "license:issue": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts issue",
     "license:verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts verify",
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "build:native": "node scripts/build-native-audio.mjs",
+    "build:ffmpeg": "node scripts/build-ffmpeg-linux.mjs",
+    "test:native": "node native/audio/tests/offline.mjs",
+    "test:native:device": "node native/audio/tests/device-smoke.mjs",
+    "predev": "node scripts/ensure-native.mjs",
+    "prebuild": "node scripts/ensure-native.mjs",
+    "prepreview": "node scripts/ensure-native.mjs",
+    "pretest": "node scripts/ensure-native.mjs",
+    "pretest:e2e": "node scripts/ensure-native.mjs",
+    "pretest:e2e:headed": "node scripts/ensure-native.mjs",
+    "pretest:native": "node scripts/ensure-native.mjs --with-decoders",
+    "prescreenshots": "node scripts/ensure-native.mjs",
+    "predist": "node scripts/ensure-native.mjs --with-decoders",
+    "predist:win": "node scripts/ensure-native.mjs",
+    "predist:mac": "node scripts/ensure-native.mjs",
+    "predist:linux": "node scripts/ensure-native.mjs --with-decoders",
+    "ensure:native": "node scripts/ensure-native.mjs --with-decoders",
+    "pretest:native:device": "node scripts/ensure-native.mjs"
   },
   "build": {
     "appId": "com.winslab.app",
     "productName": "WinsLab",
-    "copyright": "Copyright © 2026",
+    "copyright": "Copyright \u00a9 2026",
     "directories": {
       "buildResources": "resources",
       "output": "dist"
@@ -41,6 +59,15 @@
       {
         "from": "resources/demo",
         "to": "demo"
+      },
+      {
+        "from": "native/audio/build",
+        "to": "audio",
+        "filter": [
+          "winslab-audio",
+          "winslab-audio.exe",
+          "decoders/**/*"
+        ]
       }
     ],
     "win": {

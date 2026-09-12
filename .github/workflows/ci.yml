@@ -54,6 +54,31 @@ jobs:
       - name: Unit tests
         run: npm test
 
+  # The playback engine is C++ and is part of the app: its deterministic offline-render
+  # acceptance suite (exact start/stop/fade frames, routing, streaming, cache, M4A) runs
+  # here. `npm run test:native` builds the engine and, on Linux, the pinned LGPL FFmpeg
+  # helper through its pre-hook; the helper is cached so an unchanged pin costs nothing.
+  native-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
+        uses: actions/cache@v4
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Native acceptance (real mixer, offline render)
+        run: npm run test:native
+
   # Installing the Electron binary exercises npm's install scripts, @electron/get's
   # 200 MB download and zip extraction — the path that silently produced no binary on
   # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
@@ -117,6 +142,12 @@ jobs:
       - name: Install runtime dependencies
         if: runner.os == 'Linux'
         run: npx playwright install-deps
+
+      # The app runs the native engine; on Windows the compiler is installed but not on
+      # PATH unless the developer environment is imported.
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: E2E tests
         if: runner.os != 'Linux'

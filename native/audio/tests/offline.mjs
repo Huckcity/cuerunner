@@ -1,0 +1,620 @@
+#!/usr/bin/env node
+/**
+ * Native acceptance suite: drives the real engine in offline mode and asserts actual
+ * output samples, exact start/stop/fade frames, matrix routing, streaming and the cache
+ * rules. Everything here runs the same mixer, scheduler, decoders and cache the device
+ * path uses — only the clock is owned by the caller.
+ *
+ *   node native/audio/tests/offline.mjs [--binary path]
+ */
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `winslab-audio${process.platform === 'win32' ? '.exe' : ''}`)
+const binaryIndex = process.argv.indexOf('--binary')
+const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.WINSLAB_AUDIO_BIN ?? defaultBinary
+
+const SAMPLE_RATE = 48000
+const workDir = mkdtempSync(join(tmpdir(), 'winslab-audio-tests-'))
+let failures = 0
+let checks = 0
+
+function writeFloatWav(path, channels, sampleRate, frames, sampleAt) {
+  const dataBytes = frames * channels * 4
+  const buffer = Buffer.alloc(44 + dataBytes)
+  buffer.write('RIFF', 0)
+  buffer.writeUInt32LE(36 + dataBytes, 4)
+  buffer.write('WAVE', 8)
+  buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(3, 20) // IEEE float
+  buffer.writeUInt16LE(channels, 22)
+  buffer.writeUInt32LE(sampleRate, 24)
+  buffer.writeUInt32LE(sampleRate * channels * 4, 28)
+  buffer.writeUInt16LE(channels * 4, 32)
+  buffer.writeUInt16LE(32, 34)
+  buffer.write('data', 36)
+  buffer.writeUInt32LE(dataBytes, 40)
+  let offset = 44
+  for (let frame = 0; frame < frames; frame++) {
+    for (let channel = 0; channel < channels; channel++) {
+      buffer.writeFloatLE(sampleAt(channel, frame), offset)
+      offset += 4
+    }
+  }
+  writeFileSync(path, buffer)
+}
+
+function readFloatWav(path) {
+  const buffer = readFileSync(path)
+  if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
+    throw new Error(`${path} is not a WAV file`)
+  }
+  let offset = 12
+  let channels = 0
+  let sampleRate = 0
+  let format = 0
+  let dataOffset = 0
+  let dataBytes = 0
+  while (offset + 8 <= buffer.length) {
+    const id = buffer.toString('ascii', offset, offset + 4)
+    const size = buffer.readUInt32LE(offset + 4)
+    if (id === 'fmt ') {
+      format = buffer.readUInt16LE(offset + 8)
+      channels = buffer.readUInt16LE(offset + 10)
+      sampleRate = buffer.readUInt32LE(offset + 12)
+    } else if (id === 'data') {
+      dataOffset = offset + 8
+      dataBytes = Math.min(size, buffer.length - dataOffset)
+    }
+    offset += 8 + size + (size % 2)
+  }
+  if (format !== 3) throw new Error(`expected float WAV, got format ${format}`)
+  const frames = Math.floor(dataBytes / (channels * 4))
+  const samples = new Float32Array(frames * channels)
+  for (let i = 0; i < samples.length; i++) samples[i] = buffer.readFloatLE(dataOffset + i * 4)
+  return { channels, sampleRate, frames, samples }
+}
+
+function runEngine(script, extraArgs = []) {
+  const scriptPath = join(workDir, `script-${Date.now()}-${Math.floor(Math.random() * 1e6)}.json`)
+  const outPath = join(workDir, `out-${Date.now()}-${Math.floor(Math.random() * 1e6)}.wav`)
+  writeFileSync(scriptPath, JSON.stringify(script))
+  const stdout = execFileSync(
+    binary,
+    ['--offline-render', scriptPath, '--out', outPath, '--backend', 'offline', ...extraArgs],
+    { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }
+  )
+  const summary = JSON.parse(stdout.trim().split('\n').pop())
+  return { summary, wav: readFloatWav(outPath) }
+}
+
+function check(name, condition, detail = '') {
+  checks++
+  if (condition) {
+    console.log(`  ok   ${name}`)
+    return
+  }
+  failures++
+  console.log(`  FAIL ${name}${detail ? ` — ${detail}` : ''}`)
+}
+
+function near(actual, expected, tolerance = 1e-4) {
+  return Math.abs(actual - expected) <= tolerance
+}
+
+function sampleAt(wav, frame, channel = 0) {
+  return wav.samples[frame * wav.channels + channel]
+}
+
+function firstNonZeroFrame(wav, channel = 0) {
+  for (let frame = 0; frame < wav.frames; frame++) {
+    if (Math.abs(sampleAt(wav, frame, channel)) > 1e-6) return frame
+  }
+  return -1
+}
+
+function events(summary, type) {
+  return summary.events.filter((event) => event.type === type)
+}
+
+function replyFor(summary, index) {
+  const result = summary.results[index]
+  if (result === undefined) throw new Error(`no result at index ${index}`)
+  return result.reply
+}
+
+// --- fixtures --------------------------------------------------------------
+const dc4Path = join(workDir, 'dc4.wav')
+const dc2Path = join(workDir, 'dc2.wav')
+const longPath = join(workDir, 'long.wav')
+writeFloatWav(dc4Path, 4, SAMPLE_RATE, SAMPLE_RATE / 2, (channel) => [0.1, 0.2, 0.3, 0.4][channel])
+writeFloatWav(dc2Path, 2, SAMPLE_RATE, SAMPLE_RATE / 2, (channel) => (channel === 0 ? 0.5 : -0.25))
+// Three seconds of stereo at 0.25 — big enough to force the streaming path when the
+// cache's per-file limit is lowered.
+writeFloatWav(longPath, 2, SAMPLE_RATE, SAMPLE_RATE * 3, () => 0.25)
+
+console.log(`winslab-audio acceptance — binary ${binary}`)
+
+// --- 1. exact start, stop and fade frames ---------------------------------
+{
+  console.log('\nexact start / stop / fade sample indices')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      {
+        atMs: 0,
+        verb: 'start',
+        cueId: 'a',
+        whenMs: 0,
+        options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null }
+      },
+      { atMs: 100, verb: 'stop', cueId: 'a', fadeMs: 50 }
+    ]
+  })
+  check('start is audible at frame 0', firstNonZeroFrame(wav) === 0, `first non-zero ${firstNonZeroFrame(wav)}`)
+  check('level before the fade is exact', near(sampleAt(wav, 4799), 0.5))
+  check('fade begins exactly at frame 4800', near(sampleAt(wav, 4800), 0.5))
+  check('fade midpoint is half way down', near(sampleAt(wav, 6000), 0.5 * (1 - (6000 - 4800) / 2400)))
+  check('fade ends at frame 7200', Math.abs(sampleAt(wav, 7200)) < 1e-6)
+  check('silence after the fade', Math.abs(sampleAt(wav, 12000)) < 1e-6)
+  check('right channel faded with the left', near(sampleAt(wav, 6000, 1), -0.25 * (1 - (6000 - 4800) / 2400)))
+  const started = events(summary, 'state').filter((event) => event.state === 'playing')
+  check('a playing state event was emitted', started.length >= 1)
+  const ended = events(summary, 'ended')
+  check('ended carries the run identity', ended.length === 1 && ended[0].cueId === 'a' && /^run-/.test(ended[0].runId))
+  check('ended reason is stopped', ended.length === 1 && ended[0].reason === 'stopped')
+}
+
+// --- 2. a scheduled future start lands on its exact frame ------------------
+{
+  console.log('\nfuture-dated start')
+  const { wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 12000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 100, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
+    ]
+  })
+  check('silent before the scheduled frame', Math.abs(sampleAt(wav, 4799)) < 1e-6)
+  check('audible exactly at frame 4800', near(sampleAt(wav, 4800), 0.5))
+}
+
+// --- 3. N-input to M-output matrix routing --------------------------------
+{
+  console.log('\n4-channel matrix routing')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 4,
+    blockFrames: 256,
+    stopWhenIdle: false,
+    frames: 4800,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc4Path },
+      {
+        atMs: 0,
+        verb: 'start',
+        cueId: 'a',
+        whenMs: 0,
+        options: {
+          startTime: 0,
+          endTime: null,
+          loopCount: 0,
+          rate: 1,
+          trim: 1,
+          volume: 1,
+          pan: 0,
+          fadeInDuration: 0,
+          outputs: [
+            { inputChannel: 1, outputChannel: 3, gain: 0.5 },
+            { inputChannel: 0, outputChannel: 2, gain: 1 }
+          ]
+        }
+      }
+    ]
+  })
+  check('unrouted outputs stay silent', Math.abs(sampleAt(wav, 100, 0)) < 1e-6 && Math.abs(sampleAt(wav, 100, 1)) < 1e-6)
+  check('input 0 reaches output 2', near(sampleAt(wav, 100, 2), 0.1))
+  check('input 1 reaches output 3 at gain 0.5', near(sampleAt(wav, 100, 3), 0.1))
+  check('the engine reports 4 output channels', summary.info.channels === 4, `channels ${summary.info.channels}`)
+}
+
+// --- 4. empty routing is deliberate silence --------------------------------
+{
+  console.log('\nempty routing = silent voice that still completes')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 26000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: [] } }
+    ]
+  })
+  let loudest = 0
+  for (let i = 0; i < wav.samples.length; i++) loudest = Math.max(loudest, Math.abs(wav.samples[i]))
+  check('output is silent', loudest < 1e-6, `peak ${loudest}`)
+  const ended = events(summary, 'ended')
+  check('the run still reports completion', ended.length === 1 && ended[0].reason === 'complete')
+}
+
+// --- 5. finite loops -------------------------------------------------------
+{
+  console.log('\nfinite loops repeat the segment, then end')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: 100, loopCount: 1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
+    ]
+  })
+  check('first pass is audible', near(sampleAt(wav, 4799), 0.5))
+  check('second pass is audible (loop wrap)', near(sampleAt(wav, 4800), 0.5))
+  check('run ends after two passes', Math.abs(sampleAt(wav, 9600)) < 1e-6 && Math.abs(sampleAt(wav, 9500)) > 0.4)
+  const ended = events(summary, 'ended')
+  check('ended reason complete with one loop', ended.length === 1 && ended[0].reason === 'complete' && ended[0].loopsCompleted === 1)
+}
+
+// --- 6. infinite loop stopped on command ----------------------------------
+{
+  console.log('\ninfinite loop with a scheduled stop')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: 100, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 250, verb: 'stop', cueId: 'a', fadeMs: 0 }
+    ]
+  })
+  check('loops keep playing past the first segment', near(sampleAt(wav, 11000), 0.5))
+  check('stop lands on its exact frame', Math.abs(sampleAt(wav, 12000)) < 1e-6 && near(sampleAt(wav, 11999), 0.5))
+  const ended = events(summary, 'ended')
+  check('ended reason stopped', ended.length === 1 && ended[0].reason === 'stopped')
+}
+
+// --- 7. seek keeps the envelope (no fade retrigger) -----------------------
+{
+  console.log('\nseek does not retrigger the fade-in')
+  const { wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 100, outputs: null } },
+      { atMs: 150, verb: 'seek', cueId: 'a', positionMs: 200 }
+    ]
+  })
+  check('fade-in reaches full level', near(sampleAt(wav, 4900), 0.5))
+  let dip = false
+  for (let frame = 7200; frame < 9600; frame++) {
+    if (sampleAt(wav, frame) < 0.5 - 1e-4) dip = true
+  }
+  check('no dip after the seek', !dip)
+  check('audio continues at full level', near(sampleAt(wav, 9000), 0.5))
+}
+
+// --- 8. cache: hits, oversized bypass, survival, eviction -----------------
+{
+  console.log('\ncache: hit promotion, oversized bypass, LRU bounds')
+  const { summary } = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 9600,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'small', filePath: dc2Path },
+        { atMs: 0, verb: 'prepare', cueId: 'small-again', filePath: dc2Path },
+        { atMs: 0, verb: 'prepare', cueId: 'big', filePath: longPath },
+        { atMs: 0, verb: 'prepare', cueId: 'small-third', filePath: dc2Path },
+        { atMs: 0, verb: 'info' }
+      ]
+    },
+    ['--cache-max-file-bytes', '300000', '--cache-max-bytes', '4000000', '--cache-max-files', '8']
+  )
+  const first = replyFor(summary, 0).result
+  const second = replyFor(summary, 1).result
+  const big = replyFor(summary, 2).result
+  const third = replyFor(summary, 3).result
+  const info = replyFor(summary, 4).result
+  check('first prepare is a cold load', first.cacheHit === false && first.streaming === false)
+  check('second prepare is a genuine hit', second.cacheHit === true)
+  check('oversized file streams and is not cached', big.streaming === true && big.cacheHit === false)
+  check('small file survives the oversized prepare', third.cacheHit === true, JSON.stringify(third))
+  check('bypass is counted', info.cache.bypassed >= 1, JSON.stringify(info.cache))
+  check('cache stays within its file-count bound', info.cache.entries <= info.cache.maxFiles)
+}
+{
+  const { summary } = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 9600,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+        { atMs: 0, verb: 'prepare', cueId: 'b', filePath: dc4Path },
+        { atMs: 0, verb: 'info' }
+      ]
+    },
+    ['--cache-max-files', '1']
+  )
+  const info = replyFor(summary, 2).result
+  check('eviction respects the file bound', info.cache.entries === 1 && info.cache.evictions >= 1, JSON.stringify(info.cache))
+}
+
+// --- 9. streaming a long file stays bounded and correct --------------------
+{
+  console.log('\nstreaming: bounded pre-roll, correct output')
+  const { summary, wav } = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 96000,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'long', filePath: longPath },
+        { atMs: 0, verb: 'start', cueId: 'long', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+        { atMs: 20, verb: 'info' }
+      ]
+    },
+    ['--cache-max-file-bytes', '300000', '--stream-preroll-ms', '200']
+  )
+  const prepared = replyFor(summary, 0).result
+  const info = replyFor(summary, 2).result
+  check('oversized prepare reports streaming', prepared.streaming === true)
+  check('one streaming voice is active', info.media.streamingVoices === 1, JSON.stringify(info.media))
+  check('pre-roll stays inside its byte budget', info.media.streamBufferBytes > 0 && info.media.streamBufferBytes <= 4 * 1024 * 1024, JSON.stringify(info.media))
+  check('streamed audio is correct', near(sampleAt(wav, 40000), 0.25))
+  check('no underruns on a local file', events(summary, 'error').length === 0, JSON.stringify(events(summary, 'error')))
+}
+
+// --- 10. waveform is bounded and truthful ---------------------------------
+{
+  console.log('\nwaveform scan')
+  const { summary } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 512,
+    commands: [
+      { atMs: 0, verb: 'waveform', filePath: dc4Path, points: 64 },
+      { atMs: 0, verb: 'waveform', filePath: dc4Path, points: 100000 }
+    ]
+  })
+  const small = replyFor(summary, 0).result
+  const clamped = replyFor(summary, 1).result
+  check('bounded points return min/max pairs', small.buckets === 64 && small.values.length === 128)
+  // The panel folds the first two channels into one min/max pair per bucket: the
+  // fixture is 0.1 and 0.2 there, so the pair is exactly that.
+  check('peaks report the real signal', near(small.values[0], 0.1) && near(small.values[1], 0.2), JSON.stringify(small.values.slice(0, 4)))
+  check('duration and channels are reported', near(small.durationMs, 500, 1) && small.sampleRate === SAMPLE_RATE && small.channels === 4)
+  check('oversized point counts are clamped and flagged', clamped.buckets === 4096 && clamped.truncated === true)
+}
+
+// --- 11. panic stops everything and says so -------------------------------
+{
+  console.log('\npanic')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'prepare', cueId: 'b', filePath: dc4Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 0, verb: 'start', cueId: 'b', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 100, verb: 'panic', fadeMs: 0 }
+    ]
+  })
+  check('panic reports the voices it silenced', replyFor(summary, 4).result.stoppedVoices === 2, JSON.stringify(replyFor(summary, 4).result))
+  check('there is a panic event', events(summary, 'panic').length === 1)
+  check('audio is silent after the panic', Math.abs(sampleAt(wav, 6000)) < 1e-6)
+  check('both runs ended', events(summary, 'ended').length === 2)
+}
+
+// --- 12. zero-length edge -------------------------------------------------
+{
+  console.log('\nzero-length segment')
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 4800,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 100, endTime: 100, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
+    ]
+  })
+  let loudest = 0
+  for (let i = 0; i < wav.samples.length; i++) loudest = Math.max(loudest, Math.abs(wav.samples[i]))
+  const ended = events(summary, 'ended')
+  check('no output for an empty segment', loudest < 1e-6)
+  check('an ended(complete) event is still emitted', ended.length === 1 && ended[0].reason === 'complete')
+}
+
+// --- 13. M4A/AAC decoding (packaged LGPL helper on Linux, OS codec elsewhere) ---
+{
+  console.log('\nM4A/AAC decoding')
+  const fixture = join(repoRoot, 'native', 'audio', 'tests', 'fixtures', 'aac-tone.m4a')
+  if (!existsSync(fixture)) {
+    check('the M4A fixture is present', false, fixture)
+  } else {
+    const { summary, wav } = runEngine({
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 24000,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'm4a', filePath: fixture },
+        { atMs: 0, verb: 'start', cueId: 'm4a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
+      ]
+    })
+    const prepared = replyFor(summary, 0).result
+    check('M4A metadata comes from the container', prepared.format === 'm4a' && prepared.sampleRate === SAMPLE_RATE && prepared.channels === 2, JSON.stringify(prepared))
+    let peak = 0
+    for (let i = 0; i < wav.samples.length; i++) peak = Math.max(peak, Math.abs(wav.samples[i]))
+    check('decoded AAC is audible', peak > 0.2, `peak ${peak.toFixed(4)}`)
+    // The fixture is a 440 Hz tone: a decoder that produced noise or silence would not
+    // show this many zero crossings with this spacing.
+    let crossings = 0
+    for (let frame = 1; frame < Math.min(wav.frames, SAMPLE_RATE / 2); frame++) {
+      if (sampleAt(wav, frame - 1) <= 0 && sampleAt(wav, frame) > 0) crossings++
+    }
+    check('decoded AAC is the tone that was encoded', Math.abs(crossings - 220) <= 12, `${crossings} rising crossings`)
+    check('no decode errors', events(summary, 'error').length === 0, JSON.stringify(events(summary, 'error')))
+  }
+}
+
+// --- 14. device notifications: a deliberate stop is not a loss ------------
+{
+  console.log('\ndevice notification classification')
+  // A reconfigure or shutdown makes the backend post a `stopped` notification; that is
+  // the engine's own doing and must not be reported as a lost device or silence a show.
+  const { summary } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 4800,
+    commands: [
+      { atMs: 0, verb: 'simulateDeviceNotification', type: 'stopped', deliberate: true },
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 0, verb: 'simulateDeviceNotification', type: 'stopped', deliberate: true },
+      { atMs: 0, verb: 'simulateDeviceNotification', type: 'interruption_began', deliberate: true },
+      // Asked for later so it reflects rendered state, not the moment before the first block.
+      { atMs: 50, verb: 'info' }
+    ]
+  })
+  const info = replyFor(summary, 5).result
+  check('a deliberate stop raises no error', events(summary, 'error').length === 0, JSON.stringify(events(summary, 'error')))
+  check('a deliberate stop does not silence playback', info.active === true && info.activeVoices === 1, JSON.stringify({ active: info.active, voices: info.activeVoices }))
+  check('no panic is broadcast for a deliberate stop', events(summary, 'panic').length === 0)
+}
+{
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 9600,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 60, verb: 'simulateDeviceNotification', type: 'stopped', deliberate: false },
+      { atMs: 90, verb: 'info' }
+    ]
+  })
+  const info = replyFor(summary, 3).result
+  const errors = events(summary, 'error')
+  check('an unexpected stop is reported as a device error', errors.length === 1 && errors[0].code === 'device', JSON.stringify(errors))
+  check('the message names the failure', errors.length === 1 && /stopped unexpectedly/.test(errors[0].message), JSON.stringify(errors[0] ?? {}))
+  check('the active indicator clears when the device is lost', info.active === false, JSON.stringify({ active: info.active }))
+  // The loss must silence the show, not leave it playing into a dead device.
+  const tailIsSilent = Math.abs(sampleAt(wav, 9000)) < 1e-6
+  check('a lost device silences the mixer', tailIsSilent)
+}
+
+// --- 15. probe: metadata only, no cache side effects ----------------------
+{
+  console.log('\nprobe reads headers without decoding')
+  const { summary } = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 512,
+      commands: [
+        { atMs: 0, verb: 'probe', filePath: dc2Path },
+        { atMs: 0, verb: 'info' },
+        { atMs: 0, verb: 'probe', filePath: longPath },
+        { atMs: 0, verb: 'info' },
+        { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+        { atMs: 0, verb: 'probe', filePath: dc2Path },
+        { atMs: 0, verb: 'info' }
+      ]
+    },
+    ['--cache-max-file-bytes', '300000']
+  )
+  const small = replyFor(summary, 0).result
+  const afterProbes = replyFor(summary, 3).result
+  const prepared = replyFor(summary, 4).result
+  const resident = replyFor(summary, 5).result
+  const afterEverything = replyFor(summary, 6).result
+
+  check('probe reports the real metadata', small.format === 'wav' && small.sampleRate === SAMPLE_RATE && small.channels === 2 && small.frames === 24000 && near(small.durationMs, 500, 1), JSON.stringify(small))
+  check('probe sizes the decoded footprint', small.decodedBytes === 24000 * 2 * 4 && small.streaming === false, JSON.stringify({ decodedBytes: small.decodedBytes, streaming: small.streaming }))
+  check('a cold probe is not resident', small.resident === false)
+  check('probing decodes nothing and caches nothing', afterProbes.cache.entries === 0 && afterProbes.cache.bytes === 0 && afterProbes.cache.misses === 0 && afterProbes.cache.bypassed === 0, JSON.stringify(afterProbes.cache))
+  check('probing leaves resident bytes at zero for the UI', afterProbes.media.residentBytes === 0, JSON.stringify(afterProbes.media))
+  const big = replyFor(summary, 2).result
+  check('probe predicts streaming from the decoded size', big.streaming === true && big.decodedBytes === 144000 * 2 * 4, JSON.stringify({ streaming: big.streaming, decodedBytes: big.decodedBytes }))
+
+  // The prediction must be exactly what playback does: prepare takes the same decision.
+  check('prepare agrees with the probe decision', prepared.streaming === false && prepared.cacheHit === false)
+  check('a probe after prepare sees the resident copy without promoting it', resident.resident === true)
+  check('probing after a prepare still changes no counter', afterEverything.cache.hits === 0 && afterEverything.cache.entries === 1, JSON.stringify(afterEverything.cache))
+}
+
+// --- 16. rejection paths are honest ---------------------------------------
+{
+  console.log('\nrejections')
+  const { summary } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 512,
+    commands: [
+      { atMs: 0, verb: 'start', cueId: 'never-prepared', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: join(workDir, 'missing.wav') },
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 60000, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 0, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
+    ]
+  })
+  check('start without prepare is refused', replyFor(summary, 0).ok === false && replyFor(summary, 0).error.code === 'not-prepared')
+  check('a missing file is refused', replyFor(summary, 1).ok === false && replyFor(summary, 1).error.code === 'decode')
+  check('a start beyond the horizon is refused', replyFor(summary, 3).ok === false && replyFor(summary, 3).error.code === 'limit')
+  check('a zero rate is refused', replyFor(summary, 4).ok === false && replyFor(summary, 4).error.code === 'invalid')
+}
+
+rmSync(workDir, { recursive: true, force: true })
+console.log(`\n${checks - failures}/${checks} checks passed`)
+process.exit(failures === 0 ? 0 : 1)

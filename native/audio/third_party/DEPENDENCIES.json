@@ -1,0 +1,77 @@
+{
+  "note": "Third-party sources vendored into the native playback engine (native/audio/third_party). Every entry is a permissive licence; nothing here is GPL or nonfree. The packaged M4A decoder for Linux is a separate, LGPL-only FFmpeg executable built by scripts/build-ffmpeg-linux.mjs and is not vendored into the repository.",
+  "dependencies": [
+    {
+      "name": "miniaudio",
+      "version": "0.11.25",
+      "source": "https://github.com/mackron/miniaudio",
+      "commit": "9634bedb5b5a2ca38c1ee7108a9358a4e233f14d",
+      "file": "native/audio/third_party/miniaudio.h",
+      "sha256": "ac7af4de748b7e26b777f37e01cee313a308a7296a3eb080e2906b320cc55c89",
+      "license": "MIT-0 / public domain (dual)",
+      "use": "Device I/O: WASAPI (shared and exclusive), CoreAudio, ALSA, PulseAudio, JACK; device enumeration with native formats and rates; internal resampling.",
+      "notes": "Compiled with MA_NO_DECODING; decrypting of media is done by dr_libs and stb_vorbis below."
+    },
+    {
+      "name": "dr_libs (dr_wav, dr_mp3, dr_flac)",
+      "version": "commit dfe8377631000664666519fdb83da193fd8037f4",
+      "source": "https://github.com/mackron/dr_libs",
+      "commit": "dfe8377631000664666519fdb83da193fd8037f4",
+      "files": [
+        "native/audio/third_party/dr_wav.h",
+        "native/audio/third_party/dr_mp3.h",
+        "native/audio/third_party/dr_flac.h"
+      ],
+      "sha256": {
+        "dr_wav.h": "03e70c1a2d9787cd7ed3e966c075bea7bac6373f759db9cd7ca9ccdfc4ec4493",
+        "dr_mp3.h": "997b7ee18de6e6b81e2a83f1ea9fc62aef25c62b28d48db95635f49e65de0a2f",
+        "dr_flac.h": "111144e778f55738db6851cb226015c419e00d04b916a09506d4856d9cff945c"
+      },
+      "license": "public domain (Unlicense) or MIT-0, at the user's choice",
+      "use": "WAV, MP3 and FLAC decoding, streaming from disk."
+    },
+    {
+      "name": "stb_vorbis",
+      "version": "commit 2c980bb59875b0d32144a71867fbdebb2f77cd20",
+      "source": "https://github.com/nothings/stb",
+      "commit": "2c980bb59875b0d32144a71867fbdebb2f77cd20",
+      "file": "native/audio/third_party/stb_vorbis.c",
+      "sha256": "4c7cb2ff1f7011e9d67950446b7eb9ca044f2e464d76bfbb0b84dd2e23e65636",
+      "license": "public domain (Unlicense) or MIT, at the user's choice",
+      "use": "Ogg Vorbis decoding."
+    },
+    {
+      "name": "cJSON",
+      "version": "1.7.18",
+      "source": "https://github.com/DaveGamble/cJSON",
+      "commit": "acc76239bee01d8e9c858ae2cab296704e52d916",
+      "files": ["native/audio/third_party/cJSON.c", "native/audio/third_party/cJSON.h"],
+      "sha256": {
+        "cJSON.c": "75c51de8fa40ac9d7a99319c6330719bd692eb81c0a869265f3d4c682533f9b9",
+        "cJSON.h": "0578cc29132912edbc88f83207a8fc76e5db3db0605497e909a9384ef3cc474b"
+      },
+      "license": "MIT",
+      "use": "The command/event protocol between the engine and the app."
+    }
+  ],
+  "external": [
+    {
+      "name": "FFmpeg (LGPL helper binary for Linux)",
+      "version": "8.1.2",
+      "source": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+      "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+      "signature": "detached PGP signature, FFmpeg release key FCF986EA15E6E293A5644F10B4322F04D67658D8",
+      "license": "LGPL-2.1-or-later (built with --disable-gpl --disable-nonfree --disable-version3)",
+      "buildScript": "scripts/build-ffmpeg-linux.mjs",
+      "artifact": "native/audio/build/decoders/{ffmpeg,ffprobe,licenses,NOTICE.txt} (packaged to resources/audio/decoders)",
+      "use": "M4A/AAC and ALAC decoding on Linux only, executed as a separate process over a float-PCM pipe. WinsLab links against none of it, and no GPL component is built. Windows uses Media Foundation and macOS uses AudioToolbox instead.",
+      "notes": "Built from the pinned source above; NOTICE.txt next to the binary carries the exact configure line and the rebuild command, which is what the LGPL asks for."
+    }
+  ],
+  "notIncluded": [
+    {
+      "name": "ASIO",
+      "reason": "Steinberg's ASIO SDK is dual-licensed (GPLv3 or a proprietary agreement) and is deliberately not vendored or linked. Enabling it later requires the SDK present at build time plus MA_ENABLE_ASIO; the engine would then report ASIO devices like any other backend. Until then no ASIO device appears anywhere and no ASIO support is claimed."
+    }
+  ]
+}

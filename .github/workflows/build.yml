@@ -25,6 +25,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      # The pinned M4A helper only changes when its build script does.
+      - name: Cache the packaged M4A decoder
+        uses: actions/cache@v4
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Native acceptance (real mixer, offline render)
+        run: npm run test:native
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -63,6 +73,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      # dist:win builds the native playback engine, which needs a C++ toolchain in
+      # the environment rather than only installed on the runner.
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build and package
         run: npm run dist:win
@@ -114,6 +129,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Cache the packaged M4A decoder
+        uses: actions/cache@v4
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
 
       - name: Build and package
         run: npm run dist:linux
