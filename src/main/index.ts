@@ -6,6 +6,7 @@ import { onMainError, reportMainError } from './errors'
 import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
+import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -192,6 +193,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Before anything that runs on a timer: a napped app dispatches its cues late, which
+  // on stage is a wait that takes twice as long as it says. keepAwake.ts carries the why.
+  keepAwake()
   electronApp.setAppUserModelId('com.winslab')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
@@ -219,6 +223,7 @@ app.whenReady().then(() => {
   // end-to-end suite reads what it did from this process rather than from the page.
   installPlaybackDevHarness({
     safety: playbackSafety,
+    keepAwakeHeld,
     engine: { info: () => audioEngine.info(), recentEvents: recentEngineEvents }
   })
   app.on('before-quit', () => playbackSafety.close())

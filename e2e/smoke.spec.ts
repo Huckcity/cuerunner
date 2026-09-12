@@ -1,5 +1,6 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { launchApp, closeApp } from './helpers'
+import type { PlaybackDevHarness } from '../src/main/safety/devHarness'
 
 let app: ElectronApplication
 let page: Page
@@ -30,4 +31,15 @@ test('cue list starts empty', async () => {
 
 test('inspector shows empty state when no cue is selected', async () => {
   await expect(page.locator('.inspector-empty')).toBeVisible()
+})
+
+test('the app holds the OS off its timers', async () => {
+  // Read in main rather than through the page: an app macOS has napped dispatches its
+  // cues late, and the window is not the process that has to stay awake.
+  const held = await app.evaluate(() => {
+    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    return harness ? harness.keepAwakeHeld() : null
+  })
+
+  expect(held).toBe(true)
 })

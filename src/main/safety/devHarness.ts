@@ -22,6 +22,11 @@ export interface PlaybackDevHarness {
    * false without anything being silenced.
    */
   engineEvents: () => AudioEngineEvent[]
+  /**
+   * Whether main is holding the OS off the app's timers. A napped desk dispatches late,
+   * and the timing specs are the ones that measure it.
+   */
+  keepAwakeHeld: () => boolean
 }
 
 declare global {
@@ -31,6 +36,8 @@ declare global {
 
 export interface PlaybackDevHarnessDeps {
   safety: PlaybackSafety
+  /** The app's own answer to whether the OS is being held off its timers. */
+  keepAwakeHeld: () => boolean
   engine: {
     info: () => AudioEngineInfo | Promise<AudioEngineInfo>
     /** Engine-level facts, only ever installed by a build running from the source tree. */
@@ -43,6 +50,7 @@ export function installPlaybackDevHarness(deps: PlaybackDevHarnessDeps): void {
   if (app.isPackaged) return
   globalThis.__winslabDevHarness = {
     safety: () => deps.safety.state(),
+    keepAwakeHeld: deps.keepAwakeHeld,
     engineInfo: () => deps.engine.info(),
     engineEvents: () => deps.engine.recentEvents()
   }
