@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Workspace } from '../renderer/src/types/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../renderer/src/types/show'
+import type { ActivationResult, LicenseStatus } from '../renderer/src/types/license'
 
 contextBridge.exposeInMainWorld('winslab', {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
@@ -62,6 +63,19 @@ contextBridge.exposeInMainWorld('winslab', {
       const listener = (_event: Electron.IpcRendererEvent, events: ShowEvent[]): void => callback(events)
       ipcRenderer.on('show:events', listener)
       return () => ipcRenderer.off('show:events', listener)
+    }
+  },
+  license: {
+    status: (): Promise<LicenseStatus> =>
+      ipcRenderer.invoke('license:status'),
+    activate: (text: string): Promise<ActivationResult> =>
+      ipcRenderer.invoke('license:activate', text),
+    deactivate: (): Promise<LicenseStatus> =>
+      ipcRenderer.invoke('license:deactivate'),
+    onChanged: (callback: (status: LicenseStatus) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: LicenseStatus): void => callback(status)
+      ipcRenderer.on('license:changed', listener)
+      return () => ipcRenderer.off('license:changed', listener)
     }
   },
   script: {

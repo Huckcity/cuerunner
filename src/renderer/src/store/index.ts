@@ -24,8 +24,15 @@ import type {
 } from '../types/show'
 import { createCue } from '../utils/cueDefaults'
 import { removeDeskChannel } from '../utils/scenes'
+import type { LicenseStatus } from '../types/license'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
+
+/**
+ * The tabs the settings dialog has. `license` is the machine's own settings rather
+ * than the workspace's, which is why the dialog can be opened straight onto it.
+ */
+export type SettingsTab = 'audio' | 'midi' | 'show' | 'license'
 
 export interface RunningCue {
   cueId: string
@@ -145,6 +152,15 @@ interface CueListState {
   /** Operator-facing message shown in the notice bar: a failed save or open. */
   notice: string | null
   setNotice: (message: string | null) => void
+
+  // Licence. The machine's, not the show's: it is read from the main process before
+  // the first frame, it never travels in a workspace, and it never dirties one.
+  license: LicenseStatus
+  setLicense: (status: LicenseStatus) => void
+  /** Which tab the settings dialog is on, or null when it is closed. */
+  settingsTab: SettingsTab | null
+  openSettings: (tab: SettingsTab) => void
+  closeSettings: () => void
 
   /** Marks the session as having unsaved changes, e.g. after recovering a snapshot. */
   markDirty: () => void
@@ -330,6 +346,11 @@ export const useStore = create<CueListState>((set) => ({
   notice: null,
   past: [],
   future: [],
+
+  // Locked until the main process says otherwise: the window is told what this machine
+  // holds before it draws anything, and a failure to read it must not unlock the app.
+  license: { state: 'unlicensed' },
+  settingsTab: null,
 
   addCue: (type, afterId) => set(s => {
     const cue = createCue(type)
@@ -558,6 +579,12 @@ export const useStore = create<CueListState>((set) => ({
 
   setNotice: (message) => set({ notice: message }),
 
+  setLicense: (license) => set({ license }),
+
+  openSettings: (settingsTab) => set({ settingsTab }),
+
+  closeSettings: () => set({ settingsTab: null }),
+
   markDirty: () => set({ isDirty: true }),
 
   loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings) => set({
@@ -664,6 +691,15 @@ export const useStore = create<CueListState>((set) => ({
 
 export function useSelectedCue(): Cue | null {
   return useStore(s => s.cues.find(c => c.id === s.selectedId) ?? null)
+}
+
+/**
+ * Whether this machine is licensed, which is what decides if the Pro surfaces are
+ * drawn at all. Read through the store rather than from the main process directly so
+ * that a surface and its gate agree within a frame.
+ */
+export function usePro(): boolean {
+  return useStore(s => s.license.state === 'active')
 }
 
 // Returns the GroupCue that owns the given cue, or null.

@@ -1,15 +1,76 @@
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import { createSocket } from 'dgram'
-import { mkdirSync, mkdtempSync } from 'fs'
+import { generateKeyPairSync } from 'crypto'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'fs'
 import path from 'path'
+// The spec process mints keys with the same codec the app reads them with, so a test
+// cannot pass against a format the app does not actually accept.
+import { createLicense } from '../src/main/license/key'
+
+/**
+ * A licence minted for a test run.
+ *
+ * The private half of the product key is deliberately not in the repository, so a spec
+ * that needs the Pro surfaces brings a key of its own: `launchApp({ licence })` writes
+ * it where the app keeps its own and points the app at the public half that signed it.
+ * That override is honoured by a build running out of the source tree and ignored by a
+ * packaged one — see src/main/license/trustedKeys.ts — so this unlocks a test, never a
+ * release.
+ */
+export interface TestLicence {
+  /** The key as an operator would paste it. */
+  text: string
+  /** The public half, for the app that has to trust it. */
+  publicKeyPem: string
+  /** The private half, so a spec can mint a second key from the same issuer — an
+   *  expired one, say — without the app having to trust a second key. */
+  privateKeyPem: string
+}
+
+export function mintLicence(
+  options: { licensee?: string; expires?: string; issuer?: TestLicence } = {}
+): TestLicence {
+  const { privateKeyPem, publicKeyPem } = options.issuer ?? newIssuer()
+  const payload = {
+    v: 1,
+    id: `WSP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    licensee: options.licensee ?? 'End to End Test',
+    issued: '2026-01-01',
+    ...(options.expires === undefined ? {} : { expires: options.expires })
+  }
+  return {
+    privateKeyPem,
+    publicKeyPem,
+    text: createLicense(payload, privateKeyPem)
+  }
+}
+
+/** A pair to sign test licences with. Nothing it signs leaves this machine. */
+function newIssuer(): { privateKeyPem: string; publicKeyPem: string } {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  return {
+    privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString()
+  }
+}
+
+/** Environment for a launch, with any licence override the shell happens to carry removed. */
+function launchEnv(trustPublicKey?: string): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && !key.startsWith('WINSLAB_LICENSE_')) env[key] = value
+  }
+  if (trustPublicKey !== undefined) env['WINSLAB_LICENSE_PUBLIC_KEY'] = trustPublicKey
+  return env
+}
 
 // Every instance gets its own user-data directory: recent files, window state and
 // recovery snapshots live there, and tests that write them must not leak into the
 // instances running alongside them. Pass the same directory back in to relaunch an
 // instance that should see what the previous one left behind.
 export async function launchApp(
-  options: { userDataDir?: string } = {}
+  options: { userDataDir?: string; licence?: TestLicence; trustPublicKey?: string } = {}
 ): Promise<{ app: ElectronApplication; page: Page; userDataDir: string }> {
   let userDataDir = options.userDataDir
   if (!userDataDir) {
@@ -17,8 +78,15 @@ export async function launchApp(
     userDataDir = mkdtempSync(path.join('test-results', 'userdata-'))
   }
 
+  // The key goes where the app puts its own, so a licensed spec exercises the same path
+  // an operator's licence takes — and a launch without one starts locked.
+  if (options.licence) {
+    writeFileSync(path.join(userDataDir, 'license.key'), options.licence.text, 'utf-8')
+  }
+
   const app = await electron.launch({
     args: [path.join(process.cwd(), 'out/main/index.js'), `--user-data-dir=${userDataDir}`],
+    env: launchEnv(options.licence?.publicKeyPem ?? options.trustPublicKey)
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')

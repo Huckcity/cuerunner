@@ -20,8 +20,9 @@ import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import type { ShowStrip } from './components/layout/TransportBar'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
-import { useSelectedCue, useStore } from './store'
+import { useSelectedCue, useStore, usePro } from './store'
 import type { GroupCue } from './types/cue'
+import { ProLock } from './components/license/ProLock'
 import './App.css'
 
 // Store-backed notice bar: save and open failures land here, where a packaged build
@@ -42,7 +43,11 @@ export function App() {
   useShowBridge()
   useCueTriggers()
   useCompanionPublisher()
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsTab = useStore(s => s.settingsTab)
+  const openSettings = useStore(s => s.openSettings)
+  const closeSettings = useStore(s => s.closeSettings)
+  const setLicense = useStore(s => s.setLicense)
+  const pro = usePro()
   const [timelineExpanded, setTimelineExpanded] = useState(false)
   // The panels along the bottom share the space, and together they would leave the cue
   // list too little room to be a cue list. One at a time: opening one closes the other,
@@ -58,6 +63,11 @@ export function App() {
     : null
 
   const shellClass = `app-shell${timelineExpanded && timelineGroupCue ? ' timeline-fullscreen' : ''}`
+
+  // The licence can change while the window is open — a key entered in Settings, or one
+  // that ran out overnight — so the panels follow the main process rather than the read
+  // taken at startup. The startup read itself happens before the first frame (main.tsx).
+  useEffect(() => window.winslab.license.onChanged(setLicense), [setLicense])
 
   useEffect(() => {
     return window.winslab.app.onMenuAction((action) => {
@@ -111,13 +121,21 @@ export function App() {
       <RecoveryNotice />
       <NoticeHost />
       <Toolbar
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings('audio')}
         view={view}
         onSwitchView={setView}
       />
       <div className="app-main" data-view={view}>
         {view === 'scenes' ? (
-          <ScenesView />
+          pro ? (
+            <ScenesView />
+          ) : (
+            <ProLock
+              variant="view"
+              feature="Scenes"
+              blurb="Scenes drive the desk: who is open on stage, and only the messages that change it. Recall one and the mics move with the show."
+            />
+          )
         ) : (
           <>
             <CueList />
@@ -133,15 +151,36 @@ export function App() {
           />
         : <WaveformPanel />
       )}
-      {strip === 'monitor' && <MonitorPanel onClose={() => setStrip(null)} />}
-      {strip === 'rf' && <RfPanel onClose={() => setStrip(null)} />}
-      {strip === 'script' && <ScriptPanel onClose={() => setStrip(null)} />}
+      {strip === 'monitor' && (pro
+        ? <MonitorPanel onClose={() => setStrip(null)} />
+        : <ProLock
+            variant="strip"
+            feature="Show monitor"
+            blurb="What is listening, what is on stage, and what just came in."
+            onClose={() => setStrip(null)}
+          />)}
+      {strip === 'rf' && (pro
+        ? <RfPanel onClose={() => setStrip(null)} />
+        : <ProLock
+            variant="strip"
+            feature="Wireless"
+            blurb="The mic plot, the packs on stage, and the alarm before a battery dies mid-line."
+            onClose={() => setStrip(null)}
+          />)}
+      {strip === 'script' && (pro
+        ? <ScriptPanel onClose={() => setStrip(null)} />
+        : <ProLock
+            variant="strip"
+            feature="Script panel"
+            blurb="The script beside the cue stack, with cues pinned to the lines they fire on."
+            onClose={() => setStrip(null)}
+          />)}
       {strip === 'log' && <LogPanel onClose={() => setStrip(null)} />}
       <TransportBar
         strip={strip}
         onToggleStrip={next => setStrip(current => current === next ? null : next)}
       />
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsTab !== null && <SettingsDialog initialTab={settingsTab} onClose={closeSettings} />}
     </div>
   )
 }

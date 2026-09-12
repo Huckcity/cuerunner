@@ -30,6 +30,14 @@ Object.defineProperty(window, 'winslab', {
       restart: vi.fn(() => Promise.resolve({ ok: true })),
       onEvents: vi.fn(() => () => {})
     },
+    license: {
+      status: vi.fn(() => Promise.resolve({ state: 'unlicensed' })),
+      activate: vi.fn(() => Promise.resolve({
+        ok: false, error: 'Unit tests run unlicensed', status: { state: 'unlicensed' }
+      })),
+      deactivate: vi.fn(() => Promise.resolve({ state: 'unlicensed' })),
+      onChanged: vi.fn(() => () => {})
+    },
     script: {
       readFile: vi.fn(() => Promise.resolve({ code: '', path: '' })),
       pickFile: vi.fn(() => Promise.resolve(null)),

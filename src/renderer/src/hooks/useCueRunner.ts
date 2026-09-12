@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { cueRunner } from '../engine/CueRunner'
 import { useStore } from '../store'
+import { isPro } from '../types/license'
 
 export function useCueRunner() {
   const setRunning = useStore(s => s.setRunning)
@@ -21,7 +22,8 @@ export function useCueRunner() {
       setLastRun,
       appendLog,
       getWorkspacePath: () => useStore.getState().workspacePath,
-      getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName
+      getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName,
+      isPro: () => isPro(useStore.getState().license)
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 

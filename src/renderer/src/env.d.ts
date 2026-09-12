@@ -3,6 +3,7 @@
 import type { OscArg } from './types/cue'
 import type { Workspace } from './types/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from './types/show'
+import type { ActivationResult, LicenseStatus } from './types/license'
 
 interface WinslabBridge {
   getPathForFile: (file: File) => string
@@ -36,6 +37,12 @@ interface WinslabBridge {
     ) => Promise<{ ok: boolean; result?: unknown; error?: string }>
     restart: (service: string) => Promise<{ ok: boolean; result?: unknown; error?: string }>
     onEvents: (callback: (events: ShowEvent[]) => void) => () => void
+  }
+  license: {
+    status: () => Promise<LicenseStatus>
+    activate: (text: string) => Promise<ActivationResult>
+    deactivate: () => Promise<LicenseStatus>
+    onChanged: (callback: (status: LicenseStatus) => void) => () => void
   }
   script: {
     readFile: (

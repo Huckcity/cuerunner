@@ -2,14 +2,16 @@
 // exercised here is the whole one — a datagram arrives, lands on the bus, reaches the
 // renderer, and the cue's own work actually happens.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { addCueFromMoreMenu, closeApp, launchApp, sendOsc, startServer, type TestServer } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, mintLicence, sendOsc, startServer, type TestServer } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 let server: TestServer | undefined
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp())
+  // The show services, the scenes view, the panels that read them: everything this spec
+  // is about is the licensed half of the app.
+  ;({ app, page } = await launchApp({ licence: mintLicence() }))
 })
 
 test.afterEach(async () => {

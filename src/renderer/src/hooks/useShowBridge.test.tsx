@@ -7,6 +7,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useShowBridge } from './useShowBridge'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
+import { TEST_LICENSE } from '../../../test/license'
 import type { ShowEvent, ShowSnapshot } from '../types/show'
 
 function Harness() {
@@ -59,6 +60,7 @@ describe('useShowBridge', () => {
     vi.mocked(bridge.configure).mockImplementation(() => Promise.resolve())
 
     useStore.setState({
+      license: { state: 'active', license: TEST_LICENSE },
       showSettings: defaultShowSettings(),
       showServices: [],
       showDevices: [],
@@ -130,5 +132,20 @@ describe('useShowBridge', () => {
     act(() => { root.unmount() })
 
     expect(off).toHaveBeenCalled()
+  })
+
+  it('never touches the show services while the machine is not licensed', async () => {
+    // The services themselves are gated in the main process; with no key the window has
+    // no reason to ask, and asking would leave a socket open behind a locked panel.
+    act(() => root.unmount())
+    vi.clearAllMocks()
+    act(() => { useStore.setState({ license: { state: 'unlicensed' } }) })
+    root = createRoot(container)
+    act(() => { root.render(<Harness />) })
+    await settle()
+
+    expect(vi.mocked(window.winslab.show.onEvents)).not.toHaveBeenCalled()
+    expect(vi.mocked(window.winslab.show.snapshot)).not.toHaveBeenCalled()
+    expect(vi.mocked(window.winslab.show.configure)).not.toHaveBeenCalled()
   })
 })

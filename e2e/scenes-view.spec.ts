@@ -8,14 +8,17 @@ import {
   closeApp,
   freePort,
   launchApp,
-  listenOsc
+  listenOsc,
+  mintLicence
 } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp())
+  // The show services, the scenes view, the panels that read them: everything this spec
+  // is about is the licensed half of the app.
+  ;({ app, page } = await launchApp({ licence: mintLicence() }))
 })
 
 test.afterEach(async () => {

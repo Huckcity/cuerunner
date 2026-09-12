@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useStore } from '../store'
+import { useStore, usePro } from '../store'
 import type { ShowEvent, ShowSnapshot } from '../types/show'
 
 /**
@@ -10,11 +10,17 @@ import type { ShowEvent, ShowSnapshot } from '../types/show'
  * replaces state wholesale — it is the world as it is now, not a history of it. Finally
  * the batches that arrived in between are replayed on top, minus anything the snapshot
  * already contains, which is why the snapshot carries the time it was taken.
+ *
+ * The services are part of WinsLab Pro, so this does nothing until the machine is
+ * licensed. A key entered while the window is open turns the effect back on, which is
+ * what starts the listeners the operator had configured.
  */
 export function useShowBridge(): void {
   const settings = useStore(s => s.showSettings)
+  const pro = usePro()
 
   useEffect(() => {
+    if (!pro) return
     let live = true
     const pending: ShowEvent[][] = []
     let ready = false
@@ -54,18 +60,19 @@ export function useShowBridge(): void {
       live = false
       off()
     }
-  }, [])
+  }, [pro])
 
   useEffect(() => {
     // A settings change means a listener has to move: a new port, a different MIDI
     // input, or the service being turned off. The main process compares what it has
     // and only restarts what actually changed.
+    if (!pro) return
     window.winslab.show.configure(settings).catch(error => {
       useStore.getState().appendLog([
         { level: 'error', message: `Could not apply the show settings: ${describe(error)}` }
       ])
     })
-  }, [settings])
+  }, [settings, pro])
 }
 
 function describe(error: unknown): string {

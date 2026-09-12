@@ -20,6 +20,11 @@ export function defaultServices(): ShowService[] {
 export interface ShowRuntime {
   /** Applies settings, restarting only the services whose settings changed. */
   configure(settings: ShowSettings): Promise<void>
+  /**
+   * Stops every service and forgets the settings. The next configure brings them back
+   * up, so this is how the show is told that the app is no longer licensed to run it.
+   */
+  suspend(): Promise<void>
   snapshot(): ShowSnapshot
   command(serviceId: string, action: string, payload?: unknown): Promise<CommandResult>
   restart(serviceId: string): Promise<CommandResult>
@@ -55,6 +60,14 @@ export function createShowRuntime(services: ShowService[] = defaultServices()): 
       }
       current = serialized
       await host.startAll(settings)
+    },
+
+    async suspend(): Promise<void> {
+      // Forgetting the settings matters as much as stopping the services: the dedupe
+      // above compares against them, and a key entered later has to bring the same
+      // settings back up.
+      current = null
+      await host.stopAll()
     },
 
     snapshot(): ShowSnapshot {

@@ -1,13 +1,15 @@
 // The wireless panel: the mic plot joined to live telemetry, from the demo rack so the
 // whole path — source, poll, alarm, panel — runs without a receiver on the bench.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp } from './helpers'
+import { closeApp, launchApp, mintLicence } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp())
+  // The show services, the scenes view, the panels that read them: everything this spec
+  // is about is the licensed half of the app.
+  ;({ app, page } = await launchApp({ licence: mintLicence() }))
 })
 
 test.afterEach(async () => {

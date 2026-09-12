@@ -58,7 +58,8 @@ function setup(cues: Cue[]) {
     setLastRun: vi.fn(),
     appendLog: vi.fn(),
     getWorkspacePath: () => null,
-    getMidiDefaultPort: () => 'default-midi-port'
+    getMidiDefaultPort: () => 'default-midi-port',
+    isPro: () => true
   })
   return { runner, setRunning }
 }

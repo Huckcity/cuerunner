@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { cueRunner } from '../engine/CueRunner'
 import { describeTriggerSource, triggeredCues } from '../engine/triggers'
-import { useStore } from '../store'
+import { useStore, usePro } from '../store'
 
 /**
  * Fires the cues that answer to what the show sends back.
@@ -10,9 +10,15 @@ import { useStore } from '../store'
  * monitor shows, and a triggered cue goes through the same runner as GO, so it
  * pre-waits, advances and stops exactly like one the operator fired by hand. Nothing
  * here can interrupt a cue that is already running.
+ *
+ * The events only exist while the show services are licensed and listening, so with no
+ * key there is nothing to do here.
  */
 export function useCueTriggers(): void {
+  const pro = usePro()
+
   useEffect(() => {
+    if (!pro) return
     return window.winslab.show.onEvents(events => {
       for (const event of events) {
         if (event.kind !== 'osc' && event.kind !== 'midi') continue
@@ -32,5 +38,5 @@ export function useCueTriggers(): void {
         }
       }
     })
-  }, [])
+  }, [pro])
 }

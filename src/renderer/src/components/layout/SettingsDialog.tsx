@@ -3,10 +3,14 @@ import { useStore } from '../../store'
 import { audioPlayer } from '../../engine/AudioPlayer'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
+import type { SettingsTab } from '../../store'
+import { LicenseSection } from '../license/LicenseSection'
 import './SettingsDialog.css'
 
 interface Props {
   onClose: () => void
+  /** Which tab to open on, e.g. the one a locked panel sent the operator to. */
+  initialTab?: SettingsTab
 }
 
 interface NumberFieldProps {
@@ -55,13 +59,13 @@ function NumberField({ id, label, value, min, max, disabled, onCommit }: NumberF
   )
 }
 
-export function SettingsDialog({ onClose }: Props) {
+export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
   const {
     audioSettings, midiSettings, showSettings, showServices,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
     updateRfSettings, updatePresenceSettings, updateCompanionSettings
   } = useStore()
-  const [tab, setTab] = useState<'audio' | 'midi' | 'show'>('audio')
+  const [tab, setTab] = useState<SettingsTab>(initialTab)
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([])
   const [midiPorts, setMidiPorts] = useState<string[]>([])
   const [midiInputPorts, setMidiInputPorts] = useState<string[]>([])
@@ -167,6 +171,11 @@ export function SettingsDialog({ onClose }: Props) {
             data-active={tab === 'show'}
             onClick={() => setTab('show')}
           >Show</button>
+          <button
+            className="settings-tab"
+            data-active={tab === 'license'}
+            onClick={() => setTab('license')}
+          >License</button>
         </div>
 
         <div className="settings-body">
@@ -475,6 +484,8 @@ export function SettingsDialog({ onClose }: Props) {
               )}
             </>
           )}
+
+          {tab === 'license' && <LicenseSection />}
         </div>
 
         <div className="settings-footer">

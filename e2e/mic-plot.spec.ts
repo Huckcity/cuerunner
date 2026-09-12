@@ -1,13 +1,15 @@
 // The mic plot as a tool rather than a read-out: an operator enters the cast and the
 // patch, a pack changes hands mid-show, and the night's report says who was wearing what.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp } from './helpers'
+import { closeApp, launchApp, mintLicence } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp())
+  // The show services, the scenes view, the panels that read them: everything this spec
+  // is about is the licensed half of the app.
+  ;({ app, page } = await launchApp({ licence: mintLicence() }))
 })
 
 test.afterEach(async () => {

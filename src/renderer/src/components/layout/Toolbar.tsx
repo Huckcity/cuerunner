@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from '../../store'
+import { useStore, usePro } from '../../store'
 import { useWorkspace, openDemoWorkspace } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
+import { ProMark } from '../license/ProLock'
 import './Toolbar.css'
 
 const PRIMARY_CUES: { type: CueType; icon: string; label: string }[] = [
@@ -35,8 +36,17 @@ export type AppView = 'cues' | 'scenes'
 export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
   const selectedId = useStore(s => s.selectedId)
+  const pro = usePro()
+  const openSettings = useStore(s => s.openSettings)
 
   const handleAddCue = (type: CueType) => {
+    // A scene cue belongs to the scenes the licence unlocks: without one there is
+    // nothing for it to point at, so the click goes to the place that fixes that
+    // rather than adding a cue that cannot run.
+    if (type === 'scene' && !pro) {
+      openSettings('license')
+      return
+    }
     addCue(type, selectedId ?? undefined)
     if (type === 'fade' && selectedId) {
       const { cues, selectedId: newId, updateCue } = useStore.getState()
@@ -193,10 +203,12 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                 <button
                   key={type}
                   className="toolbar-more-menu-item"
+                  data-locked={type === 'scene' && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                 >
                   <span className="toolbar-more-menu-icon">{icon}</span>
                   {label}
+                  {type === 'scene' && !pro && <ProMark />}
                 </button>
               ))}
             </div>
@@ -220,10 +232,12 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           role="tab"
           aria-selected={view === 'scenes'}
           data-active={view === 'scenes'}
+          data-locked={!pro}
           onClick={() => onSwitchView('scenes')}
-          title="Scenes and mics, for running the show"
+          title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of WinsLab Pro'}
         >
           Scenes
+          {!pro && <ProMark />}
         </button>
       </div>
     </div>

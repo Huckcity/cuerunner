@@ -85,7 +85,7 @@ interface TestSetup {
   clearAllRunning: Mock
 }
 
-function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
+function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true): TestSetup {
   const runner = new CueRunner()
   let selected: string | null = initialSelectedId ?? initialCues[0]?.id ?? null
   const setRunning = vi.fn()
@@ -104,7 +104,8 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
     setLastRun,
     appendLog,
     getWorkspacePath: () => null,
-    getMidiDefaultPort: () => 'default-midi-port'
+    getMidiDefaultPort: () => 'default-midi-port',
+    isPro: () => licensed
   })
 
   const cues = initialCues
@@ -730,6 +731,26 @@ describe('CueRunner — scene cues', () => {
     expect(useStore.getState().deskState).toEqual({})
     expect(useStore.getState().deskSceneId).toBeNull()
   })
+
+  it('refuses a scene cue when this machine is not licensed', async () => {
+    // The cue stays in the file and the rest of the show carries on: a show written on a
+    // licensed machine opens anywhere, and the desk is simply not driven here. A cue that
+    // did nothing quietly would be worse than one that says why.
+    const { runner, appendLog, setLastRun } = setup([withDesk()], undefined, false)
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'scene cues need WinsLab Pro' })
+    ])
+    expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
+      outcome: 'error',
+      error: 'WinsLab Pro is required'
+    }))
+    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(useStore.getState().deskSceneId).toBeNull()
+  })
 })
 
 describe('CueRunner — network cues', () => {
@@ -1248,7 +1269,8 @@ describe('CueRunner — fireCueFromOffset fallback', () => {
           setLastRun: vi.fn(),
           appendLog: vi.fn(),
           getWorkspacePath: () => null,
-          getMidiDefaultPort: () => ''
+          getMidiDefaultPort: () => '',
+          isPro: () => true
         })
 
     // Seek past the osc cue's offset — fireCueFromOffset will hit the else branch (onDone)

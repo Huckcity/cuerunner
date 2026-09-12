@@ -68,6 +68,9 @@ interface RunnerDeps {
   getWorkspacePath: () => string | null
   // Output port a MIDI cue falls back to when it does not name one itself.
   getMidiDefaultPort: () => string
+  // Whether this machine may run the Pro cues. Read per firing rather than latched at
+  // init: a key can be entered or removed while the show is loaded.
+  isPro: () => boolean
 }
 
 export class CueRunner {
@@ -305,6 +308,15 @@ export class CueRunner {
       case 'scene': {
         const sceneCue = cue as SceneCue
         const label = this.cueLabel(cue)
+        if (!this.deps!.isPro()) {
+          // The cue stays in the file — a show written on a licensed machine opens on an
+          // unlicensed one, and nothing is thrown away — but the desk is not driven
+          // without a licence, and a cue that did nothing quietly would be worse.
+          this.log({ level: 'error', message: 'scene cues need WinsLab Pro', label })
+          report({ outcome: 'error', error: 'WinsLab Pro is required' })
+          onDone()
+          break
+        }
         if (sceneCue.sceneId === '') {
           // A cue pointed at nothing must not be read as "close every mic": that would be
           // a silent, and very loud, surprise in the middle of a show.

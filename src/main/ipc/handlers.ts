@@ -16,13 +16,31 @@ import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime } from '../show/runtime'
 import { drainMainErrors } from '../errors'
 import { loadScriptDocument } from '../script/document'
+import { createLicenseManager } from '../license/LicenseManager'
+import { trustedPublicKeys } from '../license/trustedKeys'
 import { defaultShowSettings } from '../../renderer/src/types/show'
+import { isPro } from '../../renderer/src/types/license'
 import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
+import type { LicenseStatus } from '../../renderer/src/types/license'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
 const midi = new MidiEngine()
 const osc = new OscEngine()
 const show = createShowRuntime()
+
+// The licence this machine holds, read once at startup and written only when the
+// operator enters or removes a key. Everything Pro is gated on it from here, in the
+// process that owns the sockets: a window can explain a lock, but only this can be one.
+const license = createLicenseManager({
+  filePath: path.join(app.getPath('userData'), 'license.key'),
+  publicKeys: trustedPublicKeys(app.isPackaged, process.env)
+})
+
+// The last settings the window sent. Kept so a key entered mid-session can start the
+// services the operator had configured, without waiting for the window to re-send them.
+let lastShowSettings: ShowSettings = defaultShowSettings()
+
+const PRO_REQUIRED = 'WinsLab Pro is required for the show services'
 
 // One batch, every window that is still alive. A window that is mid-reload has no
 // listener yet; it catches up from the snapshot it asks for on startup.
@@ -35,6 +53,20 @@ function broadcastShowEvents(events: ShowEvent[]): void {
 }
 
 show.subscribe(broadcastShowEvents)
+
+/**
+ * A licence that changes takes the show services with it: entering a key starts what
+ * the window had configured, and removing one stops every socket and poller. The
+ * window is told as well, so the panels it draws follow the same fact.
+ */
+license.subscribe((status: LicenseStatus) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send('license:changed', status)
+    }
+  }
+  void (isPro(status) ? show.configure(lastShowSettings) : show.suspend())
+})
 
 function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
   return BrowserWindow.fromWebContents(event.sender)!
@@ -49,8 +81,9 @@ export function registerIpcHandlers(): void {
   // The services come up with the defaults, before the window has finished loading:
   // a console that is already sending when the operator launches the app should not
   // have its first cues fall on the floor. The renderer re-sends its own settings —
-  // which may come from the workspace — as soon as it has them.
-  void show.configure(defaultShowSettings())
+  // which may come from the workspace — as soon as it has them. Nothing starts without
+  // a licence: the show services are the Pro half of the app.
+  if (isPro(license.status())) void show.configure(defaultShowSettings())
 
   // Audio
   ipcMain.handle('audio:readFile', async (_, filePath: string) => {
@@ -89,6 +122,8 @@ export function registerIpcHandlers(): void {
   // set, reads a snapshot, and sends a command to one by id, so a service can be added
   // without a new IPC channel.
   ipcMain.handle('show:snapshot', async () => {
+    // A locked app has services registered and none of them started, so this is the
+    // truth: nothing is listening.
     return show.snapshot()
   })
 
@@ -97,16 +132,29 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('app:drainMainErrors', () => drainMainErrors())
 
   ipcMain.handle('show:configure', async (_, settings: ShowSettings) => {
+    lastShowSettings = settings
+    if (!isPro(license.status())) {
+      await show.suspend()
+      return
+    }
     await show.configure(settings)
   })
 
   ipcMain.handle('show:command', async (_, cmd: { service: string; action: string; payload?: unknown }) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     return show.command(cmd.service, cmd.action, cmd.payload)
   })
 
   ipcMain.handle('show:restart', async (_, service: string) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     return show.restart(service)
   })
+
+  // Licence. The window reads the status, asks for a key to be checked, and is told
+  // when it changes — including the change it asked for.
+  ipcMain.handle('license:status', () => license.status())
+  ipcMain.handle('license:activate', (_, text: string) => license.activate(text))
+  ipcMain.handle('license:deactivate', () => license.deactivate())
 
   // Script
   // include() resolves against the file that is doing the including, or the workspace
@@ -129,13 +177,19 @@ export function registerIpcHandlers(): void {
 
   // The script panel's reader. It refuses what it cannot show — a binary file, or a
   // document far larger than any script — because rendering one is what took the
-  // window's process to 3 GB and stopped the interface answering.
+  // window's process to 3 GB and stopped the interface answering. The panel itself is
+  // Pro, so a locked app is refused here as well as in the window. Script *cues* read
+  // their includes through `script:readFile` above, which stays free.
   ipcMain.handle('script:readDocument', async (_, filePath: string, workspacePath: string | null) => {
+    if (!isPro(license.status())) {
+      return { ok: false, error: 'The script panel is part of WinsLab Pro.' }
+    }
     return loadScriptDocument(filePath, workspacePath)
   })
 
   // The script panel reads the document the same way a script cue reads its includes.
   ipcMain.handle('script:pickFile', async (event) => {
+    if (!isPro(license.status())) return null
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Script',
       filters: [

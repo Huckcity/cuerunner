@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useSelectedCue } from '../../store'
+import { useSelectedCue, usePro } from '../../store'
+import { ProLock, ProMark } from '../license/ProLock'
 import { BasicTab } from './BasicTab'
 import { AudioInspector } from './AudioInspector'
 import { MidiInspector } from './MidiInspector'
@@ -28,6 +29,7 @@ const TYPE_TABS: Record<string, string[]> = {
 }
 
 function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
+  const pro = usePro()
   if (tab === 'Basics') return <BasicTab cue={cue} />
   if (tab === 'Audio' || tab === 'Timing') return <AudioInspector cue={cue as AudioCue} tab={tab} />
   if (tab === 'MIDI') return <MidiInspector cue={cue as MidiCue} />
@@ -37,13 +39,24 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Group') return <GroupInspector cue={cue as GroupCue} />
   if (tab === 'Network') return <NetworkInspector cue={cue as NetworkCue} />
   if (tab === 'Script') return <ScriptInspector cue={cue as ScriptCue} />
-  if (tab === 'Scene') return <SceneInspector cue={cue as SceneCue} />
+  if (tab === 'Scene') {
+    return pro ? (
+      <SceneInspector cue={cue as SceneCue} />
+    ) : (
+      <ProLock
+        variant="inspector"
+        feature="Scene cues"
+        blurb="A cue that recalls a scene, so GO moves the desk along with the show."
+      />
+    )
+  }
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 
 export function Inspector() {
   const cue = useSelectedCue()
+  const pro = usePro()
   const [activeTab, setActiveTab] = useState('Basics')
 
   if (!cue) {
@@ -65,9 +78,11 @@ export function Inspector() {
             key={t}
             className="inspector-tab"
             data-active={t === tab}
+            data-locked={t === 'Scene' && !pro}
             onClick={() => setActiveTab(t)}
           >
             {t}
+            {t === 'Scene' && !pro && <ProMark />}
           </button>
         ))}
       </div>

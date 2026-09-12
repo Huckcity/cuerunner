@@ -1,7 +1,8 @@
-import { useStore } from '../../store'
+import { useStore, usePro } from '../../store'
 import type { Cue, CueColor } from '../../types/cue'
 import { ResetButton } from './ResetButton'
 import { Triggers } from './Triggers'
+import { ProLock } from '../license/ProLock'
 import { BASE_DEFAULTS } from '../../utils/cueDefaults'
 
 const COLORS: CueColor[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']
@@ -20,6 +21,7 @@ interface Props { cue: Cue }
 
 export function BasicTab({ cue }: Props) {
   const update = useStore(s => s.updateCue)
+  const pro = usePro()
   const set = (patch: Partial<Cue>) => update(cue.id, patch)
 
   return (
@@ -103,7 +105,18 @@ export function BasicTab({ cue }: Props) {
         <label></label>
         <textarea value={cue.notes} onChange={e => set({ notes: e.target.value })} rows={3} />
       </div>
-      <Triggers cue={cue} />
+      {pro ? (
+        <Triggers cue={cue} />
+      ) : (
+        <>
+          <div className="field-section-title">Triggers</div>
+          <ProLock
+            variant="section"
+            feature="Triggers"
+            blurb="OSC and MIDI that fire a cue with nobody's hand on GO."
+          />
+        </>
+      )}
     </div>
   )
 }
