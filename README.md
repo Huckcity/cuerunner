@@ -462,7 +462,9 @@ GitHub Actions workflows in `.github/workflows/`:
 - **`build.yml`**: Runs when a release is published, or manually
   - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
   - Uploads to R2 (Cloudflare) and GitHub Releases
-- **`release.yml`**: Semantic versioning with `semantic-release`
+- **`release.yml`**: Semantic versioning with `semantic-release` — run it by hand from
+  `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
+  own, so a release happens only when it is meant to.
 
 ## Known Limitations
 

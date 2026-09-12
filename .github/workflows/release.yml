@@ -1,8 +1,12 @@
 name: Release
 
+# Deliberate, never automatic: pushing to main no longer publishes anything. Run this
+# workflow from main (Actions → Release → Run workflow) when the release is wanted —
+# semantic-release then cuts the version from the commits since the last tag, and
+# build.yml picks it up from the published release. A run dispatched from any other ref
+# fails semantic-release's own branch check rather than publishing.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
