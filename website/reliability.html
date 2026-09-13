@@ -354,6 +354,9 @@
       }
 
       const failures = []
+      if (typeof report.failureNote === 'string' && report.failureNote !== '') {
+        failures.push(report.failureNote)
+      }
       for (const shard of shards) {
         if (!Array.isArray(shard.failures)) continue
         for (const failure of shard.failures) {

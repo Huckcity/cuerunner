@@ -86,22 +86,25 @@ const max = (key) => shards.reduce((best, shard) => (shard[key] === null || shar
 const worstDrift = shards.reduce((best, shard) => (shard.driftPct === null ? best : Math.max(best, Math.abs(shard.driftPct))), 0)
 const first = found[0]?.report ?? {}
 
+// With no reports there is nothing to total; zeroes would read on the page as
+// measurements of a night that never ran.
+const noReports = shards.length === 0
 const totals = {
   shards: shards.length,
   shardsPassed: shards.filter((shard) => shard.passed).length,
-  showMinutes: sum('minutes'),
-  cuesScheduled: sum('scheduledRuns'),
-  cuesStarted: sum('observedStarts'),
-  starts: sum('scheduledRuns'),
-  xruns: sum('xruns'),
-  decodeUnderruns: sum('decodeUnderruns'),
-  droppedFileChunks: sum('droppedFileChunks'),
-  errorEvents: sum('errorEvents'),
-  maxStartDelayMs: max('maxStartDelayMs'),
-  meanStartDelayMs: shards.length > 0 ? Number((shards.reduce((total, shard) => total + (shard.meanStartDelayMs ?? 0), 0) / shards.length).toFixed(2)) : 0,
-  worstClockDriftPct: Number(worstDrift.toFixed(4)),
-  peakActiveVoices: max('peakActiveVoices'),
-  peakStreamingVoices: max('peakStreamingVoices'),
+  showMinutes: noReports ? null : sum('minutes'),
+  cuesScheduled: noReports ? null : sum('scheduledRuns'),
+  cuesStarted: noReports ? null : sum('observedStarts'),
+  starts: noReports ? null : sum('scheduledRuns'),
+  xruns: noReports ? null : sum('xruns'),
+  decodeUnderruns: noReports ? null : sum('decodeUnderruns'),
+  droppedFileChunks: noReports ? null : sum('droppedFileChunks'),
+  errorEvents: noReports ? null : sum('errorEvents'),
+  maxStartDelayMs: noReports ? null : max('maxStartDelayMs'),
+  meanStartDelayMs: shards.length > 0 ? Number((shards.reduce((total, shard) => total + (shard.meanStartDelayMs ?? 0), 0) / shards.length).toFixed(2)) : null,
+  worstClockDriftPct: noReports ? null : Number(worstDrift.toFixed(4)),
+  peakActiveVoices: noReports ? null : max('peakActiveVoices'),
+  peakStreamingVoices: noReports ? null : max('peakStreamingVoices'),
   startToleranceMs: first.tolerances?.startDelayMs ?? null,
   clockTolerancePct: first.tolerances?.clockDriftPct ?? null
 }
@@ -121,6 +124,9 @@ const report = {
     repository
   },
   passed: shards.length > 0 && shards.every((shard) => shard.passed),
+  // A night where no shard got far enough to write a report has no shard failures to
+  // list, and "Failed" with nothing under it is not an explanation anyone can act on.
+  ...(shards.length === 0 ? { failureNote: 'No shard produced a report: the night failed before the soak could run.' } : {}),
   totals,
   shards
 }
@@ -144,17 +150,20 @@ for (const shard of shards) {
     `| ${shard.shard} | ${shard.minutes} | ${shard.observedStarts} | ${shard.maxStartDelayMs ?? '—'} ms | ${shard.driftPct ?? '—'}% | ${shard.xruns} | ${shard.decodeUnderruns} | ${shard.peakActiveVoices} (${shard.peakStreamingVoices} streaming) |`
   )
 }
-lines.push('')
-lines.push(
-  `Tolerances: a cue must begin within **${totals.startToleranceMs} ms** of its scheduled time on the sample clock; ` +
-    `the engine clock must stay within **${totals.clockTolerancePct}%** of the wall clock.`
-)
+if (totals.startToleranceMs !== null && totals.clockTolerancePct !== null) {
+  lines.push('')
+  lines.push(
+    `Tolerances: a cue must begin within **${totals.startToleranceMs} ms** of its scheduled time on the sample clock; ` +
+      `the engine clock must stay within **${totals.clockTolerancePct}%** of the wall clock.`
+  )
+}
 if (report.run.url !== '') lines.push('')
 if (report.run.url !== '') lines.push(`Run: ${report.run.url}`)
 const failed = shards.filter((shard) => !shard.passed)
-if (failed.length > 0) {
+if (report.failureNote !== undefined || failed.length > 0) {
   lines.push('')
   lines.push('## Failures')
+  if (report.failureNote !== undefined) lines.push(`- ${report.failureNote}`)
   for (const shard of failed) {
     lines.push(`- shard ${shard.shard}: ${shard.failures.length > 0 ? shard.failures.join('; ') : 'no detail'}`)
   }
