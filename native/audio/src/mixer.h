@@ -57,6 +57,10 @@ struct Voice {
   int loopCount = 0;
   int loopsCompleted = 0;
   bool lengthUnknown = false;      // streaming file whose length is not stated
+  // The stream ring is parked somewhere else while it repositions (a start at an
+  // offset, a seek, a loop wrap): samples it cannot serve yet are not starvation, so
+  // they must not be counted as underruns.
+  bool awaitingSeek = false;
 
   int64_t startFrame = 0;  // device frame the voice becomes audible
   int64_t stopFrame = -1;  // device frame the voice goes silent (-1 = not stopping)
@@ -124,6 +128,8 @@ class Mixer {
   void reclaim(Voice& voice);
   void reclaimResourcesForCommand(const Command& cmd);
   void retryReclaims();
+  /** Points a streaming voice's ring at a frame, marking the reposition as expected. */
+  void requestStreamSeek(Voice& voice, int64_t frame);
 
   double paramValue(const Voice& voice, int param, int64_t frame) const;
   static double rampValue(const FadeRamp& ramp, int64_t frame);

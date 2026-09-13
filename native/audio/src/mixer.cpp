@@ -322,6 +322,7 @@ Voice* Mixer::startVoice(const Command& cmd) {
   voice->segmentStartFrame = segmentStart;
   voice->segmentEndFrame = segmentEnd;
   voice->position = segmentStart;
+  if (segmentStart > 0.0) requestStreamSeek(*voice, static_cast<int64_t>(segmentStart));
   voice->loopCount = options.loopCount;
   voice->volume = options.volume;
   voice->pan = options.pan;
@@ -462,9 +463,9 @@ void Mixer::apply(const Command& cmd) {
         voice->position = target;
         if (voice->streamSlot >= 0) {
           StreamSlot* slot = streams_.at(voice->streamSlot);
-          if (slot != nullptr && slot->ring.seekPending() == false) {
-            slot->ring.requestSeek(static_cast<int64_t>(target));
+          if (slot != nullptr) {
             slot->eof.store(false, std::memory_order_relaxed);
+            requestStreamSeek(*voice, static_cast<int64_t>(target));
           }
         }
         ackState = static_cast<int>(voice->state);
@@ -561,6 +562,20 @@ void Mixer::retryReclaims() {
   pendingStreamCount_ = remaining;
 }
 
+// A streaming decoder is filled forward from wherever it was opened, so any jump in the
+// voice's position — a start at an offset, a seek, a loop back to the segment start —
+// leaves the ring window parked on frames the voice will never ask for again. The voice
+// then waits forever on a window that can never advance: silence and an underrun for
+// every frame played. The window has to be moved with the voice, and the frames spent
+// waiting for it are the reposition, not starvation.
+void Mixer::requestStreamSeek(Voice& voice, int64_t frame) {
+  if (voice.streamSlot < 0) return;
+  StreamSlot* slot = streams_.at(voice.streamSlot);
+  if (slot == nullptr) return;
+  slot->ring.requestSeek(frame);
+  voice.awaitingSeek = true;
+}
+
 void Mixer::render(float* out, int frames, int channels) {
   retryReclaims();
   const int64_t blockStart = clockFrames_;
@@ -599,6 +614,15 @@ void Mixer::render(float* out, int frames, int channels) {
       const int64_t base = static_cast<int64_t>(std::floor(voice.position));
       const double frac = voice.position - static_cast<double>(base);
 
+      // Once the ring covers the frame the voice is asking for, the reposition is done
+      // and later starvation is starvation again.
+      if (voice.awaitingSeek) {
+        const StreamSlot* slot = streams_.at(voice.streamSlot);
+        if (slot != nullptr && base >= slot->ring.readFrame() && base < slot->ring.writeFrame()) {
+          voice.awaitingSeek = false;
+        }
+      }
+
       float sample[kMaxOutputChannels] = {};
       bool have = true;
       for (int channel = 0; channel < voice.channels; channel++) {
@@ -631,7 +655,7 @@ void Mixer::render(float* out, int frames, int channels) {
       }
 
       if (!have) {
-        if (voice.streamSlot >= 0) {
+        if (voice.streamSlot >= 0 && !voice.awaitingSeek) {
           StreamSlot* slot = streams_.at(voice.streamSlot);
           if (slot != nullptr) slot->underruns.fetch_add(1, std::memory_order_relaxed);
           underruns_.fetch_add(1, std::memory_order_relaxed);
@@ -707,6 +731,9 @@ void Mixer::render(float* out, int frames, int channels) {
             finishVoice(voice, frame + 1, EndReason::Complete);
           }
         }
+        // A streamed voice wraps back to frames the ring has long since passed, so the
+        // window has to follow it back or the rest of the run plays nothing.
+        if (voice.active) requestStreamSeek(voice, static_cast<int64_t>(voice.position));
       }
     }
   }

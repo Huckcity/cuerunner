@@ -139,6 +139,11 @@ writeFloatWav(monoPath, 1, SAMPLE_RATE, SAMPLE_RATE / 2, () => 0.5)
 // Three seconds of stereo at 0.25 — big enough to force the streaming path when the
 // cache's per-file limit is lowered.
 writeFloatWav(longPath, 2, SAMPLE_RATE, SAMPLE_RATE * 3, () => 0.25)
+// Four seconds whose every sample says where in the file it came from: frame/480000.
+// A streamed voice that starts, seeks or loops to the wrong place cannot produce these
+// values, so where playback really resumed is readable off the output.
+const rampPath = join(workDir, 'ramp.wav')
+writeFloatWav(rampPath, 2, SAMPLE_RATE, SAMPLE_RATE * 4, (channel, frame) => frame / 480000)
 
 console.log(`winslab-audio acceptance — binary ${binary}`)
 
@@ -398,6 +403,107 @@ console.log(`winslab-audio acceptance — binary ${binary}`)
   check('pre-roll stays inside its byte budget', info.media.streamBufferBytes > 0 && info.media.streamBufferBytes <= 4 * 1024 * 1024, JSON.stringify(info.media))
   check('streamed audio is correct', near(sampleAt(wav, 40000), 0.25))
   check('no underruns on a local file', events(summary, 'error').length === 0, JSON.stringify(events(summary, 'error')))
+
+  // A streaming decoder fills forward from wherever it was opened, so every jump the
+  // voice makes — a start offset, a seek, a loop back to the segment start — has to
+  // move the ring window with it. It used to stay parked: the voice asked for frames
+  // the ring could never reach and played silence, with an underrun for every frame,
+  // for the rest of the run. `rampPath` says on each sample where it came from, so the
+  // tests below read the position off the audio.
+  const streamArgs = ['--cache-max-file-bytes', '300000', '--stream-preroll-ms', '200']
+  const rampOptions = (extra) => ({
+    startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null, ...extra
+  })
+
+  const offsetStart = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 24000,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+        { atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0, options: rampOptions({ startTime: 1500 }) },
+        { atMs: 100, verb: 'info' }
+      ]
+    },
+    streamArgs
+  )
+  check('the ramp fixture streams', offsetStart.summary.results[0].reply.result.streaming === true)
+  check(
+    'a streamed start at an offset plays from that frame',
+    near(sampleAt(offsetStart.wav, 0), 72000 / 480000),
+    `${sampleAt(offsetStart.wav, 0)} at frame 0 (expected ${72000 / 480000})`
+  )
+  check(
+    'and keeps advancing from there',
+    near(sampleAt(offsetStart.wav, 4800), 76800 / 480000),
+    `${sampleAt(offsetStart.wav, 4800)} at frame 4800 (expected ${76800 / 480000})`
+  )
+  check(
+    'the repositioning is not counted as an underrun',
+    replyFor(offsetStart.summary, 2).result.media.decodeUnderruns === 0,
+    JSON.stringify(replyFor(offsetStart.summary, 2).result.media)
+  )
+
+  const looped = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: true,
+      frames: SAMPLE_RATE * 9,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+        { atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0, options: rampOptions({ loopCount: 1 }) }
+      ]
+    },
+    streamArgs
+  )
+  const loopEnded = events(looped.summary, 'ended')
+  check(
+    'a streamed voice plays its second pass through the loop',
+    loopEnded.length === 1 && loopEnded[0].reason === 'complete' && loopEnded[0].loopsCompleted === 1,
+    JSON.stringify(loopEnded)
+  )
+  let secondPassPeak = 0
+  for (let frame = SAMPLE_RATE * 6; frame < SAMPLE_RATE * 7; frame++) {
+    secondPassPeak = Math.max(secondPassPeak, Math.abs(sampleAt(looped.wav, frame)))
+  }
+  check('the second pass is audible, not silence', secondPassPeak > 0.15, `peak ${secondPassPeak}`)
+
+  const seeked = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: SAMPLE_RATE * 2,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+        { atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0, options: rampOptions({}) },
+        { atMs: 1000, verb: 'seek', cueId: 'ramp', positionMs: 200 },
+        { atMs: 1500, verb: 'info' }
+      ]
+    },
+    streamArgs
+  )
+  // The seek command carries no frame of its own (it lands where it is applied), so the
+  // absolute level is asserted where the ramp is unmistakable rather than sample-exact:
+  // a voice still playing from before the seek cannot be near 0.02 a second later.
+  const afterSeek = sampleAt(seeked.wav, SAMPLE_RATE + 480)
+  check('a streamed seek lands near the requested position', Math.abs(afterSeek - 10080 / 480000) < 0.005, `${afterSeek}`)
+  check(
+    'the seek did not silence the voice',
+    secondPassPeak > 0 && Math.abs(sampleAt(seeked.wav, SAMPLE_RATE + 1000) - sampleAt(seeked.wav, SAMPLE_RATE + 480)) > 0.0005,
+    `${sampleAt(seeked.wav, SAMPLE_RATE + 480)} then ${sampleAt(seeked.wav, SAMPLE_RATE + 1000)}`
+  )
+  check(
+    'the seek is not counted as an underrun',
+    replyFor(seeked.summary, 3).result.media.decodeUnderruns === 0,
+    JSON.stringify(replyFor(seeked.summary, 3).result.media)
+  )
 }
 
 // --- 10. waveform is bounded and truthful ---------------------------------

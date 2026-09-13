@@ -80,7 +80,11 @@ class WavSource final : public Source {
     return static_cast<int64_t>(drwav_read_pcm_frames_f32(&wav_, static_cast<drwav_uint64>(frames), out));
   }
   bool seekToFrame(int64_t frame) override {
-    return drwav_seek_to_pcm_frame(&wav_, static_cast<drwav_uint64>(frame)) == DRWAV_SUCCESS;
+    // drwav_seek_to_pcm_frame answers with DRWAV_TRUE/DRWAV_FALSE, not a drwav_result:
+    // comparing it to DRWAV_SUCCESS (0) inverted the answer, so every WAV seek reported
+    // failure. For a streamed file that meant the ring was flagged EOF right after a
+    // seek had reset it, and a voice that had wrapped a loop finished on the spot.
+    return drwav_seek_to_pcm_frame(&wav_, static_cast<drwav_uint64>(frame)) == DRWAV_TRUE;
   }
 
  private:
