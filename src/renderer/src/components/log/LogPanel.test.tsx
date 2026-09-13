@@ -33,16 +33,17 @@ const EVENTS: ShowEvent[] = [
 describe('logRows', () => {
   const log = [entry(1, AT, 'started'), entry(2, AT + 2000, 'completed in 2000ms')]
 
-  it('interleaves the cues and the show by time, leaving alerts to the log that already has them', () => {
+  it('interleaves the cues and the show by time, and says nothing twice', () => {
+    // Alerts are already log entries, and a service's state is the monitor's to show.
     const rows = logRows(log, EVENTS, 'all')
     expect(rows.map(row => row.kind === 'entry' ? row.entry.message : row.event.kind))
-      .toEqual(['started', 'osc', 'completed in 2000ms', 'midi', 'service'])
+      .toEqual(['started', 'osc', 'completed in 2000ms', 'midi'])
   })
 
   it('filters to either half', () => {
     expect(logRows(log, EVENTS, 'cues').every(row => row.kind === 'entry')).toBe(true)
     expect(logRows(log, EVENTS, 'show').map(row => row.kind === 'event' && row.event.kind))
-      .toEqual(['osc', 'midi', 'service'])
+      .toEqual(['osc', 'midi'])
   })
 })
 
@@ -88,13 +89,12 @@ describe('LogPanel', () => {
     render()
 
     expect([...container.querySelectorAll('.log-event')].map(row => row.getAttribute('data-kind')))
-      .toEqual(['osc', 'midi', 'service'])
-    expect(texts('.log-event-kind')).toEqual(['OSC', 'MIDI', 'SERVICE'])
+      .toEqual(['osc', 'midi'])
+    expect(texts('.log-event-kind')).toEqual(['OSC', 'MIDI'])
     expect(texts('.log-event .log-time')[0]).toBe(formatClock(AT + 1000))
     expect(texts('.log-event .log-message')).toEqual([
       '/cue/1/go from 192.168.1.4:8000 1',
-      'noteOn ch1 60/100',
-      'OSC in failed: connection refused'
+      'noteOn ch1 60/100'
     ])
   })
 

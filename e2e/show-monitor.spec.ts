@@ -150,3 +150,12 @@ test('enabling network presence starts the service and reports what it found', a
   await openMonitor(page)
   await expect(service(page, 'Network devices')).toHaveAttribute('data-state', /^(running|degraded)$/)
 })
+
+test('services coming and going stay in the monitor, out of the log', async () => {
+  await openMonitor(page)
+  await expect(service(page, 'OSC input')).toHaveAttribute('data-state', 'running')
+
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toBeVisible()
+  await expect(page.locator('.log-panel .log-event[data-kind="service"]')).toHaveCount(0)
+})

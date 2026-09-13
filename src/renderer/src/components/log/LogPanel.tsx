@@ -19,7 +19,8 @@ type Row =
 /**
  * One history for the session: the cues' own lines and what came in from the show,
  * newest last. Alerts are already written into the log as entries when they are raised,
- * so the show's copy of them is left out rather than said twice.
+ * so the show's copy of them is left out rather than said twice; a service starting and
+ * stopping is the monitor's to show as a state, and one that fails raises an alert.
  */
 export function logRows(log: LogEntry[], events: ShowEvent[], filter: LogFilter): Row[] {
   const entries: Row[] = filter === 'show'
@@ -28,7 +29,7 @@ export function logRows(log: LogEntry[], events: ShowEvent[], filter: LogFilter)
   const incoming: Row[] = filter === 'cues'
     ? []
     : events
-        .filter(event => event.kind !== 'alert')
+        .filter(event => event.kind !== 'alert' && event.kind !== 'service')
         .map((event, index) => ({ kind: 'event', at: event.at, key: `event-${event.at}-${index}`, event }))
   // A stable sort keeps each source's own order among lines stamped the same moment.
   return [...entries, ...incoming].sort((a, b) => a.at - b.at)
