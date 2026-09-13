@@ -67,6 +67,37 @@ test('the dock is as tall as the operator drags it', async () => {
   expect(Math.round(after!.height - before!.height)).toBe(80)
 })
 
+test('the dock keeps its 60% of a window that shrinks under it', async () => {
+  // Take the dock as tall as the window allows.
+  const handle = await page.locator('.dock-resize').boundingBox()
+  const grip = handle!.y + handle!.height / 2
+  await page.mouse.move(handle!.x + 200, grip)
+  await page.mouse.down()
+  await page.mouse.move(handle!.x + 200, grip - 400, { steps: 5 })
+  await page.mouse.up()
+  const tall = Math.round((await page.locator('.dock').boundingBox())!.height)
+  expect(tall).toBeGreaterThan(400)
+
+  // A window the operator drags smaller: the dock gives the room back rather than
+  // sitting on the cue list at a height the window no longer has.
+  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1280, 560) })
+  await expect.poll(async () => Math.round((await page.locator('.dock').boundingBox())!.height))
+    .toBeLessThan(tall)
+
+  const innerHeight = await page.evaluate(() => window.innerHeight)
+  const fitted = Math.round((await page.locator('.dock').boundingBox())!.height)
+  expect(fitted).toBeLessThanOrEqual(Math.max(110, Math.round(innerHeight * 0.6)))
+
+  // And the handle still works there: the dock moves with the pointer from the height it
+  // is drawn at, not from the taller one the window is refusing it.
+  const grip2 = (await page.locator('.dock-resize').boundingBox())!
+  await page.mouse.move(grip2.x + 200, grip2.y + grip2.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip2.x + 200, grip2.y + grip2.height / 2 + 50, { steps: 3 })
+  await page.mouse.up()
+  expect(Math.round((await page.locator('.dock').boundingBox())!.height)).toBe(fitted - 50)
+})
+
 test('the transport carries the show and nothing else', async () => {
   await expect(page.locator('.transport-bar .btn-log')).toHaveCount(0)
   await expect(page.locator('.dock .btn-log')).toBeVisible()

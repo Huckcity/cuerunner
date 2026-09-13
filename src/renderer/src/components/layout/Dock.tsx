@@ -47,6 +47,11 @@ function writeStored(key: string, value: string): void {
 }
 
 export function clampDockHeight(height: number, windowHeight: number): number {
+  // A window that is not on screen yet has no height to fit the dock into, and reading
+  // that as a real one would clamp every launch on a loaded machine down to the minimum
+  // and remember it. The height stands as it was left, and is fitted once there is a
+  // window to fit.
+  if (windowHeight <= 0) return Math.max(height, DOCK_MIN_HEIGHT)
   return Math.round(Math.min(Math.max(height, DOCK_MIN_HEIGHT), Math.max(DOCK_MIN_HEIGHT, windowHeight * DOCK_MAX_SHARE)))
 }
 
@@ -101,10 +106,21 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   const pro = usePro()
   const selected = useSelectedCue()
 
-  const [height, setHeight] = useState(() =>
-    clampDockHeight(Number(readStored(HEIGHT_KEY)) || DOCK_DEFAULT_HEIGHT, window.innerHeight))
+  // The height is the operator's, and the window is a limit on what is drawn rather than
+  // on what is kept: a window that is briefly small must not take their dock away with
+  // it, and a window that has no height yet — a loaded machine mounts the dock while the
+  // window is still coming up — is no limit at all.
+  const [height, setHeight] = useState(() => Number(readStored(HEIGHT_KEY)) || DOCK_DEFAULT_HEIGHT)
+  const [windowHeight, setWindowHeight] = useState(() => window.innerHeight)
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true')
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
+
+  useEffect(() => {
+    const measure = (): void => setWindowHeight(window.innerHeight)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
 
   useEffect(() => { writeStored(HEIGHT_KEY, String(height)) }, [height])
   useEffect(() => { writeStored(COLLAPSED_KEY, String(collapsed)) }, [collapsed])
@@ -123,12 +139,14 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>): void => {
     e.currentTarget.setPointerCapture(e.pointerId)
-    dragRef.current = { startY: e.clientY, startHeight: height }
+    // From the height on screen, which is the height the pointer is holding: a dock whose
+    // remembered height the window will not take has to move the moment it is dragged.
+    dragRef.current = { startY: e.clientY, startHeight: clampDockHeight(height, windowHeight) }
   }
   const resize = (e: ReactPointerEvent<HTMLDivElement>): void => {
     const drag = dragRef.current
     if (!drag) return
-    setHeight(clampDockHeight(drag.startHeight + (drag.startY - e.clientY), window.innerHeight))
+    setHeight(clampDockHeight(drag.startHeight + (drag.startY - e.clientY), windowHeight))
   }
   const endResize = (): void => { dragRef.current = null }
 
@@ -173,7 +191,7 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
       data-tab={tab}
       data-collapsed={!showBody}
       data-fullscreen={fullscreen}
-      style={showBody && !fullscreen ? { height } : undefined}
+      style={showBody && !fullscreen ? { height: clampDockHeight(height, windowHeight) } : undefined}
     >
       {showBody && (
         <div

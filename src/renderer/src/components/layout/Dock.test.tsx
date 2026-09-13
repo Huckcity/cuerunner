@@ -28,6 +28,7 @@ describe('Dock', () => {
   beforeEach(() => {
     ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
     localStorage.clear()
+    window.innerHeight = 768
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -96,6 +97,27 @@ describe('Dock', () => {
     act(() => { root.render(<Harness view="scenes" />) })
     expect(container.querySelector('.btn-cue')).toBeNull()
     expect(dock().dataset.collapsed).toBe('true')
+  })
+
+  it('keeps the height it was left at, and draws it within the window', () => {
+    // A loaded machine mounts the dock while the window is still 0 high: that is not a
+    // window to clamp against, and clamping against it used to floor the dock at the
+    // minimum and remember 110 as the operator's choice.
+    localStorage.setItem('winslab.dock.height', '900')
+    window.innerHeight = 0
+    act(() => { root.render(<Harness />) })
+    expect(dock().style.height).toBe('900px')
+
+    // A window the operator shrinks limits what is drawn, not what is kept: the dock
+    // gives the room back while it is small, and takes its own height again after.
+    window.innerHeight = 768
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(dock().style.height).toBe(`${clampDockHeight(900, 768)}px`)
+    expect(localStorage.getItem('winslab.dock.height')).toBe('900')
+
+    window.innerHeight = 1600
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(dock().style.height).toBe('900px')
   })
 })
 
