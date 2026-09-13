@@ -1,0 +1,6 @@
+# actionlint's knowledge of runner labels stops at GitHub's own; the homelab runner
+# registers this one (see CLAUDE.md → CI runners), so declare it rather than let every
+# `runs-on` read as a typo.
+self-hosted-runner:
+  labels:
+    - ubox

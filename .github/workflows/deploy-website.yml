@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A deploy, so it stays on GitHub's runners rather than the homelab (CLAUDE.md → CI runners).
   deploy:
     runs-on: ubuntu-latest
     environment:

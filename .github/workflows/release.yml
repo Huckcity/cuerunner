@@ -4,7 +4,8 @@ name: Release
 # workflow from main (Actions → Release → Run workflow) when the release is wanted —
 # semantic-release then cuts the version from the commits since the last tag, and
 # build.yml picks it up from the published release. A run dispatched from any other ref
-# fails semantic-release's own branch check rather than publishing.
+# fails semantic-release's own branch check rather than publishing. Like everything that
+# publishes, it runs on GitHub's runners rather than the homelab (CLAUDE.md → CI runners).
 on:
   workflow_dispatch:
 

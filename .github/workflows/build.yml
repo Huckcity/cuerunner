@@ -9,8 +9,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # The Linux half of a release runs in the homelab; everything that publishes does not
+  # (CLAUDE.md → CI runners). Windows and macOS have no self-hosted option here.
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
       - uses: actions/checkout@v4
 
@@ -180,7 +182,7 @@ jobs:
 
   build-linux:
     needs: [ test, test-e2e ]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
       - uses: actions/checkout@v4
 
@@ -211,6 +213,9 @@ jobs:
           path: dist/*.AppImage
           retention-days: 30
 
+  # Publishing stays on GitHub's runners on purpose: a release, or the website that
+  # carries the soak numbers, should not be the thing that fails because the homelab is
+  # asleep (CLAUDE.md → CI runners).
   release:
     needs: [ build-windows, build-mac, build-linux ]
     runs-on: ubuntu-latest
