@@ -2,7 +2,7 @@
 // reaches the app. Everything here is the part of a show that is not the cue stack.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createSocket } from 'dgram'
-import { closeApp, launchApp, mintLicense, sendOsc } from './helpers'
+import { closeApp, launchApp, mintLicense, oscPortOfItsOwn, sendOsc } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -64,10 +64,8 @@ test('the monitor opens on the running services, and closes the log', async () =
 })
 
 test('OSC sent to the app reaches the log, beside what the cues did', async () => {
-  await openMonitor(page)
-  await expect(service(page, 'OSC input')).toHaveAttribute('data-state', 'running')
-
-  await sendOsc(53000, '/show/go', 1, 'walk-in')
+  const port = await oscPortOfItsOwn(page)
+  await sendOsc(port, '/show/go', 1, 'walk-in')
 
   // What came in is history, and the log is the session's one history.
   await page.locator('.btn-log').click()

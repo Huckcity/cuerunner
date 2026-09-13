@@ -33,10 +33,11 @@ test('an operator enters the plot, and the panel follows it', async () => {
   // A channel can be picked from what is reporting rather than typed from memory.
   const channel = dialog.locator('.plot-pack-row').first().locator('.plot-channel')
   await expect(channel).toHaveAttribute('list', 'plot-channels')
-  const options = await dialog.locator('#plot-channels option').evaluateAll(
+  // Polled: the list is what the rack has reported, and under a loaded run the first
+  // poll can land after the dialog opens.
+  await expect.poll(() => dialog.locator('#plot-channels option').evaluateAll(
     nodes => nodes.map(node => (node as HTMLOptionElement).value)
-  )
-  expect(options).toContain('demo-pack-1')
+  )).toContain('demo-pack-1')
 
   // Rename a performer: the plot is theirs, and the panel shows the name it is given.
   const name = dialog.locator('.plot-performer-row').first().locator('.plot-name')

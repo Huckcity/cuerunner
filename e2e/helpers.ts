@@ -365,6 +365,25 @@ export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
 }
 
+/**
+ * Moves this app's OSC input off the default port, onto one nothing else in the run is
+ * using, and waits for the service to say so. Every licensed app in a parallel run
+ * listens on the default, and a datagram sent there lands in whichever one the OS picks
+ * — so a spec that sends OSC to the app it launched sends it here.
+ */
+export async function oscPortOfItsOwn(page: Page): Promise<number> {
+  const port = 43000 + Math.floor(Math.random() * 5000)
+  await page.locator('.toolbar-brand').click()
+  await page.getByRole('button', { name: /Settings/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.locator('#settings-osc-port').fill(String(port))
+  await dialog.locator('#settings-osc-port').blur()
+  await expect(dialog.locator('.settings-service[data-service="osc-in"]')).toContainText(String(port))
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  return port
+}
+
 /** A free-ish port for a test that needs to listen for OSC. */
 export function freePort(): number {
   return 43600 + Math.floor(Math.random() * 2000)

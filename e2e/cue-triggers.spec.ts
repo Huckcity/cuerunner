@@ -2,16 +2,19 @@
 // exercised here is the whole one — a datagram arrives, lands on the bus, reaches the
 // renderer, and the cue's own work actually happens.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, sendOsc, startServer, type TestServer } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, oscPortOfItsOwn, sendOsc, startServer, type TestServer } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 let server: TestServer | undefined
+let port: number
 
 test.beforeEach(async () => {
   // The show services, the scenes view, the panels that read them: everything this spec
   // is about is the licensed half of the app.
   ;({ app, page } = await launchApp({ license: mintLicense() }))
+  // A message that does nothing proves nothing if it went to another app in the run.
+  port = await oscPortOfItsOwn(page)
 })
 
 test.afterEach(async () => {
@@ -47,7 +50,7 @@ test('a cue fires when the message it answers to arrives', async () => {
   // Writing a trigger is not firing one.
   expect(hits()).toBe(0)
 
-  await sendOsc(53000, '/eos/cue/12/fire')
+  await sendOsc(port, '/eos/cue/12/fire')
 
   await expect.poll(hits).toBe(1)
   expect(server?.hits[0].url).toBe('/triggered')
@@ -65,7 +68,7 @@ test('removing the trigger stops the cue answering to it', async () => {
   await page.locator('.trigger-row[data-kind="osc"] .trigger-remove').click()
   await expect(page.locator('.trigger-row')).toHaveCount(0)
 
-  await sendOsc(53000, '/eos/cue/12/fire')
+  await sendOsc(port, '/eos/cue/12/fire')
   // Long enough for the datagram to have arrived and been ignored.
   await page.waitForTimeout(500)
 
@@ -77,7 +80,7 @@ test('a message nothing answers to leaves the cue alone', async () => {
   await networkCueTo(server.baseUrl)
   await addOscTrigger('/eos/cue/12/fire')
 
-  await sendOsc(53000, '/eos/cue/13/fire')
+  await sendOsc(port, '/eos/cue/13/fire')
   await page.waitForTimeout(500)
 
   expect(hits()).toBe(0)
