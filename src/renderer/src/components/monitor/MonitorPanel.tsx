@@ -1,13 +1,7 @@
-import { useEffect, useRef } from 'react'
 import { useStore } from '../../store'
-import { formatClock } from '../../utils/cueDefaults'
 import type { MidiMessageKind } from '../../types/cue'
 import type { DeviceState, ShowEvent } from '../../types/show'
 import './MonitorPanel.css'
-
-// How close to the bottom counts as "following the river". Scrolling further up
-// releases the pin so new events stop yanking the view. Same threshold as the log.
-const PIN_THRESHOLD_PX = 24
 
 function describeMidi(message: MidiMessageKind): string {
   switch (message.kind) {
@@ -23,7 +17,7 @@ function describeMidi(message: MidiMessageKind): string {
   }
 }
 
-/** One line of the event river, in the terms the operator thinks in. */
+/** One line of what came in from the show, in the terms the operator thinks in. */
 export function describeEvent(event: ShowEvent): string {
   switch (event.kind) {
     case 'osc': {
@@ -66,27 +60,16 @@ interface Props {
   onClose: () => void
 }
 
+/**
+ * What the show is made of right now: the services listening for it, the devices on the
+ * network, and the alarms standing against either. What came in and when is history,
+ * and history is the log's.
+ */
 export function MonitorPanel({ onClose }: Props) {
   const services = useStore(s => s.showServices)
   const devices = useStore(s => s.showDevices)
   const alerts = useStore(s => s.showAlerts)
-  const events = useStore(s => s.showEvents)
   const dismissAlert = useStore(s => s.dismissAlert)
-  const clearShowEvents = useStore(s => s.clearShowEvents)
-
-  const streamRef = useRef<HTMLDivElement>(null)
-  const pinnedRef = useRef(true)
-
-  useEffect(() => {
-    const el = streamRef.current
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight
-  }, [events])
-
-  const handleScroll = (): void => {
-    const el = streamRef.current
-    if (!el) return
-    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < PIN_THRESHOLD_PX
-  }
 
   // Whether a restart worked is reported by the service's next state event, not by
   // this promise, so there is nothing to show here — but the rejection still has to
@@ -99,11 +82,10 @@ export function MonitorPanel({ onClose }: Props) {
     <div className="monitor-panel">
       <div className="monitor-header">
         <span className="monitor-title">Show monitor</span>
-        <span className="monitor-count">{events.length === 0 ? 'empty' : `${events.length} events`}</span>
+        <span className="monitor-count">
+          {`${services.length} ${services.length === 1 ? 'service' : 'services'} · ${devices.length} ${devices.length === 1 ? 'device' : 'devices'}`}
+        </span>
         <div className="monitor-actions">
-          <button className="monitor-btn" onClick={clearShowEvents} disabled={events.length === 0}>
-            Clear
-          </button>
           <button className="monitor-btn" onClick={onClose} title="Hide monitor">
             ✕
           </button>
@@ -160,21 +142,6 @@ export function MonitorPanel({ onClose }: Props) {
               <div key={device.id} className="monitor-device" data-online={String(device.online)}>
                 <span className="monitor-device-name">{device.name}</span>
                 <span className="monitor-device-readout">{describeDevice(device)}</span>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="monitor-column monitor-events" ref={streamRef} onScroll={handleScroll}>
-          <div className="monitor-column-title">Events</div>
-          {events.length === 0 ? (
-            <div className="monitor-empty">Nothing yet.</div>
-          ) : (
-            events.map((event, index) => (
-              <div key={index} className="monitor-event" data-kind={event.kind}>
-                <span className="monitor-event-time">{formatClock(event.at)}</span>
-                <span className="monitor-event-kind">{event.kind.toUpperCase()}</span>
-                <span className="monitor-event-message">{describeEvent(event)}</span>
               </div>
             ))
           )}

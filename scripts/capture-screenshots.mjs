@@ -154,7 +154,7 @@ await shot('07-timeline.png', '.timeline-panel')
 // The panel scrolls; give it more room for the figure. Then show what a failure
 // looks like by firing the same cue with nothing listening.
 await page.locator('.btn-log').click()
-await page.evaluate(() => document.documentElement.style.setProperty('--h-log', '340px'))
+await page.evaluate(() => (document.querySelector('.dock').style.height = '340px'))
 await new Promise(resolve => server.close(resolve))
 await selectCue('Trigger Video')
 await page.getByRole('button', { name: /GO/ }).click()
@@ -181,7 +181,7 @@ client.send('/mixer/fader', 3, -6.5)
 client.send('/rf/pack12/battery', 42)
 
 await page.locator('.btn-monitor').click()
-await page.locator('.monitor-event[data-kind="osc"]').first().waitFor()
+await page.locator('.monitor-service[data-state="running"]').first().waitFor()
 await shot('12-show-monitor.png', '.monitor-panel')
 await page.locator('.btn-monitor').click()
 await client.close()
@@ -189,7 +189,7 @@ await client.close()
 // The wireless panel with the demo rack, so the figure shows a plot with a pack in
 // trouble rather than an empty table. Twelve packs need more height than the strip
 // holds by default.
-await page.evaluate(() => document.documentElement.style.setProperty('--h-rf', '430px'))
+await page.evaluate(() => (document.querySelector('.dock').style.height = '430px'))
 await page.locator('.btn-rf').click()
 await page.locator('.rf-panel').waitFor()
 await page.locator('.rf-demo-btn').click()
@@ -242,7 +242,7 @@ await page.locator('.script-choose').click()
 await page.locator('.script-line').first().waitFor()
 await page.locator('.script-line[data-line="5"] .script-line-no').click()
 await page.locator('.script-pin').waitFor()
-await page.evaluate(() => document.documentElement.style.setProperty('--h-script', '430px'))
+await page.evaluate(() => (document.querySelector('.dock').style.height = '430px'))
 await shot('15-script.png', '.script-panel')
 // The strip gives the window back: the scenes view wants all of it.
 await page.locator('.btn-script').click()

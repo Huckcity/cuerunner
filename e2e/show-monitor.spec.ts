@@ -63,13 +63,15 @@ test('the monitor opens on the running services, and closes the log', async () =
   await expect(monitor(page)).toHaveCount(0)
 })
 
-test('OSC sent to the app reaches the monitor', async () => {
+test('OSC sent to the app reaches the log, beside what the cues did', async () => {
   await openMonitor(page)
   await expect(service(page, 'OSC input')).toHaveAttribute('data-state', 'running')
 
   await sendOsc(53000, '/show/go', 1, 'walk-in')
 
-  const event = monitor(page).locator('.monitor-event[data-kind="osc"]').first()
+  // What came in is history, and the log is the session's one history.
+  await page.locator('.btn-log').click()
+  const event = page.locator('.log-panel .log-event[data-kind="osc"]').first()
   await expect(event).toContainText('/show/go')
   await expect(event).toContainText('127.0.0.1')
   await expect(event).toContainText('walk-in')
@@ -88,9 +90,9 @@ test('moving the OSC port rebinds the listener in place', async () => {
   await expect(dialog.locator('.settings-service[data-service="osc-in"]')).toContainText(String(port))
   await dialog.getByRole('button', { name: 'Close' }).click()
 
-  await openMonitor(page)
   await sendOsc(port, '/show/port-check')
-  await expect(monitor(page).locator('.monitor-event[data-kind="osc"]').first())
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel .log-event[data-kind="osc"]').first())
     .toContainText('/show/port-check')
 })
 

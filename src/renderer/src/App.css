@@ -174,9 +174,8 @@ html, body, #root {
 /* The scenes view is one surface, not a cue list with an inspector beside it. */
 .app-main[data-view='scenes'] { grid-template-columns: minmax(0, 1fr); }
 
-/* Timeline fullscreen mode */
+/* Timeline fullscreen mode: the dock takes the window (Dock.css) and the rows go. */
 .app-shell.timeline-fullscreen .app-main { display: none; }
-.app-shell.timeline-fullscreen .timeline-panel { flex: 1; height: auto; }
 
 /* ─── Failure surfaces ───────────────────────────────────────────────────── */
 

@@ -7,7 +7,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MonitorPanel, describeEvent } from './MonitorPanel'
 import { useStore } from '../../store'
-import { formatClock } from '../../utils/cueDefaults'
 import type { MidiMessageKind } from '../../types/cue'
 import type { DeviceState, ServiceStatus, ShowAlert, ShowEvent } from '../../types/show'
 
@@ -92,10 +91,16 @@ describe('MonitorPanel', () => {
   it('reports each column as empty and shows no alarm strip', async () => {
     await show()
 
-    expect(texts('.monitor-empty')).toEqual(['No services.', 'No devices.', 'Nothing yet.'])
-    expect(container.querySelectorAll('.monitor-column')).toHaveLength(3)
+    // What came in and when is the log's; the monitor is what the show is made of now.
+    expect(texts('.monitor-empty')).toEqual(['No services.', 'No devices.'])
+    expect(container.querySelectorAll('.monitor-column')).toHaveLength(2)
     expect(container.querySelector('.monitor-alerts')).toBeNull()
-    expect(texts('.monitor-count')).toEqual(['empty'])
+    expect(texts('.monitor-count')).toEqual(['0 services · 0 devices'])
+  })
+
+  it('counts what it is showing', async () => {
+    await show({ services: [service()], devices: [device(), device({ id: 'shure:2' })] })
+    expect(texts('.monitor-count')).toEqual(['1 service · 2 devices'])
   })
 
   it('closes from the header', async () => {
@@ -108,21 +113,6 @@ describe('MonitorPanel', () => {
     await act(async () => { close.click() })
 
     expect(onClose).toHaveBeenCalledTimes(1)
-  })
-
-  it('clears the river from the header', async () => {
-    await show({
-      events: [{ kind: 'osc', at: AT, from: '192.168.1.4:8000', address: '/cue/1/go', args: [] }]
-    })
-    expect(container.querySelectorAll('.monitor-event')).toHaveLength(1)
-
-    const clear = [...container.querySelectorAll<HTMLButtonElement>('.monitor-btn')]
-      .find(b => b.textContent === 'Clear')!
-    await act(async () => { clear.click() })
-
-    expect(useStore.getState().showEvents).toEqual([])
-    expect(container.querySelectorAll('.monitor-event')).toHaveLength(0)
-    expect(texts('.monitor-empty')[2]).toBe('Nothing yet.')
   })
 
   it('offers a restart only for a service that is not running', async () => {
@@ -205,49 +195,6 @@ describe('MonitorPanel', () => {
     await act(async () => { container.querySelector<HTMLButtonElement>('.monitor-alert-dismiss')!.click() })
 
     expect(container.querySelector('.monitor-alerts')).toBeNull()
-  })
-
-  it('keeps the river newest last and labels every kind', async () => {
-    const events: ShowEvent[] = [
-      {
-        kind: 'osc',
-        at: AT,
-        from: '192.168.1.4:8000',
-        address: '/cue/1/go',
-        args: [{ type: 'i', value: 1 }, { type: 'f', value: 2 }]
-      },
-      {
-        kind: 'midi',
-        at: AT + 1000,
-        device: 'Launchpad',
-        message: { kind: 'noteOn', channel: 1, note: 60, velocity: 100 }
-      },
-      { kind: 'device', at: AT + 2000, device: device() },
-      { kind: 'alert', at: AT + 3000, alert: alert({ level: 'warning', message: 'Shure API unreachable' }) },
-      { kind: 'service', at: AT + 4000, service: service({ state: 'failed', detail: 'connection refused' }) }
-    ]
-    await show({ events })
-
-    const rows = [...container.querySelectorAll('.monitor-event')]
-    expect(rows.map(row => row.getAttribute('data-kind'))).toEqual([
-      'osc', 'midi', 'device', 'alert', 'service'
-    ])
-    expect(texts('.monitor-event-kind')).toEqual(['OSC', 'MIDI', 'DEVICE', 'ALERT', 'SERVICE'])
-    expect(texts('.monitor-event-time')).toEqual([
-      formatClock(AT),
-      formatClock(AT + 1000),
-      formatClock(AT + 2000),
-      formatClock(AT + 3000),
-      formatClock(AT + 4000)
-    ])
-    expect(texts('.monitor-event-message')).toEqual([
-      '/cue/1/go from 192.168.1.4:8000 1, 2',
-      'noteOn ch1 60/100',
-      'SM58 #1 online',
-      'warning: Shure API unreachable',
-      'OSC in failed: connection refused'
-    ])
-    expect(texts('.monitor-count')).toEqual(['5 events'])
   })
 })
 

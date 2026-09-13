@@ -189,9 +189,9 @@ test('a key entered mid-session starts the show settings, not the defaults', asy
 
   await page.locator('.btn-monitor').click()
   await expect(page.locator('.monitor-panel')).toBeVisible()
-  await expect(page.locator('.monitor-event[data-kind="service"]', { hasText: 'OSC input running' }))
-    .toHaveCount(0)
   await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel .log-event[data-kind="service"]', { hasText: 'OSC input running' }))
+    .toHaveCount(0)
   await expect(page.locator('.log-panel .log-message', { hasText: 'OSC input:' })).toHaveCount(0)
 })
 

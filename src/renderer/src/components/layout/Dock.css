@@ -1,0 +1,146 @@
+/* The dock: one strip of tabs and one body under it, at a height the operator sets and
+   the selection never changes. */
+
+.dock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+/* The timeline taken full-window: the dock is the window, less the bars around it. */
+.dock[data-fullscreen='true'] { flex: 1; }
+
+/* A few pixels either side of the dock's top edge, for the pointer to take hold of. */
+.dock-resize {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 5;
+}
+
+.dock-resize:hover { background: var(--accent-blue-glow); }
+
+.dock-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.dock[data-collapsed='true'] .dock-tabs { border-bottom: none; }
+
+.dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: var(--transition-std);
+}
+
+.dock-tab:hover { color: var(--fg-tertiary); }
+
+.dock-tab[data-active='true'] {
+  color: var(--fg-primary);
+  border-bottom-color: var(--accent-blue);
+}
+
+.dock-collapse {
+  margin-left: auto;
+  width: 28px;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.dock-collapse:hover { color: var(--fg-primary); }
+
+.dock-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each panel was built to be its own strip with its own height; in the dock it fills the
+   body instead, and the dock draws the edge. */
+.dock .dock-body > .waveform-panel,
+.dock .dock-body > .timeline-panel,
+.dock .dock-body > .log-panel,
+.dock .dock-body > .monitor-panel,
+.dock .dock-body > .rf-panel,
+.dock .dock-body > .script-panel,
+.dock .dock-body > .pro-lock {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  border-top: none;
+}
+
+/* ─── The Cue tab for a cue with no picture of its own ─────────────────── */
+
+.dock-summary {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-well);
+  font-size: var(--text-base);
+  color: var(--fg-secondary);
+}
+
+.dock-summary-empty { color: var(--fg-ghost); }
+
+.dock-summary-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  color: var(--fg-primary);
+}
+
+.dock-summary-meta {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.dock-summary-icon {
+  width: 18px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.dock-summary-children {
+  list-style: none;
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dock-summary-children li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  color: var(--fg-secondary);
+}
+
+.dock-summary-children strong { color: var(--fg-muted); font-weight: var(--fw-medium); }

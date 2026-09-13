@@ -4,8 +4,6 @@ import { TransportBar } from './components/layout/TransportBar'
 import { StandbyBar } from './components/layout/StandbyBar'
 import { CueList } from './components/cue-list/CueList'
 import { Inspector } from './components/inspector/Inspector'
-import { WaveformPanel } from './components/waveform/WaveformPanel'
-import { TimelineEditor } from './components/timeline/TimelineEditor'
 import { SettingsDialog } from './components/layout/SettingsDialog'
 import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
@@ -13,14 +11,10 @@ import { NoticeBar } from './components/layout/NoticeBar'
 import { MissingMediaBar } from './components/media/MissingMediaBar'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
-import { LogPanel } from './components/log/LogPanel'
-import { MonitorPanel } from './components/monitor/MonitorPanel'
-import { RfPanel } from './components/rf/RfPanel'
-import { ScriptPanel } from './components/script/ScriptPanel'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
-import type { ShowStrip } from './components/layout/TransportBar'
+import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
 import { useSelectedCue, useStore, usePro } from './store'
@@ -53,10 +47,8 @@ export function App() {
   const setLicense = useStore(s => s.setLicense)
   const pro = usePro()
   const [timelineExpanded, setTimelineExpanded] = useState(false)
-  // The panels along the bottom share the space, and together they would leave the cue
-  // list too little room to be a cue list. One at a time: opening one closes the other,
-  // and the same button closes the one it opened.
-  const [strip, setStrip] = useState<ShowStrip | null>(null)
+  // The bottom of the window is one dock: the selected cue, or one of the show's panels.
+  const [dockTab, setDockTab] = useState<DockTab>('cue')
   // Which view fills the window. The scenes view is what the show is run from and where
   // it is edited; the cue stack is the other half, one click away at curtain up.
   const [view, setView] = useState<AppView>('cues')
@@ -66,7 +58,8 @@ export function App() {
     ? selected as GroupCue
     : null
 
-  const shellClass = `app-shell${timelineExpanded && timelineGroupCue ? ' timeline-fullscreen' : ''}`
+  const timelineFullscreen = timelineExpanded && timelineGroupCue !== null && dockTab === 'cue' && view === 'cues'
+  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}`
 
   // The license can change while the window is open — a key entered in Settings, or one
   // that ran out overnight — so the panels follow the main process rather than the read
@@ -149,44 +142,14 @@ export function App() {
           </>
         )}
       </div>
-      {view === 'cues' && (timelineGroupCue
-        ? <TimelineEditor
-            cue={timelineGroupCue}
-            expanded={timelineExpanded}
-            onToggleExpand={() => setTimelineExpanded(e => !e)}
-          />
-        : <WaveformPanel />
-      )}
-      {strip === 'monitor' && (pro
-        ? <MonitorPanel onClose={() => setStrip(null)} />
-        : <ProLock
-            variant="strip"
-            feature="Show monitor"
-            blurb="What is listening, what is on stage, and what just came in."
-            onClose={() => setStrip(null)}
-          />)}
-      {strip === 'rf' && (pro
-        ? <RfPanel onClose={() => setStrip(null)} />
-        : <ProLock
-            variant="strip"
-            feature="Wireless"
-            blurb="The mic plot, the packs on stage, and the alarm before a battery dies mid-line."
-            onClose={() => setStrip(null)}
-          />)}
-      {strip === 'script' && (pro
-        ? <ScriptPanel onClose={() => setStrip(null)} />
-        : <ProLock
-            variant="strip"
-            feature="Script panel"
-            blurb="The script beside the cue stack, with cues pinned to the lines they fire on."
-            onClose={() => setStrip(null)}
-          />)}
-      {strip === 'log' && <LogPanel onClose={() => setStrip(null)} />}
-      <TransportBar
-        strip={strip}
-        onToggleStrip={next => setStrip(current => current === next ? null : next)}
-        onShowStrip={setStrip}
+      <Dock
+        view={view}
+        tab={dockTab}
+        onTab={setDockTab}
+        timelineExpanded={timelineExpanded}
+        onToggleTimeline={() => setTimelineExpanded(e => !e)}
       />
+      <TransportBar onShowStrip={setDockTab} />
       {settingsTab !== null && <SettingsDialog initialTab={settingsTab} onClose={closeSettings} />}
     </div>
   )
