@@ -1,7 +1,9 @@
-# actionlint's knowledge of runner labels stops at GitHub's own; the two self-hosted
-# machines register these (see CLAUDE.md → CI runners), so declare them rather than let
-# every `runs-on` read as a typo.
+# actionlint's knowledge of runner labels stops at GitHub's own; the self-hosted hosts
+# register these (see CLAUDE.md → CI runners), so declare them rather than let every
+# `runs-on` read as a typo. `ubox` and `ubox-win` are the same physical machine — Linux on
+# it, and the Windows guest on it.
 self-hosted-runner:
   labels:
     - ubox
+    - ubox-win
     - mac-mini

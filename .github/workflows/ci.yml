@@ -147,7 +147,10 @@ jobs:
         include:
           - runner: [self-hosted, linux, x64, ubox]
             label: linux
-          - runner: windows-latest
+          # Windows runs in a KVM guest on ubox: the same x64 Windows the installer ships
+          # for, from the same eval media GitHub's own windows-latest uses, at none of the
+          # 2x minutes (CLAUDE.md → CI runners).
+          - runner: [self-hosted, windows, x64, ubox-win]
             label: windows
           # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the
           # .dmg ships for, at none of the 10x minutes. It is a launchd agent in the

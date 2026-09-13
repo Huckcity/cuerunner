@@ -69,7 +69,7 @@ jobs:
 
   build-windows:
     needs: [ test, test-e2e ]
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows, x64, ubox-win]
     steps:
       - uses: actions/checkout@v4
 
