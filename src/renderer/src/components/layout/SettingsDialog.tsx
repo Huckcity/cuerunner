@@ -68,6 +68,28 @@ function NumberField({ id, label, value, min, max, disabled, onCommit }: NumberF
   )
 }
 
+/** The tabs, by what the operator is setting up rather than by which service does it. */
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'audio', label: 'Audio' },
+  { id: 'midi', label: 'MIDI' },
+  { id: 'network', label: 'Network' },
+  { id: 'wireless', label: 'Wireless' },
+  { id: 'license', label: 'License' }
+]
+
+/**
+ * Why a Pro service's settings are here but not running. The settings travel with the
+ * show whatever the license says; only the listening waits for one.
+ */
+function ProHint({ onUnlock }: { onUnlock: () => void }) {
+  return (
+    <p className="inspector-hint license-hint">
+      WinsLab Pro: these travel with the show, and start once this machine is licensed.{' '}
+      <button className="license-link" onClick={onUnlock}>Enter a license key</button>
+    </p>
+  )
+}
+
 export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
   const {
     audioSettings, midiSettings, showSettings, showServices, audioDeviceError,
@@ -171,30 +193,18 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
       <div className="settings-dialog" role="dialog" aria-modal="true" aria-label="Settings">
         <div className="settings-header">
           <span className="settings-title">Settings</span>
-          <button className="settings-close" onClick={onClose} aria-label="Dismiss settings">✕</button>
+          <button className="settings-close" onClick={onClose} aria-label="Close settings" title="Close (Esc)">✕</button>
         </div>
 
         <div className="settings-tabs">
-          <button
-            className="settings-tab"
-            data-active={tab === 'audio'}
-            onClick={() => setTab('audio')}
-          >Audio</button>
-          <button
-            className="settings-tab"
-            data-active={tab === 'midi'}
-            onClick={() => setTab('midi')}
-          >MIDI</button>
-          <button
-            className="settings-tab"
-            data-active={tab === 'show'}
-            onClick={() => setTab('show')}
-          >Show</button>
-          <button
-            className="settings-tab"
-            data-active={tab === 'license'}
-            onClick={() => setTab('license')}
-          >License</button>
+          {SETTINGS_TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              className="settings-tab"
+              data-active={tab === id}
+              onClick={() => setTab(id)}
+            >{label}</button>
+          ))}
         </div>
 
         <div className="settings-body">
@@ -271,12 +281,8 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 <span className="settings-info">Take the device for WinsLab alone</span>
               </div>
               <p className="inspector-hint">
-                Exclusive locks the device against everything else on the machine: while the
-                show is running, system sounds and conferencing apps are locked out. On
-                Windows it is what gets the device's real channel count, a sample rate that
-                matches the session, and latency you can predict. Where the driver will not
-                allow it the engine refuses the setting rather than falling back quietly, and
-                its reason appears here.
+                Exclusive locks system sounds and conferencing apps out of the device, for its
+                real channel count and steady latency. A driver that refuses says why, here.
               </p>
               {/* A backend with no device at all — the silent and offline ones a test or
                   a dev run uses — refuses every device request by definition, including
@@ -365,51 +371,10 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                   ))}
                 </select>
               </div>
-              <p className="inspector-hint">
-                MIDI cues without their own port send here; individual cues can override it
-                with a per-cue port selection.
-              </p>
-            </>
-          )}
-
-          {tab === 'show' && (
-            <>
-              {!pro && (
-                <p className="inspector-hint license-hint">
-                  These settings belong to the show services, and the show services are
-                  WinsLab Pro. They travel with the show; the listening starts once this
-                  machine is licensed.{' '}
-                  <button className="license-link" onClick={() => setTab('license')}>
-                    Enter a license key
-                  </button>
-                </p>
-              )}
-              <div className="field-row">
-                <label htmlFor="settings-osc-in">OSC input</label>
-                <input
-                  id="settings-osc-in"
-                  type="checkbox"
-                  checked={showSettings.oscIn.enabled}
-                  onChange={e => updateOscInSettings({ enabled: e.target.checked })}
-                />
-                <span className="settings-info">Listen for OSC from consoles and tablets</span>
-              </div>
-              <NumberField
-                id="settings-osc-port"
-                label="Port"
-                value={showSettings.oscIn.port}
-                min={1}
-                max={65535}
-                disabled={!showSettings.oscIn.enabled}
-                onCommit={port => updateOscInSettings({ port })}
-              />
-              {oscService && (
-                <div className="settings-service" data-service={oscService.id} data-state={oscService.state}>
-                  {oscService.state} — {oscService.detail}
-                </div>
-              )}
+              <p className="inspector-hint">MIDI cues without a port of their own send here.</p>
 
               <div className="field-section-title">MIDI input</div>
+              {!pro && <ProHint onUnlock={() => setTab('license')} />}
               <div className="field-row">
                 <label htmlFor="settings-midi-in">Listen</label>
                 <input
@@ -437,112 +402,42 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                   ))}
                 </div>
               )}
-              <p className="inspector-hint">
-                With nothing selected, every available input is opened. A port that drops
-                out mid-show is reported in the show monitor.
-              </p>
+              <p className="inspector-hint">With none ticked, every input is opened.</p>
               {midiService && (
                 <div className="settings-service" data-service={midiService.id} data-state={midiService.state}>
                   {midiService.state} — {midiService.detail}
                 </div>
               )}
 
-              <div className="field-section-title">Wireless telemetry</div>
-              {showSettings.rf.sources.length === 0 ? (
-                <p className="inspector-hint">
-                  Nothing is feeding the mic plot. Add a source below, or open the wireless
-                  panel and use the demo rack to see what it does.
-                </p>
-              ) : (
-                <div className="settings-source-list">
-                  {showSettings.rf.sources.map(source => (
-                    <div key={source.id} className="settings-source-row">
-                      <input
-                        className="settings-source-label"
-                        value={source.label}
-                        aria-label="Source name"
-                        onChange={e => updateSource(source.id, { label: e.target.value })}
-                      />
-                      <select
-                        value={source.kind}
-                        aria-label="Source kind"
-                        onChange={e => updateSource(source.id, { kind: e.target.value as TelemetrySourceKind })}
-                      >
-                        <option value="http">HTTP</option>
-                        <option value="file">File</option>
-                        <option value="demo">Demo</option>
-                      </select>
-                      <input
-                        className="settings-source-target"
-                        value={source.target}
-                        aria-label="Source address"
-                        placeholder={source.kind === 'file' ? '/path/to/telemetry.json' : 'http://10.0.0.20/telemetry'}
-                        disabled={source.kind === 'demo'}
-                        onChange={e => updateSource(source.id, { target: e.target.value })}
-                      />
-                      <button
-                        className="settings-source-remove"
-                        onClick={() => removeSource(source.id)}
-                        aria-label={`Remove ${source.label}`}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+            </>
+          )}
+
+          {tab === 'network' && (
+            <>
+              {!pro && <ProHint onUnlock={() => setTab('license')} />}
+              <div className="field-section-title">OSC input</div>
               <div className="field-row">
-                <label />
-                <button className="add-row" onClick={addSource}>+ Add source</button>
+                <label htmlFor="settings-osc-in">Listen</label>
+                <input
+                  id="settings-osc-in"
+                  type="checkbox"
+                  checked={showSettings.oscIn.enabled}
+                  onChange={e => updateOscInSettings({ enabled: e.target.checked })}
+                />
+                <span className="settings-info">Listen for OSC from consoles and tablets</span>
               </div>
-              <p className="inspector-hint">
-                A source returns <code>{'{"channels":[{"id":"…","batteryPercent":42,"rfDbm":-62}]}'}</code>{' '}
-                — the field names are the contract, so a bridge written against a receiver's
-                own API only has to emit them. Thresholds that raise the alarms live in the
-                workspace alongside the plot.
-              </p>
-              <div className="field-section-title">Alarms</div>
               <NumberField
-                id="settings-rf-battery-warning"
-                label="Battery low (%)"
-                value={showSettings.rf.thresholds.batteryWarning}
+                id="settings-osc-port"
+                label="Port"
+                value={showSettings.oscIn.port}
                 min={1}
-                max={99}
-                onCommit={batteryWarning => setThresholds({ batteryWarning })}
+                max={65535}
+                disabled={!showSettings.oscIn.enabled}
+                onCommit={port => updateOscInSettings({ port })}
               />
-              <NumberField
-                id="settings-rf-battery-critical"
-                label="Battery critical (%)"
-                value={showSettings.rf.thresholds.batteryCritical}
-                min={1}
-                max={99}
-                onCommit={batteryCritical => setThresholds({ batteryCritical })}
-              />
-              <NumberField
-                id="settings-rf-rf-warning"
-                label="RF weak (dBm)"
-                value={showSettings.rf.thresholds.rfWarningDbm}
-                min={-120}
-                max={-20}
-                onCommit={rfWarningDbm => setThresholds({ rfWarningDbm })}
-              />
-              <NumberField
-                id="settings-rf-gone"
-                label="Quiet after (s)"
-                value={showSettings.rf.thresholds.offlineAfterSeconds}
-                min={2}
-                max={600}
-                onCommit={offlineAfterSeconds => setThresholds({ offlineAfterSeconds })}
-              />
-              <p className="inspector-hint">
-                A pack that stops being reported is marked quiet and warned about once this
-                long has passed. Packs switched off between scenes are normal, so a longer
-                window is a fair choice — the row's colour turns as soon as the silence
-                starts, whatever this is set to.
-              </p>
-              {rfService && (
-                <div className="settings-service" data-service={rfService.id} data-state={rfService.state}>
-                  {rfService.state} — {rfService.detail}
+              {oscService && (
+                <div className="settings-service" data-service={oscService.id} data-state={oscService.state}>
+                  {oscService.state} — {oscService.detail}
                 </div>
               )}
 
@@ -580,9 +475,8 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 onCommit={goneAfterSeconds => updatePresenceSettings({ goneAfterSeconds })}
               />
               <p className="inspector-hint">
-                Devices that announce themselves over mDNS — a Dante endpoint, an interface,
-                an amplifier — appear in the show monitor while they are there, and raise an
-                alarm when they leave.
+                Dante endpoints, interfaces and amps on the network appear in the monitor,
+                and raise an alarm when they leave.
               </p>
               {presenceService && (
                 <div className="settings-service" data-service={presenceService.id} data-state={presenceService.state}>
@@ -626,9 +520,8 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 </button>
               </div>
               <p className="inspector-hint">
-                The address to open on the tablet is reported below once the service is
-                running. Nothing on the companion can change the show: it is a window, not
-                a control surface. Anyone on the same network who has the token can watch it.
+                Read-only: the tablet watches, it cannot change the show. Its address appears
+                below once running.
               </p>
               {companionService && (
                 <div className="settings-service" data-service={companionService.id} data-state={companionService.state}>
@@ -638,11 +531,103 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
             </>
           )}
 
-          {tab === 'license' && <LicenseSection />}
-        </div>
+          {tab === 'wireless' && (
+            <>
+              {!pro && <ProHint onUnlock={() => setTab('license')} />}
+              <div className="field-section-title">Sources</div>
+              {showSettings.rf.sources.length === 0 ? (
+                <p className="inspector-hint">Nothing is feeding the mic plot yet.</p>
+              ) : (
+                <div className="settings-source-list">
+                  {showSettings.rf.sources.map(source => (
+                    <div key={source.id} className="settings-source-row">
+                      <input
+                        className="settings-source-label"
+                        value={source.label}
+                        aria-label="Source name"
+                        onChange={e => updateSource(source.id, { label: e.target.value })}
+                      />
+                      <select
+                        value={source.kind}
+                        aria-label="Source kind"
+                        onChange={e => updateSource(source.id, { kind: e.target.value as TelemetrySourceKind })}
+                      >
+                        <option value="http">HTTP</option>
+                        <option value="file">File</option>
+                        <option value="demo">Demo</option>
+                      </select>
+                      <input
+                        className="settings-source-target"
+                        value={source.target}
+                        aria-label="Source address"
+                        placeholder={source.kind === 'file' ? '/path/to/telemetry.json' : 'http://10.0.0.20/telemetry'}
+                        disabled={source.kind === 'demo'}
+                        onChange={e => updateSource(source.id, { target: e.target.value })}
+                      />
+                      <button
+                        className="settings-source-remove"
+                        onClick={() => removeSource(source.id)}
+                        aria-label={`Remove ${source.label}`}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="field-row">
+                <label />
+                <button className="add-row" onClick={addSource}>+ Add source</button>
+              </div>
+              <p className="inspector-hint">
+                Each source reports battery and RF per channel; the format is in the user guide.
+              </p>
+              <div className="field-section-title">Alarms</div>
+              <NumberField
+                id="settings-rf-battery-warning"
+                label="Battery low (%)"
+                value={showSettings.rf.thresholds.batteryWarning}
+                min={1}
+                max={99}
+                onCommit={batteryWarning => setThresholds({ batteryWarning })}
+              />
+              <NumberField
+                id="settings-rf-battery-critical"
+                label="Battery critical (%)"
+                value={showSettings.rf.thresholds.batteryCritical}
+                min={1}
+                max={99}
+                onCommit={batteryCritical => setThresholds({ batteryCritical })}
+              />
+              <NumberField
+                id="settings-rf-rf-warning"
+                label="RF weak (dBm)"
+                value={showSettings.rf.thresholds.rfWarningDbm}
+                min={-120}
+                max={-20}
+                onCommit={rfWarningDbm => setThresholds({ rfWarningDbm })}
+              />
+              <NumberField
+                id="settings-rf-gone"
+                label="Quiet after (s)"
+                value={showSettings.rf.thresholds.offlineAfterSeconds}
+                min={2}
+                max={600}
+                onCommit={offlineAfterSeconds => setThresholds({ offlineAfterSeconds })}
+              />
+              <p className="inspector-hint">
+                How long a pack can go unheard before it is warned about.
+              </p>
+              {rfService && (
+                <div className="settings-service" data-service={rfService.id} data-state={rfService.state}>
+                  {rfService.state} — {rfService.detail}
+                </div>
+              )}
 
-        <div className="settings-footer">
-          <button className="inspector-btn" onClick={onClose}>Close</button>
+            </>
+          )}
+
+          {tab === 'license' && <LicenseSection />}
         </div>
       </div>
     </div>

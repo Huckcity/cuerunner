@@ -134,10 +134,10 @@ test('MIDI tab offers a default output port select', async () => {
   await closeSettings(page)
 })
 
-test('the Show tab sets the wireless alarms, and refuses a value that would misfire', async () => {
+test('the Wireless tab sets the alarms, and refuses a value that would misfire', async () => {
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Wireless', exact: true }).click()
 
   const quiet = dialog.locator('#settings-rf-gone')
   await expect(quiet).toHaveValue('6')
@@ -161,7 +161,7 @@ test('the Show tab sets the wireless alarms, and refuses a value that would misf
   // It is workspace state, not dialog state, so it is still there next time.
   await openSettings(page)
   await page.getByRole('dialog', { name: 'Settings' })
-    .getByRole('button', { name: 'Show', exact: true }).click()
+    .getByRole('button', { name: 'Wireless', exact: true }).click()
   await expect(page.locator('#settings-rf-gone')).toHaveValue('30')
   await closeSettings(page)
 })
@@ -175,5 +175,32 @@ test('settings dialog closes with Escape key', async () => {
 test('settings dialog opens via Ctrl+, keyboard shortcut', async () => {
   await page.keyboard.press('Control+,')
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+  await closeSettings(page)
+})
+
+test('settings are grouped by what is being set up, and close one way', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+
+  await expect(dialog.locator('.settings-tab')).toHaveText(['Audio', 'MIDI', 'Network', 'Wireless', 'License'])
+
+  // MIDI out and MIDI in are one subject, on one tab.
+  await dialog.getByRole('button', { name: 'MIDI', exact: true }).click()
+  await expect(dialog.locator('.field-row', { hasText: 'Default output' })).toBeVisible()
+  await expect(dialog.locator('#settings-midi-in')).toBeVisible()
+
+  // What listens on the network, and what serves it, together.
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
+  await expect(dialog.locator('#settings-osc-in')).toBeVisible()
+  await expect(dialog.locator('#settings-presence')).toBeVisible()
+  await expect(dialog.locator('#settings-companion')).toBeVisible()
+  await expect(dialog.locator('#settings-rf-gone')).toHaveCount(0)
+
+  // The packs' readings and the alarms they raise.
+  await dialog.getByRole('button', { name: 'Wireless', exact: true }).click()
+  await expect(dialog.locator('#settings-rf-gone')).toBeVisible()
+
+  // The ✕ and Escape close it; there is no second Close at the bottom.
+  await expect(dialog.getByRole('button', { name: /Close/ })).toHaveCount(1)
   await closeSettings(page)
 })

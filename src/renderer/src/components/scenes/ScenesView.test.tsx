@@ -393,7 +393,7 @@ describe('ScenesView', () => {
 
     useStore.setState({ settingsTab: null })
     await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-sources')!.click() })
-    expect(useStore.getState().settingsTab).toBe('show')
+    expect(useStore.getState().settingsTab).toBe('wireless')
   })
 
   it('marks the column the desk is in, and the rows follow it', async () => {

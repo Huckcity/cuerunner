@@ -33,7 +33,7 @@ export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'audio' | 'midi' | 'show' | 'license'
+export type SettingsTab = 'audio' | 'midi' | 'network' | 'wireless' | 'license'
 
 export interface RunningCue {
   cueId: string

@@ -333,7 +333,7 @@ test('OSC /winslab/panic silences the show through the licensed input', async ({
 
     await openSettings(page)
     const dialog = page.getByRole('dialog', { name: 'Settings' })
-    await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Network', exact: true }).click()
     await dialog.locator('#settings-osc-in').check()
     await dialog.locator('#settings-osc-port').fill(String(port))
     await dialog.locator('#settings-osc-port').blur()

@@ -376,7 +376,7 @@ export async function oscPortOfItsOwn(page: Page): Promise<number> {
   await page.locator('.toolbar-brand').click()
   await page.getByRole('button', { name: /Settings/ }).click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await dialog.locator('#settings-osc-port').fill(String(port))
   await dialog.locator('#settings-osc-port').blur()
   await expect(dialog.locator('.settings-service[data-service="osc-in"]')).toContainText(String(port))

@@ -76,11 +76,11 @@ test('a machine with no key runs the free half and locks the rest', async () => 
   expect(await inRenderer("window.winslab.script.readDocument('/etc/hosts', null)"))
     .toEqual({ ok: false, error: 'The script panel is part of WinsLab Pro.' })
 
-  // The Show tab says why its services are not listening, and leads to the tab that fixes
+  // The Network tab says why its services are not listening, and leads to the tab that fixes
   // it — an operator who has configured a port and sees it stopped deserves the reason.
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await expect(dialog.locator('.license-hint')).toContainText('WinsLab Pro')
   await dialog.getByRole('button', { name: 'Enter a license key' }).click()
   await expect(dialog.locator('#license-key')).toBeVisible()
@@ -110,9 +110,9 @@ test('a key pasted into Settings unlocks without a restart, and stays put', asyn
   await expect(page.locator('.rf-panel')).toBeVisible()
   await expect(page.locator('.pro-mark')).toHaveCount(0)
 
-  // The Show tab stops explaining itself and starts reporting the services.
+  // The Network tab stops explaining itself and starts reporting the services.
   await openSettings(page)
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await expect(page.locator('.license-hint')).toHaveCount(0)
   await dialog.getByRole('button', { name: 'Close' }).click()
 
@@ -171,7 +171,7 @@ test('a key entered mid-session starts the show settings, not the defaults', asy
   // A show that does not listen for OSC at all, which is not the default.
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await dialog.locator('#settings-osc-in').uncheck()
 
   // Enter the key on the tab next door.
@@ -182,7 +182,7 @@ test('a key entered mid-session starts the show settings, not the defaults', asy
 
   // The service the show turned off is off: what came up was the workspace's settings,
   // not the defaults main holds for a launch, which would have opened port 53000 first.
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await expect(dialog.locator('.settings-service[data-service="osc-in"]'))
     .toHaveAttribute('data-state', 'stopped')
   await dialog.getByRole('button', { name: 'Close' }).click()

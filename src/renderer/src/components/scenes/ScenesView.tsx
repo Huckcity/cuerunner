@@ -327,7 +327,7 @@ export function ScenesView() {
               </button>
               <button
                 className="scenes-sources"
-                onClick={() => openSettings('show')}
+                onClick={() => openSettings('wireless')}
                 title="Where the packs' battery and RF readings come from"
               >
                 Telemetry…

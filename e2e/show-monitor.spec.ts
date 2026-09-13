@@ -36,11 +36,11 @@ async function openMonitor(page: Page): Promise<void> {
   await expect(monitor(page)).toBeVisible()
 }
 
-async function openShowSettings(page: Page) {
+async function openShowSettings(page: Page, tab: 'Network' | 'MIDI' = 'Network') {
   await page.locator('.toolbar-brand').click()
   await page.getByRole('button', { name: /Settings/ }).click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Show', exact: true }).click()
+  await dialog.getByRole('button', { name: tab, exact: true }).click()
   return dialog
 }
 
@@ -95,7 +95,7 @@ test('moving the OSC port rebinds the listener in place', async () => {
 })
 
 test('enabling MIDI input starts the service and reports what it found', async () => {
-  const dialog = await openShowSettings(page)
+  const dialog = await openShowSettings(page, 'MIDI')
   await dialog.locator('#settings-midi-in').check()
 
   // A test machine with no MIDI inputs has a service that says so rather than one that

@@ -177,13 +177,6 @@
 
 .settings-source-remove:hover { color: var(--fg-primary); background: var(--bg-hover); }
 
-.settings-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-}
-
 /* A warning the engine is holding until the condition goes away: memory pressure,
    a stalled stream. It stays on screen while the engine still reports it. */
 .settings-warning {
@@ -208,3 +201,7 @@
   padding: var(--space-2) var(--space-3);
   margin-top: var(--space-2);
 }
+
+/* Why a Pro tab's services are not running: first on the tab, with room under it before
+   the fields start. */
+.settings-body .license-hint { margin: 0 0 var(--space-3); }
