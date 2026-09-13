@@ -219,6 +219,13 @@ export function storedMediaPath(absolutePath: string, workspaceDir: string): str
 // The on-disk form: the runtime workspace, with each named file's location written as
 // both its workspace-relative form and the absolute original it had at this save. The
 // caller's object is left alone.
+//
+// The bytes are a function of the show's state and the folder it is saved into — nothing
+// else, and in particular not the clock. The show's id and createdAt arrive in the
+// workspace object and are written back as they came; the renderer owns them
+// (`buildWorkspace`) and only mints them for a new show. That is what makes a showfile
+// diffable: saving a show that has not changed puts the same bytes back.
+// Held by src/main/workspace/determinism.test.ts and e2e/showfile.spec.ts.
 function serialiseWorkspace(workspace: Workspace, workspaceDir: string): string {
   const cues = workspace.cues.map(cue => {
     if (cue.type !== 'audio' || cue.filePath === '') return cue

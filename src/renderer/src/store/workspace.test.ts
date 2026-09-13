@@ -130,3 +130,36 @@ describe('store — saveSucceeded', () => {
     expect(useStore.getState().workspaceName).toBe('Renamed')
   })
 })
+
+describe('store — the show’s identity', () => {
+  beforeEach(resetStore)
+
+  const loaded = { id: 'w-my-show', createdAt: '2026-01-01T00:00:00.000Z' }
+
+  it('is adopted from the file that is opened', () => {
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab', undefined, undefined, undefined, loaded)
+
+    expect(useStore.getState().workspaceId).toBe('w-my-show')
+    expect(useStore.getState().workspaceCreatedAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+
+  it('is minted for a new show, not inherited from the last one', () => {
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab', undefined, undefined, undefined, loaded)
+
+    useStore.getState().loadWorkspace([], 'Untitled', null)
+
+    const { workspaceId, workspaceCreatedAt } = useStore.getState()
+    expect(workspaceId).not.toBe('w-my-show')
+    expect(workspaceId).not.toBe('')
+    expect(Number.isNaN(Date.parse(workspaceCreatedAt))).toBe(false)
+  })
+
+  it('survives editing the show', () => {
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab', undefined, undefined, undefined, loaded)
+
+    useStore.getState().updateCue('c1', { name: 'Renamed' })
+
+    expect(useStore.getState().workspaceId).toBe('w-my-show')
+    expect(useStore.getState().workspaceCreatedAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+})

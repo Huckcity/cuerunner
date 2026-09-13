@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
 import type { MissingMedia } from '../../../shared/media'
-import type { AudioSettings, MidiSettings } from '../types/workspace'
+import type { AudioSettings, MidiSettings, WorkspaceIdentity } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
   CompanionSettings,
@@ -90,9 +90,13 @@ const defaultMidiSettings: MidiSettings = {
 }
 
 interface CueListState {
-  // Workspace metadata
+  // Workspace metadata. The identity belongs to the show, not to a save: it comes out of
+  // the file it was opened from and is written back unchanged, so saving a show twice
+  // does not rewrite it. Only a new show — or a template like the demo — mints one.
   workspaceName: string
   workspacePath: string | null
+  workspaceId: string
+  workspaceCreatedAt: string
   isDirty: boolean
 
   // Settings
@@ -224,7 +228,15 @@ interface CueListState {
   redo: () => void
 
   // Workspace lifecycle
-  loadWorkspace: (cues: Cue[], name: string, path: string | null, audioSettings?: AudioSettings, midiSettings?: MidiSettings, showSettings?: ShowSettings) => void
+  loadWorkspace: (
+    cues: Cue[],
+    name: string,
+    path: string | null,
+    audioSettings?: AudioSettings,
+    midiSettings?: MidiSettings,
+    showSettings?: ShowSettings,
+    identity?: WorkspaceIdentity
+  ) => void
   saveSucceeded: (path: string, name: string) => void
   setWorkspaceName: (name: string) => void
 }
@@ -356,6 +368,10 @@ function isDescendant(cues: Cue[], cueId: string, possibleAncestorId: string): b
 export const useStore = create<CueListState>((set) => ({
   workspaceName: 'Untitled',
   workspacePath: null,
+  // A session that has not opened a file is a new show, so it starts with an identity of
+  // its own — minted once here, not once per save.
+  workspaceId: crypto.randomUUID(),
+  workspaceCreatedAt: new Date().toISOString(),
   isDirty: false,
 
   audioSettings: { ...defaultAudioSettings },
@@ -639,10 +655,13 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings) => set({
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity) => set({
     cues,
     workspaceName: name,
     workspacePath: path,
+    // Loading a file adopts the show's identity; a load without one is a new show.
+    workspaceId: identity?.id ?? crypto.randomUUID(),
+    workspaceCreatedAt: identity?.createdAt ?? new Date().toISOString(),
     isDirty: false,
     selectedId: cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null,
     running: new Map(),

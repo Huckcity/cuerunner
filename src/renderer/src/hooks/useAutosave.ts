@@ -10,10 +10,13 @@ const AUTOSAVE_INTERVAL_MS = 30_000
 export function useAutosave(): void {
   useEffect(() => {
     const timer = setInterval(() => {
-      const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings } =
+      const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt } =
         useStore.getState()
       if (!isDirty) return
-      const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
+      const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+        id: workspaceId,
+        createdAt: workspaceCreatedAt
+      })
       window.winslab.workspace.autosave(snapshot, workspacePath).catch(() => {
         // A snapshot that cannot be written must never interrupt the show. The next
         // tick tries again.

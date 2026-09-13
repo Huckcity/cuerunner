@@ -17,6 +17,17 @@ export interface MidiSettings {
   outputPortName: string
 }
 
+/**
+ * A show's identity as it is stored: minted once, when the show is made, and carried by
+ * every save afterwards. Saving is not a new show, so nothing about a save may change
+ * these — a file that rewrites its own id and date on every write cannot be diffed, and
+ * a version history is the point of the format.
+ */
+export interface WorkspaceIdentity {
+  id: string
+  createdAt: string
+}
+
 export interface Workspace {
   version: 1
   id: string

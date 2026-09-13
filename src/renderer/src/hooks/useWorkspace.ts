@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useStore } from '../store'
 import type { MissingMedia } from '../../../shared/media'
-import type { Workspace } from '../types/workspace'
+import type { Workspace, WorkspaceIdentity } from '../types/workspace'
 import { buildWorkspace } from '../utils/workspace'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
@@ -14,14 +14,17 @@ function reportFailure(message: string): void {
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 async function guardDirty(): Promise<boolean> {
-  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, saveSucceeded } =
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
 
   const response = await window.winslab.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+      id: workspaceId,
+      createdAt: workspaceCreatedAt
+    })
     let savedPath: string | null
     try {
       savedPath = await window.winslab.workspace.save(ws, workspacePath)
@@ -44,7 +47,12 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function loadIntoStore(workspace: Workspace, path: string | null, missingMedia: MissingMedia[]): void {
+function loadIntoStore(
+  workspace: Workspace,
+  path: string | null,
+  missingMedia: MissingMedia[],
+  identity?: WorkspaceIdentity
+): void {
   const store = useStore.getState()
   store.loadWorkspace(
     workspace.cues,
@@ -52,7 +60,8 @@ function loadIntoStore(workspace: Workspace, path: string | null, missingMedia: 
     path,
     workspace.audioSettings,
     workspace.midiSettings,
-    workspace.showSettings
+    workspace.showSettings,
+    identity ?? { id: workspace.id, createdAt: workspace.createdAt }
   )
   store.setMissingMedia(missingMedia)
 }
@@ -63,8 +72,10 @@ export async function openDemoWorkspace(): Promise<void> {
   if (!await guardDirty()) return
   try {
     // The demo's audio is copied out of the app bundle as it loads, so there is never
-    // anything missing to report.
-    loadIntoStore(await window.winslab.workspace.openDemo(), null, [])
+    // anything missing to report. It is a template rather than a show someone owns, so
+    // it takes a fresh identity: saving it as your own show must not keep the demo's.
+    const demo = await window.winslab.workspace.openDemo()
+    loadIntoStore(demo, null, [], { id: crypto.randomUUID(), createdAt: new Date().toISOString() })
   } catch (e) {
     reportFailure(`Could not open the demo workspace: ${message(e)}`)
   }
@@ -76,9 +87,12 @@ export async function openDemoWorkspace(): Promise<void> {
  * Whatever is left is reported again for another pick.
  */
 export async function relinkMissingMedia(cueId: string): Promise<void> {
-  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings } =
+  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt } =
     useStore.getState()
-  const workspace = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
+  const workspace = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+    id: workspaceId,
+    createdAt: workspaceCreatedAt
+  })
   try {
     const result = await window.winslab.workspace.relink(workspace, workspacePath, cueId)
     // Only cues that actually moved are written back, so an unresolved file keeps the
@@ -147,9 +161,12 @@ export function useWorkspace() {
   }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, saveSucceeded } =
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt, saveSucceeded } =
       useStore.getState()
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+      id: workspaceId,
+      createdAt: workspaceCreatedAt
+    })
     try {
       const savedPath = await window.winslab.workspace.save(ws, workspacePath)
       if (!savedPath) return false
@@ -164,9 +181,14 @@ export function useWorkspace() {
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, cues, audioSettings, midiSettings, showSettings, saveSucceeded } =
+    const { workspaceName, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt, saveSucceeded } =
       useStore.getState()
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings)
+    // Saving under another name is the same show in another file: the identity travels
+    // with it, so both copies stay recognisably the same show.
+    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+      id: workspaceId,
+      createdAt: workspaceCreatedAt
+    })
     try {
       const savedPath = await window.winslab.workspace.saveAs(ws)
       if (!savedPath) return false
