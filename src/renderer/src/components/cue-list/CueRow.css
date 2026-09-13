@@ -155,3 +155,10 @@
   background: var(--accent-blue);
   transition: width 0.05s linear;
 }
+
+/* A playing cue's length becomes what is left of it. */
+.col-dur-remaining {
+  font-family: var(--font-mono);
+  color: var(--fg-primary);
+  font-variant-numeric: tabular-nums;
+}

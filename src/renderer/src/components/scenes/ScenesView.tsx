@@ -293,7 +293,7 @@ export function ScenesView() {
             </span>
             {next !== null && (
               <span className="scenes-next">
-                <span className="scenes-where-label">next</span>{' '}
+                <span className="scenes-where-label">next scene</span>{' '}
                 <strong className="scenes-where-number">{nextIndex + 1}</strong>{' '}
                 <span className="scenes-where-name" title={next.name}>{next.name}</span>
               </span>

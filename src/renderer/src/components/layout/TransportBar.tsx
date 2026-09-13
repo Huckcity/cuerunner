@@ -28,11 +28,7 @@ export function TransportBar({ strip, onToggleStrip, onShowStrip }: Props) {
   useKeyboard(go, stop, panic)
   const pro = usePro()
 
-  const selectedId = useStore(s => s.selectedId)
-  const cues = useStore(s => s.cues)
   const running = useStore(s => s.running)
-
-  const selectedCue = cues.find(c => c.id === selectedId)
   const runningCount = running.size
 
   return (
@@ -71,13 +67,7 @@ export function TransportBar({ strip, onToggleStrip, onShowStrip }: Props) {
           ✕ PANIC
         </button>
       </div>
-      <div className="transport-right">
-        {selectedCue && (
-          <span className="next-cue">
-            <strong>{selectedCue.number}</strong> {selectedCue.name}
-          </span>
-        )}
-      </div>
+      <div className="transport-right" />
     </div>
   )
 }

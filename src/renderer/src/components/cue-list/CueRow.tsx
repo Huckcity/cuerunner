@@ -3,6 +3,7 @@ import type { Cue, CueColor } from '../../types/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
+import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { audioEngine } from '../../engine/audioEngineClient'
 import './CueRow.css'
 
@@ -49,27 +50,36 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
   const inputRef = useRef<HTMLInputElement>(null)
   const rafRef = useRef<number>(0)
   const progressFillRef = useRef<HTMLDivElement>(null)
+  const remainingRef = useRef<HTMLSpanElement>(null)
 
   const isAudioPlaying = cue.type === 'audio' && runState?.state === 'playing'
+  const totalMs = durationMs ?? cue.duration
+  // While a cue with a known length plays, its Duration cell counts down what is left:
+  // the question in the booth is how long until it ends, not how long it was.
+  const countingDown = runState?.state === 'playing' && (totalMs > 0 || isAudioPlaying)
 
   useEffect(() => {
-    if (!isAudioPlaying) {
+    if (!countingDown || !runState) {
       if (progressFillRef.current) progressFillRef.current.style.width = '0%'
       return
     }
     const tick = () => {
       // The engine's own position, cached by the playback client at tick rate.
-      const prog = audioEngine.getProgress(cue.id)
+      const prog = cue.type === 'audio' ? audioEngine.getProgress(cue.id) : null
       if (progressFillRef.current) {
         // runFraction spans the whole run (loop repeats included); the waveform
         // panel keeps using fraction, which is position inside the file.
         progressFillRef.current.style.width = `${(prog?.runFraction ?? 0) * 100}%`
       }
+      if (remainingRef.current) {
+        const { remainingMs } = runTiming(cue, runState, totalMs, Date.now(), prog)
+        remainingRef.current.textContent = remainingMs === null ? '' : `−${formatRunTime(remainingMs)}`
+      }
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [isAudioPlaying, cue.id])
+  }, [countingDown, runState, totalMs, cue])
 
   const startEdit = (e: React.MouseEvent) => {
     if (!isSelected) return
@@ -158,7 +168,11 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
           <span className="state-pill">post-wait</span>
         )}
       </span>
-      <span className="col-dur">{formatDuration(durationMs ?? cue.duration)}</span>
+      <span className="col-dur">
+        {countingDown
+          ? <span ref={remainingRef} className="col-dur-remaining" />
+          : formatDuration(totalMs)}
+      </span>
       <span className="col-pre">{cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}</span>
       <span className="col-post">{cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}</span>
       <span className="col-adv">{cue.advance !== 'none' ? cue.advance : ''}</span>
