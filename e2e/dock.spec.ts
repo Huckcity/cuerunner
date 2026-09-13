@@ -22,6 +22,44 @@ async function listBottom(page: Page): Promise<number> {
   return Math.round(box!.y + box!.height)
 }
 
+/**
+ * The geometry the assertions below are about, as one line. A layout failure that only
+ * says "513 vs 423" costs a CI round trip to explain; this is what explains it.
+ */
+async function geometry(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const rect = (selector: string): { top: number; bottom: number; height: number } | null => {
+      const element = document.querySelector(selector)
+      if (element === null) return null
+      const box = element.getBoundingClientRect()
+      return { top: Math.round(box.top), bottom: Math.round(box.bottom), height: Math.round(box.height) }
+    }
+    const dock = document.querySelector('.dock')
+    const panel = document.querySelector('.dock-body > *')
+    return JSON.stringify({
+      innerHeight: window.innerHeight,
+      dpr: window.devicePixelRatio,
+      dock: rect('.dock'),
+      dockStyle: dock?.getAttribute('style') ?? null,
+      dockState: { tab: dock?.getAttribute('data-tab'), collapsed: dock?.getAttribute('data-collapsed') },
+      body: rect('.dock-body'),
+      panel: panel?.className ?? null,
+      panelBox: rect('.dock-body > *'),
+      main: rect('.app-main'),
+      list: rect('.cue-list-container'),
+      transport: rect('.transport-bar')
+    })
+  })
+}
+
+/** The list must still end where it did; if it does not, say what the layout was. */
+async function expectSameBottom(page: Page, expected: number): Promise<void> {
+  const bottom = await listBottom(page)
+  if (bottom !== expected) {
+    throw new Error(`the cue list ends at ${bottom}, not ${expected}\n${await geometry(page)}`)
+  }
+}
+
 test('walking the list changes what the dock shows, never where the list ends', async () => {
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
   await expect(page.locator('.dock .waveform-panel')).toBeVisible()
@@ -30,28 +68,31 @@ test('walking the list changes what the dock shows, never where the list ends', 
   // A sequence group has no waveform; it used to take the waveform's 110px back.
   await page.locator('.cue-row', { hasText: 'Act 1' }).first().click()
   await expect(page.locator('.dock .dock-summary')).toContainText('Act 1')
-  expect(await listBottom(page)).toBe(bottom)
+  await expectSameBottom(page, bottom)
 
   // A timeline group draws its timeline in the same space.
   await page.locator('.cue-row', { hasText: 'Walk-out' }).first().click()
   await expect(page.locator('.dock .timeline-panel')).toBeVisible()
-  expect(await listBottom(page)).toBe(bottom)
+  await expectSameBottom(page, bottom)
 
   // And so does a panel.
   await page.locator('.btn-log').click()
   await expect(page.locator('.dock .log-panel')).toBeVisible()
-  expect(await listBottom(page)).toBe(bottom)
+  await expectSameBottom(page, bottom)
 })
 
 test('the dock folds away to its tabs and gives the list the room', async () => {
   const bottom = await listBottom(page)
   await page.locator('.dock-collapse').click()
   await expect(page.locator('.dock')).toHaveAttribute('data-collapsed', 'true')
-  expect(await listBottom(page)).toBeGreaterThan(bottom + 100)
+  const collapsed = await listBottom(page)
+  if (collapsed <= bottom + 100) {
+    throw new Error(`folding the dock moved the list's end from ${bottom} to ${collapsed}\n${await geometry(page)}`)
+  }
 
   await page.locator('.btn-cue').click()
   await expect(page.locator('.dock')).toHaveAttribute('data-collapsed', 'false')
-  expect(await listBottom(page)).toBe(bottom)
+  await expectSameBottom(page, bottom)
 })
 
 test('the dock is as tall as the operator drags it', async () => {
@@ -64,7 +105,8 @@ test('the dock is as tall as the operator drags it', async () => {
   await page.mouse.up()
 
   const after = await page.locator('.dock').boundingBox()
-  expect(Math.round(after!.height - before!.height)).toBe(80)
+  const grew = Math.round(after!.height - before!.height)
+  if (grew !== 80) throw new Error(`dragging the dock 80px changed it by ${grew}\n${await geometry(page)}`)
 })
 
 test('the dock keeps its 60% of a window that shrinks under it', async () => {
@@ -76,7 +118,7 @@ test('the dock keeps its 60% of a window that shrinks under it', async () => {
   await page.mouse.move(handle!.x + 200, grip - 400, { steps: 5 })
   await page.mouse.up()
   const tall = Math.round((await page.locator('.dock').boundingBox())!.height)
-  expect(tall).toBeGreaterThan(400)
+  if (tall <= 400) throw new Error(`a dock dragged to the top only reached ${tall}\n${await geometry(page)}`)
 
   // A window the operator drags smaller: the dock gives the room back rather than
   // sitting on the cue list at a height the window no longer has.
@@ -86,7 +128,8 @@ test('the dock keeps its 60% of a window that shrinks under it', async () => {
 
   const innerHeight = await page.evaluate(() => window.innerHeight)
   const fitted = Math.round((await page.locator('.dock').boundingBox())!.height)
-  expect(fitted).toBeLessThanOrEqual(Math.max(110, Math.round(innerHeight * 0.6)))
+  const limit = Math.max(110, Math.round(innerHeight * 0.6))
+  if (fitted > limit) throw new Error(`the dock fitted a ${innerHeight}px window at ${fitted}, over ${limit}\n${await geometry(page)}`)
 
   // And the handle still works there: the dock moves with the pointer from the height it
   // is drawn at, not from the taller one the window is refusing it.
@@ -95,7 +138,10 @@ test('the dock keeps its 60% of a window that shrinks under it', async () => {
   await page.mouse.down()
   await page.mouse.move(grip2.x + 200, grip2.y + grip2.height / 2 + 50, { steps: 3 })
   await page.mouse.up()
-  expect(Math.round((await page.locator('.dock').boundingBox())!.height)).toBe(fitted - 50)
+  const draggedDown = Math.round((await page.locator('.dock').boundingBox())!.height)
+  if (draggedDown !== fitted - 50) {
+    throw new Error(`dragging the fitted dock down 50px left it at ${draggedDown}, not ${fitted - 50}\n${await geometry(page)}`)
+  }
 })
 
 test('the transport carries the show and nothing else', async () => {

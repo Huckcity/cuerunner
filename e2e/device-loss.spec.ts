@@ -92,7 +92,23 @@ test('a device that goes away mid-show silences the show, says why, and the show
 
   // The show is not over: the same cue plays again on the same engine.
   await playWalkInForever()
-  await expect.poll(engineVoices, { timeout: 15_000, message: 'nothing played after the device came back' }).toBeGreaterThanOrEqual(1)
+  try {
+    await expect.poll(engineVoices, { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
+  } catch (error) {
+    // Saying only "it did not play" costs a CI round trip; say what the engine and the
+    // session log had to say about it.
+    const info = await app.evaluate(async () => {
+      const harness = globalThis.__winslabDevHarness
+      return harness ? await harness.engineInfo() : null
+    })
+    const log = await page.locator('.log-panel').innerText().catch(() => '')
+    throw new Error(
+      `nothing played after the device came back\n` +
+        `engine warnings: ${JSON.stringify(info?.warnings ?? [])}\n` +
+        `engine lastError: ${String(info?.lastError)}\n` +
+        `session log tail: ${log.slice(-600)}`
+    )
+  }
   await page.locator('.btn-stop').click()
   await expect.poll(engineVoices, { timeout: 10_000 }).toBe(0)
 })
