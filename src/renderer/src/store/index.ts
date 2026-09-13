@@ -211,6 +211,14 @@ interface CueListState {
   deskSceneId: string | null
   setDeskState: (deskState: Record<string, boolean>, deskSceneId: string | null) => void
 
+  /**
+   * Whether the Scenes view is being edited. Session state, and off whenever a show is
+   * opened: the view is run from at curtain up, so it starts where a stray click changes
+   * nothing, and editing is a press somebody made on purpose.
+   */
+  scenesEditing: boolean
+  setScenesEditing: (editing: boolean) => void
+
   // Undo / redo
   undo: () => void
   redo: () => void
@@ -365,6 +373,7 @@ export const useStore = create<CueListState>((set) => ({
   showEvents: [],
   deskState: {},
   deskSceneId: null,
+  scenesEditing: false,
   audioDeviceError: null,
   notice: null,
   missingMedia: [],
@@ -648,6 +657,7 @@ export const useStore = create<CueListState>((set) => ({
     // Nothing has been told to this show's desk yet.
     deskState: {},
     deskSceneId: null,
+    scenesEditing: false,
     past: [],
     future: [],
   }),
@@ -706,7 +716,7 @@ export const useStore = create<CueListState>((set) => ({
   })),
 
   // Scenes and their mics are the grid's work, so a delete or a stray cell is one undo
-  // away from being back. The desk groups and the lock are set up once and are not.
+  // away from being back. The desk groups are set up once and are not.
   updateScenesSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, scenes: { ...s.showSettings.scenes, ...patch } },
     past: 'list' in patch ? pushPast(s.past, snapshotOf(s)) : s.past,
@@ -732,7 +742,9 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
-  setDeskState: (deskState, deskSceneId) => set({ deskState, deskSceneId })
+  setDeskState: (deskState, deskSceneId) => set({ deskState, deskSceneId }),
+
+  setScenesEditing: (scenesEditing) => set({ scenesEditing })
 }))
 
 export function useSelectedCue(): Cue | null {

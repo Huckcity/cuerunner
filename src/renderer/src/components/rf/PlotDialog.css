@@ -69,7 +69,11 @@
 
 .plot-pack-row {
   display: grid;
-  grid-template-columns: 140px 150px 170px 170px 1fr 26px;
+  /* Every field gets a floor it can be read at: fixed widths left the notes whatever was
+     over, which at the dialog's width was one letter of its placeholder. */
+  grid-template-columns:
+    minmax(90px, 0.9fr) minmax(100px, 1fr) minmax(120px, 1.1fr) minmax(120px, 1.1fr)
+    minmax(140px, 1.4fr) 26px;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);

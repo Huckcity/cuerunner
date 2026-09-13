@@ -324,6 +324,13 @@ export async function openScenesView(page: Page): Promise<void> {
   await expect(page.locator('.scenes-view')).toBeVisible()
 }
 
+/** The view opens to run the show; building one starts with the press that edits it. */
+export async function editScenes(page: Page): Promise<void> {
+  const edit = page.locator('.scenes-edit')
+  if ((await edit.getAttribute('data-editing')) !== 'true') await edit.click()
+  await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
+}
+
 /**
  * A show set up through the view, in the order an operator would do it: a group on the
  * desk driven over OSC at a port the test owns, the pack that feeds it patched in the mic
@@ -332,6 +339,7 @@ export async function openScenesView(page: Page): Promise<void> {
 export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await liveRack(page)
   await openScenesView(page)
+  await editScenes(page)
 
   await page.locator('.scenes-groups-toggle').click()
   const groups = page.locator('.scenes-groups')

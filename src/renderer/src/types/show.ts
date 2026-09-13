@@ -204,11 +204,6 @@ export interface MicScene {
 export interface ScenesSettings {
   channels: DeskChannel[]
   list: MicScene[]
-  /**
-   * Locked for the performance: the matrix still recalls scenes, and nothing in the show
-   * can be edited — a stray click at curtain up must not change who is open.
-   */
-  locked: boolean
 }
 
 export interface RfPlot {
@@ -420,7 +415,7 @@ export function defaultScriptSettings(): ScriptSettings {
 
 /** A show with no scenes still has a desk; the list starts empty rather than guessed at. */
 export function defaultScenesSettings(): ScenesSettings {
-  return { channels: [], list: [], locked: false }
+  return { channels: [], list: [] }
 }
 
 /** The companion is off until it is asked for: it puts the show on the network. */
@@ -456,8 +451,7 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
     companion: { ...defaults.companion, ...settings?.companion },
     scenes: {
       channels: settings?.scenes?.channels ?? defaults.scenes.channels,
-      list: settings?.scenes?.list ?? defaults.scenes.list,
-      locked: settings?.scenes?.locked ?? defaults.scenes.locked
+      list: settings?.scenes?.list ?? defaults.scenes.list
     }
   }
 }

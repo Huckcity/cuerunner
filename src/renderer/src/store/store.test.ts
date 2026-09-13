@@ -504,14 +504,19 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.scenes.list).toEqual([NUMBER])
   })
 
-  it('the lock is not an edit: it does not enter the history', () => {
-    const defaults = defaultShowSettings()
-    useStore.setState({ showSettings: defaults })
+  it('editing the Scenes view is a mode, not an edit, and opening a show ends it', () => {
+    useStore.setState({ showSettings: defaultShowSettings(), isDirty: false })
     const before = useStore.getState().past.length
 
-    useStore.getState().updateScenesSettings({ locked: true })
+    useStore.getState().setScenesEditing(true)
 
+    expect(useStore.getState().scenesEditing).toBe(true)
     expect(useStore.getState().past).toHaveLength(before)
+    expect(useStore.getState().isDirty).toBe(false)
+
+    // A show that has just been opened is run from, not edited.
+    useStore.getState().loadWorkspace([], 'Next show', null)
+    expect(useStore.getState().scenesEditing).toBe(false)
   })
 
   it('loadWorkspace clears undo and redo stacks', () => {

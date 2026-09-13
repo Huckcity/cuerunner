@@ -16,6 +16,7 @@ import {
   updateScene
 } from '../../utils/scenes'
 import type { DeskChannel, ScenesSettings } from '../../types/show'
+import { PlotDialog } from '../rf/PlotDialog'
 import './ScenesView.css'
 
 // A group with no patch of its own yet: one address per group, opened with a 1 and
@@ -148,12 +149,12 @@ function oscFields(channel: DeskChannel): { host: string; port: number; address:
  * Scenes: the mic plot down the side, the scenes across the top, and the desk groups
  * they drive.
  *
- * This is the curtain-up view and the only place the show is built, so the two jobs are
- * one surface: the grid answers who is open now, and the drawer under it holds the desk
- * groups those mics feed. Editing a cell changes the scene, never the desk; the header's
- * Apply is the press that moves the room, and it only appears once there is a difference
- * to send. The lock stops every edit — cells, names, the drawer — and nothing else,
- * because recalling is what this view is for.
+ * This is the curtain-up view and the place the show is built, so it has two modes. It
+ * always opens to run it: recall, Apply and Mics off are live, and nothing else can be
+ * changed by a stray click. Edit is the deliberate press that gives the grid, the names,
+ * the desk groups and the mic plot back, and Done hands the view back to the show.
+ * Editing a cell changes the scene, never the desk; the header's Apply is the press that
+ * moves the room, and it only appears once there is a difference to send.
  */
 export function ScenesView() {
   const scenes = useStore(s => s.showSettings.scenes)
@@ -162,8 +163,12 @@ export function ScenesView() {
   const deskSceneId = useStore(s => s.deskSceneId)
   const updateScenesSettings = useStore(s => s.updateScenesSettings)
   const removeDeskGroup = useStore(s => s.removeDeskGroup)
+  const editing = useStore(s => s.scenesEditing)
+  const setEditing = useStore(s => s.setScenesEditing)
+  const openSettings = useStore(s => s.openSettings)
 
   const [groupsOpen, setGroupsOpen] = useState(false)
+  const [plotOpen, setPlotOpen] = useState(false)
   const [ports, setPorts] = useState<string[]>([])
 
   useEffect(() => {
@@ -172,7 +177,7 @@ export function ScenesView() {
     return () => { mounted = false }
   }, [])
 
-  const locked = scenes.locked
+  const locked = !editing
   const currentIndex = scenes.list.findIndex(scene => scene.id === deskSceneId)
   const current = currentIndex === -1 ? null : scenes.list[currentIndex]
 
@@ -275,7 +280,7 @@ export function ScenesView() {
   }
 
   return (
-    <div className="scenes-view" data-locked={locked}>
+    <div className="scenes-view" data-editing={editing}>
       <div className="scenes-header">
         <span className="scenes-title">Scenes</span>
         {scenes.list.length > 0 && (
@@ -304,14 +309,31 @@ export function ScenesView() {
           {`${micCount(plot.packs.length)} · ${scenes.list.length} scene${scenes.list.length === 1 ? '' : 's'}`}
         </span>
         <div className="scenes-actions">
-          <button
-            className="scenes-add"
-            disabled={locked}
-            onClick={() => writeList(addScene(scenes))}
-            title="Add a scene and open mics in it"
-          >
-            Add scene
-          </button>
+          {editing && (
+            <>
+              <button
+                className="scenes-add"
+                onClick={() => writeList(addScene(scenes))}
+                title="Add a scene and open mics in it"
+              >
+                Add scene
+              </button>
+              <button
+                className="scenes-plot"
+                onClick={() => setPlotOpen(true)}
+                title="The cast, their packs, and the group each pack feeds"
+              >
+                Mic plot…
+              </button>
+              <button
+                className="scenes-sources"
+                onClick={() => openSettings('show')}
+                title="Where the packs' battery and RF readings come from"
+              >
+                Telemetry…
+              </button>
+            </>
+          )}
           <button
             className="scenes-mics-off"
             onClick={() => { void recallScene(null) }}
@@ -337,26 +359,41 @@ export function ScenesView() {
             </button>
           )}
           <button
-            className="matrix-lock"
-            data-locked={locked}
-            onClick={() => updateScenesSettings({ locked: !locked })}
-            title={locked ? 'Allow the show to be edited' : 'Lock the show for the performance'}
+            className="scenes-edit"
+            data-editing={editing}
+            onClick={() => setEditing(!editing)}
+            title={editing ? 'Back to running the show: recall stays live, nothing else moves' : 'Edit scenes, mics and desk groups'}
           >
-            {locked ? 'Locked' : 'Lock'}
+            {editing ? 'Done' : 'Edit'}
           </button>
         </div>
       </div>
 
-      {locked && (
-        <div className="scenes-locked-hint">
-          Locked for the show — recall is live, editing is not.
+      {editing && (
+        <div className="scenes-editing-hint">
+          Editing — cells, names and groups change the show. Done when finished.
         </div>
       )}
 
       {scenes.list.length === 0 ? (
-        <div className="matrix-empty">No scenes yet — add one from the header.</div>
+        <div className="matrix-empty">
+          <span>No scenes yet.</span>
+          {editing ? (
+            <span>Add one from the header.</span>
+          ) : (
+            <button className="matrix-empty-action" onClick={() => setEditing(true)}>Edit to add one</button>
+          )}
+        </div>
       ) : plot.packs.length === 0 ? (
-        <div className="matrix-empty">The mic plot is empty — add packs in the RF panel.</div>
+        <div className="matrix-empty">
+          <span>The mic plot is empty: the rows are the packs your cast wears.</span>
+          <button
+            className="matrix-empty-action"
+            onClick={() => { setEditing(true); setPlotOpen(true) }}
+          >
+            Enter the mic plot…
+          </button>
+        </div>
       ) : (
         <div className="matrix-scroll" ref={scrollerRef}>
           <div
@@ -380,41 +417,44 @@ export function ScenesView() {
                   data-current={scene.id === deskSceneId}
                   data-pending={pending}
                 >
-                  <CommitInput
-                    className="scene-name-field"
-                    value={scene.name}
-                    placeholder="Scene name"
-                    aria-label="Scene name"
-                    size={SCENE_NAME_SIZE}
-                    disabled={locked}
-                    // A scene without a name is a row nobody can find again, so the old
-                    // name stays until something is actually typed.
-                    onCommit={name => {
-                      if (name.trim() === '') return
-                      writeList(updateScene(scenes, scene.id, { name }))
-                    }}
-                  />
-                  {/* How many mics a scene opens is the block of colour next to it, so the
-                      column says a name and two presses and nothing else. */}
-                  <div className="matrix-scene-actions">
-                    <button
-                      className="matrix-recall"
-                      onClick={() => { void recallScene(scene.id) }}
-                      title="Send this scene to the desk"
-                      aria-label={`Recall ${scene.name}`}
-                    >
-                      →
-                    </button>
-                    <button
-                      className="matrix-scene-remove"
-                      aria-label={`Remove ${scene.name}`}
-                      title="Remove this scene — undo puts it back"
+                  <div className="matrix-scene-name">
+                    <CommitInput
+                      className="scene-name-field"
+                      value={scene.name}
+                      placeholder="Scene name"
+                      aria-label="Scene name"
+                      size={SCENE_NAME_SIZE}
                       disabled={locked}
-                      onClick={() => writeList(removeScene(scenes, scene.id))}
-                    >
-                      ✕
-                    </button>
+                      // A scene without a name is a row nobody can find again, so the old
+                      // name stays until something is actually typed.
+                      onCommit={name => {
+                        if (name.trim() === '') return
+                        writeList(updateScene(scenes, scene.id, { name }))
+                      }}
+                    />
+                    {/* Removing sits with the name, away from recall, and only exists
+                        while the show is being edited. */}
+                    {editing && (
+                      <button
+                        className="matrix-scene-remove"
+                        aria-label={`Remove ${scene.name}`}
+                        title="Remove this scene — undo puts it back"
+                        onClick={() => writeList(removeScene(scenes, scene.id))}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
+                  {/* How many mics a scene opens is the block of colour next to it, so the
+                      column says a name and the press that recalls it. */}
+                  <button
+                    className="matrix-recall"
+                    onClick={() => { void recallScene(scene.id) }}
+                    title="Send this scene to the desk"
+                    aria-label={`Recall ${scene.name}`}
+                  >
+                    →
+                  </button>
                 </div>
               )
             })}
@@ -471,7 +511,7 @@ export function ScenesView() {
 
       {/* The drawer sits under the grid rather than inside it, so the groups are edited
           without the header or the scene columns moving; it scrolls its own rows and
-          never widens the view. While the show is locked it still opens — reading the
+          never widens the view. While the show is running it still opens — reading the
           groups is what it is for at curtain up — but nothing in it can be changed. */}
       {groupsOpen && (
         <div className="scenes-groups">
@@ -578,14 +618,15 @@ export function ScenesView() {
                     </>
                   )}
 
-                  <button
-                    className="group-remove"
-                    aria-label={`Remove ${channel.label}`}
-                    disabled={locked}
-                    onClick={() => removeGroup(channel)}
-                  >
-                    ✕
-                  </button>
+                  {editing && (
+                    <button
+                      className="group-remove"
+                      aria-label={`Remove ${channel.label}`}
+                      onClick={() => removeGroup(channel)}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
 
                 <div className="group-summary">
@@ -605,15 +646,21 @@ export function ScenesView() {
               </div>
             )
           })}
-          <button
-            className="group-add"
-            disabled={locked}
-            onClick={() => writeChannels(addDeskChannel(scenes))}
-          >
-            Add group
-          </button>
+          {editing && (
+            <button
+              className="group-add"
+              onClick={() => writeChannels(addDeskChannel(scenes))}
+            >
+              Add group
+            </button>
+          )}
+          {!editing && groupRows.length === 0 && (
+            <div className="scenes-groups-empty">No desk groups yet. Edit to add one.</div>
+          )}
         </div>
       )}
+
+      {plotOpen && <PlotDialog onClose={() => setPlotOpen(false)} />}
     </div>
   )
 }

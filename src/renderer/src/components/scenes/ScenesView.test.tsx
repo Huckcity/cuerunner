@@ -2,8 +2,8 @@
 // edited: a row per pack, a column per scene, the column the desk was last taken to lit
 // where the show is, and the desk groups in a drawer below. These tests pin that glance,
 // every editing control the old dialog used to hold, the two presses that move the desk —
-// a column's Recall and the header's Apply — and the lock that stops every edit while
-// leaving recall, Apply and Mics off working.
+// a column's Recall and the header's Apply — and the run mode it opens in, which stops
+// every edit while leaving recall, Apply and Mics off working.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -74,10 +74,9 @@ function channel(overrides: Partial<DeskChannel> = {}): DeskChannel {
 
 function settings(
   list: MicScene[],
-  locked = false,
   channels: DeskChannel[] = [ENSEMBLE, BAND]
 ): ScenesSettings {
-  return { channels, list, locked }
+  return { channels, list }
 }
 
 describe('ScenesView', () => {
@@ -111,7 +110,8 @@ describe('ScenesView', () => {
     useStore.setState({
       showSettings: defaultShowSettings(),
       deskState: {},
-      deskSceneId: null
+      deskSceneId: null,
+      scenesEditing: false
     })
   })
 
@@ -121,6 +121,8 @@ describe('ScenesView', () => {
     deskState?: Record<string, boolean>
     deskSceneId?: string | null
     ports?: string[]
+    /** Most of these tests are about editing, so they start in edit mode. */
+    editing?: boolean
   }
 
   async function show(state: ViewState = {}): Promise<void> {
@@ -134,7 +136,8 @@ describe('ScenesView', () => {
           scenes: state.scenes ?? defaults.scenes
         },
         deskState: state.deskState ?? {},
-        deskSceneId: state.deskSceneId ?? null
+        deskSceneId: state.deskSceneId ?? null,
+        scenesEditing: state.editing ?? true
       })
       root.render(<ScenesView />)
     })
@@ -290,8 +293,8 @@ describe('ScenesView', () => {
     await show({ scenes: settings([]), plot: PLOT })
 
     expect(container.querySelectorAll('.matrix-scene')).toHaveLength(0)
-    expect(container.querySelector('.matrix-empty')?.textContent)
-      .toBe('No scenes yet — add one from the header.')
+    expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet.')
+    expect(container.querySelector('.matrix-empty')?.textContent).toContain('Add one from the header.')
 
     await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-add')!.click() })
 
@@ -325,9 +328,10 @@ describe('ScenesView', () => {
     expect(container.querySelectorAll('.matrix-scene')).toHaveLength(1)
   })
 
-  it('locks every cell but leaves the column recall live', async () => {
+  it('runs the show without editing it: every cell is still, the column recall is live', async () => {
     await show({
-      scenes: settings([OPENING, INTERVAL], true),
+      scenes: settings([OPENING, INTERVAL]),
+      editing: false,
       plot: PLOT,
       deskState: { 'dca-ensemble': true, 'dca-band': false },
       deskSceneId: 's1'
@@ -357,23 +361,39 @@ describe('ScenesView', () => {
     expect(useStore.getState().deskSceneId).toBe('s2')
   })
 
-  it('writes the lock from the header and says why', async () => {
+  it('opens to run the show, and Edit and Done switch it, saying what the clicks now do', async () => {
+    await show({ scenes: settings([OPENING]), plot: PLOT, editing: false })
+
+    const edit = container.querySelector<HTMLButtonElement>('.scenes-edit')
+    expect(edit?.textContent).toBe('Edit')
+    expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('false')
+    expect(container.querySelector('.scenes-editing-hint')).toBeNull()
+    expect(container.querySelector('.scenes-add')).toBeNull()
+    expect(container.querySelector('.scenes-plot')).toBeNull()
+
+    await act(async () => { edit?.click() })
+
+    // A mode of the window, not a change to the show.
+    expect(useStore.getState().scenesEditing).toBe(true)
+    expect(edit?.textContent).toBe('Done')
+    expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('true')
+    expect(container.querySelector('.scenes-editing-hint')?.textContent).toContain('Editing')
+    expect(container.querySelector('.scenes-add')).not.toBeNull()
+    expect(container.querySelector('.scenes-plot')).not.toBeNull()
+
+    await act(async () => { edit?.click() })
+    expect(useStore.getState().scenesEditing).toBe(false)
+  })
+
+  it('opens the mic plot and the telemetry sources from edit mode', async () => {
     await show({ scenes: settings([OPENING]), plot: PLOT })
 
-    const lock = container.querySelector<HTMLButtonElement>('.matrix-lock')
-    expect(lock?.textContent).toBe('Lock')
-    expect(lock?.getAttribute('data-locked')).toBe('false')
-    expect(container.querySelector('.scenes-view')?.getAttribute('data-locked')).toBe('false')
-    expect(container.querySelector('.scenes-locked-hint')).toBeNull()
+    await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-plot')!.click() })
+    expect(container.querySelector('.plot-dialog')).not.toBeNull()
 
-    await act(async () => { lock?.click() })
-
-    expect(useStore.getState().showSettings.scenes.locked).toBe(true)
-    expect(lock?.getAttribute('data-locked')).toBe('true')
-    expect(lock?.textContent).toBe('Locked')
-    expect(container.querySelector('.scenes-view')?.getAttribute('data-locked')).toBe('true')
-    expect(container.querySelector('.scenes-locked-hint')?.textContent)
-      .toBe('Locked for the show — recall is live, editing is not.')
+    useStore.setState({ settingsTab: null })
+    await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-sources')!.click() })
+    expect(useStore.getState().settingsTab).toBe('show')
   })
 
   it('marks the column the desk is in, and the rows follow it', async () => {
@@ -484,12 +504,29 @@ describe('ScenesView', () => {
     expect(useStore.getState().deskSceneId).toBe('s1')
   })
 
-  it('says the plot is empty when there are no packs', async () => {
-    await show({ scenes: settings([OPENING]), plot: { performers: [], packs: [] } })
+  it('says the plot is empty, and goes straight to entering it', async () => {
+    await show({ scenes: settings([OPENING]), plot: { performers: [], packs: [] }, editing: false })
 
-    expect(container.querySelector('.matrix-empty')?.textContent)
-      .toBe('The mic plot is empty — add packs in the RF panel.')
+    expect(container.querySelector('.matrix-empty')?.textContent).toContain('The mic plot is empty')
     expect(container.querySelectorAll('.matrix-row').length).toBe(0)
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.matrix-empty-action')!.click()
+    })
+
+    expect(useStore.getState().scenesEditing).toBe(true)
+    expect(container.querySelector('.plot-dialog')).not.toBeNull()
+  })
+
+  it('offers Edit from an empty show that is being run', async () => {
+    await show({ scenes: settings([]), plot: PLOT, editing: false })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.matrix-empty-action')!.click()
+    })
+
+    expect(useStore.getState().scenesEditing).toBe(true)
+    expect(container.querySelector('.scenes-add')).not.toBeNull()
   })
 
   it('keeps the desk groups shut until the header asks for them', async () => {
@@ -508,7 +545,7 @@ describe('ScenesView', () => {
   })
 
   it('adds a group in the drawer and configures MIDI delivery', async () => {
-    await show({ scenes: settings([OPENING], false, []), plot: PLOT, ports: ['Yamaha', 'IEM rack'] })
+    await show({ scenes: settings([OPENING], []), plot: PLOT, ports: ['Yamaha', 'IEM rack'] })
     await openGroups()
 
     expect(container.querySelectorAll('.group-row')).toHaveLength(0)
@@ -535,7 +572,7 @@ describe('ScenesView', () => {
 
   it('switches a group to OSC and sends one address for both states', async () => {
     await show({
-      scenes: settings([OPENING], false, [
+      scenes: settings([OPENING], [
         channel({ id: 'dca-1', label: 'DCA 2', ...midiNoteMessages('Yamaha', 3, 12) })
       ]),
       plot: PLOT
@@ -560,7 +597,7 @@ describe('ScenesView', () => {
 
   it('leaves a group alone on recall when its delivery is none', async () => {
     await show({
-      scenes: settings([OPENING], false, [
+      scenes: settings([OPENING], [
         channel({ id: 'dca-1', label: 'DCA 2', ...midiNoteMessages('Yamaha', 3, 12) })
       ]),
       plot: PLOT
@@ -577,7 +614,7 @@ describe('ScenesView', () => {
 
   it('removes a group and clears the pointer on the packs that fed it', async () => {
     await show({
-      scenes: settings([OPENING], false, [
+      scenes: settings([OPENING], [
         channel({ id: 'dca-1' }),
         channel({ id: 'dca-2', label: 'DCA 2' })
       ]),
@@ -609,7 +646,7 @@ describe('ScenesView', () => {
 
   it('shows which mics feed each group, and where that leaves it', async () => {
     await show({
-      scenes: settings([OPENING], false, [
+      scenes: settings([OPENING], [
         ENSEMBLE,
         BAND,
         channel({ id: 'dca-3', label: 'DCA 3' })
@@ -632,9 +669,10 @@ describe('ScenesView', () => {
       .toEqual(['live', 'muted', '—'])
   })
 
-  it('disables every editing control while locked, leaving recall, Apply and Mics off', async () => {
+  it('while the show is run, nothing edits it; recall, Apply and Mics off stay live', async () => {
     await show({
-      scenes: settings([OPENING, INTERVAL], true),
+      scenes: settings([OPENING, INTERVAL]),
+      editing: false,
       plot: PLOT,
       deskState: { 'dca-ensemble': true, 'dca-band': true },
       deskSceneId: 's1',
@@ -647,10 +685,10 @@ describe('ScenesView', () => {
         .map(control => control.disabled)
 
     expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
-    expect(disabled('.matrix-scene-remove').every(Boolean)).toBe(true)
-    expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
+    // What removes a scene is not there at all, rather than there and asleep beside recall.
+    expect(container.querySelector('.matrix-scene-remove')).toBeNull()
     expect(disabled('.matrix-cell').every(Boolean)).toBe(true)
-    expect(container.querySelector<HTMLButtonElement>('.scenes-add')?.disabled).toBe(true)
+    expect(container.querySelector('.scenes-add')).toBeNull()
     expect(disabled('.group-label').every(Boolean)).toBe(true)
     expect(disabled('.group-delivery').every(Boolean)).toBe(true)
     expect(disabled('.group-port').every(Boolean)).toBe(true)
@@ -659,12 +697,12 @@ describe('ScenesView', () => {
     expect(disabled('.group-host').every(Boolean)).toBe(true)
     expect(disabled('.group-osc-port').every(Boolean)).toBe(true)
     expect(disabled('.group-address').every(Boolean)).toBe(true)
-    expect(disabled('.group-remove').every(Boolean)).toBe(true)
-    expect(container.querySelector<HTMLButtonElement>('.group-add')?.disabled).toBe(true)
+    expect(container.querySelector('.group-remove')).toBeNull()
+    expect(container.querySelector('.group-add')).toBeNull()
 
-    // The lock is how the show is unlocked, and recall is what the view is for; both the
-    // Mics off press and the drawer's own toggle stay live.
-    expect(container.querySelector<HTMLButtonElement>('.matrix-lock')?.disabled).toBe(false)
+    // Edit is how the show is edited, and recall is what the view is for; both the Mics
+    // off press and the drawer's own toggle stay live.
+    expect(container.querySelector<HTMLButtonElement>('.scenes-edit')?.disabled).toBe(false)
     expect(container.querySelector<HTMLButtonElement>('.scenes-groups-toggle')?.disabled).toBe(false)
     expect([...container.querySelectorAll<HTMLButtonElement>('.matrix-recall')]
       .every(recall => !recall.disabled)).toBe(true)

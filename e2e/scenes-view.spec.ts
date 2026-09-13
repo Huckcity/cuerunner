@@ -83,12 +83,12 @@ test('a show with many scenes still fits the window', async () => {
   await expect(page.locator('.matrix-scene')).toHaveCount(13)
 
   // The grid scrolls inside the view. The view itself must not grow past the window, or
-  // the lock and the far scenes end up clipped somewhere unreachable — which is what
+  // the Edit press and the far scenes end up clipped somewhere unreachable — which is what
   // happened before: 1532px of view in a 1280px window, and no visible scroller.
   const measured = await page.evaluate(() => {
     const view = document.querySelector('.scenes-view') as HTMLElement
     const scroll = document.querySelector('.matrix-scroll') as HTMLElement
-    const lock = document.querySelector('.matrix-lock') as HTMLElement
+    const lock = document.querySelector('.scenes-edit') as HTMLElement
     return {
       viewScrollWidth: view.scrollWidth,
       gridScrolls: scroll.scrollWidth > scroll.clientWidth,
@@ -305,36 +305,55 @@ test('mics off closes everything the plot drives', async () => {
   }
 })
 
-test('locking stops editing and leaves recalling alone', async () => {
+test('the view opens to run the show: Edit gives it back, and recalling never stops', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())
 
   try {
     await buildDeskShow(page, desk.port)
 
-    await page.locator('.matrix-lock').click()
-    await expect(page.locator('.scenes-view')).toHaveAttribute('data-locked', 'true')
-    await expect(page.locator('.scenes-locked-hint')).toBeVisible()
+    // Done: the show is being run, and a stray click changes nothing.
+    await page.locator('.scenes-edit').click()
+    await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'false')
+    await expect(page.locator('.scenes-editing-hint')).toHaveCount(0)
 
-    // Nothing can be moved, however hard it is clicked.
     const cell = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
     await expect(cell).toBeDisabled()
     await cell.click({ force: true })
     await expect(cell).toHaveAttribute('data-live', 'false')
-    await expect(page.locator('.scenes-add')).toBeDisabled()
-    await expect(page.locator('.matrix-scene-remove').first()).toBeDisabled()
+    await expect(page.locator('.scenes-add')).toHaveCount(0)
+    await expect(page.locator('.matrix-scene-remove')).toHaveCount(0)
     await expect(page.locator('.scenes-groups .group-label').first()).toBeDisabled()
 
-    // Recalling is what the lock is for: it stays live, so does applying.
+    // Recalling is what the view is for: it stays live.
     await page.locator('.matrix-recall').first().click()
     await expect.poll(() => desk.received.length).toBe(1)
     expect(desk.received[0].args).toEqual([1])
 
-    // And unlocking gives the show back.
-    await page.locator('.matrix-lock').click()
+    // And Edit gives the show back.
+    await page.locator('.scenes-edit').click()
     await expect(cell).toBeEnabled()
-    await expect(page.locator('.scenes-add')).toBeEnabled()
+    await expect(page.locator('.scenes-add')).toBeVisible()
   } finally {
     await desk.close()
   }
+})
+
+test('an opened show always starts out being run, whatever it was left as', async () => {
+  test.setTimeout(60_000)
+  await buildDeskShow(page, freePort())
+  await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
+
+  // The cue toolbar belongs to the cue stack, not to this view.
+  await expect(page.locator('.toolbar-cue-btn').first()).toBeHidden()
+
+  // Opening another show hands the view back to running it. The show was changed, so the
+  // app asks first; the answer is Don't Save, given for the OS's own dialog.
+  await app.evaluate(({ dialog }) => {
+    dialog.showMessageBox = (async () => ({ response: 1, checkboxChecked: false })) as typeof dialog.showMessageBox
+  })
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
+  await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+  await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'false')
 })

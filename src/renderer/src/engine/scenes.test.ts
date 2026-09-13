@@ -13,7 +13,6 @@ const osc = oscMessages('10.0.0.5', 9000, '/dca/2/mute')
 
 function scenes(): ScenesSettings {
   return {
-    locked: false,
     channels: [
       { id: 'dca-1', label: 'DCA 1 — Principals', mute: note.mute, unmute: note.unmute },
       { id: 'dca-2', label: 'DCA 2 — Ensemble', mute: osc.mute, unmute: osc.unmute }

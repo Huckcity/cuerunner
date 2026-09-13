@@ -254,3 +254,5 @@
   background: var(--border);
   flex-shrink: 0;
 }
+
+.toolbar-actions[hidden] { display: none; }

@@ -251,6 +251,8 @@ await page.locator('.btn-script').click()
 // once as the operator watches it, once with the groups open for editing.
 await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
 await page.locator('.scenes-view').waitFor()
+// The view opens to run the show; building one is an Edit away.
+await page.locator('.scenes-edit').click()
 
 // A group on the desk, pointed at a local port so the figure shows a real message.
 await page.locator('.scenes-groups-toggle').click()
@@ -302,8 +304,11 @@ await page.locator('.btn-rf').click()
 // The first number, so the header shows both the scene the desk is on and the one coming.
 await page.locator('.matrix-recall').first().click()
 await page.locator('.matrix-scene[data-current="true"]').waitFor()
+// The first figure is the view as the operator runs the show from it.
+await page.locator('.scenes-edit').click()
 await shot('18-scenes.png', '.scenes-view')
 
+await page.locator('.scenes-edit').click()
 await page.locator('.scenes-groups-toggle').click()
 await groups.waitFor()
 await shot('19-scenes-groups.png', '.scenes-view')

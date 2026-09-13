@@ -22,7 +22,6 @@ const { mute, unmute } = midiNoteMessages('Yamaha', 1, 36)
 
 function setup(): ScenesSettings {
   return {
-    locked: false,
     channels: [
       { id: 'dca-1', label: 'DCA 1 — Principals', mute, unmute },
       { id: 'dca-2', label: 'DCA 2 — Ensemble', mute, unmute },
@@ -43,7 +42,7 @@ function scene(live: string[]): MicScene {
 
 describe('scenes', () => {
   it('names a new scene after the ones already there', () => {
-    const first = addScene({ channels: [], list: [], locked: false })
+    const first = addScene({ channels: [], list: [] })
     const named = addScene(first, '  Quick Change  ')
     const second = addScene(named)
 
@@ -75,8 +74,8 @@ describe('scenes', () => {
 
 describe('desk channels', () => {
   it('labels new groups after the ones already there', () => {
-    expect(addDeskChannel({ channels: [], list: [], locked: false }).channels[0].label).toBe('DCA 1')
-    expect(addDeskChannel({ channels: [], list: [], locked: false }, 'DCA 9 — Pit').channels[0].label).toBe('DCA 9 — Pit')
+    expect(addDeskChannel({ channels: [], list: [] }).channels[0].label).toBe('DCA 1')
+    expect(addDeskChannel({ channels: [], list: [] }, 'DCA 9 — Pit').channels[0].label).toBe('DCA 9 — Pit')
   })
 
   it('updates and removes without touching the scenes', () => {

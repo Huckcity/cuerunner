@@ -6,8 +6,12 @@ import { closeApp, launchApp, mintLicense } from './helpers'
 let app: ElectronApplication
 let page: Page
 
-test.beforeEach(async () => {
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+// Only the Scenes test needs the licensed half. A licensed app listens for OSC on the
+// default port, and every one launched alongside the rest of the suite is one more
+// instance contending for it.
+test.beforeEach(async ({}, testInfo) => {
+  const licensed = testInfo.title.includes('Scenes view')
+  ;({ app, page } = await launchApp(licensed ? { license: mintLicense() } : {}))
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor()

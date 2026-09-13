@@ -125,9 +125,6 @@ export function RfPanel({ onClose }: Props) {
   const updateRfSettings = useStore(s => s.updateRfSettings)
   const dismissAlert = useStore(s => s.dismissAlert)
   const appendLog = useStore(s => s.appendLog)
-  // The lock is the show's, not this panel's: while it is on, the plot cannot be edited
-  // from anywhere — a stray click at curtain up must not change who is wearing what.
-  const locked = useStore(s => s.showSettings.scenes.locked)
 
   // Two views of the same plot: what the packs are doing now, and what the night did to
   // them. The second one is what gets read the next morning, so it is a view rather
@@ -198,9 +195,8 @@ export function RfPanel({ onClose }: Props) {
           )}
           <button
             className="rf-btn rf-edit"
-            disabled={locked}
             onClick={() => setEditing(true)}
-            title={locked ? 'Locked for the show — unlock in the matrix view' : 'Enter the cast, packs and patches'}
+            title="Enter the cast, packs and patches"
           >
             Edit plot…
           </button>
@@ -265,7 +261,6 @@ export function RfPanel({ onClose }: Props) {
             <span>No packs in the plot. Enter the cast and their packs, or load the demo rack.</span>
             <button
               className="rf-edit-btn"
-              disabled={locked}
               onClick={() => setEditing(true)}
             >
               Edit plot…

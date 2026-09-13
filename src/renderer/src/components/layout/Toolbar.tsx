@@ -184,9 +184,11 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
         </div>
       </div>
 
-      <div className="toolbar-divider" />
+      {/* Cues are added to the cue stack, so the buttons that add them live with it: in
+          the Scenes view they would add to a list that is not on screen. */}
+      {view === 'cues' && <div className="toolbar-divider" />}
 
-      <div className="toolbar-actions">
+      <div className="toolbar-actions" hidden={view !== 'cues'}>
         {PRIMARY_CUES.map(({ type, icon, label }) => (
           <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
             {icon} {label}

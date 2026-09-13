@@ -119,11 +119,15 @@
   flex: none;
 }
 
-/* The edits the grid cannot hold: a scene, the all-off press, and the drawer. They read
-   as buttons rather than as state, because that is what they are. */
+/* The edits the grid cannot hold: a scene, the all-off press, the drawer, the plot and
+   where its readings come from. They read as buttons rather than as state, because that
+   is what they are. */
 .scenes-add,
+.scenes-plot,
+.scenes-sources,
 .scenes-mics-off,
-.scenes-groups-toggle {
+.scenes-groups-toggle,
+.scenes-edit {
   height: 22px;
   padding: 0 var(--space-2);
   background: transparent;
@@ -137,8 +141,11 @@
 }
 
 .scenes-add:hover,
+.scenes-plot:hover,
+.scenes-sources:hover,
 .scenes-mics-off:hover,
-.scenes-groups-toggle:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.scenes-groups-toggle:hover,
+.scenes-edit:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 .scenes-groups-toggle[data-open='true'] {
   background: var(--bg-hover);
@@ -146,7 +153,6 @@
   color: var(--fg-primary);
 }
 
-.scenes-add:disabled { opacity: 0.5; cursor: default; }
 
 /* A scene that would move the desk is a thing to do, not a readout: it gets the warning
    colour and the exact number of messages that would go out. */
@@ -165,34 +171,20 @@
 
 .matrix-apply:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
-.matrix-lock {
-  height: 22px;
-  padding: 0 var(--space-2);
-  background: transparent;
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-sm);
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
+/* Editing is the mode that can change the show, so it is the one that is marked: the
+   press says Done in blue, and a line under the header says what the clicks now do. */
+.scenes-edit[data-editing='true'] {
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
 }
 
-.matrix-lock:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-/* A locked show says so in amber all the way across, because the one thing the operator
-   must not do at curtain up is try to edit and wonder why nothing happened. */
-.matrix-lock[data-locked='true'] {
-  border-color: var(--accent-amber);
-  color: var(--accent-amber);
-}
-
-.scenes-locked-hint {
+.scenes-editing-hint {
   flex-shrink: 0;
   padding: var(--space-1) var(--space-3);
-  background: var(--accent-amber-bg);
+  background: var(--accent-blue-glow);
   border-bottom: 1px solid var(--border-soft);
-  color: var(--accent-amber);
+  color: var(--accent-blue);
   font-size: var(--text-sm);
 }
 
@@ -281,17 +273,17 @@
   opacity: 1;
 }
 
-/* The column's presses: recall, which is a symbol because the column has no room to say
-   what its only verb is, and remove beside it. */
-.matrix-scene-actions {
+/* The name, and while editing the mark that removes the scene: kept to the name's row so
+   it is never beside recall, the press the show is run with. */
+.matrix-scene-name {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin-top: 2px;
 }
 
+/* Recall is a symbol because the column has no room to say what its only verb is. */
 .matrix-recall {
-  flex: 1;
+  margin-top: 2px;
   height: 18px;
   padding: 0;
   background: transparent;
@@ -327,7 +319,6 @@
 
 .matrix-scene-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
-.matrix-scene-remove:disabled { opacity: 0.4; cursor: default; }
 
 .matrix-mic {
   position: sticky;
@@ -407,8 +398,32 @@
 .matrix-empty {
   flex: 1;
   min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-3);
   font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+.matrix-empty > span { padding-top: 3px; }
+
+.matrix-empty-action {
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-base);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.matrix-empty-action:hover { background: var(--bg-hover); }
+
+.scenes-groups-empty {
+  font-size: var(--text-sm);
   color: var(--fg-ghost);
 }
 
