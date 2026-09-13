@@ -7,7 +7,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { RfPanel, packState, rfPercent } from './RfPanel'
 import { useStore } from '../../store'
-import { demoSource } from '../../utils/rfDemo'
 import {
   DEMO_PACK_COUNT,
   DEMO_SOURCE_ID,
@@ -139,31 +138,9 @@ describe('RfPanel', () => {
     expect(container.querySelector('.rf-empty')).toBeNull()
     expect(texts('.rf-count')).toEqual([`${DEMO_PACK_COUNT} packs`])
 
-    // A second click replaces the source list rather than stacking a duplicate rack.
-    await act(async () => { headerButton('Demo rack').click() })
-    expect(useStore.getState().showSettings.rf.sources).toHaveLength(1)
-    expect(useStore.getState().showSettings.rf.plot.packs).toHaveLength(DEMO_PACK_COUNT)
-  })
-
-  it('loads the demo rack from the header, and does not throw a real plot away', async () => {
-    await show({ plot: { performers: [], packs: [pack({ id: 'p-mine', label: 'My pack' })] } })
-
-    await act(async () => { headerButton('Demo rack').click() })
-    await act(async () => { headerButton('Demo rack').click() })
-
-    const settings = useStore.getState().showSettings.rf
-    // The source list is replaced rather than stacked, but a cast somebody typed in is
-    // not the demo's to overwrite: only an empty plot gets the demo one.
-    expect(settings.sources).toEqual([demoSource()])
-    expect(settings.plot.packs.map(entry => entry.label)).toEqual(['My pack'])
-  })
-
-  it('loads the demo plot from the header when there is nothing to overwrite', async () => {
-    await show()
-
-    await act(async () => { headerButton('Demo rack').click() })
-
-    expect(useStore.getState().showSettings.rf.plot.packs).toHaveLength(DEMO_PACK_COUNT)
+    // Once there is a plot the demo is no longer offered: the header is the show's.
+    expect(container.querySelector('.rf-demo-btn')).toBeNull()
+    expect(headerButton('Demo rack')).toBeUndefined()
   })
 
   it('closes from the header', async () => {

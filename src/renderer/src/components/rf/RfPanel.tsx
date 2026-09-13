@@ -162,16 +162,11 @@ export function RfPanel({ onClose }: Props) {
     // band changes, never because a neighbour's did.
     .sort((a, b) => BAND_ORDER[a.state] - BAND_ORDER[b.state] || a.index - b.index)
 
+  // The demo rack is offered only while the plot is empty — it is how the feature is
+  // seen before there is a show, not a control the show needs — so it brings its own
+  // plot, and replaces the source list rather than adding a rack beside a real one.
   const addDemo = (): void => {
-    // The demo rack replaces the source list rather than adding to it, so one click shows
-    // the whole feature and a second click cannot stack a duplicate rack. It brings its
-    // own plot only when there is none: a cast somebody typed in is not the demo's to
-    // throw away.
-    const keepsPlot = plot.packs.length > 0
-    updateRfSettings({
-      sources: [demoSource()],
-      ...(keepsPlot ? {} : { plot: demoPlot() })
-    })
+    updateRfSettings({ sources: [demoSource()], plot: demoPlot() })
   }
 
   return (
@@ -199,9 +194,6 @@ export function RfPanel({ onClose }: Props) {
             title="Enter the cast, packs and patches"
           >
             Edit plot…
-          </button>
-          <button className="rf-btn" onClick={addDemo} title="Load the demo rack">
-            Demo rack
           </button>
           <button className="rf-btn" onClick={onClose} title="Hide wireless">
             ✕

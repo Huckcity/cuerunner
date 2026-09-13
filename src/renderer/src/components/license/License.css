@@ -148,17 +148,17 @@
 
 /* The marker on a button, tab or menu item: small enough to sit in a toolbar, amber
    enough to be found without reading. */
+/* The mark on the press that opens a Pro feature: quiet, because it sits in the chrome
+   all night. The amber is for the lock the press leads to, where there is something to
+   do about it. */
 .pro-mark {
   margin-left: var(--space-1);
-  padding: 1px 4px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-amber-bg);
-  color: var(--accent-amber);
-  font-size: 9px;
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--ls-wide);
-  text-transform: uppercase;
-  vertical-align: middle;
+  color: var(--fg-ghost);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-caps);
+  text-transform: lowercase;
+  vertical-align: baseline;
 }
 
 /* ─── The license tab in Settings ─────────────────────────────────────────── */

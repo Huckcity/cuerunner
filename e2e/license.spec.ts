@@ -209,3 +209,24 @@ test('deactivating gives the free half back', async () => {
   await page.locator('.btn-rf').click()
   await expect(page.locator('.pro-lock[data-feature="Wireless"]')).toBeVisible()
 })
+
+test('an unlicensed window marks each Pro feature once, quietly, where it opens', async () => {
+  const { page } = await start()
+
+  // One mark per press that opens a Pro feature, and none on the transport.
+  await expect(page.locator('.transport-bar .pro-mark')).toHaveCount(0)
+  await expect(page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).locator('.pro-mark')).toHaveCount(1)
+  await expect(page.locator('.dock-tab .pro-mark')).toHaveCount(3)
+
+  // Quiet: the amber belongs to the lock the press leads to, not to the chrome.
+  const amber = 'rgb(224, 160, 32)'
+  const colors = await page.locator('.pro-mark').evaluateAll(marks =>
+    marks.map(mark => getComputedStyle(mark).color))
+  expect(colors.every(color => color !== amber)).toBe(true)
+
+  // A cue's Basics tab carries no lock; its Triggers tab does.
+  await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
+  await expect(page.locator('.inspector .pro-lock')).toHaveCount(0)
+  await page.locator('.inspector-tab', { hasText: 'Triggers' }).click()
+  await expect(page.locator('.inspector .pro-lock[data-feature="Triggers"]')).toBeVisible()
+})

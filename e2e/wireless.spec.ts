@@ -116,3 +116,14 @@ test('an alarm stays on screen with every panel closed, and leads back to its pa
   for (let i = 0; i < count; i++) await alerts.first().click()
   await expect(chip).toHaveCount(0)
 })
+
+test('the demo rack is offered while the plot is empty, and not in the header of a real one', async () => {
+  await openWireless(page)
+  await expect(panel(page).locator('.rf-demo-btn')).toBeVisible()
+  await expect(panel(page).locator('.rf-header button', { hasText: 'Demo' })).toHaveCount(0)
+
+  await page.locator('.rf-demo-btn').click()
+  await expect(panel(page).locator('.rf-row')).toHaveCount(12)
+  await expect(panel(page).locator('.rf-demo-btn')).toHaveCount(0)
+  await expect(panel(page).locator('.rf-header button', { hasText: 'Demo' })).toHaveCount(0)
+})

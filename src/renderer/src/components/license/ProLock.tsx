@@ -50,7 +50,11 @@ export function ProLock({ feature, blurb, variant = 'section', onClose }: Props)
   )
 }
 
-/** The marker on a button, tab or menu item whose feature is part of Pro. */
+/**
+ * The marker on the one press that opens a Pro feature — the view switch, a dock tab, a
+ * menu entry — and nowhere else. What the feature is and how to unlock it is the lock's
+ * to say, once it is open.
+ */
 export function ProMark() {
-  return <span className="pro-mark">Pro</span>
+  return <span className="pro-mark" title="Part of WinsLab Pro">pro</span>
 }
