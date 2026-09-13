@@ -44,6 +44,27 @@ function audioCue(overrides: Partial<AudioCue> = {}): AudioCue {
 }
 
 describe('AudioInspector', () => {
+  // The engine answers at 48 kHz (see the audioEngineClient mock); a file at another rate
+  // is stated on the cue it applies to rather than silently resampled.
+  it('says when the file is not at the rate the engine is mixing at', async () => {
+    engine.prepare.mockResolvedValue({
+      cueId: 'a1', filePath: '/shows/acetrack-44k.wav', format: 'wav', durationMs: 4000,
+      sampleRate: 44100, channels: 2, frames: null, fileBytes: 0,
+      streaming: false, cacheHit: false, decodedBytes: 0
+    })
+
+    await show(audioCue({ filePath: '/shows/acetrack-44k.wav' }))
+
+    const notice = container.querySelector('.audio-file-rate')
+    expect(notice?.textContent).toBe('44.1 kHz file — resampled to 48 kHz')
+  })
+
+  it('says nothing about a file that is already at the engine rate', async () => {
+    await show(audioCue({ filePath: '/shows/walk-in.wav' }))
+
+    expect(container.querySelector('.audio-file-rate')).toBeNull()
+  })
+
   let container: HTMLDivElement
   let root: Root
   let warn: ReturnType<typeof vi.spyOn>

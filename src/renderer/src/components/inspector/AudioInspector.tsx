@@ -6,6 +6,8 @@ import { ResetButton } from './ResetButton'
 import { RoutingMatrix } from './RoutingMatrix'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueRunner } from '../../engine/CueRunner'
+import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
+import { resampleNotice } from '../../utils/sampleRate'
 import { AUDIO_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: AudioCue; tab: string }
@@ -19,7 +21,13 @@ export function AudioInspector({ cue, tab }: Props) {
   // Real channel counts, so the matrix offers the channels the file and the device
   // actually have rather than a stereo guess.
   const [fileChannels, setFileChannels] = useState(0)
+  const [fileRate, setFileRate] = useState(0)
   const [deviceChannels, setDeviceChannels] = useState(2)
+  const { info } = useAudioEngineInfo()
+  // A file at another rate is resampled, not wrong — but it is worth saying, on the cue
+  // it applies to, rather than leaving the operator to notice a level or a length that
+  // does not read the way this rig's files do.
+  const rateNotice = resampleNotice(fileRate, info?.sampleRate ?? 0)
 
   // Playback and level are live: a running cue hears the change as the control moves,
   // so a reset has to go through the engine too.
@@ -44,13 +52,21 @@ export function AudioInspector({ cue, tab }: Props) {
     cueRunner.setLiveRouting(cue.id)
   }
 
-  // The file's channel count, from the engine's metadata — the media stays there.
+  // The file's channel count and rate, from the engine's metadata — the media stays there.
   useEffect(() => {
-    if (!cue.filePath) { setFileChannels(0); return }
+    if (!cue.filePath) { setFileChannels(0); setFileRate(0); return }
     let current = true
     audioEngine.prepare(cue.id, cue.filePath)
-      .then(metadata => { if (current) setFileChannels(metadata.channels) })
-      .catch(() => { if (current) setFileChannels(0) })
+      .then(metadata => {
+        if (!current) return
+        setFileChannels(metadata.channels)
+        setFileRate(metadata.sampleRate)
+      })
+      .catch(() => {
+        if (!current) return
+        setFileChannels(0)
+        setFileRate(0)
+      })
     return () => { current = false }
   }, [cue.id, cue.filePath])
 
@@ -77,6 +93,7 @@ export function AudioInspector({ cue, tab }: Props) {
       const metadata = await audioEngine.prepare(cue.id, path)
       set({ filePath: path, duration: Math.round(metadata.durationMs) })
       setFileChannels(metadata.channels)
+      setFileRate(metadata.sampleRate)
     } catch (e) {
       // The file is still selected; only its length is unknown.
       console.warn('Could not read audio metadata:', e)
@@ -145,6 +162,12 @@ export function AudioInspector({ cue, tab }: Props) {
       </div>
       {folder !== '' && (
         <p className="inspector-hint audio-file-folder" title={folder}>{folder}</p>
+      )}
+      {rateNotice !== null && (
+        <p className="inspector-hint audio-file-rate"
+          title="The engine resamples this file into the rig's rate; pitch and tempo are unchanged.">
+          {rateNotice}
+        </p>
       )}
       <div className="field-section-title">Playback</div>
       <div className="field-row">

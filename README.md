@@ -288,6 +288,14 @@ processes and the engine speak.
 - **Device I/O**: miniaudio (MIT-0). Windows WASAPI shared **and** exclusive, macOS Core
   Audio, Linux PulseAudio / ALSA / JACK. Exclusive access is requested, never assumed: if
   the device or mode asked for cannot be honoured, `configure` fails and says why.
+- **One device at a time**: one output device is opened, and devices are deliberately not
+  aggregated into one. Clock discipline across devices belongs to the operating system (an
+  aggregate device) or to a Dante/AES67 layer — not to the show software; a rig with more
+  channels presents them on one device.
+- **Sample rates**: files keep their own rate and the engine resamples into the device's,
+  so a 44.1 kHz file on a 48 kHz rig plays at the right pitch and tempo. A cue whose file
+  is not at the running rate says so under its file name, rather than leaving the operator
+  to infer it.
 - **Decoding**: WAV, MP3, FLAC (dr_libs) and Ogg Vorbis (stb_vorbis) are compiled in.
   M4A/AAC and ALAC use the platform codec — Media Foundation on Windows, AudioToolbox on
   macOS — and on Linux the LGPL-only FFmpeg helper described under *Packaging

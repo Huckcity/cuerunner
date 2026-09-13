@@ -405,7 +405,7 @@
               <tr><th>Field</th><th>Range</th><th>Notes</th></tr>
             </thead>
             <tbody>
-              <tr><td>File</td><td>—</td><td>Browse, or drag files onto the cue list. Picking a file decodes it and fills in the duration.</td></tr>
+              <tr><td>File</td><td>—</td><td>Browse, or drag files onto the cue list. Picking a file decodes it and fills in the duration. A file that is not at the rig's sample rate says so underneath it — the engine resamples, so the pitch and tempo are unchanged.</td></tr>
               <tr><td>Rate</td><td>0.25x – 4x</td><td>Playback speed. Applies live.</td></tr>
               <tr><td>Trim</td><td>0 – 200%</td><td>Per-cue gain, separate from Volume. Applies live.</td></tr>
               <tr><td>Volume</td><td>0 – 100%</td><td>Applies live to the playing cue.</td></tr>
@@ -1273,6 +1273,7 @@ console.log(r.stdout.trim())</code></pre>
           <li><strong>Group length is unknown for playlist and random groups.</strong> Their Duration column shows <em>–</em>, because the length depends on how the operator steps through them.</li>
           <li><strong>Listeners are listen-only.</strong> OSC input and MIDI input receive, show, and can fire cues — but WinsLab does not act as a MIDI or OSC destination that other software queries.</li>
           <li><strong>Wireless telemetry needs a source that speaks the documented JSON.</strong> Shure's System API, Sennheiser's receiver protocol and Dante's control protocol are not spoken directly, so a rack needs a small bridge between it and WinsLab — or the demo rack, which needs nothing. See <a href="#wireless">Wireless and the mic plot</a>.</li>
+          <li><strong>One audio device at a time.</strong> WinsLab opens one output device and does not aggregate several into one; clock discipline across devices belongs to the operating system (an aggregate device) or to a Dante/AES67 layer. A rig with more channels presents them on one device.</li>
           <li><strong>Presence reports, it does not route.</strong> The network service notices that a device is there and when it leaves. Subscriptions, clocking and patching stay in Dante Controller or the device's own software.</li>
           <li><strong>Recording is not built in.</strong> WinsLab does not capture multitrack audio; a recorder runs alongside it. Triggers and OSC are how the two are tied together — a cue that arms the recorder, or a message from it that fires a cue.</li>
           <li><strong>Script cues are unsandboxed.</strong> Treat a workspace file as executable code.</li>
