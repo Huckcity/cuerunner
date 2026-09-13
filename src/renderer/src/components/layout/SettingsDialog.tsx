@@ -27,6 +27,11 @@ interface NumberFieldProps {
   onCommit: (value: number) => void
 }
 
+/** A backend that has no device to configure, so no device request can ever be honoured. */
+function backendHasNoDevice(backend: string): boolean {
+  return backend === 'silent' || backend === 'offline'
+}
+
 /**
  * An integer field that commits when it is left rather than on every keystroke: binding
  * "5" on the way to "53000" would move a listener somewhere nobody asked for, and an
@@ -273,7 +278,13 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 allow it the engine refuses the setting rather than falling back quietly, and
                 its reason appears here.
               </p>
-              {audioDeviceError && (
+              {/* A backend with no device at all — the silent and offline ones a test or
+                  a dev run uses — refuses every device request by definition, including
+                  the one this window sends when it opens. That is not a fault anyone can
+                  act on, and a red line that never clears teaches people to ignore red
+                  lines; the Backend row below already says which engine this is. A real
+                  device's refusal is shown in the engine's own words. */}
+              {audioDeviceError !== null && info !== null && !backendHasNoDevice(info.backend) && (
                 <p className="settings-device-error" role="alert">{audioDeviceError}</p>
               )}
 

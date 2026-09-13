@@ -83,6 +83,12 @@ test('Audio tab reports exactly what the engine says it is running', async () =>
     + ` · ${info!.media.decodeUnderruns} ${info!.media.decodeUnderruns === 1 ? 'decode underrun' : 'decode underruns'}`
   )
 
+  // The silent backend refuses every device request, including the one the window
+  // sends when it opens — and that is not a fault anyone can act on, so it is not shown
+  // as one. The Backend row above already says which engine this is; the red line is
+  // kept for a real device's refusal, in the engine's own words.
+  await expect(dialog.locator('.settings-device-error')).toHaveCount(0)
+
   // The latency is either a number labelled with how it was arrived at, or it is
   // honestly unknown — never a number pretending to be measured.
   const expectedLatency = info!.latencySource === 'unknown' || info!.latencyMs === null

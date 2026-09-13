@@ -52,7 +52,7 @@ export interface CueRunResult {
   /** Network cues: status of the response, when one arrived. */
   status?: number
   statusText?: string
-  /** Failure detail — a fetch/CORS/timeout error, an HTTP error status, or a thrown script error. */
+  /** Failure detail — a connection or timeout error, an HTTP error status, or a thrown script error. */
   error?: string
   /** Network cues: the start of the response body, capped at NETWORK_BODY_LIMIT characters. */
   body?: string
