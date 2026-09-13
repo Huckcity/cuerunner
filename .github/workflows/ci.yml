@@ -1,7 +1,7 @@
-# The Linux jobs run on the self-hosted runner in the homelab (`ubox`, the labels below).
-# The repository's included Actions minutes are what the lanes that cannot be self-hosted
-# need — Windows and macOS, billed at 2x and 10x. The runner host, and how to replace it,
-# are in CLAUDE.md → CI runners.
+# The Linux jobs run on the self-hosted runner in the homelab (`ubox`) and the macOS lane
+# on the Mac mini next to it — machines that would otherwise be idle, and macOS is billed
+# at ten times the Linux rate. What is left on GitHub's runners is Windows, which has no
+# self-hosted home yet. Both hosts, and how to replace them, are in CLAUDE.md → CI runners.
 name: CI
 
 on:
@@ -149,7 +149,10 @@ jobs:
             label: linux
           - runner: windows-latest
             label: windows
-          - runner: macos-latest
+          # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the
+          # .dmg ships for, at none of the 10x minutes. It is a launchd agent in the
+          # login session the suite needs (CLAUDE.md → CI runners).
+          - runner: [self-hosted, macos, arm64, mac-mini]
             label: macos
     steps:
       - uses: actions/checkout@v4
