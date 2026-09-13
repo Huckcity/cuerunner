@@ -68,6 +68,8 @@ export function App() {
 
   useEffect(() => {
     return window.winslab.app.onMenuAction((action) => {
+      // The File menu's actions are the toolbar's (useWorkspace lives there).
+      if (action !== 'undo' && action !== 'redo') return
       // The menu accelerator swallows the keystroke, so a focused text field never
       // receives it. Route the action to the field's own editing undo instead of the
       // cue history (which only covers cues).
@@ -83,7 +85,7 @@ export function App() {
 
       const store = useStore.getState()
       if (action === 'undo') store.undo()
-      else store.redo()
+      else if (action === 'redo') store.redo()
     })
   }, [])
 

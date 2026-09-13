@@ -5,7 +5,13 @@ import type { CueType } from '../../types/cue'
 import { ProMark } from '../license/ProLock'
 import { CUE_ICON } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
+import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import './Toolbar.css'
+
+/** An Electron accelerator, written for this keyboard. */
+function shortcutLabel(accelerator: string): string {
+  return formatShortcut(accelerator.replace('CmdOrCtrl', 'Mod'))
+}
 
 const PRIMARY_CUES: { type: CueType; label: string }[] = [
   { type: 'audio', label: 'Audio' },
@@ -105,6 +111,35 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     await action()
   }
 
+  // One set of actions for both File menus: the one in the window and the application's.
+  const fileActions: Record<FileMenuAction, () => unknown> = {
+    'new': newWorkspace,
+    'open': openWorkspace,
+    'open-demo': openDemoWorkspace,
+    'save': save,
+    'save-as': saveAs,
+    'settings': onOpenSettings
+  }
+  const fileActionsRef = useRef(fileActions)
+  fileActionsRef.current = fileActions
+
+  useEffect(() => window.winslab.app.onMenuAction(action => {
+    if (action === 'undo' || action === 'redo') return
+    void fileActionsRef.current[action]()
+  }), [])
+
+  const fileItem = (item: FileMenuItem) => (
+    <button key={item.action} data-action={item.action} onClick={() => handleMenuAction(fileActions[item.action])}>
+      <span>{item.label}</span>
+      {item.accelerator && <kbd>{shortcutLabel(item.accelerator)}</kbd>}
+    </button>
+  )
+  // Everything in the shared list but Settings, which goes last, after the recent files.
+  const [settingsItem] = FILE_MENU.filter((entry): entry is FileMenuItem =>
+    entry !== 'separator' && entry.action === 'settings')
+  const mainEntries = FILE_MENU.filter(entry => entry !== settingsItem)
+  while (mainEntries[mainEntries.length - 1] === 'separator') mainEntries.pop()
+
   const commitName = () => {
     const val = nameRef.current?.value.trim()
     if (val) setWorkspaceName(val)
@@ -112,7 +147,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   }
 
   const baseName = workspacePath
-    ? workspacePath.split('/').pop()?.replace('.wlab', '') ?? workspaceName
+    ? workspacePath.split(/[\\/]/).pop()?.replace('.wlab', '') ?? workspaceName
     : workspaceName
 
   return (
@@ -124,22 +159,9 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           </button>
           {fileMenuOpen && (
             <div className="file-menu">
-              <button onClick={() => handleMenuAction(newWorkspace)}>
-                <span>New</span><kbd>{formatShortcut('Mod+N')}</kbd>
-              </button>
-              <button onClick={() => handleMenuAction(openWorkspace)}>
-                <span>Open…</span><kbd>{formatShortcut('Mod+O')}</kbd>
-              </button>
-              <button onClick={() => handleMenuAction(openDemoWorkspace)}>
-                <span>Open Demo Workspace</span>
-              </button>
-              <div className="file-menu-separator" />
-              <button onClick={() => handleMenuAction(save)}>
-                <span>Save</span><kbd>{formatShortcut('Mod+S')}</kbd>
-              </button>
-              <button onClick={() => handleMenuAction(saveAs)}>
-                <span>Save As…</span><kbd>{formatShortcut('Mod+Shift+S')}</kbd>
-              </button>
+              {mainEntries.map((entry, index) => entry === 'separator'
+                ? <div key={`separator-${index}`} className="file-menu-separator" />
+                : fileItem(entry))}
               {recentFiles.length > 0 && (
                 <>
                   <div className="file-menu-separator" />
@@ -151,15 +173,17 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                       onClick={() => handleMenuAction(() => openRecent(p))}
                       title={p}
                     >
-                      <span>{p.split('/').pop()}</span>
+                      <span>{p.split(/[\\/]/).pop()}</span>
                     </button>
                   ))}
                 </>
               )}
-              <div className="file-menu-separator" />
-              <button onClick={() => handleMenuAction(onOpenSettings)}>
-                <span>Settings…</span><kbd>{formatShortcut('Mod+,')}</kbd>
-              </button>
+              {settingsItem && (
+                <>
+                  <div className="file-menu-separator" />
+                  {fileItem(settingsItem)}
+                </>
+              )}
             </div>
           )}
         </div>

@@ -9,6 +9,7 @@ import type { NetworkRequest, NetworkResult } from './types/network'
 import type { PlaybackPanic } from './types/playback'
 import type { MissingMedia } from '../../shared/media'
 import type { AudioEngineBridge } from '../../shared/audio'
+import type { MenuAction } from '../../shared/fileMenu'
 
 interface WinslabBridge {
   /** `process.platform` of the machine the app is running on. */
@@ -16,7 +17,7 @@ interface WinslabBridge {
   getPathForFile: (file: File) => string
   app: {
     onCloseRequested: (callback: () => void) => () => void
-    onMenuAction: (callback: (action: 'undo' | 'redo') => void) => () => void
+    onMenuAction: (callback: (action: MenuAction) => void) => () => void
     confirmClose: () => Promise<void>
     rendererCrash: () => Promise<{ reason: string; at: number } | null>
     onMainError: (callback: (message: string) => void) => () => void

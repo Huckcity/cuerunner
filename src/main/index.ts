@@ -7,6 +7,7 @@ import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
+import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -48,24 +49,65 @@ process.on('unhandledRejection', (reason) => {
 // renderer decides whether the action belongs to a focused text field or to the
 // cue history. A programmatic click from a test has no focused window, hence the
 // fallback to the first open window.
-function sendMenuAction(action: 'undo' | 'redo'): void {
+function sendMenuAction(action: MenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   target?.webContents.send('app:menu-action', action)
 }
 
+// The File menu is the window's work — every item runs in the renderer, where the show
+// is — so each one is a message to it. The list itself is shared with the WinsLab ▾ button
+// in the window, which draws the same items from the same definition.
+function fileMenuItems(options: { withSettings: boolean }): Electron.MenuItemConstructorOptions[] {
+  return FILE_MENU
+    .filter(entry => options.withSettings || entry === 'separator' || entry.action !== 'settings')
+    .map((entry): Electron.MenuItemConstructorOptions => entry === 'separator'
+      ? { type: 'separator' }
+      : {
+          id: fileMenuItemId(entry.action),
+          label: entry.label,
+          accelerator: entry.accelerator,
+          click: () => sendMenuAction(entry.action)
+        })
+    // A list that ends on a separator (Settings taken out, on a Mac) ends on nothing.
+    .filter((item, index, items) => !(item.type === 'separator' && index === items.length - 1))
+}
+
 function createMenu(): void {
+  const mac = process.platform === 'darwin'
+  const about: Electron.MenuItemConstructorOptions = {
+    label: 'About WinsLab',
+    click: () => app.showAboutPanel()
+  }
+  // A Mac keeps About, Settings and Quit under the app's own name; Windows and Linux put
+  // Settings and Exit in File and About in Help, and have no menu named after the app —
+  // which, on a bar drawn in the window, would sit over the WinsLab ▾ button saying
+  // something different.
+  const settings = FILE_MENU.find(entry => entry !== 'separator' && entry.action === 'settings')
   const template: Electron.MenuItemConstructorOptions[] = [
+    ...(mac
+      ? [{
+          label: 'WinsLab',
+          submenu: [
+            about,
+            { type: 'separator' as const },
+            ...(settings && settings !== 'separator'
+              ? [{
+                  id: fileMenuItemId('settings'),
+                  label: settings.label,
+                  accelerator: settings.accelerator,
+                  click: () => sendMenuAction('settings')
+                }]
+              : []),
+            { type: 'separator' as const },
+            { role: 'quit' as const }
+          ]
+        }]
+      : []),
     {
-      label: 'WinsLab',
+      label: 'File',
       submenu: [
-        {
-          label: `About WinsLab`,
-          click: () => {
-            app.showAboutPanel()
-          }
-        },
-        { type: 'separator' },
-        { role: 'quit' }
+        ...fileMenuItems({ withSettings: !mac }),
+        ...(mac ? [] : [{ type: 'separator' as const }, { role: 'quit' as const, label: 'Exit' }])
       ]
     },
     {
@@ -82,7 +124,12 @@ function createMenu(): void {
           label: 'Redo',
           accelerator: 'Shift+CmdOrCtrl+Z',
           click: () => sendMenuAction('redo')
-        }
+        },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
       ]
     },
     {
@@ -99,7 +146,8 @@ function createMenu(): void {
           click: () => playbackSafety.panic('menu', 'Panic from the application menu')
         }
       ]
-    }
+    },
+    ...(mac ? [] : [{ label: 'Help', submenu: [about] }])
   ]
 
   const menu = Menu.buildFromTemplate(template)

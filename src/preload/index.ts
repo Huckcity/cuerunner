@@ -41,6 +41,7 @@ import {
   type AudioWaveformPayload,
   type DeviceOptions
 } from '../shared/audio'
+import type { MenuAction } from '../shared/fileMenu'
 
 contextBridge.exposeInMainWorld('winslab', {
   // Which keyboard the labels should be written for: ⌘ on a Mac, Ctrl everywhere else.
@@ -52,8 +53,8 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.on('app:close-requested', listener)
       return () => ipcRenderer.off('app:close-requested', listener)
     },
-    onMenuAction: (callback: (action: 'undo' | 'redo') => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, action: 'undo' | 'redo'): void =>
+    onMenuAction: (callback: (action: MenuAction) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: MenuAction): void =>
         callback(action)
       ipcRenderer.on('app:menu-action', listener)
       return () => ipcRenderer.off('app:menu-action', listener)
