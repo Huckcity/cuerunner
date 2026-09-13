@@ -1,0 +1,189 @@
+name: Soak
+
+# The reliability claim, checked rather than asserted: eight hours of show time on the
+# silent pacer, in eight independent one-hour shards (a GitHub job may not run longer
+# than six hours, and eight jobs that fail separately are more useful than one that
+# times out). The `faults` job is the other half — the kill tests that assert what the
+# app does when something dies underneath it.
+#
+# Scheduled runs are on the default branch only. Each shard is a Linux runner for about
+# an hour; on a private repository that is roughly 9 hours of billed runner time a
+# night, so tune `minutes` (or delete the schedule and dispatch it before a release) if
+# that is not what you want to spend.
+on:
+  schedule:
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'Show minutes per shard'
+        default: '60'
+      channels:
+        description: 'Output channels per shard (2 = a stereo desk)'
+        default: '2'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: soak
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Build the engine
+        run: node scripts/ensure-native.mjs
+
+      # Shard 1 of 8 runs on eight channels instead of two: the same show through the
+      # matrix path, so the routing code sees the nightly too.
+      - name: Soak (shard ${{ matrix.shard }} of 8)
+        run: |
+          node native/audio/tests/soak.mjs \
+            --shard ${{ matrix.shard }} --shards 8 \
+            --minutes ${{ github.event.inputs.minutes || '60' }} \
+            --channels ${{ matrix.shard == 1 && '8' || github.event.inputs.channels || '2' }} \
+            --report soak-shard-${{ matrix.shard }}.json
+
+      - name: Upload the shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-shard-${{ matrix.shard }}
+          path: soak-shard-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Kill tests: the app must behave when the world does not. Renderer killed mid-show,
+  # engine killed mid-show, device taken away mid-show, a reader that cannot keep up —
+  # each asserts a defined behaviour rather than an absence of crashing, and the native
+  # half of it (stalled streams, a lost device, malformed media) runs on every pull
+  # request too. This job is what keeps them honest over time.
+  faults:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Install runtime dependencies
+        run: npx playwright install-deps
+
+      - name: Native acceptance, including the fault injection
+        run: npm run test:native
+
+      - name: Kill tests (renderer, engine, device, media)
+        run: npm run test:e2e -- e2e/engine-restart.spec.ts e2e/reliability.spec.ts e2e/durability.spec.ts e2e/device-loss.spec.ts
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-faults-results
+          path: test-results/
+          retention-days: 30
+
+  report:
+    needs: [soak, faults]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: soak-shard-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Fan in the shards
+        run: |
+          node scripts/soak-report.mjs \
+            --reports artifacts \
+            --out soak-latest.json \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --allow-missing
+
+      # The night failed if any shard failed or the kill tests did. The report is
+      # published either way — a red result is a result, and it is the one worth seeing.
+      - name: Fail the run if the night was not clean
+        if: needs.soak.result != 'success' || needs.faults.result != 'success'
+        run: |
+          echo "::error::soak night not clean — soak: ${{ needs.soak.result }}, faults: ${{ needs.faults.result }}"
+          exit 1
+
+      - name: Upload the night's result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-latest
+          path: soak-latest.json
+          retention-days: 90
+
+  # The numbers on the website are the numbers from the last run that finished, so the
+  # page cannot be older than the last night. The site itself is whatever is on main.
+  publish:
+    needs: [report]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: soak-latest
+          path: result
+
+      - name: Put the result with the site
+        run: cp result/soak-latest.json website/soak-latest.json
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

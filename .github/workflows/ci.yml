@@ -79,6 +79,11 @@ jobs:
       - name: Native acceptance (real mixer, offline render)
         run: npm run test:native
 
+      # The soak is what runs nightly in full; a minute of it here means a change that
+      # breaks the show harness is caught on the pull request that made it, not at 3 am.
+      - name: Soak smoke (a minute of show)
+        run: npm run soak -- --minutes 1
+
   # Installing the Electron binary exercises npm's install scripts, @electron/get's
   # 200 MB download and zip extraction — the path that silently produced no binary on
   # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
