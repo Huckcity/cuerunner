@@ -473,6 +473,37 @@ console.log(`winslab-audio acceptance — binary ${binary}`)
   }
   check('the second pass is audible, not silence', secondPassPeak > 0.15, `peak ${secondPassPeak}`)
 
+  // Below rate 1 the same source frame serves several output frames, so the ring must
+  // not release a frame until the voice has finished with it. It used to release one
+  // frame past the one being played, and every slower-than-real-time voice on a long
+  // file then asked for a frame the window had already dropped: silence, an underrun
+  // per output frame, for the rest of the run.
+  const slowed = runEngine(
+    {
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: SAMPLE_RATE,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+        { atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0, options: rampOptions({ rate: 0.5 }) },
+        { atMs: 100, verb: 'info' }
+      ]
+    },
+    streamArgs
+  )
+  check(
+    'a streamed voice at half rate plays, not silence',
+    near(sampleAt(slowed.wav, 4800), 2400 / 480000, 1e-4),
+    `${sampleAt(slowed.wav, 4800)} at frame 4800 (expected ${2400 / 480000})`
+  )
+  check(
+    'a slower-than-real-time voice is not reported as starved',
+    replyFor(slowed.summary, 2).result.media.decodeUnderruns === 0,
+    JSON.stringify(replyFor(slowed.summary, 2).result.media)
+  )
+
   const seeked = runEngine(
     {
       sampleRate: SAMPLE_RATE,

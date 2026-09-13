@@ -665,7 +665,12 @@ void Mixer::render(float* out, int frames, int channels) {
 
       if (voice.streamSlot >= 0) {
         StreamSlot* slot = streams_.at(voice.streamSlot);
-        if (slot != nullptr) slot->ring.release(base + 1);
+        // Release the frame just played, not the next one: below rate 1 the same source
+        // frame is played across several output frames, and releasing past it left the
+        // voice asking for a frame the window had already dropped — silence and an
+        // underrun per output frame, for good, on any cue playing a long file slower
+        // than real time (a rate below 1, or a rate fade on the way down).
+        if (slot != nullptr) slot->ring.release(base);
       }
 
       const double gain = paramValue(voice, static_cast<int>(Param::Volume), frame) *
