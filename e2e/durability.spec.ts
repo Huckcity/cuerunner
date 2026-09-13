@@ -50,8 +50,9 @@ test('a save that cannot be written is reported and leaves the file untouched', 
   fs.chmodSync(dir, 0o500)
 
   await page.locator('.toolbar-brand').click()
-  // "Save" also matches "Save As…", so the accessible name is matched exactly.
-  await page.getByRole('button', { name: 'Save ⌘S', exact: true }).click()
+  // The File menu's own Save, by the action it performs: "Save" as text also matches
+  // "Save As…", and the label carries whatever shortcut this keyboard has.
+  await page.locator('.file-menu button[data-action="save"]').click()
 
   const notice = page.locator('.app-notice[data-kind="error"]')
   await expect(notice).toBeVisible()

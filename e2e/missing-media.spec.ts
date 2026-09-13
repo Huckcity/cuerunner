@@ -118,7 +118,7 @@ test('a moved show folder reports its missing media and one pick relinks it', as
     await expect(page.locator('.workspace-name')).toContainText('●')
 
     await page.locator('.toolbar-brand').click()
-    await page.getByRole('button', { name: 'Save ⌘S', exact: true }).click()
+    await page.locator('.file-menu button[data-action="save"]').click()
     await expect(page.locator('.workspace-name')).not.toContainText('●')
 
     // The saved file carries both locations per file: relative for the media inside the

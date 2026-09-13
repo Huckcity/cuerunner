@@ -134,3 +134,20 @@ Object.defineProperty(window, 'winslab', {
   },
   writable: true
 })
+
+// A bare `localStorage` is how the renderer reads its own window storage, and in these
+// tests it was Node's: Node defines `globalThis.localStorage` (undefined until the
+// process is given --localstorage-file), and vitest only copies the window keys it has in
+// its own list, so jsdom's storage never reached the global. Every read and write in the
+// test — and in the component under test — hit that stub and, behind the dock's
+// try/catch, quietly did nothing. vitest hangs its JSDOM instance off the global for the
+// length of a test file; nothing types it, so the one access is asserted here.
+const jsdomEnv = globalThis as unknown as { jsdom?: { window: Window } }
+const jsdomWindow = jsdomEnv.jsdom?.window
+if (jsdomWindow) {
+  for (const key of ['localStorage', 'sessionStorage'] as const) {
+    Object.defineProperty(globalThis, key, {
+      value: jsdomWindow[key], configurable: true, writable: true
+    })
+  }
+}
