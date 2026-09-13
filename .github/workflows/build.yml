@@ -95,10 +95,18 @@ jobs:
           fi
           npm run dist:win
 
+      # `secrets` is not available to a step's `if:` — GitHub rejects the whole workflow
+      # when one is asked for there, and the run fails with no jobs and nothing to read.
+      # The step runs, and decides for itself whether there is a signature to check.
       - name: Verify the signature
-        if: ${{ secrets.WIN_CSC_LINK != '' }}
         shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
         run: |
+          if (-not $env:WIN_CSC_LINK) {
+            Write-Host 'No certificate configured; nothing to verify.'
+            exit 0
+          }
           $installer = Get-ChildItem dist\*.exe | Select-Object -First 1
           $signature = Get-AuthenticodeSignature $installer.FullName
           Write-Host "$($installer.Name): $($signature.Status) — $($signature.SignerCertificate.Subject)"
@@ -145,9 +153,15 @@ jobs:
           . scripts/signing-env.sh
           npm run dist:mac
 
+      # Same reason as the Windows step: the check lives in the shell, not in an `if:`.
       - name: Verify the signature and the notarisation ticket
-        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        env:
+          SIGNING_LINK: ${{ secrets.MAC_CSC_LINK }}
         run: |
+          if [ -z "$SIGNING_LINK" ]; then
+            echo 'No certificate configured; nothing to verify.'
+            exit 0
+          fi
           APP=$(find dist -maxdepth 3 -name '*.app' -type d | head -1)
           echo "verifying $APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
