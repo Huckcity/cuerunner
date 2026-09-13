@@ -9,8 +9,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # The Linux half of a release runs in the homelab; everything that publishes does not
-  # (CLAUDE.md → CI runners). Windows and macOS have no self-hosted option here.
+  # A release runs on the homelab machines: Linux and the packaging on ubox, the macOS
+  # half on the Mac mini, as the CI lanes do (CLAUDE.md → CI runners). The Windows build
+  # is the one exception — there is no x86_64 Windows host yet, so it stays on GitHub's
+  # runners and a release waits for them.
   test:
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
@@ -47,7 +49,7 @@ jobs:
         run: npm test
 
   test-e2e:
-    runs-on: macos-latest
+    runs-on: [self-hosted, macos, arm64, mac-mini]
     steps:
       - uses: actions/checkout@v4
 
@@ -128,7 +130,7 @@ jobs:
 
   build-mac:
     needs: [ test, test-e2e ]
-    runs-on: macos-latest
+    runs-on: [self-hosted, macos, arm64, mac-mini]
     steps:
       - uses: actions/checkout@v4
 
@@ -219,12 +221,9 @@ jobs:
           path: dist/*.AppImage
           retention-days: 30
 
-  # Publishing stays on GitHub's runners on purpose: a release, or the website that
-  # carries the soak numbers, should not be the thing that fails because the homelab is
-  # asleep (CLAUDE.md → CI runners).
   release:
     needs: [ build-windows, build-mac, build-linux ]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     permissions:
       contents: write
     steps:
@@ -238,7 +237,7 @@ jobs:
 
   upload-r2:
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
       - uses: actions/download-artifact@v4
         with:

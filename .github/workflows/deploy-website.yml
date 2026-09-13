@@ -18,9 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A deploy, so it stays on GitHub's runners rather than the homelab (CLAUDE.md → CI runners).
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

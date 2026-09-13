@@ -185,12 +185,10 @@ jobs:
 
   # The numbers on the website are the numbers from the last run that finished, so the
   # page cannot be older than the last night. The site itself is whatever is on main.
-  # This one stays on a GitHub-hosted runner on purpose: it publishes, and publishing
-  # should not be the thing that breaks because the homelab is asleep.
   publish:
     needs: [report]
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     permissions:
       contents: read
       pages: write
