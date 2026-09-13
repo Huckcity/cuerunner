@@ -131,3 +131,15 @@
   border-color: var(--accent-blue-dim);
   color: var(--accent-blue);
 }
+
+.transport-keys {
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+  white-space: nowrap;
+}
+
+.transport-keys kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+}

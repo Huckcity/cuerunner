@@ -60,12 +60,10 @@ test('demo audio is copied out of the app and played from there', async () => {
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
   await page.locator('.inspector-tab', { hasText: 'Audio' }).click()
 
-  const filePath = await page
-    .locator('.field-row')
-    .filter({ hasText: 'File' })
-    .locator('input')
-    .first()
-    .inputValue()
+  // The field shows the file's name; the whole path rides on it for the tooltip.
+  const field = page.locator('.audio-file-name')
+  await expect(field).toHaveValue('walk-in.wav')
+  const filePath = (await field.getAttribute('data-path')) ?? ''
 
   expect(filePath).toMatch(/walk-in\.wav$/)
   expect(fs.existsSync(filePath)).toBe(true)

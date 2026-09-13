@@ -1,6 +1,7 @@
 // Global window.winslab mock — mirrors the preload bridge shape
 Object.defineProperty(window, 'winslab', {
   value: {
+    platform: 'win32',
     app: {
       rendererCrash: vi.fn(() => Promise.resolve(null)),
       onMainError: vi.fn(() => () => {}),

@@ -43,6 +43,8 @@ import {
 } from '../shared/audio'
 
 contextBridge.exposeInMainWorld('winslab', {
+  // Which keyboard the labels should be written for: ⌘ on a Mac, Ctrl everywhere else.
+  platform: process.platform,
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   app: {
     onCloseRequested: (callback: () => void): (() => void) => {

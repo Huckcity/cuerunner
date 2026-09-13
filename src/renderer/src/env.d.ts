@@ -11,6 +11,8 @@ import type { MissingMedia } from '../../shared/media'
 import type { AudioEngineBridge } from '../../shared/audio'
 
 interface WinslabBridge {
+  /** `process.platform` of the machine the app is running on. */
+  platform: string
   getPathForFile: (file: File) => string
   app: {
     onCloseRequested: (callback: () => void) => () => void

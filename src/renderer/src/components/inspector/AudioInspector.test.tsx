@@ -99,6 +99,22 @@ describe('AudioInspector', () => {
     return [...container.querySelectorAll<HTMLDivElement>('.routing-row')]
   }
 
+  it('names the file first and puts its folder underneath', async () => {
+    await show(audioCue({ filePath: '/Users/sam/Shows/Quixote/audio/walk-in.wav' }))
+
+    const field = container.querySelector<HTMLInputElement>('.audio-file-name')!
+    expect(field.value).toBe('walk-in.wav')
+    expect(field.title).toBe('/Users/sam/Shows/Quixote/audio/walk-in.wav')
+    expect(container.querySelector('.audio-file-folder')?.textContent).toBe('/Users/sam/Shows/Quixote/audio')
+  })
+
+  it('reads a Windows path the same way', async () => {
+    await show(audioCue({ filePath: 'C:\\Shows\\Quixote\\walk-in.wav' }))
+
+    expect(container.querySelector<HTMLInputElement>('.audio-file-name')!.value).toBe('walk-in.wav')
+    expect(container.querySelector('.audio-file-folder')?.textContent).toBe('C:\\Shows\\Quixote')
+  })
+
   it('restores rate and trim to 1x through the runner, not just the store', async () => {
     const cue = audioCue({ playbackRate: 2, trim: 0.4 })
     await show(cue)

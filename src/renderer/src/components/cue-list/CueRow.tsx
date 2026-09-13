@@ -5,6 +5,7 @@ import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { audioEngine } from '../../engine/audioEngineClient'
+import { CUE_ICON } from '../../utils/cueIcons'
 import './CueRow.css'
 
 const COLOR_MAP: Record<CueColor, string> = {
@@ -16,18 +17,6 @@ const COLOR_MAP: Record<CueColor, string> = {
   blue:   'var(--cue-color-blue)',
   purple: 'var(--cue-color-purple)',
   pink:   'var(--cue-color-pink)',
-}
-
-const TYPE_ICON: Record<string, string> = {
-  audio: '♪',
-  midi: 'M',
-  osc: 'O',
-  wait: '⏱',
-  fade: '↘',
-  stop: '■',
-  group: '▤',
-  network: '⊕',
-  script: '{ }'
 }
 
 interface Props {
@@ -124,18 +113,21 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
       onDoubleClick={startEdit}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, cue.id) }}
     >
+      {/* Chevron, icon, number: the same three slots on every row, so the icons line up
+          as a column whatever the type. */}
       <span className="col-num">
-        {isGroup ? (
-          <button
-            className="group-toggle"
-            onClick={e => { e.stopPropagation(); onToggleCollapse?.() }}
-            title={collapsed ? 'Expand group' : 'Collapse group'}
-          >
-            {collapsed ? '▶' : '▼'}
-          </button>
-        ) : (
-          <span className="cue-type-icon" title={cue.type}>{TYPE_ICON[cue.type]}</span>
-        )}
+        <span className="cue-chevron">
+          {isGroup && (
+            <button
+              className="group-toggle"
+              onClick={e => { e.stopPropagation(); onToggleCollapse?.() }}
+              title={collapsed ? 'Expand group' : 'Collapse group'}
+            >
+              {collapsed ? '▶' : '▼'}
+            </button>
+          )}
+        </span>
+        <span className="cue-type-icon" title={cue.type}>{CUE_ICON[cue.type]}</span>
         {cue.number}
       </span>
       <span
@@ -143,9 +135,6 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
         style={{ background: COLOR_MAP[cue.colorLabel] }}
       />
       <span className="col-name">
-        {isGroup && (
-          <span className="cue-type-icon" title="group">{TYPE_ICON.group}</span>
-        )}
         {editing ? (
           <input
             ref={inputRef}

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import type { Cue } from '../../types/cue'
 import { useStore } from '../../store'
+import { formatShortcut } from '../../utils/shortcuts'
 import './CueContextMenu.css'
 
 interface Props {
@@ -53,11 +54,12 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
       <button className="cue-context-menu-item" onClick={handleDuplicate}>
         <span className="cue-context-menu-icon">⧉</span>
         Duplicate
-        <kbd>⌘D</kbd>
+        <kbd>{formatShortcut('Mod+D')}</kbd>
       </button>
       <button className="cue-context-menu-item cue-context-menu-item--danger" onClick={handleDelete}>
         <span className="cue-context-menu-icon">✕</span>
         Delete
+        <kbd>Del</kbd>
       </button>
       <div className="cue-context-menu-separator" />
       <button className="cue-context-menu-item" onClick={handleArmToggle}>

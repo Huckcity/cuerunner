@@ -3,22 +3,24 @@ import { useStore, usePro } from '../../store'
 import { useWorkspace, openDemoWorkspace } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
 import { ProMark } from '../license/ProLock'
+import { CUE_ICON } from '../../utils/cueIcons'
+import { formatShortcut } from '../../utils/shortcuts'
 import './Toolbar.css'
 
-const PRIMARY_CUES: { type: CueType; icon: string; label: string }[] = [
-  { type: 'audio', icon: '♪', label: 'Audio' },
-  { type: 'group', icon: '▤', label: 'Group' },
-  { type: 'fade',  icon: '↘', label: 'Fade'  },
-  { type: 'wait',  icon: '⏱', label: 'Wait'  },
-  { type: 'stop',  icon: '■', label: 'Stop'  },
+const PRIMARY_CUES: { type: CueType; label: string }[] = [
+  { type: 'audio', label: 'Audio' },
+  { type: 'group', label: 'Group' },
+  { type: 'fade',  label: 'Fade'  },
+  { type: 'wait',  label: 'Wait'  },
+  { type: 'stop',  label: 'Stop'  },
 ]
 
-const MORE_CUES: { type: CueType; icon: string; label: string }[] = [
-  { type: 'midi',    icon: 'M',    label: 'MIDI'    },
-  { type: 'osc',     icon: 'O',    label: 'OSC'     },
-  { type: 'network', icon: '⊕',   label: 'Network' },
-  { type: 'script',  icon: '{ }', label: 'Script'  },
-  { type: 'scene',   icon: '▤',   label: 'Scene'   },
+const MORE_CUES: { type: CueType; label: string }[] = [
+  { type: 'midi',    label: 'MIDI'    },
+  { type: 'osc',     label: 'OSC'     },
+  { type: 'network', label: 'Network' },
+  { type: 'script',  label: 'Script'  },
+  { type: 'scene',   label: 'Scene'   },
 ]
 
 interface Props {
@@ -123,20 +125,20 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           {fileMenuOpen && (
             <div className="file-menu">
               <button onClick={() => handleMenuAction(newWorkspace)}>
-                <span>New</span><kbd>⌘N</kbd>
+                <span>New</span><kbd>{formatShortcut('Mod+N')}</kbd>
               </button>
               <button onClick={() => handleMenuAction(openWorkspace)}>
-                <span>Open…</span><kbd>⌘O</kbd>
+                <span>Open…</span><kbd>{formatShortcut('Mod+O')}</kbd>
               </button>
               <button onClick={() => handleMenuAction(openDemoWorkspace)}>
                 <span>Open Demo Workspace</span>
               </button>
               <div className="file-menu-separator" />
               <button onClick={() => handleMenuAction(save)}>
-                <span>Save</span><kbd>⌘S</kbd>
+                <span>Save</span><kbd>{formatShortcut('Mod+S')}</kbd>
               </button>
               <button onClick={() => handleMenuAction(saveAs)}>
-                <span>Save As…</span><kbd>⇧⌘S</kbd>
+                <span>Save As…</span><kbd>{formatShortcut('Mod+Shift+S')}</kbd>
               </button>
               {recentFiles.length > 0 && (
                 <>
@@ -156,7 +158,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
               )}
               <div className="file-menu-separator" />
               <button onClick={() => handleMenuAction(onOpenSettings)}>
-                <span>Settings…</span><kbd>⌘,</kbd>
+                <span>Settings…</span><kbd>{formatShortcut('Mod+,')}</kbd>
               </button>
             </div>
           )}
@@ -189,9 +191,9 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       {view === 'cues' && <div className="toolbar-divider" />}
 
       <div className="toolbar-actions" hidden={view !== 'cues'}>
-        {PRIMARY_CUES.map(({ type, icon, label }) => (
+        {PRIMARY_CUES.map(({ type, label }) => (
           <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
-            {icon} {label}
+            {CUE_ICON[type]} {label}
           </button>
         ))}
 
@@ -201,14 +203,14 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           </button>
           {moreMenuOpen && (
             <div className="toolbar-more-menu">
-              {MORE_CUES.map(({ type, icon, label }) => (
+              {MORE_CUES.map(({ type, label }) => (
                 <button
                   key={type}
                   className="toolbar-more-menu-item"
                   data-locked={type === 'scene' && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                 >
-                  <span className="toolbar-more-menu-icon">{icon}</span>
+                  <span className="toolbar-more-menu-icon">{CUE_ICON[type]}</span>
                   {label}
                   {type === 'scene' && !pro && <ProMark />}
                 </button>

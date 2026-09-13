@@ -33,7 +33,7 @@ export function LogPanel({ onClose }: Props) {
     <div className="log-panel">
       <div className="log-header">
         <span className="log-title">Log</span>
-        <span className="log-count">{log.length === 0 ? 'empty' : `${log.length} entries`}</span>
+        <span className="log-count">{log.length === 0 ? 'empty' : `${log.length} ${log.length === 1 ? 'entry' : 'entries'}`}</span>
         <div className="log-actions">
           <button className="log-btn" onClick={clearLog} disabled={log.length === 0}>
             Clear

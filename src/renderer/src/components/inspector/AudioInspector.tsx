@@ -125,16 +125,28 @@ export function AudioInspector({ cue, tab }: Props) {
     )
   }
 
+  // The file's name is what tells two cues apart; the folder it sits in is the long,
+  // shared part, so it goes under the name rather than in front of it.
+  const separator = Math.max(cue.filePath.lastIndexOf('/'), cue.filePath.lastIndexOf('\\'))
+  const fileName = cue.filePath.slice(separator + 1)
+  const folder = separator > 0 ? cue.filePath.slice(0, separator) : ''
+
   return (
     <div>
       <div className="field-row">
         <label>File</label>
-        <input value={cue.filePath} readOnly
+        <input value={fileName} readOnly
+          className="audio-file-name"
+          title={cue.filePath}
+          data-path={cue.filePath}
           placeholder={loading ? 'Reading file…' : 'No file selected'}
           style={{ flex: 1, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
           onClick={pickFile} />
         <button onClick={pickFile} disabled={loading} className="inspector-btn">Browse</button>
       </div>
+      {folder !== '' && (
+        <p className="inspector-hint audio-file-folder" title={folder}>{folder}</p>
+      )}
       <div className="field-section-title">Playback</div>
       <div className="field-row">
         <label>Rate</label>

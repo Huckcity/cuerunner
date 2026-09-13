@@ -403,3 +403,12 @@
   color: var(--fg-dim);
   font-size: var(--text-sm);
 }
+
+/* The folder under an audio file's name: aligned with the field, one line, the rest in
+   the tooltip. */
+.audio-file-folder {
+  margin: -6px 0 10px 98px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

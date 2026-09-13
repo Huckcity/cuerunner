@@ -28,20 +28,34 @@
   overflow-x: hidden;
 }
 
-.col-num   { width: 52px; flex-shrink: 0; }
+.col-num   { width: 72px; flex-shrink: 0; }
 .col-color { width: 6px; flex-shrink: 0; margin-right: 10px; }
 .col-name  { flex: 1; min-width: 0; }
 .col-dur   { width: 72px; flex-shrink: 0; text-align: right; }
 .col-pre   { width: 60px; flex-shrink: 0; text-align: right; }
 .col-post  { width: 60px; flex-shrink: 0; text-align: right; }
-.col-adv   { width: 60px; flex-shrink: 0; text-align: center; }
+/* Room either side of the word, so the header does not read "POST-W ADVANCE". */
+.col-adv   { width: 76px; flex-shrink: 0; text-align: center; padding-left: var(--space-3); }
 
+/* The header's number column lines up with the rows' numbers, past the chevron and icon. */
+.cue-list-header .col-num { padding-left: 42px; }
+
+/* Over the empty list rather than under it: the words sit in the space they describe. */
 .cue-list-empty {
-  padding: 40px var(--space-5);
+  position: absolute;
+  inset: var(--h-col-header) 0 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-5);
   text-align: center;
   color: var(--fg-ghost);
   font-size: var(--text-md);
+  pointer-events: none;
 }
+
+.cue-list-empty button { pointer-events: auto; }
 
 .cue-list-empty-demo {
   margin-top: var(--space-3);

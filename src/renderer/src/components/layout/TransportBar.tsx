@@ -3,6 +3,7 @@ import { useCueRunner, useKeyboard } from '../../hooks/useCueRunner'
 import { ProMark } from '../license/ProLock'
 import MidiStatusBadge from '../midi/MidiStatusBadge'
 import { AlertChip } from './AlertChip'
+import { formatShortcut } from '../../utils/shortcuts'
 import './TransportBar.css'
 
 interface Props {
@@ -57,17 +58,26 @@ export function TransportBar({ strip, onToggleStrip, onShowStrip }: Props) {
         </div>
       </div>
       <div className="transport-center">
-        <button className="btn-stop" onClick={stop} title="Stop All (Esc)">
+        <button className="btn-stop" onClick={stop} title="Stop all (Esc)">
           ■ STOP
         </button>
         <button className="btn-go" onClick={go} title="Go (Space)">
           ▶ GO
         </button>
-        <button className="btn-panic" onClick={panic} title="Panic (Shift+Esc)">
+        <button
+          className="btn-panic"
+          onClick={panic}
+          title={`Panic (${formatShortcut('Shift+Esc')}, or ${formatShortcut('Mod+Shift+P')} from the Playback menu even when the window is busy)`}
+        >
           ✕ PANIC
         </button>
       </div>
-      <div className="transport-right" />
+      {/* The three keys the show is run with, written for this keyboard. */}
+      <div className="transport-right">
+        <span className="transport-keys">
+          <kbd>Space</kbd> go · <kbd>Esc</kbd> stop · <kbd>{formatShortcut('Shift+Esc')}</kbd> panic
+        </span>
+      </div>
     </div>
   )
 }
