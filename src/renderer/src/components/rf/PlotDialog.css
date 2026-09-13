@@ -106,26 +106,6 @@
 
 /* The patch is a channel id the telemetry reports, but a pack switched off tonight is
    still in the plot, so the field is a suggestion rather than a list of the possible. */
-.plot-add-performer,
-.plot-add-pack {
-  height: var(--h-input);
-  padding: 0 var(--space-3);
-  background: var(--bg-card);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-body);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.plot-add-performer:hover,
-.plot-add-pack:hover {
-  background: var(--bg-hover);
-  color: var(--fg-primary);
-}
-
 .plot-remove {
   width: 26px;
   height: var(--h-input);

@@ -45,9 +45,9 @@ test('the playback and output sliders reset to their new-cue defaults', async ()
   await expect(pan.locator('.inspector-readout')).toHaveText('C')
 })
 
-test('the Timing tab number fields reset', async () => {
+test('the Time & Loops tab number fields reset', async () => {
   await toolbarCueBtn(page, 'Audio').click()
-  await page.locator('.inspector-tab', { hasText: 'Timing' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
 
   const fadeIn = page.locator('.field-row').filter({ hasText: 'Fade in' })
   await expect(fadeIn.locator('.inspector-reset-btn')).toBeDisabled()

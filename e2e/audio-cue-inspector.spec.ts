@@ -16,7 +16,7 @@ test.afterEach(async () => {
 
 test('Audio Timing tab has no Fade out field and states the loop range', async () => {
   await toolbarCueBtn(page, 'Audio').click()
-  await page.locator('.inspector-tab', { hasText: 'Timing' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
 
   await expect(page.locator('.inspector')).not.toContainText('Fade out')
   await expect(page.locator('.field-row').filter({ hasText: 'Fade in' })).toBeVisible()

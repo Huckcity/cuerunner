@@ -166,7 +166,6 @@ export function Triggers({ cue }: Props) {
 
   return (
     <>
-      <div className="field-section-title">Triggers</div>
       <div className="triggers">
         {triggers.length === 0 ? (
           <div className="trigger-empty">Nothing fires this cue but GO.</div>

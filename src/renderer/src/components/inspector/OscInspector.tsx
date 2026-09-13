@@ -72,7 +72,7 @@ export function OscInspector({ cue }: Props) {
           <button onClick={() => removeArg(i)} className="inspector-btn-icon">✕</button>
         </div>
       ))}
-      <button onClick={addArg} className="inspector-add-btn">+ Add Argument</button>
+      <button onClick={addArg} className="inspector-add-btn add-row">+ Add argument</button>
       <LastRun cueId={cue.id} />
     </div>
   )

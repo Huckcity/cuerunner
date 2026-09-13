@@ -211,8 +211,9 @@ await shot('17-report.png', '.rf-panel')
 await page.locator('.rf-mode').click()
 await page.locator('.rf-btn', { hasText: '✕' }).click()
 
-// Triggers live on the Basics tab, under the fields every cue shares.
+// Triggers have a tab of their own, after the cue's type.
 await selectCue('Walk-in Music')
+await openTab('Triggers')
 await page.locator('#trigger-osc-address').fill('/eos/cue/12/fire')
 await page.locator('.trigger-section[data-kind="osc"] .trigger-add').click()
 await page.locator('.trigger-row[data-kind="osc"]').waitFor()

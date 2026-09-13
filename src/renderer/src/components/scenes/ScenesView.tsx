@@ -648,10 +648,10 @@ export function ScenesView() {
           })}
           {editing && (
             <button
-              className="group-add"
+              className="group-add add-row"
               onClick={() => writeChannels(addDeskChannel(scenes))}
             >
-              Add group
+              + Add group
             </button>
           )}
           {!editing && groupRows.length === 0 && (

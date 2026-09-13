@@ -543,29 +543,6 @@
 
 .group-state[data-state='live'] { color: var(--state-running-fg); }
 
-.group-add {
-  height: var(--h-input);
-  padding: 0 var(--space-3);
-  background: var(--bg-card);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-body);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.group-add:hover {
-  background: var(--bg-hover);
-  color: var(--fg-primary);
-}
-
-.group-add:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .group-remove {
   flex: none;
   width: 26px;

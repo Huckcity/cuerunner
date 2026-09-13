@@ -26,7 +26,7 @@ async function networkCueTo(baseUrl: string): Promise<void> {
   await page.locator('.inspector-tab', { hasText: 'Network' }).click()
   await page.locator('.field-row').filter({ hasText: 'URL' }).locator('input')
     .fill(`${baseUrl}/triggered`)
-  await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Triggers' }).click()
 }
 
 async function addOscTrigger(address: string): Promise<void> {

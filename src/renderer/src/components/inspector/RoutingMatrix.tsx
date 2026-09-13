@@ -128,7 +128,7 @@ export function RoutingMatrix({ cue, fileChannels, deviceChannels, onChange }: P
           ))}
           <button
             type="button"
-            className="inspector-add-btn"
+            className="inspector-add-btn add-row"
             onClick={() => onChange([...outputs, {
               inputChannel: 0,
               outputChannel: Math.min(outputs.length, Math.max(deviceChannels - 1, 0)),

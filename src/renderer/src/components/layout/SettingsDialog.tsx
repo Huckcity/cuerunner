@@ -493,7 +493,7 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
               )}
               <div className="field-row">
                 <label />
-                <button className="inspector-btn" onClick={addSource}>Add source</button>
+                <button className="add-row" onClick={addSource}>+ Add source</button>
               </div>
               <p className="inspector-hint">
                 A source returns <code>{'{"channels":[{"id":"…","batteryPercent":42,"rfDbm":-62}]}'}</code>{' '}

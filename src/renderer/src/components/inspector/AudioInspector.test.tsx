@@ -142,9 +142,9 @@ describe('AudioInspector', () => {
     expect(setLiveParameter).toHaveBeenCalledWith('a1', 'pan', 0)
   })
 
-  it('leaves the Timing resets inert until the field is changed', async () => {
+  it('leaves the Time & Loops resets inert until the field is changed', async () => {
     const cue = audioCue({ startTime: 0, endTime: null })
-    await show(cue, 'Timing')
+    await show(cue, 'Time & Loops')
 
     expect(container.querySelector('button[title="Start time is at its default"]')).toHaveProperty('disabled', true)
     expect(container.querySelector('button[title="End time is at its default"]')).toHaveProperty('disabled', true)

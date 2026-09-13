@@ -62,10 +62,11 @@ test('a machine with no key runs the free half and locks the rest', async () => 
   await expect(page.locator('.scenes-view')).toHaveCount(0)
 
   // The cue stack is not licensed, and neither is firing it: a wait cue still runs, and
-  // the Triggers section of its Basics tab is what carries the lock.
+  // its Triggers tab is what carries the lock.
   await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
   await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
   await expect(page.locator('.cue-row')).toHaveCount(1)
+  await page.locator('.inspector-tab', { hasText: 'Triggers' }).click()
   await expect(page.locator('.pro-lock[data-feature="Triggers"]')).toBeVisible()
 
   // And the process that would open the socket refuses on its own account — the lock in

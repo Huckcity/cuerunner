@@ -87,7 +87,7 @@ async function playWalkInForever(page: Page): Promise<void> {
   await openDemo(page)
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
   // Loop count lives on the Timing tab, with the start/end times it interacts with.
-  await page.locator('.inspector-tab', { hasText: 'Timing' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
   await page.locator('.field-row').filter({ hasText: 'Loop count' }).locator('input').fill('-1')
   await page.getByRole('button', { name: /GO/ }).click()
   // The window holds the run; the engine's own answer is waited on next, and together

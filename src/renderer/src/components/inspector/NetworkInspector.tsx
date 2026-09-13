@@ -89,7 +89,7 @@ export function NetworkInspector({ cue }: Props) {
           >✕</button>
         </div>
       ))}
-      <button className="inspector-add-btn" onClick={addHeader}>+ Add Header</button>
+      <button className="inspector-add-btn add-row" onClick={addHeader}>+ Add header</button>
 
       <div className="field-section-title">Body</div>
       <div className="field-row">

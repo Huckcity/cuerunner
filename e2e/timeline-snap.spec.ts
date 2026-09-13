@@ -30,7 +30,8 @@ async function setWaitDuration(p: Page, ms: number) {
 
 async function setTimelineOffset(p: Page, ms: number) {
   await p.locator('.inspector-tab', { hasText: 'Basics' }).click()
-  await p.locator('.field-row').filter({ hasText: 'Timeline offset' }).locator('input').fill(String(ms))
+  // The field is in seconds, like every other time on the tab.
+  await p.locator('.field-row').filter({ hasText: 'Timeline offset' }).locator('input').fill(String(ms / 1000))
 }
 
 /** Reads a child's stored offset from the Basics tab — the value snapping writes. */
@@ -39,7 +40,7 @@ async function storedOffset(p: Page, childIndex: number): Promise<number> {
   await p.locator('.inspector-tab', { hasText: 'Basics' }).click()
   const value = await p
     .locator('.field-row').filter({ hasText: 'Timeline offset' }).locator('input').inputValue()
-  return Number(value)
+  return Math.round(Number(value) * 1000)
 }
 
 async function zoomTo(p: Page, pxPerSecond: number) {

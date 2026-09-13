@@ -30,7 +30,8 @@ async function setWaitDuration(p: Page, ms: number) {
 
 async function setTimelineOffset(p: Page, ms: number) {
   await p.locator('.inspector-tab', { hasText: 'Basics' }).click()
-  await p.locator('.field-row').filter({ hasText: 'Timeline offset' }).locator('input').fill(String(ms))
+  // The field is in seconds, like every other time on the tab.
+  await p.locator('.field-row').filter({ hasText: 'Timeline offset' }).locator('input').fill(String(ms / 1000))
 }
 
 /**

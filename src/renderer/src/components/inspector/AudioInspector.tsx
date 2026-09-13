@@ -85,7 +85,7 @@ export function AudioInspector({ cue, tab }: Props) {
     }
   }
 
-  if (tab === 'Timing') {
+  if (tab === 'Time & Loops') {
     const toSeconds = (ms: number) => Math.round(ms / 100) / 10  // 1 decimal
     const fromSeconds = (s: number) => Math.round(s * 1000)
     return (
@@ -120,7 +120,6 @@ export function AudioInspector({ cue, tab }: Props) {
             onReset={() => set({ loopCount: AUDIO_DEFAULTS.loopCount })} />
         </div>
         <p className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</p>
-        <LastRun cueId={cue.id} />
       </div>
     )
   }

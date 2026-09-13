@@ -148,8 +148,8 @@ export function PlotDialog({ onClose }: Props) {
                 >✕</button>
               </div>
             ))}
-            <button className="plot-add-performer" onClick={() => apply(addPerformer(plot, 'New performer', ''))}>
-              Add performer
+            <button className="plot-add-performer add-row" onClick={() => apply(addPerformer(plot, 'New performer', ''))}>
+              + Add performer
             </button>
           </div>
 
@@ -213,8 +213,8 @@ export function PlotDialog({ onClose }: Props) {
                 >✕</button>
               </div>
             ))}
-            <button className="plot-add-pack" onClick={() => apply(addPack(plot, `Pack ${plot.packs.length + 1}`))}>
-              Add pack
+            <button className="plot-add-pack add-row" onClick={() => apply(addPack(plot, `Pack ${plot.packs.length + 1}`))}>
+              + Add pack
             </button>
             <datalist id="plot-channels">
               {channels.map(channel => (

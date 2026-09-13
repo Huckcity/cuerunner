@@ -110,16 +110,14 @@ describe('Triggers', () => {
     await act(async () => { root.render(<Harness id={cueId} />) })
   }
 
-  it('titles the section and says nothing fires the cue yet', async () => {
+  it('says nothing fires the cue yet', async () => {
     await mount()
 
-    expect(text('.field-section-title')).toBe('Triggers')
+    // The tab is named Triggers, so the block needs no heading of its own.
+    expect(container.querySelector('.field-section-title')).toBeNull()
     expect(text('.trigger-empty')).toBe('Nothing fires this cue but GO.')
     expect(container.querySelectorAll('.trigger-row')).toHaveLength(0)
     expect($('.triggers').contains($('.trigger-empty'))).toBe(true)
-    // The heading sits above the block, so it reads as a section of the tab.
-    expect($('.field-section-title').compareDocumentPosition($('.triggers')))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
   it('adds an OSC trigger and clears the field', async () => {

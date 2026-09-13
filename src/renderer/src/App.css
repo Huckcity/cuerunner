@@ -262,3 +262,22 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--radius-md); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* One shape for every press that adds a row — a header, a message, a pack, a group, a
+   source: small, bordered, left-aligned, with its plus. */
+.add-row {
+  align-self: flex-start;
+  width: auto;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.add-row:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-primary); }
