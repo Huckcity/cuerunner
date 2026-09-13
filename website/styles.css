@@ -566,6 +566,53 @@ code {
   color: var(--fg-primary);
 }
 
+/* ─── Reliability page ───────────────────────────────────────────────────── */
+
+.run-state {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.run-state.pass {
+  color: color-mix(in srgb, var(--state-go) 60%, #fff 40%);
+}
+
+.run-state.fail {
+  color: color-mix(in srgb, var(--state-panic) 60%, #fff 40%);
+}
+
+.metric-value {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.metric-note:empty {
+  display: none;
+}
+
+.run-panel .cards {
+  margin-top: 12px;
+}
+
+.run-subhead {
+  margin: 16px 0 0;
+}
+
+.run-panel .table-wrap {
+  margin-top: 8px;
+}
+
 .reveal {
   opacity: 0;
   transform: translateY(8px);
@@ -655,6 +702,11 @@ code {
   td,
   th,
   figcaption {
+    color: #000000;
+  }
+
+  .run-state.pass,
+  .run-state.fail {
     color: #000000;
   }
 
