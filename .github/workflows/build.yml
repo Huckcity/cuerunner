@@ -79,8 +79,31 @@ jobs:
       - name: Set up MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
+      # The engine is a separate binary; a build that ships one the user cannot identify
+      # as theirs is a build a venue will refuse to install. Signing happens when the
+      # release secrets exist — `WIN_CSC_LINK` (the certificate, base64 or a path) and
+      # `WIN_CSC_KEY_PASSWORD` — and electron-builder skips it, without failing, when
+      # they are empty.
       - name: Build and package
-        run: npm run dist:win
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -z "$WIN_CSC_LINK" ]; then
+            echo "::warning::No Windows certificate is configured (WIN_CSC_LINK); the installer will be unsigned."
+          fi
+          npm run dist:win
+
+      - name: Verify the signature
+        if: ${{ secrets.WIN_CSC_LINK != '' }}
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist\*.exe | Select-Object -First 1
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          Write-Host "$($installer.Name): $($signature.Status) — $($signature.SignerCertificate.Subject)"
+          if ($signature.Status -ne 'Valid') {
+            throw "the installer is not validly signed: $($signature.Status)"
+          }
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
@@ -103,8 +126,40 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      # macOS needs both halves: the Developer ID certificate (`MAC_CSC_LINK` /
+      # `MAC_CSC_KEY_PASSWORD`) to sign, and `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` +
+      # `APPLE_TEAM_ID` for electron-builder to notarise and staple, which is what makes
+      # Gatekeeper open the app on a machine that has never seen it. An unset secret
+      # arrives as an empty string, and electron-builder reads an empty CSC_LINK as a
+      # certificate it cannot resolve rather than as "not signing", so it is only
+      # exported when there is something to export.
       - name: Build and package
-        run: npm run dist:mac
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$MAC_CSC_LINK" ]; then
+            export CSC_LINK="$MAC_CSC_LINK"
+            export CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+          else
+            echo "::warning::No macOS certificate is configured (MAC_CSC_LINK); the app will be unsigned and unnotarised."
+          fi
+          npm run dist:mac
+
+      - name: Verify the signature and the notarisation ticket
+        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        run: |
+          APP=$(find dist -maxdepth 3 -name '*.app' -type d | head -1)
+          echo "verifying $APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Gatekeeper's own assessment: this is what a venue machine runs, and it fails
+          # for an unnotarised build even when the signature itself is good.
+          spctl --assess --type execute --verbose=2 "$APP"
+          DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
+          xcrun stapler validate "$DMG"
 
       - name: Upload dmg
         uses: actions/upload-artifact@v4
