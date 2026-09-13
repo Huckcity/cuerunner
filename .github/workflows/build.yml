@@ -83,7 +83,8 @@ jobs:
       # as theirs is a build a venue will refuse to install. Signing happens when the
       # release secrets exist — `WIN_CSC_LINK` (the certificate, base64 or a path) and
       # `WIN_CSC_KEY_PASSWORD` — and electron-builder skips it, without failing, when
-      # they are empty.
+      # they are empty: its Windows signer checks for the empty string, which is why this
+      # job needs none of `scripts/signing-env.sh`.
       - name: Build and package
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
@@ -129,24 +130,19 @@ jobs:
       # macOS needs both halves: the Developer ID certificate (`MAC_CSC_LINK` /
       # `MAC_CSC_KEY_PASSWORD`) to sign, and `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` +
       # `APPLE_TEAM_ID` for electron-builder to notarise and staple, which is what makes
-      # Gatekeeper open the app on a machine that has never seen it. An unset secret
-      # arrives as an empty string, and electron-builder reads an empty CSC_LINK as a
-      # certificate it cannot resolve rather than as "not signing", so it is only
-      # exported when there is something to export.
+      # Gatekeeper open the app on a machine that has never seen it. The certificate is
+      # exported by `scripts/signing-env.sh`, which is where the rule about empty secrets
+      # lives and is tested; electron-builder would treat an empty CSC_LINK as a
+      # certificate it cannot resolve rather than as "not signing".
       - name: Build and package
         env:
-          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          SIGNING_LINK: ${{ secrets.MAC_CSC_LINK }}
+          SIGNING_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "$MAC_CSC_LINK" ]; then
-            export CSC_LINK="$MAC_CSC_LINK"
-            export CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
-          else
-            echo "::warning::No macOS certificate is configured (MAC_CSC_LINK); the app will be unsigned and unnotarised."
-          fi
+          . scripts/signing-env.sh
           npm run dist:mac
 
       - name: Verify the signature and the notarisation ticket

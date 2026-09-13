@@ -28,6 +28,7 @@
     "build:ffmpeg": "node scripts/build-ffmpeg-linux.mjs",
     "test:native": "node native/audio/tests/offline.mjs && node native/audio/tests/pace.mjs && node native/audio/tests/stack.mjs && node native/audio/tests/stream-stall.mjs && node native/audio/tests/matrix-bench.mjs",
     "soak": "node native/audio/tests/soak.mjs",
+    "presoak": "node scripts/ensure-native.mjs",
     "soak:report": "node scripts/soak-report.mjs",
     "test:native:device": "node native/audio/tests/device-smoke.mjs",
     "predev": "node scripts/ensure-native.mjs",
