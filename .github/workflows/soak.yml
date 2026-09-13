@@ -93,6 +93,12 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
+        uses: actions/cache@v4
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
       - name: Install runtime dependencies
         run: npx playwright install-deps
 

@@ -322,7 +322,14 @@ Voice* Mixer::startVoice(const Command& cmd) {
   voice->segmentStartFrame = segmentStart;
   voice->segmentEndFrame = segmentEnd;
   voice->position = segmentStart;
-  if (segmentStart > 0.0) requestStreamSeek(*voice, static_cast<int64_t>(segmentStart));
+  if (voice->streamSlot >= 0) {
+    // A freshly acquired ring holds nothing yet, so the voice is positioning until the
+    // first fill covers the frame it is asking for — whether or not it starts at an
+    // offset. Counting those frames as starvation made an ordinary streamed start read
+    // as "the audio waited for the disk".
+    if (segmentStart > 0.0) requestStreamSeek(*voice, static_cast<int64_t>(segmentStart));
+    else voice->awaitingSeek = true;
+  }
   voice->loopCount = options.loopCount;
   voice->volume = options.volume;
   voice->pan = options.pan;
