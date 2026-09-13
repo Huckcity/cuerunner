@@ -10,7 +10,6 @@ import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
 import { MissingMediaBar } from './components/media/MissingMediaBar'
-import MidiStatusBadge from './components/midi/MidiStatusBadge'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
 import { LogPanel } from './components/log/LogPanel'
@@ -130,11 +129,6 @@ export function App() {
         view={view}
         onSwitchView={setView}
       />
-      {/* Machine-level status that has nothing to do with the workspace: whether this
-          build can talk MIDI at all. */}
-      <div className="app-status-row">
-        <MidiStatusBadge />
-      </div>
       <div className="app-main" data-view={view}>
         {view === 'scenes' ? (
           pro ? (
@@ -189,6 +183,7 @@ export function App() {
       <TransportBar
         strip={strip}
         onToggleStrip={next => setStrip(current => current === next ? null : next)}
+        onShowStrip={setStrip}
       />
       {settingsTab !== null && <SettingsDialog initialTab={settingsTab} onClose={closeSettings} />}
     </div>

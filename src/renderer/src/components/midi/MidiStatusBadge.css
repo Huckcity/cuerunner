@@ -1,9 +1,9 @@
-/* A machine with no MIDI module: one amber pill, in the row under the toolbar. It is
+/* A machine with no MIDI module: one amber pill beside the transport's alarms. It is
    the only thing on screen for a state the operator has to know about, so it is allowed
-   to be a colour — but it stays a 26px pill, and it is invisible on a machine where
-   MIDI works. The element is always in the tree so the row never changes height. */
+   to be a colour, and it takes no room at all on a machine where MIDI works. */
 
 .midi-status {
+  flex-shrink: 0;
   height: var(--h-button-sm);
   padding: 0 var(--space-3);
   border: 1px solid var(--accent-amber);
@@ -18,8 +18,5 @@
 
 .midi-status:hover { background: var(--bg-hover); }
 
-/* Nothing to report: present for the layout, invisible and unfocusable. */
-.midi-status[data-state='ok'] {
-  visibility: hidden;
-  cursor: default;
-}
+/* Nothing to report. */
+.midi-status[data-state='ok'] { display: none; }

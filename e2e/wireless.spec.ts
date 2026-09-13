@@ -92,3 +92,27 @@ test('a channel that never reports goes offline and says so', async () => {
   await expect(quiet).toContainText('Antonia')
   await expect(panel(page).locator('.rf-alert-message', { hasText: /went quiet/ })).toBeVisible()
 })
+
+test('an alarm stays on screen with every panel closed, and leads back to its panel', async () => {
+  await loadDemoRack(page)
+  await panel(page).locator('.rf-btn', { hasText: '✕' }).click()
+  await expect(panel(page)).toHaveCount(0)
+
+  // Nothing is open along the bottom, and the worst alarm is still in front of the
+  // operator — the pack the lead is wearing, not the merely low one.
+  const chip = page.locator('.transport-bar .alert-chip')
+  await expect(chip).toHaveAttribute('data-level', 'critical')
+  await expect(chip).toContainText(/Aldonza.*battery critical/)
+  await expect(chip.locator('.alert-chip-more')).toBeVisible()
+
+  // The answer to an alarm is in the panel that raised it.
+  await chip.click()
+  await expect(panel(page)).toBeVisible()
+  await expect(page.locator('.btn-rf')).toHaveAttribute('data-active', 'true')
+
+  // Dismissed there, gone here.
+  const alerts = panel(page).locator('.rf-alert-dismiss')
+  const count = await alerts.count()
+  for (let i = 0; i < count; i++) await alerts.first().click()
+  await expect(chip).toHaveCount(0)
+})

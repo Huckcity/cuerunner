@@ -174,16 +174,6 @@ html, body, #root {
 /* The scenes view is one surface, not a cue list with an inspector beside it. */
 .app-main[data-view='scenes'] { grid-template-columns: minmax(0, 1fr); }
 
-/* Machine-level status under the toolbar: whether this build can talk MIDI. Whatever
-   sits here keeps its height when it has nothing to say, so nothing below it moves. */
-.app-status-row {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-}
-
 /* Timeline fullscreen mode */
 .app-shell.timeline-fullscreen .app-main { display: none; }
 .app-shell.timeline-fullscreen .timeline-panel { flex: 1; height: auto; }

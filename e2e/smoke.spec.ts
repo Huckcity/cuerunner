@@ -66,3 +66,13 @@ test('the audio engine is running', async () => {
     throw error
   }
 })
+
+test('nothing sits between the toolbar and the cue list', async () => {
+  // An empty status row used to hold 26px here for a badge that only appears on a
+  // broken build. The cue list starts where the toolbar ends.
+  const toolbar = await page.locator('.toolbar').boundingBox()
+  const list = await page.locator('.cue-list-container').boundingBox()
+  expect(toolbar).not.toBeNull()
+  expect(list).not.toBeNull()
+  expect(Math.abs(list!.y - (toolbar!.y + toolbar!.height))).toBeLessThanOrEqual(1)
+})

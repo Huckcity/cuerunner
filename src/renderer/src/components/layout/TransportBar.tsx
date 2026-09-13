@@ -1,12 +1,16 @@
 import { useStore, usePro } from '../../store'
 import { useCueRunner, useKeyboard } from '../../hooks/useCueRunner'
 import { ProMark } from '../license/ProLock'
+import MidiStatusBadge from '../midi/MidiStatusBadge'
+import { AlertChip } from './AlertChip'
 import './TransportBar.css'
 
 interface Props {
   /** Which bottom strip is open, or none. They share the space, so only one at a time. */
   strip: ShowStrip | null
   onToggleStrip: (strip: ShowStrip) => void
+  /** Opens a strip without toggling it: an alarm asks for its panel, never to hide it. */
+  onShowStrip: (strip: ShowStrip) => void
 }
 
 /** The panels that live along the bottom of the window, one at a time. */
@@ -19,7 +23,7 @@ const STRIPS: { strip: ShowStrip; label: string; title: string; pro?: true }[] =
   { strip: 'script', label: 'SCRIPT', title: 'Show or hide the script', pro: true }
 ]
 
-export function TransportBar({ strip, onToggleStrip }: Props) {
+export function TransportBar({ strip, onToggleStrip, onShowStrip }: Props) {
   const { go, stop, panic } = useCueRunner()
   useKeyboard(go, stop, panic)
   const pro = usePro()
@@ -50,6 +54,11 @@ export function TransportBar({ strip, onToggleStrip }: Props) {
             {gated === true && !pro && <ProMark />}
           </button>
         ))}
+        {/* Whatever the operator has open, what needs them is here. */}
+        <div className="transport-alerts">
+          <AlertChip onShow={onShowStrip} />
+          <MidiStatusBadge />
+        </div>
       </div>
       <div className="transport-center">
         <button className="btn-stop" onClick={stop} title="Stop All (Esc)">
