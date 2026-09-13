@@ -42,6 +42,19 @@ import {
   type DeviceOptions
 } from '../shared/audio'
 import type { MenuAction } from '../shared/fileMenu'
+import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
+
+/**
+ * One audio verb, unwrapped here in the window.
+ *
+ * The main process answers with the engine's own `{ ok, value } | { ok, code, message }`
+ * rather than by rejecting, because Electron logs every rejected `ipcMain.handle` to
+ * stderr with a stack and this path refuses by design. Turning a refusal back into an
+ * exception in this process — where a rejection is just a rejection, and nothing logs it —
+ * keeps every caller reading exactly what it read before, `AudioEngineError` and all.
+ */
+const invokeAudio = async <T>(channel: string, payload?: unknown): Promise<T> =>
+  unwrapAudioResult((await ipcRenderer.invoke(channel, payload)) as AudioResult<T>)
 
 contextBridge.exposeInMainWorld('winslab', {
   // Which keyboard the labels should be written for: ⌘ on a Mac, Ctrl everywhere else.
@@ -95,20 +108,20 @@ contextBridge.exposeInMainWorld('winslab', {
    */
   audio: {
     prepare: (cueId: string, filePath: string): Promise<AudioMetadata> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.prepare, { cueId, filePath } satisfies AudioPreparePayload),
+      invokeAudio(AUDIO_CHANNELS.prepare, { cueId, filePath } satisfies AudioPreparePayload),
     start: (cueId: string, whenMs: number, options: AudioStartOptions): Promise<AudioStartResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.start, { cueId, whenMs, options } satisfies AudioStartPayload),
+      invokeAudio(AUDIO_CHANNELS.start, { cueId, whenMs, options } satisfies AudioStartPayload),
     stop: (cueId: string, fadeMs: number, whenMs?: number): Promise<AudioCommandResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.stop, { cueId, fadeMs, whenMs } satisfies AudioStopPayload),
+      invokeAudio(AUDIO_CHANNELS.stop, { cueId, fadeMs, whenMs } satisfies AudioStopPayload),
     stopAll: (fadeMs: number): Promise<AudioCommandResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
+      invokeAudio(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
     seek: (cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
+      invokeAudio(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
+      invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */
     routing: (cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.routing, { cueId, outputs } satisfies AudioRoutingPayload),
+      invokeAudio(AUDIO_CHANNELS.routing, { cueId, outputs } satisfies AudioRoutingPayload),
     fade: (
       cueId: string,
       param: AudioFadeParam,
@@ -117,27 +130,24 @@ contextBridge.exposeInMainWorld('winslab', {
       curve: AudioFadeCurve,
       whenMs?: number
     ): Promise<AudioCommandResult> =>
-      ipcRenderer.invoke(
-        AUDIO_CHANNELS.fade,
-        { cueId, param, value, durationMs, curve, whenMs } satisfies AudioFadePayload
-      ),
+      invokeAudio(AUDIO_CHANNELS.fade, { cueId, param, value, durationMs, curve, whenMs } satisfies AudioFadePayload),
     progress: (cueId: string): Promise<AudioProgress | null> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.progress, { cueId } satisfies AudioProgressPayload),
+      invokeAudio(AUDIO_CHANNELS.progress, { cueId } satisfies AudioProgressPayload),
     panic: (fadeMs: number): Promise<AudioPanicResult> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.panic, { fadeMs } satisfies AudioPanicPayload),
+      invokeAudio(AUDIO_CHANNELS.panic, { fadeMs } satisfies AudioPanicPayload),
     clock: (): Promise<AudioClockReading> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.clock),
+      invokeAudio(AUDIO_CHANNELS.clock),
     info: (): Promise<AudioEngineInfo> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.info),
+      invokeAudio(AUDIO_CHANNELS.info),
     devices: (): Promise<AudioDeviceInfo[]> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.devices),
+      invokeAudio(AUDIO_CHANNELS.devices),
     configure: (options: DeviceOptions): Promise<AudioEngineInfo> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.configure, { options } satisfies AudioConfigurePayload),
+      invokeAudio(AUDIO_CHANNELS.configure, { options } satisfies AudioConfigurePayload),
     waveform: (filePath: string, points: number): Promise<AudioWaveform> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.waveform, { filePath, points } satisfies AudioWaveformPayload),
+      invokeAudio(AUDIO_CHANNELS.waveform, { filePath, points } satisfies AudioWaveformPayload),
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),
+      invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),
     /** Engine events, batched by main. Returns the unsubscribe function. */
     onEvents: (callback: (events: AudioEngineEvent[]) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, events: AudioEngineEvent[]): void => callback(events)

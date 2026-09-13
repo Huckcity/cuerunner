@@ -24,6 +24,7 @@ import {
   type AudioStopPayload,
   type AudioWaveformPayload
 } from '../../shared/audio'
+import { refusalFrom, type AudioResult } from '../../shared/audioResult'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { panicFromShowEvent } from '../safety/panicBindings'
 import { OscEngine } from '../osc/OscEngine'
@@ -179,6 +180,18 @@ export function registerIpcHandlers(): void {
   if (isPro(license.status())) void show.configure(defaultShowSettings())
 
   // Audio
+  /**
+   * One audio verb, as the window will read it: a value or a refusal, never a rejection.
+   * Electron logs a rejected handler to stderr with a stack, and a refusal here is a
+   * normal state of the engine (no devices on a silent backend, an engine being
+   * restarted), not a fault to be reported.
+   */
+  const audioVerb = <T>(run: () => Promise<T>): Promise<AudioResult<T>> =>
+    run().then(
+      value => ({ ok: true as const, value }),
+      error => refusalFrom(error)
+    )
+
   ipcMain.handle('audio:pickFile', async (event) => {
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Audio File',
@@ -195,37 +208,47 @@ export function registerIpcHandlers(): void {
   // the window can schedule ahead and read back where the sound actually is; no media
   // ever crosses this boundary. The engine lives in this process, which is what lets
   // the panic path silence the show without the window's help.
+  //
+  // Each answers with the engine's own `{ ok, value } | { ok, code, message }` rather than
+  // by rejecting, and the preload unwraps it in the window (see shared/audioResult.ts).
+  // A rejection here is not free: Electron logs every rejected `ipcMain.handle` to stderr
+  // with a stack, and this path refuses by design — the silent backend has no devices, and
+  // the clock is read while an engine is being restarted. Those refusals used to be the
+  // bulk of the Windows E2E log, which is exactly where an engine failure is meant to be
+  // findable.
   ipcMain.handle(AUDIO_CHANNELS.prepare, (_, payload: AudioPreparePayload) =>
-    audioEngine.prepare(payload.cueId, payload.filePath))
+    audioVerb(() => audioEngine.prepare(payload.cueId, payload.filePath)))
   ipcMain.handle(AUDIO_CHANNELS.start, (_, payload: AudioStartPayload) =>
-    audioEngine.start(payload.cueId, payload.whenMs, payload.options))
+    audioVerb(() => audioEngine.start(payload.cueId, payload.whenMs, payload.options)))
   ipcMain.handle(AUDIO_CHANNELS.stop, (_, payload: AudioStopPayload) =>
-    audioEngine.stop(payload.cueId, payload.fadeMs, payload.whenMs))
+    audioVerb(() => audioEngine.stop(payload.cueId, payload.fadeMs, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.stopAll, (_, payload: AudioStopAllPayload) =>
-    audioEngine.stopAll(payload.fadeMs))
+    audioVerb(() => audioEngine.stopAll(payload.fadeMs)))
   ipcMain.handle(AUDIO_CHANNELS.seek, (_, payload: AudioSeekPayload) =>
-    audioEngine.seek(payload.cueId, payload.positionMs, payload.whenMs))
+    audioVerb(() => audioEngine.seek(payload.cueId, payload.positionMs, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
-    audioEngine.cancel(payload.cueId, payload.whenMs))
+    audioVerb(() => audioEngine.cancel(payload.cueId, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.routing, (_, payload: AudioRoutingPayload) =>
-    audioEngine.routing(payload.cueId, payload.outputs))
+    audioVerb(() => audioEngine.routing(payload.cueId, payload.outputs)))
   ipcMain.handle(AUDIO_CHANNELS.fade, (_, payload: AudioFadePayload) =>
-    audioEngine.fade(payload.cueId, payload.param, payload.value, payload.durationMs, payload.curve, payload.whenMs))
+    audioVerb(() =>
+      audioEngine.fade(payload.cueId, payload.param, payload.value, payload.durationMs, payload.curve, payload.whenMs)
+    ))
   ipcMain.handle(AUDIO_CHANNELS.progress, (_, payload: AudioProgressPayload) =>
-    audioEngine.progress(payload.cueId))
+    audioVerb(() => audioEngine.progress(payload.cueId)))
   ipcMain.handle(AUDIO_CHANNELS.panic, (_, payload: AudioPanicPayload) =>
-    audioEngine.panic(payload.fadeMs))
-  ipcMain.handle(AUDIO_CHANNELS.clock, () => audioEngine.clock())
-  ipcMain.handle(AUDIO_CHANNELS.info, () => audioEngine.info())
-  ipcMain.handle(AUDIO_CHANNELS.devices, () => audioEngine.devices())
+    audioVerb(() => audioEngine.panic(payload.fadeMs)))
+  ipcMain.handle(AUDIO_CHANNELS.clock, () => audioVerb(() => audioEngine.clock()))
+  ipcMain.handle(AUDIO_CHANNELS.info, () => audioVerb(() => audioEngine.info()))
+  ipcMain.handle(AUDIO_CHANNELS.devices, () => audioVerb(() => audioEngine.devices()))
   ipcMain.handle(AUDIO_CHANNELS.configure, (_, payload: AudioConfigurePayload) =>
-    audioEngine.configure(payload.options))
+    audioVerb(() => audioEngine.configure(payload.options)))
   ipcMain.handle(AUDIO_CHANNELS.waveform, (_, payload: AudioWaveformPayload) =>
-    audioEngine.waveform(payload.filePath, payload.points))
+    audioVerb(() => audioEngine.waveform(payload.filePath, payload.points)))
   // A workspace footprint asks about every cue: headers only, nothing decoded, nothing
   // cached, nothing counted.
   ipcMain.handle(AUDIO_CHANNELS.probe, (_, payload: AudioProbePayload) =>
-    audioEngine.probe(payload.filePath))
+    audioVerb(() => audioEngine.probe(payload.filePath)))
 
   // Every engine event is both forwarded to the window and kept for the safety net: a
   // burst — a panic stopping twenty voices at once — is one message rather than twenty,
