@@ -131,9 +131,11 @@ function replyFor(summary, index) {
 // --- fixtures --------------------------------------------------------------
 const dc4Path = join(workDir, 'dc4.wav')
 const dc2Path = join(workDir, 'dc2.wav')
+const monoPath = join(workDir, 'mono.wav')
 const longPath = join(workDir, 'long.wav')
 writeFloatWav(dc4Path, 4, SAMPLE_RATE, SAMPLE_RATE / 2, (channel) => [0.1, 0.2, 0.3, 0.4][channel])
 writeFloatWav(dc2Path, 2, SAMPLE_RATE, SAMPLE_RATE / 2, (channel) => (channel === 0 ? 0.5 : -0.25))
+writeFloatWav(monoPath, 1, SAMPLE_RATE, SAMPLE_RATE / 2, () => 0.5)
 // Three seconds of stereo at 0.25 — big enough to force the streaming path when the
 // cache's per-file limit is lowered.
 writeFloatWav(longPath, 2, SAMPLE_RATE, SAMPLE_RATE * 3, () => 0.25)
@@ -613,6 +615,63 @@ console.log(`winslab-audio acceptance — binary ${binary}`)
   check('a missing file is refused', replyFor(summary, 1).ok === false && replyFor(summary, 1).error.code === 'decode')
   check('a start beyond the horizon is refused', replyFor(summary, 3).ok === false && replyFor(summary, 3).error.code === 'limit')
   check('a zero rate is refused', replyFor(summary, 4).ok === false && replyFor(summary, 4).error.code === 'invalid')
+}
+
+// --- 17. pan belongs to automatic routing only ----------------------------
+{
+  console.log('\nexplicit routing is not panned')
+  // A mono voice routed explicitly to all four outputs at unity must play at unity on
+  // all four whatever the pan knob says; an operator's matrix is the whole statement.
+  const unityMatrix = [
+    { inputChannel: 0, outputChannel: 0, gain: 1 },
+    { inputChannel: 0, outputChannel: 1, gain: 1 },
+    { inputChannel: 0, outputChannel: 2, gain: 1 },
+    { inputChannel: 0, outputChannel: 3, gain: 1 }
+  ]
+  const script = (pan, outputs) => ({
+    sampleRate: SAMPLE_RATE,
+    channels: 4,
+    blockFrames: 256,
+    stopWhenIdle: false,
+    frames: 4800,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: monoPath },
+      {
+        atMs: 0,
+        verb: 'start',
+        cueId: 'a',
+        whenMs: 0,
+        options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan, fadeInDuration: 0, outputs }
+      }
+    ]
+  })
+  const rms = (wav, channel, frames = 4800) => {
+    let sum = 0
+    for (let frame = 0; frame < frames; frame++) {
+      const value = sampleAt(wav, frame, channel)
+      sum += value * value
+    }
+    return Math.sqrt(sum / frames)
+  }
+  for (const pan of [-1, -0.5, 0, 0.5, 1]) {
+    const levels = [0, 1, 2, 3].map((channel) => rms(runEngine(script(pan, unityMatrix)).wav, channel))
+    check(
+      `unity matrix is flat on four outputs at pan ${pan}`,
+      levels.every((level) => near(level, levels[0])),
+      JSON.stringify(levels)
+    )
+    // The pan law leaves exactly one side at unity, and only at the extremes; anywhere
+    // else the automatic route is deliberately quieter, so there is no level to match.
+    if (pan === -1 || pan === 1) {
+      const channel = pan < 0 ? 0 : 1
+      const automatic = rms(runEngine(script(pan, null)).wav, channel)
+      check(
+        `pan ${pan} matches automatic routing on output ${channel}`,
+        near(levels[channel], automatic),
+        `${levels[channel]} vs ${automatic}`
+      )
+    }
+  }
 }
 
 rmSync(workDir, { recursive: true, force: true })

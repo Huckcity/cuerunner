@@ -28,6 +28,15 @@ struct FadeRamp {
   Curve curve = Curve::Linear;
 };
 
+// One destination gain for the explicit matrix. The output channel is not stored: the
+// taps are grouped by output and `voice.tapStart` slices them, so the render loop walks
+// only the taps that feed the output being written. Eight bytes against Crosspoint's
+// twelve keeps the indexed list smaller than the raw one it replaces.
+struct Tap {
+  int inputChannel = 0;
+  float gain = 1.0f;
+};
+
 struct Voice {
   bool active = false;
   char cueId[kMaxCueIdLen] = {};
@@ -62,8 +71,10 @@ struct Voice {
   FadeRamp stopFade;
 
   bool automaticRouting = true;
-  int crosspointCount = 0;
-  Crosspoint crosspoints[kMaxCrosspoints] = {};
+  Tap taps[kMaxCrosspoints] = {};
+  // tapStart[output] .. tapStart[output + 1] is the slice of `taps` for that output,
+  // built once when the routing is applied. Empty when the two are equal.
+  int tapStart[kMaxOutputChannels + 1] = {};
 
   EndReason pendingReason = EndReason::Complete;
 };
@@ -105,6 +116,7 @@ class Mixer {
   Voice* freeVoice();
   void beginVoice(Voice& voice, int64_t frame);
   Voice* startVoice(const Command& cmd);
+  void indexRouting(Voice& voice, const Crosspoint* points, int count);
   void stopVoice(Voice& voice, int64_t frame, double fadeFrames, EndReason reason);
   void finishVoice(Voice& voice, int64_t frame, EndReason reason);
   void cancelVoice(Voice& voice, int64_t frame, int& canceled);

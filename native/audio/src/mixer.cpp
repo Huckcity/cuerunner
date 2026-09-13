@@ -208,6 +208,43 @@ void Mixer::beginVoice(Voice& voice, int64_t frame) {
   emitState(&voice, true);
 }
 
+// Builds the output-indexed tap list for an explicit matrix. Called once when the
+// routing is applied, never per frame: a counting sort stably groups the crosspoints by
+// output channel and `tapStart` records each output's slice. Stability matters — the
+// taps for one output stay in the order the operator gave them, so the accumulated sum
+// is bit-for-bit what the per-frame scan produced. Crosspoints the scan would have
+// rejected anyway (an output outside the device range, an input outside the source) are
+// dropped here instead of being re-tested for every frame and output.
+void Mixer::indexRouting(Voice& voice, const Crosspoint* points, int count) {
+  count = std::max(0, std::min(kMaxCrosspoints, count));
+
+  int counts[kMaxOutputChannels] = {};
+  for (int i = 0; i < count; i++) {
+    const Crosspoint& point = points[i];
+    if (point.outputChannel < 0 || point.outputChannel >= kMaxOutputChannels) continue;
+    if (point.inputChannel < 0 || point.inputChannel >= voice.channels) continue;
+    counts[point.outputChannel]++;
+  }
+
+  int cursor[kMaxOutputChannels];
+  int total = 0;
+  for (int output = 0; output < kMaxOutputChannels; output++) {
+    voice.tapStart[output] = total;
+    cursor[output] = total;
+    total += counts[output];
+  }
+  voice.tapStart[kMaxOutputChannels] = total;
+
+  for (int i = 0; i < count; i++) {
+    const Crosspoint& point = points[i];
+    if (point.outputChannel < 0 || point.outputChannel >= kMaxOutputChannels) continue;
+    if (point.inputChannel < 0 || point.inputChannel >= voice.channels) continue;
+    Tap& tap = voice.taps[cursor[point.outputChannel]++];
+    tap.inputChannel = point.inputChannel;
+    tap.gain = point.gain;
+  }
+}
+
 Voice* Mixer::startVoice(const Command& cmd) {
   if (Voice* existing = findVoice(cmd.cueId)) {
     finishVoice(*existing, clockFrames_, EndReason::Replaced);
@@ -291,8 +328,7 @@ Voice* Mixer::startVoice(const Command& cmd) {
   voice->trim = options.trim;
   voice->rate = options.rate > 0.0 ? options.rate : 1.0;
   voice->automaticRouting = options.automatic;
-  voice->crosspointCount = std::max(0, std::min(kMaxCrosspoints, options.crosspointCount));
-  for (int i = 0; i < voice->crosspointCount; i++) voice->crosspoints[i] = options.crosspoints[i];
+  indexRouting(*voice, options.crosspoints, options.crosspointCount);
 
   voice->startFrame = atOrNow(cmd.whenMs, sampleRate_, clockFrames_);
   if (options.fadeInMs > 0.0) {
@@ -479,8 +515,7 @@ void Mixer::apply(const Command& cmd) {
       Voice* voice = findVoice(cmd.cueId);
       if (voice != nullptr) {
         voice->automaticRouting = cmd.routingAutomatic;
-        voice->crosspointCount = std::max(0, std::min(kMaxCrosspoints, cmd.routingCount));
-        for (int i = 0; i < voice->crosspointCount; i++) voice->crosspoints[i] = cmd.routing[i];
+        indexRouting(*voice, cmd.routing, cmd.routingCount);
         applied = true;
       }
       break;
@@ -638,16 +673,20 @@ void Mixer::render(float* out, int frames, int channels) {
                                 ? (output < 2 ? 0 : -1)
                                 : (output < voice.channels ? output : -1);
           if (input >= 0) contribution = sample[input];
+          // Pan belongs to automatic routing. An explicit crosspoint list states its
+          // own destinations and levels, so nothing is applied on top of it.
+          if (output == 0) contribution *= panLeft;
+          else if (output == 1) contribution *= panRight;
         } else {
-          for (int i = 0; i < voice.crosspointCount; i++) {
-            const Crosspoint& point = voice.crosspoints[i];
-            if (point.outputChannel != output) continue;
-            if (point.inputChannel < 0 || point.inputChannel >= voice.channels) continue;
-            contribution += static_cast<double>(sample[point.inputChannel]) * static_cast<double>(point.gain);
+          // The taps are grouped by output when the routing is applied, so this walks
+          // only the crosspoints that feed the output being written.
+          const int begin = voice.tapStart[output];
+          const int end = voice.tapStart[output + 1];
+          for (int t = begin; t < end; t++) {
+            const Tap& tap = voice.taps[t];
+            contribution += static_cast<double>(sample[tap.inputChannel]) * static_cast<double>(tap.gain);
           }
         }
-        if (output == 0) contribution *= panLeft;
-        else if (output == 1) contribution *= panRight;
         outFrame[output] += static_cast<float>(contribution * gain);
       }
 
