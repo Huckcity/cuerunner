@@ -29,7 +29,10 @@ jobs:
           cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -51,7 +54,10 @@ jobs:
           cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -106,7 +112,10 @@ jobs:
           cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -127,6 +136,9 @@ jobs:
   # Linux is the one that can run in the homelab; `label` is the lane's name (the job's,
   # and the failure artifact's), `runner` is where it runs.
   e2e:
+    # Without this the job is named after every matrix value it carries, which for the
+    # self-hosted lane is the whole label list.
+    name: e2e (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:

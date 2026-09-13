@@ -22,7 +22,10 @@ jobs:
           cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -192,7 +195,10 @@ jobs:
           cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
