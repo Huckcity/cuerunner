@@ -19,5 +19,13 @@ export function liveWindow(win: BrowserWindow | null | undefined): win is Browse
 /** Send, if there is anyone to send to. */
 export function sendToWindow(win: BrowserWindow | null | undefined, channel: string, payload?: unknown): void {
   if (!liveWindow(win)) return
-  win.webContents.send(channel, payload)
+  try {
+    win.webContents.send(channel, payload)
+  } catch {
+    // The frame can be disposed between the check and the call — a renderer that is killed
+    // does exactly that, and the engine keeps producing events for it, because the show
+    // does not stop when the window does. A message addressed to a window that is gone has
+    // nowhere to land; the renderer's disappearance is reported by the app's own line, so
+    // nothing is being swallowed here.
+  }
 }

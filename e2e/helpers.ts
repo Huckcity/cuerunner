@@ -141,8 +141,19 @@ export async function launchApp(
   // Elsewhere Playwright already surfaces it, so the tee stays Windows-only.
   if (process.platform === 'win32') {
     const proc = app.process()
-    proc.stdout?.on('data', (chunk: Buffer) => process.stdout.write(chunk))
-    proc.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk))
+    // Node prints this once per app, on exit, because Playwright's inspector is still
+    // attached — it is about the debugger, not the app, and the suite launches an app per
+    // test. Dropping it keeps the tee about what the tee is for: the engine's diagnostics
+    // and main's own reports, on the one lane where Playwright does not print them.
+    const nodeNoise = /^Waiting for the debugger to disconnect\.\.\.\s*/gm
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString().replace(nodeNoise, '')
+      if (text.trim() !== '') process.stdout.write(text)
+    })
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString().replace(nodeNoise, '')
+      if (text.trim() !== '') process.stderr.write(text)
+    })
   }
 
   const page = await app.firstWindow()

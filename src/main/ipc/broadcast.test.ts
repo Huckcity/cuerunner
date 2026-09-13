@@ -23,6 +23,20 @@ describe('sending to a window that may have gone', () => {
     expect(send).toHaveBeenCalledWith('audio:events', [{ id: 1 }])
   })
 
+  it('survives a frame that goes away between the check and the send', () => {
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        isDestroyed: () => false,
+        isCrashed: () => false,
+        send: () => {
+          throw new Error('Render frame was disposed before WebFrameMain could be accessed')
+        }
+      }
+    } as unknown as BrowserWindow
+    expect(() => sendToWindow(win, 'audio:events', [])).not.toThrow()
+  })
+
   it('skips a failed, destroyed or absent window instead of throwing', () => {
     const cases = [
       { name: 'no window', make: () => null },
