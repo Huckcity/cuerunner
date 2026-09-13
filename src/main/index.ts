@@ -276,7 +276,8 @@ app.whenReady().then(() => {
       info: () => audioEngine.info(),
       recentEvents: recentEngineEvents,
       status: () => audioEngine.status(),
-      kill: () => audioEngine.crashForTest()
+      kill: () => audioEngine.crashForTest(),
+      simulateDeviceLoss: () => audioEngine.simulateDeviceLossForTest()
     }
   })
   app.on('before-quit', () => playbackSafety.close())

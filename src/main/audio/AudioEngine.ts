@@ -620,6 +620,17 @@ export class NativeAudioEngine {
     child.kill('SIGKILL')
   }
 
+  /**
+   * Asks the engine to lose its device, for the device-loss acceptance test. The engine
+   * runs the same classification its backend callback runs and refuses the verb when a
+   * real device is open, so this can neither stand in for nor mask a genuine event; only
+   * the silent/offline backends — which is where the test suite runs — accept it.
+   * Reachable only through the dev harness, which a packaged build never installs.
+   */
+  simulateDeviceLossForTest(): Promise<void> {
+    return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false }).then(() => undefined)
+  }
+
   private failPending(error: Error): void {
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer)

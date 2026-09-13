@@ -40,6 +40,12 @@ export interface PlaybackDevHarness {
    * child from the outside on every platform.
    */
   killEngine: () => void
+  /**
+   * Takes the device away mid-show: the engine runs its own device-loss classification
+   * and silences what it holds. The engine refuses the underlying verb when a real
+   * device is open, so a spec can only ever exercise this on the silent backend.
+   */
+  simulateDeviceLoss: () => Promise<void>
 }
 
 declare global {
@@ -59,6 +65,11 @@ export interface PlaybackDevHarnessDeps {
     status: () => AudioEngineStatus
     /** A hard kill of the engine child; a packaged build never gets the harness. */
     kill: () => void
+    /**
+     * The engine's own device-loss path, driven without hardware. Refused by the engine
+     * when a real device is open, so it cannot mask or imitate a genuine event.
+     */
+    simulateDeviceLoss: () => Promise<void>
   }
 }
 
@@ -71,6 +82,7 @@ export function installPlaybackDevHarness(deps: PlaybackDevHarnessDeps): void {
     engineStatus: deps.engine.status,
     engineInfo: () => deps.engine.info(),
     engineEvents: () => deps.engine.recentEvents(),
-    killEngine: () => deps.engine.kill()
+    killEngine: () => deps.engine.kill(),
+    simulateDeviceLoss: () => deps.engine.simulateDeviceLoss()
   }
 }
