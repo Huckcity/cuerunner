@@ -1,15 +1,12 @@
-# The Linux jobs run on the self-hosted runner in the homelab (`ubox`) and the macOS lane
-# on the Mac mini next to it — machines that would otherwise be idle, and macOS is billed
-# at ten times the Linux rate. What is left on GitHub's runners is Windows, which has no
-# self-hosted home yet. Both hosts, and how to replace them, are in CLAUDE.md → CI runners.
+# Every lane runs on hardware in the homelab: Linux on `ubox`, macOS on the Mac mini beside
+# it, Windows in a KVM guest on `ubox` (CLAUDE.md → CI runners). None of it is billed, and
+# none of it stops when the account's included minutes run out.
 name: CI
 
 on:
   pull_request:
     branches: [main]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   typecheck:
@@ -21,12 +18,11 @@ jobs:
         # like fd-slicer's zip extraction stalling on Node 26 (#49).
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Install ALSA dev headers
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
@@ -46,12 +42,11 @@ jobs:
       matrix:
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Install ALSA dev headers
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
@@ -71,17 +66,16 @@ jobs:
   native-engine:
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - run: npm ci --legacy-peer-deps
 
       - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: native/audio/build/decoders
           key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
@@ -104,12 +98,11 @@ jobs:
       matrix:
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Install ALSA dev headers
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
@@ -158,12 +151,11 @@ jobs:
           - runner: [self-hosted, macos, arm64, mac-mini]
             label: macos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
@@ -195,10 +187,23 @@ jobs:
           echo 'runtime libraries present'
 
       # The app runs the native engine; on Windows the compiler is installed but not on
-      # PATH unless the developer environment is imported.
+      # PATH unless the developer environment is imported. This is done here rather than
+      # with `ilammy/msvc-dev-cmd`, which was the last thing in these workflows still
+      # targeting Node 20: what it does for this lane is vswhere to find the tools,
+      # vcvars64 to import them, and the two variable files GitHub gives a step.
+      # `vcvars64` is the x64-targeting variant, which is what the installer builds for.
       - name: Set up MSVC
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
 
       # Electron opens a real window; the wrapper gives it a private Xvfb display on
       # Linux, where a runner has none of its own (scripts/run-e2e.js).
@@ -207,7 +212,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-results-${{ matrix.label }}
           path: test-results/

@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
+import { sendToWindow } from './ipc/broadcast'
 import { onMainError, reportMainError } from './errors'
 import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
@@ -24,11 +25,7 @@ const RENDERER_RESTART_DELAY_MS = 500
 // until a window is listening: the window subscribes a moment after it loads, and a
 // failure during startup would otherwise be pushed to nobody.
 onMainError(message => {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-      win.webContents.send('app:main-error', message)
-    }
-  }
+  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, 'app:main-error', message)
 })
 
 function describeError(error: unknown): string {
@@ -51,7 +48,7 @@ process.on('unhandledRejection', (reason) => {
 // fallback to the first open window.
 function sendMenuAction(action: MenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-  target?.webContents.send('app:menu-action', action)
+  sendToWindow(target, 'app:menu-action', action)
 }
 
 // The File menu is the window's work — every item runs in the renderer, where the show
@@ -182,7 +179,7 @@ function createWindow(): void {
   win.on('close', (event) => {
     if (allowClose || rendererDead) return
     event.preventDefault()
-    win.webContents.send('app:close-requested')
+    sendToWindow(win, 'app:close-requested')
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {
@@ -224,8 +221,13 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => win.show())
 
-  win.webContents.on('console-message', (_, level, message, line, sourceId) => {
-    if (level >= 2) console.error(`[renderer] ${message} (${sourceId}:${line})`)
+  // The event object, not the deprecated positional arguments: Electron logs a deprecation
+  // warning for the old form on every message, which on a full E2E run is a hundred and
+  // forty lines of the Windows log that say nothing about the app.
+  win.webContents.on('console-message', details => {
+    if (details.level === 'warning' || details.level === 'error') {
+      console.error(`[renderer] ${details.message} (${details.sourceId}:${details.lineNumber})`)
+    }
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {

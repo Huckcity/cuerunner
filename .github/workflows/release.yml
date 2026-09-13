@@ -9,8 +9,6 @@ name: Release
 on:
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: write
@@ -21,15 +19,14 @@ jobs:
   release:
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
         # Here the headers are the hosted image's; the check and the timeout are the same

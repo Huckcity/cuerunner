@@ -25,6 +25,7 @@ import {
   type AudioWaveformPayload
 } from '../../shared/audio'
 import { refusalFrom, type AudioResult } from '../../shared/audioResult'
+import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { panicFromShowEvent } from '../safety/panicBindings'
 import { OscEngine } from '../osc/OscEngine'
@@ -94,13 +95,12 @@ let settingsReceived = false
 const PRO_REQUIRED = 'WinsLab Pro is required for the show services'
 
 // One batch, every window that is still alive. A window that is mid-reload has no
-// listener yet; it catches up from the snapshot it asks for on startup.
+// listener yet; it catches up from the snapshot it asks for on startup. A window whose
+// renderer was killed is the case that matters here: the show keeps running in this
+// process, so engine events keep arriving for a window that is not there, and sending to
+// it throws rather than being skipped.
 function broadcastToWindows(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-      win.webContents.send(channel, payload)
-    }
-  }
+  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, channel, payload)
 }
 
 function broadcastShowEvents(events: ShowEvent[]): void {
@@ -147,11 +147,7 @@ show.subscribe(events => {
  * bind a port on a machine that may not use one.
  */
 license.subscribe((status: LicenseStatus) => {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-      win.webContents.send('license:changed', status)
-    }
-  }
+  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, 'license:changed', status)
   if (!isPro(status)) {
     void show.suspend()
     return
@@ -468,7 +464,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('workspace:setTitle', async (event, title: string) => {
-    getWin(event).setTitle(title)
+    // The window can be gone by the time this arrives: the kill tests stop the renderer
+    // while the main process keeps running the show, and the title update that was in
+    // flight then has nowhere to land. Doing nothing is the correct behaviour, and it is
+    // the difference between a title and an exception in the log.
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (liveWindow(win)) win.setTitle(title)
   })
 
   ipcMain.handle('workspace:confirmClose', async (event, workspaceName: string) => {

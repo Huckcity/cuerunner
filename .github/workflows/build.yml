@@ -5,23 +5,20 @@ on:
     types: [published]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # A release runs on the homelab machines: Linux and the packaging on ubox, the macOS
-  # half on the Mac mini, as the CI lanes do (CLAUDE.md → CI runners). The Windows build
-  # is the one exception — there is no x86_64 Windows host yet, so it stays on GitHub's
-  # runners and a release waits for them.
+  # A release runs entirely on the homelab machines, like every other workflow here:
+  # Linux and the packaging on ubox, the macOS half on the Mac mini, the Windows installer
+  # in the KVM guest on ubox (CLAUDE.md → CI runners). Nothing publishes from GitHub's
+  # runners, and nothing here waits on them.
   test:
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
@@ -34,7 +31,7 @@ jobs:
 
       # The pinned M4A helper only changes when its build script does.
       - name: Cache the packaged M4A decoder
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: native/audio/build/decoders
           key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
@@ -51,12 +48,11 @@ jobs:
   test-e2e:
     runs-on: [self-hosted, macos, arm64, mac-mini]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -71,20 +67,30 @@ jobs:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, windows, x64, ubox-win]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      # dist:win builds the native playback engine, which needs a C++ toolchain in
-      # the environment rather than only installed on the runner.
+      # dist:win builds the native playback engine, which needs a C++ toolchain in the
+      # environment rather than only installed on the runner. Same import as ci.yml's E2E
+      # lane, and the same reason for spelling it out: the action it used to call still
+      # targets Node 20, and this is vswhere + vcvars64 + two variable files.
       - name: Set up MSVC
-        uses: ilammy/msvc-dev-cmd@v1
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
 
       # The engine is a separate binary; a build that ships one the user cannot identify
       # as theirs is a build a venue will refuse to install. Signing happens when the
@@ -122,7 +128,7 @@ jobs:
           }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinsLab-windows
           path: dist/*.exe
@@ -132,12 +138,11 @@ jobs:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, macos, arm64, mac-mini]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -179,7 +184,7 @@ jobs:
           xcrun stapler validate "$DMG"
 
       - name: Upload dmg
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinsLab-mac
           path: dist/*.dmg
@@ -189,12 +194,11 @@ jobs:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
@@ -206,7 +210,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Cache the packaged M4A decoder
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: native/audio/build/decoders
           key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
@@ -215,7 +219,7 @@ jobs:
         run: npm run dist:linux
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinsLab-linux
           path: dist/*.AppImage
@@ -227,11 +231,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/**/*
 
@@ -239,7 +243,7 @@ jobs:
     needs: release
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 

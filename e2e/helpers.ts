@@ -122,6 +122,13 @@ export async function launchApp(
     ],
     env: {
       ...launchEnv(options.license?.publicKeyPem ?? options.trustPublicKey),
+      // Electron prints its security advice into the renderer's console once per window
+      // while unpackaged, and the suite opens hundreds. It says so itself — "this warning
+      // will not show up once the app is packaged" — and where the harness tees the app's
+      // stdio (Windows) that is a hundred and forty lines of the log saying nothing about
+      // the run. The policy it advises on is a real item and not a test-harness one; this
+      // keeps the suite's log about the suite.
+      ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
       ...(options.audio?.binPath !== undefined ? { WINSLAB_AUDIO_BIN: options.audio.binPath } : {}),
       // Explicit, not detected: a test run plays no user hardware, and a spec that wants
       // the real device says so.
