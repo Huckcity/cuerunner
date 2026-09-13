@@ -65,7 +65,7 @@ function NumberField({ id, label, value, min, max, disabled, onCommit }: NumberF
 
 export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
   const {
-    audioSettings, midiSettings, showSettings, showServices,
+    audioSettings, midiSettings, showSettings, showServices, audioDeviceError,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
     updateRfSettings, updatePresenceSettings, updateCompanionSettings
   } = useStore()
@@ -263,12 +263,27 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                   checked={audioSettings.exclusive ?? false}
                   onChange={e => updateAudioSettings({ exclusive: e.target.checked })}
                 />
-                <span className="settings-info">Take the device exclusively, where the driver allows it</span>
+                <span className="settings-info">Take the device for WinsLab alone</span>
               </div>
+              <p className="inspector-hint">
+                Exclusive locks the device against everything else on the machine: while the
+                show is running, system sounds and conferencing apps are locked out. On
+                Windows it is what gets the device's real channel count, a sample rate that
+                matches the session, and latency you can predict. Where the driver will not
+                allow it the engine refuses the setting rather than falling back quietly, and
+                its reason appears here.
+              </p>
+              {audioDeviceError && (
+                <p className="settings-device-error" role="alert">{audioDeviceError}</p>
+              )}
 
               <div className="field-section-title">Engine</div>
               {info ? (
                 <>
+                  <div className="field-row">
+                    <label>Backend</label>
+                    <span className="settings-info">{info.backend}</span>
+                  </div>
                   <div className="field-row">
                     <label>Running at</label>
                     <span className="settings-info">
@@ -304,6 +319,13 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                     <span className="settings-info">
                       {formatBytes(info.media.residentBytes)} resident
                       {info.cache.limitBytes > 0 ? ` · cache ${formatBytes(info.cache.bytes)} of ${formatBytes(info.cache.limitBytes)}` : ''}
+                    </span>
+                  </div>
+                  <div className="field-row">
+                    <label>Dropouts</label>
+                    <span className="settings-info">
+                      {info.media.xruns} {info.media.xruns === 1 ? 'xrun' : 'xruns'}
+                      {` · ${info.media.decodeUnderruns} ${info.media.decodeUnderruns === 1 ? 'decode underrun' : 'decode underruns'}`}
                     </span>
                   </div>
                   <PlaybackWarnings className="settings-warning" />

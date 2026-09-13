@@ -64,8 +64,24 @@ test('Audio tab reports exactly what the engine says it is running', async () =>
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
+  // The capability readout is the engine's own numbers, so the operator can check a rig
+  // before a show without trusting the page's memory of what it asked for. The regex is
+  // case-sensitive because the Device row's name mentions the silent backend too.
+  const backend = dialog.locator('.field-row', { hasText: /Backend/ }).locator('.settings-info')
+  await expect(backend).toHaveText(info!.backend)
+
   const runningAt = dialog.locator('.field-row', { hasText: 'Running at' }).locator('.settings-info')
-  await expect(runningAt).toContainText(`${info!.sampleRate.toLocaleString()} Hz`)
+  await expect(runningAt).toHaveText(
+    `${info!.sampleRate.toLocaleString()} Hz`
+    + (info!.channels > 0 ? ` · ${info!.channels} ch` : '')
+    + (info!.bufferFrames ? ` · ${info!.bufferFrames} frames` : '')
+  )
+
+  const dropouts = dialog.locator('.field-row', { hasText: 'Dropouts' }).locator('.settings-info')
+  await expect(dropouts).toHaveText(
+    `${info!.media.xruns} ${info!.media.xruns === 1 ? 'xrun' : 'xruns'}`
+    + ` · ${info!.media.decodeUnderruns} ${info!.media.decodeUnderruns === 1 ? 'decode underrun' : 'decode underruns'}`
+  )
 
   // The latency is either a number labelled with how it was arrived at, or it is
   // honestly unknown — never a number pretending to be measured.
@@ -75,6 +91,31 @@ test('Audio tab reports exactly what the engine says it is running', async () =>
   const latency = dialog.locator('.field-row', { hasText: 'Latency' }).locator('.settings-info')
   await expect(latency).toHaveText(expectedLatency)
 
+  await closeSettings(page)
+})
+
+test('the device section sets exclusive mode, and says what it costs', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  const exclusive = dialog.locator('#settings-exclusive')
+  await expect(exclusive).toBeVisible()
+
+  // The trade-off is stated where the choice is made, in the operator's terms: it takes
+  // the device away from everything else on the machine.
+  const tradeOff = dialog.locator('.inspector-hint', { hasText: 'Exclusive locks' })
+  await expect(tradeOff).toContainText('system sounds')
+  await expect(tradeOff).toContainText('conferencing')
+  await expect(tradeOff).toContainText('real channel count')
+
+  const wasOn = await exclusive.isChecked()
+  await exclusive.setChecked(!wasOn)
+
+  await closeSettings(page)
+  // A device setting belongs to the workspace, so it is still there next time.
+  await openSettings(page)
+  await expect(page.locator('#settings-exclusive')).toBeChecked({ checked: !wasOn })
+
+  await page.locator('#settings-exclusive').setChecked(wasOn)
   await closeSettings(page)
 })
 

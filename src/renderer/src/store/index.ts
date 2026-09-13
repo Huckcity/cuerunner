@@ -179,6 +179,14 @@ interface CueListState {
   /** Marks the session as having unsaved changes, e.g. after recovering a snapshot. */
   markDirty: () => void
 
+  /**
+   * The engine's own reason for refusing a device change, or null when the last request
+   * was honoured. Session state, not workspace content: it says what this machine did,
+   * and it stands until a request is accepted.
+   */
+  audioDeviceError: string | null
+  setAudioDeviceError: (message: string | null) => void
+
   // Settings
   updateAudioSettings: (patch: Partial<AudioSettings>) => void
   updateMidiSettings: (patch: Partial<MidiSettings>) => void
@@ -357,6 +365,7 @@ export const useStore = create<CueListState>((set) => ({
   showEvents: [],
   deskState: {},
   deskSceneId: null,
+  audioDeviceError: null,
   notice: null,
   missingMedia: [],
   past: [],
@@ -612,6 +621,8 @@ export const useStore = create<CueListState>((set) => ({
   }),
 
   setLicense: (license) => set({ license }),
+
+  setAudioDeviceError: (audioDeviceError) => set({ audioDeviceError }),
 
   openSettings: (settingsTab) => set({ settingsTab }),
 
