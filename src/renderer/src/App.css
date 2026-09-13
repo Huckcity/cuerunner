@@ -167,6 +167,13 @@ html, body, #root {
   /* minmax(0, 1fr) rather than 1fr: a plain 1fr track takes its minimum from its content,
      so a wide grid inside it pushes the window wider instead of scrolling in place. */
   grid-template-columns: minmax(0, 1fr) var(--inspector-width);
+  /* The same rule vertically. An implicit row is content-sized, so on a window shorter
+     than the cue list wants — a laptop, or a dock the operator has dragged up — the list
+     grew past this box, was clipped by `overflow: hidden`, and still scrolled: selecting a
+     cue near the end scrolled the clip and moved the list and the panel beside it. Rows
+     past the clip could not be reached at all. The row is the height the window gives it,
+     and the cue list scrolls inside itself. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }

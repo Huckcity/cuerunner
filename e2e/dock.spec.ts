@@ -81,6 +81,27 @@ test('walking the list changes what the dock shows, never where the list ends', 
   await expectSameBottom(page, bottom)
 })
 
+test('a window too short for the list: the list still ends where it did', async () => {
+  // The Windows and macOS runners open a window whose content is ~650px tall, and the
+  // demo's cue list wants ~420px of that. It used to grow past its container there, be
+  // clipped, and then scroll when a cue near the end was selected — the list's own box
+  // moved under the operator, and rows past the clip could not be reached at all.
+  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1280, 620) })
+  await expect.poll(async () => Math.round((await page.locator('.app-main').boundingBox())!.height))
+    .toBeLessThan(400)
+
+  await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
+  const bottom = await listBottom(page)
+
+  await page.locator('.cue-row').last().click()
+  await expectSameBottom(page, bottom)
+
+  // And the list is the height of the space it was given, not of its contents.
+  const list = await page.locator('.cue-list-container').boundingBox()
+  const main = await page.locator('.app-main').boundingBox()
+  expect(Math.round(list!.height)).toBe(Math.round(main!.height))
+})
+
 test('the dock folds away to its tabs and gives the list the room', async () => {
   const bottom = await listBottom(page)
   await page.locator('.dock-collapse').click()

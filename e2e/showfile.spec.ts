@@ -111,32 +111,38 @@ test('saving an unedited show writes the same bytes, and an edit writes differen
   await page.locator('.file-menu-recent', { hasText: 'Press Night.wlab' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 
-  // First save settles the file into the shape this version writes — an older file (this
-  // one has no per-cue triggers) is migrated once, and that migration is a real change.
+  // A real edit, so the save certainly runs (renaming a cue to the name it already has
+  // is not an edit: React does not report a change for a value that did not change, and
+  // the spec would then be asserting that an unsaved file equals itself). The file is
+  // migrated on this first save — it was written without the show-services section — so
+  // what follows compares this version's output with this version's output.
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
-  await renameSelectedCue('Walk-in Music')
+  await renameSelectedCue('Walk-in (house to half)')
   await save()
   const settled = fs.readFileSync(showPath, 'utf-8')
+  expect(settled).toContain('Walk-in (house to half)')
   const identity = JSON.parse(settled).id
   const createdAt = JSON.parse(settled).createdAt
 
-  // Saving again, with nothing touched, must not rewrite the show's identity or its
-  // bytes. This is the property a version history is built on.
+  // Rename it back and forth: the workspace is dirty, the content is exactly what was
+  // just written, and the save therefore has to put the same bytes back — identity,
+  // creation date and all. A save that mints its own id or stamps the clock fails here,
+  // and a save that quietly does nothing cannot pass either, because the workspace is
+  // dirty when it is asked for.
+  await renameSelectedCue('Walk-in Music')
+  await renameSelectedCue('Walk-in (house to half)')
   await save()
-  expect(fs.readFileSync(showPath, 'utf-8')).toBe(settled)
-  expect(JSON.parse(fs.readFileSync(showPath, 'utf-8')).id).toBe(identity)
-  expect(JSON.parse(fs.readFileSync(showPath, 'utf-8')).createdAt).toBe(createdAt)
+  const rewritten = fs.readFileSync(showPath, 'utf-8')
+  expect(rewritten).toBe(settled)
+  expect(JSON.parse(rewritten).id).toBe(identity)
+  expect(JSON.parse(rewritten).createdAt).toBe(createdAt)
 
   // A real change is a real diff, and still does not mint a new show.
-  await renameSelectedCue('Walk-in (house to half)')
+  await renameSelectedCue('Walk-in (house to half, Q2)')
   await save()
   const edited = fs.readFileSync(showPath, 'utf-8')
   expect(edited).not.toBe(settled)
-  expect(edited).toContain('Walk-in (house to half)')
+  expect(edited).toContain('Walk-in (house to half, Q2)')
   expect(JSON.parse(edited).id).toBe(identity)
   expect(JSON.parse(edited).createdAt).toBe(createdAt)
-
-  // And the edit settles too.
-  await save()
-  expect(fs.readFileSync(showPath, 'utf-8')).toBe(edited)
 })

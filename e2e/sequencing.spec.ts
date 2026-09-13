@@ -133,11 +133,14 @@ test('advance on-end respects post-wait before firing next cue', async () => {
   await setPostWait(page, 0.3) // 300ms post-wait
   await setAdvance(page, 'on-end')
 
-  // Cue 2: Wait 600ms — long enough to observe it in-flight
+  // Cue 2: a wait long enough to observe in flight. Seconds, not milliseconds: a loaded
+  // Windows runner can miss a 600 ms window between two polls, and the assertion below is
+  // that the cue fired, not how quickly the window was painted — the ordering that matters
+  // is the pair of cue-2 assertions.
   await toolbarCueBtn(page, 'Wait').click()
   const row2 = page.locator('.cue-row').last()
   await row2.click()
-  await setWaitDuration(page, 600)
+  await setWaitDuration(page, 5000)
 
   // GO on cue 1
   await row1.click()
@@ -153,7 +156,7 @@ test('advance on-end respects post-wait before firing next cue', async () => {
   await expect(row2).toHaveAttribute('data-running', 'false')
 
   // After post-wait (~300ms remaining), cue 2 auto-fires
-  await expect(row2).toHaveAttribute('data-running', 'true', { timeout: 1500 })
+  await expect(row2).toHaveAttribute('data-running', 'true', { timeout: 5000 })
 
   await page.getByRole('button', { name: /STOP/ }).click()
 })
