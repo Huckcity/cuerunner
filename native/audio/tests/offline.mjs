@@ -674,6 +674,73 @@ console.log(`winslab-audio acceptance — binary ${binary}`)
   }
 }
 
+// --- 18. malformed media is refused, not fatal ----------------------------
+{
+  console.log('\nmalformed media')
+  // A container that cannot be parsed is a refusal, never a crash. It used to be a
+  // crash: dr_wav and dr_mp3 free their own state when init fails, and the source
+  // destructors then uninitialized the failed decoder, freeing it a second time
+  // (glibc aborts the process). A corrupted file, or one still being copied onto the
+  // show machine, took the whole engine — and whatever was playing — down with it.
+  const wavHeader = (channels) => {
+    const bytes = Buffer.alloc(44)
+    bytes.write('RIFF', 0); bytes.writeUInt32LE(36, 4); bytes.write('WAVE', 8); bytes.write('fmt ', 12)
+    bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(3, 20); bytes.writeUInt16LE(channels, 22)
+    bytes.writeUInt32LE(48000, 24); bytes.writeUInt32LE(48000 * 8, 28); bytes.writeUInt16LE(8, 32)
+    bytes.writeUInt16LE(32, 34); bytes.write('data', 36); bytes.writeUInt32LE(0, 40)
+    return bytes
+  }
+  const malformed = {
+    // Valid magic, so the sniffer dispatches to the decoder, then nothing usable.
+    'truncated-wav': Buffer.from('RIFF\x00\x00\x00\x00WAVEfmt '),
+    'half-fmt-wav': Buffer.concat([wavHeader(2).subarray(0, 28), Buffer.alloc(8)]),
+    'zero-channel-wav': wavHeader(0),
+    'id3-garbage-mp3': Buffer.concat([Buffer.from('ID3'), Buffer.alloc(20, 0x41)]),
+    'frame-sync-garbage-mp3': Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x00]), Buffer.alloc(40, 0x11)]),
+    'flac-garbage': Buffer.concat([Buffer.from('fLaC'), Buffer.alloc(40, 0x11)]),
+    'ogg-garbage': Buffer.concat([Buffer.from('OggS'), Buffer.alloc(40, 0x11)]),
+    'aiff-garbage': Buffer.concat([Buffer.from('FORM'), Buffer.alloc(4, 0x20), Buffer.from('AIFF'), Buffer.alloc(20, 0x11)]),
+    'm4a-garbage': Buffer.concat([Buffer.alloc(4), Buffer.from('ftypM4A '), Buffer.alloc(30, 0x11)])
+  }
+  const names = Object.keys(malformed)
+  const files = {}
+  for (const name of names) {
+    files[name] = join(workDir, `${name}.bin`)
+    writeFileSync(files[name], malformed[name])
+  }
+
+  // The show is already playing when the bad files are offered; it must still be
+  // playing after, and the same engine must still be able to play a new cue.
+  const { summary, wav } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 48000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'show', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'show', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      ...names.map((name, index) => ({ atMs: 100 + index, verb: 'prepare', cueId: name, filePath: files[name] })),
+      { atMs: 400, verb: 'info' },
+      { atMs: 500, verb: 'prepare', cueId: 'after', filePath: dc2Path },
+      { atMs: 600, verb: 'start', cueId: 'after', whenMs: 700, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
+    ]
+  })
+
+  for (let index = 0; index < names.length; index++) {
+    const reply = replyFor(summary, 2 + index)
+    check(
+      `${names[index]} is refused as unreadable`,
+      reply.ok === false && (reply.error.code === 'decode' || reply.error.code === 'format-unavailable'),
+      JSON.stringify(reply)
+    )
+  }
+  const info = replyFor(summary, 2 + names.length).result
+  check('the cue that was playing is untouched', info.active === true && info.activeVoices === 1, JSON.stringify({ active: info.active, voices: info.activeVoices }))
+  check('the engine still prepares media after the refusals', replyFor(summary, 3 + names.length).ok === true)
+  check('a cue started after the refusals really plays', Math.abs(sampleAt(wav, 24000)) > 0.1, `sample ${sampleAt(wav, 24000)}`)
+}
+
 rmSync(workDir, { recursive: true, force: true })
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

@@ -56,9 +56,15 @@ class WavSource final : public Source {
  public:
   bool open(const std::string& path, std::string& error) {
     if (!drwav_init_file(&wav_, path.c_str(), nullptr)) {
+      // dr_wav closes the FILE* itself when init fails, and it frees what it allocated
+      // on the way out. Uninitializing a decoder that never initialized therefore
+      // closes/frees the same object twice — glibc aborts on it — so the destructor
+      // must only uninit what really initialized. A truncated WAV from the cue list
+      // used to take the engine and the running show down with it.
       error = "not a readable WAV file";
       return false;
     }
+    initialized_ = true;
     info_.format = Format::Wav;
     info_.sampleRate = static_cast<int>(wav_.sampleRate);
     info_.channels = static_cast<int>(wav_.channels);
@@ -66,7 +72,9 @@ class WavSource final : public Source {
     info_.canSeek = true;
     return true;
   }
-  ~WavSource() override { drwav_uninit(&wav_); }
+  ~WavSource() override {
+    if (initialized_) drwav_uninit(&wav_);
+  }
   SourceInfo& info() override { return info_; }
   int64_t readFrames(float* out, int64_t frames) override {
     return static_cast<int64_t>(drwav_read_pcm_frames_f32(&wav_, static_cast<drwav_uint64>(frames), out));
@@ -77,6 +85,7 @@ class WavSource final : public Source {
 
  private:
   drwav wav_{};
+  bool initialized_ = false;
   SourceInfo info_{};
 };
 
@@ -113,9 +122,12 @@ class Mp3Source final : public Source {
       return false;
     }
     if (!drmp3_init(&mp3_, onRead, onSeek, onTell, nullptr, &io_, nullptr)) {
+      // Same contract as dr_wav: a failed init frees what it allocated and must not be
+      // uninitialized afterwards. A truncated MP3 is a refusal, not an abort.
       error = "not a readable MP3 file";
       return false;
     }
+    initialized_ = true;
     info_.format = Format::Mp3;
     info_.sampleRate = static_cast<int>(mp3_.sampleRate);
     info_.channels = static_cast<int>(mp3_.channels);
@@ -125,7 +137,7 @@ class Mp3Source final : public Source {
     return true;
   }
   ~Mp3Source() override {
-    drmp3_uninit(&mp3_);
+    if (initialized_) drmp3_uninit(&mp3_);
     if (io_.file != nullptr) std::fclose(io_.file);
   }
   SourceInfo& info() override { return info_; }
@@ -138,6 +150,7 @@ class Mp3Source final : public Source {
 
  private:
   drmp3 mp3_{};
+  bool initialized_ = false;
   FileIo io_{};
   SourceInfo info_{};
 };
