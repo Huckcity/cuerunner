@@ -466,15 +466,23 @@ GitHub Actions workflows in `.github/workflows/`:
   `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
   own, so a release happens only when it is meant to.
 
+[`RELEASE_CHECKLIST.md`](./.github/RELEASE_CHECKLIST.md) is what a release engineer walks
+before that dispatch, including the check that keeps this file's limitations honest.
+
 ## Known Limitations
 
 Playback and platform limits:
 
-- MIDI native module requires ALSA headers on Linux (not officially supported), and MIDI cues
-  silently do nothing when the module is unavailable
-- Network cues require appropriate CORS headers on target servers, and hold the cue until the
-  response or timeout
-- Audio cues store absolute file paths, so a `.wlab` moved without its audio loses those links
+- MIDI is an optional native module: on Linux it needs the ALSA development headers
+  (`libasound2-dev`) installed before dependencies, and a build without it says so rather
+  than swallowing a cue — a **MIDI unavailable** badge in the status bar opens Settings →
+  MIDI, and a MIDI cue that fires reports the failure in the run log
+- Network cues are sent by the main process as an ordinary HTTP client, so a target server
+  needs no CORS headers; a cue still holds until the response or its timeout (5 s by default)
+- Audio cues are written twice: relative to the show folder when the file sits inside it, and
+  as the absolute path it had at the last save, so a show folder copied with its media keeps
+  its links. A file still not found is listed in a missing-media bar — locating one file puts
+  the rest of that folder back with it
 - E2E tests open real windows: on Linux they run on a private Xvfb display, so they never
   take over the desktop and work over ssh. Windows and macOS runs use the session's display,
   and `npm run test:e2e:headed` runs the suite on your own display deliberately
