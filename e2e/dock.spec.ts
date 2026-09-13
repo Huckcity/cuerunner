@@ -138,8 +138,16 @@ test('the dock keeps its 60% of a window that shrinks under it', async () => {
   await page.mouse.down()
   await page.mouse.move(handle!.x + 200, grip - 400, { steps: 5 })
   await page.mouse.up()
+  // Dragged as far up as the window allows: the dock takes the share it is allowed and
+  // no more. Asserted against the window it is in rather than a pixel count, because the
+  // runners' windows are not all the same height (the macOS and Windows ones are about
+  // 120px shorter than the Linux one).
+  const innerHeight = await page.evaluate(() => window.innerHeight)
+  const allowed = Math.max(110, Math.round(innerHeight * 0.6))
   const tall = Math.round((await page.locator('.dock').boundingBox())!.height)
-  if (tall <= 400) throw new Error(`a dock dragged to the top only reached ${tall}\n${await geometry(page)}`)
+  if (tall !== allowed) {
+    throw new Error(`a dock dragged to the top reached ${tall}, not the ${allowed} this ${innerHeight}px window allows\n${await geometry(page)}`)
+  }
 
   // A window the operator drags smaller: the dock gives the room back rather than
   // sitting on the cue list at a height the window no longer has.
@@ -147,7 +155,6 @@ test('the dock keeps its 60% of a window that shrinks under it', async () => {
   await expect.poll(async () => Math.round((await page.locator('.dock').boundingBox())!.height))
     .toBeLessThan(tall)
 
-  const innerHeight = await page.evaluate(() => window.innerHeight)
   const fitted = Math.round((await page.locator('.dock').boundingBox())!.height)
   const limit = Math.max(110, Math.round(innerHeight * 0.6))
   if (fitted > limit) throw new Error(`the dock fitted a ${innerHeight}px window at ${fitted}, over ${limit}\n${await geometry(page)}`)

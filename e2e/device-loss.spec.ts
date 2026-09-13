@@ -102,10 +102,22 @@ test('a device that goes away mid-show silences the show, says why, and the show
       return harness ? await harness.engineInfo() : null
     })
     const log = await page.locator('.log-panel').innerText().catch(() => '')
+    // What the engine actually did with the second start, which is the difference between
+    // "the cue never reached it" and "it played and ended on its own".
+    const events = await app.evaluate(() => {
+      const harness = globalThis.__winslabDevHarness
+      return (harness?.engineEvents() ?? []).slice(-12).map(event => {
+        if (event.type === 'ended') return `ended ${event.cueId} ${event.reason} loops=${event.loopsCompleted}`
+        if (event.type === 'error') return `error ${event.code}: ${event.message}`
+        if (event.type === 'panic') return 'panic'
+        return `state ${event.cueId ?? '-'} ${event.state ?? '-'} playing=${event.playing}`
+      })
+    })
     throw new Error(
       `nothing played after the device came back\n` +
         `engine warnings: ${JSON.stringify(info?.warnings ?? [])}\n` +
         `engine lastError: ${String(info?.lastError)}\n` +
+        `engine events: ${events.join(' | ')}\n` +
         `session log tail: ${log.slice(-600)}`
     )
   }
