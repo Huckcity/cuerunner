@@ -9,10 +9,13 @@ import type {
   AudioStartOptions
 } from './audioEngineClient'
 import { SampleScheduler, SCHEDULER_LOOKAHEAD_MS } from './scheduler'
+import { InputGuard, refirePolicy } from './inputGuard'
+import type { FireSurface } from './inputGuard'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
 import { network } from './networkClient'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
+import type { TriggerGuardSettings } from '../types/workspace'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
 type ClearAllRunning = () => void
@@ -129,6 +132,9 @@ interface RunnerDeps {
   // Whether this machine may run the Pro cues. Read per firing rather than latched at
   // init: a key can be entered or removed while the show is loaded.
   isPro: () => boolean
+  // How long each firing surface stays deaf after it fires. Read per press, because the
+  // operator can change it while the show is loaded.
+  getTriggerGuard: () => TriggerGuardSettings
 }
 
 export class CueRunner {
@@ -149,6 +155,10 @@ export class CueRunner {
   // STOP — a network request, a script — cannot resume the show.
   private generation = 0
   private runSeq = 0
+  // What each firing surface last fired, and which notes are still down. Owned here
+  // because this is the one place every surface reaches — the keyboard, a trigger, the
+  // GO button — and a guard that lived in one of them would be a guard on one of them.
+  private guard = new InputGuard(() => this.deps?.getTriggerGuard().windowMs ?? 0)
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -186,6 +196,16 @@ export class CueRunner {
     const cue = cues[targetIdx]
     if (!cue || !cue.isArmed) return
 
+    // The hand that shook. Every way of firing a cue reaches the runner, so the window
+    // is asked here rather than at each of them — and Space, which the OS repeats while
+    // it is held down, is exactly what it is for.
+    if (!this.guard.accepts('key', 'go', this.now())) return
+
+    // A cue that is already in flight is left where it is, unless it was told it may be
+    // restarted. Checked before the selection moves, so an ignored press changes nothing
+    // at all rather than moving the operator's hand somewhere the show is not going.
+    if (this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
+
     // When the fired cue is a group, skip over its children to find the next
     // cue that should receive selection focus after GO
     const nextCue = (() => {
@@ -220,7 +240,7 @@ export class CueRunner {
     setSelected(selectionTarget?.id ?? null)
 
     // Firing a cue that is already in flight replaces it rather than stacking a second
-    // copy of it on the same cue id.
+    // copy of it on the same cue id — which is what a cue set to restart is asking for.
     if (this.hasActiveRun(cue.id)) this.stop(cue.id)
 
     const startMs = this.now()
@@ -236,11 +256,18 @@ export class CueRunner {
     }
   }
 
+  /**
+   * Fires one named cue. `atMs` says the caller already knows when this belongs on the
+   * clock — an advance chain handing over, a timeline placing a child — and such a call
+   * is the show's own plumbing, not a press: the interlock is only for a firing that
+   * happens *now*, which is what an operator's hand and a remote trigger produce.
+   */
   goById(id: string, atMs?: number, parent?: CueRun): void {
     const { getCues } = this.deps!
     const cues = getCues()
     const cue = cues.find(c => c.id === id)
     if (!cue || !cue.isArmed) return
+    if (atMs === undefined && this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
     const idx = cues.findIndex(c => c.id === id)
     const nextCue = cues[idx + 1] ?? null
     this.fireCue(cue, atMs ?? this.now(), (doneAt, run) => {
@@ -1036,6 +1063,34 @@ export class CueRunner {
 
   private hasActiveRun(cueId: string): boolean {
     return this.runs.has(cueId) || (this.timelineTasks.get(cueId)?.size ?? 0) > 0
+  }
+
+  /**
+   * Whether this firing may happen, asked by the surfaces that see events the runner
+   * does: a show's OSC and MIDI arrive as whole messages, and the note that is being
+   * held is only visible here. The operator's own GO asks through `go()` instead, which
+   * asks this on the way past.
+   */
+  acceptsFire(surface: FireSurface, key: string): boolean {
+    return this.guard.accepts(surface, key, this.now())
+  }
+
+  /** A note going down, so that holding it is not the same as pressing it again. */
+  pressNote(key: string): void {
+    this.guard.pressNote(key)
+  }
+
+  /** A note coming up. Never gated: a release is not a firing. */
+  releaseNote(key: string): void {
+    this.guard.releaseNote(key)
+  }
+
+  /**
+   * Forgets who fired what. A show that has just loaded has no history for the guard to
+   * be deaf to — the file's own state did not press anything.
+   */
+  resetGuards(): void {
+    this.guard.reset()
   }
 
   // True when a global STOP or PANIC has happened since the given generation started.

@@ -12,6 +12,10 @@ import {
   defaultShowSettings,
   normalizeShowSettings
 } from '../../renderer/src/types/show'
+import {
+  DEFAULT_TRIGGER_GUARD,
+  normalizeTriggerGuard
+} from '../../renderer/src/types/workspace'
 
 // Cues come out of a JSON file, so they can still carry fields a previous version
 // wrote and this one no longer knows about. Read and delete those through here.
@@ -29,6 +33,9 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   if (cue.notes === undefined) cue.notes = ''
   if (cue.parentId === undefined) cue.parentId = null
   if (cue.triggers === undefined) cue.triggers = []
+  // A cue saved before the policy existed restarts when it is re-fired, which is what
+  // the app did unconditionally; what the show wants is the other one.
+  if (cue.refire === undefined) cue.refire = 'ignore'
   if (cue.type === 'audio') {
     if (cue.playbackRate === undefined) cue.playbackRate = 1.0
     if (cue.trim === undefined) cue.trim = 1.0
@@ -331,6 +338,9 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
   // A workspace written before the show services existed has no port settings; the
   // defaults bring it up listening where a new one would.
   workspace.showSettings = normalizeShowSettings(workspace.showSettings)
+  // A workspace saved before the firing guard existed has none: it gets the default,
+  // which is the window that keeps a bounced trigger from truncating a cue.
+  workspace.triggerGuard = normalizeTriggerGuard(workspace.triggerGuard)
   return workspace
 }
 
@@ -737,6 +747,7 @@ export function blankWorkspace(name = 'Untitled'): Workspace {
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
     showSettings: defaultShowSettings(),
+    triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
     cues: []
   }
 }

@@ -13,7 +13,8 @@ export function buildWorkspace(
   audioSettings: Workspace['audioSettings'],
   midiSettings: Workspace['midiSettings'],
   showSettings: Workspace['showSettings'],
-  identity: WorkspaceIdentity
+  identity: WorkspaceIdentity,
+  triggerGuard: Workspace['triggerGuard']
 ): Workspace {
   return {
     version: 1,
@@ -23,6 +24,7 @@ export function buildWorkspace(
     audioSettings,
     midiSettings,
     showSettings,
+    triggerGuard,
     cues
   }
 }

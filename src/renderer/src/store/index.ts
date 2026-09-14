@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
 import type { MissingMedia } from '../../../shared/media'
-import type { AudioSettings, MidiSettings, WorkspaceIdentity } from '../types/workspace'
+import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
+import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
   CastSettings,
@@ -46,7 +47,7 @@ export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'audio' | 'midi' | 'network' | 'wireless' | 'license'
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'license'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -192,6 +193,13 @@ interface CueListState {
   appendLog: (entries: LogEntryInput[]) => void
   clearLog: () => void
 
+  /**
+   * How long each firing surface stays deaf after it fires a cue. Workspace content: it
+   * travels with the show, because the desk that sends twice travels with the show too.
+   */
+  triggerGuard: TriggerGuardSettings
+  updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
+
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
   // of it is workspace content, so none of it dirties the show or enters undo.
@@ -333,7 +341,8 @@ interface CueListState {
     audioSettings?: AudioSettings,
     midiSettings?: MidiSettings,
     showSettings?: ShowSettings,
-    identity?: WorkspaceIdentity
+    identity?: WorkspaceIdentity,
+    triggerGuard?: TriggerGuardSettings
   ) => void
   saveSucceeded: (path: string, name: string) => void
   setWorkspaceName: (name: string) => void
@@ -523,6 +532,7 @@ export const useStore = create<CueListState>((set) => ({
   lastRuns: {},
   log: [],
   showSettings: defaultShowSettings(),
+  triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -935,7 +945,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -962,6 +972,9 @@ export const useStore = create<CueListState>((set) => ({
       audioSettings: audioSettings ?? { ...defaultAudioSettings },
       midiSettings: midiSettings ?? { ...defaultMidiSettings },
       showSettings: showSettings ?? defaultShowSettings(),
+      // A file written before the guard existed has none: the normalizer both fills it in
+      // and holds a value typed outside its range to the range.
+      triggerGuard: normalizeTriggerGuard(triggerGuard),
       // Nothing has been told to this show's desk yet.
       deskState: {},
       deskSceneId: null,
@@ -986,6 +999,11 @@ export const useStore = create<CueListState>((set) => ({
 
   updateMidiSettings: (patch) => set(s => ({
     midiSettings: { ...s.midiSettings, ...patch },
+    isDirty: true
+  })),
+
+  updateTriggerGuard: (patch) => set(s => ({
+    triggerGuard: normalizeTriggerGuard({ ...s.triggerGuard, ...patch }),
     isDirty: true
   })),
 

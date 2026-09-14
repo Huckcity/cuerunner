@@ -34,6 +34,10 @@ test.afterAll(async () => {
 
 /** Nothing running, nothing open, and the first cue selected: GO fires it or nothing did. */
 async function standOnTheFirstCue(): Promise<void> {
+  // An operator presses GO when they mean it, and the previous test's press is still
+  // inside the firing window — that is what the window is for. Thirty milliseconds is
+  // not long enough to be a second press of the same hand.
+  await page.waitForTimeout(400)
   await page.getByRole('button', { name: /STOP/ }).click()
   await page.keyboard.press('Escape')
   await page.locator('.cue-row').first().click()

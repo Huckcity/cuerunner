@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CueRunner } from './CueRunner'
 import { audioEngine } from './audioEngineClient'
 import type { Cue, WaitCue, AudioCue, GroupCue } from '../types/cue'
+import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
 
 vi.mock('./audioEngineClient')
 vi.mock('./networkClient', () => ({
@@ -61,6 +62,7 @@ function setup(cues: Cue[]) {
     appendLog: vi.fn(),
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
     isPro: () => true
   })
   runners.push(runner)

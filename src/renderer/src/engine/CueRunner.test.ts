@@ -9,6 +9,7 @@ import type { ScriptRun } from './scriptHost'
 import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
+import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -127,6 +128,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true):
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
     isPro: () => licensed
   })
   runners.push(runner)
@@ -398,6 +400,97 @@ describe('CueRunner — stop and panic', () => {
 
     const states = setRunning.mock.calls.map(c => c[1]?.state ?? null)
     expect(states).not.toContain('playing')
+  })
+})
+
+// What a second firing does to a cue that is already running. The guard's window has
+// passed in each of these — an operator who waits and presses again is a second press,
+// and that is the one the policy is about.
+describe('CueRunner — re-firing a running cue', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  const starts = (setRunning: Mock, id: string): number =>
+    setRunning.mock.calls.filter(c => c[0] === id && c[1]?.state === 'playing').length
+
+  it('leaves a running cue alone when it is fired again', () => {
+    const cue = makeWait({ id: 'w1', duration: 5000 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    runner.resetGuards()
+    runner.go()
+
+    expect(starts(setRunning, 'w1')).toBe(1)
+  })
+
+  it('restarts a running cue that was told it may be restarted', () => {
+    // The cue that is itself the repeat — a stinger, a hold chord — asks for the old
+    // behaviour, which is the whole reason the policy is a setting rather than a rule.
+    const cue = makeWait({ id: 'w1', duration: 5000, refire: 'restart' })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    runner.resetGuards()
+    runner.go()
+
+    expect(starts(setRunning, 'w1')).toBe(2)
+  })
+
+  it('holds the selection where it is when the press is ignored', () => {
+    // An ignored press is not a press: moving the operator's hand on to the next cue
+    // would leave them standing somewhere the show is not going.
+    const cue1 = makeWait({ id: 'w1', number: '1', duration: 5000 })
+    const cue2 = makeWait({ id: 'w2', number: '2' })
+    const { runner, setSelected } = setup([cue1, cue2])
+
+    runner.go()
+    runner.resetGuards()
+    // The selection advanced to w2 on the first GO; press again while w1 still runs by
+    // asking for w1 directly, the way a trigger does.
+    runner.goById('w1')
+
+    expect(setSelected).toHaveBeenCalledTimes(1)
+    expect(setSelected).toHaveBeenLastCalledWith('w2')
+  })
+
+  it('ignores a trigger on a running cue without disturbing the cue that is playing', () => {
+    const cue = makeWait({ id: 'w1', duration: 5000 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    const before = setRunning.mock.calls.length
+    runner.resetGuards()
+    runner.goById('w1')
+
+    // Nothing was stopped and nothing was started: the run that was going is the run.
+    expect(setRunning.mock.calls.length).toBe(before)
+    expect(starts(setRunning, 'w1')).toBe(1)
+  })
+
+  it('still fires a cue whose run has ended', () => {
+    const cue = makeWait({ id: 'w1', duration: 1000 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+    runner.resetGuards()
+    runner.goById('w1')
+
+    expect(starts(setRunning, 'w1')).toBe(2)
+  })
+
+  it('does not make an advance chain wait for a cue it has never fired', () => {
+    // The chain hands over at a sample time, which is the show's own plumbing rather
+    // than a press: the interlock must never stand between two cues of one GO.
+    const cue1 = makeWait({ id: 'w1', duration: 1000, advance: 'on-end' })
+    const cue2 = makeWait({ id: 'w2', duration: 1000 })
+    const { runner, setRunning } = setup([cue1, cue2])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+
+    expect(starts(setRunning, 'w2')).toBe(1)
   })
 })
 

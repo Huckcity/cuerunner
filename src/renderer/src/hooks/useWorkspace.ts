@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import type { MissingMedia } from '../../../shared/media'
 import type { Workspace, WorkspaceIdentity } from '../types/workspace'
 import { buildWorkspace } from '../utils/workspace'
+import { cueRunner } from '../engine/CueRunner'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
 function reportFailure(message: string): void {
@@ -14,20 +15,19 @@ function reportFailure(message: string): void {
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 async function guardDirty(): Promise<boolean> {
-  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt, saveSucceeded } =
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
 
   const response = await window.winslab.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
-      id: workspaceId,
-      createdAt: workspaceCreatedAt
-    })
     let savedPath: string | null
     try {
-      savedPath = await window.winslab.workspace.save(ws, workspacePath)
+      savedPath = await window.winslab.workspace.save(buildWorkspace(
+        workspaceName, cues, audioSettings, midiSettings, showSettings,
+        { id: workspaceId, createdAt: workspaceCreatedAt }, triggerGuard
+      ), workspacePath)
     } catch (e) {
       // Closing without a save would lose the show, so the close stops here and says why.
       reportFailure(`Could not save before closing: ${message(e)}`)
@@ -61,8 +61,13 @@ function loadIntoStore(
     workspace.audioSettings,
     workspace.midiSettings,
     workspace.showSettings,
-    identity ?? { id: workspace.id, createdAt: workspace.createdAt }
+    identity ?? { id: workspace.id, createdAt: workspace.createdAt },
+    workspace.triggerGuard
   )
+  // The guard remembers what pressed what; a show that has just opened has no presses
+  // behind it, and the first GO of the night must not be mistaken for a repeat of the
+  // one from the show that was open before.
+  cueRunner.resetGuards()
   store.setMissingMedia(missingMedia)
 }
 
@@ -87,12 +92,12 @@ export async function openDemoWorkspace(): Promise<void> {
  * Whatever is left is reported again for another pick.
  */
 export async function relinkMissingMedia(cueId: string): Promise<void> {
-  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt } =
+  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt } =
     useStore.getState()
   const workspace = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
     id: workspaceId,
     createdAt: workspaceCreatedAt
-  })
+  }, triggerGuard)
   try {
     const result = await window.winslab.workspace.relink(workspace, workspacePath, cueId)
     // Only cues that actually moved are written back, so an unresolved file keeps the
@@ -161,12 +166,12 @@ export function useWorkspace() {
   }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt, saveSucceeded } =
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, saveSucceeded } =
       useStore.getState()
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
       id: workspaceId,
       createdAt: workspaceCreatedAt
-    })
+    }, triggerGuard)
     try {
       const savedPath = await window.winslab.workspace.save(ws, workspacePath)
       if (!savedPath) return false
@@ -181,14 +186,14 @@ export function useWorkspace() {
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt, saveSucceeded } =
+    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, saveSucceeded } =
       useStore.getState()
     // Saving under another name is the same show in another file: the identity travels
     // with it, so both copies stay recognisably the same show.
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
       id: workspaceId,
       createdAt: workspaceCreatedAt
-    })
+    }, triggerGuard)
     try {
       const savedPath = await window.winslab.workspace.saveAs(ws)
       if (!savedPath) return false

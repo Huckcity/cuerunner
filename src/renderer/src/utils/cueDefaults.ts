@@ -8,7 +8,7 @@ import type {
 
 type BaseDefaults = Pick<
   Cue,
-  'colorLabel' | 'preWait' | 'postWait' | 'timelineOffset' | 'duration' | 'advance' | 'isArmed'
+  'colorLabel' | 'preWait' | 'postWait' | 'timelineOffset' | 'duration' | 'advance' | 'isArmed' | 'refire'
 >
 
 export const BASE_DEFAULTS: BaseDefaults = {
@@ -18,7 +18,10 @@ export const BASE_DEFAULTS: BaseDefaults = {
   timelineOffset: 0,
   duration: 0,
   advance: 'none',
-  isArmed: true
+  isArmed: true,
+  // A cue that is running is not restarted by a second press of the same thing. See
+  // `RefirePolicy`: the opt-out is there for the cue that is itself the repeat.
+  refire: 'ignore'
 }
 
 export const AUDIO_DEFAULTS = {

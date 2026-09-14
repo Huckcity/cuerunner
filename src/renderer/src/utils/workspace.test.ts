@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest'
 import { buildWorkspace } from './workspace'
 import type { AudioCue } from '../types/cue'
 import { defaultShowSettings } from '../types/show'
+import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
 
 const identity = { id: 'w-press-night', createdAt: '2026-01-01T00:00:00.000Z' }
 
@@ -42,9 +43,10 @@ function cue(overrides: Partial<AudioCue> = {}): AudioCue {
 // fresh default per save would be a different state every time, which is the thing this
 // file exists to say a showfile is not.
 const settings = defaultShowSettings()
+const guard = DEFAULT_TRIGGER_GUARD
 
 const build = () =>
-  buildWorkspace('Press Night', [cue()], { outputDeviceId: 'default' }, { outputPortName: '' }, settings, identity)
+  buildWorkspace('Press Night', [cue()], { outputDeviceId: 'default' }, { outputPortName: '' }, settings, identity, guard)
 
 describe('buildWorkspace', () => {
   it('writes the identity it was given, not one of its own', () => {
@@ -52,6 +54,12 @@ describe('buildWorkspace', () => {
 
     expect(workspace.id).toBe(identity.id)
     expect(workspace.createdAt).toBe(identity.createdAt)
+  })
+
+  it('carries the guard with the show', () => {
+    // The window is what the desk that sends twice is answered with, so it travels in
+    // the file rather than in this machine's settings.
+    expect(build().triggerGuard).toEqual(guard)
   })
 
   it('builds the same bytes twice for the same state', () => {

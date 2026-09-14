@@ -18,6 +18,12 @@ async function openSettings(p: Page) {
   await expect(p.getByRole('dialog', { name: 'Settings' })).toBeVisible()
 }
 
+/** Settings opens on General; these are the tests about what one of the others holds. */
+async function openSettingsOn(p: Page, tab: string) {
+  await openSettings(p)
+  await p.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: tab, exact: true }).click()
+}
+
 async function closeSettings(p: Page) {
   const dialog = p.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Close' }).click()
@@ -38,7 +44,7 @@ test('settings dialog has Audio and MIDI tabs', async () => {
 })
 
 test('Audio tab offers the real device options the engine can honour', async () => {
-  await openSettings(page)
+  await openSettingsOn(page, 'Audio')
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
   const device = dialog.locator('.field-row', { hasText: 'Output device' })
@@ -61,7 +67,7 @@ test('Audio tab reports exactly what the engine says it is running', async () =>
   })
   expect(info).not.toBeNull()
 
-  await openSettings(page)
+  await openSettingsOn(page, 'Audio')
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
   // The capability readout is the engine's own numbers, so the operator can check a rig
@@ -101,7 +107,7 @@ test('Audio tab reports exactly what the engine says it is running', async () =>
 })
 
 test('the device section sets exclusive mode, and says what it costs', async () => {
-  await openSettings(page)
+  await openSettingsOn(page, 'Audio')
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   const exclusive = dialog.locator('#settings-exclusive')
   await expect(exclusive).toBeVisible()
@@ -118,7 +124,7 @@ test('the device section sets exclusive mode, and says what it costs', async () 
 
   await closeSettings(page)
   // A device setting belongs to the workspace, so it is still there next time.
-  await openSettings(page)
+  await openSettingsOn(page, 'Audio')
   await expect(page.locator('#settings-exclusive')).toBeChecked({ checked: !wasOn })
 
   await page.locator('#settings-exclusive').setChecked(wasOn)
@@ -211,11 +217,31 @@ test('the dialog is the same box on every tab, and only its own ways close it', 
   await closeSettings(page)
 })
 
+test('the General tab holds the firing guard, in the range that can be typed', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+
+  // It opens on General: the show-wide settings come first, and the window is one of them.
+  await expect(dialog.locator('#settings-guard-window')).toHaveValue('300')
+
+  // A value past the range is dropped rather than clamped: the field goes back to what
+  // the show would really do, so nothing is stored that cannot be obeyed.
+  await dialog.locator('#settings-guard-window').fill('99999')
+  await dialog.locator('#settings-guard-window').press('Enter')
+  await expect(dialog.locator('#settings-guard-window')).toHaveValue('300')
+
+  await dialog.locator('#settings-guard-window').fill('250')
+  await dialog.locator('#settings-guard-window').press('Enter')
+  await expect(dialog.locator('#settings-guard-window')).toHaveValue('250')
+
+  await closeSettings(page)
+})
+
 test('settings are grouped by what is being set up, and close one way', async () => {
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
-  await expect(dialog.locator('.settings-tab')).toHaveText(['Audio', 'MIDI', 'Network', 'Wireless', 'License'])
+  await expect(dialog.locator('.settings-tab')).toHaveText(['General', 'Audio', 'MIDI', 'Network', 'Wireless', 'License'])
 
   // MIDI out and MIDI in are one subject, on one tab.
   await dialog.getByRole('button', { name: 'MIDI', exact: true }).click()

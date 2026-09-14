@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { cueRunner } from '../engine/CueRunner'
 import { describeTriggerSource, triggeredCues } from '../engine/triggers'
+import { firingIdentity, noteKey } from '../engine/inputGuard'
 import { useStore, usePro } from '../store'
 
 /**
@@ -8,8 +9,12 @@ import { useStore, usePro } from '../store'
  *
  * This sits beside the cue stack rather than inside it: the events are the ones the
  * monitor shows, and a triggered cue goes through the same runner as GO, so it
- * pre-waits, advances and stops exactly like one the operator fired by hand. Nothing
- * here can interrupt a cue that is already running.
+ * pre-waits, advances and stops exactly like one the operator fired by hand.
+ *
+ * What reaches the runner first is the guard, not the cue: a desk that sends the same
+ * message twice is one firing, and a note held down is one firing however many times it
+ * repeats. Both are properties of the surface the message came in on, so they are
+ * settled before anything looks for a cue to fire.
  *
  * The events only exist while the show services are licensed and listening, so with no
  * key there is nothing to do here.
@@ -22,6 +27,22 @@ export function useCueTriggers(): void {
     return window.winslab.show.onEvents(events => {
       for (const event of events) {
         if (event.kind !== 'osc' && event.kind !== 'midi') continue
+
+        // A note coming up is a release, and a release is never gated — it is what makes
+        // the next press of that note a press rather than a repeat.
+        const note = noteKey(event)
+        if (note !== null && event.kind === 'midi' && event.message.kind === 'noteOff') {
+          cueRunner.releaseNote(note)
+          // A note-off is not a trigger in any case: nothing below can match it.
+          continue
+        }
+
+        const firing = firingIdentity(event)
+        if (!firing || !cueRunner.acceptsFire(firing.surface, firing.key)) continue
+
+        // The press is remembered only once it has been allowed: a note that was refused
+        // never started anything, so nothing should be waiting for it to come up.
+        if (note !== null) cueRunner.pressNote(note)
 
         // Read the cue list per event rather than per batch: a trigger that fires a cue
         // which is itself edited by that run should be matched against what is there.
