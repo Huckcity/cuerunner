@@ -6,7 +6,7 @@ import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue } from '../types/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
 import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
@@ -30,6 +30,11 @@ const scriptHostMock = scriptHost as unknown as {
 
 const engine = vi.mocked(audioEngine)
 const requestMock = vi.mocked(network.request)
+
+// A verb added to the engine client after this suite's automock was written is a key
+// the mock does not carry. Named here, with the shape the real call answers, so a test
+// can ask what the runner sent without the mock being the thing under test.
+engine.release = vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })) as unknown as typeof engine.release
 
 /** Hands an event to every engine-event handler the runner installed. */
 function emitEngineEvent(event: AudioEngineEvent): void {
@@ -1093,6 +1098,63 @@ describe('CueRunner — scene cues', () => {
     }))
     expect(window.winslab.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBeNull()
+  })
+})
+
+// A devamp releases a vamping cue: the music leaves its loop and plays out to the end of
+// the file. The cue itself is finished the moment it has asked, which is what lets a
+// group's next cue start over the tail.
+describe('CueRunner — devamp cues', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  function makeDevamp(targetCueId: string, overrides: Partial<DevampCue> = {}): DevampCue {
+    return {
+      id: 'd1', number: '9', name: 'Devamp', type: 'devamp',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      targetCueId,
+      ...overrides
+    }
+  }
+
+  it('asks the engine to release the cue it names', async () => {
+    const vamp = makeAudio({ id: 'a1', loopCount: -1, startTime: 2000, endTime: 3000 })
+    const devamp = makeDevamp('a1')
+    const { runner, setLastRun } = setup([vamp, devamp])
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.release).toHaveBeenCalledWith('a1')
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('reports a cue that was not looping rather than pretending it released one', async () => {
+    const straight = makeAudio({ id: 'a1', loopCount: 0 })
+    const devamp = makeDevamp('a1')
+    const { runner, setLastRun } = setup([straight, devamp])
+    engine.release.mockResolvedValueOnce({ ok: true, at: 0, applied: false })
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({
+      outcome: 'error',
+      error: 'that cue was not looping'
+    }))
+  })
+
+  it('refuses to release anything when it has not been pointed at a cue', async () => {
+    // A devamp with no target must not be read as "release everything": which cue is
+    // vamping is the operator's decision, not a guess this cue gets to make.
+    const { runner, setLastRun } = setup([makeAudio({ id: 'a1', loopCount: -1 }), makeDevamp('')])
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.release).not.toHaveBeenCalled()
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'error' }))
   })
 })
 

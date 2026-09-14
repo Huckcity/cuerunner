@@ -392,6 +392,19 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "release") {
+    CommandResultDTO result;
+    EngineError error;
+    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
+    if (engine.releaseCue(text(root, "cueId", ""), whenMs, result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
   } else if (verb == "cancel") {
     CancelResultDTO result;
     EngineError error;

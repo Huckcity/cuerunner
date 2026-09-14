@@ -878,6 +878,92 @@ console.log(`winslab-audio acceptance — binary ${binary}`)
   check('a cue started after the refusals really plays', Math.abs(sampleAt(wav, 24000)) > 0.1, `sample ${sampleAt(wav, 24000)}`)
 }
 
+// --- 19. release ends a loop and plays the rest of the file ----------------
+//
+// The vamp's second verb. A cue looping a section is a vamp; a devamp releases it, and
+// the music continues from wherever the loop had reached rather than restarting at the
+// seam. The ramp fixture says on every sample where it came from, so a release that
+// jumped, restarted or spliced is readable off the output.
+{
+  console.log('\nrelease plays the tail out of a loop')
+  const released = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: true,
+    frames: SAMPLE_RATE * 6,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+      // Loops 2s-3s of the four-second file, forever: a vamp.
+      {
+        atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0,
+        options: { startTime: 2000, endTime: 3000, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null }
+      },
+      { atMs: 2500, verb: 'release', cueId: 'ramp' }
+    ]
+  })
+
+  const reply = replyFor(released.summary, 2)
+  check('the release is applied', reply.ok === true && reply.result.applied === true, JSON.stringify(reply))
+
+  // Where the loop was when it was released: 0.5s into a section that started at 2s.
+  check(
+    'the sample at the release is the one the loop had reached',
+    near(sampleAt(released.wav, 120000), 120000 / 480000, 2e-4),
+    `${sampleAt(released.wav, 120000)} at frame 120000`
+  )
+  // An eighth of a second later the position has advanced through the file. A voice that
+  // had gone on looping would be back at 2s (0.20833) here; one that restarted would be
+  // at 0.033.
+  check(
+    'the released voice keeps advancing through the file',
+    near(sampleAt(released.wav, 126000), 126000 / 480000, 2e-4),
+    `${sampleAt(released.wav, 126000)} at frame 126000`
+  )
+  check(
+    'the voice plays past the end of the section it was looping',
+    near(sampleAt(released.wav, 168000), 168000 / 480000, 2e-4),
+    `${sampleAt(released.wav, 168000)} at frame 168000 (3.5s into the file)`
+  )
+  // The file is four seconds, so the last sample is frame 191999: a voice that stopped
+  // at the section end would be silent a quarter of a second before this.
+  check(
+    'and it plays right up to the last sample of the file',
+    near(sampleAt(released.wav, 191999), 191999 / 480000, 2e-4) && Math.abs(sampleAt(released.wav, 192001)) < 1e-6,
+    `${sampleAt(released.wav, 191999)} at frame 191999`
+  )
+  const ended = events(released.summary, 'ended')
+  check(
+    'the released voice ends complete',
+    ended.length === 1 && ended[0].reason === 'complete',
+    JSON.stringify(ended)
+  )
+
+  // A voice that is not looping is not vamping: a release would be a verb that silently
+  // did nothing, so it says so instead of reporting a change that did not happen.
+  const straight = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+      {
+        atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0,
+        options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null }
+      },
+      { atMs: 100, verb: 'release', cueId: 'ramp' }
+    ]
+  })
+  const straightReply = replyFor(straight.summary, 2)
+  check(
+    'releasing a voice that is not looping changes nothing',
+    straightReply.ok === true && straightReply.result.applied === false,
+    JSON.stringify(straightReply)
+  )
+}
+
 rmSync(workDir, { recursive: true, force: true })
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

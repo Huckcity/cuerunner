@@ -867,6 +867,31 @@ bool Engine::seekCue(const std::string& cueId, double positionMs, double whenMs,
   return true;
 }
 
+/**
+ * Ends a voice's loop and plays it out to the end of the file.
+ *
+ * The whole verb is the one transition a vamp needs: the voice keeps its position, its
+ * gain envelope and its routing, and only the region it is allowed to play changes — so
+ * the release is heard as the music continuing, not as a splice. A voice whose file has
+ * no known length has no end to play out to, and a voice that is not looping is not
+ * vamping, so neither is released; the caller is told which it got.
+ */
+bool Engine::releaseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "release needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Release;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
 bool Engine::cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error) {
   if (!finiteNumber(whenMs)) {
     error = {"invalid", "cancel needs a finite time"};

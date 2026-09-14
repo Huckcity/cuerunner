@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Cue } from '../../types/cue'
+import type { AudioCue, Cue } from '../../types/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
@@ -38,10 +38,14 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
   const remainingRef = useRef<HTMLSpanElement>(null)
 
   const isAudioPlaying = cue.type === 'audio' && runState?.state === 'playing'
+  // A vamp loops forever, which means it has no end to count down to: its cell shows the
+  // length of the section instead, and the row says what the cue is doing. A countdown
+  // that only ever counted up would read as "playing", which is the thing it is not.
+  const vamping = isAudioPlaying && (cue as AudioCue).loopCount < 0
   const totalMs = durationMs ?? cue.duration
   // While a cue with a known length plays, its Duration cell counts down what is left:
   // the question in the booth is how long until it ends, not how long it was.
-  const countingDown = runState?.state === 'playing' && (totalMs > 0 || isAudioPlaying)
+  const countingDown = runState?.state === 'playing' && !vamping && (totalMs > 0 || isAudioPlaying)
 
   useEffect(() => {
     if (!countingDown || !runState) {
@@ -152,6 +156,7 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
         {isRunning && runState?.state === 'post-wait' && (
           <span className="state-pill">post-wait</span>
         )}
+        {vamping && <span className="state-pill" data-vamping="true">vamping</span>}
       </span>
       <span className="col-dur">
         {countingDown ? (

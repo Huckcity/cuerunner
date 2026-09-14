@@ -27,6 +27,7 @@ Object.defineProperty(window, 'winslab', {
       stop: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
       stopAll: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
       seek: vi.fn(() => Promise.resolve({ ok: true, at: 0, positionMs: 0, state: 'playing' })),
+      release: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
       cancel: vi.fn(() => Promise.resolve({ ok: true, at: 0, canceled: 0 })),
       routing: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
       fade: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),

@@ -27,6 +27,7 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'network', label: 'Network' },
   { type: 'script',  label: 'Script'  },
   { type: 'scene',   label: 'Scene'   },
+  { type: 'devamp',  label: 'Devamp'  },
 ]
 
 interface Props {

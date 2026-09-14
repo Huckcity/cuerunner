@@ -9,6 +9,7 @@ import type { MissingMedia } from '../shared/media'
 import {
   AUDIO_CHANNELS,
   type AudioCancelPayload,
+  type AudioReleasePayload,
   type AudioCancelResult,
   type AudioClockReading,
   type AudioCommandResult,
@@ -117,6 +118,8 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
     seek: (cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> =>
       invokeAudio(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
+    release: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs } satisfies AudioReleasePayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
       invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */

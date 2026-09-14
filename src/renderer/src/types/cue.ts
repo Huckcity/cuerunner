@@ -11,6 +11,7 @@ export type CueType =
   | 'network'
   | 'script'
   | 'scene'
+  | 'devamp'
 
 /**
  * What a second firing does to a cue that is already running.
@@ -182,6 +183,17 @@ export interface ScriptCue extends CueBase {
  * the mics with it. The work — which groups change, and the messages that change them —
  * belongs to the scene, so this cue only names one.
  */
+/**
+ * A cue that releases a vamping cue: the target stops looping its section and plays out
+ * to the end of its file, from wherever the loop had reached. It acts on another cue the
+ * way a stop or a fade does, which is why it names one instead of holding music itself.
+ */
+export interface DevampCue extends CueBase {
+  type: 'devamp'
+  /** The cue to release. Empty means it is not pointed at anything yet. */
+  targetCueId: string
+}
+
 export interface SceneCue extends CueBase {
   type: 'scene'
   /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
@@ -199,3 +211,4 @@ export type Cue =
   | NetworkCue
   | ScriptCue
   | SceneCue
+  | DevampCue

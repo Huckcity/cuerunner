@@ -261,6 +261,10 @@ export class NativeAudioEngine {
     return this.request('seek', { cueId, positionMs, whenMs }) as Promise<AudioSeekResult>
   }
 
+  release(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    return this.request('release', { cueId, whenMs }) as Promise<AudioCommandResult>
+  }
+
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult> {
     return this.request('cancel', { cueId, whenMs }) as Promise<AudioCancelResult>
   }

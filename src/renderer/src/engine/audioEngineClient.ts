@@ -419,6 +419,15 @@ export class AudioEngineClient {
     return { ...result, at: this.toShowMs(result.at) }
   }
 
+  /**
+   * Ends a running voice's loop and plays it out to the end of the file. The verb a
+   * devamp cue sends; `applied` says whether there was a loop to release.
+   */
+  async release(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    const result = await bridge().release(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
   /** Drops a cue's future-dated verbs — a start or a stop that has not fired yet. */
   async cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult> {
     const result = await bridge().cancel(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))

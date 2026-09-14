@@ -1,5 +1,5 @@
 import type {
-  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue
+  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue
 } from '../types/cue'
 import { audioEngine } from './audioEngineClient'
 import type {
@@ -498,6 +498,9 @@ export class CueRunner {
       case 'scene':
         this.executeScene(cue as SceneCue, finish)
         break
+      case 'devamp':
+        this.executeDevamp(cue as DevampCue, finish)
+        break
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
@@ -718,6 +721,40 @@ export class CueRunner {
       })
   }
 
+  /**
+   * Releases a vamping cue: the target stops looping and plays out to the end of its
+   * file, from wherever the loop had reached. The engine does the work on the audio
+   * thread, so the join is a sample rather than a seam; this cue then completes, which
+   * is what lets the next cue of a group start over music that is still playing — that
+   * is the whole point of a devamp.
+   */
+  private executeDevamp(cue: DevampCue, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    if (cue.targetCueId === '') {
+      // A devamp pointed at nothing must not be read as "release everything": the cue
+      // that is vamping is a decision the operator made, and guessing at it silently is
+      // not this cue's business.
+      this.log({ level: 'error', message: 'no cue chosen to release', label })
+      finish(this.now(), { outcome: 'error', error: 'no cue chosen' })
+      return
+    }
+    const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
+    // Releasing a cue that is not looping is a no-op the engine reports, and that is not
+    // an error: the operator's devamp arrived after the vamp had already ended.
+    void audioEngine.release(cue.targetCueId).then(result => {
+      const detail: Partial<CueRunResult> = {}
+      if (!result.applied) {
+        detail.outcome = 'error'
+        detail.error = target === undefined
+          ? 'the cue it releases is not in the show'
+          : 'that cue was not looping'
+      }
+      finish(this.now(), detail)
+    }).catch(error => {
+      finish(this.now(), { outcome: 'error', error: errorMessage(error) })
+    })
+  }
+
   private executeScene(cue: SceneCue, finish: Finish): void {
     const label = this.cueLabel(cue)
     if (!this.deps!.isPro()) {
@@ -841,7 +878,8 @@ export class CueRunner {
         if (child.duration > 0 && seekOffsetMs >= child.duration) continue
         // Fire-and-forget types have already happened — don't replay
         if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
-            child.type === 'network' || child.type === 'script' || child.type === 'stop') continue
+            child.type === 'network' || child.type === 'script' || child.type === 'stop' ||
+            child.type === 'devamp') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }
     }

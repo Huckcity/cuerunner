@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom'
 import type { Cue } from '../../types/cue'
 import { useStore } from '../../store'
 import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'
+import { regionEndMs } from '../../utils/cueSplit'
 import { formatShortcut } from '../../utils/shortcuts'
 import './CueContextMenu.css'
 
@@ -15,7 +16,15 @@ interface Props {
 }
 
 const MENU_WIDTH = 176
-const MENU_HEIGHT = 250
+const MENU_HEIGHT = 300
+
+/** What the split item would do, where the cursor is: "Split at 1:23.4". */
+function splitHint(cue: Cue, atMs: number): string {
+  const seconds = atMs / 1000
+  const min = Math.floor(seconds / 60)
+  const sec = seconds % 60
+  return `Split “${cue.name}” at ${min}:${sec.toFixed(1).padStart(4, '0')}`
+}
 
 /**
  * What the right-click does, to what it was opened over.
@@ -31,6 +40,8 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const removeCues = useStore(s => s.removeCues)
   const duplicateCues = useStore(s => s.duplicateCues)
   const updateCues = useStore(s => s.updateCues)
+  const splitAudioCueAt = useStore(s => s.splitAudioCueAt)
+  const cursorMs = useStore(s => s.waveformCursorMs)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const clampedX = Math.min(x, window.innerWidth - MENU_WIDTH - 4)
@@ -62,6 +73,14 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const handleDelete = () => { removeCues(targets); onClose() }
   const handleArmToggle = () => { updateCues(targets, { isArmed: !allArmed }); onClose() }
 
+  // A split is offered when there is a place to make one: an audio cue whose region the
+  // waveform cursor is inside. The cursor is the same one a click on the waveform sets,
+  // so the operator chooses the point where they can see it and commits it here — the
+  // menu is beside the list, and the thing being pointed at is a time.
+  const splitSplit = !several && cue.type === 'audio' && cue.filePath !== '' &&
+    cursorMs !== null && cursorMs > cue.startTime && cursorMs < regionEndMs(cue)
+  const handleSplit = () => { splitAudioCueAt(cue.id, cursorMs!); onClose() }
+
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
@@ -78,6 +97,12 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
         Duplicate{count}
         <kbd>{formatShortcut('Mod+D')}</kbd>
       </button>
+      {splitSplit && (
+        <button className="cue-context-menu-item" onClick={handleSplit} title={splitHint(cue, cursorMs!)}>
+          <span className="cue-context-menu-icon">✂</span>
+          Split here
+        </button>
+      )}
       <button className="cue-context-menu-item cue-context-menu-item--danger" onClick={handleDelete}>
         <span className="cue-context-menu-icon">✕</span>
         Delete{count}

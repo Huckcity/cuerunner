@@ -214,6 +214,12 @@ class Engine {
   bool stopAll(double fadeMs, CommandResultDTO& out, EngineError& error);
   bool seekCue(const std::string& cueId, double positionMs, double whenMs, SeekResultDTO& out, EngineError& error);
   bool cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error);
+  /**
+   * Ends a voice's loop and plays it out to the end of the file, from wherever the loop
+   * is. The verb a devamp cue sends: the voice leaves its loop without being restarted,
+   * so the release lands on the sample the operator aimed at rather than at a seam.
+   */
+  bool releaseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
   bool fadeCue(const std::string& cueId, int param, double value, double durationMs, int curve, double whenMs,
                CommandResultDTO& out, EngineError& error);
   bool routeCue(const std::string& cueId, bool automatic, const std::vector<Crosspoint>& points,

@@ -118,7 +118,8 @@ struct Command {
     Fade = 6,
     Routing = 7,
     Panic = 8,
-    Shutdown = 9
+    Shutdown = 9,
+    Release = 10
   } kind = None;
 
   char cueId[kMaxCueIdLen] = {};

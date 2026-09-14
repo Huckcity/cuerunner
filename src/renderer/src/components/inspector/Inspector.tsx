@@ -14,7 +14,10 @@ import { NetworkInspector } from './NetworkInspector'
 import { ScriptInspector } from './ScriptInspector'
 import { SceneInspector } from './SceneInspector'
 import { StopInspector } from './StopInspector'
-import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue } from '../../types/cue'
+import { DevampInspector } from './DevampInspector'
+import type {
+  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue
+} from '../../types/cue'
 import './Inspector.css'
 
 // Basics is what every cue shares, then what this type does, then what else can fire
@@ -30,7 +33,8 @@ const TYPE_TABS: Record<string, string[]> = {
   group: ['Basics', 'Group'],
   network: ['Basics', 'Network'],
   script: ['Basics', 'Script'],
-  scene: ['Basics', 'Scene']
+  scene: ['Basics', 'Scene'],
+  devamp: ['Basics', 'Devamp']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -69,6 +73,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
     )
   }
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
+  if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

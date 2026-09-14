@@ -49,18 +49,29 @@
   color: var(--fg-dim);
 }
 
-.waveform-start-tag {
+/* The region and the cursor: what the cue plays and where a split would be made. Both
+   are statements about the file, so they read in the same shape as the file name. */
+.waveform-region-tag,
+.waveform-cursor {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
   color: var(--accent-amber);
   background: var(--accent-amber-bg);
   padding: 1px 6px;
   border-radius: var(--radius-md);
+  white-space: nowrap;
 }
 
-.waveform-start-tag button {
+.waveform-cursor {
+  color: var(--fg-tertiary);
+  background: var(--bg-card);
+}
+
+.waveform-region-tag button {
   background: none;
   border: none;
   color: var(--accent-amber);
@@ -71,7 +82,7 @@
   opacity: 0.7;
 }
 
-.waveform-start-tag button:hover { opacity: 1; }
+.waveform-region-tag button:hover { opacity: 1; }
 
 .waveform-canvas-container {
   flex: 1;

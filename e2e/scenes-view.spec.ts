@@ -155,6 +155,9 @@ test('the view follows the show past the side of the window', async () => {
   await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
   await page.locator('#scene-cue-select').selectOption({ label: 'Number 19' })
   await page.locator('.btn-go').click()
+  // The show has moved: the scenes view follows what the desk was told, so the cue has to
+  // have landed before the view is asked where the show is.
+  await expect(page.locator('.scenes-now')).toContainText('Number 19')
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
 
   const current = page.locator('.matrix-scene[data-current="true"]')

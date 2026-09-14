@@ -70,6 +70,8 @@ export const AUDIO_CHANNELS = {
   stop: 'audio:stop',
   stopAll: 'audio:stopAll',
   seek: 'audio:seek',
+  /** Ends a voice's loop and plays it out to the end of the file. */
+  release: 'audio:release',
   cancel: 'audio:cancel',
   fade: 'audio:fade',
   routing: 'audio:routing',
@@ -497,6 +499,13 @@ export interface AudioEngineBridge {
    * `state: 'stopped'` and change nothing.
    */
   seek(cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult>
+  /**
+   * End a looping voice's loop and play it out to the end of the file, from wherever the
+   * loop had reached. `applied` is false when the cue was not looping or its file has no
+   * stated length: there was nothing to release, and the caller is told rather than
+   * having a change reported that did not happen.
+   */
+  release(cueId: string, whenMs?: number): Promise<AudioCommandResult>
   /** Drop the cue's future-dated verbs (a scheduled start, a scheduled stop/fade). */
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult>
   /**
@@ -554,6 +563,10 @@ export interface AudioStopAllPayload {
 export interface AudioSeekPayload {
   cueId: string
   positionMs: number
+  whenMs?: number
+}
+export interface AudioReleasePayload {
+  cueId: string
   whenMs?: number
 }
 export interface AudioCancelPayload {

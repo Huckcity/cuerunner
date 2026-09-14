@@ -96,6 +96,7 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
                               std::strcmp(verbItem->valuestring, "stop") == 0 ||
                               std::strcmp(verbItem->valuestring, "stopAll") == 0 ||
                               std::strcmp(verbItem->valuestring, "seek") == 0 ||
+                              std::strcmp(verbItem->valuestring, "release") == 0 ||
                               std::strcmp(verbItem->valuestring, "cancel") == 0 ||
                               std::strcmp(verbItem->valuestring, "fade") == 0 ||
                               std::strcmp(verbItem->valuestring, "panic") == 0);

@@ -1,6 +1,6 @@
 import type {
-  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, Cue, CueType,
-  AudioCrosspoint
+  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, Cue,
+  CueType, AudioCrosspoint
 } from '../types/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -164,6 +164,14 @@ export function createCue(type: CueType): Cue {
         // every mic on the desk, so the runner refuses it instead.
         sceneId: ''
       } satisfies SceneCue
+    case 'devamp':
+      return {
+        ...base('Devamp'),
+        type: 'devamp',
+        // Empty until it is pointed at one, for the same reason: a devamp aimed at
+        // nothing must do nothing rather than guess which cue was vamping.
+        targetCueId: ''
+      } satisfies DevampCue
   }
 }
 
