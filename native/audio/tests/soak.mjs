@@ -363,6 +363,18 @@ function fail(name, detail = '') {
   failures.push(detail === '' ? name : `${name} — ${detail}`)
   console.log(`  FAIL ${name}${detail === '' ? '' : ` — ${detail}`}`)
 }
+// The health counters only ever grow, and the poll that reads them runs every few
+// seconds: a finding has to be reported on what is new about it, or a single seven-frame
+// underrun becomes a hundred and sixty-eight identical lines in the night's report.
+// Returns whether this reading was new, which is also when the detail is worth dumping.
+const counted = new Map()
+function failCount(key, name, total, unit) {
+  const previous = counted.get(key) ?? 0
+  if (total <= previous) return false
+  counted.set(key, total)
+  fail(name, `${total - previous}${unit}`)
+  return true
+}
 function ok(name, detail = '') {
   console.log(`  ok   ${name}${detail === '' ? '' : ` — ${detail}`}`)
 }
@@ -635,10 +647,10 @@ try {
     metrics.peakStreamBufferBytes = Math.max(metrics.peakStreamBufferBytes, media.streamBufferBytes)
     metrics.peakCacheEntries = Math.max(metrics.peakCacheEntries, info.cache.entries)
 
-    if (media.xruns > XRUN_BUDGET) fail('device callbacks missed their deadline', `${media.xruns} xruns`)
+    if (media.xruns > XRUN_BUDGET) failCount('xruns', 'device callbacks missed their deadline', media.xruns, ' xruns')
     if (media.decodeUnderruns > 0) {
-      fail('stream underruns', `${media.decodeUnderruns} frames of silence waiting for media`)
-      if (VERBOSE) {
+      const reported = failCount('decodeUnderruns', 'stream underruns', media.decodeUnderruns, ' frames of silence waiting for media')
+      if (reported && VERBOSE) {
         for (const voice of info.activeCues ?? []) {
           const planned = plannedCue.get(voice.cueId)
           console.log(
@@ -648,7 +660,9 @@ try {
         }
       }
     }
-    if (media.droppedFileChunks > 0) fail('dropped media chunks', `${media.droppedFileChunks}`)
+    if (media.droppedFileChunks > 0) {
+      failCount('droppedFileChunks', 'dropped media chunks', media.droppedFileChunks, ' chunks')
+    }
     if (info.activeVoices > VOICES + 4) fail('more voices active than the show asked for', `${info.activeVoices}`)
 
     // Every started cue must really be moving: a voice that is active but frozen is the
