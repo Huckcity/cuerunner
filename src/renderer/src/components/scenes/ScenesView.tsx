@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type InputHTMLAttribut
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
 import { OSC_DEFAULTS } from '../../utils/cueDefaults'
+import { updatePack } from '../../utils/rfPlot'
 import {
   addDeskChannel,
   addScene,
@@ -162,6 +163,7 @@ export function ScenesView() {
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
   const updateScenesSettings = useStore(s => s.updateScenesSettings)
+  const updateRfSettings = useStore(s => s.updateRfSettings)
   const removeDeskGroup = useStore(s => s.removeDeskGroup)
   const editing = useStore(s => s.scenesEditing)
   const setEditing = useStore(s => s.setScenesEditing)
@@ -220,6 +222,15 @@ export function ScenesView() {
     plot.performers.map(performer => [performer.id, performer.name])
   )
   const groupRows = deskSummary(plot.packs, scenes.channels, current)
+
+  // A pack feeds one group at a time, so the only ones a drawer row can pull in are the
+  // ones no group has claimed yet — moving a pack that is already carrying another group
+  // is still the mic plot's job.
+  const unassignedPacks = plot.packs.filter(pack => pack.deskChannelId === null)
+  const assignPack = (packId: string, channelId: string): void =>
+    updateRfSettings({ plot: updatePack(plot, packId, { deskChannelId: channelId }) })
+  const releasePack = (packId: string): void =>
+    updateRfSettings({ plot: updatePack(plot, packId, { deskChannelId: null }) })
 
   // Every edit writes back the one field it changed, so a name typed in the grid cannot
   // carry a stale copy of the desk groups with it — or the other way round.
@@ -636,11 +647,49 @@ export function ScenesView() {
                 </div>
 
                 <div className="group-carrying">
-                  <span className="group-packs">
-                    {summary.packs.length === 0
-                      ? 'nothing assigned'
-                      : summary.packs.map(pack => pack.label).join(', ')}
-                  </span>
+                  {editing ? (
+                    <div className="group-pack-chips">
+                      {summary.packs.map(pack => (
+                        <span className="pack-chip" key={pack.id}>
+                          {pack.label}
+                          <button
+                            type="button"
+                            className="pack-chip-remove"
+                            aria-label={`Unassign ${pack.label} from ${channel.label}`}
+                            title="Unassign this pack — it goes back to no group"
+                            onClick={() => releasePack(pack.id)}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                      {summary.packs.length === 0 && unassignedPacks.length === 0 && (
+                        <span className="group-packs">nothing assigned</span>
+                      )}
+                      {unassignedPacks.length > 0 && (
+                        <select
+                          className="group-pack-add"
+                          aria-label={`Assign a pack to ${channel.label}`}
+                          value=""
+                          title="Pull in a pack no group has claimed yet"
+                          onChange={e => {
+                            if (e.target.value !== '') assignPack(e.target.value, channel.id)
+                          }}
+                        >
+                          <option value="">+ assign mic</option>
+                          {unassignedPacks.map(pack => (
+                            <option key={pack.id} value={pack.id}>{pack.label}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="group-packs">
+                      {summary.packs.length === 0
+                        ? 'nothing assigned'
+                        : summary.packs.map(pack => pack.label).join(', ')}
+                    </span>
+                  )}
                   <span className="group-state" data-state={state}>{state}</span>
                 </div>
               </div>

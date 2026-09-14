@@ -534,6 +534,66 @@
   color: var(--fg-ghost);
 }
 
+/* Editing swaps the read-only pack list for chips: a pack is released with its own ✕,
+   and the "+ assign mic" select only ever offers packs no group has claimed — a pack
+   already feeding another group is moved from the mic plot, not stolen from here. */
+.group-pack-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pack-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 3px 0 7px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-pill);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
+.pack-chip-remove {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  color: var(--fg-dim);
+  font-size: 9px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.pack-chip-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.group-pack-add {
+  height: 20px;
+  padding: 0 4px;
+  background: transparent;
+  border: 1px dashed var(--border-input);
+  border-radius: var(--radius-pill);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.group-pack-add:hover,
+.group-pack-add:focus {
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
+  outline: none;
+}
+
 .group-state {
   font-family: var(--font-mono);
   text-transform: uppercase;

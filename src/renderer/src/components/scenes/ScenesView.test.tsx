@@ -652,7 +652,10 @@ describe('ScenesView', () => {
         channel({ id: 'dca-3', label: 'DCA 3' })
       ]),
       plot: PLOT,
-      deskSceneId: 's1'
+      deskSceneId: 's1',
+      // Read-only text is what the locked view shows; edit mode's chips are covered
+      // separately, since they are a different rendering of the same summary.
+      editing: false
     })
     await openGroups()
 
@@ -667,6 +670,52 @@ describe('ScenesView', () => {
       .toEqual(['Pack 1, Pack 2', 'Pack 3', 'nothing assigned'])
     expect(rows.map(row => row.querySelector('.group-state')?.textContent))
       .toEqual(['live', 'muted', '—'])
+  })
+
+  it('assigns and releases a pack from a group row, without leaving Scenes', async () => {
+    await show({
+      scenes: settings([OPENING], [ENSEMBLE, BAND]),
+      plot: {
+        performers: [],
+        packs: [
+          pack('p1', 'Pack 1', 'dca-ensemble'),
+          pack('p2', 'Pack 2', null),
+          pack('p3', 'Pack 3', null)
+        ]
+      }
+    })
+    await openGroups()
+
+    const rows = [...container.querySelectorAll('.group-row')]
+    const ensembleRow = rows[0]
+    const bandRow = rows[1]
+
+    // The read-only text is gone while editing: chips and a picker take its place.
+    expect(ensembleRow.querySelector('.group-packs')).toBeNull()
+    expect(ensembleRow.querySelectorAll('.pack-chip')).toHaveLength(1)
+    expect(ensembleRow.querySelector('.pack-chip')?.textContent).toContain('Pack 1')
+
+    // Assigning offers only the packs no group has claimed yet.
+    const bandAdd = bandRow.querySelector<HTMLSelectElement>('.group-pack-add')!
+    expect([...bandAdd.options].map(option => option.value)).toEqual(['', 'p2', 'p3'])
+
+    await choose(bandAdd, 'p2')
+    expect(useStore.getState().showSettings.rf.plot.packs
+      .find(candidate => candidate.id === 'p2')?.deskChannelId).toBe('dca-band')
+
+    // The picker's own value resets, and the pack it just pulled in is off the list.
+    expect(bandRow.querySelector<HTMLSelectElement>('.group-pack-add')?.value).toBe('')
+    expect([...bandRow.querySelectorAll('.pack-chip')].map(chip => chip.textContent))
+      .toEqual(['Pack 2✕'])
+
+    // Releasing sends the pack back to no group — and back into every row's picker.
+    await act(async () => {
+      bandRow.querySelector<HTMLButtonElement>('.pack-chip-remove')!.click()
+    })
+    expect(useStore.getState().showSettings.rf.plot.packs
+      .find(candidate => candidate.id === 'p2')?.deskChannelId).toBeNull()
+    expect(container.querySelectorAll('.group-row')[1].querySelectorAll('.pack-chip'))
+      .toHaveLength(0)
   })
 
   it('while the show is run, nothing edits it; recall, Apply and Mics off stay live', async () => {

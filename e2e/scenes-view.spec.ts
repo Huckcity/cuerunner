@@ -75,6 +75,35 @@ test('the show is edited in the view, not in a dialog', async () => {
   await expect(page.locator('.matrix-row').first().locator('select')).toHaveCount(0)
 })
 
+test('a group row assigns and releases its own packs, without opening the mic plot', async () => {
+  test.setTimeout(60_000)
+
+  await buildDeskShow(page, freePort())
+
+  const groups = page.locator('.scenes-groups')
+  await groups.locator('.group-add').click()
+  const second = groups.locator('.group-row').nth(1)
+  await second.locator('.group-label').fill('DCA 2')
+  await second.locator('.group-label').blur()
+
+  // Pack 1 already feeds DCA 1 from buildDeskShow's mic-plot patch, so the picker on
+  // DCA 2 never offers it — only packs no group has claimed yet.
+  const add = second.locator('.group-pack-add')
+  const offered = await add.locator('option').allTextContents()
+  expect(offered).not.toContain('Pack 1')
+  await add.selectOption({ label: 'Pack 2' })
+
+  await expect(second.locator('.pack-chip')).toHaveCount(1)
+  await expect(second.locator('.pack-chip')).toContainText('Pack 2')
+  // The picker is always showing its placeholder, never what was just chosen.
+  await expect(add).toHaveValue('')
+
+  // Releasing puts the pack straight back on the desk group's own picker — no trip
+  // through the mic plot dialog either way.
+  await second.locator('.pack-chip-remove').click()
+  await expect(second.locator('.pack-chip')).toHaveCount(0)
+})
+
 test('a show with many scenes still fits the window', async () => {
   test.setTimeout(60_000)
 
