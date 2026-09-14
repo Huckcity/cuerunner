@@ -1,24 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Cue, CueColor } from '../../types/cue'
+import type { Cue } from '../../types/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
 import type { MediaLengthState } from '../../utils/mediaLength'
+import { CUE_COLOR_VAR } from '../../utils/cueColors'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { CUE_ICON } from '../../utils/cueIcons'
 import './CueRow.css'
-
-const COLOR_MAP: Record<CueColor, string> = {
-  none:   'var(--cue-color-none)',
-  red:    'var(--cue-color-red)',
-  orange: 'var(--cue-color-orange)',
-  yellow: 'var(--cue-color-yellow)',
-  green:  'var(--cue-color-green)',
-  blue:   'var(--cue-color-blue)',
-  purple: 'var(--cue-color-purple)',
-  pink:   'var(--cue-color-pink)',
-}
 
 interface Props {
   cue: Cue
@@ -34,7 +24,7 @@ interface Props {
   mediaState?: MediaLengthState | null
   collapsed?: boolean
   onToggleCollapse?: () => void
-  onClick: () => void
+  onClick: (e: React.MouseEvent) => void
   onContextMenu: (e: React.MouseEvent, id: string) => void
   renamingId: string | null
 }
@@ -138,7 +128,7 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
       </span>
       <span
         className="col-color"
-        style={{ background: COLOR_MAP[cue.colorLabel] }}
+        style={{ background: CUE_COLOR_VAR[cue.colorLabel] }}
       />
       <span className="col-name">
         {editing ? (

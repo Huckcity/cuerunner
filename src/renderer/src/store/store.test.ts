@@ -44,6 +44,8 @@ function resetStore() {
   useStore.setState({
     cues: [],
     selectedId: null,
+    selectedIds: [],
+    selectionAnchorId: null,
     running: new Map(),
     lastRuns: {},
     log: [],
@@ -85,7 +87,7 @@ describe('store — removeCue', () => {
   it('removes the cue by id', () => {
     useStore.getState().addCue('wait')
     const id = useStore.getState().cues[0].id
-    useStore.getState().removeCue(id)
+    useStore.getState().removeCues([id])
     expect(useStore.getState().cues).toHaveLength(0)
   })
 
@@ -93,7 +95,7 @@ describe('store — removeCue', () => {
     useStore.getState().addCue('wait')
     const id = useStore.getState().cues[0].id
     useStore.getState().select(id)
-    useStore.getState().removeCue(id)
+    useStore.getState().removeCues([id])
     expect(useStore.getState().selectedId).toBeNull()
   })
 
@@ -102,7 +104,7 @@ describe('store — removeCue', () => {
     useStore.getState().addCue('audio')
     const [first, second] = useStore.getState().cues
     useStore.getState().select(second.id)
-    useStore.getState().removeCue(first.id)
+    useStore.getState().removeCues([first.id])
     expect(useStore.getState().selectedId).toBe(second.id)
   })
 
@@ -284,7 +286,7 @@ describe('store — groups and parentId', () => {
     useStore.getState().addCue('audio', groupId)
     expect(useStore.getState().cues).toHaveLength(3)
 
-    useStore.getState().removeCue(groupId)
+    useStore.getState().removeCues([groupId])
     expect(useStore.getState().cues).toHaveLength(0)
   })
 
@@ -305,7 +307,7 @@ describe('store — groups and parentId', () => {
     useStore.getState().addCue('audio', groupId)
     expect(useStore.getState().cues).toHaveLength(3)
 
-    useStore.getState().duplicateCue(groupId)
+    useStore.getState().duplicateCues([groupId])
     const cues = useStore.getState().cues
     expect(cues).toHaveLength(6)
 
@@ -325,7 +327,7 @@ describe('store — duplicateCue', () => {
     useStore.getState().addCue('audio')
     const [wait] = useStore.getState().cues
 
-    useStore.getState().duplicateCue(wait.id)
+    useStore.getState().duplicateCues([wait.id])
 
     expect(useStore.getState().cues).toHaveLength(3)
     expect(useStore.getState().cues[0].id).toBe(wait.id)
@@ -336,10 +338,187 @@ describe('store — duplicateCue', () => {
   it('selects the duplicate', () => {
     useStore.getState().addCue('wait')
     const id = useStore.getState().cues[0].id
-    useStore.getState().duplicateCue(id)
+    useStore.getState().duplicateCues([id])
 
     const copyId = useStore.getState().cues[1].id
     expect(useStore.getState().selectedId).toBe(copyId)
+  })
+})
+
+describe('store — selection', () => {
+  beforeEach(resetStore)
+
+  function addWaits(count: number): string[] {
+    for (let i = 0; i < count; i++) useStore.getState().addCue('wait')
+    return useStore.getState().cues.map(cue => cue.id)
+  }
+
+  it('selecting one cue makes it the set, the active cue and the anchor', () => {
+    const [first] = addWaits(3)
+    useStore.getState().select(first)
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([first])
+    expect(state.selectedId).toBe(first)
+    expect(state.selectionAnchorId).toBe(first)
+  })
+
+  it('clearing the selection clears all three', () => {
+    addWaits(2)
+    useStore.getState().select(null)
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([])
+    expect(state.selectedId).toBeNull()
+    expect(state.selectionAnchorId).toBeNull()
+  })
+
+  it('shift extends from the anchor to the cue that was clicked, in the order given', () => {
+    const ids = addWaits(4)
+    useStore.getState().select(ids[0])
+    useStore.getState().extendSelection(ids, ids[2])
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([ids[0], ids[1], ids[2]])
+    expect(state.selectedId).toBe(ids[2])
+    expect(state.selectionAnchorId).toBe(ids[0])
+  })
+
+  it('keeps extending from the same anchor, however many times it is used', () => {
+    const ids = addWaits(4)
+    useStore.getState().select(ids[1])
+    useStore.getState().extendSelection(ids, ids[3])
+    useStore.getState().extendSelection(ids, ids[2])
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([ids[1], ids[2]])
+    expect(state.selectionAnchorId).toBe(ids[1])
+  })
+
+  it('extends backwards as readily as forwards', () => {
+    const ids = addWaits(4)
+    useStore.getState().select(ids[3])
+    useStore.getState().extendSelection(ids, ids[1])
+
+    expect(useStore.getState().selectedIds).toEqual([ids[1], ids[2], ids[3]])
+  })
+
+  it('cmd-click adds a cue to the set and moves the anchor to it', () => {
+    const ids = addWaits(3)
+    useStore.getState().select(ids[0])
+    useStore.getState().toggleSelected(ids[2])
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([ids[0], ids[2]])
+    expect(state.selectedId).toBe(ids[2])
+    expect(state.selectionAnchorId).toBe(ids[2])
+  })
+
+  it('cmd-click takes a cue out of the set, and the hand with it', () => {
+    const ids = addWaits(3)
+    useStore.getState().select(ids[0])
+    useStore.getState().toggleSelected(ids[1])
+    useStore.getState().toggleSelected(ids[1])
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([ids[0]])
+    expect(state.selectedId).toBe(ids[0])
+  })
+
+  it('ignores an order that does not hold the cue, rather than selecting nothing', () => {
+    const ids = addWaits(2)
+    useStore.getState().select(ids[0])
+    useStore.getState().extendSelection(ids, 'not-a-cue')
+
+    expect(useStore.getState().selectedIds).toEqual([ids[0]])
+    expect(useStore.getState().selectedId).toBe(ids[0])
+  })
+})
+
+describe('store — batch edits', () => {
+  beforeEach(resetStore)
+
+  it('writes one patch across the set, as one edit and one undo', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    const ids = useStore.getState().cues.map(cue => cue.id)
+    useStore.setState({ past: [] })
+
+    useStore.getState().updateCues(ids, { colorLabel: 'red' })
+
+    expect(useStore.getState().cues.map(cue => cue.colorLabel)).toEqual(['red', 'red', 'red'])
+    expect(useStore.getState().isDirty).toBe(true)
+    expect(useStore.getState().past).toHaveLength(1)
+
+    // One undo takes the colour off all three: the set was one thing the operator did.
+    useStore.getState().undo()
+    expect(useStore.getState().cues.map(cue => cue.colorLabel)).toEqual(['none', 'none', 'none'])
+  })
+
+  it('removes a set, each cue with its subtree, as one edit', () => {
+    useStore.getState().addCue('group')
+    const groupId = useStore.getState().cues[0].id
+    useStore.getState().addCue('group', groupId)
+    const innerId = useStore.getState().cues[1].id
+    useStore.getState().addCue('wait', innerId)
+    useStore.getState().addCue('wait')
+    const outsideId = useStore.getState().cues[3].id
+    useStore.setState({ past: [] })
+
+    useStore.getState().removeCues([groupId])
+
+    // The group, the group inside it and the wait inside that; not the cue outside.
+    expect(useStore.getState().cues.map(cue => cue.id)).toEqual([outsideId])
+    expect(useStore.getState().past).toHaveLength(1)
+
+    useStore.getState().undo()
+    expect(useStore.getState().cues).toHaveLength(4)
+  })
+
+  it('hands the selection to what is left of it when the active cue is removed', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    const ids = useStore.getState().cues.map(cue => cue.id)
+    useStore.getState().setSelection(ids, ids[0], ids[0])
+
+    useStore.getState().removeCues([ids[0]])
+
+    expect(useStore.getState().selectedIds).toEqual([ids[1]])
+    expect(useStore.getState().selectedId).toBe(ids[1])
+  })
+
+  it('duplicates a set as one edit, and selects the copies', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    const ids = useStore.getState().cues.map(cue => cue.id)
+    const numbers = useStore.getState().cues.map(cue => cue.number)
+    const before = useStore.getState().past.length
+
+    useStore.getState().duplicateCues(ids)
+
+    const cues = useStore.getState().cues
+    expect(cues).toHaveLength(4)
+    // Each copy follows its original, and says it is a copy of it.
+    expect(cues.map(cue => cue.number)).toEqual([
+      numbers[0], `${numbers[0]} copy`, numbers[1], `${numbers[1]} copy`
+    ])
+    expect(useStore.getState().selectedIds).toEqual([cues[1].id, cues[3].id])
+    expect(useStore.getState().selectedId).toBe(cues[3].id)
+    expect(useStore.getState().past).toHaveLength(before + 1)
+  })
+
+  it('prunes the selection when an undo takes the copies away', () => {
+    useStore.getState().addCue('wait')
+    const id = useStore.getState().cues[0].id
+    useStore.getState().duplicateCues([id])
+    expect(useStore.getState().selectedIds).toHaveLength(1)
+
+    useStore.getState().undo()
+
+    // The copy is gone, so the selection is not left naming it.
+    expect(useStore.getState().selectedIds).toEqual([])
+    expect(useStore.getState().selectedId).toBeNull()
   })
 })
 
@@ -397,7 +576,7 @@ describe('store — undo/redo', () => {
   it('undo after removeCue restores the cue', () => {
     useStore.getState().addCue('wait')
     const id = useStore.getState().cues[0].id
-    useStore.getState().removeCue(id)
+    useStore.getState().removeCues([id])
     expect(useStore.getState().cues).toHaveLength(0)
     useStore.getState().undo()
     expect(useStore.getState().cues).toHaveLength(1)
@@ -406,7 +585,7 @@ describe('store — undo/redo', () => {
   it('undo after duplicateCue removes the copy', () => {
     useStore.getState().addCue('wait')
     const id = useStore.getState().cues[0].id
-    useStore.getState().duplicateCue(id)
+    useStore.getState().duplicateCues([id])
     expect(useStore.getState().cues).toHaveLength(2)
     useStore.getState().undo()
     expect(useStore.getState().cues).toHaveLength(1)
@@ -780,7 +959,7 @@ describe('store — setLastRun', () => {
     const id = useStore.getState().cues[0].id
     useStore.getState().setLastRun(id, { startedAt: 1, durationMs: 1, outcome: 'success' })
 
-    useStore.getState().removeCue(id)
+    useStore.getState().removeCues([id])
 
     expect(useStore.getState().lastRuns[id]).toBeUndefined()
   })
@@ -887,7 +1066,7 @@ describe('store — hooks logic', () => {
     useStore.getState().addCue('wait')
     const id = useStore.getState().cues[0].id
     useStore.getState().select(id)
-    useStore.getState().removeCue(id)
+    useStore.getState().removeCues([id])
 
     const state = useStore.getState()
     const found = state.cues.find(c => c.id === state.selectedId) ?? null

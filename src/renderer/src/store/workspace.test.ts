@@ -42,7 +42,7 @@ describe('store — isDirty tracking', () => {
     useStore.getState().addCue('wait')
     useStore.setState({ isDirty: false })
     const id = useStore.getState().cues[0].id
-    useStore.getState().removeCue(id)
+    useStore.getState().removeCues([id])
     expect(useStore.getState().isDirty).toBe(true)
   })
 
@@ -66,7 +66,7 @@ describe('store — isDirty tracking', () => {
     useStore.getState().addCue('wait')
     useStore.setState({ isDirty: false })
     const id = useStore.getState().cues[0].id
-    useStore.getState().duplicateCue(id)
+    useStore.getState().duplicateCues([id])
     expect(useStore.getState().isDirty).toBe(true)
   })
 

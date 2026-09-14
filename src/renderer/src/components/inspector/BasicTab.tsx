@@ -1,29 +1,28 @@
 import { useStore, useParentGroup } from '../../store'
-import type { Cue, CueColor } from '../../types/cue'
+import type { Cue } from '../../types/cue'
 import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'
+import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'
 import { BASE_DEFAULTS } from '../../utils/cueDefaults'
-
-const COLORS: CueColor[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']
-const COLOR_VAR: Record<CueColor, string> = {
-  none:   'var(--border-input)',
-  red:    'var(--cue-color-red)',
-  orange: 'var(--cue-color-orange)',
-  yellow: 'var(--cue-color-yellow)',
-  green:  'var(--cue-color-green)',
-  blue:   'var(--cue-color-blue)',
-  purple: 'var(--cue-color-purple)',
-  pink:   'var(--cue-color-pink)',
-}
 
 interface Props { cue: Cue }
 
 export function BasicTab({ cue }: Props) {
   const update = useStore(s => s.updateCue)
+  const updateCues = useStore(s => s.updateCues)
   const set = (patch: Partial<Cue>) => update(cue.id, patch)
   // Where a cue starts inside its group only means something in a timeline group; in a
   // sequence the children follow one another, and outside a group there is no timeline.
   const inTimeline = useParentGroup(cue.id)?.mode === 'timeline'
+
+  // What the set has in common, and what a press here writes to: the cue being inspected
+  // is part of the selection, and the selection is more than one, or it is just this cue.
+  const selectedIds = useStore(s => s.selectedIds)
+  const cues = useStore(s => s.cues)
+  const colorTargets = selectedIds.includes(cue.id) ? selectedIds : [cue.id]
+  const colors = new Set(colorTargets.map(id => (cues.find(other => other.id === id) ?? cue).colorLabel))
+  // One colour across the set, or none marked when they differ.
+  const sharedColor = colors.size === 1 ? [...colors][0] : null
 
   return (
     <div>
@@ -38,21 +37,27 @@ export function BasicTab({ cue }: Props) {
       <div className="field-row">
         <label>Color</label>
         <div style={{ display: 'flex', gap: 4 }}>
-          {COLORS.map(c => (
+          {CUE_COLORS.map(c => (
             <button
               key={c}
               title={c}
-              onClick={() => set({ colorLabel: c })}
+              onClick={() => updateCues(colorTargets, { colorLabel: c })}
               style={{
                 width: 18, height: 18, borderRadius: 'var(--radius-md)',
-                background: COLOR_VAR[c],
-                border: cue.colorLabel === c ? '2px solid #fff' : '2px solid transparent',
+                background: CUE_COLOR_SWATCH[c],
+                border: sharedColor === c ? '2px solid #fff' : '2px solid transparent',
                 cursor: 'pointer'
               }}
             />
           ))}
         </div>
       </div>
+      {colorTargets.length > 1 && (
+        <p className="inspector-hint">
+          {colorTargets.length} cues selected — a colour goes on all of them, and one undo
+          takes it off again.
+        </p>
+      )}
       <div className="field-section-title">Timing</div>
       {inTimeline && (
         <div className="field-row">

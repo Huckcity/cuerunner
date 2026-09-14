@@ -52,3 +52,23 @@
   background: var(--border);
   margin: var(--space-1) 0;
 }
+
+/* The eight colours, in the row an inspector picker uses, made small enough for a menu. */
+.cue-context-menu-colors {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 4px 14px 6px;
+}
+
+.cue-context-menu-color {
+  width: 100%;
+  height: 18px;
+  border-radius: var(--radius-md);
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* The colour the whole selection already wears, marked the way the inspector marks it. */
+.cue-context-menu-color[data-active='true'] { border-color: #fff; }

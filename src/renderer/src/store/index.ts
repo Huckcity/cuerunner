@@ -131,17 +131,37 @@ interface CueListState {
   // Cue CRUD
   addCue: (type: CueType, afterId?: string) => void
   addAudioCuesFromFiles: (files: Array<{ filePath: string; name: string }>, afterId?: string) => void
-  removeCue: (id: string) => void
+  /** Removes each cue with its children — a group takes its subtree — as a single edit. */
+  removeCues: (ids: string[]) => void
   updateCue: (id: string, patch: Partial<Cue>) => void
+  /**
+   * Writes one patch across a set of cues as a single edit: one undo entry, one dirty.
+   * This is what a batch action — a colour across a multi-selection — is made of.
+   */
+  updateCues: (ids: string[], patch: Partial<Cue>) => void
   // Places the cue at fromIndex — together with its children when it is a group —
   // immediately before the cue currently at beforeIndex (cues.length moves it last).
   // newParentId is ignored when it would make the cue a child of itself or of one of
   // its own descendants (the cue keeps its current parent).
   moveCue: (fromIndex: number, beforeIndex: number, newParentId?: string | null) => void
-  duplicateCue: (id: string) => void
+  /** Duplicates each cue with its children as a single edit; the copies are selected. */
+  duplicateCues: (ids: string[]) => void
 
-  // Selection
+  // Selection. The set is what a bulk edit acts on; `selectedId` is the cue the operator
+  // last put their hand on — the one GO fires and advances from, and always a member of
+  // the set while the set has one — and `selectionAnchorId` is where a shift-click range
+  // extends from. Session state: where the operator is standing is not what the show is,
+  // so none of it dirties the workspace or enters undo.
+  selectedIds: string[]
+  selectionAnchorId: string | null
+  /** One cue, or none: the operator put their hand on it. */
   select: (id: string | null) => void
+  /** The selection as a whole, for a caller that worked it out (a range, a set). */
+  setSelection: (ids: string[], active?: string | null, anchor?: string | null) => void
+  /** Shift-click: the run of cues from the anchor to this one, in the order given. */
+  extendSelection: (orderedIds: string[], toId: string) => void
+  /** Cmd-click: this cue in the set, or out of it. */
+  toggleSelected: (id: string) => void
 
   // Running state
   setRunning: (id: string, state: RunningCue | null) => void
@@ -341,6 +361,46 @@ function restoreSettings(showSettings: ShowSettings, snapshot: EditSnapshot): Sh
 // Monotonic id source for log entries — React keys and ordering in the log panel.
 let _logSeq = 0
 
+/**
+ * The selection one cue leaves behind: it is what the operator's hand is on, so it is
+ * both the set a bulk edit acts on and the cue GO fires. Four actions land here — adding
+ * a cue, dropping files, duplicating, opening a workspace — and they must agree, because
+ * the set and the active cue being out of step is a selection nobody can explain.
+ */
+function selectionFor(id: string): Pick<CueListState, 'selectedId' | 'selectedIds' | 'selectionAnchorId'> {
+  return { selectedId: id, selectedIds: [id], selectionAnchorId: id }
+}
+
+/** Nothing selected: no active cue, no set, nowhere for a shift-range to start. */
+const NO_SELECTION: Pick<CueListState, 'selectedId' | 'selectedIds' | 'selectionAnchorId'> = {
+  selectedId: null,
+  selectedIds: [],
+  selectionAnchorId: null
+}
+
+/**
+ * The selection, minus anything the show no longer holds: an undo, a redo or a removal
+ * can take a cue away, and a set naming a cue that is not there is a selection nobody can
+ * see or explain.
+ */
+function pruneSelection(
+  cues: Cue[],
+  selection: Pick<CueListState, 'selectedId' | 'selectedIds' | 'selectionAnchorId'>
+): Pick<CueListState, 'selectedId' | 'selectedIds' | 'selectionAnchorId'> {
+  const live = new Set(cues.map(cue => cue.id))
+  const selectedIds = selection.selectedIds.filter(id => live.has(id))
+  const selectedId = selection.selectedId !== null && live.has(selection.selectedId)
+    ? selection.selectedId
+    : selectedIds[selectedIds.length - 1] ?? null
+  return {
+    selectedIds,
+    selectedId,
+    selectionAnchorId: selection.selectionAnchorId !== null && live.has(selection.selectionAnchorId)
+      ? selection.selectionAnchorId
+      : null
+  }
+}
+
 function pushPast(past: EditSnapshot[], snapshot: EditSnapshot): EditSnapshot[] {
   return [...past.slice(-(HISTORY_LIMIT - 1)), snapshot]
 }
@@ -439,6 +499,8 @@ export const useStore = create<CueListState>((set) => ({
 
   cues: [],
   selectedId: null,
+  selectedIds: [],
+  selectionAnchorId: null,
   running: new Map(),
   lastRuns: {},
   log: [],
@@ -485,7 +547,7 @@ export const useStore = create<CueListState>((set) => ({
     }
 
     cues.splice(insertIdx, 0, cue)
-    return { cues, selectedId: cue.id, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+    return { cues, ...selectionFor(cue.id), isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
   addAudioCuesFromFiles: (files, afterId) => set(s => {
@@ -514,20 +576,39 @@ export const useStore = create<CueListState>((set) => ({
     }))
     cues.splice(insertIdx, 0, ...newCues)
     const lastAdded = newCues[newCues.length - 1]
-    return { cues, selectedId: lastAdded.id, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+    return { cues, ...selectionFor(lastAdded.id), isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
-  removeCue: (id) => set(s => {
-    // Collect the cue and all its children (if it's a group)
-    const toRemove = new Set<string>([id])
-    for (const c of s.cues) {
-      if (c.parentId === id) toRemove.add(c.id)
+  removeCues: (ids) => set(s => {
+    const roots = ids.filter(id => s.cues.some(cue => cue.id === id))
+    if (roots.length === 0) return s
+
+    // A group takes its whole subtree with it — children and grandchildren both — so the
+    // list cannot be left holding cues whose parent is gone.
+    const childIds = new Map<string, string[]>()
+    for (const cue of s.cues) {
+      if (cue.parentId === null) continue
+      childIds.set(cue.parentId, [...(childIds.get(cue.parentId) ?? []), cue.id])
     }
+    const removed = new Set<string>()
+    const stack = [...roots]
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      if (removed.has(id)) continue
+      removed.add(id)
+      stack.push(...(childIds.get(id) ?? []))
+    }
+
+    const selectedIds = s.selectedIds.filter(id => !removed.has(id))
     return {
-      cues: s.cues.filter(c => !toRemove.has(c.id)),
-      selectedId: toRemove.has(s.selectedId ?? '') ? null : s.selectedId,
+      cues: s.cues.filter(c => !removed.has(c.id)),
+      selectedIds,
+      // The hand moves to what is left of the set, rather than to nothing while rows are
+      // still highlighted.
+      selectedId: removed.has(s.selectedId ?? '') ? selectedIds[selectedIds.length - 1] ?? null : s.selectedId,
+      selectionAnchorId: removed.has(s.selectionAnchorId ?? '') ? null : s.selectionAnchorId,
       lastRuns: Object.fromEntries(
-        Object.entries(s.lastRuns).filter(([cueId]) => !toRemove.has(cueId))
+        Object.entries(s.lastRuns).filter(([cueId]) => !removed.has(cueId))
       ),
       isDirty: true,
       past: pushPast(s.past, snapshotOf(s)),
@@ -539,6 +620,21 @@ export const useStore = create<CueListState>((set) => ({
     const record = shouldRecordUpdate(id)
     return {
       cues: s.cues.map(c => c.id === id ? { ...c, ...patch } as Cue : c),
+      isDirty: true,
+      past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
+      future: record ? [] : s.future,
+    }
+  }),
+
+  updateCues: (ids, patch) => set(s => {
+    const touched = new Set(ids)
+    if (touched.size === 0) return s
+    // The set is one thing the operator did, so it is one entry in the history — and
+    // repeated writes to the same set in a breath (a run of swatch presses) coalesce the
+    // way a run of keystrokes in one field does.
+    const record = shouldRecordUpdate(`set:${ids.join(',')}`)
+    return {
+      cues: s.cues.map(c => touched.has(c.id) ? { ...c, ...patch } as Cue : c),
       isDirty: true,
       past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
       future: record ? [] : s.future,
@@ -575,34 +671,63 @@ export const useStore = create<CueListState>((set) => ({
     return { cues, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
-  duplicateCue: (id) => set(s => {
-    const src = s.cues.find(c => c.id === id)
-    if (!src) return s
+  duplicateCues: (ids) => set(s => {
+    // Where each source's copies go: after the cue, or after the subtree when it is a
+    // group, which is what keeps a group's children behind their own header.
+    const insertAfter = new Map<number, Cue[]>()
+    for (const id of ids) {
+      const srcIdx = s.cues.findIndex(c => c.id === id)
+      if (srcIdx < 0) continue
+      const src = s.cues[srcIdx]
+      const newGroupId = crypto.randomUUID()
 
-    const newGroupId = crypto.randomUUID()
-    const isGroup = src.type === 'group'
-
-    // Build the duplicated cue(s)
-    const copies: Cue[] = [{
-      ...src,
-      id: isGroup ? newGroupId : crypto.randomUUID(),
-      number: src.number + ' copy'
-    }]
-
-    if (isGroup) {
-      // Duplicate all children with updated parentId
-      const children = s.cues.filter(c => c.parentId === id)
-      for (const child of children) {
-        copies.push({ ...child, id: crypto.randomUUID(), parentId: newGroupId })
+      const copies: Cue[] = [{
+        ...src,
+        id: src.type === 'group' ? newGroupId : crypto.randomUUID(),
+        number: src.number + ' copy'
+      }]
+      if (src.type === 'group') {
+        // The whole subtree, each child pointing at the copy of its own parent, so a
+        // group inside a group comes with its children too.
+        const copyOf = new Map<string, string>([[src.id, newGroupId]])
+        for (let i = srcIdx + 1; i <= subtreeEndIndex(s.cues, srcIdx); i++) {
+          const child = s.cues[i]
+          if (child.parentId === null) continue
+          const parentCopy = copyOf.get(child.parentId)
+          if (parentCopy === undefined) continue
+          const copyId = crypto.randomUUID()
+          copyOf.set(child.id, copyId)
+          copies.push({ ...child, id: copyId, parentId: parentCopy })
+        }
       }
+      insertAfter.set(
+        src.type === 'group' ? subtreeEndIndex(s.cues, srcIdx) : srcIdx,
+        copies
+      )
     }
+    if (insertAfter.size === 0) return s
 
-    // Insert after the original cue (and its children)
-    const srcIdx = s.cues.findIndex(c => c.id === id)
-    const insertAfter = isGroup ? lastChildIndex([...s.cues], id) : srcIdx
-    const cues = [...s.cues]
-    cues.splice(insertAfter + 1, 0, ...copies)
-    return { cues, selectedId: copies[0].id, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+    const cues: Cue[] = []
+    const copied: string[] = []
+    s.cues.forEach((cue, index) => {
+      cues.push(cue)
+      const copies = insertAfter.get(index)
+      if (copies === undefined) return
+      cues.push(...copies)
+      copied.push(...copies.map(copy => copy.id))
+    })
+
+    // The copies are what the operator is holding now: a second press duplicates them
+    // again rather than the originals.
+    return {
+      cues,
+      selectedIds: copied,
+      selectedId: copied[copied.length - 1],
+      selectionAnchorId: copied[0],
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
   }),
 
   undo: () => set(s => {
@@ -611,6 +736,7 @@ export const useStore = create<CueListState>((set) => ({
     const snapshot = past.pop()!
     return {
       cues: snapshot.cues,
+      ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)]
@@ -623,13 +749,50 @@ export const useStore = create<CueListState>((set) => ({
     const snapshot = future.shift()!
     return {
       cues: snapshot.cues,
+      ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
       future,
       past: pushPast(s.past, snapshotOf(s))
     }
   }),
 
-  select: (id) => set({ selectedId: id }),
+  select: (id) => set(() => id === null ? { ...NO_SELECTION } : selectionFor(id)),
+
+  setSelection: (ids, active = null, anchor = null) => set(() => {
+    const unique = [...new Set(ids)]
+    const activeId = active !== null && unique.includes(active) ? active : unique[unique.length - 1] ?? null
+    return {
+      selectedIds: unique,
+      selectedId: activeId,
+      selectionAnchorId: anchor !== null && unique.includes(anchor) ? anchor : activeId
+    }
+  }),
+
+  extendSelection: (orderedIds, toId) => set(s => {
+    const from = s.selectionAnchorId ?? toId
+    const fromIndex = orderedIds.indexOf(from)
+    const toIndex = orderedIds.indexOf(toId)
+    if (toIndex < 0) return s
+    // One run of the list, the way the operator sees it: what is between the cue their
+    // hand was on and the cue they shift-clicked, inclusive.
+    const ids = fromIndex < 0
+      ? [toId]
+      : orderedIds.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1)
+    return { selectedIds: ids, selectedId: toId, selectionAnchorId: from }
+  }),
+
+  toggleSelected: (id) => set(s => {
+    if (!s.selectedIds.includes(id)) {
+      return { selectedIds: [...s.selectedIds, id], selectedId: id, selectionAnchorId: id }
+    }
+    const selectedIds = s.selectedIds.filter(other => other !== id)
+    const active = s.selectedId === id ? selectedIds[selectedIds.length - 1] ?? null : s.selectedId
+    return {
+      selectedIds,
+      selectedId: active,
+      selectionAnchorId: s.selectionAnchorId === id ? active : s.selectionAnchorId
+    }
+  }),
 
   setRunning: (id, state) => set(s => {
     const running = new Map(s.running)
@@ -736,32 +899,37 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity) => set({
-    cues,
-    workspaceName: name,
-    workspacePath: path,
-    // Loading a file adopts the show's identity; a load without one is a new show.
-    workspaceId: identity?.id ?? crypto.randomUUID(),
-    workspaceCreatedAt: identity?.createdAt ?? new Date().toISOString(),
-    isDirty: false,
-    selectedId: cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null,
-    running: new Map(),
-    lastRuns: {},
-    notice: null,
-    // Whatever the last workspace was missing says nothing about this one; the caller
-    // sets this from the open result straight after.
-    missingMedia: [],
-    // What the last show's files answered says nothing about this one's either.
-    mediaLengths: {},
-    audioSettings: audioSettings ?? { ...defaultAudioSettings },
-    midiSettings: midiSettings ?? { ...defaultMidiSettings },
-    showSettings: showSettings ?? defaultShowSettings(),
-    // Nothing has been told to this show's desk yet.
-    deskState: {},
-    deskSceneId: null,
-    scenesEditing: false,
-    past: [],
-    future: [],
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity) => set(() => {
+    // Where the operator was standing when the file was saved is not in the file; a load
+    // starts on the show's first cue.
+    const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
+    return {
+      cues,
+      workspaceName: name,
+      workspacePath: path,
+      // Loading a file adopts the show's identity; a load without one is a new show.
+      workspaceId: identity?.id ?? crypto.randomUUID(),
+      workspaceCreatedAt: identity?.createdAt ?? new Date().toISOString(),
+      isDirty: false,
+      ...(first === null ? NO_SELECTION : selectionFor(first)),
+      running: new Map(),
+      lastRuns: {},
+      notice: null,
+      // Whatever the last workspace was missing says nothing about this one; the caller
+      // sets this from the open result straight after.
+      missingMedia: [],
+      // What the last show's files answered says nothing about this one's either.
+      mediaLengths: {},
+      audioSettings: audioSettings ?? { ...defaultAudioSettings },
+      midiSettings: midiSettings ?? { ...defaultMidiSettings },
+      showSettings: showSettings ?? defaultShowSettings(),
+      // Nothing has been told to this show's desk yet.
+      deskState: {},
+      deskSceneId: null,
+      scenesEditing: false,
+      past: [],
+      future: [],
+    }
   }),
 
   saveSucceeded: (path, name) => set({

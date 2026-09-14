@@ -56,12 +56,15 @@ function dropParentId(items: RenderItem[], dropAt: number): string | null {
 export function CueList() {
   const cues = useStore(s => s.cues)
   const selectedId = useStore(s => s.selectedId)
+  const selectedIds = useStore(s => s.selectedIds)
   const running = useStore(s => s.running)
   const mediaLengths = useStore(s => s.mediaLengths)
   const missingMedia = useStore(s => s.missingMedia)
   const select = useStore(s => s.select)
-  const removeCue = useStore(s => s.removeCue)
-  const duplicateCue = useStore(s => s.duplicateCue)
+  const extendSelection = useStore(s => s.extendSelection)
+  const toggleSelected = useStore(s => s.toggleSelected)
+  const removeCues = useStore(s => s.removeCues)
+  const duplicateCues = useStore(s => s.duplicateCues)
   const moveCue = useStore(s => s.moveCue)
   const addAudioCuesFromFiles = useStore(s => s.addAudioCuesFromFiles)
 
@@ -74,7 +77,10 @@ export function CueList() {
 
   const openCtxMenu = useCallback((e: React.MouseEvent, cueId: string) => {
     e.preventDefault()
-    select(cueId)
+    // A right-click on a row that is already part of the selection acts on the selection —
+    // that is the whole point of having one. Anywhere else it moves the selection first,
+    // so the menu always acts on what it was opened over.
+    if (!useStore.getState().selectedIds.includes(cueId)) select(cueId)
     setCtxMenu({ x: e.clientX, y: e.clientY, cueId })
   }, [select])
 
@@ -87,6 +93,15 @@ export function CueList() {
       return next
     })
   }, [])
+
+  // A plain press puts the hand on one cue, shift extends from where the hand was, and
+  // cmd/ctrl takes one cue in or out of the set. Every one of them ends with the cue that
+  // was pressed as the active one, which is the cue GO fires.
+  const handleRowClick = useCallback((e: React.MouseEvent, id: string, visibleIds: string[]) => {
+    if (e.shiftKey) extendSelection(visibleIds, id)
+    else if (e.metaKey || e.ctrlKey) toggleSelected(id)
+    else select(id)
+  }, [extendSelection, toggleSelected, select])
 
   // ── Render list ───────────────────────────────────────────────────────────
 
@@ -110,6 +125,11 @@ export function CueList() {
     }
     return items
   }, [cues, collapsedGroupIds])
+
+  // The rows the operator can see, in the order they are drawn: a shift-range runs along
+  // this, so a collapsed group's hidden children are not part of a range anybody can see.
+  const visibleIds = useMemo(() => renderItems.map(item => item.cue.id), [renderItems])
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
 
   // Group rows have no stored duration — derive it from the children here, where the
   // whole cue array is already subscribed. CueRow itself must not subscribe to `cues`
@@ -305,12 +325,14 @@ export function CueList() {
     } else if (e.key === 'ArrowUp' && renderIdx > 0) {
       select(renderItems[renderIdx - 1].cue.id)
     } else if (e.key === 'Delete' || (key === 'backspace' && mod)) {
-      if (selectedId) removeCue(selectedId)
+      // The set is what the operator is holding, so it is what Delete takes: one edit,
+      // one undo, however many cues are in it.
+      if (selectedIds.length > 0) removeCues(selectedIds)
     } else if (key === 'd' && mod) {
       e.preventDefault()
-      if (selectedId) duplicateCue(selectedId)
+      if (selectedIds.length > 0) duplicateCues(selectedIds)
     }
-  }, [renderItems, selectedId, select, removeCue, duplicateCue, ctxMenu, closeCtxMenu])
+  }, [renderItems, selectedId, selectedIds, select, removeCues, duplicateCues, ctxMenu, closeCtxMenu])
 
   // ── Drop indicator ────────────────────────────────────────────────────────
 
@@ -383,7 +405,7 @@ export function CueList() {
                 <CueRow
                   cue={cue}
                   depth={depth}
-                  isSelected={cue.id === selectedId}
+                  isSelected={selectedSet.has(cue.id)}
                   runState={running.get(cue.id) ?? null}
                   durationMs={groupDurations.get(cue.id)}
                   mediaState={cue.type === 'group'
@@ -391,7 +413,7 @@ export function CueList() {
                     : mediaLengthState(cue, lengths)}
                   collapsed={collapsed}
                   onToggleCollapse={cue.type === 'group' ? () => toggleCollapse(cue.id) : undefined}
-                  onClick={() => select(cue.id)}
+                  onClick={e => handleRowClick(e, cue.id, visibleIds)}
                   onContextMenu={openCtxMenu}
                   renamingId={renamingId}
                 />
