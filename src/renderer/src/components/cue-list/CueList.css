@@ -1,3 +1,10 @@
+.cue-list-container:focus-visible {
+  /* Arrows, Delete and Mod+D only reach the list while it has focus, and the drag-over
+     state draws on the same property the browser would use: the ring has to be ours. */
+  outline: 1px solid var(--border-focus);
+  outline-offset: -1px;
+}
+
 .cue-list-container {
   position: relative;
   display: flex;

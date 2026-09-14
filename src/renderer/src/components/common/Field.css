@@ -9,3 +9,15 @@
   box-shadow: 0 0 0 2px var(--accent-blue-glow);
   transition: box-shadow 0.12s ease, border-color 0.12s ease;
 }
+
+/* A field that refused what was typed.
+ *
+ * The other half of the same sentence: the glow says a value took, this says it did not,
+ * and the field keeps what was typed so the operator can see what is being refused. Red
+ * rather than the amber accent, because amber is the brand and this is a state the show
+ * must not be left in. */
+.field[data-refused='true'] {
+  border-color: var(--state-panic-hover);
+  box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.28);
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}

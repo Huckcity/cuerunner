@@ -53,8 +53,22 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
         onClose()
       }
     }
+    // Escape closes the menu here rather than only in the list's handler: the press has
+    // to be swallowed either way, or dismissing a menu stops the show behind it.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      e.preventDefault()
+      onClose()
+    }
     document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
+    // Capture, on the document: the press is taken before anything else can read it,
+    // including the window listener that would stop the show.
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
   }, [onClose])
 
   const targets = selectedIds.includes(cue.id) ? selectedIds : [cue.id]
@@ -112,6 +126,7 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
       <button className="cue-context-menu-item" onClick={handleArmToggle}>
         <span className="cue-context-menu-icon">{allArmed ? '○' : '●'}</span>
         {allArmed ? 'Disarm' : 'Arm'}{count}
+        <kbd>{formatShortcut('Mod+Shift+A')}</kbd>
       </button>
       <div className="cue-context-menu-separator" />
       {/* The eight colours, drawn where the cue is: the same pick as the inspector's, for

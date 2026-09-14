@@ -24,6 +24,18 @@
 .cue-row[data-state='playing']  { background: var(--bg-playing-row); animation: pulse 2s ease-in-out infinite; }
 .cue-row[data-state='pre-wait'] { background: var(--bg-prewait-row); }
 
+/* Where GO points, drawn on its own edge rather than in the background. The row's fill is
+   taken by what the cue is doing — running, pre-wait — and a selected cue that is also
+   playing used to be painted over by the running colour, so the one thing the operator
+   has to know before pressing GO was invisible exactly when the show was running. */
+.cue-row[data-selected='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent-blue);
+}
+
 /* Disarmed rows: a disarmed cue is skipped by GO, so it must read as inactive at a glance */
 .cue-row[data-armed='false'] .name-text,
 .cue-row[data-armed='false'] .cue-type-icon { color: var(--fg-ghost); }

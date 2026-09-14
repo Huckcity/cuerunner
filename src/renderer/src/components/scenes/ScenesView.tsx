@@ -168,9 +168,9 @@ export function ScenesView() {
             <button
               className="matrix-apply"
               onClick={() => { void recallScene(deskSceneId) }}
-              title="Send the current scene's changes to the desk"
+              title="Recall the current scene: send its changes to the desk"
             >
-              Apply to desk ({toApply})
+              Recall now ({toApply})
             </button>
           )}
           <button
@@ -287,7 +287,7 @@ export function ScenesView() {
                   <button
                     className="matrix-recall"
                     onClick={() => { void recallScene(scene.id) }}
-                    title="Send this scene to the desk"
+                    title="Recall this scene"
                     aria-label={`Recall ${scene.name}`}
                   >
                     →

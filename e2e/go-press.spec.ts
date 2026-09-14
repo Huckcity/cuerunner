@@ -226,3 +226,22 @@ test('a text field keeps the space it is given', async () => {
   await expect(name).toHaveValue('Walk ')
   await expect(page.locator('.cue-row').first()).toHaveAttribute('data-selected', 'true')
 })
+
+test('Escape closes the context menu without stopping the show', async () => {
+  // The menu's own Escape and the transport's Escape are the same key: put the menu
+  // down is what the operator meant, and the cue behind it keeps playing.
+  await standOnTheFirstCue()
+  await page.locator('.field-row').filter({ hasText: 'Post-wait' }).locator('input').fill('30')
+  await page.locator('.cue-row').first().click()
+  await page.keyboard.press('Space')
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+
+  await page.locator('.cue-row').first().click({ button: 'right' })
+  await expect(page.locator('.cue-context-menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await expect(page.locator('.cue-context-menu')).toHaveCount(0)
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+
+  await page.getByRole('button', { name: /STOP/ }).click()
+})

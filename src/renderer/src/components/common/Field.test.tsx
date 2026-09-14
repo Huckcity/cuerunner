@@ -160,7 +160,7 @@ describe('Field', () => {
     expect(input().getAttribute('data-saved')).toBe('true')
   })
 
-  it('drops a number the field will not take, and puts the real value back', async () => {
+  it('drops a number the field will not take, and says why rather than putting it back', async () => {
     const onWrite = vi.fn()
     act(() => { root.render(<NumberHarness initial={30} min={5} max={3600} onWrite={onWrite} />) })
 
@@ -168,10 +168,13 @@ describe('Field', () => {
     await type(input(), '3')
     await leave(input())
 
-    // Nothing was written, so there is nothing to confirm either.
+    // Nothing was written, so there is nothing to confirm — and the number the operator
+    // typed stays on screen with the reason, rather than the committed one sliding back
+    // into place as if nothing had happened.
     expect(onWrite).not.toHaveBeenCalled()
-    expect(input().value).toBe('30')
+    expect(input().value).toBe('3')
     expect(input().getAttribute('data-saved')).toBeNull()
+    expect(input().getAttribute('data-refused')).toBe('true')
   })
 
   it('writes an integer field as a whole number', async () => {
@@ -207,5 +210,43 @@ describe('Field', () => {
     await leave(input())
 
     expect(input().getAttribute('data-saved')).toBeNull()
+  })
+
+  it('says so when the value it was given is out of range', async () => {
+    // The other half of the same sentence. A value that is dropped quietly is a value
+    // the operator believes is set, and the old one coming back at them is how a cue
+    // plays at the level nobody meant.
+    const onWrite = vi.fn()
+    act(() => { root.render(<NumberHarness initial={10} min={0} max={60} onWrite={onWrite} />) })
+
+    await focus(input())
+    await type(input(), '300')
+
+    expect(input().getAttribute('data-refused')).toBe('true')
+    expect(input().getAttribute('aria-invalid')).toBe('true')
+    expect(input().title).toBe('Largest is 60')
+
+    await leave(input())
+    // Nothing was written and the refusal stays up with the number still on screen: the
+    // two numbers cannot be mistaken for each other while the operator is looking.
+    expect(onWrite).not.toHaveBeenCalled()
+    expect(input().value).toBe('300')
+    expect(input().getAttribute('data-refused')).toBe('true')
+    expect(input().getAttribute('data-saved')).toBeNull()
+  })
+
+  it('takes a value that is inside the range again after a refusal', async () => {
+    const onWrite = vi.fn()
+    act(() => { root.render(<NumberHarness initial={10} min={0} max={60} onWrite={onWrite} />) })
+
+    await focus(input())
+    await type(input(), '90')
+    expect(input().getAttribute('data-refused')).toBe('true')
+
+    await type(input(), '45')
+    expect(input().getAttribute('data-refused')).toBeNull()
+
+    await leave(input())
+    expect(onWrite).toHaveBeenCalledWith(45)
   })
 })

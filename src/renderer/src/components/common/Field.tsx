@@ -10,6 +10,13 @@ type ShellProps = {
   /** When what has been typed is handed over: as it is typed, or when the field is left. */
   when: 'typed' | 'leave'
   onValue: (text: string) => void
+  /**
+   * Why the text cannot be taken, or null when it can. A field that refuses what was
+   * typed has to say so: a value the operator typed, saw, and moved on from is a value
+   * they believe is set, and the old one silently coming back is how a cue plays at the
+   * wrong level.
+   */
+  validate?: (text: string) => string | null
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'onFocus'>
 
 /**
@@ -28,9 +35,10 @@ type ShellProps = {
  * can refuse what was typed: a port out of range is dropped rather than written, and a
  * glow for a value that did not take would be a lie.
  */
-function FieldShell({ value, when, onValue, className, ...rest }: ShellProps) {
+function FieldShell({ value, when, onValue, validate, className, ...rest }: ShellProps) {
   const [draft, setDraft] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [refused, setRefused] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   /** The committed value when the field was focused — what a change is measured against. */
   const atFocusRef = useRef(value)
@@ -60,6 +68,16 @@ function FieldShell({ value, when, onValue, className, ...rest }: ShellProps) {
 
   const leave = (): void => {
     if (draft === null) return
+    // What the field will do is decided before it is left, and said while the operator
+    // is still looking at it: the draft stays on screen when it was refused, so the
+    // number they typed and the number the show has cannot be mistaken for each other.
+    if (validate !== undefined) {
+      const reason = validate(draft)
+      if (reason !== null) {
+        setRefused(reason)
+        return
+      }
+    }
     if (when === 'leave' && draft !== value) onValue(draft)
     setDraft(null)
     setLeaving(true)
@@ -70,10 +88,14 @@ function FieldShell({ value, when, onValue, className, ...rest }: ShellProps) {
       {...rest}
       className={className === undefined ? 'field' : `field ${className}`}
       data-saved={saved || undefined}
+      data-refused={refused !== null || undefined}
+      title={refused ?? rest.title}
+      aria-invalid={refused !== null || undefined}
       value={draft ?? value}
       onFocus={e => { atFocusRef.current = e.currentTarget.value }}
       onChange={e => {
         setDraft(e.target.value)
+        setRefused(validate === undefined ? null : validate(e.target.value))
         if (when === 'typed') onValue(e.target.value)
       }}
       onBlur={leave}
@@ -118,13 +140,21 @@ type NumberProps = {
 export function NumberField({ value, min, max, step = 1, when = 'leave', onValue, ...rest }: NumberProps) {
   const decimals = (String(step).split('.')[1] ?? '').length
 
+  /** Why this text cannot be a value of this field, or null when it can. */
+  const reasonFor = (text: string): string | null => {
+    // An empty field is not a mistake: a length or a time that has not been set is null.
+    if (text.trim() === '') return null
+    const parsed = Number(text)
+    if (!Number.isFinite(parsed)) return `“${text}” is not a number`
+    if (min !== undefined && parsed < min) return `Smallest is ${min}`
+    if (max !== undefined && parsed > max) return `Largest is ${max}`
+    return null
+  }
+
   const take = (text: string): void => {
     if (text.trim() === '') { onValue(null); return }
-    const parsed = Number(text)
-    if (!Number.isFinite(parsed)) return
-    if (min !== undefined && parsed < min) return
-    if (max !== undefined && parsed > max) return
-    onValue(Number(parsed.toFixed(decimals)))
+    if (reasonFor(text) !== null) return
+    onValue(Number(Number(text).toFixed(decimals)))
   }
 
   return (
@@ -137,6 +167,7 @@ export function NumberField({ value, min, max, step = 1, when = 'leave', onValue
       when={when}
       value={value === null ? '' : String(value)}
       onValue={take}
+      validate={reasonFor}
     />
   )
 }

@@ -36,3 +36,19 @@ test('Ctrl+Backspace deletes the selected cue', async () => {
 
   await expect(page.locator('.cue-row')).toHaveCount(0)
 })
+
+test('Ctrl+Shift+A takes the selected cue out of the show and puts it back', async () => {
+  // Arming is the one edit that happens mid-run, so it has to be a key rather than a
+  // right-click: the operator is watching the stage, not the mouse.
+  await toolbarCueBtn(page, 'Wait').click()
+  const row = page.locator('.cue-row').first()
+  await expect(row).toHaveAttribute('data-armed', 'true')
+
+  await list(page).press('Control+Shift+a')
+  await expect(row).toHaveAttribute('data-armed', 'false')
+  await expect(row.locator('.disarmed-pill')).toHaveText('disarmed')
+
+  await list(page).press('Control+Shift+a')
+  await expect(row).toHaveAttribute('data-armed', 'true')
+  await expect(row.locator('.disarmed-pill')).toHaveCount(0)
+})

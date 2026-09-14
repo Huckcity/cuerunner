@@ -154,10 +154,14 @@ test('the Wireless tab sets the alarms, and refuses a value that would misfire',
   await quiet.blur()
   await expect(quiet).toHaveValue('30')
 
-  // Zero would alarm on every poll. An out-of-range value is dropped, not written.
+  // Zero would alarm on every poll. An out-of-range value is refused rather than
+  // written, and the refusal is on the field: the number stays where the operator can
+  // see it, with the reason, and the show keeps the value it really has.
   await quiet.fill('0')
   await quiet.blur()
-  await expect(quiet).toHaveValue('30')
+  await expect(quiet).toHaveValue('0')
+  await expect(quiet).toHaveAttribute('data-refused', 'true')
+  await expect(quiet).toHaveAttribute('title', 'Smallest is 2')
 
   await dialog.locator('#settings-rf-battery-critical').fill('15')
   await dialog.locator('#settings-rf-battery-critical').blur()
@@ -224,15 +228,21 @@ test('the General tab holds the firing guard, in the range that can be typed', a
   // It opens on General: the show-wide settings come first, and the window is one of them.
   await expect(dialog.locator('#settings-guard-window')).toHaveValue('300')
 
-  // A value past the range is dropped rather than clamped: the field goes back to what
-  // the show would really do, so nothing is stored that cannot be obeyed.
-  await dialog.locator('#settings-guard-window').fill('99999')
-  await dialog.locator('#settings-guard-window').press('Enter')
-  await expect(dialog.locator('#settings-guard-window')).toHaveValue('300')
+  // A value past the range is refused rather than clamped, and the refusal is on the
+  // field: the number the operator typed stays where they can see it, marked, and the
+  // show keeps the value it really has.
+  const guard = dialog.locator('#settings-guard-window')
+  await guard.fill('99999')
+  await guard.press('Enter')
+  await expect(guard).toHaveAttribute('data-refused', 'true')
+  await expect(guard).toHaveValue('99999')
+  await expect(guard).toHaveAttribute('title', 'Largest is 2000')
 
-  await dialog.locator('#settings-guard-window').fill('250')
-  await dialog.locator('#settings-guard-window').press('Enter')
-  await expect(dialog.locator('#settings-guard-window')).toHaveValue('250')
+  // And a value inside the range clears the refusal and takes.
+  await guard.fill('800')
+  await expect(guard).not.toHaveAttribute('data-refused', 'true')
+  await guard.press('Enter')
+  await expect(guard).toHaveValue('800')
 
   await closeSettings(page)
 })
