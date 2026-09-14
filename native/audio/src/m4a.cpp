@@ -455,15 +455,22 @@ class FfmpegPipeSource final : public Source {
   }
 
   void closeChild() {
-    if (stream_ != nullptr) {
-      std::fclose(stream_);
-      stream_ = nullptr;
-    }
+    // Kill first, then close the read end. The child is a pinned ffmpeg reading this pipe's
+    // other side as its stdout, and the other order races it: our fclose makes its next
+    // write an EPIPE, which at `-v error` it reports as "Error muxing a packet" and
+    // "Terminating thread with return code -32 (Broken pipe)" — four lines of alarming
+    // error text per decode, in a run where the decode was in fact fine. Stopping the child
+    // before there is nothing to write to removes the race rather than hiding its output;
+    // a real decode failure still arrives, because it happens while we are reading.
     if (pid_ > 0) {
       ::kill(pid_, SIGKILL);
       int status = 0;
       ::waitpid(pid_, &status, 0);
       pid_ = -1;
+    }
+    if (stream_ != nullptr) {
+      std::fclose(stream_);
+      stream_ = nullptr;
     }
   }
 
