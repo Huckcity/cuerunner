@@ -60,12 +60,10 @@ test('demo audio is copied out of the app and played from there', async () => {
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
   await page.locator('.inspector-tab', { hasText: 'Audio' }).click()
 
-  const filePath = await page
-    .locator('.field-row')
-    .filter({ hasText: 'File' })
-    .locator('input')
-    .first()
-    .inputValue()
+  // The field shows the file's name; the whole path rides on it for the tooltip.
+  const field = page.locator('.audio-file-name')
+  await expect(field).toHaveValue('walk-in.wav')
+  const filePath = (await field.getAttribute('data-path')) ?? ''
 
   expect(filePath).toMatch(/walk-in\.wav$/)
   expect(fs.existsSync(filePath)).toBe(true)
@@ -73,4 +71,28 @@ test('demo audio is copied out of the app and played from there', async () => {
   // Copied into the app's user-data folder rather than played from the bundle.
   const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
   expect(filePath.startsWith(userData)).toBe(true)
+})
+
+test('the demo plays straight from the cue list, with no Audio tab ever opened', async () => {
+  await openDemoFromFileMenu()
+
+  // Straight from the cue list to GO. Nothing has drawn the cue's Audio inspector, so
+  // the media has to have been prepared by the fire path itself — an engine that was
+  // never asked to prepare it refuses the start.
+  await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
+  await page.getByRole('button', { name: /GO/ }).click()
+
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toHaveAttribute('data-state', 'playing')
+  await expect(page.locator('.running-badge')).toHaveText('1 running')
+  // The engine's own answer: a voice really is playing, not just a cue marked running.
+  // Polled, because a start is scheduled on the engine's clock with a lookahead — the
+  // renderer marks the cue running a moment before the engine's voice exists, and a
+  // loaded runner makes that gap longer than one read can cover.
+  await expect
+    .poll(
+      async () =>
+        app.evaluate(async () => (await globalThis.__winslabDevHarness?.engineInfo())?.activeVoices ?? 0),
+      { timeout: 5000, message: 'the engine should have a voice playing' }
+    )
+    .toBeGreaterThan(0)
 })

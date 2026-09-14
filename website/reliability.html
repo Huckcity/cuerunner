@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reliability — Winslab</title>
+  <meta name="description" content="The Winslab interface and its audio engine are separate processes; the engine keeps the show running when the interface dies. The nightly soak runs eight one-hour shards and the kill tests run on every pull request — the numbers from the last run are on this page." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Winslab Reliability" />
+  <meta property="og:description" content="The interface and the audio engine as separate processes, the nightly eight-shard soak, the kill tests on every pull request, and the numbers from the last run." />
+  <meta property="og:url" content="https://huckcity.github.io/winslab/reliability.html" />
+  <meta property="og:image" content="https://huckcity.github.io/winslab/assets/logo-horizontal.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Winslab Reliability" />
+  <meta name="twitter:description" content="The nightly soak, the kill tests, and the numbers from the last run." />
+  <link rel="icon" href="./assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="Winslab home">
+        <img src="./assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="./guide.html">User Guide</a>
+        <a href="./reliability.html">Reliability</a>
+        <a href="./index.html#download">Download</a>
+        <a href="./index.html#cue-types">Cue Types</a>
+        <a href="./index.html#changelog">Changelog</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <section class="panel reveal">
+      <h1>Reliability</h1>
+      <p>
+        The interface is an Electron application; the audio engine is a small native binary in its
+        own process, speaking a documented socket protocol. The interface can die or be replaced
+        and the show keeps playing — the engine is the only thing that touches the device, the
+        decoders and the mixer.
+      </p>
+    </section>
+
+    <section id="nightly" class="panel reveal delay-1">
+      <h2>The nightly run</h2>
+      <p>
+        Every night, eight one-hour shards run the same generated show, a different seed each,
+        driven against the engine's silent pacer: its real mixer and sample clock with no device
+        attached. The show is hundreds of cues an hour — overlapping voices, fades, loops, seeks
+        and routing changes. Each shard asserts:
+      </p>
+      <ul class="tight-list">
+        <li>zero xruns — no device callback missed its deadline;</li>
+        <li>zero stream underruns — no frames of silence while waiting for media;</li>
+        <li>every cue starts within a stated tolerance of its scheduled time on the sample clock;</li>
+        <li>the engine clock stays within a stated drift of the wall clock.</li>
+      </ul>
+      <p style="margin-top: 12px">
+        The tolerances are part of the result itself, so the claim can be checked against the
+        numbers rather than taken on trust.
+      </p>
+    </section>
+
+    <section id="kill-tests" class="panel reveal delay-2">
+      <h2>The kill tests</h2>
+      <p>
+        A show meets failures the desk did not plan for. These run on every pull request, and
+        again in the nightly workflow:
+      </p>
+      <ul class="tight-list">
+        <li>
+          <strong>Renderer killed mid-show</strong> — the interface comes back with an explanation
+          of what happened, and answers input again.
+        </li>
+        <li>
+          <strong>Engine killed mid-show</strong> — a replacement engine takes over, the cue chain
+          keeps its time across the change, the next cue's audio reaches the replacement, and the
+          operator is told.
+        </li>
+        <li>
+          <strong>Device taken away mid-show</strong> — the engine stops playing rather than
+          pouring sound into a device that is no longer there, says why in its own words, and the
+          show can go on when the rig comes back.
+        </li>
+        <li>
+          <strong>A media reader that stalls mid-stream</strong> — the engine fills the silence,
+          counts it, tells the operator, and carries on from where the show actually is; the cue
+          keeps playing and the show clock keeps wall time.
+        </li>
+        <li>
+          <strong>Malformed media at the cue list</strong> — the file is refused as unreadable, the
+          cue that was playing is untouched, and the engine still plays the next cue.
+        </li>
+      </ul>
+      <p style="margin-top: 12px">
+        Each of these asserts a defined behaviour — the show is silenced, or the operator is told,
+        or playback resumes — not merely that the application did not crash.
+      </p>
+    </section>
+
+    <section id="last-run" class="panel reveal delay-3 run-panel">
+      <h2>Last run</h2>
+      <p id="run-absent" class="note">
+        No nightly result published yet. The nightly soak writes <code>soak-latest.json</code> next
+        to this page when it finishes; until that file is here, this page reports no numbers.
+      </p>
+      <div id="run-data" hidden>
+        <p id="run-outcome" class="run-state">—</p>
+        <p id="run-stamp" class="metric-note"></p>
+        <div class="cards three-col">
+          <article class="card">
+            <h3>Show time</h3>
+            <p class="metric-value" id="m-hours">—</p>
+            <p class="metric-note" id="n-hours"></p>
+          </article>
+          <article class="card">
+            <h3>Cues started</h3>
+            <p class="metric-value" id="m-cues">—</p>
+            <p class="metric-note" id="n-cues"></p>
+          </article>
+          <article class="card">
+            <h3>xruns</h3>
+            <p class="metric-value" id="m-xruns">—</p>
+            <p class="metric-note" id="n-xruns"></p>
+          </article>
+          <article class="card">
+            <h3>Stream underruns</h3>
+            <p class="metric-value" id="m-underruns">—</p>
+            <p class="metric-note" id="n-underruns"></p>
+          </article>
+          <article class="card">
+            <h3>Worst start delay</h3>
+            <p class="metric-value" id="m-delay">—</p>
+            <p class="metric-note" id="n-delay"></p>
+          </article>
+          <article class="card">
+            <h3>Worst clock drift</h3>
+            <p class="metric-value" id="m-drift">—</p>
+            <p class="metric-note" id="n-drift"></p>
+          </article>
+        </div>
+        <h3 class="run-subhead" id="shard-subhead">Shards</h3>
+        <div class="table-wrap" id="shard-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Shard</th>
+                <th>Minutes</th>
+                <th>Cues started</th>
+                <th>Max start delay</th>
+                <th>Clock drift</th>
+                <th>xruns</th>
+                <th>Stream underruns</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody id="shard-rows"></tbody>
+          </table>
+        </div>
+        <div id="run-failures" class="note warn" hidden></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>Winslab reliability page. The numbers are read from <code>soak-latest.json</code> when the page loads — the file the nightly soak workflow publishes with the site.</p>
+  </footer>
+
+  <script>
+    // The numbers on this page are never typed in. They come from ./soak-latest.json, the
+    // file the nightly soak workflow publishes next to this page, and are rendered exactly
+    // as written there. If the file is absent or unreadable the page says so, rather than
+    // falling back to zeroes that would read as measurements.
+    (async () => {
+      const element = (id) => document.getElementById(id)
+      const absent = element('run-absent')
+      const data = element('run-data')
+
+      const count = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+
+      const isResult = (value) =>
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        value.tool === 'soak-result' &&
+        typeof value.passed === 'boolean' &&
+        value.totals !== null &&
+        typeof value.totals === 'object'
+
+      const timestamp = (value) => {
+        if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return null
+        return new Intl.DateTimeFormat('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+          timeZone: 'UTC'
+        }).format(new Date(value))
+      }
+
+      const metric = (valueId, noteId, value, note) => {
+        element(valueId).textContent = value
+        element(noteId).textContent = note
+      }
+
+      const appendCell = (row, text) => {
+        const cell = document.createElement('td')
+        cell.textContent = text
+        row.appendChild(cell)
+      }
+
+      let response
+      try {
+        response = await fetch('./soak-latest.json', { cache: 'no-store' })
+      } catch (error) {
+        absent.textContent = 'The nightly result could not be read in this browser, so no numbers are shown.'
+        return
+      }
+      // A 404 leaves the "not published yet" line above in place.
+      if (response.status === 404) return
+
+      let report = null
+      if (response.ok) {
+        try {
+          report = await response.json()
+        } catch (error) {
+          report = null
+        }
+      }
+      if (!isResult(report)) {
+        absent.textContent = 'The nightly result file could not be read, so no numbers are shown. The next run will replace it.'
+        return
+      }
+
+      const totals = report.totals
+      const shards = Array.isArray(report.shards) ? report.shards : []
+      const passed = report.passed === true
+
+      const outcome = element('run-outcome')
+      outcome.textContent = passed ? 'Passed' : 'Failed'
+      outcome.classList.add(passed ? 'pass' : 'fail')
+
+      const stamp = element('run-stamp')
+      const stampParts = []
+      const shardsPassed = count(totals.shardsPassed)
+      const shardsTotal = count(totals.shards)
+      if (shardsPassed !== null && shardsTotal !== null) {
+        stampParts.push(`${shardsPassed} of ${shardsTotal} shards`)
+      }
+      const when = timestamp(report.generatedAt)
+      if (when !== null) stampParts.push(`run of ${when} UTC`)
+      stamp.textContent = stampParts.join(' · ')
+
+      const run = report.run !== null && typeof report.run === 'object' ? report.run : {}
+      if (typeof run.url === 'string' && /^https?:\/\//.test(run.url)) {
+        const link = document.createElement('a')
+        link.href = run.url
+        link.target = '_blank'
+        link.rel = 'noreferrer'
+        link.textContent = run.id ? `workflow run ${run.id}` : 'the workflow run'
+        stamp.append(stampParts.length > 0 ? ' · ' : '', link)
+      }
+
+      const minutes = count(totals.showMinutes)
+      metric(
+        'm-hours',
+        'n-hours',
+        minutes === null ? '—' : minutes >= 60 ? `${(minutes / 60).toFixed(1)} hours` : `${minutes} minute${minutes === 1 ? '' : 's'}`,
+        minutes === null ? 'not stated in this result' : minutes >= 60 ? `${minutes} show minutes` : 'a short run'
+      )
+
+      const started = count(totals.cuesStarted)
+      const scheduled = count(totals.starts) ?? count(totals.cuesScheduled)
+      metric(
+        'm-cues',
+        'n-cues',
+        started === null ? '—' : String(started),
+        scheduled === null ? 'scheduled starts not stated in this result' : `of ${scheduled} scheduled`
+      )
+
+      const xruns = count(totals.xruns)
+      metric('m-xruns', 'n-xruns', xruns === null ? '—' : String(xruns), 'device callbacks that missed their deadline')
+
+      const underruns = count(totals.decodeUnderruns)
+      metric('m-underruns', 'n-underruns', underruns === null ? '—' : String(underruns), 'frames of silence while waiting for media')
+
+      const delay = count(totals.maxStartDelayMs)
+      const delayTolerance = count(totals.startToleranceMs)
+      metric(
+        'm-delay',
+        'n-delay',
+        delay === null ? '—' : `${delay} ms`,
+        delay === null
+          ? 'not stated in this result'
+          : delayTolerance === null
+            ? 'no tolerance stated in this result'
+            : delay <= delayTolerance
+              ? `within the ${delayTolerance} ms tolerance`
+              : `over the ${delayTolerance} ms tolerance`
+      )
+
+      const drift = count(totals.worstClockDriftPct)
+      const driftTolerance = count(totals.clockTolerancePct)
+      metric(
+        'm-drift',
+        'n-drift',
+        drift === null ? '—' : `${drift}%`,
+        drift === null
+          ? 'not stated in this result'
+          : driftTolerance === null
+            ? 'no tolerance stated in this result'
+            : drift <= driftTolerance
+              ? `within the ${driftTolerance}% tolerance`
+              : `over the ${driftTolerance}% tolerance`
+      )
+
+      const rows = element('shard-rows')
+      for (const shard of shards) {
+        const row = document.createElement('tr')
+        const shardNumber = count(shard.shard)
+        const shardMinutes = count(shard.minutes)
+        const shardStarted = count(shard.observedStarts)
+        const shardScheduled = count(shard.scheduledRuns)
+        const shardDelay = count(shard.maxStartDelayMs)
+        const shardDrift = count(shard.driftPct)
+        const shardXruns = count(shard.xruns)
+        const shardUnderruns = count(shard.decodeUnderruns)
+        appendCell(row, shardNumber === null ? '—' : String(shardNumber))
+        appendCell(row, shardMinutes === null ? '—' : String(shardMinutes))
+        appendCell(
+          row,
+          shardStarted === null ? '—' : shardScheduled === null ? String(shardStarted) : `${shardStarted} / ${shardScheduled}`
+        )
+        appendCell(row, shardDelay === null ? '—' : `${shardDelay} ms`)
+        appendCell(row, shardDrift === null ? '—' : `${shardDrift}%`)
+        appendCell(row, shardXruns === null ? '—' : String(shardXruns))
+        appendCell(row, shardUnderruns === null ? '—' : String(shardUnderruns))
+        appendCell(row, shard.passed === true ? 'Passed' : 'Failed')
+        rows.appendChild(row)
+      }
+      if (shards.length === 0) {
+        element('shard-subhead').hidden = true
+        element('shard-table').hidden = true
+      }
+
+      const failures = []
+      if (typeof report.failureNote === 'string' && report.failureNote !== '') {
+        failures.push(report.failureNote)
+      }
+      for (const shard of shards) {
+        if (!Array.isArray(shard.failures)) continue
+        for (const failure of shard.failures) {
+          failures.push(`Shard ${count(shard.shard) ?? '?'}: ${String(failure)}`)
+        }
+      }
+      if (failures.length > 0) {
+        const box = element('run-failures')
+        box.hidden = false
+        const heading = document.createElement('h3')
+        heading.textContent = 'What failed'
+        box.appendChild(heading)
+        const list = document.createElement('ul')
+        list.className = 'tight-list'
+        for (const failure of failures) {
+          const item = document.createElement('li')
+          item.textContent = failure
+          list.appendChild(item)
+        }
+        box.appendChild(list)
+      }
+
+      absent.hidden = true
+      data.hidden = false
+    })()
+  </script>
+
+</body>
+</html>

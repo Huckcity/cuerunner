@@ -1,4 +1,4 @@
-import { useStore } from '../../store'
+import { useStore, useParentGroup } from '../../store'
 import type { Cue, CueColor } from '../../types/cue'
 import { ResetButton } from './ResetButton'
 import { BASE_DEFAULTS } from '../../utils/cueDefaults'
@@ -20,6 +20,9 @@ interface Props { cue: Cue }
 export function BasicTab({ cue }: Props) {
   const update = useStore(s => s.updateCue)
   const set = (patch: Partial<Cue>) => update(cue.id, patch)
+  // Where a cue starts inside its group only means something in a timeline group; in a
+  // sequence the children follow one another, and outside a group there is no timeline.
+  const inTimeline = useParentGroup(cue.id)?.mode === 'timeline'
 
   return (
     <div>
@@ -50,16 +53,18 @@ export function BasicTab({ cue }: Props) {
         </div>
       </div>
       <div className="field-section-title">Timing</div>
-      <div className="field-row">
-        <label>Timeline offset (ms)</label>
-        <input type="number" min={0} value={cue.timelineOffset}
-          onChange={e => {
-            const v = Number(e.target.value)
-            if (!isNaN(v) && v >= 0) set({ timelineOffset: v })
-          }} />
-        <ResetButton label="Timeline offset" value={cue.timelineOffset} defaultValue={BASE_DEFAULTS.timelineOffset}
-          onReset={() => set({ timelineOffset: BASE_DEFAULTS.timelineOffset })} />
-      </div>
+      {inTimeline && (
+        <div className="field-row">
+          <label>Timeline offset (s)</label>
+          <input type="number" min={0} step={0.1} value={cue.timelineOffset / 1000}
+            onChange={e => {
+              const s = parseFloat(e.target.value)
+              if (!isNaN(s) && s >= 0) set({ timelineOffset: Math.round(s * 1000) })
+            }} />
+          <ResetButton label="Timeline offset" value={cue.timelineOffset} defaultValue={BASE_DEFAULTS.timelineOffset}
+            onReset={() => set({ timelineOffset: BASE_DEFAULTS.timelineOffset })} />
+        </div>
+      )}
       <div className="field-row">
         <label>Pre-wait (s)</label>
         <input type="number" min={0} step={0.1} value={cue.preWait / 1000}

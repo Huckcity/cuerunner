@@ -1,33 +1,60 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from '../../store'
+import { useStore, usePro } from '../../store'
 import { useWorkspace, openDemoWorkspace } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
+import { ProMark } from '../license/ProLock'
+import { CUE_ICON } from '../../utils/cueIcons'
+import { formatShortcut } from '../../utils/shortcuts'
+import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import './Toolbar.css'
 
-const PRIMARY_CUES: { type: CueType; icon: string; label: string }[] = [
-  { type: 'audio', icon: '♪', label: 'Audio' },
-  { type: 'group', icon: '▤', label: 'Group' },
-  { type: 'fade',  icon: '↘', label: 'Fade'  },
-  { type: 'wait',  icon: '⏱', label: 'Wait'  },
-  { type: 'stop',  icon: '■', label: 'Stop'  },
+/** An Electron accelerator, written for this keyboard. */
+function shortcutLabel(accelerator: string): string {
+  return formatShortcut(accelerator.replace('CmdOrCtrl', 'Mod'))
+}
+
+const PRIMARY_CUES: { type: CueType; label: string }[] = [
+  { type: 'audio', label: 'Audio' },
+  { type: 'group', label: 'Group' },
+  { type: 'fade',  label: 'Fade'  },
+  { type: 'wait',  label: 'Wait'  },
+  { type: 'stop',  label: 'Stop'  },
 ]
 
-const MORE_CUES: { type: CueType; icon: string; label: string }[] = [
-  { type: 'midi',    icon: 'M',    label: 'MIDI'    },
-  { type: 'osc',     icon: 'O',    label: 'OSC'     },
-  { type: 'network', icon: '⊕',   label: 'Network' },
-  { type: 'script',  icon: '{ }', label: 'Script'  },
+const MORE_CUES: { type: CueType; label: string }[] = [
+  { type: 'midi',    label: 'MIDI'    },
+  { type: 'osc',     label: 'OSC'     },
+  { type: 'network', label: 'Network' },
+  { type: 'script',  label: 'Script'  },
+  { type: 'scene',   label: 'Scene'   },
 ]
 
 interface Props {
   onOpenSettings: () => void
+  view: AppView
+  onSwitchView: (view: AppView) => void
 }
 
-export function Toolbar({ onOpenSettings }: Props) {
+/**
+ * What fills the middle of the window: the cue stack the show is built in, or the scenes
+ * the show is run from and edited in.
+ */
+export type AppView = 'cues' | 'scenes'
+
+export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
   const selectedId = useStore(s => s.selectedId)
+  const pro = usePro()
+  const openSettings = useStore(s => s.openSettings)
 
   const handleAddCue = (type: CueType) => {
+    // A scene cue belongs to the scenes the license unlocks: without one there is
+    // nothing for it to point at, so the click goes to the place that fixes that
+    // rather than adding a cue that cannot run.
+    if (type === 'scene' && !pro) {
+      openSettings('license')
+      return
+    }
     addCue(type, selectedId ?? undefined)
     if (type === 'fade' && selectedId) {
       const { cues, selectedId: newId, updateCue } = useStore.getState()
@@ -84,6 +111,35 @@ export function Toolbar({ onOpenSettings }: Props) {
     await action()
   }
 
+  // One set of actions for both File menus: the one in the window and the application's.
+  const fileActions: Record<FileMenuAction, () => unknown> = {
+    'new': newWorkspace,
+    'open': openWorkspace,
+    'open-demo': openDemoWorkspace,
+    'save': save,
+    'save-as': saveAs,
+    'settings': onOpenSettings
+  }
+  const fileActionsRef = useRef(fileActions)
+  fileActionsRef.current = fileActions
+
+  useEffect(() => window.winslab.app.onMenuAction(action => {
+    if (action === 'undo' || action === 'redo') return
+    void fileActionsRef.current[action]()
+  }), [])
+
+  const fileItem = (item: FileMenuItem) => (
+    <button key={item.action} data-action={item.action} onClick={() => handleMenuAction(fileActions[item.action])}>
+      <span>{item.label}</span>
+      {item.accelerator && <kbd>{shortcutLabel(item.accelerator)}</kbd>}
+    </button>
+  )
+  // Everything in the shared list but Settings, which goes last, after the recent files.
+  const [settingsItem] = FILE_MENU.filter((entry): entry is FileMenuItem =>
+    entry !== 'separator' && entry.action === 'settings')
+  const mainEntries = FILE_MENU.filter(entry => entry !== settingsItem)
+  while (mainEntries[mainEntries.length - 1] === 'separator') mainEntries.pop()
+
   const commitName = () => {
     const val = nameRef.current?.value.trim()
     if (val) setWorkspaceName(val)
@@ -91,7 +147,7 @@ export function Toolbar({ onOpenSettings }: Props) {
   }
 
   const baseName = workspacePath
-    ? workspacePath.split('/').pop()?.replace('.wlab', '') ?? workspaceName
+    ? workspacePath.split(/[\\/]/).pop()?.replace('.wlab', '') ?? workspaceName
     : workspaceName
 
   return (
@@ -103,22 +159,9 @@ export function Toolbar({ onOpenSettings }: Props) {
           </button>
           {fileMenuOpen && (
             <div className="file-menu">
-              <button onClick={() => handleMenuAction(newWorkspace)}>
-                <span>New</span><kbd>⌘N</kbd>
-              </button>
-              <button onClick={() => handleMenuAction(openWorkspace)}>
-                <span>Open…</span><kbd>⌘O</kbd>
-              </button>
-              <button onClick={() => handleMenuAction(openDemoWorkspace)}>
-                <span>Open Demo Workspace</span>
-              </button>
-              <div className="file-menu-separator" />
-              <button onClick={() => handleMenuAction(save)}>
-                <span>Save</span><kbd>⌘S</kbd>
-              </button>
-              <button onClick={() => handleMenuAction(saveAs)}>
-                <span>Save As…</span><kbd>⇧⌘S</kbd>
-              </button>
+              {mainEntries.map((entry, index) => entry === 'separator'
+                ? <div key={`separator-${index}`} className="file-menu-separator" />
+                : fileItem(entry))}
               {recentFiles.length > 0 && (
                 <>
                   <div className="file-menu-separator" />
@@ -130,15 +173,17 @@ export function Toolbar({ onOpenSettings }: Props) {
                       onClick={() => handleMenuAction(() => openRecent(p))}
                       title={p}
                     >
-                      <span>{p.split('/').pop()}</span>
+                      <span>{p.split(/[\\/]/).pop()}</span>
                     </button>
                   ))}
                 </>
               )}
-              <div className="file-menu-separator" />
-              <button onClick={() => handleMenuAction(onOpenSettings)}>
-                <span>Settings…</span><kbd>⌘,</kbd>
-              </button>
+              {settingsItem && (
+                <>
+                  <div className="file-menu-separator" />
+                  {fileItem(settingsItem)}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -165,12 +210,14 @@ export function Toolbar({ onOpenSettings }: Props) {
         </div>
       </div>
 
-      <div className="toolbar-divider" />
+      {/* Cues are added to the cue stack, so the buttons that add them live with it: in
+          the Scenes view they would add to a list that is not on screen. */}
+      {view === 'cues' && <div className="toolbar-divider" />}
 
-      <div className="toolbar-actions">
-        {PRIMARY_CUES.map(({ type, icon, label }) => (
+      <div className="toolbar-actions" hidden={view !== 'cues'}>
+        {PRIMARY_CUES.map(({ type, label }) => (
           <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
-            {icon} {label}
+            {CUE_ICON[type]} {label}
           </button>
         ))}
 
@@ -180,19 +227,46 @@ export function Toolbar({ onOpenSettings }: Props) {
           </button>
           {moreMenuOpen && (
             <div className="toolbar-more-menu">
-              {MORE_CUES.map(({ type, icon, label }) => (
+              {MORE_CUES.map(({ type, label }) => (
                 <button
                   key={type}
                   className="toolbar-more-menu-item"
+                  data-locked={type === 'scene' && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                 >
-                  <span className="toolbar-more-menu-icon">{icon}</span>
+                  <span className="toolbar-more-menu-icon">{CUE_ICON[type]}</span>
                   {label}
+                  {type === 'scene' && !pro && <ProMark />}
                 </button>
               ))}
             </div>
           )}
         </div>
+      </div>
+
+      <div className="toolbar-view" role="tablist" aria-label="View">
+        <button
+          className="toolbar-view-btn"
+          role="tab"
+          aria-selected={view === 'cues'}
+          data-active={view === 'cues'}
+          onClick={() => onSwitchView('cues')}
+          title="The cue stack"
+        >
+          Cues
+        </button>
+        <button
+          className="toolbar-view-btn"
+          role="tab"
+          aria-selected={view === 'scenes'}
+          data-active={view === 'scenes'}
+          data-locked={!pro}
+          onClick={() => onSwitchView('scenes')}
+          title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of WinsLab Pro'}
+        >
+          Scenes
+          {!pro && <ProMark />}
+        </button>
       </div>
     </div>
   )

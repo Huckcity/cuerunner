@@ -47,7 +47,7 @@ describe('migrateWorkspace', () => {
     expect(explicit.timeout).toBe(0)
   })
 
-  it('drops the retired per-output device and channel-pair fields', () => {
+  it('migrates a legacy outputs list to the cue master level and pan', () => {
     const audio = migrateWorkspace(workspaceWith([
       {
         id: 'a1',
@@ -60,7 +60,21 @@ describe('migrateWorkspace', () => {
       }
     ])).cues[0] as AudioCue
 
-    expect(audio.outputs[0]).toEqual({ volume: 0.5, pan: -0.2 })
+    // Only the first legacy output ever reached the audio graph, so that is what the
+    // cue's master level and pan become, and the dead device routing is dropped.
+    expect(audio.volume).toBe(0.5)
+    expect(audio.pan).toBe(-0.2)
+    expect(audio.outputs).toBeNull()
+  })
+
+  it('reads a legacy empty outputs list as automatic routing, not silence', () => {
+    const audio = migrateWorkspace(workspaceWith([
+      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: [] }
+    ])).cues[0] as AudioCue
+
+    expect(audio.volume).toBe(1)
+    expect(audio.pan).toBe(0)
+    expect(audio.outputs).toBeNull()
   })
 
   it('turns a legacy childIds list into parent pointers in that order', () => {
@@ -73,5 +87,26 @@ describe('migrateWorkspace', () => {
     expect(cues.map(c => c.id)).toEqual(['g1', 'c2', 'c1'])
     expect(cues.slice(1).map(c => c.parentId)).toEqual(['g1', 'g1'])
     expect((cues[0] as unknown as Record<string, unknown>).childIds).toBeUndefined()
+  })
+
+  it('gives a workspace that predates the show services their listener defaults', () => {
+    const workspace = migrateWorkspace(workspaceWith([]))
+
+    // Without this, a workspace saved before the services existed would hand each of
+    // them `undefined` instead of a port to listen on and a plot to alarm against.
+    expect(workspace.showSettings?.oscIn).toEqual({ enabled: true, port: 53000 })
+    expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
+    expect(workspace.showSettings?.rf.sources).toEqual([])
+    expect(workspace.showSettings?.rf.thresholds.batteryCritical).toBe(10)
+  })
+
+  it('keeps the show ports a workspace already carries, and fills the gaps around them', () => {
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: { oscIn: { enabled: false } } as Workspace['showSettings']
+    })
+
+    expect(workspace.showSettings?.oscIn).toEqual({ enabled: false, port: 53000 })
+    expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
   })
 })

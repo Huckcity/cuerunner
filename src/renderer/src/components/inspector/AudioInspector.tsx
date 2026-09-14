@@ -1,61 +1,108 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
-import type { AudioCue } from '../../types/cue'
+import type { AudioCue, AudioCrosspoint } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
-import { audioPlayer } from '../../engine/AudioPlayer'
-import { AUDIO_DEFAULTS, AUDIO_OUTPUT_DEFAULTS } from '../../utils/cueDefaults'
+import { RoutingMatrix } from './RoutingMatrix'
+import { audioEngine } from '../../engine/audioEngineClient'
+import { cueRunner } from '../../engine/CueRunner'
+import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
+import { resampleNotice } from '../../utils/sampleRate'
+import { AUDIO_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: AudioCue; tab: string }
 
 export function AudioInspector({ cue, tab }: Props) {
   const update = useStore(s => s.updateCue)
+  const outputDeviceId = useStore(s => s.audioSettings.outputDeviceId)
   const set = (patch: Partial<AudioCue>) => update(cue.id, patch)
 
-  const output = cue.outputs[0] ?? AUDIO_OUTPUT_DEFAULTS
+  const [loading, setLoading] = useState(false)
+  // Real channel counts, so the matrix offers the channels the file and the device
+  // actually have rather than a stereo guess.
+  const [fileChannels, setFileChannels] = useState(0)
+  const [fileRate, setFileRate] = useState(0)
+  const [deviceChannels, setDeviceChannels] = useState(2)
+  const { info } = useAudioEngineInfo()
+  // A file at another rate is resampled, not wrong — but it is worth saying, on the cue
+  // it applies to, rather than leaving the operator to notice a level or a length that
+  // does not read the way this rig's files do.
+  const rateNotice = resampleNotice(fileRate, info?.sampleRate ?? 0)
 
-  // Rate and trim are live: a running cue hears the change as the slider moves, so a
-  // reset has to go through the player too.
+  // Playback and level are live: a running cue hears the change as the control moves,
+  // so a reset has to go through the engine too.
   const applyPlaybackRate = (rate: number) => {
     set({ playbackRate: rate })
-    audioPlayer.setPlaybackRate(cue.id, rate)
+    cueRunner.setLiveParameter(cue.id, 'rate', rate)
   }
   const applyTrim = (trim: number) => {
     set({ trim })
-    audioPlayer.setTrim(cue.id, trim)
+    cueRunner.setLiveParameter(cue.id, 'trim', trim)
   }
-
-  const setOutput = (patch: Partial<typeof output>) => {
-    const outputs = [...cue.outputs]
-    outputs[0] = { ...output, ...patch }
+  const applyVolume = (volume: number) => {
+    set({ volume })
+    cueRunner.setLiveParameter(cue.id, 'volume', volume)
+  }
+  const applyPan = (pan: number) => {
+    set({ pan })
+    cueRunner.setLiveParameter(cue.id, 'pan', pan)
+  }
+  const applyRouting = (outputs: AudioCrosspoint[] | null) => {
     set({ outputs })
-    if ('volume' in patch) audioPlayer.setVolume(cue.id, patch.volume!)
-    if ('pan' in patch) audioPlayer.setPan(cue.id, patch.pan!)
+    cueRunner.setLiveRouting(cue.id)
   }
 
-  const [loading, setLoading] = useState(false)
+  // The file's channel count and rate, from the engine's metadata — the media stays there.
+  useEffect(() => {
+    if (!cue.filePath) { setFileChannels(0); setFileRate(0); return }
+    let current = true
+    audioEngine.prepare(cue.id, cue.filePath)
+      .then(metadata => {
+        if (!current) return
+        setFileChannels(metadata.channels)
+        setFileRate(metadata.sampleRate)
+      })
+      .catch(() => {
+        if (!current) return
+        setFileChannels(0)
+        setFileRate(0)
+      })
+    return () => { current = false }
+  }, [cue.id, cue.filePath])
+
+  useEffect(() => {
+    let current = true
+    audioEngine.devices()
+      .then(devices => {
+        if (!current) return
+        const device = devices.find(d => d.id === outputDeviceId) ?? devices.find(d => d.isDefault)
+        if (device && device.channels > 0) setDeviceChannels(device.channels)
+      })
+      .catch(() => {
+        // No device list yet: the matrix still offers a stereo pair.
+      })
+    return () => { current = false }
+  }, [outputDeviceId])
 
   const pickFile = async () => {
-    const path = await window.winslab.audio.pickFile()
+    const path = await audioEngine.pickFile()
     if (!path) return
     set({ filePath: path })
     setLoading(true)
-    // A decoding context is a resource the browser caps: one left open on the failure
-    // path is never reclaimed, so it is closed whatever the decode does.
-    const ctx = new AudioContext()
     try {
-      const arrayBuffer = await window.winslab.audio.readFile(path)
-      const decoded = await ctx.decodeAudioData(arrayBuffer)
-      set({ filePath: path, duration: Math.round(decoded.duration * 1000) })
+      const metadata = await audioEngine.prepare(cue.id, path)
+      set({ filePath: path, duration: Math.round(metadata.durationMs) })
+      setFileChannels(metadata.channels)
+      setFileRate(metadata.sampleRate)
     } catch (e) {
-      console.warn('Could not decode audio for duration:', e)
+      // The file is still selected; only its length is unknown.
+      console.warn('Could not read audio metadata:', e)
     } finally {
-      void ctx.close()
       setLoading(false)
     }
   }
 
-  if (tab === 'Timing') {
+  if (tab === 'Time & Loops') {
     const toSeconds = (ms: number) => Math.round(ms / 100) / 10  // 1 decimal
     const fromSeconds = (s: number) => Math.round(s * 1000)
     return (
@@ -90,21 +137,38 @@ export function AudioInspector({ cue, tab }: Props) {
             onReset={() => set({ loopCount: AUDIO_DEFAULTS.loopCount })} />
         </div>
         <p className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</p>
-        <LastRun cueId={cue.id} />
       </div>
     )
   }
+
+  // The file's name is what tells two cues apart; the folder it sits in is the long,
+  // shared part, so it goes under the name rather than in front of it.
+  const separator = Math.max(cue.filePath.lastIndexOf('/'), cue.filePath.lastIndexOf('\\'))
+  const fileName = cue.filePath.slice(separator + 1)
+  const folder = separator > 0 ? cue.filePath.slice(0, separator) : ''
 
   return (
     <div>
       <div className="field-row">
         <label>File</label>
-        <input value={cue.filePath} readOnly
-          placeholder={loading ? 'Detecting duration…' : 'No file selected'}
+        <input value={fileName} readOnly
+          className="audio-file-name"
+          title={cue.filePath}
+          data-path={cue.filePath}
+          placeholder={loading ? 'Reading file…' : 'No file selected'}
           style={{ flex: 1, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
           onClick={pickFile} />
         <button onClick={pickFile} disabled={loading} className="inspector-btn">Browse</button>
       </div>
+      {folder !== '' && (
+        <p className="inspector-hint audio-file-folder" title={folder}>{folder}</p>
+      )}
+      {rateNotice !== null && (
+        <p className="inspector-hint audio-file-rate"
+          title="The engine resamples this file into the rig's rate; pitch and tempo are unchanged.">
+          {rateNotice}
+        </p>
+      )}
       <div className="field-section-title">Playback</div>
       <div className="field-row">
         <label>Rate</label>
@@ -124,28 +188,35 @@ export function AudioInspector({ cue, tab }: Props) {
         <ResetButton label="Trim" value={cue.trim} defaultValue={AUDIO_DEFAULTS.trim}
           onReset={() => applyTrim(AUDIO_DEFAULTS.trim)} />
       </div>
-      <div className="field-section-title">Output</div>
+      <div className="field-section-title">Level</div>
       <div className="field-row">
         <label>Volume</label>
-        <input type="range" min={0} max={1} step={0.01} value={output.volume}
-          onChange={e => setOutput({ volume: Number(e.target.value) })}
+        <input type="range" min={0} max={1} step={0.01} value={cue.volume}
+          onChange={e => applyVolume(Number(e.target.value))}
           style={{ flex: 1, accentColor: 'var(--accent-blue)' }} />
-        <span className="inspector-readout">{Math.round(output.volume * 100)}%</span>
-        <ResetButton label="Volume" value={output.volume} defaultValue={AUDIO_OUTPUT_DEFAULTS.volume}
-          onReset={() => setOutput({ volume: AUDIO_OUTPUT_DEFAULTS.volume })} />
+        <span className="inspector-readout">{Math.round(cue.volume * 100)}%</span>
+        <ResetButton label="Volume" value={cue.volume} defaultValue={AUDIO_DEFAULTS.volume}
+          onReset={() => applyVolume(AUDIO_DEFAULTS.volume)} />
       </div>
       <div className="field-row">
         <label>Pan</label>
-        <input type="range" min={-1} max={1} step={0.01} value={output.pan}
-          onChange={e => setOutput({ pan: Number(e.target.value) })}
+        <input type="range" min={-1} max={1} step={0.01} value={cue.pan}
+          onChange={e => applyPan(Number(e.target.value))}
           style={{ flex: 1, accentColor: 'var(--accent-blue)' }} />
         <span className="inspector-readout">
-          {output.pan > 0 ? `R${Math.round(output.pan * 100)}` :
-           output.pan < 0 ? `L${Math.round(-output.pan * 100)}` : 'C'}
+          {cue.pan > 0 ? `R${Math.round(cue.pan * 100)}` :
+           cue.pan < 0 ? `L${Math.round(-cue.pan * 100)}` : 'C'}
         </span>
-        <ResetButton label="Pan" value={output.pan} defaultValue={AUDIO_OUTPUT_DEFAULTS.pan}
-          onReset={() => setOutput({ pan: AUDIO_OUTPUT_DEFAULTS.pan })} />
+        <ResetButton label="Pan" value={cue.pan} defaultValue={AUDIO_DEFAULTS.pan}
+          onReset={() => applyPan(AUDIO_DEFAULTS.pan)} />
       </div>
+      <div className="field-section-title">Output routing</div>
+      <RoutingMatrix
+        cue={cue}
+        fileChannels={fileChannels}
+        deviceChannels={deviceChannels}
+        onChange={applyRouting}
+      />
       <LastRun cueId={cue.id} />
     </div>
   )

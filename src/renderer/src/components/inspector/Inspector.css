@@ -20,7 +20,10 @@
 }
 
 .inspector-tab {
-  padding: var(--space-2) 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-2) 10px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -32,6 +35,17 @@
 }
 
 .inspector-tab:hover { color: var(--fg-tertiary); }
+
+/* How many triggers the cue answers to, on the tab that holds them. */
+.inspector-tab-count {
+  font-size: var(--text-xs);
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  line-height: 16px;
+}
 
 .inspector-tab[data-active='true'] {
   color: var(--fg-primary);
@@ -196,21 +210,9 @@
 .inspector-btn:hover:not(:disabled) { background: var(--border-input); color: var(--fg-primary); }
 .inspector-btn:disabled { opacity: 0.4; cursor: default; }
 
-/* Destructive small button (✕ remove) */
-.inspector-btn-danger {
-  padding: 0 6px;
-  height: var(--h-input);
-  background: #3a2020;
-  border: 1px solid #5a3030;
-  border-radius: var(--radius-md);
-  color: var(--cue-color-red);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  font-family: inherit;
-  flex-shrink: 0;
-}
+/* A ghost ✕ that only turns red under the pointer, like every other remove. */
+.inspector-btn-remove:hover { color: var(--cue-color-red); }
 
-.inspector-btn-danger:hover { background: #4a2828; }
 
 /* Ghost icon button (✕ inline remove, no border) */
 .inspector-btn-icon {
@@ -229,8 +231,9 @@
 
 .inspector-btn-icon:hover { color: var(--fg-primary); }
 
-/* Per-field reset (↻). Inert and dim while the field holds its default, so the
-   arrows that are live are exactly the fields this cue has changed. */
+/* Per-field reset (↻). Drawn only where the field has been changed, so the arrows on a
+   tab are a map of what this cue does differently; the space is kept either way, so
+   fields do not shift as they change. */
 .inspector-reset-btn {
   width: 18px;
   height: 18px;
@@ -250,24 +253,8 @@
   transition: var(--transition-fast);
 }
 
-.inspector-reset-btn[data-default='true'] { opacity: 0.2; }
+.inspector-reset-btn[data-default='true'] { visibility: hidden; }
 .inspector-reset-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-primary); }
-
-/* Full-width dashed "add" button */
-.inspector-add-btn {
-  width: 100%;
-  height: var(--h-button-md);
-  background: var(--bg-card);
-  border: 1px dashed var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-muted);
-  font-size: var(--text-base);
-  cursor: pointer;
-  font-family: inherit;
-  transition: var(--transition-fast);
-}
-
-.inspector-add-btn:hover { background: var(--bg-hover); color: var(--fg-secondary); }
 
 /* Card block (MIDI messages, OSC args) */
 .inspector-card {
@@ -373,4 +360,42 @@
   font-size: var(--text-sm);
   color: var(--fg-muted);
   flex-shrink: 0;
+}
+
+/* Routing matrix: one row per crosspoint, file channel → device channel with a gain
+   trim. Rows are as narrow as the panel allows, and the list is not limited to a pair. */
+.routing-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.routing-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.routing-row select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  font-size: var(--text-sm);
+  padding: 2px 4px;
+  font-family: inherit;
+}
+
+.routing-arrow {
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+}
+
+/* The folder under an audio file's name: aligned with the field, one line, the rest in
+   the tooltip. */
+.audio-file-folder {
+  margin: -6px 0 10px 98px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -1,0 +1,110 @@
+// The inspector's shape: what every cue shares on Basics, what the type does on its own
+// tab, and what else can fire it on Triggers — with nothing on Basics that only one kind
+// of cue in one kind of group would ever use.
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { Inspector } from './Inspector'
+import { useStore } from '../../store'
+import { createCue } from '../../utils/cueDefaults'
+import { TEST_LICENSE } from '../../../../test/license'
+import type { Cue, GroupCue } from '../../types/cue'
+
+function cue(type: Cue['type'], patch: Partial<Cue> = {}): Cue {
+  return { ...createCue(type), ...patch } as Cue
+}
+
+describe('Inspector', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    useStore.setState({ cues: [], selectedId: null, license: { state: 'unlicensed' } })
+  })
+
+  function show(cues: Cue[], selected: Cue): void {
+    act(() => {
+      useStore.setState({ cues, selectedId: selected.id })
+      root.render(<Inspector />)
+    })
+  }
+
+  const tabs = (): string[] =>
+    [...container.querySelectorAll('.inspector-tab')].map(tab => tab.textContent ?? '')
+
+  const openTab = (name: string): void => {
+    const tab = [...container.querySelectorAll<HTMLButtonElement>('.inspector-tab')]
+      .find(candidate => candidate.textContent?.startsWith(name))!
+    act(() => tab.click())
+  }
+
+  const labels = (): string[] =>
+    [...container.querySelectorAll('.field-row label')].map(label => label.textContent ?? '')
+
+  it('gives an audio cue Basics, Audio, Time & Loops and Triggers — one thing called Timing', () => {
+    const audio = cue('audio')
+    show([audio], audio)
+    expect(tabs()).toEqual(['Basics', 'Audio', 'Time & Loops', 'Triggers'])
+  })
+
+  it('keeps triggers off Basics, and counts them on their own tab', () => {
+    const wait = cue('wait', {
+      triggers: [
+        { id: 't1', kind: 'osc', address: '/eos/cue/12/fire' },
+        { id: 't2', kind: 'osc', address: '/show/go' }
+      ]
+    })
+    show([wait], wait)
+
+    expect(container.querySelector('.triggers')).toBeNull()
+    expect(container.querySelector('.inspector-tab-count')?.textContent).toBe('2')
+
+    openTab('Triggers')
+    expect(container.querySelectorAll('.trigger-row')).toHaveLength(2)
+  })
+
+  it('shows an unlicensed machine the lock on the Triggers tab, not on every Basics tab', () => {
+    useStore.setState({ license: { state: 'unlicensed' } })
+    const wait = cue('wait')
+    show([wait], wait)
+
+    expect(container.querySelector('.pro-lock')).toBeNull()
+    openTab('Triggers')
+    expect(container.querySelector('.pro-lock[data-feature="Triggers"]')).not.toBeNull()
+  })
+
+  it('asks for a timeline offset only inside a timeline group, and in seconds', () => {
+    const loose = cue('wait')
+    show([loose], loose)
+    expect(labels()).not.toContain('Timeline offset (s)')
+
+    const group = cue('group', { mode: 'timeline' } as Partial<GroupCue>)
+    const child = cue('wait', { parentId: group.id, timelineOffset: 2500 })
+    show([group, child], child)
+    expect(labels()).toContain('Timeline offset (s)')
+    const field = [...container.querySelectorAll('.field-row')]
+      .find(row => row.textContent?.startsWith('Timeline offset'))!
+      .querySelector('input')!
+    expect(field.value).toBe('2.5')
+  })
+
+  it('draws a reset arrow only where the cue differs from a new one', () => {
+    const wait = cue('wait', { preWait: 500 })
+    show([wait], wait)
+
+    const shown = [...container.querySelectorAll<HTMLButtonElement>('.inspector-reset-btn')]
+      .filter(button => button.dataset.default === 'false')
+      .map(button => button.title)
+    expect(shown).toEqual(['Reset Pre-wait to default'])
+  })
+})

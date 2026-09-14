@@ -1,0 +1,66 @@
+/* Trigger editor: the messages that fire this cue when nobody is on GO, plus the two
+   forms that compose new ones. Fields and buttons borrow the inspector's shared
+   classes; only the trigger-specific frame lives here. */
+
+.triggers {
+  margin-bottom: var(--space-2);
+}
+
+.trigger-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-1) 6px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  margin-bottom: 3px;
+  font-size: var(--text-base);
+}
+
+.trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-body);
+}
+
+.trigger-remove:hover:not(:disabled) {
+  color: var(--cue-color-red);
+}
+
+.trigger-empty {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+
+.trigger-section-label {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  margin-bottom: var(--space-1);
+}
+
+.trigger-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.trigger-learning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 6px;
+  margin-bottom: var(--space-2);
+  background: var(--bg-card);
+  border: 1px dashed var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+}
+
+.trigger-learning span {
+  flex: 1;
+}

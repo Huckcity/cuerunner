@@ -1,25 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
 import { CueRunner } from './CueRunner'
-import { audioPlayer } from './AudioPlayer'
+import { audioEngine } from './audioEngineClient'
+import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
+import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
+import { useStore } from '../store'
+import { defaultShowSettings } from '../types/show'
+import { midiNoteMessages } from '../utils/scenes'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
   ScriptCancelledError: class ScriptCancelledError extends Error {}
 }))
 
-vi.mock('./AudioPlayer', () => ({
-  audioPlayer: {
-    play: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn(),
-    stopAll: vi.fn(),
-    setVolume: vi.fn(),
-    setPan: vi.fn(),
-    isPlaying: vi.fn(() => false)
-  }
+vi.mock('./audioEngineClient')
+
+vi.mock('./networkClient', () => ({
+  network: { request: vi.fn(), cancel: vi.fn() }
 }))
 
 const scriptHostMock = scriptHost as unknown as {
@@ -27,6 +27,21 @@ const scriptHostMock = scriptHost as unknown as {
   cancel: Mock
   cancelAll: Mock
 }
+
+const engine = vi.mocked(audioEngine)
+const requestMock = vi.mocked(network.request)
+
+/** Hands an event to every engine-event handler the runner installed. */
+function emitEngineEvent(event: AudioEngineEvent): void {
+  for (const [handler] of engine.onEvent.mock.calls) handler(event)
+}
+
+// Runners left behind by a test still hold scheduled work; disposing them keeps a
+// later test's clock from firing an earlier test's cues.
+const runners: CueRunner[] = []
+afterEach(() => {
+  for (const runner of runners.splice(0)) runner.dispose()
+})
 
 // Helpers
 function makeWait(overrides: Partial<WaitCue> = {}): WaitCue {
@@ -45,7 +60,7 @@ function makeAudio(overrides: Partial<AudioCue> = {}): AudioCue {
     advance: 'none', isArmed: true, notes: '',
     filePath: '/test.mp3', startTime: 0, endTime: null,
     fadeInDuration: 0,
-    outputs: [{ volume: 1, pan: 0 }],
+    volume: 1, pan: 0, outputs: null,
     loopCount: 0, playbackRate: 1, trim: 1,
     ...overrides
   }
@@ -72,6 +87,16 @@ function makeOsc(overrides: Partial<OscCue> = {}): OscCue {
   }
 }
 
+function makeNetwork(overrides: Partial<NetworkCue> = {}): NetworkCue {
+  return {
+    id: 'n1', number: '1', name: 'Network', type: 'network',
+    colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: '',
+    method: 'GET', url: 'https://example.com', body: '', headers: {}, timeout: 5000,
+    ...overrides
+  }
+}
+
 interface TestSetup {
   runner: CueRunner
   cues: Cue[]
@@ -82,7 +107,7 @@ interface TestSetup {
   clearAllRunning: Mock
 }
 
-function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
+function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true): TestSetup {
   const runner = new CueRunner()
   let selected: string | null = initialSelectedId ?? initialCues[0]?.id ?? null
   const setRunning = vi.fn()
@@ -91,6 +116,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
   const appendLog = vi.fn()
   const clearAllRunning = vi.fn()
 
+  const cues = initialCues
   runner.init({
     getCues: () => cues,
     getSelected: () => selected,
@@ -101,10 +127,11 @@ function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
     setLastRun,
     appendLog,
     getWorkspacePath: () => null,
-    getMidiDefaultPort: () => 'default-midi-port'
+    getMidiDefaultPort: () => 'default-midi-port',
+    isPro: () => licensed
   })
+  runners.push(runner)
 
-  const cues = initialCues
   return { runner, cues, setRunning, setSelected, setLastRun, appendLog, clearAllRunning }
 }
 
@@ -122,15 +149,40 @@ describe('CueRunner — basic execution', () => {
     const { runner, setRunning } = setup([makeWait({ duration: 2000 })])
     runner.go()
     vi.advanceTimersByTime(2000)
-    vi.runAllTimers() // flush the 0ms postWait setTimeout chained inside
     expect(setRunning).toHaveBeenLastCalledWith('w1', null)
   })
 
-  it('delegates audio cue to audioPlayer.play', () => {
+  it('sends an audio cue to the engine at the moment it is fired', async () => {
     const cue = makeAudio()
     const { runner } = setup([cue])
+    const firedAt = Date.now()
     runner.go()
-    expect(audioPlayer.play).toHaveBeenCalledWith(cue, expect.any(Function), expect.any(Function))
+    // The engine is asked to prepare the cue first; the start goes out once it has answered.
+    await vi.advanceTimersByTimeAsync(0)
+    expect(engine.start).toHaveBeenCalledWith('a1', firedAt, expect.objectContaining({
+      startTime: 0,
+      loopCount: 0,
+      rate: 1,
+      volume: 1,
+      pan: 0,
+      outputs: null,
+      fadeInDuration: 0
+    }))
+  })
+
+  it('prepares an audio cue whose length is already known before playing it', async () => {
+    // The inspector is not the only way into a cue: a saved show can be fired without
+    // its Audio tab ever being drawn, and the engine refuses a start it was not prepared
+    // for. The prepare has to happen on the way in, not only when the length is unknown.
+    const cue = makeAudio({ id: 'a1', duration: 4000 })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.prepare).toHaveBeenCalledWith('a1', cue.filePath)
+    expect(engine.prepare.mock.invocationCallOrder[0])
+      .toBeLessThan(engine.start.mock.invocationCallOrder[0])
   })
 
   it('does not fire a disarmed cue', () => {
@@ -180,7 +232,6 @@ describe('CueRunner — basic execution', () => {
     // With null selection, go() falls back to index 0 (same cue) — cancels and restarts
     runner.go()
     vi.advanceTimersByTime(500)
-    vi.runAllTimers()
 
     const playingCalls = setRunning.mock.calls.filter(c => c[1]?.state === 'playing')
     expect(playingCalls).toHaveLength(1)
@@ -224,6 +275,22 @@ describe('CueRunner — pre-wait and post-wait', () => {
     expect(setRunning).not.toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'pre-wait' }))
     expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
   })
+
+  it('keeps the cue start at its absolute time even when the tick arrives late', async () => {
+    // The pre-wait ends at 500 on the sample clock. Whatever the ticker did in
+    // between, the cue's own times are the ones that were planned.
+    const wait = makeWait({ id: 'w1', preWait: 500, duration: 400 })
+    const audio = makeAudio({ id: 'a1', number: '2' })
+    const { runner } = setup([wait, audio])
+
+    const firedAt = Date.now()
+    runner.go()
+    runner.goById('a1', firedAt + 500)
+    // The command goes out a lookahead before the cue's own time, carrying that time.
+    await vi.advanceTimersByTimeAsync(400)
+
+    expect(engine.start).toHaveBeenCalledWith('a1', firedAt + 500, expect.anything())
+  })
 })
 
 describe('CueRunner — auto-continue and auto-follow', () => {
@@ -252,7 +319,6 @@ describe('CueRunner — auto-continue and auto-follow', () => {
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
 
     vi.advanceTimersByTime(1000) // w1 playing done
-    vi.runAllTimers()            // flush nested 0ms postWait + autoFollow timers
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
 
@@ -265,8 +331,27 @@ describe('CueRunner — auto-continue and auto-follow', () => {
     vi.advanceTimersByTime(500) // w1 playing done, entering post-wait
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
     vi.advanceTimersByTime(1000) // post-wait done
-    vi.runAllTimers()            // flush the 0ms auto-follow timer
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
+  })
+
+  it('schedules the next cue at the exact time the first one is due to end', async () => {
+    // Both cues are audio, so the whole chain is known at GO: the second start carries
+    // the first one's end time, whatever the ticker does in between.
+    const first = makeAudio({ id: 'a1', number: '1', duration: 4000, advance: 'on-end' })
+    const second = makeAudio({ id: 'a2', number: '2', duration: 1000 })
+    const { runner, setRunning } = setup([first, second])
+
+    const firedAt = Date.now()
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).toHaveBeenCalledWith('a1', firedAt, expect.anything())
+    // The handover is released a lookahead early, and the second start names the exact
+    // end of the first run rather than "now plus a little".
+    await vi.advanceTimersByTimeAsync(3900)
+    expect(engine.start).toHaveBeenCalledWith('a2', firedAt + 4000, expect.anything())
+    await vi.advanceTimersByTimeAsync(100)
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('a2')
   })
 })
 
@@ -288,20 +373,20 @@ describe('CueRunner — stop and panic', () => {
     expect(setRunning.mock.calls.length).toBe(callCount)
   })
 
-  it('stop() with no argument cancels all running cues', () => {
+  it('stop() with no argument silences everything', () => {
     const cue1 = makeWait({ id: 'w1', duration: 5000, advance: 'on-start' })
     const cue2 = makeWait({ id: 'w2', duration: 5000 })
     const { runner } = setup([cue1, cue2])
     runner.go()
     runner.stop()
-    expect(audioPlayer.stopAll).toHaveBeenCalled()
+    expect(engine.stopAll).toHaveBeenCalledWith(0)
   })
 
-  it('panic() calls audioPlayer.stopAll', () => {
+  it('panic() fades the engine out rather than cutting it', () => {
     const { runner } = setup([makeWait({ duration: 5000 })])
     runner.go()
     runner.panic()
-    expect(audioPlayer.stopAll).toHaveBeenCalled()
+    expect(engine.panic).toHaveBeenCalledWith(200)
   })
 
   it('stop() during pre-wait prevents the cue from ever playing', () => {
@@ -322,47 +407,67 @@ describe('CueRunner — STOP abandons in-flight work', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  function networkCue(overrides: Partial<NetworkCue> = {}): NetworkCue {
-    return {
-      id: 'n1', number: '1', name: 'Network', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET', url: 'http://example.com/hook', body: '', headers: {}, timeout: 5000,
-      ...overrides
-    }
-  }
-
   it('stop() during a network request neither advances nor records a run', async () => {
-    const request = Promise.withResolvers<Response>()
-    vi.stubGlobal('fetch', vi.fn(() => request.promise))
+    const request = Promise.withResolvers<Awaited<ReturnType<typeof network.request>>>()
+    requestMock.mockReturnValue(request.promise)
 
-    const fired = networkCue({ advance: 'on-end' })
+    const fired = makeNetwork({ advance: 'on-end' })
     const next = makeWait({ id: 'w2', number: '2' })
     const { runner, setRunning, setLastRun } = setup([fired, next])
 
     runner.go()
     runner.stop()
-    request.resolve(new Response('ok', { status: 200 }))
-    await vi.runAllTimersAsync()
+    request.resolve({ ok: true, status: 200, statusText: 'OK', body: '', error: null })
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).not.toHaveBeenCalled()
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
   })
 
-  it('panic() during a network request also abandons it', async () => {
-    const request = Promise.withResolvers<Response>()
-    vi.stubGlobal('fetch', vi.fn(() => request.promise))
+  it('stop() takes the in-flight request back from the main process', () => {
+    const request = Promise.withResolvers<Awaited<ReturnType<typeof network.request>>>()
+    requestMock.mockReturnValue(request.promise)
 
-    const fired = networkCue({ advance: 'on-end' })
+    const { runner } = setup([makeNetwork({ id: 'n1' })])
+    runner.go()
+    const requestId = requestMock.mock.calls[0][0].requestId
+    expect(requestId).toBeTruthy()
+
+    runner.stop('n1')
+    expect(network.cancel).toHaveBeenCalledWith(requestId)
+  })
+
+  it('panic() during a network request also abandons it', async () => {
+    const request = Promise.withResolvers<Awaited<ReturnType<typeof network.request>>>()
+    requestMock.mockReturnValue(request.promise)
+
+    const fired = makeNetwork({ advance: 'on-end' })
     const next = makeWait({ id: 'w2', number: '2' })
     const { runner, setRunning } = setup([fired, next])
 
     runner.go()
     runner.panic()
-    request.resolve(new Response('ok', { status: 200 }))
-    await vi.runAllTimersAsync()
+    request.resolve({ ok: true, status: 200, statusText: 'OK', body: '', error: null })
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
+  })
+
+  it('a stopped cue does not start the cue it had already handed over to', () => {
+    // The handover is released a lookahead before the end so the next cue's commands
+    // reach the engine in time. STOP inside that window must take it back.
+    const first = makeAudio({ id: 'a1', number: '1', duration: 4000, advance: 'on-end' })
+    const second = makeAudio({ id: 'a2', number: '2', duration: 1000 })
+    const { runner, setRunning } = setup([first, second])
+
+    runner.go()
+    vi.advanceTimersByTime(3950)   // released, not yet begun
+    runner.stop('a1')
+    vi.advanceTimersByTime(2000)
+
+    // The start may already have gone out within the lookahead; STOP takes it back.
+    expect(engine.cancel).toHaveBeenCalledWith('a2')
+    expect(setRunning.mock.calls.map(c => c[0])).not.toContain('a2')
   })
 
   it('fires normally again after a stop', () => {
@@ -378,61 +483,187 @@ describe('CueRunner — STOP abandons in-flight work', () => {
   })
 })
 
+describe('CueRunner — sample-clock scheduling', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('keeps the intended start times when the clock advances unevenly', async () => {
+    // The ticker is not the clock: a late tick must not push a cue's own time.
+    const first = makeAudio({ id: 'a1', number: '1', duration: 1000, advance: 'on-end' })
+    const second = makeAudio({ id: 'a2', number: '2', duration: 1000 })
+    const { runner } = setup([first, second])
+
+    const firedAt = Date.now()
+    runner.go()
+    // A jump of 37 ms, then a long stretch that swallows several ticks at once.
+    await vi.advanceTimersByTimeAsync(37)
+    await vi.advanceTimersByTimeAsync(900)
+    await vi.advanceTimersByTimeAsync(63)
+
+    expect(engine.start).toHaveBeenNthCalledWith(1, 'a1', firedAt, expect.anything())
+    expect(engine.start).toHaveBeenNthCalledWith(2, 'a2', firedAt + 1000, expect.anything())
+  })
+
+  it('moves a run’s end when a slow prepare pushes its start past the planned time', async () => {
+    const first = makeAudio({ id: 'a1', number: '1', duration: 4000, advance: 'on-end' })
+    const second = makeAudio({ id: 'a2', number: '2', duration: 1000 })
+    const { runner } = setup([first, second])
+
+    const decode = Promise.withResolvers<AudioMetadata>()
+    engine.prepare.mockReturnValueOnce(decode.promise)
+
+    const firedAt = Date.now()
+    runner.go()
+    // A cold file: the decode outlasts the lookahead, so the engine begins the cue after
+    // the time the cue was fired at.
+    await vi.advanceTimersByTimeAsync(300)
+    decode.resolve({
+      cueId: 'a1', filePath: '/shows/a1.wav', format: 'wav', durationMs: 4000,
+      sampleRate: 48000, channels: 2, frames: null, fileBytes: 0,
+      streaming: false, cacheHit: false, decodedBytes: 0
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).toHaveBeenCalledWith('a1', firedAt, expect.anything())
+    // The end moved with the lateness, so the cue after it still starts when the first
+    // run really ends rather than 300 ms before the sound does.
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(engine.start).toHaveBeenCalledWith('a2', firedAt + 4300, expect.anything())
+  })
+
+  it('closes a run the engine ends before its planned end', async () => {
+    // A file that turns out to be shorter than the metadata said: the engine has the
+    // last word, and the cue after it starts from where the run really ended.
+    const first = makeAudio({ id: 'a1', number: '1', duration: 5000, advance: 'on-end' })
+    const second = makeWait({ id: 'w2', number: '2', duration: 100 })
+    const { runner, setLastRun } = setup([first, second])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(1000)
+    emitEngineEvent({
+      type: 'ended', cueId: 'a1', runId: 'run-a1', at: Date.now(), reason: 'complete', loopsCompleted: 0,
+      sessionId: 'test-session'
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({ outcome: 'success' }))
+    // Only the first cue was ever sent to the engine, and its run was closed at the
+    // moment the engine reported rather than at the plan's 5000 ms.
+    expect(engine.start).toHaveBeenCalledTimes(1)
+    expect(setLastRun.mock.calls[0][1].durationMs).toBeLessThan(5000)
+  })
+
+  it('re-times a finite run when the operator changes its rate', async () => {
+    const cue = makeAudio({ id: 'a1', duration: 4000, advance: 'on-end' })
+    const next = makeAudio({ id: 'a2', duration: 1000 })
+    const { runner } = setup([cue, next])
+
+    const firedAt = Date.now()
+    runner.go()
+    await vi.advanceTimersByTimeAsync(1000)
+    // A quarter through the cue the operator doubles the rate: the remaining 3000 ms of
+    // playback now take 1500 ms, so the next cue starts at +2500, not +4000.
+    runner.setLiveParameter('a1', 'rate', 2)
+    await vi.advanceTimersByTimeAsync(1400)
+
+    expect(engine.start).toHaveBeenCalledWith('a2', firedAt + 2500, expect.anything())
+  })
+
+  it('drops the playhead without fading the cue in again', async () => {
+    const cue = makeAudio({ id: 'a1', duration: 4000, fadeInDuration: 1500 })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(500)
+    runner.seekCue('a1', 2000)
+
+    // The engine moves the position; the renderer does not start the cue again, which
+    // is what used to fade it in a second time.
+    expect(engine.seek).toHaveBeenCalledWith('a1', 2000)
+    expect(engine.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-applies routing at the position a playing cue had reached', () => {
+    const cue = makeAudio({ id: 'a1', duration: 4000, outputs: [{ inputChannel: 0, outputChannel: 2, gain: 0.5 }] })
+    const { runner } = setup([cue])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+    engine.getProgress.mockReturnValue({
+      cueId: 'a1', runId: 'run-a1', state: 'playing', playing: true,
+      elapsedMs: 1000, durationMs: 4000, fraction: 0.25, runFraction: 0.25,
+      loopsCompleted: 0, startedAtMs: 0
+    })
+    runner.setLiveRouting('a1')
+
+    expect(engine.seek).toHaveBeenCalledWith('a1', 1000)
+    expect(engine.stop).not.toHaveBeenCalledWith('a1', 0)
+  })
+
+  it('a main-process panic clears the window without panicking a second time', () => {
+    const { runner, setRunning, clearAllRunning } = setup([makeWait({ duration: 5000, advance: 'on-end' }), makeWait({ id: 'w2' })])
+
+    runner.go()
+    engine.panic.mockClear()
+    runner.handleExternalPanic()
+
+    expect(engine.panic).not.toHaveBeenCalled()
+    expect(clearAllRunning).toHaveBeenCalled()
+    const callsAtPanic = setRunning.mock.calls.length
+    vi.advanceTimersByTime(10_000)
+    expect(setRunning.mock.calls.length).toBe(callsAtPanic)
+  })
+})
+
 describe('CueRunner — fade cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('calls audioPlayer.setVolume with target value and duration', () => {
-    const fadeCue: FadeCue = {
+  function makeFade(overrides: Partial<FadeCue> = {}): FadeCue {
+    return {
       id: 'f1', number: '1', name: 'Fade', type: 'fade',
       colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 2000,
       advance: 'none', isArmed: true, notes: '',
       targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0,
-      curve: 'linear', stopTargetWhenDone: false
+      curve: 'linear', stopTargetWhenDone: false,
+      ...overrides
     }
-    const { runner } = setup([fadeCue])
+  }
+
+  it('sends a volume ramp with the target value, duration and time', () => {
+    const { runner } = setup([makeFade()])
+    const firedAt = Date.now()
     runner.go()
-    expect(audioPlayer.setVolume).toHaveBeenCalledWith('a1', 0, 2000, 'linear')
+    expect(engine.fade).toHaveBeenCalledWith('a1', 'volume', 0, 2000, 'linear', firedAt)
   })
 
-  it('calls audioPlayer.setPan with target value and duration', () => {
-    const fadeCue: FadeCue = {
-      id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 1000,
-      advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeProperty: 'pan', targetValue: 0.5,
-      curve: 'linear', stopTargetWhenDone: false
-    }
-    const { runner } = setup([fadeCue])
+  it('sends a pan ramp with the target value and duration', () => {
+    const { runner } = setup([makeFade({ fadeProperty: 'pan', targetValue: 0.5, duration: 1000 })])
+    const firedAt = Date.now()
     runner.go()
-    expect(audioPlayer.setPan).toHaveBeenCalledWith('a1', 0.5, 1000, 'linear')
+    expect(engine.fade).toHaveBeenCalledWith('a1', 'pan', 0.5, 1000, 'linear', firedAt)
   })
 
   it('stops the target cue after fading when stopTargetWhenDone is true', () => {
-    const fadeCue: FadeCue = {
-      id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 500,
-      advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0,
-      curve: 'linear', stopTargetWhenDone: true
-    }
-    const { runner } = setup([fadeCue])
+    const { runner } = setup([makeFade({ duration: 500, stopTargetWhenDone: true })])
     runner.go()
     vi.advanceTimersByTime(500)
-    expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 0)
+    expect(engine.stop).toHaveBeenCalledWith('a1', 0)
   })
 
-  it('passes the cue curve through to the audio player', () => {
-    const fadeCue: FadeCue = {
-      id: 'f1', number: '1', name: 'Fade', type: 'fade',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 750,
-      advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeProperty: 'volume', targetValue: 0.25,
-      curve: 'sCurve', stopTargetWhenDone: false
-    }
-    const { runner } = setup([fadeCue])
+  it('passes the cue curve through to the engine', () => {
+    const { runner } = setup([makeFade({ targetValue: 0.25, duration: 750, curve: 'sCurve' })])
+    const firedAt = Date.now()
     runner.go()
-    expect(audioPlayer.setVolume).toHaveBeenCalledWith('a1', 0.25, 750, 'sCurve')
+    expect(engine.fade).toHaveBeenCalledWith('a1', 'volume', 0.25, 750, 'sCurve', firedAt)
+  })
+
+  it('starts the ramp at the cue’s own time, after its pre-wait', () => {
+    const { runner } = setup([makeFade({ preWait: 300, duration: 500 })])
+    const firedAt = Date.now()
+    runner.go()
+    vi.advanceTimersByTime(300)
+    expect(engine.fade).toHaveBeenCalledWith('a1', 'volume', 0, 500, 'linear', firedAt + 300)
   })
 })
 
@@ -440,61 +671,44 @@ describe('CueRunner — stop cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('stop cue targeting "all" calls audioPlayer.stopAll', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop All', type: 'stop',
+  function makeStop(overrides: Partial<StopCue> = {}): StopCue {
+    return {
+      id: 's1', number: '1', name: 'Stop', type: 'stop',
       colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
       advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'all', fadeOut: false, fadeOutDuration: 500, waitForFade: false
+      targetCueId: 'all', fadeOut: false, fadeOutDuration: 500, waitForFade: false,
+      ...overrides
     }
-    const { runner } = setup([stopCue])
+  }
+
+  it('stop cue targeting "all" silences the engine', () => {
+    const { runner } = setup([makeStop()])
     runner.go()
-    expect(audioPlayer.stopAll).toHaveBeenCalledWith(0)
+    expect(engine.stopAll).toHaveBeenCalledWith(0)
   })
 
-  it('stop cue with fadeOut passes fadeOutDuration to stopAll', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop All', type: 'stop',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'all', fadeOut: true, fadeOutDuration: 1500, waitForFade: false
-    }
-    const { runner } = setup([stopCue])
+  it('stop cue with fadeOut passes fadeOutDuration to the engine', () => {
+    const { runner } = setup([makeStop({ fadeOut: true, fadeOutDuration: 1500 })])
     runner.go()
-    expect(audioPlayer.stopAll).toHaveBeenCalledWith(1500)
+    expect(engine.stopAll).toHaveBeenCalledWith(1500)
   })
 
-  it('stop cue targeting a specific cue calls audioPlayer.stop without fade', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop Specific', type: 'stop',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: false, fadeOutDuration: 0, waitForFade: false
-    }
-    const { runner } = setup([stopCue])
+  it('stop cue targeting a specific cue stops it without fade', () => {
+    const { runner } = setup([makeStop({ targetCueId: 'a1', fadeOutDuration: 0 })])
     runner.go()
-    expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 0)
+    expect(engine.stop).toHaveBeenCalledWith('a1', 0)
   })
 
   it('stop cue targeting a specific cue with fadeOut passes fadeOutDuration', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop Specific Fade', type: 'stop',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 800, waitForFade: false
-    }
-    const { runner } = setup([stopCue])
+    const { runner } = setup([makeStop({ targetCueId: 'a1', fadeOut: true, fadeOutDuration: 800 })])
     runner.go()
-    expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 800)
+    expect(engine.stop).toHaveBeenCalledWith('a1', 800)
   })
 
   it('fires the next cue only after the fade when waitForFade is on', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop With Fade', type: 'stop',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'on-end', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true
-    }
+    const stopCue = makeStop({
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true, advance: 'on-end'
+    })
     const nextCue = makeWait({ id: 'w2', number: '2' })
     const { runner, setRunning } = setup([stopCue, nextCue])
 
@@ -503,38 +717,30 @@ describe('CueRunner — stop cue', () => {
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
 
     vi.advanceTimersByTime(1)
-    vi.runAllTimers()
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
 
   it('fires the next cue immediately when waitForFade is off', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop Without Wait', type: 'stop',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'on-end', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: false
-    }
+    const stopCue = makeStop({
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: false, advance: 'on-end'
+    })
     const nextCue = makeWait({ id: 'w2', number: '2' })
     const { runner, setRunning } = setup([stopCue, nextCue])
 
     runner.go()
-    vi.runAllTimers()
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
 
   it('stop() cancels a pending wait-for-fade timer', () => {
-    const stopCue: StopCue = {
-      id: 's1', number: '1', name: 'Stop With Fade', type: 'stop',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'on-end', isArmed: true, notes: '',
-      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true
-    }
+    const stopCue = makeStop({
+      targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true, advance: 'on-end'
+    })
     const nextCue = makeWait({ id: 'w2', number: '2' })
     const { runner, setRunning } = setup([stopCue, nextCue])
 
     runner.go()
     runner.stop('s1')
-    vi.runAllTimers()
+    vi.advanceTimersByTime(5000)
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
   })
 })
@@ -574,7 +780,7 @@ describe('CueRunner — engine failures are reported', () => {
     // in afterEach keeps implementations, so they are set here.
     vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
     vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
-    vi.mocked(audioPlayer.play).mockResolvedValue(undefined)
+    engine.start.mockResolvedValue({ cueId: 'a1', runId: 'run-a1', state: 'playing', startAtMs: 0 })
   })
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -587,7 +793,7 @@ describe('CueRunner — engine failures are reported', () => {
     const { runner, setLastRun, appendLog } = setup([cue])
 
     runner.go()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('m1', expect.objectContaining({
       outcome: 'error',
@@ -607,7 +813,7 @@ describe('CueRunner — engine failures are reported', () => {
     const { runner, setLastRun } = setup([cue])
 
     runner.go()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('o1', expect.objectContaining({
       outcome: 'error',
@@ -616,12 +822,12 @@ describe('CueRunner — engine failures are reported', () => {
   })
 
   it('reports an audio cue whose file will not play', async () => {
-    vi.mocked(audioPlayer.play).mockRejectedValue(new Error('ENOENT: no such file'))
+    engine.start.mockRejectedValueOnce(new Error('ENOENT: no such file'))
     const cue = makeAudio({ id: 'a1' })
     const { runner, setLastRun, appendLog } = setup([cue])
 
     runner.go()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
       outcome: 'error',
@@ -632,116 +838,238 @@ describe('CueRunner — engine failures are reported', () => {
     ])
   })
 
+  it('reports a cue the engine could not prepare, and never asks it to play', async () => {
+    engine.prepare.mockRejectedValueOnce(new Error('ENOENT: no such file'))
+    const cue = makeAudio({ id: 'a1', duration: 4000 })
+    const { runner, setLastRun } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).not.toHaveBeenCalled()
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: 'ENOENT: no such file'
+    }))
+  })
+
+  it('reports an error the engine raises while the cue plays', async () => {
+    const cue = makeAudio({ id: 'a1', duration: 5000 })
+    const { runner, setLastRun } = setup([cue])
+
+    runner.go()
+    vi.advanceTimersByTime(200)
+    emitEngineEvent({
+      type: 'error', cueId: 'a1', runId: 'run-a1', at: Date.now(), code: 'engine', message: 'device lost',
+      sessionId: 'test-session'
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: 'device lost'
+    }))
+  })
+
+  it('tells the operator when the engine was replaced under the show', () => {
+    const { appendLog } = setup([makeWait({ id: 'w1' })])
+
+    // The client keeps the show clock continuous across the restart; the runner's half
+    // is the line that explains it, so a gap in the show is never a mystery.
+    for (const [handler] of engine.onSessionChange.mock.calls) {
+      handler({ previousSessionId: 'session-a', sessionId: 'session-b', showMs: 5_405_000 })
+    }
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({
+        level: 'error',
+        message: 'audio engine restarted (session session-b); the show clock carried on'
+      })
+    ])
+  })
+
   it('keeps the run successful when the MIDI send went through', async () => {
     const cue = makeMidi({ id: 'm1' })
     const { runner, setLastRun } = setup([cue])
 
     runner.go()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('m1', expect.objectContaining({ outcome: 'success' }))
   })
 })
 
-describe('CueRunner — network cue', () => {
+// A scene cue puts the desk where the scene says it should be, at the moment GO reaches
+// it — which is the whole point of having it in the stack rather than on a panel.
+describe('CueRunner — scene cues', () => {
+  function withDesk(sceneId = 's-1'): SceneCue {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        rf: {
+          ...defaults.rf,
+          plot: {
+            performers: [],
+            packs: [{
+              id: 'pack-1', label: 'Pack 1', channelId: null,
+              performerId: null, notes: '', deskChannelId: 'dca-1'
+            }]
+          }
+        },
+        scenes: {
+          channels: [{
+            id: 'dca-1',
+            label: 'DCA 1 — Principals',
+            ...midiNoteMessages('Yamaha', 1, 36)
+          }],
+          list: [{ id: 's-1', name: 'Wedding', live: ['pack-1'], notes: '' }]
+        }
+      },
+      deskState: {},
+      deskSceneId: null,
+      log: []
+    })
+
+    return {
+      id: 'sc1', number: '12', name: 'Wedding Scene', type: 'scene',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      sceneId
+    }
+  }
+
+  beforeEach(() => {
+    // The bridge mocks are shared with every other case in this file, so their call
+    // history has to go before each one.
+    vi.clearAllMocks()
+    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+  })
+
+  it('recalls the scene the cue names, and says so under the cue', async () => {
+    const { runner, appendLog } = setup([withDesk()])
+
+    runner.go()
+    // Wait for the recall to finish rather than for the first message: the log line and
+    // the remembered desk state come after the sends.
+    await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
+
+    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
+    })
+    // The runner says the cue started; the recall says what it did to the desk, under the
+    // same label, so the log reads as one story.
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ message: 'started' })])
+    expect(useStore.getState().log.map(entry => [entry.label, entry.message])).toEqual([
+      ['12 · Wedding Scene', 'Scene "Wedding" — 1 opened']
+    ])
+    expect(useStore.getState().deskSceneId).toBe('s-1')
+  })
+
+  it('refuses a cue pointed at no scene rather than closing every mic', async () => {
+    // An unfinished cue must not be read as "mics off": that would be a silent, and very
+    // loud, surprise halfway through a number.
+    const { runner, appendLog } = setup([withDesk('')])
+
+    runner.go()
+    await vi.waitFor(() => expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'no scene chosen' })
+    ]))
+
+    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(useStore.getState().deskState).toEqual({})
+    expect(useStore.getState().deskSceneId).toBeNull()
+  })
+
+  it('refuses a scene cue when this machine is not licensed', async () => {
+    // The cue stays in the file and the rest of the show carries on: a show written on a
+    // licensed machine opens anywhere, and the desk is simply not driven here. A cue that
+    // did nothing quietly would be worse than one that says why.
+    const { runner, appendLog, setLastRun } = setup([withDesk()], undefined, false)
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'scene cues need WinsLab Pro' })
+    ])
+    expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
+      outcome: 'error',
+      error: 'WinsLab Pro is required'
+    }))
+    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(useStore.getState().deskSceneId).toBeNull()
+  })
+})
+
+describe('CueRunner — network cues', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })))
+    requestMock.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', body: '', error: null })
   })
   afterEach(() => {
     vi.useRealTimers()
-    vi.unstubAllGlobals()
   })
 
-  it('calls fetch with url, method, headers, body, and a timeout signal', () => {
-    const networkCue: NetworkCue = {
-      id: 'n1', number: '1', name: 'Network', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
+  it('sends the cue’s request through the main process', () => {
+    const cue = makeNetwork({
+      id: 'n1',
       method: 'POST',
       url: 'https://example.com/api',
       body: '{"key":"value"}',
       headers: { 'Content-Type': 'application/json' },
       timeout: 3000
-    }
-    const { runner } = setup([networkCue])
+    })
+    const { runner } = setup([cue])
     runner.go()
 
-    expect(fetch).toHaveBeenCalledWith('https://example.com/api', {
+    expect(requestMock).toHaveBeenCalledWith({
       method: 'POST',
+      url: 'https://example.com/api',
       headers: { 'Content-Type': 'application/json' },
       body: '{"key":"value"}',
-      signal: expect.any(AbortSignal)
+      timeout: 3000,
+      requestId: 'n1:1'
     })
   })
 
-  it('uses default 5000ms timeout when cue.timeout is not set', () => {
-    const networkCue: NetworkCue = {
-      id: 'n2', number: '2', name: 'Default Timeout', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner } = setup([networkCue])
+  it('defaults the timeout and leaves a GET without a body', () => {
+    const cue = makeNetwork({ id: 'n2', timeout: undefined as unknown as number, method: 'GET' })
+    const { runner } = setup([cue])
     runner.go()
 
-    expect(fetch).toHaveBeenCalledWith('https://example.com', {
+    expect(requestMock).toHaveBeenCalledWith(expect.objectContaining({
       method: 'GET',
-      headers: {},
       body: undefined,
-      signal: expect.any(AbortSignal)
-    })
+      timeout: 5000
+    }))
   })
 
-  it('calls onDone after fetch completes', async () => {
-    const networkCue: NetworkCue = {
-      id: 'n3', number: '3', name: 'Network', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'on-end', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
+  it('waits for the response before advancing', async () => {
+    const cue = makeNetwork({ id: 'n3', advance: 'on-end' })
     const cue2 = makeWait({ id: 'w2', number: '4' })
-    const { runner, setRunning } = setup([networkCue, cue2])
+    const { runner, setRunning } = setup([cue, cue2])
     runner.go()
 
-    // Should not fire next cue until fetch resolves
+    // Should not fire next cue until the request answers
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
 
-    // Flush microtasks — the mock fetch resolves immediately, so onDone should fire
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
   })
 
-  it('logs the error and still advances when the request rejects', async () => {
-    const log = vi.fn()
-    console.error = log
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+  it('logs the failure and still advances when the request rejects', async () => {
+    requestMock.mockRejectedValueOnce(new Error('network down'))
 
-    const networkCue: NetworkCue = {
-      id: 'n4', number: '4', name: 'Failing Network', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'on-end', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
+    const cue = makeNetwork({ id: 'n4', number: '4', name: 'Failing Network', advance: 'on-end' })
     const cue2 = makeWait({ id: 'w2', number: '5' })
-    const { runner, setRunning, setLastRun, appendLog } = setup([networkCue, cue2])
+    const { runner, setRunning, setLastRun, appendLog } = setup([cue, cue2])
     runner.go()
 
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
-    expect(log).toHaveBeenCalledWith('Network cue failed:', expect.any(Error))
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
     expect(setLastRun).toHaveBeenCalledWith('n4', expect.objectContaining({
       outcome: 'error',
@@ -753,24 +1081,11 @@ describe('CueRunner — network cue', () => {
   })
 
   it('logs the request line with method, url, and status', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response('ok', { status: 200, statusText: 'OK' })
-    ))
-
-    const networkCue: NetworkCue = {
-      id: 'n7', number: '7', name: 'Ping', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com/ping',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner, appendLog } = setup([networkCue])
+    const cue = makeNetwork({ id: 'n7', number: '7', name: 'Ping', url: 'https://example.com/ping' })
+    const { runner, appendLog } = setup([cue])
     runner.go()
 
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(appendLog).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -782,22 +1097,11 @@ describe('CueRunner — network cue', () => {
   })
 
   it('records the response status of a successful run', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok', { status: 200 })))
-
-    const networkCue: NetworkCue = {
-      id: 'n5', number: '5', name: 'Network', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner, setLastRun } = setup([networkCue])
+    const cue = makeNetwork({ id: 'n5' })
+    const { runner, setLastRun } = setup([cue])
     runner.go()
 
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('n5', expect.objectContaining({
       outcome: 'success',
@@ -807,24 +1111,14 @@ describe('CueRunner — network cue', () => {
   })
 
   it('records a failed run when the response carries an error status', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response('nope', { status: 503, statusText: 'Service Unavailable' })
-    ))
-
-    const networkCue: NetworkCue = {
-      id: 'n6', number: '6', name: 'Network', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner, setLastRun } = setup([networkCue])
+    requestMock.mockResolvedValueOnce({
+      ok: true, status: 503, statusText: 'Service Unavailable', body: 'nope', error: null
+    })
+    const cue = makeNetwork({ id: 'n6' })
+    const { runner, setLastRun } = setup([cue])
     runner.go()
 
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('n6', expect.objectContaining({
       outcome: 'error',
@@ -833,25 +1127,31 @@ describe('CueRunner — network cue', () => {
     }))
   })
 
-  it('reports the response body on the run result', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response('{"ok":true}', { status: 200 })
-    ))
-
-    const networkCue: NetworkCue = {
-      id: 'n8', number: '8', name: 'Body', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com/body',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner, setLastRun } = setup([networkCue])
+  it('records a transport failure as an error without a status', async () => {
+    requestMock.mockResolvedValueOnce({
+      ok: false, status: null, statusText: '', body: '', error: 'timed out after 5000ms'
+    })
+    const cue = makeNetwork({ id: 'n10' })
+    const { runner, setLastRun } = setup([cue])
     runner.go()
 
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(setLastRun).toHaveBeenCalledWith('n10', expect.objectContaining({
+      outcome: 'error',
+      error: 'timed out after 5000ms'
+    }))
+  })
+
+  it('reports the response body on the run result', async () => {
+    requestMock.mockResolvedValueOnce({
+      ok: true, status: 200, statusText: 'OK', body: '{"ok":true}', error: null
+    })
+    const cue = makeNetwork({ id: 'n8', url: 'https://example.com/body' })
+    const { runner, setLastRun } = setup([cue])
+    runner.go()
+
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('n8', expect.objectContaining({
       outcome: 'success',
@@ -859,48 +1159,12 @@ describe('CueRunner — network cue', () => {
     }))
   })
 
-  it('truncates a body longer than the cap and marks it', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response('a'.repeat(4500), { status: 200 })
-    ))
-
-    const networkCue: NetworkCue = {
-      id: 'n9', number: '9', name: 'Long Body', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com/long',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner, setLastRun } = setup([networkCue])
-    runner.go()
-
-    await vi.runAllTimersAsync()
-
-    expect(setLastRun).toHaveBeenCalledWith('n9', expect.objectContaining({
-      body: 'a'.repeat(4000) + '\n… (truncated)'
-    }))
-  })
-
   it('omits the body field for an empty response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })))
-
-    const networkCue: NetworkCue = {
-      id: 'n10', number: '10', name: 'Empty Body', type: 'network',
-      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none', isArmed: true, notes: '',
-      method: 'GET',
-      url: 'https://example.com/empty',
-      body: '',
-      headers: {},
-      timeout: 5000
-    }
-    const { runner, setLastRun } = setup([networkCue])
+    const cue = makeNetwork({ id: 'n10', url: 'https://example.com/empty' })
+    const { runner, setLastRun } = setup([cue])
     runner.go()
 
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalled()
     expect(setLastRun.mock.calls[0][1]).not.toHaveProperty('body')
@@ -949,7 +1213,7 @@ describe('CueRunner — script cue', () => {
     expect(setRunning).toHaveBeenCalledWith('sc1', expect.objectContaining({ state: 'playing' }))
 
     script.resolve()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({ outcome: 'success' }))
     expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
@@ -975,7 +1239,7 @@ describe('CueRunner — script cue', () => {
     const { runner, setLastRun, appendLog } = setup([cue])
 
     runner.go()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
       outcome: 'error',
@@ -992,7 +1256,7 @@ describe('CueRunner — script cue', () => {
     const { runner, setLastRun, appendLog } = setup([cue])
 
     runner.go()
-    await vi.runAllTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(setLastRun).not.toHaveBeenCalled()
     expect(appendLog.mock.calls.flat().map(e => e.message)).not.toContain('boom')
@@ -1075,8 +1339,9 @@ describe('CueRunner — script cue', () => {
 
     runner.goById('s1')
 
-    expect(audioPlayer.stop).toHaveBeenCalledWith('a1', 0)
-    // The run stays lit until the audio actually ends; only scripts are taken away here.
+    expect(engine.stop).toHaveBeenCalledWith('a1', 0)
+    // Only scripts are taken away here: the audio cue's row stays lit until the engine
+    // reports the run stopped, so the fade that is still sounding keeps its row.
     expect(scriptHostMock.cancel).not.toHaveBeenCalled()
     expect(setRunning).not.toHaveBeenCalledWith('a1', null)
   })
@@ -1086,7 +1351,7 @@ describe('CueRunner — panic details', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('fades the audio instead of cutting it, and drops pending cues', () => {
+  it('fades the engine instead of cutting it, and drops pending cues', () => {
     const cue1 = makeWait({ id: 'w1', duration: 5000, advance: 'on-end' })
     const cue2 = makeWait({ id: 'w2' })
     const { runner, setRunning, clearAllRunning } = setup([cue1, cue2])
@@ -1094,9 +1359,10 @@ describe('CueRunner — panic details', () => {
     runner.go()
     runner.panic()
 
-    // Exactly one stopAll, with the fade. A hard stopAll() first would leave the
-    // player's active map empty and the fade would never be scheduled.
-    expect(vi.mocked(audioPlayer.stopAll).mock.calls).toEqual([[200]])
+    // Exactly one panic, with the fade. A hard stop first would silence every source
+    // before the fade could be scheduled.
+    expect(vi.mocked(engine.panic).mock.calls).toEqual([[200]])
+    expect(engine.stopAll).not.toHaveBeenCalled()
     expect(clearAllRunning).toHaveBeenCalled()
 
     vi.advanceTimersByTime(10_000)
@@ -1123,54 +1389,26 @@ describe('CueRunner — clearGroupStartOffset', () => {
   })
 })
 
-describe('CueRunner — fireCueFromOffset fallback', () => {
+describe('CueRunner — timeline seek skips what already happened', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('calls onDone immediately for non-audio/non-wait cues via fireCueFromOffset (e.g. osc cue in timeline seek)', () => {
-    // Use seekTimeline to exercise the fireCueFromOffset path with a non-audio/non-wait cue
-    const group = {
-      id: 'g1', number: '1', name: 'Group', type: 'group' as const,
-      colorLabel: 'none' as const, parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none' as const, isArmed: true, notes: '',
-      mode: 'timeline' as const,
+  it('does not replay a fire-and-forget child that lies before the seek point', () => {
+    const group: GroupCue = {
+      id: 'g1', number: '1', name: 'Group', type: 'group',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      mode: 'timeline'
     }
-    const oscCue = {
-      id: 'oc1', number: '2', name: 'OSC', type: 'osc' as const,
-      colorLabel: 'none' as const, parentId: 'g1', preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
-      advance: 'none' as const, isArmed: true, notes: '',
-      host: '127.0.0.1', port: 8000, address: '/test', args: [],
-    }
-    // Mock window.winslab.osc
-    Object.defineProperty(window, 'winslab', {
-      value: { osc: { send: vi.fn().mockResolvedValue(undefined) } },
-      writable: true,
-    })
+    const oscCue = makeOsc({ id: 'oc1', parentId: 'g1', timelineOffset: 0 })
+    const { runner, setRunning } = setup([group, oscCue])
 
-    const setRunning = vi.fn()
-    const runner = new CueRunner()
-    runner.init({
-          getCues: () => [group, oscCue],
-          getSelected: () => 'g1',
-          setSelected: vi.fn(),
-          setRunning,
-          clearAllRunning: vi.fn(),
-          syncCueDuration: vi.fn(),
-          setLastRun: vi.fn(),
-          appendLog: vi.fn(),
-          getWorkspacePath: () => null,
-          getMidiDefaultPort: () => ''
-        })
-
-    // Seek past the osc cue's offset — fireCueFromOffset will hit the else branch (onDone)
     runner.seekTimeline('g1', 100)
     runner.go()
-    vi.runAllTimers()
+    vi.advanceTimersByTime(1000)
 
-    // The osc cue should NOT have been fired because its timelineOffset (0) was before the seek (100),
-    // and it's a fire-and-forget type so it gets skipped entirely (line 234: child.type === 'osc' → continue)
-    // Let's verify that the osc was skipped by checking createBufferSource not called
     expect(setRunning.mock.calls.filter(c => c[0] === 'oc1')).toHaveLength(0)
+    expect(window.winslab.osc.send).not.toHaveBeenCalled()
   })
 })
 
@@ -1233,10 +1471,10 @@ describe('CueRunner — stopping a group', () => {
 
     expect(setRunning).toHaveBeenCalledWith('c1', null)
     expect(setRunning).toHaveBeenCalledWith('g1', null)
-    expect(audioPlayer.stop).toHaveBeenCalledWith('c1', 0)
+    expect(engine.stop).toHaveBeenCalledWith('c1', 0)
 
     // The run is abandoned: the child that was stopped cannot hand over to the next.
-    vi.runAllTimers()
+    vi.advanceTimersByTime(5000)
     expect(fired(setRunning)).not.toContain('c2')
   })
 
@@ -1250,8 +1488,8 @@ describe('CueRunner — stopping a group', () => {
     vi.advanceTimersByTime(100)
     runner.goById('s1')
 
-    expect(audioPlayer.stop).toHaveBeenCalledWith('c1', 800)
-    expect(audioPlayer.stop).toHaveBeenCalledWith('c2', 800)
+    expect(engine.stop).toHaveBeenCalledWith('c1', 800)
+    expect(engine.stop).toHaveBeenCalledWith('c2', 800)
   })
 
   it('cancels the scripts under it', () => {
@@ -1286,7 +1524,7 @@ describe('CueRunner — stopping a group', () => {
 
     expect(setRunning).toHaveBeenCalledWith('w1', null)
     expect(setRunning).toHaveBeenCalledWith('g2', null)
-    vi.runAllTimers()
+    vi.advanceTimersByTime(5000)
     expect(fired(setRunning)).not.toContain('w2')
   })
 
@@ -1300,7 +1538,7 @@ describe('CueRunner — stopping a group', () => {
     vi.advanceTimersByTime(100)
     runner.goById('s1')
 
-    vi.runAllTimers()
+    vi.advanceTimersByTime(5000)
     expect(fired(setRunning)).not.toContain('c2')
   })
 
@@ -1318,7 +1556,7 @@ describe('CueRunner — stopping a group', () => {
     expect(scriptHostMock.cancel).toHaveBeenCalledWith('sc1')
     expect(setRunning).toHaveBeenCalledWith('sc1', null)
     expect(setRunning).toHaveBeenCalledWith('g1', null)
-    vi.runAllTimers()
+    vi.advanceTimersByTime(5000)
     expect(fired(setRunning)).not.toContain('c2')
   })
 })

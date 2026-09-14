@@ -528,6 +528,21 @@ figure.figure {
   background: rgba(224, 160, 32, 0.07);
 }
 
+/* Pro marker: the same amber chip the app puts on a surface a licence unlocks. */
+.pro {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: rgba(224, 160, 32, 0.1);
+  color: var(--accent-amber);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .code {
   margin: 10px 0 0;
   padding: 10px 12px;
@@ -549,6 +564,53 @@ code {
 
 .code code {
   color: var(--fg-primary);
+}
+
+/* ─── Reliability page ───────────────────────────────────────────────────── */
+
+.run-state {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.run-state.pass {
+  color: color-mix(in srgb, var(--state-go) 60%, #fff 40%);
+}
+
+.run-state.fail {
+  color: color-mix(in srgb, var(--state-panic) 60%, #fff 40%);
+}
+
+.metric-value {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.metric-note:empty {
+  display: none;
+}
+
+.run-panel .cards {
+  margin-top: 12px;
+}
+
+.run-subhead {
+  margin: 16px 0 0;
+}
+
+.run-panel .table-wrap {
+  margin-top: 8px;
 }
 
 .reveal {
@@ -640,6 +702,11 @@ code {
   td,
   th,
   figcaption {
+    color: #000000;
+  }
+
+  .run-state.pass,
+  .run-state.fail {
     color: #000000;
   }
 

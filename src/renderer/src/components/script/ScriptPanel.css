@@ -1,0 +1,194 @@
+/* The script panel is the document with the cue stack pinned to it: every line the
+   operator has pinned a cue to carries its number, and the line the next GO fires on is
+   marked and kept in view. */
+.script-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--h-script);
+  flex-shrink: 0;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+.script-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--h-waveform-header);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.script-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.script-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+.script-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.script-btn {
+  height: 18px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.script-btn:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.script-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+/* A document that cannot be shown: the same shape as the empty state, in the colour of
+   something the operator has to act on rather than something waiting to happen. */
+.script-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--accent-amber);
+}
+
+.script-choose {
+  height: 22px;
+  padding: 0 var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.script-choose:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* The document is the panel, so the size the operator picked on the music stand is the
+   size of every line here. */
+.script-lines {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+  font-size: var(--script-font-size, var(--text-md));
+}
+
+/* One row per line. The number stays in its own column so the text starts at the same
+   place down the whole document, pinned or not. */
+.script-line {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 1px var(--space-3);
+  border-left: 2px solid transparent;
+  line-height: var(--line-height-base);
+}
+
+.script-line:hover { background: var(--bg-card); }
+
+.script-line[data-running='true'] {
+  background: var(--bg-playing-row);
+  border-left-color: var(--state-running-fg);
+}
+
+/* The line the next GO fires on outranks the rest: it is the one the operator looks up
+   from the desk to find. */
+.script-line[data-current='true'] {
+  background: var(--bg-selected);
+  border-left-color: var(--accent-blue);
+}
+
+.script-line-no {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-ghost);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.script-line-no:hover { color: var(--fg-primary); }
+
+.script-line[data-current='true'] .script-line-no { color: var(--fg-tertiary); }
+
+.script-line-text {
+  min-width: 0;
+  color: var(--fg-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A pinned cue reads as a margin note: the number is what the cue list is looking for,
+   so it wears the accent rather than the text colour. */
+.script-pin {
+  justify-self: end;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--accent-amber);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Scrolling away hands the view to the operator; this is the way back to the cue about
+   to fire, so it floats over the document rather than taking a row of it. */
+.script-follow {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  height: 22px;
+  padding: 0 var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.script-follow[data-active] {
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}
+
+.script-follow:hover { background: var(--bg-hover); color: var(--fg-primary); }

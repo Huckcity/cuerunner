@@ -3,7 +3,7 @@ import { createCue, formatDuration, formatClock } from './cueDefaults'
 import type { CueType } from '../types/cue'
 
 describe('createCue', () => {
-  const types: CueType[] = ['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script']
+  const types: CueType[] = ['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script', 'scene']
 
   it.each(types)('creates a %s cue with correct type', (type) => {
     expect(createCue(type).type).toBe(type)
@@ -26,12 +26,13 @@ describe('createCue', () => {
     expect(cue.postWait).toBe(0)
   })
 
-  it('audio cue has a default output', () => {
+  it('audio cue is born with automatic routing at full level', () => {
     const cue = createCue('audio')
     if (cue.type !== 'audio') throw new Error('wrong type')
-    expect(cue.outputs).toHaveLength(1)
-    expect(cue.outputs[0].volume).toBe(1)
-    expect(cue.outputs[0].pan).toBe(0)
+    // null, not []: automatic routing, where an empty list would be silence.
+    expect(cue.outputs).toBeNull()
+    expect(cue.volume).toBe(1)
+    expect(cue.pan).toBe(0)
     expect(cue.playbackRate).toBe(1.0)
     expect(cue.trim).toBe(1.0)
   })
@@ -62,7 +63,7 @@ describe('createCue', () => {
     expect(cue.parentId).toBeNull()
   })
 
-  it.each(['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script'] as CueType[])(
+  it.each(['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script', 'scene'] as CueType[])(
     '%s cue has parentId null by default', (type) => {
       expect(createCue(type).parentId).toBeNull()
     }

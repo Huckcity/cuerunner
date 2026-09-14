@@ -1,0 +1,42 @@
+/* The one alarm surface that is on screen whatever else is: amber for a warning, red for
+   something that will be heard in the house. It is a button because the answer to an
+   alarm is in the panel that raised it. */
+
+.alert-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: var(--transition-std);
+  border: 1px solid var(--accent-amber);
+  background: var(--accent-amber-bg);
+  color: var(--accent-amber);
+}
+
+.alert-chip[data-level='critical'] {
+  border-color: var(--cue-color-red);
+  background: #3a2020;
+  color: #f1d4d0;
+}
+
+.alert-chip:hover { background: var(--bg-hover); }
+
+.alert-chip-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-chip-more {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  opacity: 0.8;
+}

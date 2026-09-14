@@ -1,15 +1,16 @@
+# Every lane runs on hardware in the homelab: Linux on `ubox`, macOS on the Mac mini beside
+# it, Windows in a KVM guest on `ubox` (CLAUDE.md → CI runners). None of it is billed, and
+# none of it stops when the account's included minutes run out.
 name: CI
 
 on:
   pull_request:
     branches: [main]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   typecheck:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     strategy:
       fail-fast: false
       matrix:
@@ -17,15 +18,17 @@ jobs:
         # like fd-slicer's zip extraction stalling on Node 26 (#49).
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -33,46 +36,79 @@ jobs:
         run: npm run typecheck
 
   unit-test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     strategy:
       fail-fast: false
       matrix:
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
       - name: Unit tests
         run: npm test
 
+  # The playback engine is C++ and is part of the app: its deterministic offline-render
+  # acceptance suite (exact start/stop/fade frames, routing, streaming, cache, M4A) runs
+  # here. `npm run test:native` builds the engine and, on Linux, the pinned LGPL FFmpeg
+  # helper through its pre-hook; the helper is cached so an unchanged pin costs nothing.
+  native-engine:
+    runs-on: [self-hosted, linux, x64, ubox]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
+        uses: actions/cache@v6
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Native acceptance (real mixer, offline render)
+        run: npm run test:native
+
+      # The soak is what runs nightly in full; a minute of it here means a change that
+      # breaks the show harness is caught on the pull request that made it, not at 3 am.
+      - name: Soak smoke (a minute of show)
+        run: npm run soak -- --minutes 1
+
   # Installing the Electron binary exercises npm's install scripts, @electron/get's
   # 200 MB download and zip extraction — the path that silently produced no binary on
   # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
   electron-install:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     strategy:
       fail-fast: false
       matrix:
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -89,22 +125,37 @@ jobs:
           "
 
   # The app ships for Windows, macOS and Linux, so the interface is exercised on all
-  # three. The Windows lane matters most of all — it is the platform the product is for —
-  # and Linux needs a display, which a runner does not have.
+  # three. The Windows lane matters most of all — it is the platform the product is for.
+  # Linux is the one that can run in the homelab; `label` is the lane's name (the job's,
+  # and the failure artifact's), `runner` is where it runs.
   e2e:
-    runs-on: ${{ matrix.os }}
+    # Without this the job is named after every matrix value it carries, which for the
+    # self-hosted lane is the whole label list.
+    name: e2e (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - runner: [self-hosted, linux, x64, ubox]
+            label: linux
+          # Windows runs in a KVM guest on ubox: the same x64 Windows the installer ships
+          # for, from the same eval media GitHub's own windows-latest uses, at none of the
+          # 2x minutes (CLAUDE.md → CI runners).
+          - runner: [self-hosted, windows, x64, ubox-win]
+            label: windows
+          # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the
+          # .dmg ships for, at none of the 10x minutes. It is a launchd agent in the
+          # login session the suite needs (CLAUDE.md → CI runners).
+          - runner: [self-hosted, macos, arm64, mac-mini]
+            label: macos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
@@ -112,25 +163,57 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
-      # Electron tests use the app's own Chromium, so nothing is downloaded; Linux still
-      # needs the system libraries a Chromium process links against.
+      # Electron tests use the app's own Chromium, so nothing is downloaded; a Linux host
+      # still needs the system libraries a Chromium process links against. GitHub's
+      # runners install them per job; the homelab runner is provisioned once and this is
+      # what says so, because `npx playwright install-deps` wants a root shell (`sudo sh
+      # -c`) and the runner's sudoers rule allows apt-get, not an arbitrary command.
       - name: Install runtime dependencies
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
         run: npx playwright install-deps
 
-      - name: E2E tests
-        if: runner.os != 'Linux'
-        run: npm run test:e2e
+      - name: Runtime dependencies are provisioned on the runner
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        run: |
+          missing=()
+          for pkg in libnss3 libgbm1 libasound2t64 libatk-bridge2.0-0t64 libcups2t64 \
+                     libxkbcommon0 libgtk-3-0t64 xvfb; do
+            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::missing on this runner: ${missing[*]} — provision the host (CLAUDE.md → CI runners)"
+            exit 1
+          fi
+          echo 'runtime libraries present'
 
-      # Electron opens a real window, so Linux needs a display server of its own.
-      - name: E2E tests (under Xvfb)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a -s "-screen 0 1600x1000x24" npm run test:e2e
+      # The app runs the native engine; on Windows the compiler is installed but not on
+      # PATH unless the developer environment is imported. This is done here rather than
+      # with `ilammy/msvc-dev-cmd`, which was the last thing in these workflows still
+      # targeting Node 20: what it does for this lane is vswhere to find the tools,
+      # vcvars64 to import them, and the two variable files GitHub gives a step.
+      # `vcvars64` is the x64-targeting variant, which is what the installer builds for.
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
+      # Electron opens a real window; the wrapper gives it a private Xvfb display on
+      # Linux, where a runner has none of its own (scripts/run-e2e.js).
+      - name: E2E tests
+        run: npm run test:e2e
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: e2e-results-${{ matrix.os }}
+          name: e2e-results-${{ matrix.label }}
           path: test-results/
           retention-days: 7

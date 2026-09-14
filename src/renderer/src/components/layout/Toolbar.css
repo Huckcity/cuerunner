@@ -133,6 +133,38 @@
   gap: var(--space-1);
 }
 
+/* The view switch sits at the far right: it changes what fills the window, which is a
+   different kind of decision from adding a cue. */
+.toolbar-view {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.toolbar-view-btn {
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.toolbar-view-btn:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+.toolbar-view-btn[data-active='true'] {
+  background: var(--accent-blue-glow);
+  color: var(--fg-primary);
+}
+
 .toolbar-label {
   font-size: var(--text-sm);
   color: var(--fg-dim);
@@ -222,3 +254,5 @@
   background: var(--border);
   flex-shrink: 0;
 }
+
+.toolbar-actions[hidden] { display: none; }

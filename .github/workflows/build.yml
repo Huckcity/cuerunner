@@ -5,25 +5,39 @@ on:
     types: [published]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # A release runs entirely on the homelab machines, like every other workflow here:
+  # Linux and the packaging on ubox, the macOS half on the Mac mini, the Windows installer
+  # in the KVM guest on ubox (CLAUDE.md → CI runners). Nothing publishes from GitHub's
+  # runners, and nothing here waits on them.
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      # The pinned M4A helper only changes when its build script does.
+      - name: Cache the packaged M4A decoder
+        uses: actions/cache@v6
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Native acceptance (real mixer, offline render)
+        run: npm run test:native
 
       - name: Typecheck
         run: npm run typecheck
@@ -32,14 +46,13 @@ jobs:
         run: npm test
 
   test-e2e:
-    runs-on: macos-latest
+    runs-on: [self-hosted, macos, arm64, mac-mini]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -52,23 +65,70 @@ jobs:
 
   build-windows:
     needs: [ test, test-e2e ]
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows, x64, ubox-win]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      # dist:win builds the native playback engine, which needs a C++ toolchain in the
+      # environment rather than only installed on the runner. Same import as ci.yml's E2E
+      # lane, and the same reason for spelling it out: the action it used to call still
+      # targets Node 20, and this is vswhere + vcvars64 + two variable files.
+      - name: Set up MSVC
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
+      # The engine is a separate binary; a build that ships one the user cannot identify
+      # as theirs is a build a venue will refuse to install. Signing happens when the
+      # release secrets exist — `WIN_CSC_LINK` (the certificate, base64 or a path) and
+      # `WIN_CSC_KEY_PASSWORD` — and electron-builder skips it, without failing, when
+      # they are empty: its Windows signer checks for the empty string, which is why this
+      # job needs none of `scripts/signing-env.sh`.
       - name: Build and package
-        run: npm run dist:win
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -z "$WIN_CSC_LINK" ]; then
+            echo "::warning::No Windows certificate is configured (WIN_CSC_LINK); the installer will be unsigned."
+          fi
+          npm run dist:win
+
+      # `secrets` is not available to a step's `if:` — GitHub rejects the whole workflow
+      # when one is asked for there, and the run fails with no jobs and nothing to read.
+      # The step runs, and decides for itself whether there is a signature to check.
+      - name: Verify the signature
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+        run: |
+          if (-not $env:WIN_CSC_LINK) {
+            Write-Host 'No certificate configured; nothing to verify.'
+            exit 0
+          }
+          $installer = Get-ChildItem dist\*.exe | Select-Object -First 1
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          Write-Host "$($installer.Name): $($signature.Status) — $($signature.SignerCertificate.Subject)"
+          if ($signature.Status -ne 'Valid') {
+            throw "the installer is not validly signed: $($signature.Status)"
+          }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinsLab-windows
           path: dist/*.exe
@@ -76,23 +136,55 @@ jobs:
 
   build-mac:
     needs: [ test, test-e2e ]
-    runs-on: macos-latest
+    runs-on: [self-hosted, macos, arm64, mac-mini]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      # macOS needs both halves: the Developer ID certificate (`MAC_CSC_LINK` /
+      # `MAC_CSC_KEY_PASSWORD`) to sign, and `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` +
+      # `APPLE_TEAM_ID` for electron-builder to notarise and staple, which is what makes
+      # Gatekeeper open the app on a machine that has never seen it. The certificate is
+      # exported by `scripts/signing-env.sh`, which is where the rule about empty secrets
+      # lives and is tested; electron-builder would treat an empty CSC_LINK as a
+      # certificate it cannot resolve rather than as "not signing".
       - name: Build and package
-        run: npm run dist:mac
+        env:
+          SIGNING_LINK: ${{ secrets.MAC_CSC_LINK }}
+          SIGNING_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          . scripts/signing-env.sh
+          npm run dist:mac
+
+      # Same reason as the Windows step: the check lives in the shell, not in an `if:`.
+      - name: Verify the signature and the notarisation ticket
+        env:
+          SIGNING_LINK: ${{ secrets.MAC_CSC_LINK }}
+        run: |
+          if [ -z "$SIGNING_LINK" ]; then
+            echo 'No certificate configured; nothing to verify.'
+            exit 0
+          fi
+          APP=$(find dist -maxdepth 3 -name '*.app' -type d | head -1)
+          echo "verifying $APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Gatekeeper's own assessment: this is what a venue machine runs, and it fails
+          # for an unnotarised build even when the signature itself is good.
+          spctl --assess --type execute --verbose=2 "$APP"
+          DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
+          xcrun stapler validate "$DMG"
 
       - name: Upload dmg
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinsLab-mac
           path: dist/*.dmg
@@ -100,26 +192,34 @@ jobs:
 
   build-linux:
     needs: [ test, test-e2e ]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Cache the packaged M4A decoder
+        uses: actions/cache@v6
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
 
       - name: Build and package
         run: npm run dist:linux
 
       - name: Upload AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: WinsLab-linux
           path: dist/*.AppImage
@@ -127,23 +227,23 @@ jobs:
 
   release:
     needs: [ build-windows, build-mac, build-linux ]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/**/*
 
   upload-r2:
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 

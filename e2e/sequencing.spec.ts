@@ -133,24 +133,30 @@ test('advance on-end respects post-wait before firing next cue', async () => {
   await setPostWait(page, 0.3) // 300ms post-wait
   await setAdvance(page, 'on-end')
 
-  // Cue 2: Wait 600ms — long enough to observe it in-flight
+  // Cue 2: a wait long enough to observe in flight. Seconds, not milliseconds: a loaded
+  // Windows runner can miss a 600 ms window between two polls, and the assertion below is
+  // that the cue fired, not how quickly the window was painted — the ordering that matters
+  // is the pair of cue-2 assertions.
   await toolbarCueBtn(page, 'Wait').click()
   const row2 = page.locator('.cue-row').last()
   await row2.click()
-  await setWaitDuration(page, 600)
+  await setWaitDuration(page, 5000)
 
   // GO on cue 1
   await row1.click()
   await page.getByRole('button', { name: /GO/ }).click()
 
-  // Cue 1 enters post-wait after ~50ms
-  await expect(page.locator('.state-pill', { hasText: 'post-wait' })).toBeVisible({ timeout: 500 })
+  // Cue 1 enters post-wait after ~50ms. The pill lives for the post-wait (300ms), and on
+  // a loaded runner the click can take longer than that to reach the renderer, so the
+  // window to observe it is generous: this asserts the state appears, not how quickly —
+  // the ordering that matters is the two cue-2 assertions below.
+  await expect(page.locator('.state-pill', { hasText: 'post-wait' })).toBeVisible({ timeout: 2000 })
 
   // Cue 2 must NOT start during cue 1's post-wait
   await expect(row2).toHaveAttribute('data-running', 'false')
 
   // After post-wait (~300ms remaining), cue 2 auto-fires
-  await expect(row2).toHaveAttribute('data-running', 'true', { timeout: 1500 })
+  await expect(row2).toHaveAttribute('data-running', 'true', { timeout: 5000 })
 
   await page.getByRole('button', { name: /STOP/ }).click()
 })

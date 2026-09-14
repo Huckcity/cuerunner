@@ -35,7 +35,6 @@ interface Destination {
 }
 
 export class OscEngine {
-  private listener: unknown = null
   private destinations = new Map<string, Destination>()
 
   constructor(private readonly connect: ClientFactory = connectOsc) {}
@@ -98,20 +97,6 @@ export class OscEngine {
       destination.client.close(() => {})
     }
     this.destinations.clear()
-  }
-
-  startListener(port: number): void {
-    try {
-      const { Server } = require('node-osc') as {
-        Server: new (port: number, host: string, callback: () => void) => unknown
-      }
-      if (this.listener) return
-      this.listener = new Server(port, '0.0.0.0', () => {
-        console.log(`OSC listener on port ${port}`)
-      })
-    } catch (e) {
-      console.error('OSC listener error:', e)
-    }
   }
 
   private destinationFor(host: string, port: number): Destination {

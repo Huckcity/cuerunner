@@ -1,5 +1,34 @@
+/** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
-export type CueType = 'audio' | 'midi' | 'osc' | 'wait' | 'fade' | 'stop' | 'group' | 'network' | 'script'
+export type CueType =
+  | 'audio'
+  | 'midi'
+  | 'osc'
+  | 'wait'
+  | 'fade'
+  | 'stop'
+  | 'group'
+  | 'network'
+  | 'script'
+  | 'scene'
+
+/**
+ * A message a cue answers to, when nobody's hand is on the GO button.
+ *
+ * A MIDI trigger is identity, not value: a note fires whatever its velocity and a knob
+ * fires whatever it is turned to. The desk decides when something happens; the cue only
+ * decides whether it is the thing being talked to.
+ */
+export type TriggerMidiMessage =
+  | { kind: 'noteOn'; channel: number; note: number }
+  | { kind: 'noteOff'; channel: number; note: number }
+  | { kind: 'cc'; channel: number; controller: number }
+  | { kind: 'programChange'; channel: number; program: number }
+
+export type CueTrigger =
+  | { id: string; kind: 'osc'; address: string }
+  /** `device` is the MIDI input port name, as the service reports it. */
+  | { id: string; kind: 'midi'; device: string; message: TriggerMidiMessage }
 
 export interface CueBase {
   id: string
@@ -14,11 +43,28 @@ export interface CueBase {
   advance: 'none' | 'on-start' | 'on-end'
   isArmed: boolean
   notes: string
+  /**
+   * What fires this cue besides GO. Optional on disk: a workspace saved before triggers
+   * existed has none, and the migration fills the list in.
+   */
+  triggers?: CueTrigger[]
+  /**
+   * The line of the script this cue fires on, 1-based, for the script panel and the
+   * tablet reading it. Null or absent means it is not pinned to anything.
+   */
+  scriptLine?: number | null
 }
 
-export interface AudioOutput {
-  volume: number
-  pan: number
+/**
+ * One routing crosspoint: the file's channel `inputChannel` feeds the device's channel
+ * `outputChannel` at `gain`. Both channels are zero-based, so a stereo file routed to
+ * the first two device channels is `{inputChannel: 0, outputChannel: 0}` and
+ * `{inputChannel: 1, outputChannel: 1}`.
+ */
+export interface AudioCrosspoint {
+  inputChannel: number
+  outputChannel: number
+  gain: number
 }
 
 export interface AudioCue extends CueBase {
@@ -27,7 +73,16 @@ export interface AudioCue extends CueBase {
   startTime: number
   endTime: number | null
   fadeInDuration: number
-  outputs: AudioOutput[]
+  /** Master level, 0–1, applied to every output. */
+  volume: number
+  /** Master pan, −1 (left) to 1 (right); automatic routing spreads it across the pair. */
+  pan: number
+  /**
+   * Crosspoints, or null for automatic channel routing. An empty list is not "no
+   * routing": it is a cue that is deliberately silent, and it must not be read as
+   * "automatic".
+   */
+  outputs: AudioCrosspoint[] | null
   loopCount: number
   playbackRate: number
   trim: number
@@ -106,6 +161,17 @@ export interface ScriptCue extends CueBase {
   timeout: number  // ms, defaults to 60000; 0 runs without a timeout
 }
 
+/**
+ * A cue that puts the desk where the scene says it should be: GO moves the show on and
+ * the mics with it. The work — which groups change, and the messages that change them —
+ * belongs to the scene, so this cue only names one.
+ */
+export interface SceneCue extends CueBase {
+  type: 'scene'
+  /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
+  sceneId: string
+}
+
 export type Cue =
   | AudioCue
   | MidiCue
@@ -116,3 +182,4 @@ export type Cue =
   | GroupCue
   | NetworkCue
   | ScriptCue
+  | SceneCue

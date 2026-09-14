@@ -65,7 +65,12 @@ export function MidiInspector({ cue }: Props) {
               <option value="programChange">Program Change</option>
               <option value="sysex">SysEx</option>
             </select>
-            <button onClick={() => removeMsg(i)} className="inspector-btn-danger">✕</button>
+            <button
+              onClick={() => removeMsg(i)}
+              className="inspector-btn-icon inspector-btn-remove"
+              title="Remove this message"
+              aria-label="Remove this message"
+            >✕</button>
           </div>
           {msg.kind !== 'sysex' && (
             <div className="field-row">
@@ -124,7 +129,7 @@ export function MidiInspector({ cue }: Props) {
           )}
         </div>
       ))}
-      <button onClick={addMsg} className="inspector-add-btn">+ Add Message</button>
+      <button onClick={addMsg} className="inspector-add-btn add-row">+ Add message</button>
       <LastRun cueId={cue.id} />
     </div>
   )

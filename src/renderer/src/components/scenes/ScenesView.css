@@ -1,0 +1,568 @@
+/* Scenes is the curtain-up view and the only place the show is edited: the mic plot down
+   the side, the scenes across the top, one filled cell per mic that is open, and the desk
+   groups those mics feed in a drawer underneath. It is read from a metre away mid-show,
+   so state is a block of colour rather than a word, and the only amber on it is work to do. */
+.scenes-view {
+  /* The view is a grid item in a minmax(0, 1fr) track; without this its content's
+     min-content width would push the window wider instead of scrolling inside. */
+  min-width: 0;
+  --matrix-mic-width: 170px;
+  --matrix-cell-width: 88px;
+  --matrix-cell-height: 34px;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-base);
+}
+
+/* The header is outside the scroller, so the lock and Apply stay on screen whichever way
+   the grid is scrolled — that is the whole reason they are up here. */
+.scenes-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.scenes-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+/* Where the show is, in words, in the one part of the view that cannot scroll: the scene
+   the desk is on and the one after it. A long show is wider than the window, so a column
+   off the side has to be a nuisance rather than a lost place. */
+.scenes-where {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  /* A rule, so the title does not read as another label in the row of them. */
+  margin-left: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-soft);
+}
+
+.scenes-now,
+.scenes-next {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.scenes-where-label {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.scenes-where-number {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-bold);
+  color: var(--fg-primary);
+}
+
+.scenes-where-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  color: var(--fg-secondary);
+}
+
+/* The one coming reads a step quieter than the one running: both are read at a glance, and
+   the difference between them is the whole point of putting them side by side. */
+.scenes-next .scenes-where-number { color: var(--fg-secondary); }
+.scenes-next .scenes-where-name { color: var(--fg-muted); }
+
+.scenes-where-none {
+  flex: none;
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+.scenes-subtitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+
+.scenes-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+}
+
+/* The edits the grid cannot hold: a scene, the all-off press, the drawer, the plot and
+   where its readings come from. They read as buttons rather than as state, because that
+   is what they are. */
+.scenes-add,
+.scenes-plot,
+.scenes-sources,
+.scenes-mics-off,
+.scenes-groups-toggle,
+.scenes-edit {
+  height: 22px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.scenes-add:hover,
+.scenes-plot:hover,
+.scenes-sources:hover,
+.scenes-mics-off:hover,
+.scenes-groups-toggle:hover,
+.scenes-edit:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.scenes-groups-toggle[data-open='true'] {
+  background: var(--bg-hover);
+  border-color: var(--border-focus);
+  color: var(--fg-primary);
+}
+
+
+/* A scene that would move the desk is a thing to do, not a readout: it gets the warning
+   colour and the exact number of messages that would go out. */
+.matrix-apply {
+  height: 22px;
+  padding: 0 var(--space-2);
+  background: var(--accent-amber-bg);
+  border: 1px solid var(--accent-amber);
+  border-radius: var(--radius-sm);
+  color: var(--accent-amber);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-apply:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* Editing is the mode that can change the show, so it is the one that is marked: the
+   press says Done in blue, and a line under the header says what the clicks now do. */
+.scenes-edit[data-editing='true'] {
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}
+
+.scenes-editing-hint {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  background: var(--accent-blue-glow);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--accent-blue);
+  font-size: var(--text-sm);
+}
+
+/* The one horizontal scroller in the view: everything to the right or below the header
+   moves inside this box, and nothing else does. */
+.matrix-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* The grid is as wide as the show needs: the header row stays at the top and the plot
+   stays on the left, whichever way the operator scrolls. */
+.matrix-grid {
+  display: grid;
+  align-content: start;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* The row carries whether the pack is open; its cells place themselves in the columns. */
+.matrix-row { display: contents; }
+
+.matrix-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+/* One column per scene. Recalling is never locked out, so the header is always a press. */
+.matrix-scene {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border-soft);
+}
+
+/* The recalled scene is where the show is, so its column carries the running colour all
+   the way down rather than a label the operator has to read. */
+.matrix-scene[data-current='true'] {
+  background: var(--bg-playing-row);
+  border-bottom-color: var(--state-running-fg);
+}
+
+/* The scene name is edited in place: the column is the row, and a separate editor for a
+   name that is already right there would be a second place to look. */
+.scene-name-field {
+  min-width: 0;
+  width: 100%;
+  height: 22px;
+  padding: 0 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-secondary);
+  font-size: var(--text-base);
+  font-family: inherit;
+  outline: none;
+}
+
+.scene-name-field:focus { border-color: var(--border-focus); }
+
+.matrix-scene[data-current='true'] .scene-name-field {
+  color: var(--fg-primary);
+  font-weight: var(--fw-medium);
+}
+
+.matrix-scene[data-pending='true'] .scene-name-field { color: var(--accent-amber); }
+
+.scene-name-field:disabled {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  cursor: default;
+  opacity: 1;
+}
+
+/* The name, and while editing the mark that removes the scene: kept to the name's row so
+   it is never beside recall, the press the show is run with. */
+.matrix-scene-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Recall is a symbol because the column has no room to say what its only verb is. */
+.matrix-recall {
+  margin-top: 2px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-base);
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-recall:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* Removing a scene is the one destructive edit in the view, so it is small and never
+   armed by accident: it reads as a mark beside the name, not as a press to make. */
+.matrix-scene-remove {
+  flex: none;
+  width: 20px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--fg-ghost);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-scene-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+
+.matrix-mic {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: var(--matrix-cell-height);
+  padding: 0 var(--space-2);
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border);
+}
+
+/* The row is a name: who is wearing this mic is what the operator reads down the side of
+   the plot, and it is the only thing about a mic that changes at the interval. A pack
+   nobody is wearing falls back to its label rather than reading as a blank row. */
+.matrix-performer {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  color: var(--fg-body);
+}
+
+.matrix-performer[data-unassigned='true'] {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+/* A pack that is open in the current scene brightens its whole row: this is the glance
+   the view exists for — the column and the people it opens, read together. */
+.matrix-row[data-on='true'] .matrix-mic { background: var(--bg-card); }
+
+.matrix-row[data-on='true'] .matrix-performer { color: var(--fg-primary); }
+
+.matrix-cell {
+  height: var(--matrix-cell-height);
+  margin: 2px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-cell:hover { border-color: var(--fg-ghost); }
+
+/* A mic that is open is a block of running colour, not a word. */
+.matrix-cell[data-live='true'] {
+  background: var(--state-running-fg);
+  border-color: var(--state-running-fg);
+}
+
+/* ...except down the current column, which is tinted so the scene the desk is in is
+   findable without reading a name. */
+.matrix-cell[data-current='true'][data-live='false'] {
+  background: var(--bg-playing-row);
+  border-color: var(--border);
+}
+
+/* Pending is amber: the desk has not been told what this group is doing now. The fill
+   stays live's or the column's, so the cell still says whether the mic is open. */
+.matrix-cell[data-pending='true'] { border-color: var(--accent-amber); }
+
+.matrix-cell[data-pending='true'][data-live='false'] { background: var(--accent-amber-bg); }
+
+/* Locked cells stop being a target but keep saying who is open: the state is what the
+   view is read for, and dimming it below legibility would defeat the lock. */
+.matrix-cell:disabled { cursor: default; }
+
+.matrix-cell:disabled[data-live='false'] { opacity: 0.5; }
+
+.matrix-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+.matrix-empty > span { padding-top: 3px; }
+
+.matrix-empty-action {
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-base);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.matrix-empty-action:hover { background: var(--bg-hover); }
+
+.scenes-groups-empty {
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+/* ── The desk groups drawer ────────────────────────────────────────────────────
+   Fixed under the grid rather than inside the scroller: the grid keeps its own scroll,
+   and the groups keep theirs. Nothing here is allowed to widen the view. */
+.scenes-groups {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-height: 45vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+.scenes-groups-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  margin-bottom: var(--space-2);
+}
+
+/* One row per desk group: the name the desk knows it by, how it is told to open, what
+   will be sent, and which mics are feeding it. */
+.group-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.group-fields {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.group-fields input,
+.group-fields select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.group-fields input:focus,
+.group-fields select:focus {
+  border-color: var(--border-focus);
+}
+
+.group-fields input:disabled,
+.group-fields select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.group-label { flex: 0 0 150px; }
+.group-delivery { flex: 0 0 104px; }
+.group-port { flex: 1 1 140px; }
+.group-channel { flex: 0 0 56px; padding: 4px 2px; }
+.group-note { flex: 0 0 64px; padding: 4px 2px; }
+.group-host { flex: 1 1 120px; }
+.group-osc-port { flex: 0 0 80px; }
+.group-address { flex: 1 1 120px; }
+
+/* What the group sends, in the order a recall sends it: the operator reads the message
+   rather than the settings it was built from. A group left alone reads "nothing" on
+   both sides, which is the whole point of `none`. */
+.group-summary {
+  display: flex;
+  gap: var(--space-2);
+  padding-left: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.group-summary-open {
+  color: var(--fg-tertiary);
+}
+
+.group-summary-sep {
+  color: var(--fg-ghost);
+}
+
+/* Which mics put this group where it is, and where that leaves it in the current scene.
+   A group with no message configured is not driven at all, so it reads as a dash. */
+.group-carrying {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-left: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.group-packs {
+  color: var(--fg-ghost);
+}
+
+.group-state {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  color: var(--fg-ghost);
+}
+
+.group-state[data-state='live'] { color: var(--state-running-fg); }
+
+.group-remove {
+  flex: none;
+  width: 26px;
+  height: var(--h-input);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.group-remove:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.group-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

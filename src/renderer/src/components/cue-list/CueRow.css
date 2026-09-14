@@ -45,13 +45,19 @@
 }
 
 .col-num {
-  width: 52px;
+  width: 72px;
   flex-shrink: 0;
   color: var(--fg-muted);
   font-size: var(--text-sm);
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.cue-chevron {
+  width: 16px;
+  flex-shrink: 0;
+  display: flex;
 }
 
 .group-toggle {
@@ -136,7 +142,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.col-adv {
+.cue-row .col-adv {
   color: var(--adv-fg);
   font-size: var(--text-xs);
 }
@@ -154,4 +160,11 @@
   height: 100%;
   background: var(--accent-blue);
   transition: width 0.05s linear;
+}
+
+/* A playing cue's length becomes what is left of it. */
+.col-dur-remaining {
+  font-family: var(--font-mono);
+  color: var(--fg-primary);
+  font-variant-numeric: tabular-nums;
 }

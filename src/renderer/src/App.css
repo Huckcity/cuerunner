@@ -109,6 +109,9 @@
   --h-waveform:        110px;
   --h-waveform-header:  24px;
   --h-log:             180px;
+  --h-monitor:         220px;
+  --h-rf:              220px;
+  --h-script:          260px;
   --h-timeline:        200px;
   --h-button-sm:        26px;
   --h-button-md:        28px;
@@ -161,14 +164,25 @@ html, body, #root {
 .app-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr var(--inspector-width);
+  /* minmax(0, 1fr) rather than 1fr: a plain 1fr track takes its minimum from its content,
+     so a wide grid inside it pushes the window wider instead of scrolling in place. */
+  grid-template-columns: minmax(0, 1fr) var(--inspector-width);
+  /* The same rule vertically. An implicit row is content-sized, so on a window shorter
+     than the cue list wants — a laptop, or a dock the operator has dragged up — the list
+     grew past this box, was clipped by `overflow: hidden`, and still scrolled: selecting a
+     cue near the end scrolled the clip and moved the list and the panel beside it. Rows
+     past the clip could not be reached at all. The row is the height the window gives it,
+     and the cue list scrolls inside itself. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
 
-/* Timeline fullscreen mode */
+/* The scenes view is one surface, not a cue list with an inspector beside it. */
+.app-main[data-view='scenes'] { grid-template-columns: minmax(0, 1fr); }
+
+/* Timeline fullscreen mode: the dock takes the window (Dock.css) and the rows go. */
 .app-shell.timeline-fullscreen .app-main { display: none; }
-.app-shell.timeline-fullscreen .timeline-panel { flex: 1; height: auto; }
 
 /* ─── Failure surfaces ───────────────────────────────────────────────────── */
 
@@ -254,3 +268,22 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--radius-md); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* One shape for every press that adds a row — a header, a message, a pack, a group, a
+   source: small, bordered, left-aligned, with its plus. */
+.add-row {
+  align-self: flex-start;
+  width: auto;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.add-row:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-primary); }

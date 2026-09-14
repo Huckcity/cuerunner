@@ -78,7 +78,7 @@ test('a timeline group row shows the duration computed from its children', async
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
   await page.locator('.inspector input[type="number"]').fill('3000')
   await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
-  await page.locator('.field-row', { hasText: 'Timeline offset' }).locator('input').fill('5000')
+  await page.locator('.field-row', { hasText: 'Timeline offset' }).locator('input').fill('5')
 
   await groupRow(page).click()
   await expect(groupRow(page).locator('.col-dur')).toHaveText('8.0s')

@@ -1,0 +1,217 @@
+name: Soak
+
+# The reliability claim, checked rather than asserted: eight hours of show time on the
+# silent pacer, in eight independent one-hour shards (a GitHub job may not run longer
+# than six hours, and eight jobs that fail separately are more useful than one that
+# times out). The `faults` job is the other half — the kill tests that assert what the
+# app does when something dies underneath it.
+#
+# Scheduled runs are on the default branch only. Each shard is about an hour on the
+# self-hosted runner in the homelab (`ubox`, the labels the Linux jobs below carry),
+# which is what makes a nightly this long affordable at all: as GitHub-hosted minutes it
+# would be nine hours of a three-thousand-minute month, every night. `minutes` scales the
+# show the night paces; the shards are independent, so the runner's capacity is what
+# decides how long the night is rather than the size of the show.
+on:
+  schedule:
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'Show minutes per shard'
+        default: '60'
+      channels:
+        description: 'Output channels per shard (2 = a stereo desk)'
+        default: '2'
+
+
+concurrency:
+  group: soak
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    runs-on: [self-hosted, linux, x64, ubox]
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install ALSA dev headers
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Build the engine
+        run: node scripts/ensure-native.mjs
+
+      # Shard 1 of 8 runs on eight channels instead of two: the same show through the
+      # matrix path, so the routing code sees the nightly too.
+      - name: Soak (shard ${{ matrix.shard }} of 8)
+        run: |
+          node native/audio/tests/soak.mjs \
+            --shard ${{ matrix.shard }} --shards 8 \
+            --minutes ${{ github.event.inputs.minutes || '60' }} \
+            --channels ${{ matrix.shard == 1 && '8' || github.event.inputs.channels || '2' }} \
+            --report soak-shard-${{ matrix.shard }}.json
+
+      - name: Upload the shard report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: soak-shard-${{ matrix.shard }}
+          path: soak-shard-${{ matrix.shard }}.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Kill tests: the app must behave when the world does not. Renderer killed mid-show,
+  # engine killed mid-show, device taken away mid-show, a reader that cannot keep up —
+  # each asserts a defined behaviour rather than an absence of crashing, and the native
+  # half of it (stalled streams, a lost device, malformed media) runs on every pull
+  # request too. This job is what keeps them honest over time.
+  faults:
+    runs-on: [self-hosted, linux, x64, ubox]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install ALSA dev headers
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
+        uses: actions/cache@v6
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Install runtime dependencies
+        if: runner.environment == 'github-hosted'
+        run: npx playwright install-deps
+
+      # Same reason as the E2E lane in ci.yml: the kernel and the media libraries are a
+      # Chromium process's minimum, the host is provisioned with them once, and this says
+      # it still is. `npx playwright install-deps` is how GitHub's runners get them.
+      - name: Runtime dependencies are provisioned on the runner
+        if: runner.environment == 'self-hosted'
+        run: |
+          missing=()
+          for pkg in libnss3 libgbm1 libasound2t64 libatk-bridge2.0-0t64 libcups2t64 \
+                     libxkbcommon0 libgtk-3-0t64 xvfb; do
+            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::missing on this runner: ${missing[*]} — provision the host (CLAUDE.md → CI runners)"
+            exit 1
+          fi
+          echo 'runtime libraries present'
+
+      - name: Native acceptance, including the fault injection
+        run: npm run test:native
+
+      - name: Kill tests (renderer, engine, device, media)
+        run: npm run test:e2e -- e2e/engine-restart.spec.ts e2e/reliability.spec.ts e2e/durability.spec.ts e2e/device-loss.spec.ts
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: soak-faults-results
+          path: test-results/
+          retention-days: 30
+
+  report:
+    needs: [soak, faults]
+    if: always()
+    runs-on: [self-hosted, linux, x64, ubox]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: soak-shard-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Fan in the shards
+        run: |
+          node scripts/soak-report.mjs \
+            --reports artifacts \
+            --out soak-latest.json \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --allow-missing
+
+      # The night failed if any shard failed or the kill tests did. The report is
+      # published either way — a red result is a result, and it is the one worth seeing.
+      - name: Fail the run if the night was not clean
+        if: needs.soak.result != 'success' || needs.faults.result != 'success'
+        run: |
+          echo "::error::soak night not clean — soak: ${{ needs.soak.result }}, faults: ${{ needs.faults.result }}"
+          exit 1
+
+      - name: Upload the night's result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: soak-latest
+          path: soak-latest.json
+          retention-days: 90
+
+  # The numbers on the website are the numbers from the last run that finished, so the
+  # page cannot be older than the last night. The site itself is whatever is on main.
+  publish:
+    needs: [report]
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, ubox]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: soak-latest
+          path: result
+
+      - name: Put the result with the site
+        run: cp result/soak-latest.json website/soak-latest.json
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

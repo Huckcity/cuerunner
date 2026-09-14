@@ -3,7 +3,9 @@ import type { Cue, CueColor } from '../../types/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
-import { audioPlayer } from '../../engine/AudioPlayer'
+import { formatRunTime, runTiming } from '../../utils/runTiming'
+import { audioEngine } from '../../engine/audioEngineClient'
+import { CUE_ICON } from '../../utils/cueIcons'
 import './CueRow.css'
 
 const COLOR_MAP: Record<CueColor, string> = {
@@ -15,18 +17,6 @@ const COLOR_MAP: Record<CueColor, string> = {
   blue:   'var(--cue-color-blue)',
   purple: 'var(--cue-color-purple)',
   pink:   'var(--cue-color-pink)',
-}
-
-const TYPE_ICON: Record<string, string> = {
-  audio: '♪',
-  midi: 'M',
-  osc: 'O',
-  wait: '⏱',
-  fade: '↘',
-  stop: '■',
-  group: '▤',
-  network: '⊕',
-  script: '{ }'
 }
 
 interface Props {
@@ -49,26 +39,36 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
   const inputRef = useRef<HTMLInputElement>(null)
   const rafRef = useRef<number>(0)
   const progressFillRef = useRef<HTMLDivElement>(null)
+  const remainingRef = useRef<HTMLSpanElement>(null)
 
   const isAudioPlaying = cue.type === 'audio' && runState?.state === 'playing'
+  const totalMs = durationMs ?? cue.duration
+  // While a cue with a known length plays, its Duration cell counts down what is left:
+  // the question in the booth is how long until it ends, not how long it was.
+  const countingDown = runState?.state === 'playing' && (totalMs > 0 || isAudioPlaying)
 
   useEffect(() => {
-    if (!isAudioPlaying) {
+    if (!countingDown || !runState) {
       if (progressFillRef.current) progressFillRef.current.style.width = '0%'
       return
     }
     const tick = () => {
-      const prog = audioPlayer.getProgress(cue.id)
+      // The engine's own position, cached by the playback client at tick rate.
+      const prog = cue.type === 'audio' ? audioEngine.getProgress(cue.id) : null
       if (progressFillRef.current) {
         // runFraction spans the whole run (loop repeats included); the waveform
         // panel keeps using fraction, which is position inside the file.
         progressFillRef.current.style.width = `${(prog?.runFraction ?? 0) * 100}%`
       }
+      if (remainingRef.current) {
+        const { remainingMs } = runTiming(cue, runState, totalMs, Date.now(), prog)
+        remainingRef.current.textContent = remainingMs === null ? '' : `−${formatRunTime(remainingMs)}`
+      }
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [isAudioPlaying, cue.id])
+  }, [countingDown, runState, totalMs, cue])
 
   const startEdit = (e: React.MouseEvent) => {
     if (!isSelected) return
@@ -113,18 +113,21 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
       onDoubleClick={startEdit}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, cue.id) }}
     >
+      {/* Chevron, icon, number: the same three slots on every row, so the icons line up
+          as a column whatever the type. */}
       <span className="col-num">
-        {isGroup ? (
-          <button
-            className="group-toggle"
-            onClick={e => { e.stopPropagation(); onToggleCollapse?.() }}
-            title={collapsed ? 'Expand group' : 'Collapse group'}
-          >
-            {collapsed ? '▶' : '▼'}
-          </button>
-        ) : (
-          <span className="cue-type-icon" title={cue.type}>{TYPE_ICON[cue.type]}</span>
-        )}
+        <span className="cue-chevron">
+          {isGroup && (
+            <button
+              className="group-toggle"
+              onClick={e => { e.stopPropagation(); onToggleCollapse?.() }}
+              title={collapsed ? 'Expand group' : 'Collapse group'}
+            >
+              {collapsed ? '▶' : '▼'}
+            </button>
+          )}
+        </span>
+        <span className="cue-type-icon" title={cue.type}>{CUE_ICON[cue.type]}</span>
         {cue.number}
       </span>
       <span
@@ -132,9 +135,6 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
         style={{ background: COLOR_MAP[cue.colorLabel] }}
       />
       <span className="col-name">
-        {isGroup && (
-          <span className="cue-type-icon" title="group">{TYPE_ICON.group}</span>
-        )}
         {editing ? (
           <input
             ref={inputRef}
@@ -157,7 +157,11 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
           <span className="state-pill">post-wait</span>
         )}
       </span>
-      <span className="col-dur">{formatDuration(durationMs ?? cue.duration)}</span>
+      <span className="col-dur">
+        {countingDown
+          ? <span ref={remainingRef} className="col-dur-remaining" />
+          : formatDuration(totalMs)}
+      </span>
       <span className="col-pre">{cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}</span>
       <span className="col-post">{cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}</span>
       <span className="col-adv">{cue.advance !== 'none' ? cue.advance : ''}</span>

@@ -12,6 +12,21 @@
 .transport-left,
 .transport-right {
   flex: 1;
+  min-width: 0;
+}
+
+.transport-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-3);
+}
+
+.transport-alerts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .transport-right {
@@ -71,6 +86,7 @@
 .btn-panic:active { background: var(--state-panic-active); }
 
 .running-badge {
+  flex-shrink: 0;
   font-size: var(--text-sm);
   padding: 3px var(--space-2);
   border-radius: var(--radius-pill);
@@ -83,26 +99,14 @@
   color: var(--state-running-fg);
 }
 
-.btn-log {
-  margin-left: var(--space-2);
-  height: var(--h-button-sm);
-  padding: 0 var(--space-2);
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-muted);
+.transport-keys {
   font-size: var(--text-sm);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--ls-brand);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-std);
+  color: var(--fg-ghost);
+  white-space: nowrap;
 }
 
-.btn-log:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-.btn-log[data-active='true'] {
-  background: var(--accent-blue-glow);
-  border-color: var(--accent-blue-dim);
-  color: var(--accent-blue);
+.transport-keys kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
 }

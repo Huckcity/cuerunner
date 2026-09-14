@@ -95,3 +95,14 @@
   font-size: var(--text-sm);
   color: var(--fg-ghost);
 }
+
+/* Engine warnings in the header: one line, with the rest in the tooltip and in
+   Settings, where the whole list has room. */
+.waveform-warning {
+  font-size: var(--text-sm);
+  color: var(--accent-amber);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

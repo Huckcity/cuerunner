@@ -1,65 +1,15 @@
-// Drawing a waveform by scanning the decoded samples costs one pass over the whole
-// buffer per frame — 330 ms a frame for an hour-long file, which is what made a long
-// cue look like a hung app. The peaks are computed once per file instead, and each
-// frame only reads one bucket per pixel.
+// Drawing a waveform from a precomputed envelope: the engine hands the renderer
+// interleaved min/max buckets for a file, and each frame reads one bucket per pixel.
+// No decoded audio passes through the renderer at all.
 
 /** Interleaved min/max per bucket: [min0, max0, min1, max1, …]. */
 export interface WaveformPeaks {
-  values: Float32Array
+  values: ArrayLike<number>
   buckets: number
 }
 
 // Enough detail for any panel width the window can reach; 32 KB per file.
 export const PEAK_BUCKETS = 4096
-
-// Peaks are tiny next to the decoded audio, but the cache is still bounded.
-const PEAK_CACHE_LIMIT = 16
-
-const peaksByFile = new Map<string, WaveformPeaks>()
-
-export function buildPeaks(buffer: AudioBuffer, buckets = PEAK_BUCKETS): WaveformPeaks {
-  const values = new Float32Array(buckets * 2)
-  const channels = Math.min(buffer.numberOfChannels, 2)
-  const samplesPerBucket = buffer.length / buckets
-
-  for (let channel = 0; channel < channels; channel++) {
-    const samples = buffer.getChannelData(channel)
-    for (let bucket = 0; bucket < buckets; bucket++) {
-      const from = Math.floor(bucket * samplesPerBucket)
-      const to = Math.min(Math.floor((bucket + 1) * samplesPerBucket), buffer.length)
-      let min = 0
-      let max = 0
-      for (let i = from; i < to; i++) {
-        const value = samples[i]
-        if (value < min) min = value
-        if (value > max) max = value
-      }
-      // Channels share a bucket: the widest excursion of either is the one drawn.
-      if (min < values[bucket * 2]) values[bucket * 2] = min
-      if (max > values[bucket * 2 + 1]) values[bucket * 2 + 1] = max
-    }
-  }
-
-  return { values, buckets }
-}
-
-/** Peaks for a file, built once and kept until the cache turns over. */
-export function getPeaks(filePath: string, buffer: AudioBuffer): WaveformPeaks {
-  const cached = peaksByFile.get(filePath)
-  if (cached) return cached
-
-  const peaks = buildPeaks(buffer)
-  peaksByFile.set(filePath, peaks)
-  if (peaksByFile.size > PEAK_CACHE_LIMIT) {
-    const oldest = peaksByFile.keys().next().value
-    if (oldest !== undefined) peaksByFile.delete(oldest)
-  }
-  return peaks
-}
-
-export function clearPeaksCache(): void {
-  peaksByFile.clear()
-}
 
 export function drawWaveform(
   canvas: HTMLCanvasElement,

@@ -12,9 +12,12 @@
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  width: 420px;
+  width: 520px;
   display: flex;
   flex-direction: column;
+  /* The Show tab is taller than a laptop screen once the services are on it, so the
+     body scrolls and the header, tabs and footer stay where they are. */
+  max-height: 88vh;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
@@ -73,7 +76,9 @@
 
 .settings-body {
   padding: 16px;
-  min-height: 120px;
+  /* min-height 0 is what lets a flex child shrink enough to scroll at all. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .settings-info {
@@ -82,9 +87,121 @@
   flex: 1;
 }
 
-.settings-footer {
+/* The MIDI input list is a row per port: the names are long, and the checkbox belongs
+   beside the name it applies to rather than in a column of its own. */
+.settings-port-list {
   display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 10px 90px;
+  max-height: 132px;
+  overflow-y: auto;
 }
+
+.settings-port-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--fg-tertiary);
+  cursor: pointer;
+}
+
+.settings-port-row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  accent-color: var(--accent-blue);
+}
+
+/* What the service is doing right now, so the answer to "did that take effect?"
+   is on the screen the change was made on. */
+.settings-service {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+  margin-bottom: var(--space-3);
+}
+
+.settings-service[data-state='running']  { color: var(--state-running-fg); }
+.settings-service[data-state='degraded'] { color: var(--accent-amber); }
+.settings-service[data-state='failed']   { color: var(--state-panic-hover); }
+
+/* One row per telemetry source: the name it is known by, where its document comes
+   from, and nothing else — the poll interval and the timeouts are show defaults. */
+.settings-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.settings-source-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-source-row input,
+.settings-source-row select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.settings-source-row input:focus,
+.settings-source-row select:focus { border-color: var(--border-focus); }
+
+.settings-source-row input:disabled { color: var(--fg-ghost); }
+
+.settings-source-label { flex: 0 0 110px; }
+.settings-source-target { flex: 1; }
+
+.settings-source-remove {
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  height: var(--h-input);
+  padding: 0 var(--space-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.settings-source-remove:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+/* A warning the engine is holding until the condition goes away: memory pressure,
+   a stalled stream. It stays on screen while the engine still reports it. */
+.settings-warning {
+  font-size: var(--text-sm);
+  color: var(--accent-amber);
+  background: #2a2418;
+  border: 1px solid #4a3d1a;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* The engine's refusal of a device request, in its own words. It stands under the row
+   that asked for it until a request is honoured, because a setting that did not take
+   effect is not something the operator should have to infer. */
+.settings-device-error {
+  font-size: var(--text-sm);
+  color: var(--state-panic-hover);
+  background: rgba(122, 45, 45, 0.15);
+  border: 1px solid var(--state-panic);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* Why a Pro tab's services are not running: first on the tab, with room under it before
+   the fields start. */
+.settings-body .license-hint { margin: 0 0 var(--space-3); }

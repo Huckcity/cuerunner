@@ -1,11 +1,14 @@
 name: Release
 
+# Deliberate, never automatic: pushing to main no longer publishes anything. Run this
+# workflow from main (Actions → Release → Run workflow) when the release is wanted —
+# semantic-release then cuts the version from the commits since the last tag, and
+# build.yml picks it up from the published release. A run dispatched from any other ref
+# fails semantic-release's own branch check rather than publishing. It runs on the homelab
+# runner like the rest of the pipeline (CLAUDE.md → CI runners).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: write
@@ -14,20 +17,23 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, ubox]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
 
       - name: Install ALSA dev headers
-        run: sudo apt-get install -y libasound2-dev
+        # Here the headers are the hosted image's; the check and the timeout are the same
+        # ones the homelab runner needs, where six jobs share one dpkg lock.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
