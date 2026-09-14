@@ -3,11 +3,11 @@
 // moved the way an operator moves one, the app saying exactly what it cannot find, one
 // pick in the file dialog putting all of it back, and a save that survives the next
 // reopen.
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp } from './helpers'
+import { closeApp, launchApp, openFromRecent } from './helpers'
 
 // A real audio file, so everything downstream of the relink — reading metadata, drawing
 // a waveform — deals with a file that is actually playable.
@@ -75,12 +75,6 @@ test.afterAll(() => {
   for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true })
   tempDirs = []
 })
-
-async function openFromRecent(page: Page, userDataDir: string, wlab: string): Promise<void> {
-  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([wlab]))
-  await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: path.basename(wlab) }).click()
-}
 
 test('a moved show folder reports its missing media and one pick relinks it', async () => {
   const show = movedShow()
