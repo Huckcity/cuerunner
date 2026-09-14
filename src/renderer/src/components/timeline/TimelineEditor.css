@@ -217,6 +217,18 @@
 }
 .tl-block:active { cursor: grabbing; }
 
+/* A block whose file has not answered: no length is drawn, because none is known, and
+   the block says which of the two it is. */
+.tl-block[data-media='measuring'] {
+  border: 1px dashed var(--border-input);
+  opacity: 1;
+}
+
+.tl-block[data-media='missing'] {
+  border: 1px solid var(--accent-amber);
+  opacity: 1;
+}
+
 .tl-block-label {
   font-size: var(--text-xs);
   color: rgba(255, 255, 255, 0.9);

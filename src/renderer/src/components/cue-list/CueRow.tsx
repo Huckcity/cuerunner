@@ -3,6 +3,7 @@ import type { Cue, CueColor } from '../../types/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'
+import type { MediaLengthState } from '../../utils/mediaLength'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { CUE_ICON } from '../../utils/cueIcons'
@@ -26,6 +27,11 @@ interface Props {
   runState: RunningCue | null
   /** Derived length for group rows — a group's own `duration` is never stored. */
   durationMs?: number
+  /**
+   * Where the length has not been measured yet, or cannot be: a row that would
+   * otherwise show `–` for a file nobody has read, or a zero for one that is gone.
+   */
+  mediaState?: MediaLengthState | null
   collapsed?: boolean
   onToggleCollapse?: () => void
   onClick: () => void
@@ -33,7 +39,7 @@ interface Props {
   renamingId: string | null
 }
 
-export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed, onToggleCollapse, onClick, onContextMenu, renamingId }: Props) {
+export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaState, collapsed, onToggleCollapse, onClick, onContextMenu, renamingId }: Props) {
   const updateCue = useStore(s => s.updateCue)
   const [editing, setEditing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -158,9 +164,19 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, collapsed
         )}
       </span>
       <span className="col-dur">
-        {countingDown
-          ? <span ref={remainingRef} className="col-dur-remaining" />
-          : formatDuration(totalMs)}
+        {countingDown ? (
+          <span ref={remainingRef} className="col-dur-remaining" />
+        ) : mediaState === 'measuring' ? (
+          <span className="col-dur-media" data-media="measuring" title="the file's length is being read">
+            measuring
+          </span>
+        ) : mediaState === 'missing' ? (
+          <span className="col-dur-media" data-media="missing" title="this cue's file could not be read">
+            missing
+          </span>
+        ) : (
+          formatDuration(totalMs)
+        )}
       </span>
       <span className="col-pre">{cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}</span>
       <span className="col-post">{cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}</span>
