@@ -383,6 +383,24 @@ test('a scene that applies an ensemble opens every member of it', async () => {
     await applied.click()
     await expect(applied).toHaveAttribute('data-applied', 'on')
 
+    // It is one grid: an ensemble's cell for a scene sits over the performers' cells for
+    // the same scene, under the same header. A row that is one cell short draws every
+    // column a place to the left — and takes every row after it with it, which is a
+    // thing the clicks still do correctly and the eye does not.
+    const boxOf = async (selector: string): Promise<{ x: number; width: number }> => {
+      const box = await page.locator(selector).first().boundingBox()
+      if (box === null) throw new Error(`${selector} is not on screen`)
+      return box
+    }
+    const ensembleCell = await boxOf('.matrix-ensemble-row .matrix-cell')
+    const performerCell = await boxOf('.matrix-row .matrix-cell')
+    const sceneHeader = await boxOf('.matrix-scene:not([data-all-closed])')
+    expect(ensembleCell.x).toBe(performerCell.x)
+    expect(ensembleCell.width).toBe(performerCell.width)
+    // The cell is inset by its own margin, so it starts a couple of pixels inside its
+    // column — a column is ninety wide, so anything that is not that is a whole column out.
+    expect(Math.abs(ensembleCell.x - sceneHeader.x)).toBeLessThan(4)
+
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(2)
     expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })

@@ -331,6 +331,10 @@ export function ScenesView() {
                     </button>
                   )}
                 </div>
+                {/* The all-closed column takes nobody, and an ensemble row needs its place
+                    in the grid as much as a performer row does: without this gap the row is
+                    one cell short, and every row after it is placed a column to the left. */}
+                <div className="matrix-cell-blank" />
                 {scenes.list.map(scene => {
                   const applied = scene.ensembles.includes(ensemble.id)
                   return (
