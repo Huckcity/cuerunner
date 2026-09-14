@@ -565,9 +565,11 @@ the end of it).
 
 **Development and E2E** mint their own keys: `WINSLAB_LICENSE_PUBLIC_KEY` overrides the
 trusted key, and it is honoured only when the app is running from a source tree
-(`!app.isPackaged`). A packaged build ignores it. E2E specs that need the Pro surfaces
-launch with `launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the
-gate itself.
+(`!app.isPackaged`). A packaged build ignores it. `npm run dev:pro` does all of that for a
+working session — a throwaway pair, a key signed with it, and a user-data directory of its
+own under `~/.winslab-dev`, so the license your normal `npm run dev` is using is never
+read, written or shown. E2E specs that need the Pro surfaces launch with
+`launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the gate itself.
 
 ## Support
 
