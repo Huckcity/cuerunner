@@ -471,8 +471,17 @@ void Mixer::apply(const Command& cmd) {
         if (voice->streamSlot >= 0) {
           StreamSlot* slot = streams_.at(voice->streamSlot);
           if (slot != nullptr) {
-            slot->eof.store(false, std::memory_order_relaxed);
-            requestStreamSeek(*voice, static_cast<int64_t>(target));
+            // The ring is addressed in absolute source frames, so a target the window
+            // already covers is decoded and waiting: the jump plays out of the pre-roll
+            // and nothing has to be repositioned. Asking for it anyway throws away
+            // frames that were already read, reads them back off the disk, and leaves
+            // the window empty under a voice that is playing — silence to the operator,
+            // and an underrun to the counters, for a seek that needed no work at all.
+            const int64_t frame = static_cast<int64_t>(target);
+            if (frame < slot->ring.readFrame() || frame >= slot->ring.writeFrame()) {
+              slot->eof.store(false, std::memory_order_relaxed);
+              requestStreamSeek(*voice, frame);
+            }
           }
         }
         ackState = static_cast<int>(voice->state);

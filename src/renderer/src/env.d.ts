@@ -87,11 +87,7 @@ interface WinslabBridge {
     save: (workspace: Workspace, existingPath: string | null) => Promise<string | null>
     saveAs: (workspace: Workspace) => Promise<string | null>
     recent: () => Promise<string[]>
-    autosave: (
-      workspace: Workspace,
-      sourcePath: string | null,
-      selectedCueId: string | null
-    ) => Promise<void>
+    autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null) => Promise<void>
     recovery: () => Promise<{
       workspace: Workspace
       savedAt: number

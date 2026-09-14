@@ -320,7 +320,7 @@ describe('saving and reopening a show folder', () => {
 
   it('reports missing media in a recovered snapshot', async () => {
     const gone = join(dir, 'old-machine', 'walk-in.wav')
-    await writeRecovery(workspaceWith([audioCue('a1', gone)]), join(dir, 'Tour Show.wlab'), null)
+    await writeRecovery(workspaceWith([audioCue('a1', gone)]), join(dir, 'Tour Show.wlab'))
 
     const recovered = await openRecovery()
 

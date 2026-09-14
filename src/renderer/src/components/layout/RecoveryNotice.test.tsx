@@ -18,12 +18,14 @@ const cue: Cue = {
   advance: 'none', isArmed: true, notes: ''
 }
 
+const secondCue: Cue = { ...cue, id: 'c2', number: '2', name: 'Sting' }
+
 function snapshot(): {
   workspace: Workspace
   savedAt: number
   sourcePath: string | null
-  missingMedia: MissingMedia[]
   selectedCueId?: string | null
+  missingMedia: MissingMedia[]
 } {
   const showSettings = defaultShowSettings()
   showSettings.scenes = {
@@ -44,11 +46,13 @@ function snapshot(): {
       audioSettings: { outputDeviceId: 'default' },
       midiSettings: { outputPortName: 'Yamaha' },
       showSettings,
-      cues: [cue]
+      cues: [cue, secondCue]
     },
     savedAt: Date.parse('2026-01-01T20:00:00Z'),
     sourcePath: '/shows/demo.wlab',
-    selectedCueId: 'c1',
+    // The session was standing on the second cue when it ended, which is the cue GO
+    // would have fired next.
+    selectedCueId: 'c2',
     // The file moved while the session was down; recovery says so rather than starting
     // the show with a cue that cannot play.
     missingMedia: [
@@ -91,7 +95,7 @@ describe('RecoveryNotice', () => {
     await recover()
 
     const state = useStore.getState()
-    expect(state.cues.map(c => c.name)).toEqual(['Walk-in Music'])
+    expect(state.cues.map(c => c.name)).toEqual(['Walk-in Music', 'Sting'])
     expect(state.workspacePath).toBe('/shows/demo.wlab')
     // The desk, the plot and the script are part of that show, not decoration.
     expect(state.showSettings.scenes.list.map(scene => scene.name)).toEqual(['Wedding'])
@@ -102,6 +106,30 @@ describe('RecoveryNotice', () => {
     expect(state.missingMedia).toEqual([
       { cueId: 'c1', path: 'media/walk-in.wav', originalPath: '/shows/media/walk-in.wav' }
     ])
+  })
+
+  it('hands back the place the session was standing on', async () => {
+    await offer(snapshot())
+
+    expect(container.textContent).toContain('It was standing on')
+    expect(container.textContent).toContain('2 · Sting')
+
+    await recover()
+
+    // The recovered show is standing where the session stood, so the next GO fires the
+    // cue it would have fired.
+    expect(useStore.getState().selectedId).toBe('c2')
+  })
+
+  it('claims no place when the cue it names is not in the snapshot', async () => {
+    await offer({ ...snapshot(), selectedCueId: 'gone' })
+
+    expect(container.textContent).not.toContain('standing on')
+
+    await recover()
+
+    // Falls back to the same place any load picks: the first cue.
+    expect(useStore.getState().selectedId).toBe('c1')
   })
 
   it('offers nothing when there is no snapshot', async () => {
@@ -119,20 +147,5 @@ describe('RecoveryNotice', () => {
 
     expect(window.winslab.workspace.clearRecovery).toHaveBeenCalled()
     expect(container.querySelector('.app-notice')).toBeNull()
-  })
-
-  it('names the cue the session was standing on, so the offer is not anonymous', async () => {
-    await offer(snapshot())
-
-    expect(container.querySelector('[data-kind="recovery"]')?.textContent)
-      .toContain('1 · Walk-in Music')
-  })
-
-  it('offers the work without a cue name when the snapshot names one that has gone', async () => {
-    await offer({ ...snapshot(), selectedCueId: 'gone' })
-
-    const text = container.querySelector('[data-kind="recovery"]')?.textContent ?? ''
-    expect(text).toContain('without saving')
-    expect(text).not.toContain('standing on')
   })
 })

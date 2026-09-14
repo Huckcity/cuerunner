@@ -46,34 +46,27 @@ describe('useAutosave', () => {
     vi.clearAllMocks()
   })
 
-  it('snapshots unsaved work, with the path it belongs to', () => {
+  it('snapshots unsaved work, with the path it belongs to and the cue it stands on', () => {
     useStore.getState().addCue('wait')
     useStore.setState({ workspaceName: 'My Show', workspacePath: '/shows/My Show.wlab' })
+    const standingOn = useStore.getState().cues[0].id
 
     act(() => { vi.advanceTimersByTime(INTERVAL_MS) })
 
     expect(autosave).toHaveBeenCalledTimes(1)
-    const [snapshot, sourcePath] = autosave.mock.calls[0]
+    const [snapshot, sourcePath, selectedCueId] = autosave.mock.calls[0]
     expect(snapshot.name).toBe('My Show')
     expect(snapshot.cues).toHaveLength(1)
     expect(snapshot.cues[0].type).toBe('wait')
     expect(sourcePath).toBe('/shows/My Show.wlab')
+    // Where the session was, so a crash mid-show hands back the place as well as the cues.
+    expect(selectedCueId).toBe(standingOn)
   })
 
   it('writes nothing while the session is already saved', () => {
     act(() => { vi.advanceTimersByTime(INTERVAL_MS * 3) })
 
     expect(autosave).not.toHaveBeenCalled()
-  })
-
-  it('carries the cue the session was standing on, so a recovery can name it', () => {
-    useStore.getState().addCue('wait')
-    const standing = useStore.getState().cues[0].id
-    useStore.getState().select(standing)
-
-    act(() => { vi.advanceTimersByTime(INTERVAL_MS) })
-
-    expect(autosave.mock.calls[0][2]).toBe(standing)
   })
 
   it('keeps snapshotting after a write fails', () => {

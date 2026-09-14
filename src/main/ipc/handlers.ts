@@ -448,10 +448,12 @@ export function registerIpcHandlers(): void {
     return getRecentFiles()
   })
 
-  // Autosave goes to the recovery snapshot, never over the operator's file.
+  // Autosave goes to the recovery snapshot, never over the operator's file. The cue the
+  // session is standing on goes with it, so a recovered show hands back the place as
+  // well as the cues.
   ipcMain.handle(
     'workspace:autosave',
-    async (_, workspace: Workspace, sourcePath: string | null, selectedCueId: string | null) => {
+    async (_, workspace: Workspace, sourcePath: string | null, selectedCueId: string | null = null) => {
       await writeRecovery(workspace, sourcePath, selectedCueId)
     }
   )

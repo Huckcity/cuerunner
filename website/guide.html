@@ -363,6 +363,12 @@
           These keys are ignored while you are typing in a text field, so editing a cue name will
           not fire the show.
         </p>
+        <p>
+          PANIC also comes from the application menu — <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> +
+          <kbd>P</kbd> — which silences the engine even when the window is not answering, and from a
+          desk or a controller with a panic button of its own. See
+          <a href="#panic-hardware">Panic from the hardware</a>.
+        </p>
       </section>
 
       <section id="cue-types" class="panel reveal delay-3">
@@ -775,6 +781,20 @@ console.log(r.stdout.trim())</code></pre>
           Every service is off or idle until it is asked for, except OSC input, which comes up on its
           default port so a desk can talk to a new workspace without any setup.
         </div>
+        <h3 id="panic-hardware">Panic from the hardware</h3>
+        <p>
+          Two messages the inputs above already carry are read as a panic, whoever sends them: OSC
+          <code>/winslab/panic</code> (any arguments), and MIDI <strong>All Sound Off</strong> —
+          controller 120 at value 0, on any channel of any port the MIDI input is listening to. A
+          desk with a panic button, a controller with a spare key, and a network panic from another
+          program all work without a cue being written for them.
+        </p>
+        <p>
+          They are acted on in the main process, where the engine is, rather than in the window: the
+          fade starts whether or not the interface is answering, and the run log records who asked —
+          <code>[main] panic (osc): OSC /winslab/panic from 192.168.1.24:8000</code>. The fade is the
+          same 200&nbsp;ms that <kbd>Shift</kbd> + <kbd>Escape</kbd> uses.
+        </p>
       </section>
 
       <section id="wireless" class="panel reveal delay-4">
@@ -1130,6 +1150,7 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue</td><td>Anywhere except a text field</td></tr>
               <tr><td><kbd>Escape</kbd></td><td>STOP — stop everything</td><td>Anywhere except a text field</td></tr>
               <tr><td><kbd>Shift</kbd> + <kbd>Escape</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
+              <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is not answering</td></tr>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>N</kbd></td><td>New workspace</td><td>Anywhere</td></tr>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>O</kbd></td><td>Open workspace</td><td>Anywhere</td></tr>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>S</kbd></td><td>Save</td><td>Anywhere</td></tr>

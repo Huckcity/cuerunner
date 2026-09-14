@@ -255,11 +255,7 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke('workspace:saveAs', workspace),
     recent: (): Promise<string[]> =>
       ipcRenderer.invoke('workspace:recent'),
-    autosave: (
-      workspace: Workspace,
-      sourcePath: string | null,
-      selectedCueId: string | null
-    ): Promise<void> =>
+    autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null): Promise<void> =>
       ipcRenderer.invoke('workspace:autosave', workspace, sourcePath, selectedCueId),
     recovery: (): Promise<{
       workspace: Workspace
@@ -267,8 +263,7 @@ contextBridge.exposeInMainWorld('winslab', {
       sourcePath: string | null
       selectedCueId?: string | null
       missingMedia: MissingMedia[]
-    } | null> =>
-      ipcRenderer.invoke('workspace:recovery'),
+    } | null> => ipcRenderer.invoke('workspace:recovery'),
     clearRecovery: (): Promise<void> =>
       ipcRenderer.invoke('workspace:clearRecovery'),
     setTitle: (title: string): Promise<void> =>

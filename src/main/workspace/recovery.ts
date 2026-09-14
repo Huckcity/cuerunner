@@ -10,9 +10,9 @@ export interface RecoverySnapshot {
   /** Path of the workspace it belongs to, or null if it was never saved. */
   sourcePath: string | null
   /**
-   * The cue the session was standing on, so the offer on the next launch can say what it
-   * caught rather than only that something was found. Optional: snapshots written before
-   * this was recorded carry no such field.
+   * The cue the session was standing on, which is the one GO would have fired next.
+   * Absent from snapshots written before it was recorded, and null when nothing was
+   * selected: a recovered show hands the operator back their place, not just their cues.
    */
   selectedCueId?: string | null
 }
@@ -26,7 +26,7 @@ function recoveryFilePath(): string {
 export async function writeRecovery(
   workspace: Workspace,
   sourcePath: string | null,
-  selectedCueId: string | null
+  selectedCueId: string | null = null
 ): Promise<void> {
   const filePath = recoveryFilePath()
   const snapshot: RecoverySnapshot = { workspace, savedAt: Date.now(), sourcePath, selectedCueId }

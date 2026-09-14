@@ -11,16 +11,24 @@ export function useAutosave(): void {
   useEffect(() => {
     const timer = setInterval(() => {
       const {
-        isDirty, workspaceName, workspacePath, selectedId, cues, audioSettings,
-        midiSettings, showSettings, workspaceId, workspaceCreatedAt
+        isDirty,
+        workspaceName,
+        workspacePath,
+        cues,
+        audioSettings,
+        midiSettings,
+        showSettings,
+        workspaceId,
+        workspaceCreatedAt,
+        selectedId
       } = useStore.getState()
       if (!isDirty) return
       const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
         id: workspaceId,
         createdAt: workspaceCreatedAt
       })
-      // The selection goes with the snapshot: offer the work back and it can say which
-      // cue the session was standing on, which is how the operator recognises the take.
+      // The cue GO would fire next goes with the work: a crash mid-show is exactly when
+      // "where was I" is the first question.
       window.winslab.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {
         // A snapshot that cannot be written must never interrupt the show. The next
         // tick tries again.
