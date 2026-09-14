@@ -12,6 +12,7 @@ import { NoticeBar } from './components/layout/NoticeBar'
 import { MissingMediaBar } from './components/media/MissingMediaBar'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
+import { useMediaLengths } from './hooks/useMediaLengths'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
@@ -39,6 +40,8 @@ function NoticeHost() {
 export function App() {
   useAutosave()
   usePlaybackBridge()
+  // A loaded show measures its files before anything asks for a length.
+  useMediaLengths()
   useShowBridge()
   useCueTriggers()
   useCompanionPublisher()

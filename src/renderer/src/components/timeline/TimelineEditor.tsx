@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useStore } from '../../store'
 import type { GroupCue, Cue } from '../../types/cue'
 import { cueRunner } from '../../engine/CueRunner'
 import { snapOffset, snapTargetsFor } from '../../utils/timelineSnap'
+import { mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import './TimelineEditor.css'
 
 const RULER_H = 22
@@ -70,6 +71,8 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
   const running = useStore(s => s.running)
   const updateCue = useStore(s => s.updateCue)
   const select = useStore(s => s.select)
+  const mediaLengths = useStore(s => s.mediaLengths)
+  const missingMedia = useStore(s => s.missingMedia)
 
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const pxPerMs = zoom / 1000
@@ -95,6 +98,11 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
   }
 
   const children = cues.filter(c => c.parentId === cue.id)
+
+  const lengths = useMemo(
+    () => mediaLengthsFrom(mediaLengths, missingMedia),
+    [mediaLengths, missingMedia]
+  )
 
   // Clear active block if child was removed
   useEffect(() => {
@@ -252,6 +260,7 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
               </div>
 
               {children.map(child => {
+                const mediaState = mediaLengthState(child, lengths)
                 const blockW = Math.max(MIN_BLOCK_W, child.duration * pxPerMs)
                 return (
                   <div
@@ -262,10 +271,20 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
                     <div
                       className="tl-block"
                       data-active={child.id === activeBlockId}
+                      data-media={mediaState ?? undefined}
+                      title={mediaState === 'missing'
+                        ? "this cue's file could not be read"
+                        : mediaState === 'measuring'
+                          ? "the file's length is being read"
+                          : undefined}
                       style={{
                         left: child.timelineOffset * pxPerMs,
                         width: blockW,
-                        background: blockColor(child),
+                        // A file that has not answered is not drawn as a length: there is
+                        // no length to draw, and a stub that looked like one would be a lie.
+                        background: mediaState === 'measuring' || mediaState === 'missing'
+                          ? 'transparent'
+                          : blockColor(child),
                       }}
                       onPointerDown={e => onBlockPointerDown(e, child)}
                       onPointerMove={onBlockPointerMove}

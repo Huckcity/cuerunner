@@ -46,7 +46,9 @@ function resetStore() {
     selectedId: null,
     running: new Map(),
     lastRuns: {},
-    log: []
+    log: [],
+    missingMedia: [],
+    mediaLengths: {}
   })
 }
 
@@ -695,6 +697,36 @@ describe('store — setRunning / clearAllRunning', () => {
   it('clearAllRunning on empty map is a no-op', () => {
     useStore.getState().clearAllRunning()
     expect(useStore.getState().running.size).toBe(0)
+  })
+})
+
+describe('store — mediaLengths', () => {
+  beforeEach(resetStore)
+
+  it('records an answer against its cue, and forgets one when asked to', () => {
+    useStore.getState().setMediaLengths({ a1: { path: '/media/a1.wav', state: 'missing' } })
+    expect(useStore.getState().mediaLengths).toEqual({
+      a1: { path: '/media/a1.wav', state: 'missing' }
+    })
+
+    useStore.getState().setMediaLengths({ a2: { path: '/media/a2.wav', state: 'no-length' } })
+    useStore.getState().setMediaLengths({ a1: null })
+    expect(useStore.getState().mediaLengths).toEqual({
+      a2: { path: '/media/a2.wav', state: 'no-length' }
+    })
+  })
+
+  it('leaves state alone when an answer says what it already said', () => {
+    useStore.getState().setMediaLengths({ a1: { path: '/media/a1.wav', state: 'missing' } })
+    const before = useStore.getState().mediaLengths
+    useStore.getState().setMediaLengths({ a1: { path: '/media/a1.wav', state: 'missing' } })
+    expect(useStore.getState().mediaLengths).toBe(before)
+  })
+
+  it('says nothing about the last show once another is loaded', () => {
+    useStore.getState().setMediaLengths({ a1: { path: '/media/a1.wav', state: 'missing' } })
+    useStore.getState().loadWorkspace([], 'Next show', null)
+    expect(useStore.getState().mediaLengths).toEqual({})
   })
 })
 

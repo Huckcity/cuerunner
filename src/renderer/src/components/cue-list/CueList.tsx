@@ -4,6 +4,7 @@ import { useStore } from '../../store'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
 import { groupDurationMs } from '../../utils/cueDuration'
+import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import './CueList.css'
 
@@ -56,6 +57,8 @@ export function CueList() {
   const cues = useStore(s => s.cues)
   const selectedId = useStore(s => s.selectedId)
   const running = useStore(s => s.running)
+  const mediaLengths = useStore(s => s.mediaLengths)
+  const missingMedia = useStore(s => s.missingMedia)
   const select = useStore(s => s.select)
   const removeCue = useStore(s => s.removeCue)
   const duplicateCue = useStore(s => s.duplicateCue)
@@ -118,6 +121,13 @@ export function CueList() {
     }
     return map
   }, [cues])
+
+  // What the session knows about the files behind the lengths, for the rows that have
+  // no number to show yet (utils/mediaLength.ts).
+  const lengths = useMemo(
+    () => mediaLengthsFrom(mediaLengths, missingMedia),
+    [mediaLengths, missingMedia]
+  )
 
   // ── File-drop state ───────────────────────────────────────────────────────
 
@@ -376,6 +386,9 @@ export function CueList() {
                   isSelected={cue.id === selectedId}
                   runState={running.get(cue.id) ?? null}
                   durationMs={groupDurations.get(cue.id)}
+                  mediaState={cue.type === 'group'
+                    ? groupLengthState(cues, cue.id, lengths)
+                    : mediaLengthState(cue, lengths)}
                   collapsed={collapsed}
                   onToggleCollapse={cue.type === 'group' ? () => toggleCollapse(cue.id) : undefined}
                   onClick={() => select(cue.id)}

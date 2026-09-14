@@ -168,3 +168,13 @@
   color: var(--fg-primary);
   font-variant-numeric: tabular-nums;
 }
+
+/* A length nobody has measured yet is said rather than guessed at, and a file that
+   cannot be read says so where its length would be. */
+.col-dur-media {
+  font-size: var(--text-xs);
+  letter-spacing: var(--ls-caps);
+}
+
+.col-dur-media[data-media='measuring'] { color: var(--fg-ghost); }
+.col-dur-media[data-media='missing'] { color: var(--accent-amber); }

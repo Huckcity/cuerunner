@@ -25,6 +25,7 @@ import type {
   ShowSnapshot
 } from '../types/show'
 import { createCue } from '../utils/cueDefaults'
+import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
   addEnsemble,
   removeEnsemble as removeEnsembleFromCast,
@@ -185,6 +186,16 @@ interface CueListState {
    * once, and that is one edit: it dirties the session once and undoes once.
    */
   applyRelinkedMedia: (paths: Record<string, string>) => void
+
+  /**
+   * What this session has found out about the files a show points at, by cue id: the
+   * answers that settle a cue's length for good (`utils/mediaLength.ts`). Session state,
+   * not workspace content — a measured cue carries its length, and what the engine said
+   * about a file on this machine is not the show.
+   */
+  mediaLengths: Record<string, MediaLengthAnswer>
+  /** Records answers, or forgets one when a cue's file turns out to have changed. */
+  setMediaLengths: (answers: Record<string, MediaLengthAnswer | null>) => void
 
   // License. The machine's, not the show's: it is read from the main process before
   // the first frame, it never travels in a workspace, and it never dirties one.
@@ -443,6 +454,7 @@ export const useStore = create<CueListState>((set) => ({
   audioDeviceError: null,
   notice: null,
   missingMedia: [],
+  mediaLengths: {},
   past: [],
   future: [],
 
@@ -696,6 +708,20 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
+  setMediaLengths: (answers) => set(s => {
+    const next = { ...s.mediaLengths }
+    let changed = false
+    for (const [cueId, answer] of Object.entries(answers)) {
+      if (answer === null) {
+        if (cueId in next) { delete next[cueId]; changed = true }
+      } else if (next[cueId]?.path !== answer.path || next[cueId]?.state !== answer.state) {
+        next[cueId] = answer
+        changed = true
+      }
+    }
+    return changed ? { mediaLengths: next } : s
+  }),
+
   setLicense: (license) => set({ license }),
 
   setAudioDeviceError: (audioDeviceError) => set({ audioDeviceError }),
@@ -725,6 +751,8 @@ export const useStore = create<CueListState>((set) => ({
     // Whatever the last workspace was missing says nothing about this one; the caller
     // sets this from the open result straight after.
     missingMedia: [],
+    // What the last show's files answered says nothing about this one's either.
+    mediaLengths: {},
     audioSettings: audioSettings ?? { ...defaultAudioSettings },
     midiSettings: midiSettings ?? { ...defaultMidiSettings },
     showSettings: showSettings ?? defaultShowSettings(),
