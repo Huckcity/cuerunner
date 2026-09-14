@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import type { AudioCue, AudioCrosspoint } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
+import { NumberField } from '../common/Field'
 import { RoutingMatrix } from './RoutingMatrix'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueRunner } from '../../engine/CueRunner'
@@ -109,30 +110,31 @@ export function AudioInspector({ cue, tab }: Props) {
       <div>
         <div className="field-row">
           <label>Start time (s)</label>
-          <input type="number" min={0} step={0.1} value={toSeconds(cue.startTime)}
-            onChange={e => set({ startTime: fromSeconds(Number(e.target.value)) })} />
+          <NumberField when="typed" min={0} step={0.1} value={toSeconds(cue.startTime)}
+            onValue={seconds => { if (seconds !== null) set({ startTime: fromSeconds(seconds) }) }} />
           <ResetButton label="Start time" value={cue.startTime} defaultValue={AUDIO_DEFAULTS.startTime}
             onReset={() => set({ startTime: AUDIO_DEFAULTS.startTime })} />
         </div>
         <div className="field-row">
           <label>End time (s)</label>
-          <input type="number" min={0} step={0.1} value={cue.endTime != null ? toSeconds(cue.endTime) : ''}
+          <NumberField when="typed" min={0} step={0.1}
+            value={cue.endTime !== null ? toSeconds(cue.endTime) : null}
             placeholder="play to end"
-            onChange={e => set({ endTime: e.target.value ? fromSeconds(Number(e.target.value)) : null })} />
+            onValue={seconds => set({ endTime: seconds === null ? null : fromSeconds(seconds) })} />
           <ResetButton label="End time" value={cue.endTime} defaultValue={AUDIO_DEFAULTS.endTime}
             onReset={() => set({ endTime: AUDIO_DEFAULTS.endTime })} />
         </div>
         <div className="field-row">
           <label>Fade in (s)</label>
-          <input type="number" min={0} step={0.1} value={toSeconds(cue.fadeInDuration)}
-            onChange={e => set({ fadeInDuration: fromSeconds(Number(e.target.value)) })} />
+          <NumberField when="typed" min={0} step={0.1} value={toSeconds(cue.fadeInDuration)}
+            onValue={seconds => { if (seconds !== null) set({ fadeInDuration: fromSeconds(seconds) }) }} />
           <ResetButton label="Fade in" value={cue.fadeInDuration} defaultValue={AUDIO_DEFAULTS.fadeInDuration}
             onReset={() => set({ fadeInDuration: AUDIO_DEFAULTS.fadeInDuration })} />
         </div>
         <div className="field-row">
           <label>Loop count</label>
-          <input type="number" min={-1} value={cue.loopCount}
-            onChange={e => set({ loopCount: Number(e.target.value) })} />
+          <NumberField when="typed" min={-1} value={cue.loopCount}
+            onValue={loopCount => { if (loopCount !== null) set({ loopCount }) }} />
           <ResetButton label="Loop count" value={cue.loopCount} defaultValue={AUDIO_DEFAULTS.loopCount}
             onReset={() => set({ loopCount: AUDIO_DEFAULTS.loopCount })} />
         </div>

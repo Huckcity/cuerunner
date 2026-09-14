@@ -5,6 +5,7 @@ import { audioEngine } from '../../engine/audioEngineClient'
 import type { AudioDeviceInfo } from '../../engine/audioEngineClient'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { PlaybackWarnings } from './PlaybackWarnings'
+import { NumberField, TextField } from '../common/Field'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
@@ -18,14 +19,14 @@ interface Props {
   initialTab?: SettingsTab
 }
 
-interface NumberFieldProps {
+interface NumberRowProps {
   id: string
   label: string
   value: number
   min: number
   max: number
   disabled?: boolean
-  onCommit: (value: number) => void
+  onValue: (value: number) => void
 }
 
 /** A backend that has no device to configure, so no device request can ever be honoured. */
@@ -34,36 +35,21 @@ function backendHasNoDevice(backend: string): boolean {
 }
 
 /**
- * An integer field that commits when it is left rather than on every keystroke: binding
- * "5" on the way to "53000" would move a listener somewhere nobody asked for, and an
- * out-of-range value is dropped rather than written.
+ * A settings number: a labelled row around the shared field. What commits when, and when
+ * the field says it saved, belong to the field; this is the row and the fact that a
+ * setting always has a value — a field left empty keeps the one it had.
  */
-function NumberField({ id, label, value, min, max, disabled, onCommit }: NumberFieldProps) {
-  const [draft, setDraft] = useState<string | null>(null)
-
-  const commit = (): void => {
-    const parsed = Number(draft)
-    if (draft !== null && Number.isFinite(parsed) && parsed >= min && parsed <= max) {
-      onCommit(Math.round(parsed))
-    }
-    setDraft(null)
-  }
-
+function NumberRow({ id, label, value, min, max, disabled, onValue }: NumberRowProps) {
   return (
     <div className="field-row">
       <label htmlFor={id}>{label}</label>
-      <input
+      <NumberField
         id={id}
-        type="number"
+        value={value}
         min={min}
         max={max}
-        value={draft ?? String(value)}
         disabled={disabled}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => {
-          if (e.key === 'Enter') commit()
-        }}
+        onValue={next => { if (next !== null) onValue(next) }}
       />
     </div>
   )
@@ -164,18 +150,6 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
     ?? devices.find(device => device.isDefault)
     ?? devices[0]
   const companionService = showServices.find(service => service.id === 'companion')
-
-  // The service list is a list the operator types, so it commits on the way out of the
-  // field: rebuilding the input from the store on every keystroke would eat the comma
-  // or the space that was about to become the next entry.
-  const [servicesDraft, setServicesDraft] = useState<string | null>(null)
-
-  const commitServices = (): void => {
-    if (servicesDraft === null) return
-    const services = servicesDraft.split(',').map(entry => entry.trim()).filter(Boolean)
-    if (services.length > 0) updatePresenceSettings({ services })
-    setServicesDraft(null)
-  }
 
   // Dismiss on Escape
   useEffect(() => {
@@ -431,14 +405,14 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 />
                 <span className="settings-info">Listen for OSC from consoles and tablets</span>
               </div>
-              <NumberField
+              <NumberRow
                 id="settings-osc-port"
                 label="Port"
                 value={showSettings.oscIn.port}
                 min={1}
                 max={65535}
                 disabled={!showSettings.oscIn.enabled}
-                onCommit={port => updateOscInSettings({ port })}
+                onValue={port => updateOscInSettings({ port })}
               />
               {oscService && (
                 <div className="settings-service" data-service={oscService.id} data-state={oscService.state}>
@@ -459,25 +433,26 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
               </div>
               <div className="field-row">
                 <label htmlFor="settings-presence-services">Services</label>
-                <input
+                <TextField
                   id="settings-presence-services"
-                  value={servicesDraft ?? showSettings.presence.services.join(', ')}
+                  value={showSettings.presence.services.join(', ')}
                   disabled={!showSettings.presence.enabled}
-                  onChange={e => setServicesDraft(e.target.value)}
-                  onBlur={commitServices}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitServices()
+                  // A list the operator types, so it is written when the field is left: a
+                  // comma or a space on the way to the next entry is not an edit.
+                  onValue={text => {
+                    const services = text.split(',').map(entry => entry.trim()).filter(Boolean)
+                    if (services.length > 0) updatePresenceSettings({ services })
                   }}
                 />
               </div>
-              <NumberField
+              <NumberRow
                 id="settings-presence-gone"
                 label="Gone after (s)"
                 value={showSettings.presence.goneAfterSeconds}
                 min={5}
                 max={3600}
                 disabled={!showSettings.presence.enabled}
-                onCommit={goneAfterSeconds => updatePresenceSettings({ goneAfterSeconds })}
+                onValue={goneAfterSeconds => updatePresenceSettings({ goneAfterSeconds })}
               />
               <p className="inspector-hint">
                 Dante endpoints, interfaces and amps on the network appear in the monitor,
@@ -500,22 +475,23 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 />
                 <span className="settings-info">A read-only view of the show on the local network</span>
               </div>
-              <NumberField
+              <NumberRow
                 id="settings-companion-port"
                 label="Port"
                 value={showSettings.companion.port}
                 min={1}
                 max={65535}
                 disabled={!showSettings.companion.enabled}
-                onCommit={port => updateCompanionSettings({ port })}
+                onValue={port => updateCompanionSettings({ port })}
               />
               <div className="field-row">
                 <label htmlFor="settings-companion-token">Token</label>
-                <input
+                <TextField
                   id="settings-companion-token"
+                  when="typed"
                   value={showSettings.companion.token}
                   placeholder="required — anyone without it is refused"
-                  onChange={e => updateCompanionSettings({ token: e.target.value })}
+                  onValue={token => updateCompanionSettings({ token })}
                 />
                 <button
                   className="inspector-btn"
@@ -546,11 +522,12 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 <div className="settings-source-list">
                   {showSettings.rf.sources.map(source => (
                     <div key={source.id} className="settings-source-row">
-                      <input
+                      <TextField
+                        when="typed"
                         className="settings-source-label"
                         value={source.label}
                         aria-label="Source name"
-                        onChange={e => updateSource(source.id, { label: e.target.value })}
+                        onValue={label => updateSource(source.id, { label })}
                       />
                       <select
                         value={source.kind}
@@ -561,13 +538,14 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                         <option value="file">File</option>
                         <option value="demo">Demo</option>
                       </select>
-                      <input
+                      <TextField
+                        when="typed"
                         className="settings-source-target"
                         value={source.target}
                         aria-label="Source address"
                         placeholder={source.kind === 'file' ? '/path/to/telemetry.json' : 'http://10.0.0.20/telemetry'}
                         disabled={source.kind === 'demo'}
-                        onChange={e => updateSource(source.id, { target: e.target.value })}
+                        onValue={target => updateSource(source.id, { target })}
                       />
                       <button
                         className="settings-source-remove"
@@ -588,37 +566,37 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
                 Each source reports battery and RF per channel; the format is in the user guide.
               </p>
               <div className="field-section-title">Alarms</div>
-              <NumberField
+              <NumberRow
                 id="settings-rf-battery-warning"
                 label="Battery low (%)"
                 value={showSettings.rf.thresholds.batteryWarning}
                 min={1}
                 max={99}
-                onCommit={batteryWarning => setThresholds({ batteryWarning })}
+                onValue={batteryWarning => setThresholds({ batteryWarning })}
               />
-              <NumberField
+              <NumberRow
                 id="settings-rf-battery-critical"
                 label="Battery critical (%)"
                 value={showSettings.rf.thresholds.batteryCritical}
                 min={1}
                 max={99}
-                onCommit={batteryCritical => setThresholds({ batteryCritical })}
+                onValue={batteryCritical => setThresholds({ batteryCritical })}
               />
-              <NumberField
+              <NumberRow
                 id="settings-rf-rf-warning"
                 label="RF weak (dBm)"
                 value={showSettings.rf.thresholds.rfWarningDbm}
                 min={-120}
                 max={-20}
-                onCommit={rfWarningDbm => setThresholds({ rfWarningDbm })}
+                onValue={rfWarningDbm => setThresholds({ rfWarningDbm })}
               />
-              <NumberField
+              <NumberRow
                 id="settings-rf-gone"
                 label="Quiet after (s)"
                 value={showSettings.rf.thresholds.offlineAfterSeconds}
                 min={2}
                 max={600}
-                onCommit={offlineAfterSeconds => setThresholds({ offlineAfterSeconds })}
+                onValue={offlineAfterSeconds => setThresholds({ offlineAfterSeconds })}
               />
               <p className="inspector-hint">
                 How long a pack can go unheard before it is warned about.

@@ -11,7 +11,7 @@ import {
 import { dcaAddress, dcaNumber } from '../../utils/desk'
 import { DCA_LIMIT } from '../../types/show'
 import type { CastSettings, DeskSettings } from '../../types/show'
-import { CommitInput, CommitNumber } from './CommitField'
+import { TextField, NumberField } from '../common/Field'
 
 const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
 
@@ -83,33 +83,33 @@ export function ChannelsTab() {
               {/* The fields are labelled rather than left to their values: an address is
                   only obvious to whoever typed it. */}
               <label className="desk-label" htmlFor="desk-host">Host</label>
-              <CommitInput
+              <TextField
                 id="desk-host"
                 className="desk-host"
                 value={desk.host}
                 placeholder="127.0.0.1"
                 aria-label="Desk host"
-                onCommit={host => updateDeskSettings({ host })}
+                onValue={host => updateDeskSettings({ host })}
               />
               <label className="desk-label" htmlFor="desk-port">Port</label>
-              <CommitNumber
+              <NumberField
                 id="desk-port"
                 className="desk-port"
                 value={desk.port}
                 min={1}
                 max={65535}
                 aria-label="Desk port"
-                onCommit={port => updateDeskSettings({ port })}
+                onValue={port => { if (port !== null) updateDeskSettings({ port }) }}
               />
               <label className="desk-label" htmlFor="desk-address">Address</label>
-              <CommitInput
+              <TextField
                 id="desk-address"
                 className="desk-address"
                 value={desk.address}
                 placeholder="/dca/{n}/on"
                 aria-label="Desk address"
                 title="The address a DCA is sent to. {n} is its number."
-                onCommit={address => updateDeskSettings({ address })}
+                onValue={address => updateDeskSettings({ address })}
               />
             </>
           )}
@@ -130,14 +130,14 @@ export function ChannelsTab() {
                 ))}
               </select>
               <label className="desk-label" htmlFor="desk-midi-channel">Channel</label>
-              <CommitNumber
+              <NumberField
                 id="desk-midi-channel"
                 className="desk-midi-channel"
                 value={desk.midiChannel}
                 min={1}
                 max={16}
                 aria-label="Desk MIDI channel"
-                onCommit={midiChannel => updateDeskSettings({ midiChannel })}
+                onValue={midiChannel => { if (midiChannel !== null) updateDeskSettings({ midiChannel }) }}
               />
             </>
           )}
@@ -171,12 +171,12 @@ export function ChannelsTab() {
         {cast.channels.map((channel, index) => (
           <div className="channel-row" key={channel.id}>
             <span className="channel-number">{index + 1}</span>
-            <CommitInput
+            <TextField
               className="channel-name"
               value={channel.name}
               placeholder="Name"
               aria-label={`Channel ${index + 1} name`}
-              onCommit={name => apply(updateChannel(cast, channel.id, { name }))}
+              onValue={name => apply(updateChannel(cast, channel.id, { name }))}
             />
             <select
               className="channel-dca"
@@ -232,37 +232,37 @@ export function ChannelsTab() {
               <div className="dca-row" key={dca.id}>
                 <div className="dca-fields">
                   <span className="dca-number">{dcaNumber(index)}</span>
-                  <CommitInput
+                  <TextField
                     className="dca-label"
                     value={dca.label}
                     placeholder="DCA"
                     aria-label={`DCA ${dcaNumber(index)} label`}
-                    onCommit={label => apply(updateDca(cast, dca.id, { label }))}
+                    onValue={label => apply(updateDca(cast, dca.id, { label }))}
                   />
                   {/* The override: empty means the message the number makes, and the
                       placeholder is that message, so the field says what will be sent
                       without being typed into. */}
                   {desk.kind === 'osc' && (
-                    <CommitInput
+                    <TextField
                       className="dca-override"
                       value={dca.address ?? ''}
                       placeholder={dcaAddress(desk.address, index)}
                       aria-label={`DCA ${dcaNumber(index)} address`}
                       title="Sent instead of the address of its number. Clear it to go back."
-                      onCommit={address => apply(updateDca(cast, dca.id, {
+                      onValue={address => apply(updateDca(cast, dca.id, {
                         address: address.trim() === '' ? null : address
                       }))}
                     />
                   )}
                   {desk.kind === 'midi' && (
-                    <CommitNumber
+                    <NumberField
                       className="dca-override"
                       value={dca.note ?? dcaNumber(index)}
                       min={0}
                       max={127}
                       aria-label={`DCA ${dcaNumber(index)} note`}
                       title="Sent instead of the note of its number."
-                      onCommit={note => apply(updateDca(cast, dca.id, {
+                      onValue={note => apply(updateDca(cast, dca.id, {
                         note: note === dcaNumber(index) ? null : note
                       }))}
                     />

@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import type { NetworkCue } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
+import { NumberField, TextField } from '../common/Field'
 import { NETWORK_DEFAULTS } from '../../utils/cueDefaults'
 
 const METHODS: NetworkCue['method'][] = ['GET', 'POST', 'PUT']
@@ -46,23 +47,21 @@ export function NetworkInspector({ cue }: Props) {
       </div>
       <div className="field-row">
         <label>URL</label>
-        <input
+        <TextField
+          when="typed"
           value={cue.url}
           placeholder="https://example.com/webhook"
-          onChange={e => set({ url: e.target.value })}
+          onValue={url => set({ url })}
         />
       </div>
       <div className="field-row">
         <label>Timeout (ms)</label>
-        <input
-          type="number"
+        <NumberField
+          when="typed"
           min={1}
           step={100}
           value={cue.timeout}
-          onChange={e => {
-            const v = Number(e.target.value)
-            if (!isNaN(v) && v > 0) set({ timeout: v })
-          }}
+          onValue={timeout => { if (timeout !== null) set({ timeout }) }}
         />
         <ResetButton label="Timeout" value={cue.timeout} defaultValue={NETWORK_DEFAULTS.timeout}
           onReset={() => set({ timeout: NETWORK_DEFAULTS.timeout })} />
@@ -72,15 +71,17 @@ export function NetworkInspector({ cue }: Props) {
       {headers.map(([key, value], i) => (
         <div key={i} className="field-row">
           <label>Header {i + 1}</label>
-          <input
+          <TextField
+            when="typed"
             value={key}
             placeholder="Content-Type"
-            onChange={e => setHeader(i, [e.target.value, value])}
+            onValue={next => setHeader(i, [next, value])}
           />
-          <input
+          <TextField
+            when="typed"
             value={value}
             placeholder="application/json"
-            onChange={e => setHeader(i, [key, e.target.value])}
+            onValue={next => setHeader(i, [key, next])}
           />
           <button
             className="inspector-btn-icon"

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import type { MidiCue, MidiMessageKind } from '../../types/cue'
 import { LastRun } from './LastRun'
+import { NumberField, TextField } from '../common/Field'
 
 interface Props { cue: MidiCue }
 
@@ -41,10 +42,11 @@ export function MidiInspector({ cue }: Props) {
             {ports.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         ) : (
-          <input
+          <TextField
+            when="typed"
             value={cue.portName}
             placeholder="No MIDI ports found"
-            onChange={e => set({ portName: e.target.value })}
+            onValue={portName => set({ portName })}
           />
         )}
         <button
@@ -75,21 +77,21 @@ export function MidiInspector({ cue }: Props) {
           {msg.kind !== 'sysex' && (
             <div className="field-row">
               <label>Channel</label>
-              <input type="number" min={1} max={16} value={'channel' in msg ? msg.channel : 1}
-                onChange={e => updateMsg(i, { channel: Number(e.target.value) } as any)} />
+              <NumberField when="typed" min={1} max={16} value={'channel' in msg ? msg.channel : 1}
+                onValue={channel => { if (channel !== null) updateMsg(i, { channel } as Partial<MidiMessageKind>) }} />
             </div>
           )}
           {(msg.kind === 'noteOn' || msg.kind === 'noteOff') && (
             <>
               <div className="field-row">
                 <label>Note</label>
-                <input type="number" min={0} max={127} value={msg.note}
-                  onChange={e => updateMsg(i, { note: Number(e.target.value) })} />
+                <NumberField when="typed" min={0} max={127} value={msg.note}
+                  onValue={note => { if (note !== null) updateMsg(i, { note }) }} />
               </div>
               <div className="field-row">
                 <label>Velocity</label>
-                <input type="number" min={0} max={127} value={msg.velocity}
-                  onChange={e => updateMsg(i, { velocity: Number(e.target.value) })} />
+                <NumberField when="typed" min={0} max={127} value={msg.velocity}
+                  onValue={velocity => { if (velocity !== null) updateMsg(i, { velocity }) }} />
               </div>
             </>
           )}
@@ -97,31 +99,32 @@ export function MidiInspector({ cue }: Props) {
             <>
               <div className="field-row">
                 <label>Controller</label>
-                <input type="number" min={0} max={127} value={msg.controller}
-                  onChange={e => updateMsg(i, { controller: Number(e.target.value) })} />
+                <NumberField when="typed" min={0} max={127} value={msg.controller}
+                  onValue={controller => { if (controller !== null) updateMsg(i, { controller }) }} />
               </div>
               <div className="field-row">
                 <label>Value</label>
-                <input type="number" min={0} max={127} value={msg.value}
-                  onChange={e => updateMsg(i, { value: Number(e.target.value) })} />
+                <NumberField when="typed" min={0} max={127} value={msg.value}
+                  onValue={value => { if (value !== null) updateMsg(i, { value }) }} />
               </div>
             </>
           )}
           {msg.kind === 'programChange' && (
             <div className="field-row">
               <label>Program</label>
-              <input type="number" min={0} max={127} value={msg.program}
-                onChange={e => updateMsg(i, { program: Number(e.target.value) })} />
+              <NumberField when="typed" min={0} max={127} value={msg.program}
+                onValue={program => { if (program !== null) updateMsg(i, { program }) }} />
             </div>
           )}
           {msg.kind === 'sysex' && (
             <div className="field-row">
               <label>Bytes</label>
-              <input
+              <TextField
+                when="typed"
                 value={(msg.data ?? []).join(' ')}
                 placeholder="F0 41 10 42 12 ... F7"
-                onChange={e => {
-                  const data = e.target.value.split(/\s+/).map(s => parseInt(s, 16)).filter(n => !isNaN(n))
+                onValue={text => {
+                  const data = text.split(/\s+/).map(byte => parseInt(byte, 16)).filter(byte => !isNaN(byte))
                   updateMsg(i, { data })
                 }}
               />

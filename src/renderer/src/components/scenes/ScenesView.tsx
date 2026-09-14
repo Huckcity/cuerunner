@@ -12,7 +12,7 @@ import {
   setPerformerLive,
   updateScene
 } from '../../utils/scenes'
-import { CommitInput } from '../show/CommitField'
+import { TextField } from '../common/Field'
 import { ALL_CLOSED_SCENE_ID, type ScenesSettings } from '../../types/show'
 import './ScenesView.css'
 
@@ -255,7 +255,7 @@ export function ScenesView() {
                   data-pending={pending}
                 >
                   <div className="matrix-scene-name">
-                    <CommitInput
+                    <TextField
                       className="scene-name-field"
                       value={scene.name}
                       placeholder="Scene name"
@@ -264,7 +264,7 @@ export function ScenesView() {
                       disabled={locked}
                       // A scene without a name is a row nobody can find again, so the old
                       // name stays until something is actually typed.
-                      onCommit={name => {
+                      onValue={name => {
                         if (name.trim() === '') return
                         writeList(updateScene(scenes, scene.id, { name }))
                       }}
@@ -302,13 +302,13 @@ export function ScenesView() {
               <div className="matrix-ensemble-row" key={ensemble.id}>
                 <div className="matrix-mic">
                   {editing ? (
-                    <CommitInput
+                    <TextField
                       className="ensemble-name-field"
                       value={ensemble.name}
                       placeholder="Ensemble"
                       aria-label="Ensemble name"
                       size={SCENE_NAME_SIZE}
-                      onCommit={name => {
+                      onValue={name => {
                         if (name.trim() === '') return
                         updateCastSettings({
                           ensembles: cast.ensembles.map(candidate =>
