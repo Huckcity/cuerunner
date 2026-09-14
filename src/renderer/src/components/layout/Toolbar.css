@@ -208,6 +208,26 @@
   color: var(--fg-secondary);
 }
 
+/* Expand / Collapse: the same shape as More, because they are the same kind of thing —
+   a press about the list rather than a cue being added to it. */
+.toolbar-list-btn {
+  height: var(--h-button-md);
+  padding: 0 10px;
+  font-size: var(--text-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-input);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--transition-fast);
+}
+
+.toolbar-list-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
 .toolbar-more-menu {
   position: absolute;
   top: calc(100% + 5px);

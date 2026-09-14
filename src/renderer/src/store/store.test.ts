@@ -46,6 +46,7 @@ function resetStore() {
     selectedId: null,
     selectedIds: [],
     selectionAnchorId: null,
+    collapsedGroupIds: new Set<string>(),
     running: new Map(),
     lastRuns: {},
     log: [],
@@ -519,6 +520,64 @@ describe('store — batch edits', () => {
     // The copy is gone, so the selection is not left naming it.
     expect(useStore.getState().selectedIds).toEqual([])
     expect(useStore.getState().selectedId).toBeNull()
+  })
+})
+
+describe('store — collapsed groups', () => {
+  beforeEach(resetStore)
+
+  /** A group holding a group holding a wait, plus a wait of the outer group's own. */
+  function nestedGroups(): { outer: string; inner: string } {
+    useStore.getState().addCue('group')
+    const outer = useStore.getState().cues[0].id
+    useStore.getState().addCue('group', outer)
+    const inner = useStore.getState().cues[1].id
+    useStore.getState().addCue('wait', inner)
+    useStore.getState().addCue('wait', outer)
+    return { outer, inner }
+  }
+
+  it('toggles one group open and closed', () => {
+    const { inner } = nestedGroups()
+    useStore.getState().toggleGroup(inner)
+    expect(useStore.getState().collapsedGroupIds.has(inner)).toBe(true)
+
+    useStore.getState().toggleGroup(inner)
+    expect(useStore.getState().collapsedGroupIds.has(inner)).toBe(false)
+  })
+
+  it('expands the top level and leaves the nested groups as they were', () => {
+    const { outer, inner } = nestedGroups()
+    useStore.getState().toggleGroup(outer)
+    useStore.getState().toggleGroup(inner)
+
+    useStore.getState().expandTopLevel()
+
+    // The outer group opened; the one inside it is still folded away, because that was
+    // somebody's decision rather than an accident of the top level being closed.
+    const collapsed = useStore.getState().collapsedGroupIds
+    expect(collapsed.has(outer)).toBe(false)
+    expect(collapsed.has(inner)).toBe(true)
+  })
+
+  it('collapses everything — there is no partial reading of collapse', () => {
+    const { outer, inner } = nestedGroups()
+
+    useStore.getState().collapseAll()
+
+    const collapsed = useStore.getState().collapsedGroupIds
+    expect(collapsed.has(outer)).toBe(true)
+    expect(collapsed.has(inner)).toBe(true)
+  })
+
+  it('leaves no group collapsed in the next workspace', () => {
+    nestedGroups()
+    useStore.getState().collapseAll()
+    expect(useStore.getState().collapsedGroupIds.size).toBeGreaterThan(0)
+
+    useStore.getState().loadWorkspace([], 'Next show', null)
+
+    expect(useStore.getState().collapsedGroupIds.size).toBe(0)
   })
 })
 
