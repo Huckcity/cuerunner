@@ -125,7 +125,7 @@ test('the companion serves the show to a tablet, and only with the token', async
   await page.locator('.cue-row').first().click()
 
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await dialog.locator('#settings-companion-token').fill(token)

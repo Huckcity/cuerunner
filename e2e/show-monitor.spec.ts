@@ -38,7 +38,7 @@ async function openMonitor(page: Page): Promise<void> {
 
 async function openShowSettings(page: Page, tab: 'Network' | 'MIDI' = 'Network') {
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: tab, exact: true }).click()
   return dialog

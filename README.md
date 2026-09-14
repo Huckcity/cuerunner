@@ -36,7 +36,7 @@ installer:
 - **Wireless and the mic plot**: who is wearing which pack, the alarm before a battery dies on someone with an entrance, a swap log, and the night's report
 - **Triggers**: a cue that fires from an OSC address or a MIDI note with nobody's hand on GO
 - **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network
-- **Scenes and the desk**: the view the show is run from, with desk groups driven over MIDI or OSC, and scene cues in the stack
+- **Scenes and the desk**: the view the show is run from, with the console's channels and the DCAs they open set up in Show Settings, ensembles that move a group of mics at once, and scene cues in the stack
 
 ## Getting Started
 

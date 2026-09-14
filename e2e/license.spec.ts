@@ -28,7 +28,7 @@ async function inRenderer(expression: string): Promise<unknown> {
 
 async function openSettings(page: Page): Promise<void> {
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
 }
 

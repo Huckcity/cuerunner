@@ -79,7 +79,7 @@ async function openShow(page: Page, userDataDir: string, wlab: string): Promise<
 
 async function openSettingsAudio(page: Page) {
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await expect(dialog).toBeVisible()
   return dialog

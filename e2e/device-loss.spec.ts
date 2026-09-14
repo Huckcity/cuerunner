@@ -85,7 +85,7 @@ test('a device that goes away mid-show silences the show, says why, and the show
 
   // And it stays on screen while the condition lasts, where a rig is checked.
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
   await expect(page.locator('.settings-warning')).toContainText('stopped unexpectedly', { timeout: 15_000 })
   await page.keyboard.press('Escape')

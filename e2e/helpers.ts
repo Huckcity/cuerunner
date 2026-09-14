@@ -1,4 +1,4 @@
-import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import { createSocket } from 'dgram'
 import { generateKeyPairSync } from 'crypto'
@@ -359,40 +359,76 @@ export async function editScenes(page: Page): Promise<void> {
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
 }
 
-/** The Show panel is where performers, ensembles and desk groups are set up. */
-export async function openShowDialog(page: Page): Promise<void> {
-  await page.locator('.scenes-show').click()
-  await expect(page.locator('.show-dialog')).toBeVisible()
+/** The tabs of Show Settings, as the menu names them. */
+export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
+
+const SHOW_SETTINGS_TAB_LABEL: Record<ShowSettingsTab, string> = {
+  channels: 'Channels',
+  cast: 'Cast',
+  'mic-plot': 'Mic plot'
 }
 
 /**
- * A show set up through the view, in the order an operator would do it: a group on the
- * desk driven over OSC at a port the test owns, the first performer routed straight to
- * it in the Show panel, and a scene with that performer open in it.
+ * Show Settings is where the show's set-up lives — the DCAs, the cast and the mic plot —
+ * and it opens from the menu rather than from the Scenes view, so a show can be set up
+ * before the view it is run from is on screen.
+ */
+export async function openShowSettings(page: Page, tab?: ShowSettingsTab): Promise<void> {
+  await page.locator('.toolbar-brand').click()
+  await page.locator('[data-action="show-settings"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Show Settings' })
+  await expect(dialog).toBeVisible()
+  if (tab !== undefined) {
+    const button = dialog.locator('.show-settings-tab', { hasText: SHOW_SETTINGS_TAB_LABEL[tab] })
+    await button.click()
+    await expect(button).toHaveAttribute('data-active', 'true')
+  }
+}
+
+/**
+ * Points a DCA's row at the test's own OSC listener. Which row is the caller's business —
+ * a show with several DCAs is what some tests are about.
+ */
+export async function wireDca(row: Locator, port: number, address: string): Promise<void> {
+  await row.locator('.dca-delivery').selectOption('osc')
+  await row.locator('.dca-host').fill('127.0.0.1')
+  await row.locator('.dca-osc-port').fill(String(port))
+  await row.locator('.dca-osc-port').blur()
+  await row.locator('.dca-address').fill(address)
+  await row.locator('.dca-address').blur()
+  await expect(row.locator('.dca-summary')).toContainText(address)
+}
+
+/**
+ * A show set up through the view, in the order an operator would do it: a DCA on the desk
+ * driven over OSC at a port the test owns, the strip that carries it, the first performer
+ * patched to that strip, and a scene with the performer open in it.
  */
 export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await liveRack(page)
+
+  await openShowSettings(page)
+  const settings = page.locator('.show-settings-dialog')
+
+  // The desk the show drives: one DCA, opened and closed at the test's port.
+  await settings.locator('.dca-count-select').selectOption('1')
+  await wireDca(settings.locator('.dca-row').first(), port, '/dca/1/mute')
+
+  // Which DCA a mic opens is the strip's business, not the performer's, so the strip
+  // carries it...
+  await settings.locator('.channel-row').first().locator('.channel-dca')
+    .selectOption({ label: 'DCA 1' })
+
+  // ...and the performer is patched to that strip. The desk never hears about performers.
+  await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
+  const performer = settings.locator('.performer-row').first()
+  await performer.locator('.performer-name').fill('Ruth')
+  await performer.locator('.performer-name').blur()
+  await performer.locator('.performer-channel').selectOption({ label: 'Ch 1' })
+  await settings.locator('.show-settings-done').click()
+
   await openScenesView(page)
   await editScenes(page)
-
-  await openShowDialog(page)
-  const show = page.locator('.show-dialog')
-  await show.locator('.group-add').click()
-  await show.locator('.group-delivery').first().selectOption('osc')
-  await show.locator('.group-host').first().fill('127.0.0.1')
-  await show.locator('.group-osc-port').first().fill(String(port))
-  await show.locator('.group-osc-port').first().blur()
-  await show.locator('.group-address').first().fill('/dca/1/mute')
-  await show.locator('.group-address').first().blur()
-  await expect(show.locator('.group-summary').first()).toContainText('/dca/1/mute')
-
-  // Which group a performer's mic feeds is set up here, not in the grid the show is run
-  // from — and it stays with them across a pack swap, since the mic plot never enters
-  // into it.
-  await show.locator('.performer-row').first().locator('.performer-group')
-    .selectOption({ label: 'DCA 1' })
-  await show.locator('.show-close').click()
-
   await page.locator('.scenes-add').click()
   await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
 }
@@ -406,7 +442,7 @@ export async function buildDeskShow(page: Page, port: number): Promise<void> {
 export async function oscPortOfItsOwn(page: Page): Promise<number> {
   const port = 43000 + Math.floor(Math.random() * 5000)
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await dialog.locator('#settings-osc-port').fill(String(port))

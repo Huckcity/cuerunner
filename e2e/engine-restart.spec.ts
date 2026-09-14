@@ -96,7 +96,7 @@ test('a cue fires after the engine is killed mid-sequence, and the show says so'
   // and the warnings bar that keeps it on screen for the rest of the show.
   await expect(page.locator('.log-panel')).toContainText('audio engine restarted')
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
   await expect(page.locator('.settings-warning')).toContainText('audio engine restarted')
   await expect(page.locator('.settings-warning')).toContainText('the show clock carried on')
