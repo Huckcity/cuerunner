@@ -1115,7 +1115,7 @@ export class CueRunner {
 
   /** A note going down, so that holding it is not the same as pressing it again. */
   pressNote(key: string): void {
-    this.guard.pressNote(key)
+    this.guard.pressNote(key, this.now())
   }
 
   /** A note coming up. Never gated: a release is not a firing. */
@@ -1124,8 +1124,9 @@ export class CueRunner {
   }
 
   /**
-   * Forgets who fired what. A show that has just loaded has no history for the guard to
-   * be deaf to — the file's own state did not press anything.
+   * Forgets who fired what, and what was down. A show that has just loaded has no history
+   * for the guard to be deaf to — the file's own state did not press anything — and a
+   * note that was down when the last one ended is a note nobody is holding now.
    */
   resetGuards(): void {
     this.guard.reset()
@@ -1175,6 +1176,10 @@ export class CueRunner {
     scriptHost.cancelAll()
     void audioEngine.panic(PANIC_FADE_MS).catch(() => {})
     this.deps!.clearAllRunning()
+    // The stuck control is what an operator reaches for PANIC to fix: a pad whose
+    // note-off never came is not a note anybody is holding, and leaving it held would
+    // keep that trigger dead for the rest of the night.
+    this.guard.reset()
   }
 
   /**

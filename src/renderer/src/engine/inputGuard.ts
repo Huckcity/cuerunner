@@ -17,6 +17,13 @@ import type { OscInEvent, ShowEvent } from '../types/show'
 export type FireSurface = 'key' | 'osc' | 'midi'
 
 /**
+ * How long a note may stay down before the guard treats it as never released. Two
+ * minutes: far longer than any hold on a cue trigger, short enough that a cable pulled
+ * mid-number does not take that control out for the night.
+ */
+export const HOLD_LIMIT_MS = 120_000
+
+/**
  * Whether this is a firing at all, and the identity of what arrived.
  *
  * `null` means the event is not a way of firing a cue — a device reading, an alarm, a
@@ -84,7 +91,8 @@ function midiKey(device: string, message: FiringMidiKind): string {
  */
 export class InputGuard {
   private lastAccepted = new Map<string, number>()
-  private held = new Set<string>()
+  /** Notes still down, and when each went down — the age is what catches a lost note-off. */
+  private held = new Map<string, number>()
 
   /**
    * Config read per press, not latched: the window is a field the operator can change
@@ -104,8 +112,16 @@ export class InputGuard {
     const id = `${surface}:${key}`
     // A note that is still down does not fire again, whatever the window says: a
     // repeated note-on is the key being held, and the desk that repeats it is the desk
-    // behaving normally. The window is the backstop for a note that never releases.
-    if (this.held.has(id)) return false
+    // behaving normally.
+    const downSince = this.held.get(id)
+    if (downSince !== undefined) {
+      // A note-off that never arrives — the pad unplugged mid-hold, the cable pulled —
+      // would otherwise block that control for the rest of the session, silently. No
+      // hand holds a cue trigger for two minutes; past that it is a lost release, and
+      // the next note-on is a new press.
+      if (nowMs - downSince < HOLD_LIMIT_MS) return false
+      this.held.delete(id)
+    }
 
     const window = Math.max(0, this.windowMs())
     const last = this.lastAccepted.get(id)
@@ -117,15 +133,20 @@ export class InputGuard {
   }
 
   /** A note going down is a firing; whether it fires is `accepts`'s answer. */
-  pressNote(key: string): void {
-    this.held.add(`midi:${key}`)
+  pressNote(key: string, nowMs: number): void {
+    this.held.set(`midi:${key}`, nowMs)
   }
 
   /** A note coming up is a release, and a release is never gated. */
   releaseNote(key: string): void {
     this.held.delete(`midi:${key}`)
   }
-  /** Forgets everything — a show that has just loaded has no history to be deaf to. */
+
+  /**
+   * Forgets everything — a show that has just loaded has no history to be deaf to — and
+   * takes the held notes with it: a note that was down when the last show ended is a
+   * note nobody is holding now.
+   */
   reset(): void {
     this.lastAccepted.clear()
     this.held.clear()
@@ -133,7 +154,6 @@ export class InputGuard {
 
   private forget(nowMs: number, window: number): void {
     for (const [id, at] of this.lastAccepted) {
-      // Held notes are kept regardless of age: a note-down is not a time-limited fact.
       if (nowMs - at > window && !this.held.has(id)) this.lastAccepted.delete(id)
     }
   }

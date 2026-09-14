@@ -51,6 +51,23 @@ describe('splitAudioCue', () => {
     expect(split.tail.outputs).toEqual([{ inputChannel: 0, outputChannel: 2, gain: 1 }])
   })
 
+  it('leaves the tail with nothing that fires it', () => {
+    // A copy that kept the head's OSC address or MIDI note would be fired by the same
+    // message as the head — one press, two cues — and the script line belongs to the
+    // line the cue was cut from, which is the head's now.
+    const original = cue({
+      triggers: [{ id: 't1', kind: 'osc', address: '/eos/cue/12/fire' }],
+      scriptLine: 42
+    })
+
+    const split = splitAudioCue(original, 30_000)!
+
+    expect(split.head.triggers).toEqual([{ id: 't1', kind: 'osc', address: '/eos/cue/12/fire' }])
+    expect(split.head.scriptLine).toBe(42)
+    expect(split.tail.triggers).toEqual([])
+    expect(split.tail.scriptLine).toBeNull()
+  })
+
   it('refuses a point that would leave an empty cue', () => {
     const c = cue({ startTime: 1000, endTime: 60_000 })
 

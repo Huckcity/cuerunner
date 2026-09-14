@@ -13,6 +13,10 @@ import type { AudioCue } from '../types/cue'
  * The region is expressed in file time, and `null` end means the end of the file, which
  * is where a split leaves it: the tail half keeps `endTime: null` so it still ends with
  * the file if a longer file is later chosen.
+ *
+ * What fires the cue — its triggers and the script line it is pinned to — stays with the
+ * head, which is the half that kept the cue's identity. Both halves are the same music cut
+ * in two, not two cues the same message should fire.
  */
 
 /** What one split produces: the head of the cue, and the tail that continues it. */
@@ -59,7 +63,13 @@ export function splitAudioCue(cue: AudioCue, atMs: number): CueSplit | null {
     // the join seamless, and they can put one back if that is what they meant.
     fadeInDuration: 0,
     startTime: atMs,
-    endTime: cue.endTime
+    endTime: cue.endTime,
+    // What fires the cue stays with the half that kept its identity. A tail that carried
+    // the same OSC address or MIDI note would be fired by the same message as the head —
+    // one press, two cues — and the script line a cue is pinned to is the line it was
+    // cut from, which is now the head's.
+    triggers: [],
+    scriptLine: null
   }
   return {
     head: { ...cue, endTime: atMs },

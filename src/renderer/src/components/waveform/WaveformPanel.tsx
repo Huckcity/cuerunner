@@ -36,13 +36,17 @@ type DragMode = 'start' | 'end' | 'cursor'
 /**
  * How close a press has to be to a transient to land on it.
  *
- * A whole-file view puts a second of music in about 400 pixels, so the attack of a note
- * is a target nobody can hit exactly and four pixels would be a snap that never fires.
- * Thirty is a comfortable reach that still leaves the gaps between notes in the gaps:
- * music that is worth placing a boundary in has its hits further apart than a tenth of
- * the width of the panel.
+ * Two reaches, and the nearer one wins. Thirty-two pixels is what a hand needs: a
+ * whole-file view puts a second of music in about 400 pixels, so the attack of a note is
+ * a target nobody hits exactly, and four pixels was a snap that never fired.
+ *
+ * The time is what keeps that honest on a long file. The panel has one zoom, so a
+ * hundred pixels is a tenth of a second in a three-second walk-in and half a minute in a
+ * ten-minute act — and a boundary that jumped half a minute to the nearest hit would be
+ * the panel moving the operator's work for them.
  */
 const SNAP_PX = 32
+const SNAP_MS = 100
 
 export function WaveformPanel() {
   const selectedCue = useSelectedCue()
@@ -213,16 +217,19 @@ export function WaveformPanel() {
     if (!canvas || total <= 0 || onsets.length === 0) return fractionAt(clientX)
     const rect = canvas.getBoundingClientRect()
     const x = clientX - rect.left
-    let best = 0
-    let bestDistance = SNAP_PX + 1
+    let best: number | null = null
+    let bestPixels = SNAP_PX + 1
     for (const onset of onsets) {
-      const distance = Math.abs(onset / total * rect.width - x)
-      if (distance < bestDistance) {
-        bestDistance = distance
-        best = onset / total
+      const pixels = Math.abs(onset / total * rect.width - x)
+      if (pixels < bestPixels) {
+        bestPixels = pixels
+        best = onset
       }
     }
-    return bestDistance <= SNAP_PX ? best : fractionAt(clientX)
+    if (best === null || bestPixels > SNAP_PX) return fractionAt(clientX)
+    // Both reaches: near enough in the hand, and near enough in the music.
+    if (Math.abs(best - fractionAt(clientX) * total) > SNAP_MS) return fractionAt(clientX)
+    return best / total
   }
 
   /** Which grip a press is on, if any: the drawn grips are the only hit targets. */

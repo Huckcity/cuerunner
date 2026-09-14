@@ -3,7 +3,7 @@
 // second message. These tests are written the way a desk misbehaves — a bounce, a repeat,
 // a datagram sent twice — because that is the evidence the window is worth having.
 import { describe, it, expect } from 'vitest'
-import { InputGuard, firingIdentity, noteKey, refirePolicy } from './inputGuard'
+import { HOLD_LIMIT_MS, InputGuard, firingIdentity, noteKey, refirePolicy } from './inputGuard'
 import type { Cue, MidiMessageKind } from '../types/cue'
 import type { ShowEvent } from '../types/show'
 
@@ -33,7 +33,7 @@ function fire(guard: InputGuard, event: ShowEvent, nowMs: number): boolean {
   const accepted = guard.accepts(firing.surface, firing.key, nowMs)
   const note = noteKey(event)
   if (accepted && note !== null && event.kind === 'midi' && event.message.kind === 'noteOn') {
-    guard.pressNote(note)
+    guard.pressNote(note, nowMs)
   }
   return accepted
 }
@@ -128,6 +128,18 @@ describe('InputGuard', () => {
     expect(fire(guard, datagram, 1300)).toBe(true)
     // And the clock restarts from that one, not from the attempts in between.
     expect(fire(guard, datagram, 1400)).toBe(false)
+  })
+
+  it('lets go of a note whose release never came', () => {
+    // The pad unplugged mid-hold, the cable pulled: without an age on the hold, that
+    // control would be dead for the rest of the session and nothing on screen would say
+    // why. Past the limit the next note-on is a new press.
+    const guard = guardAt(300)
+    const noteOn = midi({ kind: 'noteOn', channel: 1, note: 60, velocity: 100 })
+
+    expect(fire(guard, noteOn, 1000)).toBe(true)
+    expect(fire(guard, noteOn, 1000 + HOLD_LIMIT_MS - 1)).toBe(false)
+    expect(fire(guard, noteOn, 1000 + HOLD_LIMIT_MS)).toBe(true)
   })
 
   it('forgets everything when it is reset', () => {
