@@ -1,13 +1,16 @@
 // Failure surfaces: a crashed renderer comes back with an explanation, and errors the
 // operator cannot see in a packaged build reach the session log.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import fs from 'node:fs'
+import path from 'node:path'
 import { closeApp, launchApp } from './helpers'
 
 let app: ElectronApplication
 let page: Page
+let userDataDir: string
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp())
+  ;({ app, page, userDataDir } = await launchApp())
 })
 
 test.afterEach(async () => {
@@ -24,6 +27,31 @@ test('recovers from a renderer crash with an explanation', async () => {
   const mainLog: string[] = []
   app.process().stdout?.on('data', chunk => mainLog.push(String(chunk)))
   app.process().stderr?.on('data', chunk => mainLog.push(String(chunk)))
+
+  // Unsaved work, written where the autosave leaves it. The session that is about to die
+  // has already booted, so this is its snapshot as the next window will find it — and the
+  // crash bar has to explain the crash without telling the operator this is gone.
+  fs.writeFileSync(
+    path.join(userDataDir, 'recovery.wlab'),
+    JSON.stringify({
+      savedAt: Date.now(),
+      sourcePath: null,
+      selectedCueId: 'c1',
+      workspace: {
+        version: 1,
+        id: 'w1',
+        name: 'Crashed Show',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        audioSettings: { outputDeviceId: 'default' },
+        midiSettings: { outputPortName: '' },
+        cues: [{
+          id: 'c1', number: '1', name: 'Where I Was', type: 'wait', colorLabel: 'none',
+          parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 1000,
+          advance: 'none', isArmed: true, notes: ''
+        }]
+      }
+    })
+  )
 
   // A real crash: the renderer process is killed outright. Electron's
   // forcefullyCrashRenderer() goes through Chromium's hung-process path instead, which
@@ -63,11 +91,19 @@ test('recovers from a renderer crash with an explanation', async () => {
 
   const banner = await readRecovered("document.querySelector('[data-kind=\"crash\"]')?.textContent ?? null")
   expect(banner).toContain('The interface stopped unexpectedly')
-  expect(banner).toContain('Anything unsaved is gone')
+  expect(banner).toContain('The workspace file on disk is untouched')
   expect(banner).toContain('was reloaded')
   // Which reason Electron reports depends on the platform ('killed' on macOS, 'crashed'
   // on Linux), so the contract is that the banner says why, not which word it picks.
   expect(banner).toMatch(/\((crashed|killed|oom|launch-failed|integrity-failure)\)/)
+
+  // And the two bars agree with each other: the crash is explained, and the work the
+  // autosave caught is offered back with the cue the session was standing on, rather than
+  // being written off by the banner above it.
+  await expect.poll(
+    () => readRecovered("document.querySelector('[data-kind=\"recovery\"]')?.textContent ?? null"),
+    { timeout: 30_000 }
+  ).toContain('1 · Where I Was')
 
   // The interface answers input again, not just renders: the LOG toggle works.
   const logOpened = await app.evaluate(async ({ BrowserWindow }) => {

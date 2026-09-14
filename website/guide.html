@@ -1162,10 +1162,13 @@ console.log(r.stdout.trim())</code></pre>
           <article class="card">
             <h3>A banner says the interface stopped unexpectedly</h3>
             <p>
-              The window's process died and WinsLab restarted it, which resets the show: the cue
-              list comes back empty and anything unsaved is gone. The <code>.wlab</code> file on
-              disk is untouched, so open it again from <strong>WinsLab ▾ → Open Recent</strong>.
-              Save before a show rather than during one — there is no autosave yet.
+              The window's process died and WinsLab restarted it, so the cue list comes back empty.
+              The <code>.wlab</code> file on disk is untouched — open it again from
+              <strong>WinsLab ▾ → Open Recent</strong> — and unsaved work is not necessarily gone:
+              WinsLab snapshots it every 30 seconds while there are changes (see
+              <a href="#workspaces">Workspaces</a>), and the recovery bar offers the last snapshot
+              back with <strong>Recover</strong>, including the cue the session was standing on.
+              Recovered work counts as unsaved, so save it when the show allows.
             </p>
           </article>
           <article class="card">

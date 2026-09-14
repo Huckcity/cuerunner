@@ -28,7 +28,7 @@ describe('CrashNotice', () => {
     await act(async () => { root.render(<CrashNotice />) })
   }
 
-  it('says the interface stopped, which reason, and that unsaved work is gone', async () => {
+  it('says the interface stopped, which reason, and where the unsaved work stands', async () => {
     await renderCrash({ reason: 'crashed', at: Date.parse('2026-01-01T20:30:00Z') })
 
     const notice = container.querySelector('.app-notice')
@@ -36,7 +36,10 @@ describe('CrashNotice', () => {
     expect(notice?.textContent).toContain('The interface stopped unexpectedly')
     expect(notice?.textContent).toContain('(crashed)')
     expect(notice?.textContent).toContain('was reloaded')
-    expect(notice?.textContent).toContain('Anything unsaved is gone')
+    // Not "it is gone": the autosave snapshot may hold it, and the recovery bar beside this
+    // one is where the operator finds out which.
+    expect(notice?.textContent).toContain('The workspace file on disk is untouched')
+    expect(notice?.textContent).toContain('offered back when the autosave caught it')
   })
 
   it('shows nothing when the last renderer did not crash', async () => {
