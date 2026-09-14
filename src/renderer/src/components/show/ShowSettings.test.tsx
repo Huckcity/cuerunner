@@ -349,8 +349,10 @@ describe('ShowSettings', () => {
         .toEqual(cast().dcas.map(entry => entry.id))
       expect([...container.querySelectorAll<HTMLSelectElement>('.channel-dca')]
         .map(select => select.value)).toEqual(cast().dcas.map(entry => entry.id))
-      // …and the first fader is sent the address its number makes.
-      expect(field('.dca-sent').textContent).toBe('/dca/1/on 1')
+      // …and what the desk is sent is read back once, from the connection: the address a
+      // DCA's number makes, where it goes, and which value opens it.
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends /dca/1/on … /dca/12/on to 127.0.0.1:8000, with 1 to open and 0 to close')
     })
 
     it('edits where the desk is: the host, the port and the address pattern a DCA is sent to', async () => {
@@ -358,7 +360,8 @@ describe('ShowSettings', () => {
 
       // The first and last of what the show will send, read back from the pattern: it is
       // easier to check as the addresses it makes than as a template.
-      expect(container.querySelector('.desk-preview')?.textContent).toBe('/dca/1/on … /dca/12/on')
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toContain('/dca/1/on … /dca/12/on to 127.0.0.1:8000')
 
       await type(field('.desk-host'), '10.0.0.5')
       await leave(field('.desk-host'))
@@ -370,8 +373,8 @@ describe('ShowSettings', () => {
       expect(useStore.getState().showSettings.desk.host).toBe('10.0.0.5')
       expect(useStore.getState().showSettings.desk.port).toBe(9000)
       expect(useStore.getState().showSettings.desk.address).toBe('/dca/{n}/mute')
-      expect(container.querySelector('.desk-preview')?.textContent).toBe('/dca/1/mute … /dca/12/mute')
-      expect(field('.dca-sent').textContent).toBe('/dca/1/mute 1')
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends /dca/1/mute … /dca/12/mute to 10.0.0.5:9000, with 1 to open and 0 to close')
     })
 
     it('drives the desk over MIDI, offering the ports the machine reports', async () => {
@@ -382,7 +385,6 @@ describe('ShowSettings', () => {
       // A message to nowhere is worse than none, so a MIDI desk with no port chosen says
       // what is missing rather than previewing a send that cannot happen.
       expect(container.querySelector('.desk-gap')?.textContent).toBe('No MIDI port chosen.')
-      expect(field('.dca-sent').textContent).toBe('not sent')
 
       const port = field<HTMLSelectElement>('.desk-midi-port')
       expect([...port.options].map(option => option.textContent))
@@ -394,8 +396,8 @@ describe('ShowSettings', () => {
 
       expect(useStore.getState().showSettings.desk.midiPort).toBe('Yamaha')
       expect(useStore.getState().showSettings.desk.midiChannel).toBe(3)
-      expect(container.querySelector('.desk-preview')?.textContent).toBe('note 1 … 12 → "Yamaha"')
-      expect(field('.dca-sent').textContent).toBe('noteOn 3')
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends note 1 … 12 to "Yamaha", on and off')
 
       // A desk that numbers its DCAs differently: its own note in place of the one the
       // number makes, and typing that number back clears the override.
@@ -492,19 +494,21 @@ describe('ShowSettings', () => {
       const override = field('.dca-override', 3)
       expect(override.value).toBe('')
       expect(override.placeholder).toBe('/dca/4/on')
-      expect(field('.dca-sent', 3).textContent).toBe('/dca/4/on 1')
 
       await type(override, '/dca/99/mute')
       await leave(override)
 
       expect(cast().dcas[3].address).toBe('/dca/99/mute')
-      expect(field('.dca-sent', 3).textContent).toBe('/dca/99/mute 1')
+      expect(field('.dca-override', 3).value).toBe('/dca/99/mute')
 
       await type(field('.dca-override', 3), '')
       await leave(field('.dca-override', 3))
 
+      // Empty is not "send nothing": it is the address the number makes again, which is
+      // what the placeholder is there to say.
       expect(cast().dcas[3].address).toBeNull()
-      expect(field('.dca-sent', 3).textContent).toBe('/dca/4/on 1')
+      expect(field('.dca-override', 3).value).toBe('')
+      expect(field('.dca-override', 3).placeholder).toBe('/dca/4/on')
     })
 
     it('shows which strips feed each DCA', async () => {

@@ -8,9 +8,9 @@ import {
   updateChannel,
   updateDca
 } from '../../utils/cast'
-import { dcaAddress, dcaNumber, deskMessages } from '../../utils/desk'
+import { dcaAddress, dcaNumber } from '../../utils/desk'
 import { DCA_LIMIT } from '../../types/show'
-import type { CastSettings, DeskMessage, DeskSettings } from '../../types/show'
+import type { CastSettings, DeskSettings } from '../../types/show'
 import { CommitInput, CommitNumber } from './CommitField'
 
 const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
@@ -64,22 +64,6 @@ export function ChannelsTab() {
       <div className="show-section">
         <div className="show-section-head">
           <span className="show-section-title">Desk</span>
-          <label className="dca-count">
-            <span className="dca-count-label">DCAs to control</span>
-            <select
-              className="dca-count-select"
-              aria-label="Number of DCAs"
-              value={cast.dcas.length}
-              onChange={e => apply(setDcaCount(cast, Number(e.target.value)))}
-            >
-              {/* A show from an older build can carry more DCAs than the dial offers;
-                  the count it has stays selectable rather than silently shrinking. */}
-              {(cast.dcas.length > DCA_LIMIT ? [...DCA_COUNTS, cast.dcas.length] : DCA_COUNTS)
-                .map(count => (
-                  <option key={count} value={count}>{count === 0 ? 'none' : count}</option>
-                ))}
-            </select>
-          </label>
         </div>
 
         <div className="desk-row">
@@ -96,14 +80,20 @@ export function ChannelsTab() {
 
           {desk.kind === 'osc' && (
             <>
+              {/* The fields are labelled rather than left to their values: an address is
+                  only obvious to whoever typed it. */}
+              <label className="desk-label" htmlFor="desk-host">Host</label>
               <CommitInput
+                id="desk-host"
                 className="desk-host"
                 value={desk.host}
-                placeholder="Host"
+                placeholder="127.0.0.1"
                 aria-label="Desk host"
                 onCommit={host => updateDeskSettings({ host })}
               />
+              <label className="desk-label" htmlFor="desk-port">Port</label>
               <CommitNumber
+                id="desk-port"
                 className="desk-port"
                 value={desk.port}
                 min={1}
@@ -111,7 +101,9 @@ export function ChannelsTab() {
                 aria-label="Desk port"
                 onCommit={port => updateDeskSettings({ port })}
               />
+              <label className="desk-label" htmlFor="desk-address">Address</label>
               <CommitInput
+                id="desk-address"
                 className="desk-address"
                 value={desk.address}
                 placeholder="/dca/{n}/on"
@@ -124,7 +116,9 @@ export function ChannelsTab() {
 
           {desk.kind === 'midi' && (
             <>
+              <label className="desk-label" htmlFor="desk-midi-port">Port</label>
               <select
+                id="desk-midi-port"
                 className="desk-midi-port"
                 aria-label="Desk MIDI port"
                 value={desk.midiPort}
@@ -135,7 +129,9 @@ export function ChannelsTab() {
                   <option key={port} value={port}>{port}</option>
                 ))}
               </select>
+              <label className="desk-label" htmlFor="desk-midi-channel">Channel</label>
               <CommitNumber
+                id="desk-midi-channel"
                 className="desk-midi-channel"
                 value={desk.midiChannel}
                 min={1}
@@ -151,13 +147,14 @@ export function ChannelsTab() {
           )}
         </div>
 
-        {/* The first and last of what the show will send, read back from the connection:
-            the pattern and the port are easier to check as addresses than as a template. */}
+        {/* What the show sends, read back from the connection: a pattern and a port are
+            easier to check as addresses. This is the only place the convention lives, so a
+            DCA row is left saying what it is rather than what goes out of it. */}
         {desk.kind !== 'none' && !gap && (
           <div className="desk-preview">{
             desk.kind === 'osc'
-              ? `${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, Math.max(0, cast.dcas.length - 1))}`
-              : `note ${dcaNumber(0)} … ${dcaNumber(Math.max(0, cast.dcas.length - 1))} → "${desk.midiPort}"`
+              ? `Sends ${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, Math.max(0, cast.dcas.length - 1))} to ${desk.host}:${desk.port}, with 1 to open and 0 to close`
+              : `Sends note ${dcaNumber(0)} … ${dcaNumber(Math.max(0, cast.dcas.length - 1))} to "${desk.midiPort}", on and off`
           }</div>
         )}
         {gap !== null && <div className="desk-preview desk-gap">{gap}</div>}
@@ -206,6 +203,22 @@ export function ChannelsTab() {
       <div className="show-section">
         <div className="show-section-head">
           <span className="show-section-title">DCAs</span>
+          <label className="dca-count">
+            <span className="dca-count-label">Count</span>
+            <select
+              className="dca-count-select"
+              aria-label="Number of DCAs"
+              value={cast.dcas.length}
+              onChange={e => apply(setDcaCount(cast, Number(e.target.value)))}
+            >
+              {/* A show from an older build can carry more DCAs than the dial offers;
+                  the count it has stays selectable rather than silently shrinking. */}
+              {(cast.dcas.length > DCA_LIMIT ? [...DCA_COUNTS, cast.dcas.length] : DCA_COUNTS)
+                .map(count => (
+                  <option key={count} value={count}>{count === 0 ? 'none' : count}</option>
+                ))}
+            </select>
+          </label>
         </div>
 
         {cast.dcas.length === 0 ? (
@@ -215,8 +228,6 @@ export function ChannelsTab() {
             const carrying = cast.channels
               .filter(channel => channel.dcaId === dca.id)
               .map(channel => channelLabel(cast.channels, channel.id))
-            const sent = deskMessages(dca, index, desk)?.unmute ?? null
-
             return (
               <div className="dca-row" key={dca.id}>
                 <div className="dca-fields">
@@ -256,9 +267,6 @@ export function ChannelsTab() {
                       }))}
                     />
                   )}
-                  <span className="dca-sent">
-                    {sent === null ? 'not sent' : describeSent(sent)}
-                  </span>
                 </div>
                 <div className="dca-carrying">
                   {carrying.length === 0 ? 'nothing assigned' : carrying.join(', ')}
@@ -270,11 +278,4 @@ export function ChannelsTab() {
       </div>
     </div>
   )
-}
-
-/** What one message will look like on the wire, short enough for a row. */
-function describeSent(message: DeskMessage): string {
-  if (message.kind === 'osc') return `${message.address} ${message.args.join(' ')}`
-  const kind = message.message.kind
-  return kind === 'sysex' ? `sysex ${message.message.data.length} bytes` : `${kind} ${message.message.channel}`
 }

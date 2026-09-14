@@ -108,30 +108,50 @@ test('the DCA count resizes the desk, and a strip says which fader it rides', as
 })
 
 test('a DCA can be sent somewhere other than the address its number makes', async () => {
-  await openShowSettings(page)
-  const dialog = page.locator('.show-settings-dialog')
-  const dca = dialog.locator('.dca-row').first()
-  const override = dca.locator('.dca-override')
+  test.setTimeout(60_000)
+  const desk = await listenOsc(freePort())
 
-  // The field starts empty and its placeholder is the address the number makes: the row
-  // says what will be sent without anything having been typed into it.
-  await expect(override).toHaveValue('')
-  await expect(override).toHaveAttribute('placeholder', '/dca/1/on')
-  await expect(dca.locator('.dca-sent')).toHaveText('/dca/1/on 1')
+  try {
+    await openShowSettings(page)
+    const dialog = page.locator('.show-settings-dialog')
+    const override = dialog.locator('.dca-row').first().locator('.dca-override')
 
-  // A desk that mutes the principal somewhere else gets an address typed here, and the row
-  // reads back what that DCA is now sent.
-  await override.fill('/stage/principals')
-  await override.blur()
-  await expect(override).toHaveValue('/stage/principals')
-  await expect(dca.locator('.dca-sent')).toHaveText('/stage/principals 1')
+    // The field starts empty and its placeholder is the address the number makes: it says
+    // what will be sent without anything having been typed into it.
+    await expect(override).toHaveValue('')
+    await expect(override).toHaveAttribute('placeholder', '/dca/1/on')
 
-  // Clearing it goes back to the address of its number, not to an address of nothing.
-  await override.fill('')
-  await override.blur()
-  await expect(override).toHaveValue('')
-  await expect(override).toHaveAttribute('placeholder', '/dca/1/on')
-  await expect(dca.locator('.dca-sent')).toHaveText('/dca/1/on 1')
+    // A desk that mutes the principal somewhere else gets an address typed here. The row
+    // itself no longer reads the message back — the wire is where that is read.
+    await override.fill('/stage/principals')
+    await override.blur()
+    await expect(override).toHaveValue('/stage/principals')
+    await dialog.locator('.show-settings-done').click()
+
+    await liveRack(page)
+    await pointDeskAtOsc(page, desk.port)
+    await page.locator('.show-settings-done').click()
+
+    // A one-mic scene opens DCA 1 at the address it was given, and closes the eleven it
+    // leaves dark at the addresses their numbers make.
+    await openScenesView(page)
+    await editScenes(page)
+    await page.locator('.scenes-add').click()
+    await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
+    await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
+    await expect.poll(() => desk.received.length).toBe(12)
+    expect(desk.received[0]).toEqual({ address: '/stage/principals', args: [1] })
+    expect(desk.received.slice(1).map(message => message.address)).toEqual(
+      Array.from({ length: 11 }, (_, index) => `/dca/${index + 2}/on`)
+    )
+
+    // And the all-closed column closes it where it was sent, not where its number lives.
+    await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
+    await expect.poll(() => desk.received.length).toBe(13)
+    expect(desk.received[12]).toEqual({ address: '/stage/principals', args: [0] })
+  } finally {
+    await desk.close()
+  }
 })
 
 test('the defaults take a show nobody wired to a desk of its own', async () => {
@@ -180,13 +200,12 @@ test('a show with no desk sends nothing, however the scene moves', async () => {
     await expect.poll(() => desk.received.length).toBe(1)
     expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
 
-    // A show pointed at no desk says so on every DCA row, and a recall of the all-closed
-    // column — which would close the fader — puts nothing on the wire at all.
+    // A show pointed at no desk says so under the desk connection, and a recall of the
+    // all-closed column — which would close the fader — puts nothing on the wire at all.
     await openShowSettings(page)
     const dialog = page.locator('.show-settings-dialog')
     await dialog.locator('.desk-kind').selectOption('none')
     await expect(dialog.locator('.desk-hint')).toContainText('Nothing is sent')
-    await expect(dialog.locator('.dca-row').first().locator('.dca-sent')).toHaveText('not sent')
     await dialog.locator('.show-settings-done').click()
 
     await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()

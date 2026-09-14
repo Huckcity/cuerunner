@@ -171,7 +171,15 @@
   border-color: var(--border-focus);
 }
 
-.desk-kind { flex: 0 0 110px; }
+/* The label belongs to the field it names, and sits beside it: the row is a sentence —
+   "OSC to 10.0.0.5:9000 at /dca/{n}/on". */
+.desk-label {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.desk-kind { flex: 0 0 96px; }
 .desk-host { flex: 1 1 140px; }
 .desk-port { flex: 0 0 80px; }
 .desk-address { flex: 1 1 190px; font-family: var(--font-mono); }
@@ -325,23 +333,15 @@
 
 /* The override: empty means the message the DCA's number makes, and the placeholder is
    that message, so the field shows what will be sent without being typed into. */
-.dca-override { flex: 0 0 170px; font-family: var(--font-mono); }
-
-.dca-sent {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-}
+/* The override takes the room the row has: addresses are long, and a row of boxes half
+   the width of the section is a row that reads as unfinished. */
+.dca-override { flex: 1 1 200px; font-family: var(--font-mono); }
 
 /* Which strips a DCA is carrying is the other half of "what opens this": the routing is
    on the channels, so this is where it is read back. */
 .dca-carrying {
-  padding-left: var(--space-1);
+  /* In from the number gutter, so the line starts under the label it belongs to. */
+  padding-left: calc(16px + var(--space-2));
   font-size: var(--text-sm);
   color: var(--fg-ghost);
 }
