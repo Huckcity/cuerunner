@@ -18,6 +18,7 @@ import {
 import type {
   DeviceEvent,
   DeviceState,
+  RfPerformer,
   RfPlot,
   RfThresholds,
   ShowAlert,
@@ -77,14 +78,17 @@ function response(body: unknown, status = 200): { ok: boolean; status: number; j
 
 function settings(
   sources: TelemetrySource[],
-  plot: RfPlot = { performers: [], packs: [] },
+  plot: RfPlot = { packs: [] },
+  performers: RfPerformer[] = [],
   thresholds: RfThresholds = defaultRfThresholds()
 ): ShowSettings {
+  const defaults = defaultShowSettings()
   return {
-    ...defaultShowSettings(),
+    ...defaults,
     oscIn: { enabled: false, port: 53000 },
     midiIn: { enabled: false, portNames: [] },
-    rf: { plot, sources, swaps: [], thresholds }
+    rf: { plot, sources, swaps: [], thresholds },
+    cast: { ...defaults.cast, performers }
   }
 }
 
@@ -420,13 +424,15 @@ describe('WirelessService', () => {
   it('names the pack and the performer from the plot, and falls back without them', async () => {
     const { service, fetchJson, context, bus } = harness()
     const plot: RfPlot = {
-      performers: [{ id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '' }],
       packs: [
         { id: 'slot-12', label: 'Pack 12', channelId: 'ch-12', performerId: 'perf-1', notes: '' },
         { id: 'slot-13', label: 'Pack 13', channelId: 'ch-13', performerId: null, notes: '' },
         { id: 'slot-14', label: 'Pack 14', channelId: 'ch-14', performerId: 'gone', notes: '' }
       ]
     }
+    const performers: RfPerformer[] = [
+      { id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', ensembleId: null, deskChannelId: null }
+    ]
     fetchJson.mockResolvedValue(
       response(
         document(
@@ -438,7 +444,7 @@ describe('WirelessService', () => {
       )
     )
 
-    service.start(context, settings([httpSource()], plot))
+    service.start(context, settings([httpSource()], plot, performers))
     await flush()
 
     expect(messages(bus)).toEqual([
@@ -487,7 +493,6 @@ describe('WirelessService', () => {
   it('ages out a pack the plot expects and the rack never reports', async () => {
     const { service, context, bus } = harness()
     const plot: RfPlot = {
-      performers: [{ id: 'perf-7', name: 'Antonia', role: 'supporting', notes: '' }],
       packs: [
         {
           id: 'slot-7',
@@ -498,8 +503,11 @@ describe('WirelessService', () => {
         }
       ]
     }
+    const performers: RfPerformer[] = [
+      { id: 'perf-7', name: 'Antonia', role: 'supporting', notes: '', ensembleId: null, deskChannelId: null }
+    ]
 
-    service.start(context, settings([demoSource()], plot))
+    service.start(context, settings([demoSource()], plot, performers))
     expect(device(bus, demoChannelId(7))).toBeUndefined()
 
     await vi.advanceTimersByTimeAsync(6000)
@@ -516,7 +524,6 @@ describe('WirelessService', () => {
   it('leaves a pack with no channel out of it, unpatched rather than offline', async () => {
     const { service, context, bus } = harness()
     const plot: RfPlot = {
-      performers: [],
       packs: [{ id: 'spare', label: 'Spare pack', channelId: null, performerId: null, notes: '' }]
     }
 
@@ -606,7 +613,6 @@ describe('WirelessService', () => {
   it('starts a plot-seeded pack with no floor until the rack says what it is', async () => {
     const { service, fetchJson, context, bus } = harness()
     const plot: RfPlot = {
-      performers: [],
       packs: [{ id: 'slot-12', label: 'Pack 12', channelId: 'ch-12', performerId: null, notes: '' }]
     }
 
@@ -630,7 +636,6 @@ describe('WirelessService', () => {
   it('counts a dropout for a plot-seeded pack the rack never names, with no floor invented', async () => {
     const { service, fetchJson, context, bus } = harness()
     const plot: RfPlot = {
-      performers: [],
       packs: [{ id: 'slot-12', label: 'Pack 12', channelId: 'ch-12', performerId: null, notes: '' }]
     }
 

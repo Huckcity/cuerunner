@@ -1,6 +1,7 @@
-// The Scenes view: the matrix the show is run from and the only place scenes, mics and
-// desk groups are edited. The test owns a UDP port and the desk groups point at it, so
-// what is asserted is what actually left the app.
+// The Scenes view: the matrix the show is run from and the only place scenes are
+// edited. Desk groups, performers and ensembles are the Show panel's
+// (`show-dialog.spec.ts`); the test owns a UDP port and the group points at it, so what
+// is asserted here is what actually left the app.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import {
   addCueFromMoreMenu,
@@ -69,39 +70,10 @@ test('the show is edited in the view, not in a dialog', async () => {
   await page.locator('.matrix-scene').nth(2).locator('.matrix-scene-remove').click()
   await expect(page.locator('.matrix-scene')).toHaveCount(2)
 
-  // The row is who is wearing the mic. Which group that mic feeds is a patch, set up with
-  // the rest of the plot rather than in the grid the show is run from.
+  // The row is the performer. Which group their mic feeds is set up in the Show panel,
+  // not in the grid the show is run from.
   await expect(page.locator('.matrix-performer').first()).toHaveText('Aldonza')
   await expect(page.locator('.matrix-row').first().locator('select')).toHaveCount(0)
-})
-
-test('a group row assigns and releases its own packs, without opening the mic plot', async () => {
-  test.setTimeout(60_000)
-
-  await buildDeskShow(page, freePort())
-
-  const groups = page.locator('.scenes-groups')
-  await groups.locator('.group-add').click()
-  const second = groups.locator('.group-row').nth(1)
-  await second.locator('.group-label').fill('DCA 2')
-  await second.locator('.group-label').blur()
-
-  // Pack 1 already feeds DCA 1 from buildDeskShow's mic-plot patch, so the picker on
-  // DCA 2 never offers it — only packs no group has claimed yet.
-  const add = second.locator('.group-pack-add')
-  const offered = await add.locator('option').allTextContents()
-  expect(offered).not.toContain('Pack 1')
-  await add.selectOption({ label: 'Pack 2' })
-
-  await expect(second.locator('.pack-chip')).toHaveCount(1)
-  await expect(second.locator('.pack-chip')).toContainText('Pack 2')
-  // The picker is always showing its placeholder, never what was just chosen.
-  await expect(add).toHaveValue('')
-
-  // Releasing puts the pack straight back on the desk group's own picker — no trip
-  // through the mic plot dialog either way.
-  await second.locator('.pack-chip-remove').click()
-  await expect(second.locator('.pack-chip')).toHaveCount(0)
 })
 
 test('a show with many scenes still fits the window', async () => {
@@ -328,7 +300,6 @@ test('mics off closes everything the plot drives', async () => {
 
     await expect.poll(() => desk.received.length).toBe(1)
     expect(desk.received[0].args).toEqual([0])
-    await expect(page.locator('.group-state').first()).toHaveText('muted')
   } finally {
     await desk.close()
   }
@@ -352,7 +323,7 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
     await expect(cell).toHaveAttribute('data-live', 'false')
     await expect(page.locator('.scenes-add')).toHaveCount(0)
     await expect(page.locator('.matrix-scene-remove')).toHaveCount(0)
-    await expect(page.locator('.scenes-groups .group-label').first()).toBeDisabled()
+    await expect(page.locator('.scenes-show')).toHaveCount(0)
 
     // Recalling is what the view is for: it stays live.
     await page.locator('.matrix-recall').first().click()

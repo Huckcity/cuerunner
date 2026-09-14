@@ -109,4 +109,83 @@ describe('migrateWorkspace', () => {
     expect(workspace.showSettings?.oscIn).toEqual({ enabled: false, port: 53000 })
     expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
   })
+
+  it('carries a performer over from the plot, with the desk group whichever pack fed them', () => {
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: {
+        rf: {
+          plot: {
+            performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '' }],
+            packs: [
+              { id: 'pack1', label: 'Pack 1', channelId: 'ch1', performerId: 'p1', notes: '', deskChannelId: 'dca1' }
+            ]
+          }
+        },
+        scenes: {
+          channels: [{ id: 'dca1', label: 'DCA 1', mute: null, unmute: null }],
+          list: []
+        }
+      } as unknown as Workspace['showSettings']
+    })
+
+    expect(workspace.showSettings?.cast.performers).toEqual([
+      { id: 'p1', name: 'Ada', role: 'Lead', notes: '', ensembleId: null, deskChannelId: 'dca1' }
+    ])
+    expect(workspace.showSettings?.cast.groups.map(group => group.id)).toEqual(['dca1'])
+    expect(workspace.showSettings?.cast.ensembles).toEqual([])
+    // The old homes are gone, not left behind empty for the next load to trip over.
+    expect((workspace.showSettings?.rf.plot as unknown as Record<string, unknown>).performers)
+      .toBeUndefined()
+    expect((workspace.showSettings?.scenes as unknown as Record<string, unknown>).channels)
+      .toBeUndefined()
+    expect((workspace.showSettings?.rf.plot.packs[0] as unknown as Record<string, unknown>).deskChannelId)
+      .toBeUndefined()
+  })
+
+  it("turns a scene's open packs into the performers who were wearing them, dropping a spare", () => {
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: {
+        rf: {
+          plot: {
+            performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '' }],
+            packs: [
+              { id: 'pack1', label: 'Pack 1', channelId: 'ch1', performerId: 'p1', notes: '' },
+              { id: 'pack2', label: 'Pack 2', channelId: 'ch2', performerId: null, notes: '' }
+            ]
+          }
+        },
+        scenes: {
+          channels: [],
+          list: [{ id: 's1', name: 'Opening', live: ['pack1', 'pack2'], notes: '' }]
+        }
+      } as unknown as Workspace['showSettings']
+    })
+
+    // Pack 2 was nobody's, so the scene it was open in only remembers Pack 1's wearer.
+    expect(workspace.showSettings?.scenes.list).toEqual([
+      { id: 's1', name: 'Opening', live: ['p1'], notes: '' }
+    ])
+  })
+
+  it('migrates an older cast once, and leaves an already-migrated one alone', () => {
+    const legacy = {
+      ...workspaceWith([]),
+      showSettings: {
+        rf: {
+          plot: {
+            performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '' }],
+            packs: [{ id: 'pack1', label: 'Pack 1', channelId: null, performerId: 'p1', notes: '', deskChannelId: 'dca1' }]
+          }
+        },
+        scenes: { channels: [{ id: 'dca1', label: 'DCA 1', mute: null, unmute: null }], list: [] }
+      } as unknown as Workspace['showSettings']
+    }
+
+    const once = migrateWorkspace(legacy)
+    const twice = migrateWorkspace(once)
+
+    expect(twice.showSettings?.cast).toEqual(once.showSettings?.cast)
+  })
 })

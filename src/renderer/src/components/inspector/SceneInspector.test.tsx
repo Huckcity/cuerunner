@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { SceneInspector } from './SceneInspector'
 import { useStore } from '../../store'
 import { defaultShowSettings, type MicScene, type ScenesSettings } from '../../types/show'
-import { midiNoteMessages } from '../../utils/scenes'
+import { midiNoteMessages } from '../../utils/cast'
 import type { SceneCue } from '../../types/cue'
 
 const note = midiNoteMessages('Yamaha', 1, 36)
@@ -39,22 +39,17 @@ describe('SceneInspector', () => {
     useStore.setState({
       showSettings: {
         ...defaults,
-        rf: {
-          ...defaults.rf,
-          plot: {
-            performers: [],
-            packs: [{
-              id: 'pack-1', label: 'Pack 1', channelId: null,
-              performerId: null, notes: '', deskChannelId: 'dca-1'
-            }]
-          }
+        cast: {
+          groups: [{ id: 'dca-1', label: 'DCA 1', ...note }],
+          performers: [{
+            id: 'p-1', name: 'Ada', role: 'Lead', notes: '',
+            ensembleId: null, deskChannelId: 'dca-1'
+          }],
+          ensembles: []
         },
-        scenes: {
-          channels: [{ id: 'dca-1', label: 'DCA 1', ...note }],
-          list: scenes.list ?? [scene('s-1', 'Wedding', ['pack-1'])]
-        }
+        scenes: { list: scenes.list ?? [scene('s-1', 'Wedding', ['p-1'])] }
       },
-      deskState: scenes.channels ? {} : {},
+      deskState: {},
       deskSceneId: null,
       log: [],
       cues: [cue]
@@ -96,7 +91,7 @@ describe('SceneInspector', () => {
 
   it('says what firing it will do, and refuses to when nothing is chosen', async () => {
     show(cue('s-1'))
-    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 mic open')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 performer open')
 
     show(cue(''))
     expect(container.querySelector('.inspector-hint')?.textContent)

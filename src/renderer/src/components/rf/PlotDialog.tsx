@@ -1,17 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
-import {
-  addPack,
-  addPerformer,
-  assignPack,
-  describeSwap,
-  recordSwaps,
-  removePack,
-  removePerformer,
-  updatePack,
-  updatePerformer
-} from '../../utils/rfPlot'
+import { addPack, assignPack, describeSwap, recordSwaps, removePack, updatePack } from '../../utils/rfPlot'
 import type { RfPlot, RfSwap } from '../../types/show'
 import './PlotDialog.css'
 
@@ -73,9 +63,9 @@ function CommitInput({
 export function PlotDialog({ onClose }: Props) {
   const plot = useStore(s => s.showSettings.rf.plot)
   const swaps = useStore(s => s.showSettings.rf.swaps)
-  // Which group on the desk a pack feeds is set once, with the rest of the plot, so it is
-  // edited here rather than in the grid the show is run from.
-  const deskGroups = useStore(s => s.showSettings.scenes.channels)
+  // Performers themselves — and which desk group they feed — are the cast's, set up in
+  // the Show panel. The plot only says who is currently wearing which transmitter.
+  const performers = useStore(s => s.showSettings.cast.performers)
   const devices = useStore(s => s.showDevices)
   const updateRfSettings = useStore(s => s.updateRfSettings)
   const appendLog = useStore(s => s.appendLog)
@@ -113,46 +103,6 @@ export function PlotDialog({ onClose }: Props) {
         </div>
 
         <div className="plot-body">
-          <div className="plot-section plot-cast">
-            <div className="plot-section-title">Cast</div>
-            {plot.performers.map(performer => (
-              <div className="plot-performer-row" key={performer.id}>
-                <CommitInput
-                  className="plot-name"
-                  value={performer.name}
-                  placeholder="Name"
-                  aria-label="Performer name"
-                  onCommit={name => apply(updatePerformer(plot, performer.id, { name }))}
-                />
-                <CommitInput
-                  className="plot-role"
-                  value={performer.role}
-                  placeholder="Role"
-                  aria-label="Performer role"
-                  onCommit={role => apply(updatePerformer(plot, performer.id, { role }))}
-                />
-                <CommitInput
-                  className="plot-notes"
-                  value={performer.notes}
-                  placeholder="Notes"
-                  aria-label="Performer notes"
-                  onCommit={notes => apply(updatePerformer(plot, performer.id, { notes }))}
-                />
-                <button
-                  className="plot-remove"
-                  aria-label={`Remove ${performer.name || 'performer'}`}
-                  onClick={() => {
-                    const change = removePerformer(plot, performer.id, Date.now())
-                    apply(change.plot, change.swaps)
-                  }}
-                >✕</button>
-              </div>
-            ))}
-            <button className="plot-add-performer add-row" onClick={() => apply(addPerformer(plot, 'New performer', ''))}>
-              + Add performer
-            </button>
-          </div>
-
           <div className="plot-section plot-packs">
             <div className="plot-section-title">Packs</div>
             {plot.packs.map(pack => (
@@ -177,26 +127,13 @@ export function PlotDialog({ onClose }: Props) {
                   value={pack.performerId ?? ''}
                   aria-label="Pack performer"
                   onChange={e => {
-                    const change = assignPack(plot, pack.id, e.target.value || null, Date.now())
+                    const change = assignPack(plot, performers, pack.id, e.target.value || null, Date.now())
                     apply(change.plot, change.swaps)
                   }}
                 >
                   <option value="">— unassigned —</option>
-                  {plot.performers.map(performer => (
+                  {performers.map(performer => (
                     <option key={performer.id} value={performer.id}>{performer.name}</option>
-                  ))}
-                </select>
-                <select
-                  className="plot-pack-group"
-                  value={pack.deskChannelId ?? ''}
-                  aria-label="Pack desk group"
-                  onChange={e => apply(updatePack(plot, pack.id, {
-                    deskChannelId: e.target.value || null
-                  }))}
-                >
-                  <option value="">— no group —</option>
-                  {deskGroups.map(group => (
-                    <option key={group.id} value={group.id}>{group.label}</option>
                   ))}
                 </select>
                 <CommitInput

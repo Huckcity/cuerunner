@@ -9,18 +9,18 @@ import type {
   DeviceEvent,
   DeviceState,
   MicScene,
-  RfPack,
+  RfPerformer,
   ServiceEvent,
   ShowEvent
 } from '../types/show'
 
 const DESK_GROUP: DeskChannel = { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null }
-const WORN_PACK: RfPack = {
+const ROUTED_PERFORMER: RfPerformer = {
   id: 'p1',
-  label: 'Pack 1',
-  channelId: null,
-  performerId: null,
+  name: 'Ada',
+  role: 'Lead',
   notes: '',
+  ensembleId: null,
   deskChannelId: 'dca-1'
 }
 const NUMBER: MicScene = { id: 's1', name: 'Bows', live: ['p1'], notes: '' }
@@ -467,28 +467,28 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().cues.find(c => c.id === c1.id)?.name).toBe('First')
   })
 
-  it('undo after removing a desk group brings the group and its packs back together', () => {
+  it('undo after removing a desk group brings the group and its performers back together', () => {
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
         ...defaults,
-        scenes: { ...defaults.scenes, channels: [DESK_GROUP], list: [NUMBER] },
-        rf: { ...defaults.rf, plot: { performers: [], packs: [WORN_PACK] } }
+        scenes: { ...defaults.scenes, list: [NUMBER] },
+        cast: { groups: [DESK_GROUP], performers: [ROUTED_PERFORMER], ensembles: [] }
       }
     })
 
-    useStore.getState().removeDeskGroup(DESK_GROUP.id)
+    useStore.getState().removeCastGroup(DESK_GROUP.id)
 
-    // The group goes and the pack that fed it is unpicked in the same edit: a pack pointing
-    // at a group that is gone is a mic nothing on the desk opens.
-    expect(useStore.getState().showSettings.scenes.channels).toEqual([])
-    expect(useStore.getState().showSettings.rf.plot.packs[0].deskChannelId).toBeNull()
+    // The group goes and the performer routed to it is unpicked in the same edit: a
+    // performer pointing at a group that is gone is a mic nothing on the desk opens.
+    expect(useStore.getState().showSettings.cast.groups).toEqual([])
+    expect(useStore.getState().showSettings.cast.performers[0].deskChannelId).toBeNull()
 
     // One undo, rather than half of the edit and then the other half.
     useStore.getState().undo()
-    expect(useStore.getState().showSettings.scenes.channels.map(channel => channel.id))
+    expect(useStore.getState().showSettings.cast.groups.map(group => group.id))
       .toEqual([DESK_GROUP.id])
-    expect(useStore.getState().showSettings.rf.plot.packs[0].deskChannelId).toBe('dca-1')
+    expect(useStore.getState().showSettings.cast.performers[0].deskChannelId).toBe('dca-1')
   })
 
   it('undo after deleting a scene restores it with the mics it opens', () => {

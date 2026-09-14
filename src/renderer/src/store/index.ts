@@ -4,8 +4,8 @@ import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings, WorkspaceIdentity } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
+  CastSettings,
   CompanionSettings,
-  DeskChannel,
   DeviceState,
   DeviceEvent,
   MicScene,
@@ -24,7 +24,9 @@ import type {
   ShowSnapshot
 } from '../types/show'
 import { createCue } from '../utils/cueDefaults'
-import { removeDeskChannel } from '../utils/scenes'
+import { clearDeskGroupPointers, removeDeskGroup, removePerformerFromCast } from '../utils/cast'
+import { removePerformerFromScenes } from '../utils/scenes'
+import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
 import type { LicenseStatus } from '../types/license'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
@@ -201,12 +203,21 @@ interface CueListState {
   updateScriptSettings: (patch: Partial<ScriptSettings>) => void
   updateCompanionSettings: (patch: Partial<CompanionSettings>) => void
   updateScenesSettings: (patch: Partial<ScenesSettings>) => void
+  updateCastSettings: (patch: Partial<CastSettings>) => void
   /**
-   * Removing a desk group takes the group and unpicks the packs that fed it, as one edit:
-   * a pack pointing at a group that is gone is a mic nothing on the desk opens, and an
-   * undo that put half of it back would be the same thing with the operator's blessing.
+   * Removing a desk group takes the group and unpicks whichever performers and ensembles
+   * point at it, as one edit: a performer pointing at a group that is gone is a mic
+   * nothing on the desk opens, and an undo that put half of it back would be the same
+   * thing with the operator's blessing.
    */
-  removeDeskGroup: (channelId: string) => void
+  removeCastGroup: (groupId: string) => void
+  /**
+   * Drops a performer from the cast: released from every pack they wore (each a swap of
+   * its own), out of whichever ensemble had them, and off every scene's live list —
+   * three settings sections changed as one edit, because a performer half-removed from
+   * one of them is a name that no longer means anything in the others.
+   */
+  removePerformer: (performerId: string) => void
 
   // Where the desk was left. Session state, not workspace content: a show that has just
   // loaded has not told the desk anything yet, and saying otherwise would stop the first
@@ -244,23 +255,22 @@ interface CueListState {
 const HISTORY_LIMIT = 50
 
 /**
- * What an undo puts back: the three things an edit in this app destroys. Together, because
- * one edit can span them — removing a desk group clears the pointer on every pack that fed
- * it, and half an undo of that would be a lie.
+ * What an undo puts back: the things an edit in this app destroys. Together, because
+ * one edit can span them — removing a desk group clears the pointer on every performer
+ * and ensemble that fed it, and half an undo of that would be a lie.
  */
 interface EditSnapshot {
   cues: Cue[]
-  scenes: { list: MicScene[]; channels: DeskChannel[] }
+  scenes: { list: MicScene[] }
+  cast: CastSettings
   plot: RfPlot
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
   return {
     cues: state.cues,
-    scenes: {
-      list: state.showSettings.scenes.list,
-      channels: state.showSettings.scenes.channels
-    },
+    scenes: { list: state.showSettings.scenes.list },
+    cast: state.showSettings.cast,
     plot: state.showSettings.rf.plot
   }
 }
@@ -269,11 +279,8 @@ function snapshotOf(state: CueListState): EditSnapshot {
 function restoreSettings(showSettings: ShowSettings, snapshot: EditSnapshot): ShowSettings {
   return {
     ...showSettings,
-    scenes: {
-      ...showSettings.scenes,
-      list: snapshot.scenes.list,
-      channels: snapshot.scenes.channels
-    },
+    scenes: { ...showSettings.scenes, list: snapshot.scenes.list },
+    cast: snapshot.cast,
     rf: { ...showSettings.rf, plot: snapshot.plot }
   }
 }
@@ -734,8 +741,8 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
-  // Scenes and their mics are the grid's work, so a delete or a stray cell is one undo
-  // away from being back. The desk groups are set up once and are not.
+  // Scenes and who is open in them are the grid's work, so a delete or a stray cell is
+  // one undo away from being back.
   updateScenesSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, scenes: { ...s.showSettings.scenes, ...patch } },
     past: 'list' in patch ? pushPast(s.past, snapshotOf(s)) : s.past,
@@ -743,23 +750,63 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
-  removeDeskGroup: (channelId) => set(s => ({
+  // The cast — performers and ensembles — is edited in a handful of places, same as the
+  // scene list; the desk groups underneath it are set up once and are not, matching how
+  // desk groups behaved when they lived in the scenes section.
+  updateCastSettings: (patch) => set(s => {
+    const record = 'performers' in patch || 'ensembles' in patch
+    return {
+      showSettings: { ...s.showSettings, cast: { ...s.showSettings.cast, ...patch } },
+      past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
+      future: record ? [] : s.future,
+      isDirty: true
+    }
+  }),
+
+  removeCastGroup: (groupId) => set(s => ({
     showSettings: {
       ...s.showSettings,
-      scenes: removeDeskChannel(s.showSettings.scenes, channelId),
-      rf: {
-        ...s.showSettings.rf,
-        plot: {
-          ...s.showSettings.rf.plot,
-          packs: s.showSettings.rf.plot.packs.map(pack =>
-            pack.deskChannelId === channelId ? { ...pack, deskChannelId: null } : pack)
-        }
-      }
+      cast: clearDeskGroupPointers(removeDeskGroup(s.showSettings.cast, groupId), groupId)
     },
     past: pushPast(s.past, snapshotOf(s)),
     future: [],
     isDirty: true
   })),
+
+  // Three sections change as one edit: the pack they wore is released (a swap in its
+  // own right), the cast drops them, and any scene that had them open no longer does.
+  removePerformer: (performerId) => set(s => {
+    const at = Date.now()
+    const release = releasePerformerPacks(
+      s.showSettings.rf.plot,
+      s.showSettings.cast.performers,
+      performerId,
+      at
+    )
+    const log = release.swaps.length === 0
+      ? s.log
+      : appendToLog(s.log, release.swaps.map(swap => ({
+          level: 'info' as const,
+          label: 'RF',
+          message: `Swap: ${describeSwap(swap)}`
+        })))
+    return {
+      showSettings: {
+        ...s.showSettings,
+        rf: {
+          ...s.showSettings.rf,
+          plot: release.plot,
+          swaps: recordSwaps(s.showSettings.rf.swaps, release.swaps)
+        },
+        cast: removePerformerFromCast(s.showSettings.cast, performerId),
+        scenes: removePerformerFromScenes(s.showSettings.scenes, performerId)
+      },
+      log,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+      isDirty: true
+    }
+  }),
 
   setDeskState: (deskState, deskSceneId) => set({ deskState, deskSceneId }),
 

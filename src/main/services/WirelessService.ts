@@ -3,6 +3,7 @@ import { defaultRfThresholds } from '../../renderer/src/types/show'
 import type {
   DeviceHistory,
   DeviceState,
+  RfPerformer,
   RfPlot,
   RfThresholds,
   ShowSettings,
@@ -86,7 +87,8 @@ export class WirelessService implements ShowService {
 
   private context: ServiceContext | null = null
   private sources: TelemetrySource[] = []
-  private plot: RfPlot = { performers: [], packs: [] }
+  private plot: RfPlot = { packs: [] }
+  private performers: RfPerformer[] = []
   private thresholds: RfThresholds = defaultRfThresholds()
   private timers: Timer[] = []
   private inFlight = new Set<AbortController>()
@@ -104,6 +106,7 @@ export class WirelessService implements ShowService {
     this.context = context
     this.sources = sources
     this.plot = plot
+    this.performers = settings.cast.performers
     this.thresholds = thresholds
 
     if (sources.length === 0) {
@@ -385,7 +388,7 @@ export class WirelessService implements ShowService {
     const pack = this.plot.packs.find(candidate => candidate.channelId === channelId)
     const name = pack?.label || rackName || channelId
     const performer = pack?.performerId
-      ? this.plot.performers.find(candidate => candidate.id === pack.performerId)
+      ? this.performers.find(candidate => candidate.id === pack.performerId)
       : undefined
     return performer ? `${name} (${performer.name})` : name
   }

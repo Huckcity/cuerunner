@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../../store'
 import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
-import { demoPlot, demoSource } from '../../utils/rfDemo'
+import { demoPacks, demoPerformers, demoSource } from '../../utils/rfDemo'
 import { buildReport, reportText } from '../../utils/rfPlot'
 import { formatClock } from '../../utils/cueDefaults'
 import { PlotDialog } from './PlotDialog'
@@ -120,9 +120,11 @@ interface Props {
 
 export function RfPanel({ onClose }: Props) {
   const rf = useStore(s => s.showSettings.rf)
+  const cast = useStore(s => s.showSettings.cast)
   const devices = useStore(s => s.showDevices)
   const alerts = useStore(s => s.showAlerts)
   const updateRfSettings = useStore(s => s.updateRfSettings)
+  const updateCastSettings = useStore(s => s.updateCastSettings)
   const dismissAlert = useStore(s => s.dismissAlert)
   const appendLog = useStore(s => s.appendLog)
 
@@ -133,8 +135,8 @@ export function RfPanel({ onClose }: Props) {
   const [editing, setEditing] = useState(false)
 
   const report = useMemo(
-    () => buildReport(rf.plot, devices, rf.swaps),
-    [rf.plot, devices, rf.swaps]
+    () => buildReport(rf.plot, cast.performers, devices, rf.swaps),
+    [rf.plot, cast.performers, devices, rf.swaps]
   )
 
   const copyReport = (): void => {
@@ -164,9 +166,11 @@ export function RfPanel({ onClose }: Props) {
 
   // The demo rack is offered only while the plot is empty — it is how the feature is
   // seen before there is a show, not a control the show needs — so it brings its own
-  // plot, and replaces the source list rather than adding a rack beside a real one.
+  // cast and packs, and replaces the source list rather than adding a rack beside a
+  // real one.
   const addDemo = (): void => {
-    updateRfSettings({ sources: [demoSource()], plot: demoPlot() })
+    updateRfSettings({ sources: [demoSource()], plot: { packs: demoPacks() } })
+    updateCastSettings({ performers: demoPerformers() })
   }
 
   return (
@@ -250,7 +254,7 @@ export function RfPanel({ onClose }: Props) {
           )
         ) : plot.packs.length === 0 ? (
           <div className="rf-empty">
-            <span>No packs in the plot. Enter the cast and their packs, or load the demo rack.</span>
+            <span>No packs in the plot. Enter them, or load the demo rack.</span>
             <button
               className="rf-edit-btn"
               onClick={() => setEditing(true)}
@@ -263,7 +267,7 @@ export function RfPanel({ onClose }: Props) {
           </div>
         ) : (
           rows.map(({ pack, device, state }) => {
-            const performer = plot.performers.find(p => p.id === pack.performerId)
+            const performer = cast.performers.find(p => p.id === pack.performerId)
             return (
               <div key={pack.id} className="rf-row" data-state={state}>
                 <span className="rf-name">{pack.label}</span>

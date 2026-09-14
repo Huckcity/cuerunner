@@ -148,12 +148,36 @@ export interface MidiInSettings {
 // the alarms that matter — a pack about to die on someone with an entrance — are raised
 // against the plot rather than against a channel number.
 
-/** One performer: who is wearing a pack, and in which role. */
+/**
+ * One performer: a role in the show, not a physical mic. Which pack they are currently
+ * wearing is the plot's business (`RfPack.performerId`); which DCA opens for them is the
+ * cast's (`deskChannelId` here, or their ensemble's) — a performer keeps the same desk
+ * routing across a pack swap, because the desk does not know packs were ever involved.
+ */
 export interface RfPerformer {
   id: string
   name: string
   role: string
   notes: string
+  /** Which ensemble they are grouped under for desk routing, or null for none. */
+  ensembleId: string | null
+  /**
+   * Their own desk group, overriding their ensemble's. Null falls through to the
+   * ensemble's group (or to nothing, when they are not in one either).
+   */
+  deskChannelId: string | null
+}
+
+/**
+ * A named group of performers who share a DCA — the chorus, the band — so the group is
+ * assigned once rather than repeated on every member. Membership is the performer's own
+ * `ensembleId`, not a list kept here: one pointer per performer is the only place it can
+ * drift out of sync with itself.
+ */
+export interface RfEnsemble {
+  id: string
+  name: string
+  deskChannelId: string | null
 }
 
 /** One transmitter, and the receiver channel it is patched to. */
@@ -164,12 +188,6 @@ export interface RfPack {
   channelId: string | null
   performerId: string | null
   notes: string
-  /**
-   * The desk channel this mic feeds — the DCA or input it is grouped under — or null when
-   * the show does not drive the desk from here. Optional on disk: a plot saved before
-   * scenes existed has none.
-   */
-  deskChannelId?: string | null
 }
 
 // ── Scenes: who is on, and what that does to the desk ───────────────────────
@@ -196,18 +214,27 @@ export interface DeskChannel {
 export interface MicScene {
   id: string
   name: string
-  /** The packs that are open in this scene. Everything else the plot knows about closes. */
+  /** The performers open in this scene. Everyone else the cast knows about closes. */
   live: string[]
   notes: string
 }
 
 export interface ScenesSettings {
-  channels: DeskChannel[]
   list: MicScene[]
 }
 
-export interface RfPlot {
+/**
+ * The show's cast: who is in it, how they are grouped for the desk, and the groups
+ * themselves. This is the one place DCA routing is configured — Scenes only runs it,
+ * and the plot only says who is currently wearing which pack.
+ */
+export interface CastSettings {
+  groups: DeskChannel[]
   performers: RfPerformer[]
+  ensembles: RfEnsemble[]
+}
+
+export interface RfPlot {
   packs: RfPack[]
 }
 
@@ -297,6 +324,7 @@ export interface ShowSettings {
   script: ScriptSettings
   companion: CompanionSettings
   scenes: ScenesSettings
+  cast: CastSettings
 }
 
 // ── The script, and the tablet reading it ───────────────────────────────────
@@ -386,13 +414,18 @@ export function defaultRfThresholds(): RfThresholds {
 
 export function defaultRfSettings(): RfSettings {
   return {
-    // No plot and no sources: an operator who wants either adds it, and the demo rack
+    // No packs and no sources: an operator who wants either adds it, and the demo rack
     // is one click away for anyone who wants to see what the panel does.
-    plot: { performers: [], packs: [] },
+    plot: { packs: [] },
     sources: [],
     swaps: [],
     thresholds: defaultRfThresholds()
   }
+}
+
+/** A show with nobody cast yet still has a desk; the lists start empty rather than guessed at. */
+export function defaultCastSettings(): CastSettings {
+  return { groups: [], performers: [], ensembles: [] }
 }
 
 export function defaultShowSettings(): ShowSettings {
@@ -405,7 +438,8 @@ export function defaultShowSettings(): ShowSettings {
     presence: defaultPresenceSettings(),
     script: defaultScriptSettings(),
     companion: defaultCompanionSettings(),
-    scenes: defaultScenesSettings()
+    scenes: defaultScenesSettings(),
+    cast: defaultCastSettings()
   }
 }
 
@@ -415,7 +449,7 @@ export function defaultScriptSettings(): ScriptSettings {
 
 /** A show with no scenes still has a desk; the list starts empty rather than guessed at. */
 export function defaultScenesSettings(): ScenesSettings {
-  return { channels: [], list: [] }
+  return { list: [] }
 }
 
 /** The companion is off until it is asked for: it puts the show on the network. */
@@ -437,6 +471,7 @@ export function defaultPresenceSettings(): PresenceSettings {
 export function normalizeShowSettings(settings: Partial<ShowSettings> | undefined): ShowSettings {
   const defaults = defaultShowSettings()
   const rf = settings?.rf
+  const cast = settings?.cast
   return {
     oscIn: { ...defaults.oscIn, ...settings?.oscIn },
     midiIn: { ...defaults.midiIn, ...settings?.midiIn },
@@ -450,8 +485,12 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
     script: { ...defaults.script, ...settings?.script },
     companion: { ...defaults.companion, ...settings?.companion },
     scenes: {
-      channels: settings?.scenes?.channels ?? defaults.scenes.channels,
       list: settings?.scenes?.list ?? defaults.scenes.list
+    },
+    cast: {
+      groups: cast?.groups ?? defaults.cast.groups,
+      performers: cast?.performers ?? defaults.cast.performers,
+      ensembles: cast?.ensembles ?? defaults.cast.ensembles
     }
   }
 }

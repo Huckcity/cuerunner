@@ -1,7 +1,14 @@
 // The mic plot as a tool rather than a read-out: an operator enters the cast and the
 // patch, a pack changes hands mid-show, and the night's report says who was wearing what.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp, mintLicense } from './helpers'
+import {
+  closeApp,
+  editScenes,
+  launchApp,
+  mintLicense,
+  openScenesView,
+  openShowDialog
+} from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -38,12 +45,21 @@ test('an operator enters the plot, and the panel follows it', async () => {
   await expect.poll(() => dialog.locator('#plot-channels option').evaluateAll(
     nodes => nodes.map(node => (node as HTMLOptionElement).value)
   )).toContain('demo-pack-1')
+  await dialog.locator('.plot-close').click()
+  await page.locator('.btn-rf').click()
 
-  // Rename a performer: the plot is theirs, and the panel shows the name it is given.
-  const name = dialog.locator('.plot-performer-row').first().locator('.plot-name')
+  // Renaming a performer is the Show panel's, not the plot's: the plot only says who is
+  // currently wearing what.
+  await openScenesView(page)
+  await editScenes(page)
+  await openShowDialog(page)
+  const show = page.locator('.show-dialog')
+  const name = show.locator('.performer-row').first().locator('.performer-name')
   await name.fill('Aldonza Test')
   await name.blur()
-  await dialog.locator('.plot-close').click()
+  await show.locator('.show-close').click()
+
+  await page.locator('.btn-rf').click()
   await expect(page.locator('.rf-panel')).toContainText('Aldonza Test')
 })
 

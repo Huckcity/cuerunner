@@ -13,7 +13,7 @@ import {
   defaultRfThresholds,
   defaultShowSettings
 } from '../../types/show'
-import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
+import type { DeviceState, RfPack, RfPerformer, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
 
 const AT = 1_700_000_000_000
 const THRESHOLDS = defaultRfThresholds()
@@ -51,7 +51,7 @@ function alert(overrides: Partial<ShowAlert> = {}): ShowAlert {
   }
 }
 
-const EMPTY_PLOT: RfPlot = { performers: [], packs: [] }
+const EMPTY_PLOT: RfPlot = { packs: [] }
 
 describe('RfPanel', () => {
   let container: HTMLDivElement
@@ -80,6 +80,7 @@ describe('RfPanel', () => {
 
   interface PanelState {
     plot?: RfPlot
+    performers?: RfPerformer[]
     devices?: DeviceState[]
     alerts?: ShowAlert[]
     thresholds?: RfThresholds
@@ -94,7 +95,8 @@ describe('RfPanel', () => {
           ...defaults.rf,
           plot: state.plot ?? EMPTY_PLOT,
           thresholds: state.thresholds ?? THRESHOLDS
-        }
+        },
+        cast: { ...defaults.cast, performers: state.performers ?? [] }
       },
       showDevices: state.devices ?? [],
       showAlerts: state.alerts ?? []
@@ -134,6 +136,7 @@ describe('RfPanel', () => {
     const settings = useStore.getState().showSettings.rf
     expect(settings.sources.map(source => source.id)).toEqual([DEMO_SOURCE_ID])
     expect(settings.plot.packs).toHaveLength(DEMO_PACK_COUNT)
+    expect(useStore.getState().showSettings.cast.performers).toHaveLength(DEMO_PACK_COUNT)
     expect(container.querySelectorAll('.rf-row')).toHaveLength(DEMO_PACK_COUNT)
     expect(container.querySelector('.rf-empty')).toBeNull()
     expect(texts('.rf-count')).toEqual([`${DEMO_PACK_COUNT} packs`])
@@ -154,7 +157,6 @@ describe('RfPanel', () => {
 
   it('sorts the plot critical, offline, silent, low, ok, unpatched', async () => {
     const plot: RfPlot = {
-      performers: [],
       packs: [
         pack({ id: 'p-ok', label: 'Pack ok', channelId: 'ch-ok' }),
         pack({ id: 'p-low-1', label: 'Pack low one', channelId: 'ch-low-1' }),
@@ -184,7 +186,6 @@ describe('RfPanel', () => {
 
   it('draws each bar from the reading and leaves an unreported cell empty', async () => {
     const plot: RfPlot = {
-      performers: [],
       packs: [
         pack({ id: 'p-full', label: 'Pack full', channelId: 'ch-full' }),
         pack({ id: 'p-bare', label: 'Pack bare', channelId: 'ch-bare' }),
@@ -231,13 +232,15 @@ describe('RfPanel', () => {
 
   it('names the performer, or says unassigned, and shows the role', async () => {
     const plot: RfPlot = {
-      performers: [{ id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '' }],
       packs: [
         pack({ id: 'p-cast', label: 'Pack 1', channelId: 'ch-1', performerId: 'perf-1' }),
         pack({ id: 'p-spare', label: 'Pack spare', channelId: 'ch-2', performerId: null })
       ]
     }
-    await show({ plot })
+    const performers: RfPerformer[] = [{
+      id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', ensembleId: null, deskChannelId: null
+    }]
+    await show({ plot, performers })
 
     expect(texts('.rf-performer')).toEqual(['Aldonza', 'unassigned'])
     expect(texts('.rf-role')).toEqual(['lead', ''])
@@ -245,7 +248,7 @@ describe('RfPanel', () => {
 
   it('shows only the wireless alarms and dismisses one', async () => {
     await show({
-      plot: { performers: [], packs: [pack()] },
+      plot: { packs: [pack()] },
       alerts: [
         alert({ id: 7, level: 'warning', deviceId: 'rf:ch-1', message: 'Pack 1 is down to 20%' }),
         alert({ id: 8, message: 'Shure API unreachable' }),
@@ -266,7 +269,7 @@ describe('RfPanel', () => {
   })
 
   it('notes the pack beside its row', async () => {
-    await show({ plot: { performers: [], packs: [pack({ notes: 'Spare — swap with 4' })] } })
+    await show({ plot: { packs: [pack({ notes: 'Spare — swap with 4' })] } })
 
     expect(texts('.rf-notes')).toEqual(['Spare — swap with 4'])
   })

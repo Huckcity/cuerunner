@@ -5,7 +5,7 @@ import {
   DEMO_SOURCE_ID,
   demoChannelId
 } from '../types/show'
-import type { RfPerformer, RfPlot, TelemetrySource } from '../types/show'
+import type { RfPack, RfPerformer, TelemetrySource } from '../types/show'
 
 // The demo rack is the whole feature in one click: a source the main process simulates
 // and a plot that names every channel it reports. Both are generated from the same ids
@@ -53,24 +53,27 @@ export function demoSource(): TelemetrySource {
   }
 }
 
-/** Twelve packs, each patched to the demo channel its performer wears. */
-export function demoPlot(): RfPlot {
-  const performers: RfPerformer[] = CAST.map((member, i) => ({
+/** Twelve performers, cast-side rather than plot-side, unassigned to any group yet. */
+export function demoPerformers(): RfPerformer[] {
+  return CAST.map((member, i) => ({
     id: demoPerformerId(i + 1),
     name: member.name,
     role: member.role,
-    notes: member.notes
+    notes: member.notes,
+    ensembleId: null,
+    deskChannelId: null
   }))
+}
 
+/** Twelve packs, each patched to the demo channel its performer wears. */
+export function demoPacks(): RfPack[] {
   // The cast list and the channel count are the same number; keep them tied together
   // so a channel can never end up without a name in the plot.
-  const packs = Array.from({ length: DEMO_PACK_COUNT }, (_, i) => ({
+  return Array.from({ length: DEMO_PACK_COUNT }, (_, i) => ({
     id: `demo-slot-${i + 1}`,
     label: `Pack ${i + 1}`,
     channelId: demoChannelId(i + 1),
     performerId: demoPerformerId(i + 1),
     notes: ''
   }))
-
-  return { performers, packs }
 }

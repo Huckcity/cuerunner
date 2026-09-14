@@ -18,8 +18,8 @@
   width: 760px;
   display: flex;
   flex-direction: column;
-  /* The cast and the packs together outgrow a laptop screen, so the body scrolls and
-     the header and footer stay put. */
+  /* The packs and the swap log together outgrow a laptop screen, so the body scrolls
+     and the header and footer stay put. */
   max-height: 88vh;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
@@ -57,29 +57,19 @@
   margin-bottom: var(--space-2);
 }
 
-/* One row per performer and per pack: the fields line up in columns so a row can be
-   read across, and the remove button sits where the eye expects it on every row. */
-.plot-performer-row {
-  display: grid;
-  grid-template-columns: 180px 150px 1fr 26px;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
+/* One row per pack: the fields line up in columns so a row can be read across, and the
+   remove button sits where the eye expects it on every row. */
 .plot-pack-row {
   display: grid;
   /* Every field gets a floor it can be read at: fixed widths left the notes whatever was
      over, which at the dialog's width was one letter of its placeholder. */
   grid-template-columns:
-    minmax(90px, 0.9fr) minmax(100px, 1fr) minmax(120px, 1.1fr) minmax(120px, 1.1fr)
-    minmax(140px, 1.4fr) 26px;
+    minmax(90px, 0.9fr) minmax(100px, 1fr) minmax(120px, 1.1fr) minmax(140px, 1.4fr) 26px;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
 }
 
-.plot-performer-row input,
 .plot-pack-row input,
 .plot-pack-row select {
   min-width: 0;
@@ -94,7 +84,6 @@
   font-family: inherit;
 }
 
-.plot-performer-row input:focus,
 .plot-pack-row input:focus,
 .plot-pack-row select:focus {
   border-color: var(--border-focus);

@@ -6,6 +6,10 @@ import type { DeviceState, RfPack, RfPerformer, RfPlot, RfSwap } from '../types/
  * another performer for a quick change, or comes off someone entirely. Everything that
  * changes the plot lives here as a pure function, so the editor can be small and the
  * swap it produces is recorded the same way wherever the change came from.
+ *
+ * Performers themselves are the cast's (`utils/cast.ts`) — the plot only tracks who is
+ * currently wearing which transmitter, which is why every function below that needs a
+ * name takes the cast's performer list as a parameter rather than owning one.
  */
 
 /** A session rarely makes more than a handful of swaps; this is a runaway guard. */
@@ -15,23 +19,6 @@ export interface PlotChange {
   plot: RfPlot
   /** Swaps this change made, in order. Empty for a change that moved nothing. */
   swaps: RfSwap[]
-}
-
-export function addPerformer(plot: RfPlot, name: string, role: string, notes = ''): RfPlot {
-  const performer: RfPerformer = { id: crypto.randomUUID(), name, role, notes }
-  return { ...plot, performers: [...plot.performers, performer] }
-}
-
-export function updatePerformer(
-  plot: RfPlot,
-  performerId: string,
-  patch: Partial<Omit<RfPerformer, 'id'>>
-): RfPlot {
-  return {
-    ...plot,
-    performers: plot.performers.map(performer =>
-      performer.id === performerId ? { ...performer, ...patch } : performer)
-  }
 }
 
 /** Adding a pack leaves it unassigned and unpatched: both are decisions, not defaults. */
@@ -62,6 +49,7 @@ export function removePack(plot: RfPlot, packId: string): RfPlot {
  */
 export function assignPack(
   plot: RfPlot,
+  performers: RfPerformer[],
   packId: string,
   performerId: string | null,
   at: number
@@ -76,37 +64,32 @@ export function assignPack(
       at,
       packId,
       packLabel: pack.label,
-      from: nameOf(plot, pack.performerId),
-      to: nameOf(next, performerId)
+      from: nameOf(performers, pack.performerId),
+      to: nameOf(performers, performerId)
     }]
   }
 }
 
 /**
- * Takes a performer out of the plot, releasing every pack they were wearing. Each
+ * Releases every pack a performer was wearing — called when they leave the cast. Each
  * release is a swap in its own right: the report should say the pack came off someone,
  * not quietly show it unassigned.
  */
-export function removePerformer(plot: RfPlot, performerId: string, at: number): PlotChange {
-  if (!plot.performers.some(performer => performer.id === performerId)) {
-    return { plot, swaps: [] }
-  }
-
-  // The releases are resolved while the performer is still in the plot — a swap records
-  // the name a pack came off, and by the end of this function there is no name to find.
+export function releasePerformerPacks(
+  plot: RfPlot,
+  performers: RfPerformer[],
+  performerId: string,
+  at: number
+): PlotChange {
   const swaps: RfSwap[] = []
   let next = plot
   for (const pack of plot.packs) {
     if (pack.performerId !== performerId) continue
-    const change = assignPack(next, pack.id, null, at)
+    const change = assignPack(next, performers, pack.id, null, at)
     next = change.plot
     swaps.push(...change.swaps)
   }
-
-  return {
-    plot: { ...next, performers: next.performers.filter(performer => performer.id !== performerId) },
-    swaps
-  }
+  return { plot: next, swaps }
 }
 
 /** Appends swaps to the log, keeping the newest, so a runaway cannot grow the workspace. */
@@ -143,11 +126,16 @@ export interface RfReportRow {
  * times it went quiet, and every time it changed hands. Read the morning after, which
  * is why it does not depend on anything being on right now.
  */
-export function buildReport(plot: RfPlot, devices: DeviceState[], swaps: RfSwap[]): RfReportRow[] {
+export function buildReport(
+  plot: RfPlot,
+  performers: RfPerformer[],
+  devices: DeviceState[],
+  swaps: RfSwap[]
+): RfReportRow[] {
   const byChannel = new Map(devices.map(device => [device.id, device]))
   return plot.packs.map(pack => {
     const device = pack.channelId ? byChannel.get(`rf:${pack.channelId}`) : undefined
-    const performer = plot.performers.find(candidate => candidate.id === pack.performerId)
+    const performer = performers.find(candidate => candidate.id === pack.performerId)
     return {
       packId: pack.id,
       label: pack.label,
@@ -188,7 +176,7 @@ export function reportText(rows: RfReportRow[], generatedAt: number): string {
   return lines.join('\n')
 }
 
-function nameOf(plot: RfPlot, performerId: string | null): string | null {
+function nameOf(performers: RfPerformer[], performerId: string | null): string | null {
   if (performerId === null) return null
-  return plot.performers.find(performer => performer.id === performerId)?.name ?? null
+  return performers.find(performer => performer.id === performerId)?.name ?? null
 }

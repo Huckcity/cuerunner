@@ -1,33 +1,38 @@
 // The plot's operations are pure so the editor stays small — and the swaps they produce
 // are what the show report is read from the next morning. What is tested here is the
 // record: who a pack came off, who it went to, and what the night did to its battery.
+// Performers themselves are the cast's (`utils/cast.test.ts`); every function here that
+// needs a name takes the cast's performer list as a plain fixture.
 import { describe, it, expect } from 'vitest'
 import {
   MAX_SWAPS,
   addPack,
-  addPerformer,
   assignPack,
   buildReport,
   describeSwap,
   recordSwaps,
+  releasePerformerPacks,
   removePack,
-  removePerformer,
   reportText,
-  updatePack,
-  updatePerformer
+  updatePack
 } from './rfPlot'
-import type { DeviceState, RfPlot, RfSwap } from '../types/show'
+import type { DeviceState, RfPerformer, RfPlot, RfSwap } from '../types/show'
 
 const AT = Date.parse('2026-09-11T20:14:00.000Z')
 
+function performer(id: string, name: string, role: string): RfPerformer {
+  return { id, name, role, notes: '', ensembleId: null, deskChannelId: null }
+}
+
+const ALDONZA = performer('perf-1', 'Aldonza', 'lead')
+const SANCHO = performer('perf-2', 'Sancho', 'comic lead')
+const PERFORMERS = [ALDONZA, SANCHO]
+
 function plot(): RfPlot {
-  const withCast = addPerformer(addPerformer({ performers: [], packs: [] }, 'Aldonza', 'lead'), 'Sancho', 'comic lead')
-  const [aldonza, sancho] = withCast.performers
   return {
-    performers: withCast.performers,
     packs: [
-      { id: 'p1', label: 'Pack 1', channelId: 'ch-1', performerId: aldonza.id, notes: '' },
-      { id: 'p2', label: 'Pack 2', channelId: 'ch-2', performerId: sancho.id, notes: '' }
+      { id: 'p1', label: 'Pack 1', channelId: 'ch-1', performerId: ALDONZA.id, notes: '' },
+      { id: 'p2', label: 'Pack 2', channelId: 'ch-2', performerId: SANCHO.id, notes: '' }
     ]
   }
 }
@@ -37,22 +42,16 @@ function device(id: string, overrides: Partial<DeviceState> = {}): DeviceState {
 }
 
 describe('plot edits', () => {
-  it('adds performers and packs without inventing assignments', () => {
-    const added = addPack(addPerformer({ performers: [], packs: [] }, 'Aldonza', 'lead'), 'Pack 9')
+  it('adds a pack without inventing an assignment', () => {
+    const added = addPack({ packs: [] }, 'Pack 9')
 
-    expect(added.performers[0]).toMatchObject({ name: 'Aldonza', role: 'lead' })
     expect(added.packs[0]).toMatchObject({ label: 'Pack 9', channelId: null, performerId: null })
-    // Fresh ids, so a pack can be added twice without the two colliding.
-    expect(added.performers[0].id).not.toBe(added.packs[0].id)
   })
 
-  it('updates and removes by id, leaving the rest alone', () => {
+  it('updates and removes packs by id, leaving the rest alone', () => {
     const start = plot()
-    const renamed = updatePerformer(start, start.performers[0].id, { name: 'Aldonza (cover)' })
     const repatched = updatePack(start, 'p1', { channelId: 'ch-9', notes: 'wig mic' })
 
-    expect(renamed.performers[0].name).toBe('Aldonza (cover)')
-    expect(renamed.performers[1].name).toBe('Sancho')
     expect(repatched.packs[0]).toMatchObject({ channelId: 'ch-9', notes: 'wig mic', label: 'Pack 1' })
     expect(removePack(start, 'p1').packs.map(pack => pack.id)).toEqual(['p2'])
     expect(start.packs).toHaveLength(2)
@@ -62,22 +61,17 @@ describe('plot edits', () => {
 describe('assignPack', () => {
   it('records a swap with the names as they were', () => {
     const start = plot()
-    const { plot: next, swaps } = assignPack(start, 'p1', start.performers[1].id, AT)
+    const { plot: next, swaps } = assignPack(start, PERFORMERS, 'p1', SANCHO.id, AT)
 
-    expect(next.packs[0].performerId).toBe(start.performers[1].id)
+    expect(next.packs[0].performerId).toBe(SANCHO.id)
     expect(swaps).toEqual([
       { at: AT, packId: 'p1', packLabel: 'Pack 1', from: 'Aldonza', to: 'Sancho' }
     ])
-
-    // Renaming afterwards must not rewrite what the report says happened on the night.
-    const renamed = updatePerformer(next, start.performers[0].id, { name: 'Someone else' })
-    expect(renamed.performers[0].name).toBe('Someone else')
-    expect(swaps[0].from).toBe('Aldonza')
   })
 
   it('records a pack coming off someone as a swap to nobody', () => {
     const start = plot()
-    const { swaps } = assignPack(start, 'p1', null, AT)
+    const { swaps } = assignPack(start, PERFORMERS, 'p1', null, AT)
 
     expect(swaps[0]).toMatchObject({ from: 'Aldonza', to: null })
     expect(describeSwap(swaps[0])).toBe('Pack 1 Aldonza → unassigned')
@@ -86,28 +80,27 @@ describe('assignPack', () => {
   it('says nothing when nothing changed, or when the pack is not there', () => {
     const start = plot()
 
-    expect(assignPack(start, 'p1', start.packs[0].performerId, AT).swaps).toEqual([])
-    expect(assignPack(start, 'nope', null, AT)).toEqual({ plot: start, swaps: [] })
+    expect(assignPack(start, PERFORMERS, 'p1', start.packs[0].performerId, AT).swaps).toEqual([])
+    expect(assignPack(start, PERFORMERS, 'nope', null, AT)).toEqual({ plot: start, swaps: [] })
   })
 })
 
-describe('removePerformer', () => {
+describe('releasePerformerPacks', () => {
   it('releases their packs, and says who each one came off', () => {
     const start = plot()
-    const { plot: next, swaps } = removePerformer(start, start.performers[0].id, AT)
+    const { plot: next, swaps } = releasePerformerPacks(start, PERFORMERS, ALDONZA.id, AT)
 
-    expect(next.performers.map(performer => performer.name)).toEqual(['Sancho'])
     expect(next.packs[0].performerId).toBeNull()
-    expect(next.packs[1].performerId).toBe(start.performers[1].id)
+    expect(next.packs[1].performerId).toBe(SANCHO.id)
     expect(swaps).toEqual([
       { at: AT, packId: 'p1', packLabel: 'Pack 1', from: 'Aldonza', to: null }
     ])
   })
 
-  it('changes nothing for an id that is not in the plot', () => {
+  it('changes nothing for a performer wearing no packs', () => {
     const start = plot()
 
-    expect(removePerformer(start, 'nobody', AT)).toEqual({ plot: start, swaps: [] })
+    expect(releasePerformerPacks(start, PERFORMERS, 'nobody', AT)).toEqual({ plot: start, swaps: [] })
   })
 })
 
@@ -132,7 +125,7 @@ describe('recordSwaps', () => {
 describe('buildReport', () => {
   it('reports the battery floor, the dropouts and the swaps for each pack', () => {
     const start = plot()
-    const assigned = assignPack(start, 'p1', start.performers[1].id, AT)
+    const assigned = assignPack(start, PERFORMERS, 'p1', SANCHO.id, AT)
     const devices = [
       device('rf:ch-1', {
         battery: { percent: 42 },
@@ -140,7 +133,7 @@ describe('buildReport', () => {
       })
     ]
 
-    const rows = buildReport(assigned.plot, devices, assigned.swaps)
+    const rows = buildReport(assigned.plot, PERFORMERS, devices, assigned.swaps)
     const [first, second] = rows
 
     expect(first).toMatchObject({
@@ -169,7 +162,7 @@ describe('buildReport', () => {
       })
     ]
 
-    const [row] = buildReport(start, devices, [])
+    const [row] = buildReport(start, PERFORMERS, devices, [])
 
     expect(row.lowestPercent).toBe(3)
     expect(row.dropouts).toBe(2)
@@ -181,7 +174,7 @@ describe('buildReport', () => {
     // It has no floor to report and it certainly has dropouts: saying "no dropouts"
     // because there is no battery reading would be the report lying about the night.
     const start = plot()
-    const rows = buildReport(start, [
+    const rows = buildReport(start, PERFORMERS, [
       device('rf:ch-1', { online: false, history: { dropouts: 1 } })
     ], [])
 
@@ -191,9 +184,9 @@ describe('buildReport', () => {
   })
 
   it('leaves a pack with no channel out of the device lookup', () => {
-    const start = addPack({ performers: [], packs: [] }, 'Spare')
+    const start = addPack({ packs: [] }, 'Spare')
 
-    const [row] = buildReport(start, [device('rf:ch-1')], [])
+    const [row] = buildReport(start, PERFORMERS, [device('rf:ch-1')], [])
 
     expect(row.device).toBeUndefined()
     expect(row.performer).toBeNull()
@@ -203,8 +196,8 @@ describe('buildReport', () => {
 describe('reportText', () => {
   it('reads as a report of the night', () => {
     const start = plot()
-    const assigned = assignPack(start, 'p1', null, AT)
-    const rows = buildReport(assigned.plot, [
+    const assigned = assignPack(start, PERFORMERS, 'p1', null, AT)
+    const rows = buildReport(assigned.plot, PERFORMERS, [
       device('rf:ch-1', { battery: { percent: 5 }, history: { lowestPercent: 5, lowestAt: AT, dropouts: 1 } })
     ], assigned.swaps)
 
@@ -218,7 +211,7 @@ describe('reportText', () => {
   })
 
   it('says so when nothing changed hands', () => {
-    const rows = buildReport(plot(), [], [])
+    const rows = buildReport(plot(), PERFORMERS, [], [])
 
     expect(reportText(rows, AT)).toContain('No swaps.')
   })

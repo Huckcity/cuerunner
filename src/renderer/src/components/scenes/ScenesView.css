@@ -1,7 +1,8 @@
-/* Scenes is the curtain-up view and the only place the show is edited: the mic plot down
-   the side, the scenes across the top, one filled cell per mic that is open, and the desk
-   groups those mics feed in a drawer underneath. It is read from a metre away mid-show,
-   so state is a block of colour rather than a word, and the only amber on it is work to do. */
+/* Scenes is the curtain-up view: the cast down the side, the scenes across the top, one
+   filled cell per performer who is open. Which desk group each performer's mic actually
+   opens is set up in the Show panel, not here — this view only runs it. It is read from
+   a metre away mid-show, so state is a block of colour rather than a word, and the only
+   amber on it is work to do. */
 .scenes-view {
   /* The view is a grid item in a minmax(0, 1fr) track; without this its content's
      min-content width would push the window wider instead of scrolling inside. */
@@ -119,14 +120,14 @@
   flex: none;
 }
 
-/* The edits the grid cannot hold: a scene, the all-off press, the drawer, the plot and
-   where its readings come from. They read as buttons rather than as state, because that
-   is what they are. */
+/* The edits the grid cannot hold: a scene, the all-off press, the mic plot and the Show
+   panel, and where telemetry readings come from. They read as buttons rather than as
+   state, because that is what they are. */
 .scenes-add,
 .scenes-plot,
+.scenes-show,
 .scenes-sources,
 .scenes-mics-off,
-.scenes-groups-toggle,
 .scenes-edit {
   height: 22px;
   padding: 0 var(--space-2);
@@ -142,17 +143,10 @@
 
 .scenes-add:hover,
 .scenes-plot:hover,
+.scenes-show:hover,
 .scenes-sources:hover,
 .scenes-mics-off:hover,
-.scenes-groups-toggle:hover,
 .scenes-edit:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-.scenes-groups-toggle[data-open='true'] {
-  background: var(--bg-hover);
-  border-color: var(--border-focus);
-  color: var(--fg-primary);
-}
-
 
 /* A scene that would move the desk is a thing to do, not a readout: it gets the warning
    colour and the exact number of messages that would go out. */
@@ -333,9 +327,8 @@
   border-right: 1px solid var(--border);
 }
 
-/* The row is a name: who is wearing this mic is what the operator reads down the side of
-   the plot, and it is the only thing about a mic that changes at the interval. A pack
-   nobody is wearing falls back to its label rather than reading as a blank row. */
+/* The row is a name: the performer is what the operator reads down the side of the
+   grid, and it is the only thing about a row that changes at the interval. */
 .matrix-performer {
   min-width: 0;
   overflow: hidden;
@@ -345,14 +338,8 @@
   color: var(--fg-body);
 }
 
-.matrix-performer[data-unassigned='true'] {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--fg-ghost);
-}
-
-/* A pack that is open in the current scene brightens its whole row: this is the glance
-   the view exists for — the column and the people it opens, read together. */
+/* A performer who is open in the current scene brightens their whole row: this is the
+   glance the view exists for — the column and the people it opens, read together. */
 .matrix-row[data-on='true'] .matrix-mic { background: var(--bg-card); }
 
 .matrix-row[data-on='true'] .matrix-performer { color: var(--fg-primary); }
@@ -421,208 +408,3 @@
 }
 
 .matrix-empty-action:hover { background: var(--bg-hover); }
-
-.scenes-groups-empty {
-  font-size: var(--text-sm);
-  color: var(--fg-ghost);
-}
-
-/* ── The desk groups drawer ────────────────────────────────────────────────────
-   Fixed under the grid rather than inside the scroller: the grid keeps its own scroll,
-   and the groups keep theirs. Nothing here is allowed to widen the view. */
-.scenes-groups {
-  flex: 0 0 auto;
-  min-width: 0;
-  max-height: 45vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  background: var(--bg-raised);
-  border-top: 1px solid var(--border);
-}
-
-.scenes-groups-title {
-  font-size: var(--text-xs);
-  font-weight: var(--fw-bold);
-  color: var(--fg-ghost);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-wide);
-  margin-bottom: var(--space-2);
-}
-
-/* One row per desk group: the name the desk knows it by, how it is told to open, what
-   will be sent, and which mics are feeding it. */
-.group-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-bottom: var(--space-2);
-}
-
-.group-fields {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.group-fields input,
-.group-fields select {
-  min-width: 0;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-primary);
-  font-size: var(--text-base);
-  padding: 4px 7px;
-  height: var(--h-input);
-  outline: none;
-  font-family: inherit;
-}
-
-.group-fields input:focus,
-.group-fields select:focus {
-  border-color: var(--border-focus);
-}
-
-.group-fields input:disabled,
-.group-fields select:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.group-label { flex: 0 0 150px; }
-.group-delivery { flex: 0 0 104px; }
-.group-port { flex: 1 1 140px; }
-.group-channel { flex: 0 0 56px; padding: 4px 2px; }
-.group-note { flex: 0 0 64px; padding: 4px 2px; }
-.group-host { flex: 1 1 120px; }
-.group-osc-port { flex: 0 0 80px; }
-.group-address { flex: 1 1 120px; }
-
-/* What the group sends, in the order a recall sends it: the operator reads the message
-   rather than the settings it was built from. A group left alone reads "nothing" on
-   both sides, which is the whole point of `none`. */
-.group-summary {
-  display: flex;
-  gap: var(--space-2);
-  padding-left: var(--space-1);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-}
-
-.group-summary-open {
-  color: var(--fg-tertiary);
-}
-
-.group-summary-sep {
-  color: var(--fg-ghost);
-}
-
-/* Which mics put this group where it is, and where that leaves it in the current scene.
-   A group with no message configured is not driven at all, so it reads as a dash. */
-.group-carrying {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  padding-left: var(--space-1);
-  font-size: var(--text-sm);
-}
-
-.group-packs {
-  color: var(--fg-ghost);
-}
-
-/* Editing swaps the read-only pack list for chips: a pack is released with its own ✕,
-   and the "+ assign mic" select only ever offers packs no group has claimed — a pack
-   already feeding another group is moved from the mic plot, not stolen from here. */
-.group-pack-chips {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.pack-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 3px 0 7px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-pill);
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
-}
-
-.pack-chip-remove {
-  all: unset;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  color: var(--fg-dim);
-  font-size: 9px;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.pack-chip-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-.group-pack-add {
-  height: 20px;
-  padding: 0 4px;
-  background: transparent;
-  border: 1px dashed var(--border-input);
-  border-radius: var(--radius-pill);
-  color: var(--fg-dim);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.group-pack-add:hover,
-.group-pack-add:focus {
-  background: var(--accent-blue-glow);
-  border-color: var(--accent-blue-dim);
-  color: var(--accent-blue);
-  outline: none;
-}
-
-.group-state {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-wide);
-  color: var(--fg-ghost);
-}
-
-.group-state[data-state='live'] { color: var(--state-running-fg); }
-
-.group-remove {
-  flex: none;
-  width: 26px;
-  height: var(--h-input);
-  background: transparent;
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-dim);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.group-remove:hover {
-  background: var(--bg-hover);
-  color: var(--fg-primary);
-}
-
-.group-remove:disabled {
-  opacity: 0.5;
-  cursor: default;
-}

@@ -1,9 +1,9 @@
 // The demo rack is the one-click way to see the wireless panel do something: a source
-// the main process simulates plus a twelve-pack plot that names every channel it
-// reports. These tests hold the two together — the ids have to agree, or the demo
-// shows twelve unpatched rows.
+// the main process simulates, twelve packs, and the performers who wear them. These
+// tests hold the two lists together — the ids have to agree, or the demo shows twelve
+// unpatched rows.
 import { describe, it, expect } from 'vitest'
-import { demoPlot, demoSource } from './rfDemo'
+import { demoPacks, demoPerformers, demoSource } from './rfDemo'
 import {
   DEFAULT_POLL_MS,
   DEFAULT_TIMEOUT_MS,
@@ -29,9 +29,9 @@ describe('demoSource', () => {
   })
 })
 
-describe('demoPlot', () => {
+describe('demoPacks and demoPerformers', () => {
   it('patches twelve packs to the twelve demo channels', () => {
-    const { packs } = demoPlot()
+    const packs = demoPacks()
 
     expect(packs).toHaveLength(DEMO_PACK_COUNT)
     expect(packs.map(p => p.label)).toEqual(
@@ -42,8 +42,9 @@ describe('demoPlot', () => {
     )
   })
 
-  it('gives every pack a distinct performer that exists in the plot', () => {
-    const { packs, performers } = demoPlot()
+  it('gives every pack a distinct performer that exists in the cast', () => {
+    const packs = demoPacks()
+    const performers = demoPerformers()
 
     expect(performers).toHaveLength(DEMO_PACK_COUNT)
     expect(new Set(performers.map(p => p.id)).size).toBe(DEMO_PACK_COUNT)
@@ -53,8 +54,15 @@ describe('demoPlot', () => {
     }
   })
 
+  it('starts every performer unassigned to a group or ensemble', () => {
+    const performers = demoPerformers()
+
+    expect(performers.every(p => p.ensembleId === null && p.deskChannelId === null)).toBe(true)
+  })
+
   it('casts the principals the panel names', () => {
-    const { packs, performers } = demoPlot()
+    const packs = demoPacks()
+    const performers = demoPerformers()
 
     expect(performers.find(p => p.id === packs[0].performerId))
       .toMatchObject({ name: 'Aldonza', role: 'lead' })
@@ -65,7 +73,7 @@ describe('demoPlot', () => {
   })
 
   it('hands the panel a role for every performer', () => {
-    const { performers } = demoPlot()
+    const performers = demoPerformers()
 
     expect(performers.map(p => p.role)).toEqual([
       'lead', 'comic lead', 'lead', 'ensemble', 'ensemble', 'ensemble',

@@ -33,7 +33,8 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
 
       {scenes.length === 0 ? (
         <p className="inspector-hint">
-          No scenes yet. Make them in the Scenes view, with the groups they drive.
+          No scenes yet. Make them in the Scenes view; who drives which desk group is set
+          up in the Show panel.
         </p>
       ) : scene === null ? (
         <p className="inspector-hint">
@@ -43,8 +44,8 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
       ) : (
         <p className="inspector-hint">
           Firing tells the desk the difference between “{scene.name}” and where it stands now:
-          {' '}{scene.live.length} mic{scene.live.length === 1 ? '' : 's'} open, groups already
-          in the right state left alone.
+          {' '}{scene.live.length} performer{scene.live.length === 1 ? '' : 's'} open, groups
+          already in the right state left alone.
         </p>
       )}
 

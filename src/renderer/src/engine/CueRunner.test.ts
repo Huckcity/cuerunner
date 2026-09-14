@@ -9,7 +9,7 @@ import type { ScriptRun } from './scriptHost'
 import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
-import { midiNoteMessages } from '../utils/scenes'
+import { midiNoteMessages } from '../utils/cast'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -907,23 +907,20 @@ describe('CueRunner — scene cues', () => {
     useStore.setState({
       showSettings: {
         ...defaults,
-        rf: {
-          ...defaults.rf,
-          plot: {
-            performers: [],
-            packs: [{
-              id: 'pack-1', label: 'Pack 1', channelId: null,
-              performerId: null, notes: '', deskChannelId: 'dca-1'
-            }]
-          }
-        },
-        scenes: {
-          channels: [{
+        cast: {
+          groups: [{
             id: 'dca-1',
             label: 'DCA 1 — Principals',
             ...midiNoteMessages('Yamaha', 1, 36)
           }],
-          list: [{ id: 's-1', name: 'Wedding', live: ['pack-1'], notes: '' }]
+          performers: [{
+            id: 'p-1', name: 'Ada', role: 'Lead', notes: '',
+            ensembleId: null, deskChannelId: 'dca-1'
+          }],
+          ensembles: []
+        },
+        scenes: {
+          list: [{ id: 's-1', name: 'Wedding', live: ['p-1'], notes: '' }]
         }
       },
       deskState: {},

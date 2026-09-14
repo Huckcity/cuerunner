@@ -4,28 +4,33 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { recallScene } from './scenes'
 import { useStore } from '../store'
-import { midiNoteMessages, oscMessages } from '../utils/scenes'
-import { defaultShowSettings, type ScenesSettings } from '../types/show'
-import type { RfPack } from '../types/show'
+import { midiNoteMessages, oscMessages } from '../utils/cast'
+import { defaultShowSettings, type CastSettings } from '../types/show'
+import type { RfPerformer } from '../types/show'
 
 const note = midiNoteMessages('Yamaha', 1, 36)
 const osc = oscMessages('10.0.0.5', 9000, '/dca/2/mute')
 
-function scenes(): ScenesSettings {
+function performer(id: string, deskChannelId: string): RfPerformer {
+  return { id, name: id, role: '', notes: '', ensembleId: null, deskChannelId }
+}
+
+function cast(): CastSettings {
   return {
-    channels: [
+    groups: [
       { id: 'dca-1', label: 'DCA 1 — Principals', mute: note.mute, unmute: note.unmute },
       { id: 'dca-2', label: 'DCA 2 — Ensemble', mute: osc.mute, unmute: osc.unmute }
     ],
-    list: [
-      { id: 's-1', name: 'Wedding', live: ['pack-1'], notes: '' },
-      { id: 's-2', name: 'Finale', live: ['pack-1', 'pack-2'], notes: '' }
-    ]
+    performers: [performer('p-1', 'dca-1'), performer('p-2', 'dca-2')],
+    ensembles: []
   }
 }
 
-function pack(id: string, deskChannelId: string): RfPack {
-  return { id, label: id, channelId: null, performerId: null, notes: '', deskChannelId }
+function scenesList(): { id: string; name: string; live: string[]; notes: string }[] {
+  return [
+    { id: 's-1', name: 'Wedding', live: ['p-1'], notes: '' },
+    { id: 's-2', name: 'Finale', live: ['p-1', 'p-2'], notes: '' }
+  ]
 }
 
 function seed(deskState: Record<string, boolean> = {}, deskSceneId: string | null = null): void {
@@ -33,8 +38,8 @@ function seed(deskState: Record<string, boolean> = {}, deskSceneId: string | nul
   useStore.setState({
     showSettings: {
       ...settings,
-      scenes: scenes(),
-      rf: { ...settings.rf, plot: { performers: [], packs: [pack('pack-1', 'dca-1'), pack('pack-2', 'dca-2')] } }
+      cast: cast(),
+      scenes: { list: scenesList() }
     },
     deskState,
     deskSceneId,

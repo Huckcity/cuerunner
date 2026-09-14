@@ -42,6 +42,72 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   return cue
 }
 
+interface LegacyPack {
+  id: string
+  performerId?: string | null
+  deskChannelId?: string | null
+}
+
+/**
+ * Performers and desk groups used to live under the plot and the scenes section, keyed
+ * to packs: a pack carried the desk group it fed, and a scene named the packs open in
+ * it. Both moved up a level — the desk group belongs to the performer (or their
+ * ensemble) now, not to whichever transmitter they happen to be wearing — so a workspace
+ * saved before that move is rewritten in place, once.
+ *
+ * A file already in the new shape has no `rf.plot.performers` or `scenes.channels` left
+ * to find, which is what makes this safe to run unconditionally on every load.
+ */
+function migrateCast(showSettings: Record<string, unknown> | undefined): void {
+  if (!showSettings) return
+  const rf = showSettings.rf as Record<string, unknown> | undefined
+  const plot = rf?.plot as Record<string, unknown> | undefined
+  const scenes = showSettings.scenes as Record<string, unknown> | undefined
+  const legacyPerformers = plot?.performers as
+    Array<Record<string, unknown>> | undefined
+  const legacyChannels = scenes?.channels as unknown[] | undefined
+  if (legacyPerformers === undefined && legacyChannels === undefined) return
+
+  const packs = ((plot?.packs as LegacyPack[] | undefined) ?? [])
+  const performers: Array<Record<string, unknown>> = (legacyPerformers ?? []).map(
+    (performer: Record<string, unknown>) => ({
+      ...performer,
+      ensembleId: null,
+      deskChannelId: null as string | null
+    })
+  )
+
+  // A performer's desk group used to live on whichever pack they wore. The first pack
+  // found wearing them is what they carry forward — the same "only the first legacy
+  // value survives" rule the audio-routing migration above already uses.
+  for (const pack of packs) {
+    if (!pack.deskChannelId || !pack.performerId) continue
+    const performer = performers.find(candidate => candidate.id === pack.performerId)
+    if (performer && performer.deskChannelId === null) performer.deskChannelId = pack.deskChannelId
+  }
+
+  const cast = (showSettings.cast as Record<string, unknown> | undefined) ?? {}
+  cast.performers = performers
+  cast.groups = legacyChannels ?? []
+  cast.ensembles = cast.ensembles ?? []
+  showSettings.cast = cast
+
+  if (plot) delete plot.performers
+  if (scenes) delete scenes.channels
+  for (const pack of packs) delete (pack as unknown as Record<string, unknown>).deskChannelId
+
+  // A scene's live list named packs; what it means now is who was wearing them. A pack
+  // nobody was wearing drops out rather than leaving a dangling id nothing can show.
+  const wornBy = new Map(packs.map(pack => [pack.id, pack.performerId ?? null]))
+  const list = (scenes?.list as Array<Record<string, unknown>> | undefined) ?? []
+  for (const scene of list) {
+    const live = (scene.live as string[] | undefined) ?? []
+    scene.live = [...new Set(
+      live.map(packId => wornBy.get(packId) ?? null).filter((id): id is string => id !== null)
+    )]
+  }
+}
+
 export function migrateWorkspace(workspace: Workspace): Workspace {
   // Pass 1: normalize all cues
   const cues = workspace.cues.map(c => migrateCue(c as Cue & Record<string, unknown>))
@@ -75,6 +141,9 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
   }
 
   workspace.cues = cues
+  // Pass 3: performers and desk groups move from the plot and the scenes section onto
+  // the cast, before defaulting fills in a shape that already agrees with the new one.
+  migrateCast(workspace.showSettings as Record<string, unknown> | undefined)
   // A workspace written before the show services existed has no port settings; the
   // defaults bring it up listening where a new one would.
   workspace.showSettings = normalizeShowSettings(workspace.showSettings)

@@ -359,35 +359,39 @@ export async function editScenes(page: Page): Promise<void> {
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
 }
 
+/** The Show panel is where performers, ensembles and desk groups are set up. */
+export async function openShowDialog(page: Page): Promise<void> {
+  await page.locator('.scenes-show').click()
+  await expect(page.locator('.show-dialog')).toBeVisible()
+}
+
 /**
  * A show set up through the view, in the order an operator would do it: a group on the
- * desk driven over OSC at a port the test owns, the pack that feeds it patched in the mic
- * plot, and a scene with that mic open in it.
+ * desk driven over OSC at a port the test owns, the first performer routed straight to
+ * it in the Show panel, and a scene with that performer open in it.
  */
 export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await liveRack(page)
   await openScenesView(page)
   await editScenes(page)
 
-  await page.locator('.scenes-groups-toggle').click()
-  const groups = page.locator('.scenes-groups')
-  await groups.locator('.group-add').click()
-  await groups.locator('.group-delivery').first().selectOption('osc')
-  await groups.locator('.group-host').first().fill('127.0.0.1')
-  await groups.locator('.group-osc-port').first().fill(String(port))
-  await groups.locator('.group-osc-port').first().blur()
-  await groups.locator('.group-address').first().fill('/dca/1/mute')
-  await groups.locator('.group-address').first().blur()
-  await expect(groups.locator('.group-summary').first()).toContainText('/dca/1/mute')
+  await openShowDialog(page)
+  const show = page.locator('.show-dialog')
+  await show.locator('.group-add').click()
+  await show.locator('.group-delivery').first().selectOption('osc')
+  await show.locator('.group-host').first().fill('127.0.0.1')
+  await show.locator('.group-osc-port').first().fill(String(port))
+  await show.locator('.group-osc-port').first().blur()
+  await show.locator('.group-address').first().fill('/dca/1/mute')
+  await show.locator('.group-address').first().blur()
+  await expect(show.locator('.group-summary').first()).toContainText('/dca/1/mute')
 
-  // Which group a mic feeds is set up with the plot, not in the grid the show is run from.
-  await page.locator('.btn-rf').click()
-  await page.locator('.rf-edit').click()
-  const dialog = page.locator('.plot-dialog')
-  await dialog.locator('.plot-pack-row').first().locator('.plot-pack-group')
+  // Which group a performer's mic feeds is set up here, not in the grid the show is run
+  // from — and it stays with them across a pack swap, since the mic plot never enters
+  // into it.
+  await show.locator('.performer-row').first().locator('.performer-group')
     .selectOption({ label: 'DCA 1' })
-  await dialog.locator('.plot-close').click()
-  await page.locator('.btn-rf').click()
+  await show.locator('.show-close').click()
 
   await page.locator('.scenes-add').click()
   await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()

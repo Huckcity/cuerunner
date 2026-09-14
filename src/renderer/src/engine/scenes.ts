@@ -1,5 +1,6 @@
 import { useStore } from '../store'
-import { describeDeskMessage, sceneChanges, type DeskChange } from '../utils/scenes'
+import { describeDeskMessage } from '../utils/cast'
+import { sceneChanges, type DeskChange } from '../utils/scenes'
 import type { OscArg } from '../types/cue'
 import type { DeskMessage } from '../types/show'
 
@@ -39,9 +40,11 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
     return { sceneName: null, changes: [], failures: [message] }
   }
 
+  const cast = state.showSettings.cast
   const changes = sceneChanges(
-    state.showSettings.rf.plot.packs,
-    scenes.channels,
+    cast.performers,
+    cast.ensembles,
+    cast.groups,
     scene,
     state.deskState
   )
