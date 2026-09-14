@@ -10,14 +10,18 @@ const AUTOSAVE_INTERVAL_MS = 30_000
 export function useAutosave(): void {
   useEffect(() => {
     const timer = setInterval(() => {
-      const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, workspaceId, workspaceCreatedAt } =
-        useStore.getState()
+      const {
+        isDirty, workspaceName, workspacePath, selectedId, cues, audioSettings,
+        midiSettings, showSettings, workspaceId, workspaceCreatedAt
+      } = useStore.getState()
       if (!isDirty) return
       const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
         id: workspaceId,
         createdAt: workspaceCreatedAt
       })
-      window.winslab.workspace.autosave(snapshot, workspacePath).catch(() => {
+      // The selection goes with the snapshot: offer the work back and it can say which
+      // cue the session was standing on, which is how the operator recognises the take.
+      window.winslab.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {
         // A snapshot that cannot be written must never interrupt the show. The next
         // tick tries again.
       })

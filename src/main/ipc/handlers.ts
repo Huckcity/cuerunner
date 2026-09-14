@@ -449,9 +449,12 @@ export function registerIpcHandlers(): void {
   })
 
   // Autosave goes to the recovery snapshot, never over the operator's file.
-  ipcMain.handle('workspace:autosave', async (_, workspace: Workspace, sourcePath: string | null) => {
-    await writeRecovery(workspace, sourcePath)
-  })
+  ipcMain.handle(
+    'workspace:autosave',
+    async (_, workspace: Workspace, sourcePath: string | null, selectedCueId: string | null) => {
+      await writeRecovery(workspace, sourcePath, selectedCueId)
+    }
+  )
 
   ipcMain.handle('workspace:recovery', async () => {
     // Recovery resolves the media in the snapshot the same way opening a file does; its

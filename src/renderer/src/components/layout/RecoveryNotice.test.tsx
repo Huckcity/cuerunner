@@ -23,6 +23,7 @@ function snapshot(): {
   savedAt: number
   sourcePath: string | null
   missingMedia: MissingMedia[]
+  selectedCueId?: string | null
 } {
   const showSettings = defaultShowSettings()
   showSettings.scenes = {
@@ -47,6 +48,7 @@ function snapshot(): {
     },
     savedAt: Date.parse('2026-01-01T20:00:00Z'),
     sourcePath: '/shows/demo.wlab',
+    selectedCueId: 'c1',
     // The file moved while the session was down; recovery says so rather than starting
     // the show with a cue that cannot play.
     missingMedia: [
@@ -117,5 +119,20 @@ describe('RecoveryNotice', () => {
 
     expect(window.winslab.workspace.clearRecovery).toHaveBeenCalled()
     expect(container.querySelector('.app-notice')).toBeNull()
+  })
+
+  it('names the cue the session was standing on, so the offer is not anonymous', async () => {
+    await offer(snapshot())
+
+    expect(container.querySelector('[data-kind="recovery"]')?.textContent)
+      .toContain('1 · Walk-in Music')
+  })
+
+  it('offers the work without a cue name when the snapshot names one that has gone', async () => {
+    await offer({ ...snapshot(), selectedCueId: 'gone' })
+
+    const text = container.querySelector('[data-kind="recovery"]')?.textContent ?? ''
+    expect(text).toContain('without saving')
+    expect(text).not.toContain('standing on')
   })
 })

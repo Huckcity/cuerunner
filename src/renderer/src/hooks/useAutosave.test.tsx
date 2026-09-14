@@ -66,6 +66,16 @@ describe('useAutosave', () => {
     expect(autosave).not.toHaveBeenCalled()
   })
 
+  it('carries the cue the session was standing on, so a recovery can name it', () => {
+    useStore.getState().addCue('wait')
+    const standing = useStore.getState().cues[0].id
+    useStore.getState().select(standing)
+
+    act(() => { vi.advanceTimersByTime(INTERVAL_MS) })
+
+    expect(autosave.mock.calls[0][2]).toBe(standing)
+  })
+
   it('keeps snapshotting after a write fails', () => {
     useStore.getState().addCue('wait')
     autosave.mockRejectedValueOnce(new Error('disk full'))

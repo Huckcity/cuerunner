@@ -10,6 +10,7 @@ interface Snapshot {
   savedAt: number
   sourcePath: string | null
   missingMedia: MissingMedia[]
+  selectedCueId?: string | null
 }
 
 // Autosave writes snapshots to the user-data folder rather than over the operator's
@@ -28,6 +29,10 @@ export function RecoveryNotice() {
   if (!snapshot) return null
 
   const name = snapshot.workspace.name || 'Untitled'
+  // What the snapshot holds, not just that something was found: the cue the session was
+  // standing on is the operator's best handle on which take this is. A snapshot whose cue
+  // has since gone simply offers the work without naming one.
+  const standing = snapshot.workspace.cues.find(cue => cue.id === snapshot.selectedCueId)
 
   const recover = (): void => {
     const store = useStore.getState()
@@ -72,7 +77,8 @@ export function RecoveryNotice() {
       }
     >
       Unsaved work from “{name}” ({formatClock(snapshot.savedAt)}) was found after the last
-      session ended without saving.
+      session ended without saving
+      {standing ? `, last standing on ${standing.number} · ${standing.name}` : ''}.
     </NoticeBar>
   )
 }
