@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import { useCueRunner, useKeyboard } from '../../hooks/useCueRunner'
 import MidiStatusBadge from '../midi/MidiStatusBadge'
 import { AlertChip } from './AlertChip'
+import { PlaybackWarnings } from './PlaybackWarnings'
 import { formatShortcut } from '../../utils/shortcuts'
 import './TransportBar.css'
 
@@ -31,10 +32,15 @@ export function TransportBar({ onShowStrip }: Props) {
         <span className="running-badge" data-active={runningCount > 0}>
           {runningCount > 0 ? `${runningCount} running` : 'idle'}
         </span>
-        {/* Whatever the operator has open, what needs them is here. */}
+        {/* Whatever the operator has open, what needs them is here. Warnings are among
+            them: the panel that carries the long form is a tab in a dock that can be
+            showing something else, or folded away, and a warning raised mid-show that
+            nobody reads is a warning that was not raised. The transport is the one strip
+            that is always on screen. */}
         <div className="transport-alerts">
           <AlertChip onShow={onShowStrip} />
           <MidiStatusBadge />
+          <PlaybackWarnings className="transport-warning" compact />
         </div>
       </div>
       <div className="transport-center">

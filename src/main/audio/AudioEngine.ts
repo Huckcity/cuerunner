@@ -30,6 +30,7 @@ import type {
   AudioMetadata,
   AudioPanicResult,
   AudioProbe,
+  AudioOnsets,
   AudioProgress,
   AudioSeekResult,
   AudioStartOptions,
@@ -315,6 +316,10 @@ export class NativeAudioEngine {
     const result = (await this.request('configure', { options }, SLOW_VERBS.configure)) as AudioEngineInfo
     this.lastInfo = result
     return result
+  }
+
+  onsets(filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets> {
+    return this.request('onsets', { filePath, sensitivity, maxOnsets }) as Promise<AudioOnsets>
   }
 
   waveform(filePath: string, points: number): Promise<AudioWaveform> {

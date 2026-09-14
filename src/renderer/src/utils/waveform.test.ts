@@ -66,6 +66,24 @@ describe('drawWaveform', () => {
     expect(bars.length).toBe(9)
   })
 
+  it('draws one tick per onset, and none when there are none', () => {
+    // The ticks are what a boundary snaps to: a snap the operator cannot see is a
+    // boundary that moved by itself.
+    const none = recordingCanvas(100, 20)
+    const three = recordingCanvas(100, 20)
+
+    drawWaveform(none.canvas, peaks([-0.5, 0.5], 1), { region, play: null, cursor: null })
+    drawWaveform(three.canvas, peaks([-0.5, 0.5], 1), {
+      region, play: null, cursor: null, onsets: [0.25, 0.5, 0.75]
+    })
+
+    // The ticks are 5px tall along the bottom edge; the bars are the full height.
+    const ticks = (calls: string[]): number =>
+      calls.filter(call => call.startsWith('fillRect:') && call.endsWith(',1,5')).length
+    expect(ticks(none.calls)).toBe(0)
+    expect(ticks(three.calls)).toBe(3)
+  })
+
   it('draws both boundary grips, every frame', () => {
     // The grips are the only hit targets the pointer has, so a frame that does not draw
     // one is a boundary nobody can drag.

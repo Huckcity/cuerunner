@@ -11,10 +11,16 @@ import { regionEndMs } from '../../utils/cueSplit'
 import type { AudioCue } from '../../types/cue'
 import './WaveformPanel.css'
 
+/**
+ * A time in the panel, to a tenth of a second — the precision the inspector's own fields
+ * are written to, so the two cannot come to disagree about where a boundary is. Rounded
+ * rather than truncated: 997 ms is a second to anybody reading it, and showing it as
+ * "0:00.9" beside a field that says 1.0 is the panel calling its own number a lie.
+ */
 function formatTime(ms: number): string {
-  const s = ms / 1000
-  const min = Math.floor(s / 60)
-  const sec = s % 60
+  const tenths = Math.round(Math.max(0, ms) / 100)
+  const min = Math.floor(tenths / 600)
+  const sec = (tenths % 600) / 10
   return `${min}:${sec.toFixed(1).padStart(4, '0')}`
 }
 
@@ -26,6 +32,17 @@ function formatTime(ms: number): string {
  * without knowing they made it.
  */
 type DragMode = 'start' | 'end' | 'cursor'
+
+/**
+ * How close a press has to be to a transient to land on it.
+ *
+ * A whole-file view puts a second of music in about 400 pixels, so the attack of a note
+ * is a target nobody can hit exactly and four pixels would be a snap that never fires.
+ * Thirty is a comfortable reach that still leaves the gaps between notes in the gaps:
+ * music that is worth placing a boundary in has its hits further apart than a tenth of
+ * the width of the panel.
+ */
+const SNAP_PX = 32
 
 export function WaveformPanel() {
   const selectedCue = useSelectedCue()
@@ -44,13 +61,13 @@ export function WaveformPanel() {
   const layoutRef = useRef<WaveformLayout | null>(null)
   /** The drag in progress, or null. `grab` is the file fraction the boundary started at. */
   const dragRef = useRef<{ mode: DragMode; grab: number } | null>(null)
-  /** Mirrors of the state the pointer handlers need, so their listeners stay stable. */
-  const regionRef = useRef<WaveformRegion>({ start: 0, end: 1 })
-  const cursorRef = useRef<number | null>(null)
 
   // The engine's bounded envelope for the file: interleaved min/max buckets, never the
   // media itself.
   const [peaks, setPeaks] = useState<WaveformPeaks | null>(null)
+  // Where the notes and hits begin in this file, in ms. Fetched with the envelope and
+  // kept with it: the ticks are part of reading the file, not a second question about it.
+  const [onsets, setOnsets] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [playFraction, setPlayFraction] = useState(0)
   const [hoverFraction, setHoverFraction] = useState<number | null>(null)
@@ -87,11 +104,20 @@ export function WaveformPanel() {
       peaksRef.current = null
       durationRef.current = 0
       setPeaks(null)
+      setOnsets([])
       return
     }
 
     let current = true
     setLoading(true)
+    // Both answers are about the same file and arrive independently: the envelope is what
+    // is drawn, the onsets are what a drag snaps to, and a file whose onsets cannot be
+    // read still has a waveform.
+    audioEngine.onsets(audioCue.filePath).then(result => {
+      if (current) setOnsets(result.onsetsMs)
+    }).catch(() => {
+      if (current) setOnsets([])
+    })
     audioEngine.waveform(audioCue.filePath, PEAK_BUCKETS)
       .then(data => {
         if (!current) return
@@ -140,15 +166,14 @@ export function WaveformPanel() {
     if (!canvas || !envelope || !audioCue) return
     const total = totalMs()
     const region = regionOf(audioCue, total)
-    regionRef.current = region
-    const shown = cursorMs === null ? null : Math.min(Math.max(cursorMs / (total * 1000), 0), 1)
-    cursorRef.current = shown
+    const shown = cursorMs === null ? null : Math.min(Math.max(cursorMs / total, 0), 1)
     layoutRef.current = drawWaveform(canvas, envelope, {
       region,
       play: isPlaying ? playFraction : null,
-      cursor: shown
+      cursor: shown,
+      onsets: total > 0 ? onsets.map(ms => ms / total) : []
     })
-  }, [peaks, playFraction, audioCue?.startTime, audioCue?.endTime, audioCue?.duration, cursorMs, isPlaying])
+  }, [peaks, playFraction, audioCue?.startTime, audioCue?.endTime, audioCue?.duration, cursorMs, isPlaying, onsets])
 
   useEffect(draw, [draw])
 
@@ -175,6 +200,29 @@ export function WaveformPanel() {
     if (!canvas) return 0
     const rect = canvas.getBoundingClientRect()
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  }
+
+  /**
+   * The same place, moved onto a note or a hit if one is close enough to be what the
+   * operator meant. Four pixels is under a millisecond at a normal zoom: it is a hand
+   * that cannot land on the transient, not a judgement about the music.
+   */
+  const snap = (clientX: number): number => {
+    const canvas = canvasRef.current
+    const total = totalMs()
+    if (!canvas || total <= 0 || onsets.length === 0) return fractionAt(clientX)
+    const rect = canvas.getBoundingClientRect()
+    const x = clientX - rect.left
+    let best = 0
+    let bestDistance = SNAP_PX + 1
+    for (const onset of onsets) {
+      const distance = Math.abs(onset / total * rect.width - x)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = onset / total
+      }
+    }
+    return bestDistance <= SNAP_PX ? best : fractionAt(clientX)
   }
 
   /** Which grip a press is on, if any: the drawn grips are the only hit targets. */
@@ -223,7 +271,7 @@ export function WaveformPanel() {
 
     // Anywhere else: the cursor, which is where the playhead goes and where a split
     // will be made. Nothing is trimmed by it.
-    const fraction = fractionAt(e.clientX)
+    const fraction = snap(e.clientX)
     const timeMs = fraction * total
     setWaveformCursor(timeMs)
     setPlayFraction(fraction)
@@ -233,7 +281,7 @@ export function WaveformPanel() {
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>): void => {
-    const fraction = fractionAt(e.clientX)
+    const fraction = snap(e.clientX)
     const drag = dragRef.current
     if (!drag) {
       setHoverFraction(fraction)
@@ -310,6 +358,7 @@ export function WaveformPanel() {
           ref={canvasRef}
           className="waveform-canvas"
           data-dragging={dragging ?? undefined}
+          data-onsets={onsets.length}
           style={{ opacity: loading || !peaks ? 0 : 1 }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

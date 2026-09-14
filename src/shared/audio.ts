@@ -82,6 +82,8 @@ export const AUDIO_CHANNELS = {
   devices: 'audio:devices',
   configure: 'audio:configure',
   waveform: 'audio:waveform',
+  /** Times where notes or hits begin, for placing a slice boundary. */
+  onsets: 'audio:onsets',
   pickFile: 'audio:pickFile',
   /** Main pushes AudioEngineEvent[] here; preload subscribes with `onEvents`. */
   events: 'audio:events'
@@ -466,6 +468,25 @@ export interface AudioWaveform {
 }
 
 /**
+ * Where notes or hits begin in a file, as times in milliseconds, ascending. The engine
+ * analyses the decoded samples — an envelope would lose the quiet attacks, and a slice
+ * boundary placed on a drowned one is worse than no boundary at all.
+ *
+ * A time is where the attack is, not where the analysis window started: the samples are
+ * read in frames, and the frame's middle is the closest a 1024-sample window gets to the
+ * moment the sound began.
+ */
+export interface AudioOnsets {
+  filePath: string
+  onsetsMs: number[]
+  durationMs: number
+  sampleRate: number
+  channels: number
+  /** True when the cap on returned onsets was reached and the scan stopped early. */
+  truncated: boolean
+}
+
+/**
  * The renderer-facing bridge (`window.winslab.audio`). Main implements it in
  * src/main/audio/AudioEngine.ts + the IPC handlers; preload is a thin forwarder.
  */
@@ -533,6 +554,12 @@ export interface AudioEngineBridge {
   /** Apply device options. Rejects (with the reason) when the request cannot be honoured. */
   configure(options: DeviceOptions): Promise<AudioEngineInfo>
   waveform(filePath: string, points: number): Promise<AudioWaveform>
+  /**
+   * Where the notes and hits begin, for placing slice boundaries. `sensitivity` 1 is the
+   * default, higher is stricter — fewer onsets, for a file whose noise floor keeps
+   * crossing the threshold — and `maxOnsets` caps the reply.
+   */
+  onsets(filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets>
   /** Subscribe to engine events. Returns the unsubscribe function. */
   onEvents(callback: (events: AudioEngineEvent[]) => void): () => void
   /** File dialog for choosing a cue's media. */
@@ -594,6 +621,12 @@ export interface AudioPanicPayload {
 }
 export interface AudioConfigurePayload {
   options: DeviceOptions
+}
+export interface AudioOnsetsPayload {
+  filePath: string
+  /** 1 is the default; higher is stricter, lower finds more. */
+  sensitivity?: number
+  maxOnsets?: number
 }
 export interface AudioWaveformPayload {
   filePath: string

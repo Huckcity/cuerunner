@@ -30,6 +30,7 @@ import type {
   AudioMetadata,
   AudioPanicResult,
   AudioProbe,
+  AudioOnsets,
   AudioProgress,
   AudioSeekResult,
   AudioStartOptions,
@@ -474,6 +475,11 @@ export class AudioEngineClient {
 
   configure(options: DeviceOptions): Promise<AudioEngineInfo> {
     return bridge().configure(options)
+  }
+
+  /** Where the notes and hits begin, for placing slice boundaries. */
+  onsets(filePath: string, sensitivity = 1, maxOnsets = 2000): Promise<AudioOnsets> {
+    return bridge().onsets(filePath, sensitivity, maxOnsets)
   }
 
   waveform(filePath: string, points: number): Promise<AudioWaveform> {

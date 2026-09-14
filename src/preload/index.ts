@@ -30,6 +30,8 @@ import {
   type AudioProgressPayload,
   type AudioProbe,
   type AudioProbePayload,
+  type AudioOnsetsPayload,
+  type AudioOnsets,
   type AudioRoutingPayload,
   type AudioSeekPayload,
   type AudioSeekResult,
@@ -148,6 +150,8 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.configure, { options } satisfies AudioConfigurePayload),
     waveform: (filePath: string, points: number): Promise<AudioWaveform> =>
       invokeAudio(AUDIO_CHANNELS.waveform, { filePath, points } satisfies AudioWaveformPayload),
+    onsets: (filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets> =>
+      invokeAudio(AUDIO_CHANNELS.onsets, { filePath, sensitivity, maxOnsets } satisfies AudioOnsetsPayload),
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),

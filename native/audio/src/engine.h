@@ -233,6 +233,15 @@ class Engine {
   bool devices(std::vector<DeviceDTO>& out, EngineError& error) const;
   bool configureDevice(const DeviceRequest& request, EngineError& error);
   bool waveform(const std::string& filePath, int points, WaveformDTO& out, EngineError& error);
+  /**
+   * Where notes or hits begin in a media file. `sensitivity` scales the adaptive
+   * threshold — 1.0 is the default, higher is stricter and finds fewer onsets — and
+   * `maxOnsets` caps the answer; a scan is bounded work, so a nonsense cap is clamped
+   * and reported rather than refused. Each onset is reported at the middle of the
+   * analysis frame that caught its attack, which is the closest a 1024-sample window
+   * gets to the instant of the hit.
+   */
+  bool onsets(const std::string& filePath, double sensitivity, int maxOnsets, OnsetDTO& out, EngineError& error);
   int64_t scheduleHorizonMs() const { return options_.scheduleHorizonMs; }
   const EngineOptions& options() const { return options_; }
 

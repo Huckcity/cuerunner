@@ -7,6 +7,7 @@
 
 #include "engine.h"
 
+#include "onsets.h"
 #include "util.h"
 
 #include <algorithm>
@@ -29,6 +30,13 @@ namespace {
 
 constexpr int kBackgroundTickMs = 2;
 constexpr int kAckTimeoutMs = 2000;
+
+// An onset scan's sensitivity bounds. Out of range is either a typo or an attempt to
+// make the threshold meaningless: 0.1 asks for a rise 1.15x the median flux and 10.0 for
+// one 16x the median, which is as far as the calibration means anything. Clamped rather
+// than refused, the way an oversized waveform point count is.
+constexpr double kMinOnsetSensitivity = 0.1;
+constexpr double kMaxOnsetSensitivity = 10.0;
 
 std::string maResultText(ma_result result) { return std::string(ma_result_description(result)); }
 
@@ -1319,6 +1327,103 @@ bool Engine::waveform(const std::string& filePath, int points, WaveformDTO& out,
   out.sampleRate = sampleRate;
   out.channels = channels;
   out.durationMs = frames > 0 ? static_cast<double>(frames) * 1000.0 / static_cast<double>(sampleRate) : 0.0;
+  out.truncated = truncated;
+  return true;
+}
+
+bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnsets, OnsetDTO& out,
+                    EngineError& error) {
+  if (!std::isfinite(sensitivity)) {
+    error = {"invalid", "sensitivity must be a finite number"};
+    return false;
+  }
+  sensitivity = std::clamp(sensitivity, kMinOnsetSensitivity, kMaxOnsetSensitivity);
+  bool truncated = false;
+  if (maxOnsets <= 0) {
+    maxOnsets = kMaxOnsets;
+  } else if (maxOnsets > kMaxOnsets) {
+    maxOnsets = kMaxOnsets;
+    truncated = true;
+  }
+
+  int sampleRate = 0;
+  int channels = 0;
+  int64_t frames = -1;
+  std::vector<double> onsetsMs;
+
+  // A file the show has already decoded is scanned straight out of the cache: no disk
+  // pass and no second decode, so a scan costs nothing on a file that is playing.
+  CacheEntry* resident = nullptr;
+  if (cache_.isResident(filePath)) {
+    bool cacheHit = false;
+    bool bypassed = false;
+    std::string cacheError;
+    resident = cache_.pin(filePath, cacheHit, bypassed, cacheError);
+  }
+  if (resident != nullptr && (resident->channels <= 0 || resident->sampleRate <= 0)) {
+    // An entry that cannot describe itself is no better than the file.
+    cache_.release(resident);
+    resident = nullptr;
+  }
+
+  if (resident != nullptr) {
+    channels = resident->channels;
+    sampleRate = resident->sampleRate;
+    frames = resident->frames;
+    OnsetDetector detector(sampleRate, sensitivity, maxOnsets);
+    // One call: the samples are already in memory, so hitting the cap only stops the
+    // analysis early, not any reading.
+    detector.feed(resident->data.data(), frames, channels);
+    detector.finish();
+    onsetsMs = detector.onsetsMs();
+    truncated = truncated || detector.capped();
+    cache_.release(resident);
+  } else {
+    std::string openError;
+    std::unique_ptr<Source> source = openSource(filePath, openError);
+    if (source == nullptr) {
+      error = {"decode", openError};
+      return false;
+    }
+    const SourceInfo info = source->info();
+    channels = info.channels;
+    sampleRate = info.sampleRate;
+    frames = info.frames;
+    if (channels <= 0 || sampleRate <= 0) {
+      error = {"decode", "media file reports an invalid format"};
+      return false;
+    }
+    if (frames <= 0) {
+      // The length is not stated: count it once, then scan from the start. The scan
+      // itself only ever holds one analysis frame, so this is bounded either way.
+      std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
+      int64_t total = 0;
+      for (;;) {
+        const int64_t got = source->readFrames(chunk.data(), 8192);
+        if (got <= 0) break;
+        total += got;
+      }
+      frames = total;
+      source->seekToFrame(0);
+    }
+    OnsetDetector detector(sampleRate, sensitivity, maxOnsets);
+    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
+    for (;;) {
+      const int64_t got = source->readFrames(chunk.data(), 8192);
+      if (got <= 0) break;
+      // False means the cap was reached: the rest of the file is not read at all.
+      if (!detector.feed(chunk.data(), got, channels)) break;
+    }
+    detector.finish();
+    onsetsMs = detector.onsetsMs();
+    truncated = truncated || detector.capped();
+  }
+
+  out.filePath = filePath;
+  out.onsetsMs = std::move(onsetsMs);
+  out.durationMs = frames > 0 ? static_cast<double>(frames) * 1000.0 / static_cast<double>(sampleRate) : 0.0;
+  out.sampleRate = sampleRate;
+  out.channels = channels;
   out.truncated = truncated;
   return true;
 }

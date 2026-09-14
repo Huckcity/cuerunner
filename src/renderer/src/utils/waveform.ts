@@ -24,6 +24,12 @@ export interface WaveformDraw {
   play: number | null
   /** Where a split would be made, if the cursor is over the panel: null when it is not. */
   cursor: number | null
+  /**
+   * Where the notes and hits begin, as fractions of the file. They are what a boundary
+   * is placed on, so they are drawn whether or not one is being dragged — a snap the
+   * operator cannot see is a boundary that moved by itself.
+   */
+  onsets?: number[]
 }
 
 /**
@@ -156,6 +162,12 @@ export function drawWaveform(
     ctx.setLineDash([])
   }
 
+  for (const onset of draw.onsets ?? []) {
+    const x = Math.floor(Math.max(0, Math.min(1, onset)) * width)
+    ctx.fillStyle = ONSET_COLOR
+    ctx.fillRect(x, height - ONSET_HEIGHT * DPR, Math.max(1, Math.floor(DPR)), ONSET_HEIGHT * DPR)
+  }
+
   drawGrip(ctx, layout.handles.start, 'down', draw.region.start > 0)
   drawGrip(ctx, layout.handles.end, 'up', layout.endFraction < 1)
   return layout
@@ -203,5 +215,8 @@ const BG_COLOR = '#111'
 const BOUNDARY_COLOR = '#e0a020'
 const BOUNDARY_IDLE_STROKE = '#6b5a2a'
 const BOUNDARY_IDLE_FILL = '#1a1a1a'
+/** The tick a note or hit gets along the bottom edge: a place, not a state. */
+const ONSET_COLOR = '#5a7a9a'
+const ONSET_HEIGHT = 5
 const CURSOR_COLOR = '#8a8a8a'
 export const DPR = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
