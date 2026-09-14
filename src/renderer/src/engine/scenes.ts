@@ -1,5 +1,5 @@
 import { useStore } from '../store'
-import { describeDeskMessage } from '../utils/cast'
+import { describeDeskMessage } from '../utils/desk'
 import { sceneChanges, type DeskChange } from '../utils/scenes'
 import { ALL_CLOSED_SCENE_ID } from '../types/show'
 import type { OscArg } from '../types/cue'
@@ -41,7 +41,7 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
     return { sceneName: null, changes: [], failures: [message] }
   }
 
-  const changes = sceneChanges(state.showSettings.cast, scene, state.deskState)
+  const changes = sceneChanges(state.showSettings, scene, state.deskState)
 
   const failures: string[] = []
   const deskState = { ...state.deskState }

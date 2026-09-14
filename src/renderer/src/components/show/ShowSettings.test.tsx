@@ -1,8 +1,9 @@
-// Show Settings is the one place the show's desk routing is set up: the channels on the
-// console and the DCAs they feed, the cast and the ensembles that group them, and the mic
-// plot with the swaps it records. These tests pin the CRUD in each tab, what removing
-// something cleans up in the rest, and that the panel goes when the operator says so — a
-// backdrop click is a stray press while something is half-typed, so it is not one of them.
+// Show Settings is the one place the show's desk routing is set up: where the desk is and
+// how it is spoken to, the channels on the console and the DCAs they feed, the cast and
+// the ensembles that group them, and the mic plot with the swaps it records. These tests
+// pin the CRUD in each tab, what removing something cleans up in the rest, and that the
+// panel goes when the operator says so — a backdrop click is a stray press while something
+// is half-typed, so it is not one of them.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -10,13 +11,12 @@ import { ShowSettings } from './ShowSettings'
 import { useStore, type ShowSettingsTab } from '../../store'
 import { TEST_LICENSE } from '../../../../test/license'
 import { defaultShowSettings } from '../../types/show'
-import { midiNoteMessages, oscMessages } from '../../utils/cast'
 import type {
   CastSettings, Dca, Ensemble, MicScene, Performer, RfPack, RfPlot, RfSwap, ShowChannel
 } from '../../types/show'
 
-function showChannel(id: string, name: string, dcaId: string | null = null, enabled = true): ShowChannel {
-  return { id, name, enabled, dcaId }
+function showChannel(id: string, name: string, dcaId: string | null = null): ShowChannel {
+  return { id, name, dcaId }
 }
 
 function performer(overrides: Partial<Performer> = {}): Performer {
@@ -28,7 +28,7 @@ function ensemble(overrides: Partial<Ensemble> = {}): Ensemble {
 }
 
 function dca(overrides: Partial<Dca> = {}): Dca {
-  return { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null, ...overrides }
+  return { id: 'dca-1', label: 'DCA 1', note: null, address: null, ...overrides }
 }
 
 function scene(id: string, name: string, live: string[], overrides: Partial<MicScene> = {}): MicScene {
@@ -177,16 +177,23 @@ describe('ShowSettings', () => {
   })
 
   describe('performers', () => {
-    it('adds a performer unpatched', async () => {
+    it('adds a performer on the first free strip, and naming them names the strip', async () => {
       await show({ tab: 'cast' })
 
       await act(async () => { container.querySelector<HTMLButtonElement>('.performer-add')!.click() })
 
       expect(cast().performers).toHaveLength(1)
       expect(container.querySelectorAll('.performer-row')).toHaveLength(1)
-      // On the roster and unpatched: where their mic is patched is the next decision,
-      // not a default.
-      expect(cast().performers[0].channelId).toBeNull()
+      // On the first strip nobody is on: a performer with no strip is a row that can never
+      // be open in a scene, and the strip's label is what the desk shows.
+      expect(cast().performers[0].channelId).toBe(cast().channels[0].id)
+
+      const name = field('.performer-name')
+      await type(name, 'Aldonza')
+      await leave(name)
+
+      expect(cast().performers[0].name).toBe('Aldonza')
+      expect(cast().channels[0].name).toBe('Aldonza')
     })
 
     it('renames a performer and sets their role and notes, committing when the field is left', async () => {
@@ -207,6 +214,26 @@ describe('ShowSettings', () => {
       await type(field('.performer-notes'), 'on book for act two')
       await leave(field('.performer-notes'))
       expect(cast().performers[0].notes).toBe('on book for act two')
+    })
+
+    it('patches a performer to a strip, whose options name the fader it drives', async () => {
+      await show({
+        tab: 'cast',
+        cast: {
+          channels: [showChannel('ch-1', 'Ruth', 'dca-1'), showChannel('ch-2', '', 'dca-2')],
+          dcas: [dca({ id: 'dca-1', label: 'DCA 1' }), dca({ id: 'dca-2', label: 'DCA 2' })],
+          performers: [performer()]
+        }
+      })
+
+      const select = field<HTMLSelectElement>('.performer-channel')
+      // Picking a strip is choosing what the desk moves, so the option names the fader too.
+      expect([...select.options].map(option => option.textContent))
+        .toEqual(['— unpatched —', 'Ch 1 · Ruth → DCA 1', 'Ch 2 → DCA 2'])
+      expect(select.value).toBe('')
+
+      await choose(select, 'ch-1')
+      expect(cast().performers[0].channelId).toBe('ch-1')
     })
 
     it('removes a performer: releases their pack, drops them from the cast, its ensembles and the scenes', async () => {
@@ -311,7 +338,79 @@ describe('ShowSettings', () => {
   })
 
   describe('channels', () => {
-    it('sets how many DCAs the desk has, and a cut strip is unassigned', async () => {
+    it('opens a new show wired: twelve strips, twelve DCAs, and strip n on DCA n', async () => {
+      await show({ tab: 'channels' })
+
+      expect(container.querySelectorAll('.channel-row')).toHaveLength(12)
+      expect(container.querySelectorAll('.dca-row')).toHaveLength(12)
+      // Strip n drives DCA n, so a new show moves a desk before anything has been
+      // assigned: the mic-per-fader arrangement a wireless show is set up as.
+      expect(cast().channels.map(channel => channel.dcaId))
+        .toEqual(cast().dcas.map(entry => entry.id))
+      expect([...container.querySelectorAll<HTMLSelectElement>('.channel-dca')]
+        .map(select => select.value)).toEqual(cast().dcas.map(entry => entry.id))
+      // …and the first fader is sent the address its number makes.
+      expect(field('.dca-sent').textContent).toBe('/dca/1/on 1')
+    })
+
+    it('edits where the desk is: the host, the port and the address pattern a DCA is sent to', async () => {
+      await show({ tab: 'channels' })
+
+      // The first and last of what the show will send, read back from the pattern: it is
+      // easier to check as the addresses it makes than as a template.
+      expect(container.querySelector('.desk-preview')?.textContent).toBe('/dca/1/on … /dca/12/on')
+
+      await type(field('.desk-host'), '10.0.0.5')
+      await leave(field('.desk-host'))
+      await type(field('.desk-port'), '9000')
+      await leave(field('.desk-port'))
+      await type(field('.desk-address'), '/dca/{n}/mute')
+      await leave(field('.desk-address'))
+
+      expect(useStore.getState().showSettings.desk.host).toBe('10.0.0.5')
+      expect(useStore.getState().showSettings.desk.port).toBe(9000)
+      expect(useStore.getState().showSettings.desk.address).toBe('/dca/{n}/mute')
+      expect(container.querySelector('.desk-preview')?.textContent).toBe('/dca/1/mute … /dca/12/mute')
+      expect(field('.dca-sent').textContent).toBe('/dca/1/mute 1')
+    })
+
+    it('drives the desk over MIDI, offering the ports the machine reports', async () => {
+      await show({ tab: 'channels', ports: ['Yamaha', 'IEM rack'] })
+
+      await choose(field<HTMLSelectElement>('.desk-kind'), 'midi')
+
+      // A message to nowhere is worse than none, so a MIDI desk with no port chosen says
+      // what is missing rather than previewing a send that cannot happen.
+      expect(container.querySelector('.desk-gap')?.textContent).toBe('No MIDI port chosen.')
+      expect(field('.dca-sent').textContent).toBe('not sent')
+
+      const port = field<HTMLSelectElement>('.desk-midi-port')
+      expect([...port.options].map(option => option.textContent))
+        .toEqual(['— no port —', 'Yamaha', 'IEM rack'])
+
+      await choose(port, 'Yamaha')
+      await type(field('.desk-midi-channel'), '3')
+      await leave(field('.desk-midi-channel'))
+
+      expect(useStore.getState().showSettings.desk.midiPort).toBe('Yamaha')
+      expect(useStore.getState().showSettings.desk.midiChannel).toBe(3)
+      expect(container.querySelector('.desk-preview')?.textContent).toBe('note 1 … 12 → "Yamaha"')
+      expect(field('.dca-sent').textContent).toBe('noteOn 3')
+
+      // A desk that numbers its DCAs differently: its own note in place of the one the
+      // number makes, and typing that number back clears the override.
+      const note = field('.dca-override', 3)
+      expect(note.value).toBe('4')
+      await type(note, '60')
+      await leave(note)
+      expect(cast().dcas[3].note).toBe(60)
+
+      await type(field('.dca-override', 3), '4')
+      await leave(field('.dca-override', 3))
+      expect(cast().dcas[3].note).toBeNull()
+    })
+
+    it('sets how many DCAs the desk has, and a strip on a cut fader goes back to its own number', async () => {
       await show({
         tab: 'channels',
         cast: { channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', 'Bea')], dcas: [] }
@@ -326,7 +425,7 @@ describe('ShowSettings', () => {
       expect([...container.querySelectorAll<HTMLInputElement>('.dca-label')].map(input => input.value))
         .toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
 
-      // One strip on a DCA that stays, one on the DCA that is cut.
+      // One strip on a fader that stays, one on the fader that is cut.
       await choose(field<HTMLSelectElement>('.channel-dca', 0), cast().dcas[0].id)
       await choose(field<HTMLSelectElement>('.channel-dca', 1), cast().dcas[2].id)
 
@@ -334,12 +433,12 @@ describe('ShowSettings', () => {
 
       expect(cast().dcas.map(entry => entry.label)).toEqual(['DCA 1', 'DCA 2'])
       expect(cast().channels[0].dcaId).toBe(cast().dcas[0].id)
-      // Half of this edit — a strip pointing at a DCA nothing can open — would be worse
-      // than the cut, so the pointer goes with the DCA.
-      expect(cast().channels[1].dcaId).toBeNull()
+      // A strip pointing at a fader nothing can open is worse than the cut, so it goes
+      // back to the fader of its own number — the one that is certainly still there.
+      expect(cast().channels[1].dcaId).toBe(cast().dcas[1].id)
     })
 
-    it('adds and removes a channel, unpatching whoever was on the removed strip', async () => {
+    it('adds a channel on the fader of its own number, and removing one unpatches whoever was on it', async () => {
       await show({
         tab: 'channels',
         cast: {
@@ -355,6 +454,11 @@ describe('ShowSettings', () => {
 
       expect(cast().channels).toHaveLength(3)
       expect(rows()[2].querySelector('.channel-number')?.textContent).toBe('3')
+      // The new strip drives the fader of its own number, so a channel needs no second
+      // decision before it can move the desk.
+      expect(cast().channels[2].dcaId).toBe(cast().dcas[2].id)
+      expect(rows()[2].querySelector<HTMLSelectElement>('.channel-dca')?.value)
+        .toBe(cast().dcas[2].id)
 
       await act(async () => {
         rows()[1].querySelector<HTMLButtonElement>('.channel-remove')!.click()
@@ -368,45 +472,39 @@ describe('ShowSettings', () => {
       expect(cast().performers[0].channelId).toBeNull()
     })
 
-    it('configures MIDI delivery for a DCA, offering the ports the machine reports', async () => {
-      await show({ tab: 'channels', ports: ['Yamaha', 'IEM rack'] })
+    it('takes a strip off its DCA, which leaves that fader carrying nothing', async () => {
+      await show({ tab: 'channels' })
 
-      await choose(field<HTMLSelectElement>('.dca-count-select'), '1')
-      const row = container.querySelectorAll('.dca-row')[0]
-      await choose(row.querySelector<HTMLSelectElement>('.dca-delivery')!, 'midi')
+      // A strip rides the fader of its own number out of the box, and “— no DCA —” is how
+      // one stops moving the desk without the rest of it being reconfigured.
+      await choose(field<HTMLSelectElement>('.channel-dca', 0), '')
 
-      expect([...row.querySelectorAll<HTMLOptionElement>('.dca-port option')]
-        .map(option => option.textContent)).toEqual(['Yamaha', 'IEM rack'])
-
-      await choose(row.querySelector<HTMLSelectElement>('.dca-port')!, 'Yamaha')
-      await choose(row.querySelector<HTMLSelectElement>('.dca-channel')!, '3')
-      await choose(row.querySelector<HTMLSelectElement>('.dca-note')!, '12')
-
-      const expected = midiNoteMessages('Yamaha', 3, 12)
-      expect(cast().dcas[0].unmute).toEqual(expected.unmute)
-      expect(cast().dcas[0].mute).toEqual(expected.mute)
+      expect(cast().channels[0].dcaId).toBeNull()
+      expect(field<HTMLSelectElement>('.channel-dca', 0).value).toBe('')
+      expect(container.querySelector('.dca-carrying')?.textContent).toBe('nothing assigned')
     })
 
-    it('switches a DCA to OSC and sends one address for both states', async () => {
-      await show({
-        tab: 'channels',
-        cast: { dcas: [{ id: 'dca-1', label: 'DCA 1', ...midiNoteMessages('Yamaha', 3, 12) }] }
-      })
+    it("overrides a DCA's address, and clearing it goes back to what the number makes", async () => {
+      await show({ tab: 'channels' })
 
-      // A DCA nothing is patched to says so rather than showing a blank.
-      expect(container.querySelector('.dca-carrying')?.textContent).toBe('nothing assigned')
+      // The field says the address its number makes by way of its placeholder, so what
+      // will be sent is readable without anything being typed.
+      const override = field('.dca-override', 3)
+      expect(override.value).toBe('')
+      expect(override.placeholder).toBe('/dca/4/on')
+      expect(field('.dca-sent', 3).textContent).toBe('/dca/4/on 1')
 
-      await choose(field<HTMLSelectElement>('.dca-delivery'), 'osc')
-      await type(field('.dca-host'), '10.0.0.5')
-      await leave(field('.dca-host'))
-      await type(field('.dca-osc-port'), '9000')
-      await leave(field('.dca-osc-port'))
-      await type(field('.dca-address'), '/dca/1/mute')
-      await leave(field('.dca-address'))
+      await type(override, '/dca/99/mute')
+      await leave(override)
 
-      const expected = oscMessages('10.0.0.5', 9000, '/dca/1/mute')
-      expect(cast().dcas[0].unmute).toEqual(expected.unmute)
-      expect(cast().dcas[0].mute).toEqual(expected.mute)
+      expect(cast().dcas[3].address).toBe('/dca/99/mute')
+      expect(field('.dca-sent', 3).textContent).toBe('/dca/99/mute 1')
+
+      await type(field('.dca-override', 3), '')
+      await leave(field('.dca-override', 3))
+
+      expect(cast().dcas[3].address).toBeNull()
+      expect(field('.dca-sent', 3).textContent).toBe('/dca/4/on 1')
     })
 
     it('shows which strips feed each DCA', async () => {
@@ -424,24 +522,6 @@ describe('ShowSettings', () => {
 
       expect([...container.querySelectorAll('.dca-carrying')].map(row => row.textContent))
         .toEqual(['Ch 1 · Ruth, Ch 2 · Bea', 'Ch 3'])
-    })
-
-    it('patches a performer to a channel whose options read as the strip does', async () => {
-      await show({
-        tab: 'cast',
-        cast: {
-          channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', '')],
-          performers: [performer()]
-        }
-      })
-
-      const select = field<HTMLSelectElement>('.performer-channel')
-      expect([...select.options].map(option => option.textContent))
-        .toEqual(['— unpatched —', 'Ch 1 · Ruth', 'Ch 2'])
-      expect(select.value).toBe('')
-
-      await choose(select, 'ch-1')
-      expect(cast().performers[0].channelId).toBe('ch-1')
     })
   })
 

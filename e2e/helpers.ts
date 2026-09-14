@@ -1,4 +1,4 @@
-import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import { createSocket } from 'dgram'
 import { generateKeyPairSync } from 'crypto'
@@ -386,45 +386,72 @@ export async function openShowSettings(page: Page, tab?: ShowSettingsTab): Promi
 }
 
 /**
- * Points a DCA's row at the test's own OSC listener. Which row is the caller's business —
- * a show with several DCAs is what some tests are about.
+ * The address a DCA's place in the show makes under a pattern: `{n}` swapped for the
+ * number, or the number appended when the pattern has none — the app's own rule, written
+ * out here the way the OSC codec above is, so a spec says what the wire should carry
+ * without carrying the app into the test process.
  */
-export async function wireDca(row: Locator, port: number, address: string): Promise<void> {
-  await row.locator('.dca-delivery').selectOption('osc')
-  await row.locator('.dca-host').fill('127.0.0.1')
-  await row.locator('.dca-osc-port').fill(String(port))
-  await row.locator('.dca-osc-port').blur()
-  await row.locator('.dca-address').fill(address)
-  await row.locator('.dca-address').blur()
-  await expect(row.locator('.dca-summary')).toContainText(address)
+function addressAt(pattern: string, index: number): string {
+  const number = index + 1
+  if (pattern.includes('{n}')) return pattern.replaceAll('{n}', String(number))
+  const trimmed = pattern.trim()
+  if (trimmed === '') return `/${number}`
+  return trimmed.endsWith('/') ? `${trimmed}${number}` : `${trimmed}/${number}`
 }
 
 /**
- * A show set up through the view, in the order an operator would do it: a DCA on the desk
- * driven over OSC at a port the test owns, the strip that carries it, the first performer
- * patched to that strip, and a scene with the performer open in it.
+ * Points the show's desk at the test's own OSC listener. Where the desk is the one thing
+ * about a show the app cannot know, so the test says it — and the tab's read-back is
+ * asserted, because what it shows is what will actually be sent.
+ *
+ * The pattern is what a DCA's number is turned into; the default is the one a new show
+ * comes with, so a caller that does not pass one is exercising the defaults end to end.
  */
-export async function buildDeskShow(page: Page, port: number): Promise<void> {
-  await liveRack(page)
-
+export async function pointDeskAtOsc(
+  page: Page,
+  port: number,
+  pattern = '/dca/{n}/on'
+): Promise<void> {
   await openShowSettings(page)
   const settings = page.locator('.show-settings-dialog')
 
-  // The desk the show drives: one DCA, opened and closed at the test's port.
+  await settings.locator('.desk-host').fill('127.0.0.1')
+  await settings.locator('.desk-host').blur()
+  await settings.locator('.desk-port').fill(String(port))
+  await settings.locator('.desk-port').blur()
+  await settings.locator('.desk-address').fill(pattern)
+  await settings.locator('.desk-address').blur()
+
+  // First and last of the addresses the pattern makes for this show's DCAs.
+  const last = Math.max(0, (await settings.locator('.dca-row').count()) - 1)
+  await expect(settings.locator('.desk-preview')).toContainText(addressAt(pattern, 0))
+  await expect(settings.locator('.desk-preview')).toContainText(addressAt(pattern, last))
+}
+
+/**
+ * A show set up through the view, in the order an operator would do it: the desk pointed
+ * at a port the test owns, the first performer named, and a scene with that performer open
+ * in it. The defaults do the wiring — a new show is a mic per fader, strip n on DCA n —
+ * and the desk is left driving one DCA: a one-mic show whose recall is about what changed,
+ * rather than the sweep of twelve a brand-new show puts on the wire.
+ */
+export async function buildDeskShow(page: Page, port: number): Promise<void> {
+  await liveRack(page)
+  await pointDeskAtOsc(page, port)
+  const settings = page.locator('.show-settings-dialog')
+
   await settings.locator('.dca-count-select').selectOption('1')
-  await wireDca(settings.locator('.dca-row').first(), port, '/dca/1/mute')
 
-  // Which DCA a mic opens is the strip's business, not the performer's, so the strip
-  // carries it...
-  await settings.locator('.channel-row').first().locator('.channel-dca')
-    .selectOption({ label: 'DCA 1' })
-
-  // ...and the performer is patched to that strip. The desk never hears about performers.
+  // The demo cast is patched to the strips and strip 1 drives DCA 1, so nothing here has
+  // to be assigned. Naming the performer names their strip, which is what the grid shows.
   await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
   const performer = settings.locator('.performer-row').first()
+  const patched = await performer.locator('.performer-channel').evaluate(
+    select => (select as HTMLSelectElement).selectedOptions[0]?.textContent ?? ''
+  )
+  expect(patched).toBe('Ch 1 → DCA 1')
   await performer.locator('.performer-name').fill('Ruth')
   await performer.locator('.performer-name').blur()
-  await performer.locator('.performer-channel').selectOption({ label: 'Ch 1' })
   await settings.locator('.show-settings-done').click()
 
   await openScenesView(page)

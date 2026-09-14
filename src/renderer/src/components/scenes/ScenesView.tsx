@@ -47,7 +47,8 @@ function performerCount(count: number): string {
  * there is a difference to send.
  */
 export function ScenesView() {
-  const scenes = useStore(s => s.showSettings.scenes)
+  const showSettings = useStore(s => s.showSettings)
+  const scenes = showSettings.scenes
   const cast = useStore(s => s.showSettings.cast)
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
@@ -99,7 +100,7 @@ export function ScenesView() {
 
   // The desk's question, asked for the header: what would a recall of the current scene
   // change? Nothing means the desk is where the show left it.
-  const toApply = sceneChanges(cast, current, deskState).length
+  const toApply = sceneChanges(showSettings, current, deskState).length
 
   // Every edit writes back the one field it changed, so a cell toggled in the grid cannot
   // carry a stale copy of anything else with it.
@@ -226,7 +227,7 @@ export function ScenesView() {
               className="matrix-scene"
               data-all-closed="true"
               data-current={allClosed}
-              data-pending={sceneChanges(cast, null, deskState).length > 0}
+              data-pending={sceneChanges(showSettings, null, deskState).length > 0}
             >
               <div className="matrix-scene-name">
                 <span className="scene-name-static">All closed</span>
@@ -244,7 +245,7 @@ export function ScenesView() {
             {scenes.list.map(scene => {
               // Pending is the desk's question, not the scene's: a column is to apply when
               // recalling it would change something, which makes the marker mean the press.
-              const pending = sceneChanges(cast, scene, deskState).length > 0
+              const pending = sceneChanges(showSettings, scene, deskState).length > 0
               return (
                 <div
                   key={scene.id}

@@ -1,21 +1,17 @@
 // The Scenes view: the matrix the show is run from and the only place scenes are
 // edited. The DCAs, the cast and the ensembles are Show Settings'
-// (`show-settings.spec.ts`); the test owns a UDP port and the first DCA points at it, so
+// (`show-settings.spec.ts`); the test owns a UDP port and the show's desk points at it, so
 // what is asserted here is what actually left the app.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import {
   addCueFromMoreMenu,
   buildDeskShow,
   closeApp,
-  editScenes,
   freePort,
   launchApp,
   listenOsc,
-  liveRack,
   mintLicense,
-  openScenesView,
-  openShowSettings,
-  wireDca
+  openShowSettings
 } from './helpers'
 
 let app: ElectronApplication
@@ -54,7 +50,7 @@ test('the view holds the show, and recall works from a column', async () => {
     // Recalling from the column header is what the view is for.
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(1)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/mute', args: [1] })
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
     await expect(page.locator('.matrix-scene:not([data-all-closed])'))
       .toHaveAttribute('data-current', 'true')
   } finally {
@@ -93,9 +89,11 @@ test('the show is edited in the view, not in a dialog', async () => {
   await expect(allClosed.locator('.scene-name-field')).toHaveCount(0)
   await expect(allClosed.locator('.matrix-scene-remove')).toHaveCount(0)
 
-  // The row is the performer. Which DCA their mic opens is set up in Show Settings, not
-  // in the grid the show is run from.
+  // The row is the performer, with the strip their mic is patched to beside them — the
+  // name they were given named the strip, which is what the console calls it. Which DCA
+  // that opens is set up in Show Settings, not in the grid the show is run from.
   await expect(page.locator('.matrix-performer').first()).toHaveText('Ruth')
+  await expect(page.locator('.matrix-channel').first()).toHaveText('Ch 1 · Ruth')
   await expect(page.locator('.matrix-row').first().locator('select')).toHaveCount(0)
 })
 
@@ -267,26 +265,38 @@ test('editing a cell moves the scene, and the desk is told only when asked', asy
     await expect.poll(() => desk.received.length).toBe(1)
     expect(desk.received[0].args).toEqual([1])
 
-    // Opening a second mic on the same DCA changes nothing on the desk: it was already
-    // open for the first one, and the view says so by not offering to apply.
+    // Two mics on one fader is what makes the desk's silence observable: the second strip
+    // joins the first, so the second mic opening rides a fader that is already open.
+    await openShowSettings(page)
+    const settings = page.locator('.show-settings-dialog')
+    await settings.locator('.channel-row').nth(1).locator('.channel-dca')
+      .selectOption({ label: '1 · DCA 1' })
+    await settings.locator('.show-settings-done').click()
+
     const secondMic = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
     await secondMic.click()
     await expect(secondMic).toHaveAttribute('data-live', 'true')
     await expect(page.locator('.matrix-apply')).toHaveCount(0)
     expect(desk.received).toHaveLength(1)
 
-    // Closing the mic that was holding the group open does change it, and editing is not
-    // applying: the desk waits until the operator says so.
+    // The first mic closing leaves the second still riding the fader, so still nothing.
     const firstMic = page.locator('.matrix-row').first().locator('.matrix-cell').first()
     await firstMic.click()
     await expect(firstMic).toHaveAttribute('data-live', 'false')
+    await expect(page.locator('.matrix-apply')).toHaveCount(0)
+    expect(desk.received).toHaveLength(1)
+
+    // The last mic on the fader closing does change it, and editing is not applying: the
+    // desk waits until the operator says so.
+    await secondMic.click()
+    await expect(secondMic).toHaveAttribute('data-live', 'false')
     await expect(page.locator('.matrix-apply')).toBeVisible()
     expect(desk.received).toHaveLength(1)
 
     await page.locator('.matrix-apply').click()
     await expect.poll(() => desk.received.length).toBe(2)
     // The last mic went out, so the DCA closes.
-    expect(desk.received[1]).toEqual({ address: '/dca/1/mute', args: [0] })
+    expect(desk.received[1]).toEqual({ address: '/dca/1/on', args: [0] })
   } finally {
     await desk.close()
   }
@@ -309,7 +319,7 @@ test('a scene cue moves the desk when GO reaches it', async () => {
     await page.locator('.btn-go').click()
 
     await expect.poll(() => desk.received.length).toBe(1)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/mute', args: [1] })
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
     await page.locator('.btn-log').click()
     await expect(page.locator('.log-panel')).toContainText('Scene "Scene 1" — 1 opened')
   } finally {
@@ -328,7 +338,7 @@ test('the all-closed column closes everything the show drives', async () => {
     // drives — a scene of its own is not needed to get the desk back to nothing.
     await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(1)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/mute', args: [0] })
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [0] })
 
     // The desk is left somewhere the view can say: the all-closed column is the state it
     // is on, not an absence of one.
@@ -344,49 +354,39 @@ test('a scene that applies an ensemble opens every member of it', async () => {
   const desk = await listenOsc(freePort())
 
   try {
-    await liveRack(page)
+    await buildDeskShow(page, desk.port)
+
+    // A second fader for the second mic: an ensemble is two mics moving together, and the
+    // show the helper built drives one DCA.
     await openShowSettings(page)
     const settings = page.locator('.show-settings-dialog')
-
-    // Two DCAs on two addresses, carried by the first two strips...
     await settings.locator('.dca-count-select').selectOption('2')
-    await wireDca(settings.locator('.dca-row').nth(0), desk.port, '/dca/1/mute')
-    await wireDca(settings.locator('.dca-row').nth(1), desk.port, '/dca/2/mute')
-    await settings.locator('.channel-row').nth(0).locator('.channel-dca')
-      .selectOption({ label: 'DCA 1' })
     await settings.locator('.channel-row').nth(1).locator('.channel-dca')
-      .selectOption({ label: 'DCA 2' })
+      .selectOption({ label: '2 · DCA 2' })
 
-    // ...worn by the first two performers...
+    // The two performers — the one the scene has open and the one after them — are grouped
+    // into one ensemble by its member list.
     await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
     const performers = settings.locator('.performer-row')
-    await performers.nth(0).locator('.performer-channel').selectOption({ label: 'Ch 1' })
-    await performers.nth(1).locator('.performer-channel').selectOption({ label: 'Ch 2' })
-
-    // ...who are grouped into one ensemble.
-    await settings.locator('.ensemble-add').click()
-    const ensemble = settings.locator('.ensemble-row').first()
     const first = await performers.nth(0).locator('.performer-name').inputValue()
     const second = await performers.nth(1).locator('.performer-name').inputValue()
+    await settings.locator('.ensemble-add').click()
+    const ensemble = settings.locator('.ensemble-row').first()
     await ensemble.locator('.member-add').selectOption({ label: first })
     await ensemble.locator('.member-add').selectOption({ label: second })
     await expect(ensemble.locator('.member-chip')).toHaveCount(2)
     await settings.locator('.show-settings-done').click()
 
-    await openScenesView(page)
-    await editScenes(page)
-    await page.locator('.scenes-add').click()
-
     // An ensemble routes nothing itself: applying it to the scene is what opens both
-    // mics, and each member's own DCA is told, at its own address.
+    // mics, and each member's own DCA is told, at the address its own number makes.
     const applied = page.locator('.matrix-ensemble-row').first().locator('.matrix-cell').first()
     await applied.click()
     await expect(applied).toHaveAttribute('data-applied', 'on')
 
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(2)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/mute', args: [1] })
-    expect(desk.received[1]).toEqual({ address: '/dca/2/mute', args: [1] })
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
+    expect(desk.received[1]).toEqual({ address: '/dca/2/on', args: [1] })
   } finally {
     await desk.close()
   }

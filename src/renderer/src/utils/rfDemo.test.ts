@@ -9,7 +9,9 @@ import {
   DEFAULT_TIMEOUT_MS,
   DEMO_PACK_COUNT,
   DEMO_SOURCE_ID,
-  demoChannelId
+  demoChannelId,
+  startingChannels,
+  startingDcas
 } from '../types/show'
 
 describe('demoSource', () => {
@@ -54,10 +56,16 @@ describe('demoPacks and demoPerformers', () => {
     }
   })
 
-  it('starts every performer patched to no strip of its own', () => {
-    const performers = demoPerformers()
+  it('patches every performer to the strip of their own number, so a scene moves them', () => {
+    const channels = startingChannels(startingDcas())
+    const performers = demoPerformers(channels)
 
-    expect(performers.every(p => p.channelId === null)).toBe(true)
+    // A performer with no strip is a row no scene can open, and the demo is the show
+    // somebody opens a scene on to see what the view does.
+    expect(performers.map(p => p.channelId)).toEqual(channels.map(channel => channel.id))
+
+    // With no console to patch them to, they are left unpatched rather than invented.
+    expect(demoPerformers().every(p => p.channelId === null)).toBe(true)
   })
 
   it('casts the principals the panel names', () => {

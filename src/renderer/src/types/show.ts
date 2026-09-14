@@ -168,15 +168,44 @@ export type DeskMessage =
   | { kind: 'midi'; portName: string; message: MidiMessageKind }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
 
-/** A DCA on the desk, and how it is opened and closed. */
+// ── The desk: how the show reaches it, and what it is told ──────────────────
+//
+// One connection for the whole show. A DCA's message is derived from its number, so a
+// twelve-mic show is not twelve patches to type — which is what makes a new show runnable
+// before anything has been configured: a strip drives the DCA of its number, and a DCA is
+// sent the note or address of its own.
+
+export type DeskKind = 'none' | 'midi' | 'osc'
+
+/**
+ * Where the desk is and how it is spoken to. The address of the desk itself is the one
+ * thing the app cannot know, so it is a field rather than a guess; everything else has a
+ * default that works.
+ */
+export interface DeskSettings {
+  kind: DeskKind
+  /** MIDI output port, when the show drives the desk over MIDI. */
+  midiPort: string
+  /** MIDI channel its DCAs are sent on. */
+  midiChannel: number
+  host: string
+  port: number
+  /**
+   * The address a DCA is sent to, `{n}` standing in for its number: "/dca/{n}/on". A
+   * pattern with no `{n}` in it has the number appended.
+   */
+  address: string
+}
+
+/** A DCA on the desk: a number, what the show calls it, and how it is driven. */
 export interface Dca {
   id: string
-  /** What the desk calls it: "DCA 2 — Chorus". */
+  /** What the show calls it: "DCA 2", or "Chorus" when it is a group's fader. */
   label: string
-  /** How the desk is told to close it. Null leaves the group alone on a recall. */
-  mute: DeskMessage | null
-  /** How the desk is told to open it. */
-  unmute: DeskMessage | null
+  /** The note to send instead of the one its number derives. Null is the derived one. */
+  note: number | null
+  /** The address to send to instead of the one its number derives. Null is derived. */
+  address: string | null
 }
 
 /**
@@ -219,9 +248,11 @@ export interface ShowChannel {
   id: string
   /** What the console calls the strip: a performer, an instrument, a position. */
   name: string
-  /** Off takes the strip out of tonight's patch without forgetting what it is. */
-  enabled: boolean
-  /** The DCA the strip is assigned to, or null when it is in none. */
+  /**
+   * The DCA it drives. A strip starts on the DCA of its own number — the mic-per-fader
+   * arrangement a wireless show is set up as — and one that shares a fader with others is
+   * assigned by hand.
+   */
   dcaId: string | null
 }
 
@@ -349,6 +380,8 @@ export const DEFAULT_TIMEOUT_MS = 1500
 export interface ShowSettings {
   oscIn: OscInSettings
   midiIn: MidiInSettings
+  /** How the show reaches the desk, and what a DCA's own number means to it. */
+  desk: DeskSettings
   rf: RfSettings
   presence: PresenceSettings
   script: ScriptSettings
@@ -453,9 +486,17 @@ export function defaultRfSettings(): RfSettings {
   }
 }
 
-/** How many DCAs a show drives, and how many channels a new one starts with. */
+/** How many DCAs a show can drive, and how many a channel drives by its number. */
 export const DCA_LIMIT = 12
 export const CHANNEL_START_COUNT = 12
+
+/**
+ * What a DCA's own number sounds like on a desk that has never been told otherwise: the
+ * DCA is opened and closed at one address, the way most desks take a mute, and it is the
+ * address that carries the number.
+ */
+export const DEFAULT_DESK_ADDRESS = '/dca/{n}/on'
+export const DEFAULT_DESK_PORT = 8000
 
 /**
  * The scene that is always in the view and never in the file: every mic closed. It is
@@ -464,19 +505,49 @@ export const CHANNEL_START_COUNT = 12
  */
 export const ALL_CLOSED_SCENE_ID = 'all-closed'
 
-/** The twelve strips a new show opens on: unnamed, patched to nothing, all live. */
-export function startingChannels(): ShowChannel[] {
-  return Array.from({ length: CHANNEL_START_COUNT }, () => ({
+/**
+ * The desk a show starts pointed at. Its own address is the one thing the app cannot
+ * know — the desk is somewhere in the room — so this is the local machine, and the port
+ * and the address pattern are what an operator changes once.
+ */
+export function defaultDeskSettings(): DeskSettings {
+  return {
+    kind: 'osc',
+    midiPort: '',
+    midiChannel: 1,
+    host: '127.0.0.1',
+    port: DEFAULT_DESK_PORT,
+    address: DEFAULT_DESK_ADDRESS
+  }
+}
+
+/** The DCAs a new show drives: twelve of them, labelled by number. */
+export function startingDcas(): Dca[] {
+  return Array.from({ length: DCA_LIMIT }, (_, index) => ({
     id: crypto.randomUUID(),
-    name: '',
-    enabled: true,
-    dcaId: null
+    label: `DCA ${index + 1}`,
+    note: null,
+    address: null
   }))
 }
 
-/** A show with nobody cast yet still has a console, and no DCAs until it is told the desk has some. */
+/**
+ * The twelve strips a new show opens on, each driving the DCA of its own number: a mic
+ * per fader, which is what a wireless show is, so nothing has to be assigned before the
+ * first scene moves the desk.
+ */
+export function startingChannels(dcas: Dca[]): ShowChannel[] {
+  return Array.from({ length: CHANNEL_START_COUNT }, (_, index) => ({
+    id: crypto.randomUUID(),
+    name: '',
+    dcaId: dcas[index]?.id ?? null
+  }))
+}
+
+/** A show with nobody cast yet still has a console, wired to a desk and to itself. */
 export function defaultCastSettings(): CastSettings {
-  return { channels: startingChannels(), performers: [], ensembles: [], dcas: [] }
+  const dcas = startingDcas()
+  return { channels: startingChannels(dcas), performers: [], ensembles: [], dcas }
 }
 
 export function defaultShowSettings(): ShowSettings {
@@ -485,6 +556,7 @@ export function defaultShowSettings(): ShowSettings {
     // No port can be assumed to exist, and opening every input would answer to the
     // whole room's traffic. The operator picks the ports.
     midiIn: { enabled: false, portNames: [] },
+    desk: defaultDeskSettings(),
     rf: defaultRfSettings(),
     presence: defaultPresenceSettings(),
     script: defaultScriptSettings(),
@@ -526,6 +598,7 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
   return {
     oscIn: { ...defaults.oscIn, ...settings?.oscIn },
     midiIn: { ...defaults.midiIn, ...settings?.midiIn },
+    desk: { ...defaults.desk, ...settings?.desk },
     rf: {
       plot: { ...defaults.rf.plot, ...rf?.plot },
       sources: rf?.sources ?? defaults.rf.sources,
@@ -548,7 +621,14 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
       channels: cast?.channels ?? defaults.cast.channels,
       performers: cast?.performers ?? defaults.cast.performers,
       ensembles: cast?.ensembles ?? defaults.cast.ensembles,
-      dcas: cast?.dcas ?? defaults.cast.dcas
+      // A DCA written before overrides existed carries the messages it sent; the
+      // migration reads those into the connection and these two fields.
+      dcas: (cast?.dcas ?? defaults.cast.dcas).map(dca => ({
+        id: dca.id,
+        label: dca.label,
+        note: dca.note ?? null,
+        address: dca.address ?? null
+      }))
     }
   }
 }

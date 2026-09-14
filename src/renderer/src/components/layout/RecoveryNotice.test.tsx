@@ -8,7 +8,6 @@ import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
 import { defaultShowSettings } from '../../types/show'
-import { midiNoteMessages } from '../../utils/cast'
 import type { Workspace } from '../../types/workspace'
 import type { Cue } from '../../types/cue'
 
@@ -28,13 +27,13 @@ function snapshot(): {
   missingMedia: MissingMedia[]
 } {
   const showSettings = defaultShowSettings()
+  // The show reaches its desk over MIDI, and this DCA is on a note of its own rather than
+  // the one its number derives: what recovery hands back is the connection and the
+  // override, not a patch per fader.
+  showSettings.desk = { ...showSettings.desk, kind: 'midi', midiPort: 'Yamaha' }
   showSettings.cast = {
     ...showSettings.cast,
-    dcas: [{
-      id: 'dca-1',
-      label: 'DCA 1 — Principals',
-      ...midiNoteMessages('Yamaha', 1, 36)
-    }]
+    dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', note: 36, address: null }]
   }
   showSettings.scenes = {
     list: [{
@@ -103,6 +102,7 @@ describe('RecoveryNotice', () => {
     expect(state.cues.map(c => c.name)).toEqual(['Walk-in Music', 'Sting'])
     expect(state.workspacePath).toBe('/shows/demo.wlab')
     // The desk, the plot and the script are part of that show, not decoration.
+    expect(state.showSettings.desk.midiPort).toBe('Yamaha')
     expect(state.showSettings.scenes.list.map(scene => scene.name)).toEqual(['Wedding'])
     expect(state.showSettings.cast.dcas.map(dca => dca.label))
       .toEqual(['DCA 1 — Principals'])

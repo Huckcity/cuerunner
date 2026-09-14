@@ -136,7 +136,7 @@ describe('migrateWorkspace', () => {
     expect(cast?.performers).toEqual([
       { id: 'p1', name: 'Ada', role: 'Lead', notes: '', channelId: cast?.channels[0].id }
     ])
-    expect(cast?.channels[0]).toMatchObject({ name: 'Ada', enabled: true, dcaId: 'dca1' })
+    expect(cast?.channels[0]).toMatchObject({ name: 'Ada', dcaId: 'dca1' })
     // ...and the rest of the console comes with it, so the show lands set up rather than
     // half set up.
     expect(cast?.channels).toHaveLength(CHANNEL_START_COUNT)
@@ -224,6 +224,79 @@ describe('migrateWorkspace', () => {
     ])
     expect(cast?.ensembles).toEqual([{ id: 'e1', name: 'Chorus', members: ['p2'] }])
     expect((cast as unknown as Record<string, unknown>).groups).toBeUndefined()
+    // A show that had DCAs and drove none of them is left driving none: the derived
+    // messages are the default for a show that has never been told otherwise.
+    expect(workspace.showSettings?.desk.kind).toBe('none')
+  })
+
+  it('reads the desk connection back off the DCAs an older build patched', () => {
+    // One connection per show now, so the pattern comes from the first patched DCA — its
+    // own number swapped for {n} — and every one of them keeps what it sent as an
+    // override: a show does not start sending somewhere else because the app changed.
+    const osc = (address: string) => ({
+      kind: 'osc', host: '10.0.0.5', port: 9000, address, args: [1]
+    })
+    const closed = (address: string) => ({
+      kind: 'osc', host: '10.0.0.5', port: 9000, address, args: [0]
+    })
+
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: {
+        cast: {
+          dcas: [
+            { id: 'dca1', label: 'DCA 1', unmute: osc('/dca/1/mute'), mute: closed('/dca/1/mute') },
+            { id: 'dca2', label: 'DCA 2', unmute: osc('/show/interval'), mute: closed('/show/interval') }
+          ],
+          performers: [],
+          ensembles: [],
+          channels: []
+        },
+        scenes: { list: [] }
+      } as unknown as Workspace['showSettings']
+    })
+
+    expect(workspace.showSettings?.desk).toMatchObject({
+      kind: 'osc',
+      host: '10.0.0.5',
+      port: 9000,
+      address: '/dca/{n}/mute'
+    })
+    expect(workspace.showSettings?.cast.dcas.map(dca => dca.address))
+      .toEqual(['/dca/1/mute', '/show/interval'])
+    // The messages themselves are gone: what a DCA sends is derived or overridden, never
+    // carried as a pair.
+    expect((workspace.showSettings?.cast.dcas[0] as unknown as Record<string, unknown>).unmute)
+      .toBeUndefined()
+  })
+
+  it('reads a MIDI show’s port and channel back the same way', () => {
+    const note = (kind: 'noteOn' | 'noteOff', note: number) => ({
+      kind: 'midi', portName: 'Yamaha', message: { kind, channel: 3, note, velocity: 0 }
+    })
+
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: {
+        cast: {
+          dcas: [
+            { id: 'dca1', label: 'DCA 1', unmute: note('noteOn', 60), mute: note('noteOff', 60) },
+            { id: 'dca2', label: 'DCA 2', unmute: note('noteOn', 2), mute: note('noteOff', 2) }
+          ],
+          performers: [],
+          ensembles: [],
+          channels: []
+        },
+        scenes: { list: [] }
+      } as unknown as Workspace['showSettings']
+    })
+
+    expect(workspace.showSettings?.desk).toMatchObject({
+      kind: 'midi',
+      midiPort: 'Yamaha',
+      midiChannel: 3
+    })
+    expect(workspace.showSettings?.cast.dcas.map(dca => dca.note)).toEqual([60, 2])
   })
 
   it('leaves a console that has already been set up exactly as it was found', () => {

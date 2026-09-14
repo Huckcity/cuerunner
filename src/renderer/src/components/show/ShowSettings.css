@@ -145,7 +145,56 @@
   color: var(--fg-ghost);
 }
 
-/* ── Channels ───────────────────────────────────────────────────────────────── */
+/* ── The desk ───────────────────────────────────────────────────────────────── */
+.desk-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.desk-row input,
+.desk-row select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.desk-row input:focus,
+.desk-row select:focus {
+  border-color: var(--border-focus);
+}
+
+.desk-kind { flex: 0 0 110px; }
+.desk-host { flex: 1 1 140px; }
+.desk-port { flex: 0 0 80px; }
+.desk-address { flex: 1 1 190px; font-family: var(--font-mono); }
+.desk-midi-port { flex: 1 1 180px; }
+.desk-midi-channel { flex: 0 0 70px; }
+
+.desk-hint {
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+/* What the show will send, read back from the connection: a pattern and a port are
+   easier to check as addresses than as a template. */
+.desk-preview {
+  margin-top: var(--space-2);
+  padding-left: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.desk-gap { color: var(--accent-amber); }
+
 .dca-count {
   display: flex;
   align-items: center;
@@ -168,6 +217,62 @@
   padding: 0 6px;
 }
 
+/* ── Channels ───────────────────────────────────────────────────────────────── */
+.channel-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 200px 26px;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.channel-row input,
+.channel-row select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.channel-row input:focus,
+.channel-row select:focus {
+  border-color: var(--border-focus);
+}
+
+.channel-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  text-align: right;
+}
+
+.channel-remove,
+.performer-remove,
+.ensemble-remove {
+  width: 26px;
+  height: var(--h-input);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.channel-remove:hover,
+.performer-remove:hover,
+.ensemble-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* ── DCAs ───────────────────────────────────────────────────────────────────── */
 .dca-row {
   display: flex;
   flex-direction: column;
@@ -204,8 +309,8 @@
   border-color: var(--border-focus);
 }
 
-/* The number is the DCA's place in the desk's own list, which is what the operator
-   reaches for — the label beside it is what this show calls it. */
+/* The number is the DCA's place on the desk, which is what the operator reaches for —
+   the label beside it is what this show calls it. */
 .dca-number {
   flex: none;
   width: 16px;
@@ -217,25 +322,21 @@
 }
 
 .dca-label { flex: 0 0 140px; }
-.dca-delivery { flex: 0 0 104px; }
-.dca-port { flex: 1 1 140px; }
-.dca-channel { flex: 0 0 56px; padding: 4px 2px; }
-.dca-note { flex: 0 0 64px; padding: 4px 2px; }
-.dca-host { flex: 1 1 120px; }
-.dca-osc-port { flex: 0 0 80px; }
-.dca-address { flex: 1 1 120px; }
 
-.dca-summary {
-  display: flex;
-  gap: var(--space-2);
-  padding-left: var(--space-1);
+/* The override: empty means the message the DCA's number makes, and the placeholder is
+   that message, so the field shows what will be sent without being typed into. */
+.dca-override { flex: 0 0 170px; font-family: var(--font-mono); }
+
+.dca-sent {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--fg-muted);
 }
-
-.dca-summary-open { color: var(--fg-tertiary); }
-.dca-summary-sep { color: var(--fg-ghost); }
 
 /* Which strips a DCA is carrying is the other half of "what opens this": the routing is
    on the channels, so this is where it is read back. */
@@ -244,80 +345,6 @@
   font-size: var(--text-sm);
   color: var(--fg-ghost);
 }
-
-.channel-row {
-  display: grid;
-  grid-template-columns: 20px 1fr 180px 92px 26px;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.channel-row input,
-.channel-row select {
-  min-width: 0;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-primary);
-  font-size: var(--text-base);
-  padding: 4px 7px;
-  height: var(--h-input);
-  outline: none;
-  font-family: inherit;
-}
-
-.channel-row input:focus,
-.channel-row select:focus {
-  border-color: var(--border-focus);
-}
-
-.channel-number {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-dim);
-  text-align: right;
-}
-
-/* A strip switched out of the patch reads back a step quieter, so a rack of them can be
-   scanned for the one that is not there. */
-.channel-row[data-enabled='false'] input,
-.channel-row[data-enabled='false'] select,
-.channel-row[data-enabled='false'] .channel-number {
-  color: var(--fg-dim);
-  opacity: 0.6;
-}
-
-.channel-enabled {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-
-.channel-enabled input { accent-color: var(--accent-blue); }
-
-.channel-remove,
-.performer-remove,
-.ensemble-remove {
-  width: 26px;
-  height: var(--h-input);
-  background: transparent;
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-dim);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.channel-remove:hover,
-.performer-remove:hover,
-.ensemble-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 /* ── Performers ─────────────────────────────────────────────────────────────── */
 .performer-row {

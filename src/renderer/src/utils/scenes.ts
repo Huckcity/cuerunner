@@ -1,10 +1,11 @@
 import { performerDcaId } from './cast'
+import { deskMessages } from './desk'
 import type {
-  CastSettings,
   DeskMessage,
   Ensemble,
   MicScene,
-  ScenesSettings
+  ScenesSettings,
+  ShowSettings
 } from '../types/show'
 
 /**
@@ -212,30 +213,38 @@ export interface DeskChange {
  * doing something else with them, and a DCA already in the state the scene asks for is
  * not mentioned: that is what makes a recall a few messages instead of a sweep.
  *
+ * What each DCA is told comes from the show's connection and the DCA's number, so the
+ * patch is one thing to set up rather than one per fader.
+ *
  * A null scene is the all-closed scene: every DCA the show drives is closed.
  */
 export function sceneChanges(
-  cast: CastSettings,
+  show: ShowSettings,
   scene: MicScene | null,
   deskState: Record<string, boolean>
 ): DeskChange[] {
   const changes: DeskChange[] = []
-  const live = new Set(sceneLiveIds(scene, cast.ensembles))
+  const live = new Set(sceneLiveIds(scene, show.cast.ensembles))
 
-  for (const dca of cast.dcas) {
-    const routed = cast.performers.filter(
-      performer => performerDcaId(performer, cast.channels) === dca.id
+  show.cast.dcas.forEach((dca, index) => {
+    const routed = show.cast.performers.filter(
+      performer => performerDcaId(performer, show.cast.channels) === dca.id
     )
-    if (routed.length === 0) continue
+    if (routed.length === 0) return
 
     const shouldBeLive = routed.some(performer => live.has(performer.id))
-    if (deskState[dca.id] === shouldBeLive) continue
+    if (deskState[dca.id] === shouldBeLive) return
 
-    const message = shouldBeLive ? dca.unmute : dca.mute
-    if (message === null) continue
+    const messages = deskMessages(dca, index, show.desk)
+    if (messages === null) return
 
-    changes.push({ channelId: dca.id, label: dca.label, live: shouldBeLive, message })
-  }
+    changes.push({
+      channelId: dca.id,
+      label: dca.label,
+      live: shouldBeLive,
+      message: shouldBeLive ? messages.unmute : messages.mute
+    })
+  })
 
   return changes
 }

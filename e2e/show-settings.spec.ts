@@ -1,9 +1,10 @@
-// Show Settings: the DCAs the desk has and how they are driven, the strips and who is
-// patched to them, the ensembles that group the cast, and the mic plot. It is opened
-// from the menu rather than from the Scenes view, so that is where the dialog is
-// asserted from; the Scenes view only runs what this sets up (`scenes-view.spec.ts`).
+// Show Settings: the desk the show drives, the strips and who is patched to them, the
+// ensembles that group the cast, and the mic plot. It is opened from the menu rather than
+// from the Scenes view, so that is where the dialog is asserted from; the Scenes view only
+// runs what this sets up (`scenes-view.spec.ts`).
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import {
+  buildDeskShow,
   closeApp,
   editScenes,
   freePort,
@@ -13,7 +14,7 @@ import {
   mintLicense,
   openScenesView,
   openShowSettings,
-  wireDca
+  pointDeskAtOsc
 } from './helpers'
 
 let app: ElectronApplication
@@ -39,80 +40,162 @@ test('the WinsLab menu opens Show Settings on its Channels tab', async () => {
   const dialog = page.getByRole('dialog', { name: 'Show Settings' })
   await expect(dialog).toBeVisible()
   await expect(dialog.locator('.show-settings-tab')).toHaveCount(3)
-  // A show is set up starting from the console, so that is the tab the dialog lands on.
+  // A show is set up starting from the console, so that is the tab the dialog lands on —
+  // and the console is counted for already: twelve DCAs, one per strip.
   await expect(dialog.locator('.show-settings-tab', { hasText: 'Channels' }))
     .toHaveAttribute('data-active', 'true')
-  await expect(dialog.locator('.dca-count-select')).toHaveValue('0')
+  await expect(dialog.locator('.dca-count-select')).toHaveValue('12')
+  await expect(dialog.locator('.dca-row')).toHaveCount(12)
 })
 
-test('the Channels tab sets up the DCAs, the strips and what carries each one', async () => {
+test('the desk connection is one place, read back as the addresses it will send', async () => {
   await openShowSettings(page)
   const dialog = page.locator('.show-settings-dialog')
 
-  // A show with no DCAs drives nothing, and says so rather than showing an empty row.
-  await expect(dialog.locator('.dca-row')).toHaveCount(0)
-  await dialog.locator('.dca-count-select').selectOption('2')
-  await expect(dialog.locator('.dca-row')).toHaveCount(2)
+  // Where the desk is the one thing about a show the app cannot know, so a new show points
+  // at the local machine, on the port and the pattern most desks take.
+  await expect(dialog.locator('.desk-kind')).toHaveValue('osc')
+  await expect(dialog.locator('.desk-host')).toHaveValue('127.0.0.1')
+  await expect(dialog.locator('.desk-port')).toHaveValue('8000')
+  await expect(dialog.locator('.desk-address')).toHaveValue('/dca/{n}/on')
+  await expect(dialog.locator('.desk-preview')).toContainText('/dca/1/on')
+  await expect(dialog.locator('.desk-preview')).toContainText('/dca/12/on')
 
-  // A strip is a number, a name, and whether it is in tonight's patch.
-  const first = dialog.locator('.channel-row').first()
-  await first.locator('.channel-name').fill('Ruth')
-  await first.locator('.channel-name').blur()
-  await expect(first.locator('.channel-number')).toHaveText('1')
-  await expect(first).toHaveAttribute('data-enabled', 'true')
+  // Moving the desk is typing over three fields, and the read-back is the addresses the
+  // show will actually be sent: the pattern is what a DCA's number is turned into.
+  const port = freePort()
+  await dialog.locator('.desk-host').fill('10.0.0.7')
+  await dialog.locator('.desk-host').blur()
+  await dialog.locator('.desk-port').fill(String(port))
+  await dialog.locator('.desk-port').blur()
+  await dialog.locator('.desk-address').fill('/mixer/dca/{n}')
+  await dialog.locator('.desk-address').blur()
 
-  // Which DCA a strip carries is the whole desk-routing question, and the DCA row says
-  // what is routed to it.
-  await first.locator('.channel-dca').selectOption({ label: 'DCA 1' })
-  await expect(dialog.locator('.dca-row').first().locator('.dca-carrying'))
-    .toContainText('Ch 1 · Ruth')
-
-  // Taking a strip out of the patch leaves it named and where it was; only the switch
-  // changes, because the strip is remembered for the night it is back in.
-  await first.locator('.channel-enabled').uncheck()
-  await expect(first).toHaveAttribute('data-enabled', 'false')
-  await expect(first.locator('.channel-name')).toHaveValue('Ruth')
+  await expect(dialog.locator('.desk-host')).toHaveValue('10.0.0.7')
+  await expect(dialog.locator('.desk-port')).toHaveValue(String(port))
+  await expect(dialog.locator('.desk-address')).toHaveValue('/mixer/dca/{n}')
+  await expect(dialog.locator('.desk-preview')).toContainText('/mixer/dca/1')
+  await expect(dialog.locator('.desk-preview')).toContainText('/mixer/dca/12')
 })
 
-test("a performer's strip is what drives the desk, not the performer", async () => {
+test('the DCA count resizes the desk, and a strip says which fader it rides', async () => {
+  await openShowSettings(page)
+  const dialog = page.locator('.show-settings-dialog')
+
+  // A fader per strip is what a new show is — strip n on DCA n — so nothing has to be
+  // assigned before the first scene moves the desk...
+  await expect(dialog.locator('.dca-row').first().locator('.dca-carrying')).toHaveText('Ch 1')
+  await expect(dialog.locator('.dca-row').nth(11).locator('.dca-carrying')).toHaveText('Ch 12')
+
+  // ...and a desk with two DCAs gets two rows. The strip that was riding a fader that is
+  // gone is left driving nothing rather than pointing at one that is not there.
+  await dialog.locator('.dca-count-select').selectOption('2')
+  await expect(dialog.locator('.dca-row')).toHaveCount(2)
+  await expect(dialog.locator('.channel-row').nth(11).locator('.channel-dca')).toHaveValue('')
+  const secondFader = await dialog.locator('.channel-row').nth(1).locator('.channel-dca').evaluate(
+    select => (select as HTMLSelectElement).selectedOptions[0]?.textContent ?? ''
+  )
+  expect(secondFader).toBe('2 · DCA 2')
+
+  // Sharing a fader is the strip's own decision: the second strip joins the first, and the
+  // DCA rows say which strips are on which fader.
+  await dialog.locator('.channel-row').nth(1).locator('.channel-dca')
+    .selectOption({ label: '1 · DCA 1' })
+  await expect(dialog.locator('.dca-row').first().locator('.dca-carrying'))
+    .toHaveText('Ch 1, Ch 2')
+  await expect(dialog.locator('.dca-row').nth(1).locator('.dca-carrying'))
+    .toHaveText('nothing assigned')
+})
+
+test('a DCA can be sent somewhere other than the address its number makes', async () => {
+  await openShowSettings(page)
+  const dialog = page.locator('.show-settings-dialog')
+  const dca = dialog.locator('.dca-row').first()
+  const override = dca.locator('.dca-override')
+
+  // The field starts empty and its placeholder is the address the number makes: the row
+  // says what will be sent without anything having been typed into it.
+  await expect(override).toHaveValue('')
+  await expect(override).toHaveAttribute('placeholder', '/dca/1/on')
+  await expect(dca.locator('.dca-sent')).toHaveText('/dca/1/on 1')
+
+  // A desk that mutes the principal somewhere else gets an address typed here, and the row
+  // reads back what that DCA is now sent.
+  await override.fill('/stage/principals')
+  await override.blur()
+  await expect(override).toHaveValue('/stage/principals')
+  await expect(dca.locator('.dca-sent')).toHaveText('/stage/principals 1')
+
+  // Clearing it goes back to the address of its number, not to an address of nothing.
+  await override.fill('')
+  await override.blur()
+  await expect(override).toHaveValue('')
+  await expect(override).toHaveAttribute('placeholder', '/dca/1/on')
+  await expect(dca.locator('.dca-sent')).toHaveText('/dca/1/on 1')
+})
+
+test('the defaults take a show nobody wired to a desk of its own', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())
 
   try {
+    // Nothing here but the desk's own address: twelve strips, twelve DCAs, strip n on DCA n,
+    // all of it from the defaults.
     await liveRack(page)
-    await openShowSettings(page)
-    const settings = page.locator('.show-settings-dialog')
-
-    // One DCA on the desk, wired to the test's port, carried by the first strip.
-    await settings.locator('.dca-count-select').selectOption('1')
-    await wireDca(settings.locator('.dca-row').first(), desk.port, '/dca/1/mute')
-    await settings.locator('.channel-row').first().locator('.channel-dca')
-      .selectOption({ label: 'DCA 1' })
-
-    // The first performer wears that strip; the second wears one in no DCA at all.
-    await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
-    const performers = settings.locator('.performer-row')
-    await performers.nth(0).locator('.performer-channel').selectOption({ label: 'Ch 1' })
-    await performers.nth(1).locator('.performer-channel').selectOption({ label: 'Ch 2' })
-    await settings.locator('.show-settings-done').click()
-
+    await pointDeskAtOsc(page, desk.port)
+    await page.locator('.show-settings-done').click()
     await openScenesView(page)
     await editScenes(page)
     await page.locator('.scenes-add').click()
-
-    // A row says what its performer is patched to.
-    const rows = page.locator('.matrix-row')
-    await expect(rows.nth(0).locator('.matrix-channel')).toHaveText('Ch 1')
-    await expect(rows.nth(1).locator('.matrix-channel')).toHaveText('Ch 2')
-
-    // Both mics are open in the scene, but only the strip that carries the DCA opens
-    // anything on the desk.
-    await rows.nth(0).locator('.matrix-cell').first().click()
-    await rows.nth(1).locator('.matrix-cell').first().click()
+    await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
+    // The desk has not been told anything yet, so the first recall puts the whole show on
+    // it: the first fader opens, the eleven this one-mic scene leaves closed are closed,
+    // and every DCA is named by its own number.
+    await expect.poll(() => desk.received.length).toBe(12)
+    expect(desk.received.map(message => message.address)).toEqual(
+      Array.from({ length: 12 }, (_, index) => `/dca/${index + 1}/on`)
+    )
+    expect(desk.received.map(message => message.args[0])).toEqual([1, ...Array(11).fill(0)])
+
+    // Now the desk is where the show says it is: the same recall has nothing left to say.
+    await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
+    await page.waitForTimeout(300)
+    expect(desk.received).toHaveLength(12)
+  } finally {
+    await desk.close()
+  }
+})
+
+test('a show with no desk sends nothing, however the scene moves', async () => {
+  test.setTimeout(60_000)
+  const desk = await listenOsc(freePort())
+
+  try {
+    await buildDeskShow(page, desk.port)
+
+    // Until it is told otherwise, this show drives the test's listener.
+    await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(1)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/mute', args: [1] })
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
+
+    // A show pointed at no desk says so on every DCA row, and a recall of the all-closed
+    // column — which would close the fader — puts nothing on the wire at all.
+    await openShowSettings(page)
+    const dialog = page.locator('.show-settings-dialog')
+    await dialog.locator('.desk-kind').selectOption('none')
+    await expect(dialog.locator('.desk-hint')).toContainText('Nothing is sent')
+    await expect(dialog.locator('.dca-row').first().locator('.dca-sent')).toHaveText('not sent')
+    await dialog.locator('.show-settings-done').click()
+
+    await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
+    await expect(page.locator('.matrix-scene[data-all-closed]'))
+      .toHaveAttribute('data-current', 'true')
+
+    // Long enough for a datagram that was never sent to not arrive.
+    await page.waitForTimeout(300)
+    expect(desk.received).toHaveLength(1)
   } finally {
     await desk.close()
   }
@@ -123,49 +206,39 @@ test('an ensemble built in the Cast tab opens every member when a scene applies 
   const desk = await listenOsc(freePort())
 
   try {
-    await liveRack(page)
+    await buildDeskShow(page, desk.port)
+
+    // A second fader for the second mic: an ensemble is two mics moving together, and the
+    // show the helper built drives one DCA.
     await openShowSettings(page)
     const settings = page.locator('.show-settings-dialog')
-
-    // Two DCAs on two addresses, carried by the first two strips...
     await settings.locator('.dca-count-select').selectOption('2')
-    await wireDca(settings.locator('.dca-row').nth(0), desk.port, '/dca/1/mute')
-    await wireDca(settings.locator('.dca-row').nth(1), desk.port, '/dca/2/mute')
-    await settings.locator('.channel-row').nth(0).locator('.channel-dca')
-      .selectOption({ label: 'DCA 1' })
     await settings.locator('.channel-row').nth(1).locator('.channel-dca')
-      .selectOption({ label: 'DCA 2' })
+      .selectOption({ label: '2 · DCA 2' })
 
-    // ...worn by the first two performers...
+    // The two performers are put in one ensemble by name, from its own member list.
     await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
     const performers = settings.locator('.performer-row')
-    await performers.nth(0).locator('.performer-channel').selectOption({ label: 'Ch 1' })
-    await performers.nth(1).locator('.performer-channel').selectOption({ label: 'Ch 2' })
-
-    // ...who are put in one ensemble by name, from its own member list.
-    await settings.locator('.ensemble-add').click()
-    const ensemble = settings.locator('.ensemble-row').first()
     const first = await performers.nth(0).locator('.performer-name').inputValue()
     const second = await performers.nth(1).locator('.performer-name').inputValue()
+    await settings.locator('.ensemble-add').click()
+    const ensemble = settings.locator('.ensemble-row').first()
     await ensemble.locator('.member-add').selectOption({ label: first })
     await ensemble.locator('.member-add').selectOption({ label: second })
     await expect(ensemble.locator('.member-chip')).toHaveCount(2)
     await expect(ensemble.locator('.ensemble-count')).toHaveText('2 members')
     await settings.locator('.show-settings-done').click()
 
-    // The ensemble itself routes nothing: applying it to the scene is what opens the
-    // mics, and each member's own DCA is told, at its own address.
-    await openScenesView(page)
-    await editScenes(page)
-    await page.locator('.scenes-add').click()
+    // The ensemble itself routes nothing: applying it to the scene is what opens both mics,
+    // and each member's own DCA is told, at the address its own number makes.
     const applied = page.locator('.matrix-ensemble-row').first().locator('.matrix-cell').first()
     await applied.click()
     await expect(applied).toHaveAttribute('data-applied', 'on')
 
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(2)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/mute', args: [1] })
-    expect(desk.received[1]).toEqual({ address: '/dca/2/mute', args: [1] })
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
+    expect(desk.received[1]).toEqual({ address: '/dca/2/on', args: [1] })
   } finally {
     await desk.close()
   }

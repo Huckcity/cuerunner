@@ -5,7 +5,7 @@ import {
   DEMO_SOURCE_ID,
   demoChannelId
 } from '../types/show'
-import type { Performer, RfPack, TelemetrySource } from '../types/show'
+import type { Performer, RfPack, ShowChannel, TelemetrySource } from '../types/show'
 
 // The demo rack is the whole feature in one click: a source the main process simulates
 // and a plot that names every channel it reports. Both are generated from the same ids
@@ -53,14 +53,18 @@ export function demoSource(): TelemetrySource {
   }
 }
 
-/** Twelve performers, cast-side rather than plot-side, patched to no strip yet. */
-export function demoPerformers(): Performer[] {
+/**
+ * Twelve performers, cast-side rather than plot-side, each on the strip of their own
+ * number: the demo is a show somebody can open a scene on, and a performer with no strip
+ * is a row no scene can move.
+ */
+export function demoPerformers(channels: ShowChannel[] = []): Performer[] {
   return CAST.map((member, i) => ({
     id: demoPerformerId(i + 1),
     name: member.name,
     role: member.role,
     notes: member.notes,
-    channelId: null
+    channelId: channels[i]?.id ?? null
   }))
 }
 

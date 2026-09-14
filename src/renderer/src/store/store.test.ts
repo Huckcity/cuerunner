@@ -17,9 +17,9 @@ import type {
   ShowEvent
 } from '../types/show'
 
-const DCA: Dca = { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null }
+const DCA: Dca = { id: 'dca-1', label: 'DCA 1', note: null, address: null }
 /** The strip Ada's mic is on, which is what carries her to the desk. */
-const CHANNEL = { id: 'ch-1', name: 'Ada', enabled: true, dcaId: 'dca-1' }
+const CHANNEL = { id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }
 const ROUTED_PERFORMER: Performer = {
   id: 'p1',
   name: 'Ada',
@@ -518,14 +518,25 @@ describe('store — undo/redo', () => {
     const cast = useStore.getState().showSettings.cast
     useStore.getState().updateCastSettings(setDcaCount(cast, 0))
 
-    // The strip that was in the DCA is still there, in no DCA at all — which is what a
-    // mic with nowhere to go looks like, rather than a strip pointing at nothing.
+    // The strip that was on the DCA is still there, riding the fader of its own number —
+    // the first place, which is now past the end — rather than pointing at a DCA that is gone.
     expect(useStore.getState().showSettings.cast.dcas).toEqual([])
     expect(useStore.getState().showSettings.cast.channels[0].dcaId).toBeNull()
 
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.dcas).toEqual([DCA])
     expect(useStore.getState().showSettings.cast.channels[0].dcaId).toBe('dca-1')
+  })
+
+  it('undo after pointing the show at another desk puts the address back', () => {
+    useStore.setState({ showSettings: defaultShowSettings() })
+
+    useStore.getState().updateDeskSettings({ host: '10.0.0.5', port: 9000 })
+
+    expect(useStore.getState().showSettings.desk).toMatchObject({ host: '10.0.0.5', port: 9000 })
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.desk).toMatchObject({ host: '127.0.0.1', port: 8000 })
   })
 
   it('makes an ensemble out of a scene in one edit, and applies it there', () => {

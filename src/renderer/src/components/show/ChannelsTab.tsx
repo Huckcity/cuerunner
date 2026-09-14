@@ -3,65 +3,40 @@ import { useStore } from '../../store'
 import {
   addChannel,
   channelLabel,
-  describeDeskMessage,
-  midiNoteMessages,
   removeChannel,
-  oscMessages,
   setDcaCount,
   updateChannel,
   updateDca
 } from '../../utils/cast'
-import { OSC_DEFAULTS } from '../../utils/cueDefaults'
+import { dcaAddress, dcaNumber, deskMessages } from '../../utils/desk'
 import { DCA_LIMIT } from '../../types/show'
-import type { CastSettings, Dca } from '../../types/show'
-import { CommitInput, CommitPort } from './CommitField'
+import type { CastSettings, DeskMessage, DeskSettings } from '../../types/show'
+import { CommitInput, CommitNumber } from './CommitField'
 
-// A DCA with no patch of its own yet: one address per DCA, opened with a 1 and closed
-// with a 0, on the host and port an OSC cue starts from.
-const DCA_OSC_DEFAULTS = { ...OSC_DEFAULTS, address: '/dca/1' }
-
-const MIDI_CHANNELS = Array.from({ length: 16 }, (_, index) => index + 1)
-const MIDI_NOTES = Array.from({ length: 128 }, (_, index) => index)
 const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
 
-type Delivery = 'midi' | 'osc' | 'none'
-
-/** How a DCA is opened and closed, read back off the messages it is carrying. */
-function deliveryOf(dca: Dca): Delivery {
-  if (dca.unmute === null && dca.mute === null) return 'none'
-  if (dca.unmute?.kind === 'midi') return 'midi'
-  if (dca.unmute?.kind === 'osc') return 'osc'
-  return 'none'
-}
-
-function midiFields(
-  dca: Dca,
-  fallbackPort: string
-): { portName: string; channel: number; note: number } {
-  const message = dca.unmute?.kind === 'midi' ? dca.unmute : null
-  if (message === null) return { portName: fallbackPort, channel: 1, note: 1 }
-  const kind = message.message
-  if (kind.kind !== 'noteOn' && kind.kind !== 'noteOff') {
-    return { portName: message.portName, channel: 1, note: 1 }
-  }
-  return { portName: message.portName, channel: kind.channel, note: kind.note }
-}
-
-function oscFields(dca: Dca): { host: string; port: number; address: string } {
-  const message = dca.unmute?.kind === 'osc' ? dca.unmute : null
-  if (message === null) return DCA_OSC_DEFAULTS
-  return { host: message.host, port: message.port, address: message.address }
+/** What the desk is missing before it can be driven at all, or null when it is ready. */
+function deskGap(desk: DeskSettings): string | null {
+  if (desk.kind === 'midi' && desk.midiPort === '') return 'No MIDI port chosen.'
+  return null
 }
 
 /**
- * Channels: the console as the show sees it. First how many DCAs the desk has, then the
- * strips themselves — a number, a name, whether the strip is in tonight's patch, and the
- * DCA it feeds. This is where the desk routing of the whole show is set up; Scenes only
- * runs it.
+ * Channels: the console as the show sees it. Where the desk is, how many DCAs it has,
+ * the strips and the fader each one drives, and the DCAs themselves.
+ *
+ * It is set up once, so the defaults do the work: a new show has twelve strips and twelve
+ * DCAs, strip n driving DCA n, and the only thing nobody can guess is where the desk is.
+ * What is left here is the exceptions — a chorus sharing one fader, a desk that numbers
+ * its DCAs differently — which is why the DCA rows are the last thing on the tab rather
+ * than the first.
  */
 export function ChannelsTab() {
   const cast = useStore(s => s.showSettings.cast)
+  const desk = useStore(s => s.showSettings.desk)
+  const midiOutPort = useStore(s => s.midiSettings.outputPortName)
   const updateCastSettings = useStore(s => s.updateCastSettings)
+  const updateDeskSettings = useStore(s => s.updateDeskSettings)
   const [ports, setPorts] = useState<string[]>([])
 
   useEffect(() => {
@@ -72,52 +47,33 @@ export function ChannelsTab() {
 
   const apply = (next: CastSettings): void => updateCastSettings(next)
 
-  const setMidi = (
-    dca: Dca,
-    patch: Partial<{ portName: string; channel: number; note: number }>
-  ): void => {
-    const fields = { ...midiFields(dca, ports[0] ?? ''), ...patch }
-    apply(updateDca(cast, dca.id, midiNoteMessages(fields.portName, fields.channel, fields.note)))
+  // A desk the operator has just called for is driven on the port this machine already
+  // has chosen for its MIDI output: the app knows it, so it is not a second question.
+  const setKind = (kind: DeskSettings['kind']): void => {
+    const port = desk.midiPort === '' && kind === 'midi' ? midiOutPort : desk.midiPort
+    updateDeskSettings({ kind, midiPort: port })
   }
 
-  const setOsc = (
-    dca: Dca,
-    patch: Partial<{ host: string; port: number; address: string }>
-  ): void => {
-    const fields = { ...oscFields(dca), ...patch }
-    apply(updateDca(cast, dca.id, oscMessages(fields.host, fields.port, fields.address)))
-  }
-
-  const setDelivery = (dca: Dca, delivery: Delivery): void => {
-    if (delivery === 'none') {
-      apply(updateDca(cast, dca.id, { mute: null, unmute: null }))
-      return
-    }
-    if (delivery === 'midi') {
-      const fields = midiFields(dca, ports[0] ?? '')
-      apply(updateDca(cast, dca.id, midiNoteMessages(fields.portName, fields.channel, fields.note)))
-      return
-    }
-    const fields = oscFields(dca)
-    apply(updateDca(cast, dca.id, oscMessages(fields.host, fields.port, fields.address)))
-  }
+  const portOptions = desk.midiPort !== '' && !ports.includes(desk.midiPort)
+    ? [desk.midiPort, ...ports]
+    : ports
+  const gap = deskGap(desk)
 
   return (
     <div className="show-tab-body">
       <div className="show-section">
         <div className="show-section-head">
-          <span className="show-section-title">DCAs</span>
+          <span className="show-section-title">Desk</span>
           <label className="dca-count">
-            <span className="dca-count-label">Number to control</span>
+            <span className="dca-count-label">DCAs to control</span>
             <select
               className="dca-count-select"
               aria-label="Number of DCAs"
               value={cast.dcas.length}
               onChange={e => apply(setDcaCount(cast, Number(e.target.value)))}
             >
-              {/* A show migrated from one that drove more DCAs than the dial offers keeps
-                  the count it has: the limit is what the dial goes up to, not a number to
-                  take off somebody's desk. */}
+              {/* A show from an older build can carry more DCAs than the dial offers;
+                  the count it has stays selectable rather than silently shrinking. */}
               {(cast.dcas.length > DCA_LIMIT ? [...DCA_COUNTS, cast.dcas.length] : DCA_COUNTS)
                 .map(count => (
                   <option key={count} value={count}>{count === 0 ? 'none' : count}</option>
@@ -126,116 +82,85 @@ export function ChannelsTab() {
           </label>
         </div>
 
-        {cast.dcas.length === 0 ? (
-          <p className="show-empty">
-            No DCAs. A show that does not drive the desk leaves this at none.
-          </p>
-        ) : (
-          cast.dcas.map((dca, index) => {
-            const delivery = deliveryOf(dca)
-            const midi = midiFields(dca, ports[0] ?? '')
-            const osc = oscFields(dca)
-            const portOptions = ports.includes(midi.portName) ? ports : [midi.portName, ...ports]
-            const carrying = cast.channels
-              .filter(channel => channel.dcaId === dca.id)
-              .map(channel => channelLabel(cast.channels, channel.id))
+        <div className="desk-row">
+          <select
+            className="desk-kind"
+            aria-label="How the show reaches the desk"
+            value={desk.kind}
+            onChange={e => setKind(e.target.value as DeskSettings['kind'])}
+          >
+            <option value="osc">OSC</option>
+            <option value="midi">MIDI</option>
+            <option value="none">No desk</option>
+          </select>
 
-            return (
-              <div className="dca-row" key={dca.id}>
-                <div className="dca-fields">
-                  <span className="dca-number">{index + 1}</span>
-                  <CommitInput
-                    className="dca-label"
-                    value={dca.label}
-                    placeholder="DCA"
-                    aria-label={`DCA ${index + 1} label`}
-                    onCommit={label => apply(updateDca(cast, dca.id, { label }))}
-                  />
-                  <select
-                    className="dca-delivery"
-                    value={delivery}
-                    aria-label={`DCA ${index + 1} delivery`}
-                    onChange={e => setDelivery(dca, e.target.value as Delivery)}
-                  >
-                    <option value="midi">MIDI</option>
-                    <option value="osc">OSC</option>
-                    <option value="none">None</option>
-                  </select>
+          {desk.kind === 'osc' && (
+            <>
+              <CommitInput
+                className="desk-host"
+                value={desk.host}
+                placeholder="Host"
+                aria-label="Desk host"
+                onCommit={host => updateDeskSettings({ host })}
+              />
+              <CommitNumber
+                className="desk-port"
+                value={desk.port}
+                min={1}
+                max={65535}
+                aria-label="Desk port"
+                onCommit={port => updateDeskSettings({ port })}
+              />
+              <CommitInput
+                className="desk-address"
+                value={desk.address}
+                placeholder="/dca/{n}/on"
+                aria-label="Desk address"
+                title="The address a DCA is sent to. {n} is its number."
+                onCommit={address => updateDeskSettings({ address })}
+              />
+            </>
+          )}
 
-                  {delivery === 'midi' && (
-                    <>
-                      <select
-                        className="dca-port"
-                        value={midi.portName}
-                        aria-label="MIDI port"
-                        onChange={e => setMidi(dca, { portName: e.target.value })}
-                      >
-                        {portOptions.map(port => (
-                          <option key={port} value={port}>{port === '' ? '— none —' : port}</option>
-                        ))}
-                      </select>
-                      <select
-                        className="dca-channel"
-                        value={midi.channel}
-                        aria-label="MIDI channel"
-                        onChange={e => setMidi(dca, { channel: Number(e.target.value) })}
-                      >
-                        {MIDI_CHANNELS.map(option => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                      <select
-                        className="dca-note"
-                        value={midi.note}
-                        aria-label="MIDI note"
-                        onChange={e => setMidi(dca, { note: Number(e.target.value) })}
-                      >
-                        {MIDI_NOTES.map(option => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    </>
-                  )}
+          {desk.kind === 'midi' && (
+            <>
+              <select
+                className="desk-midi-port"
+                aria-label="Desk MIDI port"
+                value={desk.midiPort}
+                onChange={e => updateDeskSettings({ midiPort: e.target.value })}
+              >
+                <option value="">— no port —</option>
+                {portOptions.map(port => (
+                  <option key={port} value={port}>{port}</option>
+                ))}
+              </select>
+              <CommitNumber
+                className="desk-midi-channel"
+                value={desk.midiChannel}
+                min={1}
+                max={16}
+                aria-label="Desk MIDI channel"
+                onCommit={midiChannel => updateDeskSettings({ midiChannel })}
+              />
+            </>
+          )}
 
-                  {delivery === 'osc' && (
-                    <>
-                      <CommitInput
-                        className="dca-host"
-                        value={osc.host}
-                        placeholder="Host"
-                        aria-label="OSC host"
-                        onCommit={host => setOsc(dca, { host })}
-                      />
-                      <CommitPort
-                        className="dca-osc-port"
-                        value={osc.port}
-                        aria-label="OSC port"
-                        onCommit={port => setOsc(dca, { port })}
-                      />
-                      <CommitInput
-                        className="dca-address"
-                        value={osc.address}
-                        placeholder="Address"
-                        aria-label="OSC address"
-                        onCommit={address => setOsc(dca, { address })}
-                      />
-                    </>
-                  )}
-                </div>
+          {desk.kind === 'none' && (
+            <span className="desk-hint">Nothing is sent: the show is a roster and a set of cues.</span>
+          )}
+        </div>
 
-                <div className="dca-summary">
-                  <span className="dca-summary-open">{describeDeskMessage(dca.unmute)}</span>
-                  <span className="dca-summary-sep">{' / '}</span>
-                  <span className="dca-summary-close">{describeDeskMessage(dca.mute)}</span>
-                </div>
-
-                <div className="dca-carrying">
-                  {carrying.length === 0 ? 'nothing assigned' : carrying.join(', ')}
-                </div>
-              </div>
-            )
-          })
+        {/* The first and last of what the show will send, read back from the connection:
+            the pattern and the port are easier to check as addresses than as a template. */}
+        {desk.kind !== 'none' && !gap && (
+          <div className="desk-preview">{
+            desk.kind === 'osc'
+              ? `${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, Math.max(0, cast.dcas.length - 1))}`
+              : `note ${dcaNumber(0)} … ${dcaNumber(Math.max(0, cast.dcas.length - 1))} → "${desk.midiPort}"`
+          }</div>
         )}
+        {gap !== null && <div className="desk-preview desk-gap">{gap}</div>}
       </div>
 
       <div className="show-section">
@@ -247,7 +172,7 @@ export function ChannelsTab() {
         </div>
 
         {cast.channels.map((channel, index) => (
-          <div className="channel-row" key={channel.id} data-enabled={channel.enabled}>
+          <div className="channel-row" key={channel.id}>
             <span className="channel-number">{index + 1}</span>
             <CommitInput
               className="channel-name"
@@ -260,22 +185,14 @@ export function ChannelsTab() {
               className="channel-dca"
               value={channel.dcaId ?? ''}
               aria-label={`Channel ${index + 1} DCA`}
+              title="Which fader this mic rides: its own number unless a group shares one"
               onChange={e => apply(updateChannel(cast, channel.id, { dcaId: e.target.value || null }))}
             >
               <option value="">— no DCA —</option>
-              {cast.dcas.map(dca => (
-                <option key={dca.id} value={dca.id}>{dca.label}</option>
+              {cast.dcas.map((dca, place) => (
+                <option key={dca.id} value={dca.id}>{dcaNumber(place)} · {dca.label}</option>
               ))}
             </select>
-            <label className="channel-enabled">
-              <input
-                type="checkbox"
-                checked={channel.enabled}
-                aria-label={`Channel ${index + 1} enabled`}
-                onChange={e => apply(updateChannel(cast, channel.id, { enabled: e.target.checked }))}
-              />
-              <span>in patch</span>
-            </label>
             <button
               className="channel-remove"
               aria-label={`Remove channel ${index + 1}`}
@@ -285,6 +202,79 @@ export function ChannelsTab() {
           </div>
         ))}
       </div>
+
+      <div className="show-section">
+        <div className="show-section-head">
+          <span className="show-section-title">DCAs</span>
+        </div>
+
+        {cast.dcas.length === 0 ? (
+          <p className="show-empty">No DCAs: a show that drives no desk leaves this at none.</p>
+        ) : (
+          cast.dcas.map((dca, index) => {
+            const carrying = cast.channels
+              .filter(channel => channel.dcaId === dca.id)
+              .map(channel => channelLabel(cast.channels, channel.id))
+            const sent = deskMessages(dca, index, desk)?.unmute ?? null
+
+            return (
+              <div className="dca-row" key={dca.id}>
+                <div className="dca-fields">
+                  <span className="dca-number">{dcaNumber(index)}</span>
+                  <CommitInput
+                    className="dca-label"
+                    value={dca.label}
+                    placeholder="DCA"
+                    aria-label={`DCA ${dcaNumber(index)} label`}
+                    onCommit={label => apply(updateDca(cast, dca.id, { label }))}
+                  />
+                  {/* The override: empty means the message the number makes, and the
+                      placeholder is that message, so the field says what will be sent
+                      without being typed into. */}
+                  {desk.kind === 'osc' && (
+                    <CommitInput
+                      className="dca-override"
+                      value={dca.address ?? ''}
+                      placeholder={dcaAddress(desk.address, index)}
+                      aria-label={`DCA ${dcaNumber(index)} address`}
+                      title="Sent instead of the address of its number. Clear it to go back."
+                      onCommit={address => apply(updateDca(cast, dca.id, {
+                        address: address.trim() === '' ? null : address
+                      }))}
+                    />
+                  )}
+                  {desk.kind === 'midi' && (
+                    <CommitNumber
+                      className="dca-override"
+                      value={dca.note ?? dcaNumber(index)}
+                      min={0}
+                      max={127}
+                      aria-label={`DCA ${dcaNumber(index)} note`}
+                      title="Sent instead of the note of its number."
+                      onCommit={note => apply(updateDca(cast, dca.id, {
+                        note: note === dcaNumber(index) ? null : note
+                      }))}
+                    />
+                  )}
+                  <span className="dca-sent">
+                    {sent === null ? 'not sent' : describeSent(sent)}
+                  </span>
+                </div>
+                <div className="dca-carrying">
+                  {carrying.length === 0 ? 'nothing assigned' : carrying.join(', ')}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
     </div>
   )
+}
+
+/** What one message will look like on the wire, short enough for a row. */
+function describeSent(message: DeskMessage): string {
+  if (message.kind === 'osc') return `${message.address} ${message.args.join(' ')}`
+  const kind = message.message.kind
+  return kind === 'sysex' ? `sysex ${message.message.data.length} bytes` : `${kind} ${message.message.channel}`
 }

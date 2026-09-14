@@ -2,7 +2,6 @@ import { DCA_LIMIT } from '../types/show'
 import type {
   CastSettings,
   Dca,
-  DeskMessage,
   Ensemble,
   Performer,
   ShowChannel
@@ -16,28 +15,69 @@ import type {
  * edit at a time and an undo can put back exactly what an edit destroyed.
  */
 
-// ── Performers ─────────────────────────────────────────────────────────────
-
-export function addPerformer(cast: CastSettings, name: string, role: string, notes = ''): CastSettings {
-  const performer: Performer = {
-    id: crypto.randomUUID(),
-    name,
-    role,
-    notes,
-    channelId: null
-  }
-  return { ...cast, performers: [...cast.performers, performer] }
+/**
+ * The DCA a strip in this place drives by default: the one with the same number. A show
+ * is set up from the desk's own numbering — strip 4 on fader 4 — and a group sharing a
+ * fader (the chorus, the band) is the exception somebody chose.
+ */
+function dcaForPlace(dcas: Dca[], place: number): string | null {
+  return dcas[place]?.id ?? null
 }
 
+// ── Performers ─────────────────────────────────────────────────────────────
+
+/**
+ * Adds a performer on the first strip nobody is on, or on a new strip when every one is
+ * taken: a performer with no strip is a row that can never be open in a scene, and the
+ * strip they land on is where their mic is patched. It is left unnamed — naming the
+ * performer names the strip, and until then "Ch 7" is what the desk calls it.
+ */
+export function addPerformer(
+  cast: CastSettings,
+  name: string,
+  role: string,
+  notes = ''
+): CastSettings {
+  const taken = new Set(cast.performers.map(performer => performer.channelId))
+  const free = cast.channels.find(channel => !taken.has(channel.id))
+  const channelId = free?.id ?? crypto.randomUUID()
+  const channels = free === undefined
+    ? [...cast.channels, {
+        id: channelId,
+        name: '',
+        dcaId: dcaForPlace(cast.dcas, cast.channels.length)
+      }]
+    : cast.channels
+
+  const performer: Performer = { id: crypto.randomUUID(), name, role, notes, channelId }
+  return { ...cast, channels, performers: [...cast.performers, performer] }
+}
+
+/** Updates by id, leaving the rest alone. */
 export function updatePerformer(
   cast: CastSettings,
   performerId: string,
   patch: Partial<Omit<Performer, 'id'>>
 ): CastSettings {
+  const performer = cast.performers.find(candidate => candidate.id === performerId)
+  if (performer === undefined) return cast
+
+  const next = { ...performer, ...patch }
+  const performers = cast.performers.map(c => c.id === performerId ? next : c)
+  // Renaming a performer names the strip they are on, as long as nobody has named it
+  // themselves: the strip's label is what the desk shows, and it is their name nine
+  // times out of ten.
+  if (patch.name === undefined || patch.name.trim() === '' || next.channelId === null) {
+    return { ...cast, performers }
+  }
+
   return {
     ...cast,
-    performers: cast.performers.map(performer =>
-      performer.id === performerId ? { ...performer, ...patch } : performer)
+    performers,
+    channels: cast.channels.map(channel =>
+      channel.id === next.channelId && channel.name.trim() === ''
+        ? { ...channel, name: next.name }
+        : channel)
   }
 }
 
@@ -58,8 +98,13 @@ export function removePerformerFromCast(cast: CastSettings, performerId: string)
 
 // ── Channels ───────────────────────────────────────────────────────────────
 
+/** Adds a strip after the last one, driving the DCA of its own number. */
 export function addChannel(cast: CastSettings, name = ''): CastSettings {
-  const channel: ShowChannel = { id: crypto.randomUUID(), name, enabled: true, dcaId: null }
+  const channel: ShowChannel = {
+    id: crypto.randomUUID(),
+    name,
+    dcaId: dcaForPlace(cast.dcas, cast.channels.length)
+  }
   return { ...cast, channels: [...cast.channels, channel] }
 }
 
@@ -108,14 +153,11 @@ export function channelLabel(channels: ShowChannel[], channelId: string | null):
 }
 
 /**
- * The DCA a performer's mic opens: the one their channel is assigned to. A channel that
- * is switched out of tonight's patch drives nothing, which is the whole point of the
- * switch — the desk is not told about a strip that is not there.
+ * The DCA a performer's mic opens: the one their channel drives, or nothing when the
+ * strip is patched to no fader at all.
  */
 export function performerDcaId(performer: Performer, channels: ShowChannel[]): string | null {
-  const channel = performerChannel(performer, channels)
-  if (channel === null || !channel.enabled) return null
-  return channel.dcaId
+  return performerChannel(performer, channels)?.dcaId ?? null
 }
 
 // ── Ensembles ──────────────────────────────────────────────────────────────
@@ -159,16 +201,6 @@ export function ensembleMembers(cast: CastSettings, ensembleId: string): Perform
 
 // ── DCAs ───────────────────────────────────────────────────────────────────
 
-export function addDca(cast: CastSettings, label = ''): CastSettings {
-  const dca: Dca = {
-    id: crypto.randomUUID(),
-    label: label.trim() === '' ? `DCA ${cast.dcas.length + 1}` : label.trim(),
-    mute: null,
-    unmute: null
-  }
-  return { ...cast, dcas: [...cast.dcas, dca] }
-}
-
 export function updateDca(
   cast: CastSettings,
   dcaId: string,
@@ -182,9 +214,9 @@ export function updateDca(
 
 /**
  * How many DCAs the desk has, which is what the show controls. The list is resized to
- * match: growing appends unpatched DCAs, and shrinking takes the last ones off along
- * with every channel assigned to them — as one edit, because half of that is a strip
- * pointing at a DCA nothing can open.
+ * match: growing appends DCAs that label and drive themselves, and shrinking takes the
+ * last ones off — putting every strip that was on one back on the DCA of its own number,
+ * which is the one that is certainly still there.
  */
 export function setDcaCount(cast: CastSettings, count: number): CastSettings {
   const wanted = Math.max(0, Math.min(DCA_LIMIT, Math.round(count)))
@@ -195,8 +227,8 @@ export function setDcaCount(cast: CastSettings, count: number): CastSettings {
     dcas.push({
       id: crypto.randomUUID(),
       label: `DCA ${dcas.length + 1}`,
-      mute: null,
-      unmute: null
+      note: null,
+      address: null
     })
   }
 
@@ -204,47 +236,9 @@ export function setDcaCount(cast: CastSettings, count: number): CastSettings {
   return {
     ...cast,
     dcas,
-    channels: cast.channels.map(channel =>
-      channel.dcaId !== null && !kept.has(channel.dcaId) ? { ...channel, dcaId: null } : channel)
+    channels: cast.channels.map((channel, place) => {
+      if (channel.dcaId === null || kept.has(channel.dcaId)) return channel
+      return { ...channel, dcaId: dcaForPlace(dcas, place) }
+    })
   }
-}
-
-/**
- * The ordinary desk arrangement for a wireless group: one note, open on note-on and
- * closed on note-off, which is what most desks map a mute to.
- */
-export function midiNoteMessages(
-  portName: string,
-  channel: number,
-  note: number
-): { mute: DeskMessage; unmute: DeskMessage } {
-  return {
-    unmute: { kind: 'midi', portName, message: { kind: 'noteOn', channel, note, velocity: 127 } },
-    mute: { kind: 'midi', portName, message: { kind: 'noteOff', channel, note, velocity: 0 } }
-  }
-}
-
-/** The same arrangement over OSC: one address, open value and close value. */
-export function oscMessages(
-  host: string,
-  port: number,
-  address: string,
-  open: number[] = [1],
-  close: number[] = [0]
-): { mute: DeskMessage; unmute: DeskMessage } {
-  return {
-    unmute: { kind: 'osc', host, port, address, args: open },
-    mute: { kind: 'osc', host, port, address, args: close }
-  }
-}
-
-export function describeDeskMessage(message: DeskMessage | null): string {
-  if (message === null) return 'nothing'
-  if (message.kind === 'osc') {
-    return `OSC ${message.address} ${message.args.join(' ')} → ${message.host}:${message.port}`
-  }
-  if (message.message.kind === 'sysex') {
-    return `sysex ${message.message.data.length} bytes → "${message.portName}"`
-  }
-  return `${message.message.kind} ch${message.message.channel} → "${message.portName}"`
 }

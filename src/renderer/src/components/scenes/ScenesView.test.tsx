@@ -1,43 +1,42 @@
 // Scenes is the view the operator lives in at curtain up: a row per performer, a column
 // per scene, the column the desk was last taken to lit where the show is. Which DCA a
-// performer's mic opens is their channel's (`ShowSettings.test.tsx`) — these tests pin the
-// glance, the two presses that move the desk (a column's Recall and the header's Apply)
-// and the run mode it opens in, which stops every edit while leaving recall and Apply
-// working. The first column is the scene that is never edited: all closed.
+// performer's mic opens is their channel's, and what that DCA is sent comes from the
+// show's one desk connection (`ShowSettings.test.tsx`) — these tests pin the glance, the
+// two presses that move the desk (a column's Recall and the header's Apply) and the run
+// mode it opens in, which stops every edit while leaving recall and Apply working. The
+// first column is the scene that is never edited: all closed.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScenesView } from './ScenesView'
 import { useStore } from '../../store'
 import { ALL_CLOSED_SCENE_ID, defaultShowSettings } from '../../types/show'
-import type { CastSettings, Dca, Ensemble, MicScene, Performer, ShowChannel } from '../../types/show'
+import type {
+  CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, ShowChannel
+} from '../../types/show'
 
-const PORT = 'Desk'
-
-const ENSEMBLE: Dca = {
-  id: 'dca-ensemble',
-  label: 'DCA 1 — Ensemble',
-  unmute: { kind: 'midi', portName: PORT, message: { kind: 'noteOn', channel: 0, note: 60, velocity: 127 } },
-  mute: { kind: 'midi', portName: PORT, message: { kind: 'noteOff', channel: 0, note: 60, velocity: 0 } }
+// The desk these tests drive: one connection for the show, MIDI on the port the desk
+// answers to, so what a recall put on the wire reads as a port and a note rather than a
+// literal address in every assertion. The note is the DCA's number — none of these
+// carries an override.
+const DESK: DeskSettings = {
+  kind: 'midi',
+  midiPort: 'Yamaha',
+  midiChannel: 3,
+  host: '127.0.0.1',
+  port: 8000,
+  address: '/dca/{n}/on'
 }
 
-const BAND: Dca = {
-  id: 'dca-band',
-  label: 'DCA 2 — Band',
-  unmute: { kind: 'osc', host: '10.0.0.5', port: 9000, address: '/dca/2', args: [1] },
-  mute: { kind: 'osc', host: '10.0.0.5', port: 9000, address: '/dca/2', args: [0] }
-}
+const ENSEMBLE: Dca = { id: 'dca-ensemble', label: 'DCA 1 — Ensemble', note: null, address: null }
 
-/** A strip nobody is patched to: no scene drives it, so a recall leaves it where it is. */
-const SPARE: Dca = {
-  id: 'dca-spare',
-  label: 'DCA 3 — Spare',
-  unmute: { kind: 'midi', portName: 'Spare', message: { kind: 'noteOn', channel: 0, note: 62, velocity: 127 } },
-  mute: { kind: 'midi', portName: 'Spare', message: { kind: 'noteOff', channel: 0, note: 62, velocity: 0 } }
-}
+const BAND: Dca = { id: 'dca-band', label: 'DCA 2 — Band', note: null, address: null }
 
-function channel(id: string, name: string, dcaId: string | null, enabled = true): ShowChannel {
-  return { id, name, enabled, dcaId }
+/** A fader nobody is patched to: no scene drives it, so a recall leaves it where it is. */
+const SPARE: Dca = { id: 'dca-spare', label: 'DCA 3 — Spare', note: null, address: null }
+
+function channel(id: string, name: string, dcaId: string | null): ShowChannel {
+  return { id, name, dcaId }
 }
 
 const CHANNELS: ShowChannel[] = [
@@ -118,6 +117,8 @@ describe('ScenesView', () => {
   interface ViewState {
     scenes?: MicScene[]
     cast?: CastSettings
+    /** A case that asserts on the wire says which desk; the rest run a new show's OSC. */
+    desk?: Partial<DeskSettings>
     deskState?: Record<string, boolean>
     deskSceneId?: string | null
     /** Most of these tests are about editing, so they start in edit mode. */
@@ -130,6 +131,7 @@ describe('ScenesView', () => {
       useStore.setState({
         showSettings: {
           ...defaults,
+          desk: { ...defaults.desk, ...state.desk },
           cast: state.cast ?? cast(),
           scenes: { list: state.scenes ?? [] }
         },
@@ -314,6 +316,7 @@ describe('ScenesView', () => {
     await show({
       scenes: [OPENING, INTERVAL],
       cast: cast({ dcas: [ENSEMBLE, BAND, SPARE] }),
+      desk: DESK,
       deskState: { 'dca-ensemble': true, 'dca-band': true, 'dca-spare': true },
       deskSceneId: 's1'
     })
@@ -325,20 +328,20 @@ describe('ScenesView', () => {
       column.querySelector<HTMLButtonElement>('.matrix-recall')!.click()
     })
 
-    // Both strips a performer is routed to are closed. The spare is nobody's — the desk
-    // may well be doing something else with it — so it is left alone.
-    expect(midiSend).toHaveBeenCalledTimes(1)
+    // Both faders a performer rides are closed, one message each. The spare is nobody's —
+    // the desk may well be doing something else with it — so it is left alone.
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOff', channel: 0, note: 60, velocity: 0 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 1, velocity: 0 }]
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(oscSend).toHaveBeenCalledWith({
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/2',
-      args: [{ type: 'i', value: 0 }]
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 2, velocity: 0 }]
     })
+    expect(oscSend).not.toHaveBeenCalled()
+    expect(useStore.getState().deskState)
+      .toEqual({ 'dca-ensemble': false, 'dca-band': false, 'dca-spare': true })
     expect(useStore.getState().deskSceneId).toBe(ALL_CLOSED_SCENE_ID)
     expect(column.getAttribute('data-current')).toBe('true')
   })
@@ -433,21 +436,19 @@ describe('ScenesView', () => {
     expect(container.querySelectorAll('.matrix-row')).toHaveLength(PERFORMERS.length)
   })
 
-  it("reads the strip a performer is patched to, and a strip out of tonight's patch drives nothing", async () => {
-    const OUT: Dca = {
-      id: 'dca-out',
-      label: 'DCA 3 — Out',
-      unmute: { kind: 'midi', portName: 'Spare', message: { kind: 'noteOn', channel: 0, note: 62, velocity: 127 } },
-      mute: { kind: 'midi', portName: 'Spare', message: { kind: 'noteOff', channel: 0, note: 62, velocity: 0 } }
-    }
+  it('reads the strip a performer is patched to, and a strip taken off its DCA drives nothing', async () => {
+    const OUT: Dca = { id: 'dca-out', label: 'DCA 1 — Out', note: null, address: null }
 
     await show({
       scenes: [scene('s1', 'Opening', ['p1', 'p3'])],
       cast: cast({
-        channels: [channel('ch-ruth', 'Ruth', 'dca-out', false), channel('ch-bea', 'Bea', 'dca-band')],
+        // Ruth's strip is on no fader at all — that is what choosing “— no DCA —” in Show
+        // Settings leaves — so her mic opens nothing on the desk.
+        channels: [channel('ch-ruth', 'Ruth', null), channel('ch-bea', 'Bea', 'dca-band')],
         performers: [performer('p1', 'Ruth', 'ch-ruth'), performer('p3', 'Bea', 'ch-bea')],
         dcas: [OUT, BAND]
       }),
+      desk: DESK,
       deskState: { 'dca-out': false, 'dca-band': false },
       deskSceneId: 's1'
     })
@@ -458,8 +459,8 @@ describe('ScenesView', () => {
     expect(rows.map(row => row.querySelector('.matrix-performer')?.textContent))
       .toEqual(['Ruth', 'Bea'])
 
-    // The strip is switched out of tonight's patch, so the desk is not told about it:
-    // nothing it feeds is pending, and a recall leaves its DCA alone.
+    // A strip patched to no fader is patched to nothing: nobody's state is pending for it,
+    // and a recall leaves the whole desk alone but for the strip that still moves.
     expect(cellFor('Ruth', 'Opening').getAttribute('data-pending')).toBe('false')
     expect(cellFor('Bea', 'Opening').getAttribute('data-pending')).toBe('true')
 
@@ -467,13 +468,10 @@ describe('ScenesView', () => {
       columnFor('Opening').querySelector<HTMLButtonElement>('.matrix-recall')!.click()
     })
 
-    expect(midiSend).not.toHaveBeenCalled()
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(oscSend).toHaveBeenCalledWith({
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/2',
-      args: [{ type: 'i', value: 1 }]
+    expect(midiSend).toHaveBeenCalledTimes(1)
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note: 2, velocity: 127 }]
     })
     expect(useStore.getState().deskState).toEqual({ 'dca-out': false, 'dca-band': true })
   })
@@ -482,6 +480,7 @@ describe('ScenesView', () => {
     await show({
       scenes: [OPENING, INTERVAL],
       editing: false,
+      desk: DESK,
       deskState: { 'dca-ensemble': true, 'dca-band': false },
       deskSceneId: 's1'
     })
@@ -497,15 +496,15 @@ describe('ScenesView', () => {
     expect(recall?.disabled).toBe(false)
     await act(async () => { recall?.click() })
 
+    // Interval opens the band and closes the ensemble: one message to each fader.
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOff', channel: 0, note: 60, velocity: 0 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 1, velocity: 0 }]
     })
-    expect(oscSend).toHaveBeenCalledWith({
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/2',
-      args: [{ type: 'i', value: 1 }]
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note: 2, velocity: 127 }]
     })
     expect(useStore.getState().deskSceneId).toBe('s2')
   })
@@ -590,6 +589,7 @@ describe('ScenesView', () => {
   it('marks the scene pending after an edit and applies exactly that change', async () => {
     await show({
       scenes: [OPENING, INTERVAL],
+      desk: DESK,
       deskState: { 'dca-ensemble': true, 'dca-band': false },
       deskSceneId: 's1'
     })
@@ -616,8 +616,8 @@ describe('ScenesView', () => {
 
     expect(midiSend).toHaveBeenCalledTimes(1)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOff', channel: 0, note: 60, velocity: 0 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 1, velocity: 0 }]
     })
     expect(oscSend).not.toHaveBeenCalled()
     expect(useStore.getState().deskState).toEqual({ 'dca-ensemble': false, 'dca-band': false })
@@ -625,24 +625,24 @@ describe('ScenesView', () => {
   })
 
   it('sends exactly the changes a column recall needs', async () => {
-    await show({ scenes: [OPENING, INTERVAL] })
+    await show({ scenes: [OPENING, INTERVAL], desk: DESK })
 
     await act(async () => {
       columnFor('Opening').querySelector<HTMLButtonElement>('.matrix-recall')?.click()
     })
 
-    expect(midiSend).toHaveBeenCalledTimes(1)
+    // Nothing has been recalled yet, so both faders are told: the one Opening opens and
+    // the one it closes.
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOn', channel: 0, note: 60, velocity: 127 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note: 1, velocity: 127 }]
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(oscSend).toHaveBeenCalledWith({
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/2',
-      args: [{ type: 'i', value: 0 }]
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 2, velocity: 0 }]
     })
+    expect(oscSend).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBe('s1')
   })
 
@@ -674,6 +674,7 @@ describe('ScenesView', () => {
     await show({
       scenes: [OPENING, INTERVAL],
       editing: false,
+      desk: DESK,
       deskState: { 'dca-ensemble': true, 'dca-band': true },
       deskSceneId: 's1'
     })
@@ -695,14 +696,17 @@ describe('ScenesView', () => {
       .every(recall => !recall.disabled)).toBe(true)
     expect(container.querySelector('.matrix-apply')?.textContent).toBe('Apply to desk (1)')
 
-    // Apply still moves the band, which is the one strip the scene disagrees with.
+    // Apply still moves the band, which is the one fader the scene disagrees with.
     midiSend.mockClear()
     oscSend.mockClear()
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.matrix-apply')!.click()
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(midiSend).not.toHaveBeenCalled()
+    expect(midiSend).toHaveBeenCalledTimes(1)
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 2, velocity: 0 }]
+    })
 
     // ...and a column recall still opens the band and closes the ensemble.
     midiSend.mockClear()
@@ -710,8 +714,7 @@ describe('ScenesView', () => {
     await act(async () => {
       columnFor('Interval').querySelector<HTMLButtonElement>('.matrix-recall')!.click()
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(midiSend).toHaveBeenCalledTimes(1)
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(useStore.getState().deskSceneId).toBe('s2')
   })
 })

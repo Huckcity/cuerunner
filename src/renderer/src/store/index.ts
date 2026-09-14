@@ -6,6 +6,7 @@ import { defaultShowSettings } from '../types/show'
 import type {
   CastSettings,
   CompanionSettings,
+  DeskSettings,
   DeviceState,
   DeviceEvent,
   MicScene,
@@ -223,6 +224,8 @@ interface CueListState {
   updatePresenceSettings: (patch: Partial<PresenceSettings>) => void
   updateScriptSettings: (patch: Partial<ScriptSettings>) => void
   updateCompanionSettings: (patch: Partial<CompanionSettings>) => void
+  /** How the show reaches the desk: where it is, and what a DCA's number means to it. */
+  updateDeskSettings: (patch: Partial<DeskSettings>) => void
   updateScenesSettings: (patch: Partial<ScenesSettings>) => void
   updateCastSettings: (patch: Partial<CastSettings>) => void
   /**
@@ -299,6 +302,7 @@ interface EditSnapshot {
   cues: Cue[]
   scenes: { list: MicScene[] }
   cast: CastSettings
+  desk: DeskSettings
   plot: RfPlot
 }
 
@@ -307,6 +311,7 @@ function snapshotOf(state: CueListState): EditSnapshot {
     cues: state.cues,
     scenes: { list: state.showSettings.scenes.list },
     cast: state.showSettings.cast,
+    desk: state.showSettings.desk,
     plot: state.showSettings.rf.plot
   }
 }
@@ -317,6 +322,7 @@ function restoreSettings(showSettings: ShowSettings, snapshot: EditSnapshot): Sh
     ...showSettings,
     scenes: { ...showSettings.scenes, list: snapshot.scenes.list },
     cast: snapshot.cast,
+    desk: snapshot.desk,
     rf: { ...showSettings.rf, plot: snapshot.plot }
   }
 }
@@ -780,6 +786,15 @@ export const useStore = create<CueListState>((set) => ({
 
   updateCompanionSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, companion: { ...s.showSettings.companion, ...patch } },
+    isDirty: true
+  })),
+
+  // Where the desk is travels with the show, and pointing it at the wrong address is a
+  // press away from being undone.
+  updateDeskSettings: (patch) => set(s => ({
+    showSettings: { ...s.showSettings, desk: { ...s.showSettings.desk, ...patch } },
+    past: pushPast(s.past, snapshotOf(s)),
+    future: [],
     isDirty: true
   })),
 

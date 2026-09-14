@@ -11,10 +11,7 @@ import {
   type MicScene,
   type ScenesSettings
 } from '../../types/show'
-import { midiNoteMessages } from '../../utils/cast'
 import type { SceneCue } from '../../types/cue'
-
-const note = midiNoteMessages('Yamaha', 1, 36)
 
 function scene(id: string, name: string, live: string[] = [], ensembles: string[] = []): MicScene {
   return { id, name, live, ensembles, excluded: [], notes: '' }
@@ -48,15 +45,18 @@ describe('SceneInspector', () => {
     useStore.setState({
       showSettings: {
         ...defaults,
+        // The show reaches its desk over MIDI on the port the other fixtures use, and
+        // this DCA is on a note of its own rather than the one its number derives.
+        desk: { ...defaults.desk, kind: 'midi', midiPort: 'Yamaha' },
         cast: {
           // Ada is patched to the strip that drives DCA 1, so a scene naming her has a
           // message to send and a person to count.
-          channels: [{ id: 'ch-1', name: 'Ada', enabled: true, dcaId: 'dca-1' }],
+          channels: [{ id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }],
           performers: [{
             id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
           }],
           ensembles: [],
-          dcas: [{ id: 'dca-1', label: 'DCA 1', ...note }],
+          dcas: [{ id: 'dca-1', label: 'DCA 1', note: 36, address: null }],
           ...cast
         },
         scenes: { list: scenes.list ?? [scene('s-1', 'Wedding', ['p-1'])] }

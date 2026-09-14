@@ -173,7 +173,7 @@ export function RfPanel({ onClose }: Props) {
   // real one.
   const addDemo = (): void => {
     updateRfSettings({ sources: [demoSource()], plot: { packs: demoPacks() } })
-    updateCastSettings({ performers: demoPerformers() })
+    updateCastSettings({ performers: demoPerformers(cast.channels) })
   }
 
   return (

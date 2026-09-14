@@ -1,17 +1,15 @@
-// The cast's operations are pure, same as the plot's: the channels on the console, the
-// performers patched to them, the ensembles that group them and the DCAs they open. What
-// is tested here is the resolution the whole feature hangs off — which DCA a performer's
-// mic actually opens — plus the CRUD that keeps the four lists from drifting apart.
+// The cast's operations are pure: the channels on the console, the performers patched to
+// them, the ensembles that group them and the DCAs they open. What is tested here is the
+// resolution the whole feature hangs off — which DCA a performer's mic actually opens —
+// plus the que that keeps the four lists from drifting apart, and the defaults that let a
+// new show run before anything has been assigned.
 import { describe, it, expect } from 'vitest'
 import {
   addChannel,
   addEnsemble,
   addPerformer,
   channelLabel,
-  describeDeskMessage,
   ensembleMembers,
-  midiNoteMessages,
-  oscMessages,
   performerChannel,
   performerDcaId,
   removeChannel,
@@ -23,44 +21,89 @@ import {
   updateEnsemble,
   updatePerformer
 } from './cast'
-import { DCA_LIMIT } from '../types/show'
-import type { CastSettings, Performer, ShowChannel } from '../types/show'
+import { DCA_LIMIT, defaultCastSettings, startingDcas, startingChannels } from '../types/show'
+import type { CastSettings, Performer } from '../types/show'
 
 function empty(): CastSettings {
   return { channels: [], performers: [], ensembles: [], dcas: [] }
 }
 
-/** Two DCAs and three strips, the second of them switched out of the patch. */
+/** Two DCAs and two strips, the first of them driving the first DCA. */
 function wired(): CastSettings {
   const base = setDcaCount(empty(), 2)
   const [first, second] = base.dcas
-  const channels: ShowChannel[] = [
-    { id: 'ch-1', name: 'Ruth', enabled: true, dcaId: first.id },
-    { id: 'ch-2', name: 'Band', enabled: false, dcaId: second.id },
-    { id: 'ch-3', name: '', enabled: true, dcaId: null }
+  const channels = [
+    { id: 'ch-1', name: 'Ruth', dcaId: first.id },
+    { id: 'ch-2', name: 'Band', dcaId: second.id },
+    { id: 'ch-3', name: '', dcaId: null }
   ]
   return { ...base, channels }
 }
 
-describe('performers', () => {
-  it('adds a performer who is patched to nothing yet', () => {
-    const cast = addPerformer(empty(), 'Ruth', 'Lead')
-    expect(cast.performers).toHaveLength(1)
-    expect(cast.performers[0]).toMatchObject({ name: 'Ruth', role: 'Lead', channelId: null })
+function patchTo(channelId: string | null): Performer {
+  return { id: 'p1', name: 'Ruth', role: 'Lead', notes: '', channelId }
+}
+
+describe('a new show', () => {
+  it('comes with a console: twelve strips, twelve DCAs, strip n on DCA n', () => {
+    const cast = defaultCastSettings()
+
+    expect(cast.channels).toHaveLength(12)
+    expect(cast.dcas).toHaveLength(12)
+    expect(cast.channels.map(channel => channel.dcaId))
+      .toEqual(cast.dcas.map(dca => dca.id))
+    expect(cast.dcas.map(dca => dca.label)).toEqual(cast.dcas.map((_, index) => `DCA ${index + 1}`))
+    expect(cast.dcas.every(dca => dca.note === null && dca.address === null)).toBe(true)
   })
 
-  it('updates by id, leaving the rest alone', () => {
-    const cast = addPerformer(addPerformer(empty(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
-    const [first, second] = cast.performers
-    const next = updatePerformer(cast, second.id, { name: 'Sancho Panza' })
-    expect(next.performers[0]).toEqual(first)
-    expect(next.performers[1].name).toBe('Sancho Panza')
+  it('counts a strip by its place, in the DCAs it is given', () => {
+    const dcas = startingDcas()
+    const channels = startingChannels(dcas)
+    expect(channels[0].dcaId).toBe(dcas[0].id)
+    expect(channels[11].dcaId).toBe(dcas[11].id)
+  })
+})
+
+describe('performers', () => {
+  it('lands on the first strip nobody is on, so casting is a name and nothing else', () => {
+    const cast = addPerformer(addPerformer(defaultCastSettings(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
+
+    const [ruth, sancho] = cast.performers
+    expect(ruth.channelId).toBe(cast.channels[0].id)
+    expect(sancho.channelId).toBe(cast.channels[1].id)
+    // ...and the DCA their mic opens is that strip's, which is the one of its number.
+    expect(performerDcaId(ruth, cast.channels)).toBe(cast.dcas[0].id)
+    expect(performerDcaId(sancho, cast.channels)).toBe(cast.dcas[1].id)
+  })
+
+  it('takes a new strip when every one is taken, because a row with no strip can never be open', () => {
+    let cast = defaultCastSettings()
+    for (let i = 0; i < 12; i++) cast = addPerformer(cast, `Performer ${i + 1}`, '')
+
+    const thirteenth = addPerformer(cast, 'Swing', '')
+    expect(thirteenth.channels).toHaveLength(13)
+    expect(thirteenth.performers[12].channelId).toBe(thirteenth.channels[12].id)
+    // The thirteenth strip is past the last DCA, so it drives nothing until somebody says
+    // which fader it rides.
+    expect(thirteenth.channels[12].dcaId).toBeNull()
+  })
+
+  it('names the strip they are on, while nobody has named it themselves', () => {
+    const cast = addPerformer(defaultCastSettings(), 'New performer', '')
+    const id = cast.performers[0].id
+
+    const named = updatePerformer(cast, id, { name: 'Ruth' })
+    expect(named.channels[0].name).toBe('Ruth')
+
+    // A strip somebody named is left alone: a swing wearing Ruth's spare mic is not Ruth.
+    const theirOwn = updateChannel(named, named.channels[0].id, { name: 'Spare 1' })
+    expect(updatePerformer(theirOwn, id, { name: 'Nell' }).channels[0].name).toBe('Spare 1')
   })
 
   it('removes a performer from every ensemble as well as the cast list', () => {
     const cast = addPerformer(addPerformer(empty(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
     const [ruth, sancho] = cast.performers
-    const grouped = addEnsemble({ ...cast, ensembles: [] }, 'Chorus', [ruth.id, sancho.id])
+    const grouped = addEnsemble(cast, 'Chorus', [ruth.id, sancho.id])
 
     const next = removePerformerFromCast(grouped, ruth.id)
     expect(next.performers.map(performer => performer.id)).toEqual([sancho.id])
@@ -69,35 +112,31 @@ describe('performers', () => {
 })
 
 describe('channels', () => {
-  it('appends a strip, named or not', () => {
-    const cast = addChannel(addChannel(empty(), 'Ruth'), '')
-    expect(cast.channels.map(channel => channel.name)).toEqual(['Ruth', ''])
-    expect(cast.channels.every(channel => channel.enabled && channel.dcaId === null)).toBe(true)
+  it('appends a strip driving the DCA of its own place', () => {
+    const cast = defaultCastSettings()
+    const grown = addChannel(cast, 'Spare')
+
+    expect(grown.channels[12].name).toBe('Spare')
+    // Past the twelfth DCA there is no fader of its own number, so it drives none.
+    expect(grown.channels[12].dcaId).toBeNull()
   })
 
   it('unpatches whoever was on the strip it removes', () => {
     const cast = addPerformer(wired(), 'Ruth', 'Lead')
-    const performerId = cast.performers[0].id
-    const patched = updatePerformer(cast, performerId, { channelId: 'ch-1' })
+    const next = removeChannel(cast, 'ch-1')
 
-    const next = removeChannel(patched, 'ch-1')
     expect(next.channels.map(channel => channel.id)).toEqual(['ch-2', 'ch-3'])
     expect(next.performers[0].channelId).toBeNull()
   })
 })
 
 describe('the DCA a mic opens', () => {
-  it('is the one its strip is assigned to', () => {
+  it('is the one its strip drives', () => {
     const cast = wired()
     expect(performerDcaId(patchTo('ch-1'), cast.channels)).toBe(cast.dcas[0].id)
   })
 
-  it('is nothing when the strip is out of tonight’s patch', () => {
-    const cast = wired()
-    expect(performerDcaId(patchTo('ch-2'), cast.channels)).toBeNull()
-  })
-
-  it('is nothing when the performer is unpatched, or their strip is in no DCA', () => {
+  it('is nothing when the performer is unpatched, or their strip drives no fader', () => {
     const cast = wired()
     expect(performerDcaId(patchTo(null), cast.channels)).toBeNull()
     expect(performerDcaId(patchTo('ch-3'), cast.channels)).toBeNull()
@@ -173,18 +212,20 @@ describe('ensembles', () => {
 })
 
 describe('DCAs', () => {
-  it('grows to the count asked for, each one unpatched', () => {
+  it('grows to the count asked for, each one labelling and driving itself', () => {
     const cast = setDcaCount(empty(), 3)
     expect(cast.dcas).toHaveLength(3)
     expect(cast.dcas.map(dca => dca.label)).toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
-    expect(cast.dcas.every(dca => dca.mute === null && dca.unmute === null)).toBe(true)
+    expect(cast.dcas.every(dca => dca.note === null && dca.address === null)).toBe(true)
   })
 
-  it('takes the last ones off rather than renumbering, and unpicks what they carried', () => {
+  it('puts the strips of the DCAs it drops back on the fader of their own number', () => {
     const cast = wired()
     const next = setDcaCount(cast, 1)
+
     expect(next.dcas.map(dca => dca.label)).toEqual(['DCA 1'])
-    // The strip that was in the second DCA is still there, in no DCA at all.
+    // The strip that was on the second DCA falls back to the DCA of its own place — the
+    // second place, which is now past the end — rather than pointing at a fader that is gone.
     expect(next.channels.find(channel => channel.id === 'ch-2')?.dcaId).toBeNull()
     expect(next.channels.find(channel => channel.id === 'ch-1')?.dcaId).toBe(cast.dcas[0].id)
   })
@@ -199,29 +240,11 @@ describe('DCAs', () => {
     expect(setDcaCount(wired(), -3).dcas).toHaveLength(0)
   })
 
-  it('is labelled and patched in place', () => {
+  it('is labelled and given an override of its own where the desk differs', () => {
     const cast = setDcaCount(empty(), 1)
     const id = cast.dcas[0].id
-    const next = updateDca(cast, id, { label: 'Chorus', ...midiNoteMessages('Desk', 1, 12) })
-    expect(next.dcas[0].label).toBe('Chorus')
-    expect(describeDeskMessage(next.dcas[0].unmute)).toBe('noteOn ch1 → "Desk"')
-    expect(describeDeskMessage(next.dcas[0].mute)).toBe('noteOff ch1 → "Desk"')
+    const next = updateDca(cast, id, { label: 'Chorus', note: 12, address: '/mixer/chorus' })
+
+    expect(next.dcas[0]).toMatchObject({ label: 'Chorus', note: 12, address: '/mixer/chorus' })
   })
 })
-
-describe('desk messages', () => {
-  it('reads an OSC patch back the way it was set', () => {
-    const { mute, unmute } = oscMessages('10.0.0.5', 9000, '/dca/2', [1], [0])
-    expect(describeDeskMessage(unmute)).toBe('OSC /dca/2 1 → 10.0.0.5:9000')
-    expect(describeDeskMessage(mute)).toBe('OSC /dca/2 0 → 10.0.0.5:9000')
-  })
-
-  it('says nothing happened when a DCA is unpatched', () => {
-    expect(describeDeskMessage(null)).toBe('nothing')
-  })
-})
-
-/** A performer with nothing on them but the patch under test. */
-function patchTo(channelId: string | null): Performer {
-  return { id: 'p1', name: 'Ruth', role: 'Lead', notes: '', channelId }
-}

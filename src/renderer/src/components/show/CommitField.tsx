@@ -33,20 +33,28 @@ export function CommitInput({
   )
 }
 
-/** A port that commits when it is left rather than on every keystroke. */
-export function CommitPort({
+/**
+ * A number that commits when it is left rather than on every keystroke: binding a port
+ * as it is typed would move a listener somewhere nobody asked for, and a value outside
+ * the range it is given is dropped rather than written.
+ */
+export function CommitNumber({
   value,
+  min,
+  max,
   onCommit,
   ...rest
 }: {
   value: number
+  min: number
+  max: number
   onCommit: (value: number) => void
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'type'>) {
   const [draft, setDraft] = useState<string | null>(null)
 
   const commit = (): void => {
     const parsed = Number(draft)
-    if (draft !== null && Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
+    if (draft !== null && Number.isInteger(parsed) && parsed >= min && parsed <= max) {
       onCommit(parsed)
     }
     setDraft(null)
@@ -56,8 +64,8 @@ export function CommitPort({
     <input
       {...rest}
       type="number"
-      min={1}
-      max={65535}
+      min={min}
+      max={max}
       value={draft ?? String(value)}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
