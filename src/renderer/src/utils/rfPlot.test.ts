@@ -16,12 +16,12 @@ import {
   reportText,
   updatePack
 } from './rfPlot'
-import type { DeviceState, RfPerformer, RfPlot, RfSwap } from '../types/show'
+import type { DeviceState, Performer, RfPlot, RfSwap } from '../types/show'
 
 const AT = Date.parse('2026-09-11T20:14:00.000Z')
 
-function performer(id: string, name: string, role: string): RfPerformer {
-  return { id, name, role, notes: '', ensembleId: null, deskChannelId: null }
+function performer(id: string, name: string, role: string): Performer {
+  return { id, name, role, notes: '', channelId: null }
 }
 
 const ALDONZA = performer('perf-1', 'Aldonza', 'lead')

@@ -1,8 +1,8 @@
 /* Scenes is the curtain-up view: the cast down the side, the scenes across the top, one
-   filled cell per performer who is open. Which desk group each performer's mic actually
-   opens is set up in the Show panel, not here — this view only runs it. It is read from
-   a metre away mid-show, so state is a block of colour rather than a word, and the only
-   amber on it is work to do. */
+   filled cell per performer who is open. Which DCA each performer's mic actually opens is
+   set up in Show Settings — this view only runs it. It is read from a metre away
+   mid-show, so state is a block of colour rather than a word, and the only amber on it is
+   work to do. */
 .scenes-view {
   /* The view is a grid item in a minmax(0, 1fr) track; without this its content's
      min-content width would push the window wider instead of scrolling inside. */
@@ -120,15 +120,12 @@
   flex: none;
 }
 
-/* The edits the grid cannot hold: a scene, the all-off press, the mic plot and the Show
-   panel, and where telemetry readings come from. They read as buttons rather than as
-   state, because that is what they are. */
+/* The edits the grid cannot hold: a scene, and an ensemble made from the one the desk is
+   on. They read as buttons rather than as state, because that is what they are. */
 .scenes-add,
-.scenes-plot,
-.scenes-show,
-.scenes-sources,
-.scenes-mics-off,
+.scenes-ensemble,
 .scenes-edit {
+  flex: none;
   height: 22px;
   padding: 0 var(--space-2);
   background: transparent;
@@ -142,11 +139,16 @@
 }
 
 .scenes-add:hover,
-.scenes-plot:hover,
-.scenes-show:hover,
-.scenes-sources:hover,
-.scenes-mics-off:hover,
+.scenes-ensemble:hover,
 .scenes-edit:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* Grouping the mics that are open needs a scene on the desk to group them from, so the
+   press says so by being unavailable rather than by making an empty ensemble. */
+.scenes-ensemble:disabled {
+  color: var(--fg-ghost);
+  border-color: var(--border-soft);
+  cursor: default;
+}
 
 /* A scene that would move the desk is a thing to do, not a readout: it gets the warning
    colour and the exact number of messages that would go out. */
@@ -234,6 +236,32 @@
   border-bottom-color: var(--state-running-fg);
 }
 
+/* The all-closed column is always there and never edited, so it reads as a place the
+   show can be rather than as another scene with a name to type. */
+.matrix-scene[data-all-closed='true'] {
+  background: var(--bg-well);
+}
+
+.matrix-scene[data-all-closed='true'][data-current='true'] {
+  background: var(--bg-playing-row);
+  border-bottom-color: var(--state-running-fg);
+}
+
+.scene-name-static {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  font-size: var(--text-base);
+  color: var(--fg-muted);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.matrix-scene[data-all-closed='true'][data-current='true'] .scene-name-static { color: var(--fg-primary); }
+.matrix-scene[data-all-closed='true'][data-pending='true'] .scene-name-static { color: var(--accent-amber); }
+
 /* The scene name is edited in place: the column is the row, and a separate editor for a
    name that is already right there would be a second place to look. */
 .scene-name-field {
@@ -258,6 +286,25 @@
 }
 
 .matrix-scene[data-pending='true'] .scene-name-field { color: var(--accent-amber); }
+
+/* An ensemble's name is edited where the ensemble is, same as a scene's: the row is the
+   thing, and a second place to look for its name is a second place to get it wrong. */
+.ensemble-name-field {
+  min-width: 0;
+  flex: 1;
+  height: 22px;
+  padding: 0 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: var(--text-base);
+  font-family: inherit;
+  outline: none;
+}
+
+.ensemble-name-field:hover { border-color: var(--border-input); }
+.ensemble-name-field:focus { border-color: var(--border-focus); background: var(--bg-input); }
 
 .scene-name-field:disabled {
   background: transparent;
@@ -320,11 +367,23 @@
   z-index: 1;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   height: var(--matrix-cell-height);
   padding: 0 var(--space-2);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-soft);
   border-right: 1px solid var(--border);
+}
+
+/* The strip a mic is patched to, read before the name: a number is what an operator
+   reaches for at the desk, and the name is what the show calls them. */
+.matrix-channel {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  white-space: nowrap;
 }
 
 /* The row is a name: the performer is what the operator reads down the side of the
@@ -336,6 +395,47 @@
   white-space: nowrap;
   font-size: var(--text-base);
   color: var(--fg-body);
+}
+
+/* ── Ensembles ─────────────────────────────────────────────────────────────────
+   A row of its own above the cast, with a cell per scene: applying one opens every
+   member at once, and a member the scene closes anyway leaves the group reading as
+   partly open rather than as a tick that lies. */
+.matrix-ensemble-row { display: contents; }
+
+.matrix-ensemble-count {
+  flex: none;
+  min-width: 14px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-ghost);
+  text-align: right;
+}
+
+.matrix-ensemble-row .matrix-mic { background: var(--bg-raised); }
+.matrix-ensemble-row .matrix-performer { color: var(--fg-muted); }
+
+/* An ensemble applied to a scene is an outline rather than a fill: the fill is what says
+   a mic is open, and this says which mics the group is holding open. */
+.matrix-cell[data-applied='on'] {
+  border-color: var(--state-running-fg);
+  box-shadow: inset 0 0 0 1px var(--state-running-fg);
+}
+
+.matrix-cell[data-applied='partial'] {
+  border-color: var(--accent-amber);
+  box-shadow: inset 0 0 0 1px var(--accent-amber);
+  background: var(--accent-amber-bg);
+}
+
+.matrix-cell[data-applied='off'][data-current='true'] { background: var(--bg-playing-row); }
+
+/* The all-closed column takes nobody, so its place in a performer row is a gap rather
+   than a cell: the same box, and nothing that can be pressed. */
+.matrix-cell-blank {
+  height: var(--matrix-cell-height);
+  margin: 2px;
 }
 
 /* A performer who is open in the current scene brightens their whole row: this is the

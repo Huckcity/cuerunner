@@ -3,7 +3,7 @@ import { defaultRfThresholds } from '../../renderer/src/types/show'
 import type {
   DeviceHistory,
   DeviceState,
-  RfPerformer,
+  Performer,
   RfPlot,
   RfThresholds,
   ShowSettings,
@@ -88,7 +88,7 @@ export class WirelessService implements ShowService {
   private context: ServiceContext | null = null
   private sources: TelemetrySource[] = []
   private plot: RfPlot = { packs: [] }
-  private performers: RfPerformer[] = []
+  private performers: Performer[] = []
   private thresholds: RfThresholds = defaultRfThresholds()
   private timers: Timer[] = []
   private inFlight = new Set<AbortController>()

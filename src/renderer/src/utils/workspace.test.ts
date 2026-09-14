@@ -38,8 +38,13 @@ function cue(overrides: Partial<AudioCue> = {}): AudioCue {
   }
 }
 
+// A show's settings as the state holds them: one value, not one per call. Asking for a
+// fresh default per save would be a different state every time, which is the thing this
+// file exists to say a showfile is not.
+const settings = defaultShowSettings()
+
 const build = () =>
-  buildWorkspace('Press Night', [cue()], { outputDeviceId: 'default' }, { outputPortName: '' }, defaultShowSettings(), identity)
+  buildWorkspace('Press Night', [cue()], { outputDeviceId: 'default' }, { outputPortName: '' }, settings, identity)
 
 describe('buildWorkspace', () => {
   it('writes the identity it was given, not one of its own', () => {

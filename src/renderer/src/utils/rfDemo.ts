@@ -5,7 +5,7 @@ import {
   DEMO_SOURCE_ID,
   demoChannelId
 } from '../types/show'
-import type { RfPack, RfPerformer, TelemetrySource } from '../types/show'
+import type { Performer, RfPack, TelemetrySource } from '../types/show'
 
 // The demo rack is the whole feature in one click: a source the main process simulates
 // and a plot that names every channel it reports. Both are generated from the same ids
@@ -53,15 +53,14 @@ export function demoSource(): TelemetrySource {
   }
 }
 
-/** Twelve performers, cast-side rather than plot-side, unassigned to any group yet. */
-export function demoPerformers(): RfPerformer[] {
+/** Twelve performers, cast-side rather than plot-side, patched to no strip yet. */
+export function demoPerformers(): Performer[] {
   return CAST.map((member, i) => ({
     id: demoPerformerId(i + 1),
     name: member.name,
     role: member.role,
     notes: member.notes,
-    ensembleId: null,
-    deskChannelId: null
+    channelId: null
   }))
 }
 

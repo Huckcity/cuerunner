@@ -1,0 +1,450 @@
+/* Show Settings: the show's own setup — the channels on the console, the cast and the
+   ensembles that group them, and the mic plot. It travels with the workspace rather than
+   with this machine, which is why it is not a tab in Settings, and it is set up before
+   curtain rather than read mid-show, which is why nothing in here has a run mode. */
+.show-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.show-settings-dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 820px;
+  display: flex;
+  flex-direction: column;
+  /* A floor as well as a ceiling: the setup tabs are long and the cast can be short, and
+     a box that resizes itself around whichever tab is open is a box whose header and
+     close button move while the operator is reaching for them. */
+  min-height: 460px;
+  max-height: 88vh;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.show-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+}
+
+.show-settings-title {
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  color: var(--fg-primary);
+}
+
+.show-settings-close {
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+
+.show-settings-close:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+.show-settings-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  margin-top: 12px;
+}
+
+.show-settings-tab {
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
+  font-size: var(--text-base);
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--transition-std);
+  margin-bottom: -1px;
+}
+
+.show-settings-tab:hover { color: var(--fg-tertiary); }
+
+.show-settings-tab[data-active='true'] {
+  color: var(--fg-primary);
+  border-bottom-color: var(--accent-blue);
+}
+
+.show-settings-body {
+  padding: 16px;
+  /* min-height 0 is what lets a flex child shrink enough to scroll at all. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.show-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.show-settings-done {
+  padding: 0 var(--space-2);
+  height: var(--h-input);
+  background: var(--border);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: var(--transition-fast);
+}
+
+.show-settings-done:hover { background: var(--border-input); color: var(--fg-primary); }
+
+/* ── Sections, shared by every tab ──────────────────────────────────────────── */
+/* Each tab is one column of sections. Nothing is drawn here: the class is what a tab's
+   own contents can be scoped to, tests included. */
+.show-tab-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.show-section {
+  margin-bottom: var(--space-4);
+}
+
+/* The heading and whatever belongs beside it: for the DCAs that is the count, for the
+   lists it is the button that adds one. */
+.show-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.show-section-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.show-empty {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+  color: var(--fg-ghost);
+}
+
+/* ── Channels ───────────────────────────────────────────────────────────────── */
+.dca-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dca-count-label {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.dca-count-select {
+  height: var(--h-input);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  font-family: inherit;
+  padding: 0 6px;
+}
+
+.dca-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.dca-fields {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.dca-fields input,
+.dca-fields select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.dca-fields input:focus,
+.dca-fields select:focus {
+  border-color: var(--border-focus);
+}
+
+/* The number is the DCA's place in the desk's own list, which is what the operator
+   reaches for — the label beside it is what this show calls it. */
+.dca-number {
+  flex: none;
+  width: 16px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  text-align: right;
+}
+
+.dca-label { flex: 0 0 140px; }
+.dca-delivery { flex: 0 0 104px; }
+.dca-port { flex: 1 1 140px; }
+.dca-channel { flex: 0 0 56px; padding: 4px 2px; }
+.dca-note { flex: 0 0 64px; padding: 4px 2px; }
+.dca-host { flex: 1 1 120px; }
+.dca-osc-port { flex: 0 0 80px; }
+.dca-address { flex: 1 1 120px; }
+
+.dca-summary {
+  display: flex;
+  gap: var(--space-2);
+  padding-left: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.dca-summary-open { color: var(--fg-tertiary); }
+.dca-summary-sep { color: var(--fg-ghost); }
+
+/* Which strips a DCA is carrying is the other half of "what opens this": the routing is
+   on the channels, so this is where it is read back. */
+.dca-carrying {
+  padding-left: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+.channel-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 180px 92px 26px;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.channel-row input,
+.channel-row select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.channel-row input:focus,
+.channel-row select:focus {
+  border-color: var(--border-focus);
+}
+
+.channel-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  text-align: right;
+}
+
+/* A strip switched out of the patch reads back a step quieter, so a rack of them can be
+   scanned for the one that is not there. */
+.channel-row[data-enabled='false'] input,
+.channel-row[data-enabled='false'] select,
+.channel-row[data-enabled='false'] .channel-number {
+  color: var(--fg-dim);
+  opacity: 0.6;
+}
+
+.channel-enabled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.channel-enabled input { accent-color: var(--accent-blue); }
+
+.channel-remove,
+.performer-remove,
+.ensemble-remove {
+  width: 26px;
+  height: var(--h-input);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.channel-remove:hover,
+.performer-remove:hover,
+.ensemble-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* ── Performers ─────────────────────────────────────────────────────────────── */
+.performer-row {
+  display: grid;
+  grid-template-columns: 150px 120px 190px 1fr 26px;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.performer-row input,
+.performer-row select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.performer-row input:focus,
+.performer-row select:focus {
+  border-color: var(--border-focus);
+}
+
+/* ── Ensembles ──────────────────────────────────────────────────────────────── */
+.ensemble-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.ensemble-fields {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ensemble-fields input {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.ensemble-fields input:focus {
+  border-color: var(--border-focus);
+}
+
+.ensemble-name { flex: 0 0 180px; font-weight: var(--fw-medium); }
+
+/* How many are in it, so a group that has been emptied out on its way somewhere else
+   says so before it is applied to a scene. */
+.ensemble-count {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--fg-ghost);
+}
+
+.ensemble-members {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: var(--space-1);
+}
+
+.member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 4px 0 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  color: var(--fg-secondary);
+}
+
+.member-chip button {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: var(--fg-dim);
+  font-size: 10px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.member-chip button:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.member-add {
+  height: 22px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px dashed var(--border-input);
+  border-radius: var(--radius-pill);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.member-add:hover,
+.member-add:focus {
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-blue-dim);
+  color: var(--accent-blue);
+  outline: none;
+}

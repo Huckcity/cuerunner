@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { StopCue, AudioCue, ScriptCue } from '../../renderer/src/types/cue'
 import type { Workspace } from '../../renderer/src/types/workspace'
+import { CHANNEL_START_COUNT } from '../../renderer/src/types/show'
 import { migrateWorkspace } from './WorkspaceManager'
 
 // Hoisted above the import above, so WorkspaceManager never loads the real Electron.
@@ -110,7 +111,7 @@ describe('migrateWorkspace', () => {
     expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
   })
 
-  it('carries a performer over from the plot, with the desk group whichever pack fed them', () => {
+  it('carries a performer over from the plot, patched to the strip that now holds their DCA', () => {
     const workspace = migrateWorkspace({
       ...workspaceWith([]),
       showSettings: {
@@ -129,11 +130,20 @@ describe('migrateWorkspace', () => {
       } as unknown as Workspace['showSettings']
     })
 
-    expect(workspace.showSettings?.cast.performers).toEqual([
-      { id: 'p1', name: 'Ada', role: 'Lead', notes: '', ensembleId: null, deskChannelId: 'dca1' }
+    const cast = workspace.showSettings?.cast
+    // The desk routing the performer carried is now their channel strip: a strip named
+    // after them, assigned to the DCA that used to be on the performer.
+    expect(cast?.performers).toEqual([
+      { id: 'p1', name: 'Ada', role: 'Lead', notes: '', channelId: cast?.channels[0].id }
     ])
-    expect(workspace.showSettings?.cast.groups.map(group => group.id)).toEqual(['dca1'])
-    expect(workspace.showSettings?.cast.ensembles).toEqual([])
+    expect(cast?.channels[0]).toMatchObject({ name: 'Ada', enabled: true, dcaId: 'dca1' })
+    // ...and the rest of the console comes with it, so the show lands set up rather than
+    // half set up.
+    expect(cast?.channels).toHaveLength(CHANNEL_START_COUNT)
+    expect(cast?.channels.slice(1).every(channel => channel.dcaId === null && channel.name === ''))
+      .toBe(true)
+    expect(cast?.dcas.map(dca => dca.id)).toEqual(['dca1'])
+    expect(cast?.ensembles).toEqual([])
     // The old homes are gone, not left behind empty for the next load to trip over.
     expect((workspace.showSettings?.rf.plot as unknown as Record<string, unknown>).performers)
       .toBeUndefined()
@@ -163,10 +173,78 @@ describe('migrateWorkspace', () => {
       } as unknown as Workspace['showSettings']
     })
 
-    // Pack 2 was nobody's, so the scene it was open in only remembers Pack 1's wearer.
+    // Pack 2 was nobody's, so the scene it was open in only remembers Pack 1's wearer —
+    // and a scene that predates ensembles has none applied and closes none of them.
     expect(workspace.showSettings?.scenes.list).toEqual([
-      { id: 's1', name: 'Opening', live: ['p1'], notes: '' }
+      { id: 's1', name: 'Opening', live: ['p1'], ensembles: [], excluded: [], notes: '' }
     ])
+  })
+
+  it('moves desk routing off performers and ensembles onto the strips that carry it', () => {
+    // The shape the previous build wrote: the DCA was on the performer, or on the
+    // ensemble they were a member of, and membership was a pointer on each performer.
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: {
+        cast: {
+          groups: [
+            { id: 'dca1', label: 'DCA 1 — Principals', mute: null, unmute: null },
+            { id: 'dca2', label: 'DCA 2 — Chorus', mute: null, unmute: null }
+          ],
+          performers: [
+            { id: 'p1', name: 'Ada', role: 'Lead', notes: '', ensembleId: null, deskChannelId: 'dca1' },
+            { id: 'p2', name: 'Nell', role: 'Chorus', notes: '', ensembleId: 'e1', deskChannelId: null },
+            { id: 'p3', name: 'Sam', role: 'Swing', notes: '', ensembleId: null, deskChannelId: null }
+          ],
+          ensembles: [{ id: 'e1', name: 'Chorus', deskChannelId: 'dca2' }]
+        },
+        scenes: { list: [] }
+      } as unknown as Workspace['showSettings']
+    })
+
+    const cast = workspace.showSettings?.cast
+    expect(cast?.dcas.map(dca => dca.id)).toEqual(['dca1', 'dca2'])
+    // The chorus's DCA came across on the members it was carrying, not on the ensemble.
+    expect(cast?.channels.map(channel => [channel.name, channel.dcaId])).toEqual([
+      ['Ada', 'dca1'],
+      ['Nell', 'dca2'],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null],
+      ['', null]
+    ])
+    expect(cast?.performers.map(performer => performer.channelId)).toEqual([
+      cast?.channels[0].id, cast?.channels[1].id, null
+    ])
+    expect(cast?.ensembles).toEqual([{ id: 'e1', name: 'Chorus', members: ['p2'] }])
+    expect((cast as unknown as Record<string, unknown>).groups).toBeUndefined()
+  })
+
+  it('leaves a console that has already been set up exactly as it was found', () => {
+    // A show whose operator removed every strip is a console with nothing on it, not a
+    // show that has not been set up yet: the twelve a new show starts with must not
+    // come back on the next load.
+    const workspace = migrateWorkspace({
+      ...workspaceWith([]),
+      showSettings: {
+        cast: {
+          channels: [],
+          performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '', channelId: null }],
+          ensembles: [],
+          dcas: []
+        },
+        scenes: { list: [] }
+      } as unknown as Workspace['showSettings']
+    })
+
+    expect(workspace.showSettings?.cast.channels).toEqual([])
+    expect(workspace.showSettings?.cast.dcas).toEqual([])
   })
 
   it('migrates an older cast once, and leaves an already-migrated one alone', () => {

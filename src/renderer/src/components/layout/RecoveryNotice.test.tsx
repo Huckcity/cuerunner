@@ -29,16 +29,17 @@ function snapshot(): {
 } {
   const showSettings = defaultShowSettings()
   showSettings.cast = {
-    groups: [{
+    ...showSettings.cast,
+    dcas: [{
       id: 'dca-1',
       label: 'DCA 1 — Principals',
       ...midiNoteMessages('Yamaha', 1, 36)
-    }],
-    performers: [],
-    ensembles: []
+    }]
   }
   showSettings.scenes = {
-    list: [{ id: 's-1', name: 'Wedding', live: ['p-1'], notes: '' }]
+    list: [{
+      id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: ''
+    }]
   }
   showSettings.script = { path: '/shows/act-one.txt', fontSize: 13 }
   return {
@@ -103,7 +104,7 @@ describe('RecoveryNotice', () => {
     expect(state.workspacePath).toBe('/shows/demo.wlab')
     // The desk, the plot and the script are part of that show, not decoration.
     expect(state.showSettings.scenes.list.map(scene => scene.name)).toEqual(['Wedding'])
-    expect(state.showSettings.cast.groups.map(group => group.label))
+    expect(state.showSettings.cast.dcas.map(dca => dca.label))
       .toEqual(['DCA 1 — Principals'])
     expect(state.showSettings.script.path).toBe('/shows/act-one.txt')
     // A file that cannot be found is part of what the recovered session has to say.

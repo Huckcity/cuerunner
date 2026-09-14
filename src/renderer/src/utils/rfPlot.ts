@@ -1,5 +1,5 @@
 import { formatClock } from './cueDefaults'
-import type { DeviceState, RfPack, RfPerformer, RfPlot, RfSwap } from '../types/show'
+import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../types/show'
 
 /**
  * The plot is the one part of a show that changes hands during it: a pack moves to
@@ -49,7 +49,7 @@ export function removePack(plot: RfPlot, packId: string): RfPlot {
  */
 export function assignPack(
   plot: RfPlot,
-  performers: RfPerformer[],
+  performers: Performer[],
   packId: string,
   performerId: string | null,
   at: number
@@ -77,7 +77,7 @@ export function assignPack(
  */
 export function releasePerformerPacks(
   plot: RfPlot,
-  performers: RfPerformer[],
+  performers: Performer[],
   performerId: string,
   at: number
 ): PlotChange {
@@ -128,7 +128,7 @@ export interface RfReportRow {
  */
 export function buildReport(
   plot: RfPlot,
-  performers: RfPerformer[],
+  performers: Performer[],
   devices: DeviceState[],
   swaps: RfSwap[]
 ): RfReportRow[] {
@@ -176,7 +176,7 @@ export function reportText(rows: RfReportRow[], generatedAt: number): string {
   return lines.join('\n')
 }
 
-function nameOf(performers: RfPerformer[], performerId: string | null): string | null {
+function nameOf(performers: Performer[], performerId: string | null): string | null {
   if (performerId === null) return null
   return performers.find(performer => performer.id === performerId)?.name ?? null
 }

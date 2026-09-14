@@ -908,19 +908,23 @@ describe('CueRunner — scene cues', () => {
       showSettings: {
         ...defaults,
         cast: {
-          groups: [{
+          // Ada's strip is what carries the routing now: the DCA is opened by the
+          // performer whose channel is assigned to it.
+          channels: [{ id: 'ch-1', name: 'Ada', enabled: true, dcaId: 'dca-1' }],
+          performers: [{
+            id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
+          }],
+          ensembles: [],
+          dcas: [{
             id: 'dca-1',
             label: 'DCA 1 — Principals',
             ...midiNoteMessages('Yamaha', 1, 36)
-          }],
-          performers: [{
-            id: 'p-1', name: 'Ada', role: 'Lead', notes: '',
-            ensembleId: null, deskChannelId: 'dca-1'
-          }],
-          ensembles: []
+          }]
         },
         scenes: {
-          list: [{ id: 's-1', name: 'Wedding', live: ['p-1'], notes: '' }]
+          list: [{
+            id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: ''
+          }]
         }
       },
       deskState: {},

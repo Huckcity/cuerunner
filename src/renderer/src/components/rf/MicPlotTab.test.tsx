@@ -2,24 +2,21 @@
 // show, so these tests pin the two things an operator relies on: text lands when the
 // field is left (not on every keystroke), and a change that moves a pack leaves the
 // same swap behind in the store and the session log that the report is built from.
-// Performers themselves — and which desk group they drive — are the Show panel's
-// (`ShowDialog.test.tsx`); this dialog only says who is wearing what.
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
+// Performers themselves — and which desk group they drive — are the cast's
+// (`ShowSettings.test.tsx`); this tab only says who is wearing what.
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { PlotDialog } from './PlotDialog'
+import { MicPlotTab } from './MicPlotTab'
 import { useStore } from '../../store'
 import { defaultShowSettings } from '../../types/show'
 import { formatClock } from '../../utils/cueDefaults'
-import type { DeviceState, RfPack, RfPerformer, RfPlot, RfSwap } from '../../types/show'
+import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../../types/show'
 
 const AT = 1_700_000_000_000
 
-function performer(overrides: Partial<RfPerformer> = {}): RfPerformer {
-  return {
-    id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '',
-    ensembleId: null, deskChannelId: null, ...overrides
-  }
+function performer(overrides: Partial<Performer> = {}): Performer {
+  return { id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', channelId: null, ...overrides }
 }
 
 function pack(overrides: Partial<RfPack> = {}): RfPack {
@@ -36,10 +33,9 @@ function swap(overrides: Partial<RfSwap> = {}): RfSwap {
 
 const EMPTY_PLOT: RfPlot = { packs: [] }
 
-describe('PlotDialog', () => {
+describe('MicPlotTab', () => {
   let container: HTMLDivElement
   let root: Root
-  let onClose: Mock
 
   beforeEach(() => {
     ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -47,13 +43,11 @@ describe('PlotDialog', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    onClose = vi.fn()
   })
 
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    vi.restoreAllMocks()
     useStore.setState({
       showSettings: defaultShowSettings(),
       showDevices: [],
@@ -61,14 +55,14 @@ describe('PlotDialog', () => {
     })
   })
 
-  interface DialogState {
+  interface TabState {
     plot?: RfPlot
-    performers?: RfPerformer[]
+    performers?: Performer[]
     devices?: DeviceState[]
     swaps?: RfSwap[]
   }
 
-  async function show(state: DialogState = {}): Promise<void> {
+  async function show(state: TabState = {}): Promise<void> {
     const defaults = defaultShowSettings()
     await act(async () => {
       useStore.setState({
@@ -83,7 +77,7 @@ describe('PlotDialog', () => {
         },
         showDevices: state.devices ?? []
       })
-      root.render(<PlotDialog onClose={onClose} />)
+      root.render(<MicPlotTab />)
     })
   }
 
@@ -119,25 +113,6 @@ describe('PlotDialog', () => {
     })
   }
 
-  it('opens as a dialog and closes from Escape, the backdrop and the footer', async () => {
-    await show()
-
-    const dialog = container.querySelector('.plot-dialog')!
-    expect(dialog.getAttribute('role')).toBe('dialog')
-    expect(dialog.getAttribute('aria-label')).toBe('Mic plot')
-
-    await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    })
-    expect(onClose).toHaveBeenCalledTimes(1)
-
-    await act(async () => { container.querySelector<HTMLElement>('.plot-overlay')!.click() })
-    expect(onClose).toHaveBeenCalledTimes(2)
-
-    await act(async () => { container.querySelector<HTMLButtonElement>('.plot-close')!.click() })
-    expect(onClose).toHaveBeenCalledTimes(3)
-  })
-
   it('adds a pack, unassigned and unpatched', async () => {
     await show()
     expect(container.querySelectorAll('.plot-pack-row')).toHaveLength(0)
@@ -149,6 +124,18 @@ describe('PlotDialog', () => {
     const added = rf().plot.packs[0]
     expect(added.performerId).toBeNull()
     expect(added.channelId).toBeNull()
+  })
+
+  it('removes a pack from the plot', async () => {
+    await show({ plot: { packs: [pack(), pack({ id: 'pack-2', label: 'Pack 2' })] } })
+    expect(container.querySelectorAll('.plot-pack-row')).toHaveLength(2)
+
+    await act(async () => {
+      container.querySelectorAll<HTMLButtonElement>('.plot-remove')[0].click()
+    })
+
+    expect(rf().plot.packs.map(entry => entry.label)).toEqual(['Pack 2'])
+    expect(container.querySelectorAll('.plot-pack-row')).toHaveLength(1)
   })
 
   it('edits a pack label, channel and notes without recording a swap', async () => {
@@ -184,7 +171,7 @@ describe('PlotDialog', () => {
 
     const select = field<HTMLSelectElement>('.plot-pack-performer')
     expect(select.querySelector('option')!.textContent).toBe('— unassigned —')
-    expect([...select.querySelectorAll('option')].map(o => o.textContent))
+    expect([...select.querySelectorAll('option')].map(option => option.textContent))
       .toEqual(['— unassigned —', 'Aldonza'])
 
     await choose(select, 'perf-1')
@@ -198,6 +185,8 @@ describe('PlotDialog', () => {
       label: 'RF',
       message: 'Swap: Pack 1 unassigned → Aldonza'
     })
+    // The tab shows the swap it just made, which is what tells the operator it landed.
+    expect(container.querySelector('.plot-swap-text')?.textContent).toBe('Pack 1 unassigned → Aldonza')
   })
 
   it('assigning the same performer again records nothing', async () => {

@@ -1,11 +1,19 @@
-import { useEffect, useRef, useState, type CSSProperties, type InputHTMLAttributes } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
-import { resolvedGroupId } from '../../utils/cast'
-import { addScene, removeScene, sceneChanges, setPerformerLive, updateScene } from '../../utils/scenes'
-import type { ScenesSettings } from '../../types/show'
-import { PlotDialog } from '../rf/PlotDialog'
-import { ShowDialog } from '../show/ShowDialog'
+import { channelLabel, performerDcaId } from '../../utils/cast'
+import {
+  addScene,
+  ensembleState,
+  isPerformerLive,
+  removeScene,
+  sceneChanges,
+  setEnsembleApplied,
+  setPerformerLive,
+  updateScene
+} from '../../utils/scenes'
+import { CommitInput } from '../show/CommitField'
+import { ALL_CLOSED_SCENE_ID, type ScenesSettings } from '../../types/show'
 import './ScenesView.css'
 
 // A scene name is what its column is read by, so the field asks for about a name's worth of
@@ -14,6 +22,9 @@ import './ScenesView.css'
 // of the window.
 const SCENE_NAME_SIZE = 11
 
+/** The columns that are scenes in the file: the all-closed column is not one of them. */
+const SCENE_COLUMN = '.matrix-scene[data-scene-id]'
+
 /** The count as the operator says it out loud: "4 performers", "1 performer", "no performers". */
 function performerCount(count: number): string {
   if (count === 0) return 'no performers'
@@ -21,49 +32,19 @@ function performerCount(count: number): string {
 }
 
 /**
- * A field that keeps what is being typed to itself until it is left. Binding the scene
- * list to every keystroke would rewrite the workspace on each character — and a scene
- * renamed halfway through a word is a name the desk never saw.
- */
-function CommitInput({
-  value,
-  onCommit,
-  ...rest
-}: {
-  value: string
-  onCommit: (value: string) => void
-} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'>) {
-  const [draft, setDraft] = useState<string | null>(null)
-
-  const commit = (): void => {
-    if (draft !== null && draft !== value) onCommit(draft)
-    setDraft(null)
-  }
-
-  return (
-    <input
-      {...rest}
-      value={draft ?? value}
-      onChange={e => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={e => {
-        if (e.key === 'Enter') commit()
-      }}
-    />
-  )
-}
-
-/**
- * Scenes: the cast down the side, the scenes across the top. Who each performer's mic
- * routes to on the desk — their own group, or their ensemble's — is set up in the Show
- * panel; this view only runs it.
+ * Scenes: the cast down the side, the scenes across the top. Where each performer's mic
+ * is patched — and so which DCA it opens — is set up in Show Settings; this view runs it,
+ * and applies the ensembles that move a handful of mics together.
+ *
+ * The first column is the scene that is always there and never edited: all closed. It is
+ * what the desk wants pressed between numbers, and nobody is ever added to it.
  *
  * This is the curtain-up view and the place the show is run from, so it has two modes.
- * It always opens to run it: recall, Apply and Mics off are live, and nothing else can
- * be changed by a stray click. Edit is the deliberate press that gives the grid and the
- * names back, and Done hands the view back to the show. Editing a cell changes the
- * scene, never the desk; the header's Apply is the press that moves the room, and it
- * only appears once there is a difference to send.
+ * It always opens to run it: recall and Apply are live, and nothing else can be changed
+ * by a stray click. Edit is the deliberate press that gives the grid and the names back,
+ * and Done hands the view back to the show. Editing a cell changes the scene, never the
+ * desk; the header's Apply is the press that moves the room, and it only appears once
+ * there is a difference to send.
  */
 export function ScenesView() {
   const scenes = useStore(s => s.showSettings.scenes)
@@ -71,16 +52,20 @@ export function ScenesView() {
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
   const updateScenesSettings = useStore(s => s.updateScenesSettings)
+  const addEnsembleFromScene = useStore(s => s.addEnsembleFromScene)
+  const removeEnsemble = useStore(s => s.removeEnsemble)
+  const updateCastSettings = useStore(s => s.updateCastSettings)
   const editing = useStore(s => s.scenesEditing)
   const setEditing = useStore(s => s.setScenesEditing)
-  const openSettings = useStore(s => s.openSettings)
-
-  const [showOpen, setShowOpen] = useState(false)
-  const [plotOpen, setPlotOpen] = useState(false)
+  const openShowSettings = useStore(s => s.openShowSettings)
 
   const locked = !editing
-  const currentIndex = scenes.list.findIndex(scene => scene.id === deskSceneId)
-  const current = currentIndex === -1 ? null : scenes.list[currentIndex]
+  // The scene the desk is on, and whether that is the all-closed one: null is either the
+  // all-closed scene or a desk nothing has been recalled to yet, and neither opens a mic.
+  const recalled = scenes.list.find(scene => scene.id === deskSceneId) ?? null
+  const allClosed = deskSceneId === ALL_CLOSED_SCENE_ID
+  const current = allClosed ? null : recalled
+  const currentIndex = recalled === null ? -1 : scenes.list.indexOf(recalled)
 
   // The running order is the show order, so what comes next is the scene after this one —
   // and before anything has been recalled, the first one. Which scene it is belongs in the
@@ -103,7 +88,7 @@ export function ScenesView() {
     // business, and the list is not what this follows.
     const index = scenes.list.findIndex(scene => scene.id === deskSceneId)
     if (scroller === null || index === -1) return
-    const column = scroller.querySelectorAll<HTMLElement>('.matrix-scene')[index]
+    const column = scroller.querySelectorAll<HTMLElement>(SCENE_COLUMN)[index]
     const plotColumn = scroller.querySelector<HTMLElement>('.matrix-mic')
     if (column === undefined || plotColumn === null) return
     // Measured rather than assumed: the current scene is parked against the plot column, and
@@ -114,9 +99,7 @@ export function ScenesView() {
 
   // The desk's question, asked for the header: what would a recall of the current scene
   // change? Nothing means the desk is where the show left it.
-  const toApply = current === null
-    ? 0
-    : sceneChanges(cast.performers, cast.ensembles, cast.groups, current, deskState).length
+  const toApply = sceneChanges(cast, current, deskState).length
 
   // Every edit writes back the one field it changed, so a cell toggled in the grid cannot
   // carry a stale copy of anything else with it.
@@ -126,16 +109,20 @@ export function ScenesView() {
     <div className="scenes-view" data-editing={editing}>
       <div className="scenes-header">
         <span className="scenes-title">Scenes</span>
-        {scenes.list.length > 0 && (
+        {(scenes.list.length > 0 || deskSceneId !== null) && (
           <div className="scenes-where">
             <span className="scenes-now">
               <span className="scenes-where-label">now</span>{' '}
-              {current === null ? (
+              {current === null && !allClosed ? (
                 <span className="scenes-where-none">nothing recalled</span>
               ) : (
                 <>
-                  <strong className="scenes-where-number">{currentIndex + 1}</strong>{' '}
-                  <span className="scenes-where-name" title={current.name}>{current.name}</span>
+                  <strong className="scenes-where-number">
+                    {allClosed ? 0 : currentIndex + 1}
+                  </strong>{' '}
+                  <span className="scenes-where-name" title={allClosed ? 'All closed' : current?.name}>
+                    {allClosed ? 'All closed' : current?.name}
+                  </span>
                 </>
               )}
             </span>
@@ -161,36 +148,21 @@ export function ScenesView() {
               >
                 Add scene
               </button>
+              {/* The other half of building a scene: a group of the mics that are open in
+                  it, named and kept, so the next scene built from the same people is one
+                  press rather than a row of them. */}
               <button
-                className="scenes-plot"
-                onClick={() => setPlotOpen(true)}
-                title="Who is currently wearing which pack"
+                className="scenes-ensemble"
+                onClick={() => recalled !== null && addEnsembleFromScene(recalled.id)}
+                disabled={recalled === null}
+                title={recalled === null
+                  ? 'Recall a scene first — an ensemble is made from who is open in it'
+                  : `Group the mics open in "${recalled.name}" into an ensemble`}
               >
-                Mic plot…
-              </button>
-              <button
-                className="scenes-show"
-                onClick={() => setShowOpen(true)}
-                title="Performers, ensembles and the desk groups they drive"
-              >
-                Show…
-              </button>
-              <button
-                className="scenes-sources"
-                onClick={() => openSettings('wireless')}
-                title="Where the packs' battery and RF readings come from"
-              >
-                Telemetry…
+                + Ensemble
               </button>
             </>
           )}
-          <button
-            className="scenes-mics-off"
-            onClick={() => { void recallScene(null) }}
-            title="Close every group the cast drives"
-          >
-            Mics off
-          </button>
           {deskSceneId !== null && toApply > 0 && (
             <button
               className="matrix-apply"
@@ -231,7 +203,7 @@ export function ScenesView() {
           <span>The cast is empty: the rows are the performers in your show.</span>
           <button
             className="matrix-empty-action"
-            onClick={() => { setEditing(true); setShowOpen(true) }}
+            onClick={() => openShowSettings('cast')}
           >
             Enter the cast…
           </button>
@@ -242,20 +214,42 @@ export function ScenesView() {
             className="matrix-grid"
             style={{
               gridTemplateColumns:
-                `var(--matrix-mic-width) repeat(${scenes.list.length}, minmax(var(--matrix-cell-width), 1fr))`
+                `var(--matrix-mic-width) repeat(${scenes.list.length + 1}, minmax(var(--matrix-cell-width), 1fr))`
             } as CSSProperties}
           >
             <div className="matrix-corner" />
 
+            {/* The scene that is never edited and always there: every mic closed. It is a
+                column like the others so the press is where the show is run from, and the
+                column reads as a place the desk can be rather than as a button. */}
+            <div
+              className="matrix-scene"
+              data-all-closed="true"
+              data-current={allClosed}
+              data-pending={sceneChanges(cast, null, deskState).length > 0}
+            >
+              <div className="matrix-scene-name">
+                <span className="scene-name-static">All closed</span>
+              </div>
+              <button
+                className="matrix-recall"
+                onClick={() => { void recallScene(ALL_CLOSED_SCENE_ID) }}
+                title="Close every mic the show drives"
+                aria-label="Recall all closed"
+              >
+                →
+              </button>
+            </div>
+
             {scenes.list.map(scene => {
               // Pending is the desk's question, not the scene's: a column is to apply when
               // recalling it would change something, which makes the marker mean the press.
-              const pending =
-                sceneChanges(cast.performers, cast.ensembles, cast.groups, scene, deskState).length > 0
+              const pending = sceneChanges(cast, scene, deskState).length > 0
               return (
                 <div
                   key={scene.id}
                   className="matrix-scene"
+                  data-scene-id={scene.id}
                   data-current={scene.id === deskSceneId}
                   data-pending={pending}
                 >
@@ -301,23 +295,82 @@ export function ScenesView() {
               )
             })}
 
+            {/* Ensembles before the performers: they are what the grid does with several
+                rows at once, and applying one is a press in a scene column like any other. */}
+            {cast.ensembles.map(ensemble => (
+              <div className="matrix-ensemble-row" key={ensemble.id}>
+                <div className="matrix-mic">
+                  {editing ? (
+                    <CommitInput
+                      className="ensemble-name-field"
+                      value={ensemble.name}
+                      placeholder="Ensemble"
+                      aria-label="Ensemble name"
+                      size={SCENE_NAME_SIZE}
+                      onCommit={name => {
+                        if (name.trim() === '') return
+                        updateCastSettings({
+                          ensembles: cast.ensembles.map(candidate =>
+                            candidate.id === ensemble.id ? { ...candidate, name } : candidate)
+                        })
+                      }}
+                    />
+                  ) : (
+                    <span className="matrix-performer">{ensemble.name}</span>
+                  )}
+                  <span className="matrix-ensemble-count">{ensemble.members.length}</span>
+                  {editing && (
+                    <button
+                      className="matrix-scene-remove"
+                      aria-label={`Remove ${ensemble.name}`}
+                      title="Remove this ensemble — every scene using it stops using it"
+                      onClick={() => removeEnsemble(ensemble.id)}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                {scenes.list.map(scene => {
+                  const applied = scene.ensembles.includes(ensemble.id)
+                  return (
+                    <button
+                      key={scene.id}
+                      className="matrix-cell"
+                      data-applied={ensembleState(scene, ensemble)}
+                      data-current={scene.id === deskSceneId}
+                      aria-label={`${ensemble.name} in ${scene.name}`}
+                      disabled={locked}
+                      onClick={() =>
+                        writeList(setEnsembleApplied(scenes, scene.id, ensemble, !applied))
+                      }
+                    />
+                  )
+                })}
+              </div>
+            ))}
+
             {cast.performers.map(performer => {
-              const groupId = resolvedGroupId(performer, cast.ensembles)
-              const on = current !== null && current.live.includes(performer.id)
+              const groupId = performerDcaId(performer, cast.channels)
+              const on = isPerformerLive(current, cast.ensembles, performer.id)
+              const channel = channelLabel(cast.channels, performer.channelId)
 
               return (
                 <div key={performer.id} className="matrix-row" data-on={on}>
-                  {/* Who this row is: the performer, not a mic. Which group their mic
-                      routes to — their own, or their ensemble's — is set up in the Show
-                      panel, and stays with them across a pack swap. */}
+                  {/* Who this row is: the performer, and the strip their mic is patched to.
+                      Which DCA that opens is the channel's business, set up in Show
+                      Settings. */}
                   <div className="matrix-mic">
+                    {channel !== '' && <span className="matrix-channel">{channel}</span>}
                     <span className="matrix-performer">{performer.name}</span>
                   </div>
+                  {/* The all-closed column takes no one: there is nothing to open in it, so
+                      the gap is not a cell and is not in reach. */}
+                  <div className="matrix-cell-blank" />
                   {scenes.list.map(scene => {
-                    const live = scene.live.includes(performer.id)
-                    // The desk holds one state per group, so every performer routed to
-                    // the same one are pending together: the cell says what that group
-                    // has not been told yet.
+                    const live = isPerformerLive(scene, cast.ensembles, performer.id)
+                    // The desk holds one state per DCA, so every performer routed to the
+                    // same one are pending together: the cell says what that DCA has not
+                    // been told yet.
                     const pending =
                       scene.id === deskSceneId &&
                       groupId !== null &&
@@ -331,11 +384,9 @@ export function ScenesView() {
                         data-pending={pending}
                         aria-label={`${performer.name} in ${scene.name}`}
                         disabled={locked}
-                        onClick={() =>
-                          updateScenesSettings({
-                            list: setPerformerLive(scenes, scene.id, performer.id, !live).list
-                          })
-                        }
+                        onClick={() => writeList(
+                          setPerformerLive(scenes, scene.id, performer.id, !live, cast.ensembles)
+                        )}
                       />
                     )
                   })}
@@ -345,9 +396,6 @@ export function ScenesView() {
           </div>
         </div>
       )}
-
-      {plotOpen && <PlotDialog onClose={() => setPlotOpen(false)} />}
-      {showOpen && <ShowDialog onClose={() => setShowOpen(false)} />}
     </div>
   )
 }

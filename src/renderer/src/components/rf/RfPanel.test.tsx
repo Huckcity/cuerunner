@@ -13,7 +13,7 @@ import {
   defaultRfThresholds,
   defaultShowSettings
 } from '../../types/show'
-import type { DeviceState, RfPack, RfPerformer, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
+import type { DeviceState, RfPack, Performer, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
 
 const AT = 1_700_000_000_000
 const THRESHOLDS = defaultRfThresholds()
@@ -73,6 +73,7 @@ describe('RfPanel', () => {
     vi.restoreAllMocks()
     useStore.setState({
       showSettings: defaultShowSettings(),
+      showSettingsTab: null,
       showDevices: [],
       showAlerts: []
     })
@@ -80,7 +81,7 @@ describe('RfPanel', () => {
 
   interface PanelState {
     plot?: RfPlot
-    performers?: RfPerformer[]
+    performers?: Performer[]
     devices?: DeviceState[]
     alerts?: ShowAlert[]
     thresholds?: RfThresholds
@@ -153,6 +154,16 @@ describe('RfPanel', () => {
     await act(async () => { headerButton('✕').click() })
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the mic plot tab of Show Settings from Edit plot', async () => {
+    // The plot editor is a tab of Show Settings rather than a dialog of this panel's
+    // own, so the button asks the app for that tab and has nothing to render itself.
+    await show()
+
+    await act(async () => { headerButton('Edit plot…').click() })
+
+    expect(useStore.getState().showSettingsTab).toBe('mic-plot')
   })
 
   it('sorts the plot critical, offline, silent, low, ok, unpatched', async () => {
@@ -237,8 +248,8 @@ describe('RfPanel', () => {
         pack({ id: 'p-spare', label: 'Pack spare', channelId: 'ch-2', performerId: null })
       ]
     }
-    const performers: RfPerformer[] = [{
-      id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', ensembleId: null, deskChannelId: null
+    const performers: Performer[] = [{
+      id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', channelId: null
     }]
     await show({ plot, performers })
 

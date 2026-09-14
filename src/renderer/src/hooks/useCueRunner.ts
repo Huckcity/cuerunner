@@ -37,6 +37,10 @@ export function useCueRunner() {
 export function useKeyboard(go: () => void, stop: () => void, panic: () => void) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // A modal panel owns the keyboard while it is up: its own Escape closes it, and the
+      // keys that run the show do nothing behind it. Read off the store rather than from a
+      // dependency, so the binding does not have to be rebuilt every time a panel opens.
+      if (useStore.getState().modals > 0) return
       const el = e.target as HTMLElement
       const tag = el?.tagName
       const isTextInput = (tag === 'INPUT' && (el as HTMLInputElement).type !== 'range') ||

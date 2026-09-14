@@ -2,28 +2,43 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
 import type { AudioCue } from '../types/cue'
 import { defaultShowSettings } from '../types/show'
+import { setDcaCount } from '../utils/cast'
 import type {
   AlertEvent,
   AlertLevel,
-  DeskChannel,
+  CastSettings,
+  Dca,
   DeviceEvent,
   DeviceState,
+  Ensemble,
   MicScene,
-  RfPerformer,
+  Performer,
   ServiceEvent,
   ShowEvent
 } from '../types/show'
 
-const DESK_GROUP: DeskChannel = { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null }
-const ROUTED_PERFORMER: RfPerformer = {
+const DCA: Dca = { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null }
+/** The strip Ada's mic is on, which is what carries her to the desk. */
+const CHANNEL = { id: 'ch-1', name: 'Ada', enabled: true, dcaId: 'dca-1' }
+const ROUTED_PERFORMER: Performer = {
   id: 'p1',
   name: 'Ada',
   role: 'Lead',
   notes: '',
-  ensembleId: null,
-  deskChannelId: 'dca-1'
+  channelId: 'ch-1'
 }
-const NUMBER: MicScene = { id: 's1', name: 'Bows', live: ['p1'], notes: '' }
+const NUMBER: MicScene = {
+  id: 's1',
+  name: 'Bows',
+  live: ['p1'],
+  ensembles: [],
+  excluded: [],
+  notes: ''
+}
+
+function castWith(cast: Partial<CastSettings> = {}): CastSettings {
+  return { channels: [CHANNEL], performers: [ROUTED_PERFORMER], ensembles: [], dcas: [DCA], ...cast }
+}
 
 function resetStore() {
   useStore.setState({
@@ -467,28 +482,71 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().cues.find(c => c.id === c1.id)?.name).toBe('First')
   })
 
-  it('undo after removing a desk group brings the group and its performers back together', () => {
+  it('undo after removing an ensemble brings it back with the scenes that applied it', () => {
+    const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', members: ['p1'] }
+    const applying: MicScene = { ...NUMBER, live: [], ensembles: ['ens-1'] }
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
         ...defaults,
-        scenes: { ...defaults.scenes, list: [NUMBER] },
-        cast: { groups: [DESK_GROUP], performers: [ROUTED_PERFORMER], ensembles: [] }
+        scenes: { ...defaults.scenes, list: [applying] },
+        cast: castWith({ ensembles: [chorus] })
       }
     })
 
-    useStore.getState().removeCastGroup(DESK_GROUP.id)
+    useStore.getState().removeEnsemble(chorus.id)
 
-    // The group goes and the performer routed to it is unpicked in the same edit: a
-    // performer pointing at a group that is gone is a mic nothing on the desk opens.
-    expect(useStore.getState().showSettings.cast.groups).toEqual([])
-    expect(useStore.getState().showSettings.cast.performers[0].deskChannelId).toBeNull()
+    // The ensemble goes and the scenes that had it applied stop applying it, in the same
+    // edit: a scene pointing at an ensemble that is gone is a group of mics nobody can
+    // move from the grid again.
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
+    expect(useStore.getState().showSettings.scenes.list[0].ensembles).toEqual([])
 
     // One undo, rather than half of the edit and then the other half.
     useStore.getState().undo()
-    expect(useStore.getState().showSettings.cast.groups.map(group => group.id))
-      .toEqual([DESK_GROUP.id])
-    expect(useStore.getState().showSettings.cast.performers[0].deskChannelId).toBe('dca-1')
+    expect(useStore.getState().showSettings.cast.ensembles.map(ensemble => ensemble.id))
+      .toEqual([chorus.id])
+    expect(useStore.getState().showSettings.scenes.list[0].ensembles).toEqual([chorus.id])
+  })
+
+  it('undo after resizing the DCAs brings back what the dropped ones were carrying', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith() }
+    })
+
+    const cast = useStore.getState().showSettings.cast
+    useStore.getState().updateCastSettings(setDcaCount(cast, 0))
+
+    // The strip that was in the DCA is still there, in no DCA at all — which is what a
+    // mic with nowhere to go looks like, rather than a strip pointing at nothing.
+    expect(useStore.getState().showSettings.cast.dcas).toEqual([])
+    expect(useStore.getState().showSettings.cast.channels[0].dcaId).toBeNull()
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.cast.dcas).toEqual([DCA])
+    expect(useStore.getState().showSettings.cast.channels[0].dcaId).toBe('dca-1')
+  })
+
+  it('makes an ensemble out of a scene in one edit, and applies it there', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] }, cast: castWith() }
+    })
+
+    useStore.getState().addEnsembleFromScene(NUMBER.id)
+
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.ensembles).toHaveLength(1)
+    // Members are who the scene opens, and the scene applies the ensemble instead of
+    // naming them one by one.
+    expect(settings.cast.ensembles[0].members).toEqual(['p1'])
+    expect(settings.scenes.list[0].ensembles).toEqual([settings.cast.ensembles[0].id])
+    expect(settings.scenes.list[0].live).toEqual([])
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
+    expect(useStore.getState().showSettings.scenes.list[0].live).toEqual(['p1'])
   })
 
   it('undo after deleting a scene restores it with the mics it opens', () => {

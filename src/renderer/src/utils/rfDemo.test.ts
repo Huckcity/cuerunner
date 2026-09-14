@@ -54,10 +54,10 @@ describe('demoPacks and demoPerformers', () => {
     }
   })
 
-  it('starts every performer unassigned to a group or ensemble', () => {
+  it('starts every performer patched to no strip of its own', () => {
     const performers = demoPerformers()
 
-    expect(performers.every(p => p.ensembleId === null && p.deskChannelId === null)).toBe(true)
+    expect(performers.every(p => p.channelId === null)).toBe(true)
   })
 
   it('casts the principals the panel names', () => {

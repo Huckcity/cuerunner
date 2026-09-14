@@ -7,7 +7,7 @@ import { migrateLegacyAudioRouting } from '../../shared/audioRouting'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { AudioCue, Cue } from '../../renderer/src/types/cue'
-import { defaultShowSettings, normalizeShowSettings } from '../../renderer/src/types/show'
+import { CHANNEL_START_COUNT, defaultShowSettings, normalizeShowSettings } from '../../renderer/src/types/show'
 
 // Cues come out of a JSON file, so they can still carry fields a previous version
 // wrote and this one no longer knows about. Read and delete those through here.
@@ -48,18 +48,43 @@ interface LegacyPack {
   deskChannelId?: string | null
 }
 
+interface LegacyPerformer {
+  id: string
+  name?: string
+  role?: string
+  notes?: string
+  ensembleId?: string | null
+  deskChannelId?: string | null
+  channelId?: string | null
+}
+
+interface LegacyEnsemble {
+  id: string
+  name?: string
+  deskChannelId?: string | null
+  members?: string[]
+}
+
+interface LegacyCast {
+  groups?: unknown[]
+  dcas?: unknown[]
+  channels?: unknown[]
+  performers?: LegacyPerformer[]
+  ensembles?: LegacyEnsemble[]
+}
+
 /**
  * Performers and desk groups used to live under the plot and the scenes section, keyed
  * to packs: a pack carried the desk group it fed, and a scene named the packs open in
- * it. Both moved up a level — the desk group belongs to the performer (or their
- * ensemble) now, not to whichever transmitter they happen to be wearing — so a workspace
- * saved before that move is rewritten in place, once.
+ * it. Both moved up a level onto the cast — onto the performer, or the ensemble that
+ * grouped them — so a workspace saved before that move is rewritten in place, once. The
+ * pass after this one carries that routing the rest of the way, onto the channel strips
+ * that hold it now.
  *
  * A file already in the new shape has no `rf.plot.performers` or `scenes.channels` left
  * to find, which is what makes this safe to run unconditionally on every load.
  */
-function migrateCast(showSettings: Record<string, unknown> | undefined): void {
-  if (!showSettings) return
+function migratePlotCast(showSettings: Record<string, unknown>): void {
   const rf = showSettings.rf as Record<string, unknown> | undefined
   const plot = rf?.plot as Record<string, unknown> | undefined
   const scenes = showSettings.scenes as Record<string, unknown> | undefined
@@ -108,6 +133,70 @@ function migrateCast(showSettings: Record<string, unknown> | undefined): void {
   }
 }
 
+/**
+ * The second move, and the shape this build writes: a performer's desk routing left the
+ * performer for their channel strip, an ensemble became membership rather than a pointer
+ * on each of its members, and the desk's groups are the DCAs the show drives.
+ *
+ * What is preserved is what the desk was told: a performer who had a DCA — their own, or
+ * the one their ensemble carried for them — is given the channel strip that now carries
+ * it, named after them, which is the strip an operator would have made by hand. Nobody
+ * routed gets no strip, which is the state a new performer starts in.
+ */
+function migrateChannelRouting(showSettings: Record<string, unknown>): void {
+  const cast = showSettings.cast as LegacyCast | undefined
+  if (!cast) return
+  if (cast.channels !== undefined && cast.dcas !== undefined) return
+
+  const performers = cast.performers ?? []
+  const ensembles = cast.ensembles ?? []
+  const dcas = cast.dcas ?? cast.groups ?? []
+
+  const ensembleDca = new Map(ensembles.map(ensemble => [ensemble.id, ensemble.deskChannelId ?? null]))
+  const channels: Array<{ id: string; name: string; enabled: boolean; dcaId: string | null }> = []
+  const migrated = performers.map(performer => {
+    const dcaId = performer.deskChannelId
+      ?? (performer.ensembleId ? ensembleDca.get(performer.ensembleId) ?? null : null)
+    const channelId = dcaId === null ? null : crypto.randomUUID()
+    if (channelId !== null) {
+      channels.push({ id: channelId, name: performer.name ?? '', enabled: true, dcaId })
+    }
+    return {
+      id: performer.id,
+      name: performer.name ?? '',
+      role: performer.role ?? '',
+      notes: performer.notes ?? '',
+      channelId
+    }
+  })
+
+  // A show whose performers were never routed keeps no strips here: an empty list reads
+  // as "not set up yet", and the defaults give it the twelve a new show starts with.
+  if (channels.length > 0) {
+    while (channels.length < CHANNEL_START_COUNT) {
+      channels.push({ id: crypto.randomUUID(), name: '', enabled: true, dcaId: null })
+    }
+    cast.channels = channels
+  } else {
+    delete cast.channels
+  }
+
+  cast.performers = migrated
+  cast.ensembles = ensembles.map(ensemble => ({
+    id: ensemble.id,
+    name: ensemble.name ?? '',
+    members: performers.filter(candidate => candidate.ensembleId === ensemble.id).map(candidate => candidate.id)
+  }))
+  cast.dcas = dcas
+  delete cast.groups
+}
+
+function migrateCast(showSettings: Record<string, unknown> | undefined): void {
+  if (!showSettings) return
+  migratePlotCast(showSettings)
+  migrateChannelRouting(showSettings)
+}
+
 export function migrateWorkspace(workspace: Workspace): Workspace {
   // Pass 1: normalize all cues
   const cues = workspace.cues.map(c => migrateCue(c as Cue & Record<string, unknown>))
@@ -141,8 +230,10 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
   }
 
   workspace.cues = cues
-  // Pass 3: performers and desk groups move from the plot and the scenes section onto
-  // the cast, before defaulting fills in a shape that already agrees with the new one.
+  // Pass 3: the show's setup is brought forward to this build's shape — from the plot
+  // and the scenes section onto the cast, and from desk routing on performers and
+  // ensembles onto the channel strips that carry it now — before defaulting fills in a
+  // shape that already agrees with the new one.
   migrateCast(workspace.showSettings as Record<string, unknown> | undefined)
   // A workspace written before the show services existed has no port settings; the
   // defaults bring it up listening where a new one would.

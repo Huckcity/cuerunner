@@ -1,6 +1,7 @@
 import { useStore } from '../store'
 import { describeDeskMessage } from '../utils/cast'
 import { sceneChanges, type DeskChange } from '../utils/scenes'
+import { ALL_CLOSED_SCENE_ID } from '../types/show'
 import type { OscArg } from '../types/cue'
 import type { DeskMessage } from '../types/show'
 
@@ -20,34 +21,27 @@ export interface RecallResult {
  * nothing here happens on its own. Editing a scene does not move the desk; the panel says
  * what is still to apply, and the operator applies it.
  *
- * A null scene closes every group the plot drives, which is also what a "mics all off"
- * button should do.
+ * A recall of the all-closed scene — by its id, or by the null a cue carries when it is
+ * pointed at nothing — closes every DCA the show drives.
  */
 export async function recallScene(sceneId: string | null, label = 'Desk'): Promise<RecallResult> {
   const state = useStore.getState()
   const scenes = state.showSettings.scenes
-  const scene = sceneId === null
+  const scene = sceneId === null || sceneId === ALL_CLOSED_SCENE_ID
     ? null
     : scenes.list.find(candidate => candidate.id === sceneId)
 
   // A named scene that is no longer in the list is not "close everything". Deleting a
   // scene leaves the cues that pointed at it pointing at nothing, and remembering that
   // as mics-off would mute the whole stage on the next GO — the loudest possible
-  // reading of a missing button. Only a null id means mics off.
+  // reading of a missing button. Only the all-closed scene means mics off.
   if (scene === undefined) {
     const message = `no scene by that id — it may have been deleted (${sceneId})`
     useStore.getState().appendLog([{ level: 'error', label, message }])
     return { sceneName: null, changes: [], failures: [message] }
   }
 
-  const cast = state.showSettings.cast
-  const changes = sceneChanges(
-    cast.performers,
-    cast.ensembles,
-    cast.groups,
-    scene,
-    state.deskState
-  )
+  const changes = sceneChanges(state.showSettings.cast, scene, state.deskState)
 
   const failures: string[] = []
   const deskState = { ...state.deskState }
@@ -59,7 +53,10 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
     }
   }
 
-  useStore.getState().setDeskState(deskState, scene?.id ?? null)
+  // The all-closed scene is a real place the desk can be left, so it is remembered as
+  // one: a view that said "nothing recalled" after every mic was closed would be wrong
+  // about the one thing it is there to say.
+  useStore.getState().setDeskState(deskState, scene === null ? ALL_CLOSED_SCENE_ID : scene.id)
 
   const opened = changes.filter(change => change.live).length
   const closed = changes.length - opened

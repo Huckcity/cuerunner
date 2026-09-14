@@ -4,7 +4,6 @@ import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../..
 import { demoPacks, demoPerformers, demoSource } from '../../utils/rfDemo'
 import { buildReport, reportText } from '../../utils/rfPlot'
 import { formatClock } from '../../utils/cueDefaults'
-import { PlotDialog } from './PlotDialog'
 import './RfPanel.css'
 
 export type RfPackState = 'ok' | 'low' | 'critical' | 'offline' | 'silent' | 'unpatched'
@@ -132,7 +131,11 @@ export function RfPanel({ onClose }: Props) {
   // them. The second one is what gets read the next morning, so it is a view rather
   // than something you have to export before closing the app.
   const [mode, setMode] = useState<'live' | 'report'>('live')
-  const [editing, setEditing] = useState(false)
+  const openShowSettings = useStore(s => s.openShowSettings)
+  // The plot editor is a tab of Show Settings rather than a second dialog over this
+  // panel: a pack assignment is show content, and everything that edits the show's setup
+  // is edited in one place.
+  const editPlot = (): void => openShowSettings('mic-plot')
 
   const report = useMemo(
     () => buildReport(rf.plot, cast.performers, devices, rf.swaps),
@@ -194,8 +197,8 @@ export function RfPanel({ onClose }: Props) {
           )}
           <button
             className="rf-btn rf-edit"
-            onClick={() => setEditing(true)}
-            title="Enter the cast, packs and patches"
+            onClick={editPlot}
+            title="Who is wearing which pack, and who is in the cast"
           >
             Edit plot…
           </button>
@@ -255,10 +258,7 @@ export function RfPanel({ onClose }: Props) {
         ) : plot.packs.length === 0 ? (
           <div className="rf-empty">
             <span>No packs in the plot. Enter them, or load the demo rack.</span>
-            <button
-              className="rf-edit-btn"
-              onClick={() => setEditing(true)}
-            >
+            <button className="rf-edit-btn" onClick={editPlot}>
               Edit plot…
             </button>
             <button className="rf-demo-btn" onClick={addDemo}>
@@ -282,8 +282,6 @@ export function RfPanel({ onClose }: Props) {
           })
         )}
       </div>
-
-      {editing && <PlotDialog onClose={() => setEditing(false)} />}
     </div>
   )
 }

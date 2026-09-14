@@ -18,7 +18,7 @@ import {
 import type {
   DeviceEvent,
   DeviceState,
-  RfPerformer,
+  Performer,
   RfPlot,
   RfThresholds,
   ShowAlert,
@@ -79,7 +79,7 @@ function response(body: unknown, status = 200): { ok: boolean; status: number; j
 function settings(
   sources: TelemetrySource[],
   plot: RfPlot = { packs: [] },
-  performers: RfPerformer[] = [],
+  performers: Performer[] = [],
   thresholds: RfThresholds = defaultRfThresholds()
 ): ShowSettings {
   const defaults = defaultShowSettings()
@@ -430,8 +430,8 @@ describe('WirelessService', () => {
         { id: 'slot-14', label: 'Pack 14', channelId: 'ch-14', performerId: 'gone', notes: '' }
       ]
     }
-    const performers: RfPerformer[] = [
-      { id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', ensembleId: null, deskChannelId: null }
+    const performers: Performer[] = [
+      { id: 'perf-1', name: 'Aldonza', role: 'lead', notes: '', channelId: null }
     ]
     fetchJson.mockResolvedValue(
       response(
@@ -503,8 +503,8 @@ describe('WirelessService', () => {
         }
       ]
     }
-    const performers: RfPerformer[] = [
-      { id: 'perf-7', name: 'Antonia', role: 'supporting', notes: '', ensembleId: null, deskChannelId: null }
+    const performers: Performer[] = [
+      { id: 'perf-7', name: 'Antonia', role: 'supporting', notes: '', channelId: null }
     ]
 
     service.start(context, settings([demoSource()], plot, performers))

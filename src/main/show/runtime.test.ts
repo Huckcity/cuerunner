@@ -79,9 +79,11 @@ describe('createShowRuntime', () => {
     const runtime = createShowRuntime([service])
 
     // The renderer re-sends its settings on every autosave tick; rebinding a UDP port
-    // each time would drop whatever is mid-flight.
-    await runtime.configure(defaultShowSettings())
-    await runtime.configure(defaultShowSettings())
+    // each time would drop whatever is mid-flight. The same value twice is what that
+    // looks like from here.
+    const settings = defaultShowSettings()
+    await runtime.configure(settings)
+    await runtime.configure(settings)
 
     expect(service.starts).toBe(1)
     expect(service.stops).toBe(0)

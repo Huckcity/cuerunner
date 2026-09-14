@@ -1,21 +1,30 @@
-import type { CastSettings, DeskChannel, DeskMessage, RfEnsemble, RfPerformer } from '../types/show'
+import { DCA_LIMIT } from '../types/show'
+import type {
+  CastSettings,
+  Dca,
+  DeskMessage,
+  Ensemble,
+  Performer,
+  ShowChannel
+} from '../types/show'
 
 /**
- * The cast: performers, the ensembles that group them, and the desk groups they drive.
- * This is the one place DCA routing is configured — Scenes only runs it, and the mic
- * plot only says who is currently wearing which pack.
+ * The show's setup: the channels on the console, the cast and where their mics are
+ * patched, the ensembles that group them, and the DCAs those channels open.
+ *
+ * Every operation here is pure and works on the whole cast, so the store can write one
+ * edit at a time and an undo can put back exactly what an edit destroyed.
  */
 
 // ── Performers ─────────────────────────────────────────────────────────────
 
 export function addPerformer(cast: CastSettings, name: string, role: string, notes = ''): CastSettings {
-  const performer: RfPerformer = {
+  const performer: Performer = {
     id: crypto.randomUUID(),
     name,
     role,
     notes,
-    ensembleId: null,
-    deskChannelId: null
+    channelId: null
   }
   return { ...cast, performers: [...cast.performers, performer] }
 }
@@ -23,7 +32,7 @@ export function addPerformer(cast: CastSettings, name: string, role: string, not
 export function updatePerformer(
   cast: CastSettings,
   performerId: string,
-  patch: Partial<Omit<RfPerformer, 'id'>>
+  patch: Partial<Omit<Performer, 'id'>>
 ): CastSettings {
   return {
     ...cast,
@@ -33,21 +42,93 @@ export function updatePerformer(
 }
 
 /**
- * Drops a performer from the cast list. What they were wearing is the plot's business —
- * the caller releases that pack — and any scene that had them live is the scene list's,
- * since neither lives here.
+ * Drops a performer from the cast list, and out of every ensemble that held them. What
+ * they were wearing is the plot's business — the caller releases that pack — and any
+ * scene that had them open is the scene list's, since neither lives here.
  */
 export function removePerformerFromCast(cast: CastSettings, performerId: string): CastSettings {
-  return { ...cast, performers: cast.performers.filter(performer => performer.id !== performerId) }
+  return {
+    ...cast,
+    performers: cast.performers.filter(performer => performer.id !== performerId),
+    ensembles: cast.ensembles.map(ensemble => ensemble.members.includes(performerId)
+      ? { ...ensemble, members: ensemble.members.filter(id => id !== performerId) }
+      : ensemble)
+  }
+}
+
+// ── Channels ───────────────────────────────────────────────────────────────
+
+export function addChannel(cast: CastSettings, name = ''): CastSettings {
+  const channel: ShowChannel = { id: crypto.randomUUID(), name, enabled: true, dcaId: null }
+  return { ...cast, channels: [...cast.channels, channel] }
+}
+
+export function updateChannel(
+  cast: CastSettings,
+  channelId: string,
+  patch: Partial<Omit<ShowChannel, 'id'>>
+): CastSettings {
+  return {
+    ...cast,
+    channels: cast.channels.map(channel =>
+      channel.id === channelId ? { ...channel, ...patch } : channel)
+  }
+}
+
+/**
+ * Removes a channel and unpatches whoever was on it, as one edit: a performer pointed at
+ * a channel that is gone is a mic that opens nothing, and the numbers after it close up
+ * because a strip's number is its place in the list.
+ */
+export function removeChannel(cast: CastSettings, channelId: string): CastSettings {
+  return {
+    ...cast,
+    channels: cast.channels.filter(channel => channel.id !== channelId),
+    performers: cast.performers.map(performer =>
+      performer.channelId === channelId ? { ...performer, channelId: null } : performer)
+  }
+}
+
+/** The channel a performer's mic is patched to, or null while they are patched to none. */
+export function performerChannel(performer: Performer, channels: ShowChannel[]): ShowChannel | null {
+  if (performer.channelId === null) return null
+  return channels.find(channel => channel.id === performer.channelId) ?? null
+}
+
+/**
+ * A channel as a row reads it: its number, which is its place in the list, and the name
+ * beside it when it has one. An unnamed strip is still a strip — a number is what the
+ * operator calls it until it is named.
+ */
+export function channelLabel(channels: ShowChannel[], channelId: string | null): string {
+  const index = channelId === null ? -1 : channels.findIndex(channel => channel.id === channelId)
+  if (index === -1) return ''
+  const name = channels[index].name.trim()
+  return name === '' ? `Ch ${index + 1}` : `Ch ${index + 1} · ${name}`
+}
+
+/**
+ * The DCA a performer's mic opens: the one their channel is assigned to. A channel that
+ * is switched out of tonight's patch drives nothing, which is the whole point of the
+ * switch — the desk is not told about a strip that is not there.
+ */
+export function performerDcaId(performer: Performer, channels: ShowChannel[]): string | null {
+  const channel = performerChannel(performer, channels)
+  if (channel === null || !channel.enabled) return null
+  return channel.dcaId
 }
 
 // ── Ensembles ──────────────────────────────────────────────────────────────
 
-export function addEnsemble(cast: CastSettings, name = ''): CastSettings {
-  const ensemble: RfEnsemble = {
+/**
+ * An ensemble is a grouping, so it is created empty and whoever is in it is named by the
+ * list it carries. It is not desk routing: what opens for its members is their channels.
+ */
+export function addEnsemble(cast: CastSettings, name = '', members: string[] = []): CastSettings {
+  const ensemble: Ensemble = {
     id: crypto.randomUUID(),
     name: name.trim() === '' ? `Ensemble ${cast.ensembles.length + 1}` : name.trim(),
-    deskChannelId: null
+    members
   }
   return { ...cast, ensembles: [...cast.ensembles, ensemble] }
 }
@@ -55,7 +136,7 @@ export function addEnsemble(cast: CastSettings, name = ''): CastSettings {
 export function updateEnsemble(
   cast: CastSettings,
   ensembleId: string,
-  patch: Partial<Omit<RfEnsemble, 'id'>>
+  patch: Partial<Omit<Ensemble, 'id'>>
 ): CastSettings {
   return {
     ...cast,
@@ -66,58 +147,65 @@ export function updateEnsemble(
 
 /** Removes an ensemble; its members keep existing, just no longer grouped under it. */
 export function removeEnsemble(cast: CastSettings, ensembleId: string): CastSettings {
-  return {
-    ...cast,
-    ensembles: cast.ensembles.filter(ensemble => ensemble.id !== ensembleId),
-    performers: cast.performers.map(performer =>
-      performer.ensembleId === ensembleId ? { ...performer, ensembleId: null } : performer)
-  }
+  return { ...cast, ensembles: cast.ensembles.filter(ensemble => ensemble.id !== ensembleId) }
 }
 
-export function ensembleMembers(cast: CastSettings, ensembleId: string): RfPerformer[] {
-  return cast.performers.filter(performer => performer.ensembleId === ensembleId)
+/** Who is in an ensemble, in cast order. Members that are no longer cast are dropped. */
+export function ensembleMembers(cast: CastSettings, ensembleId: string): Performer[] {
+  const ensemble = cast.ensembles.find(candidate => candidate.id === ensembleId)
+  if (!ensemble) return []
+  return cast.performers.filter(performer => ensemble.members.includes(performer.id))
 }
 
-// ── Desk groups ────────────────────────────────────────────────────────────
+// ── DCAs ───────────────────────────────────────────────────────────────────
 
-export function addDeskGroup(cast: CastSettings, label = ''): CastSettings {
-  const group: DeskChannel = {
+export function addDca(cast: CastSettings, label = ''): CastSettings {
+  const dca: Dca = {
     id: crypto.randomUUID(),
-    label: label.trim() === '' ? `DCA ${cast.groups.length + 1}` : label.trim(),
+    label: label.trim() === '' ? `DCA ${cast.dcas.length + 1}` : label.trim(),
     mute: null,
     unmute: null
   }
-  return { ...cast, groups: [...cast.groups, group] }
+  return { ...cast, dcas: [...cast.dcas, dca] }
 }
 
-export function updateDeskGroup(
+export function updateDca(
   cast: CastSettings,
-  groupId: string,
-  patch: Partial<Omit<DeskChannel, 'id'>>
+  dcaId: string,
+  patch: Partial<Omit<Dca, 'id'>>
 ): CastSettings {
   return {
     ...cast,
-    groups: cast.groups.map(group => group.id === groupId ? { ...group, ...patch } : group)
+    dcas: cast.dcas.map(dca => dca.id === dcaId ? { ...dca, ...patch } : dca)
   }
 }
 
 /**
- * Removes a group. Performers and ensembles pointed at it keep the pointer until
- * something clears it — the caller does that in the same edit, because half a removal
- * is a group that is gone but still driving the desk in everyone's head.
+ * How many DCAs the desk has, which is what the show controls. The list is resized to
+ * match: growing appends unpatched DCAs, and shrinking takes the last ones off along
+ * with every channel assigned to them — as one edit, because half of that is a strip
+ * pointing at a DCA nothing can open.
  */
-export function removeDeskGroup(cast: CastSettings, groupId: string): CastSettings {
-  return { ...cast, groups: cast.groups.filter(group => group.id !== groupId) }
-}
+export function setDcaCount(cast: CastSettings, count: number): CastSettings {
+  const wanted = Math.max(0, Math.min(DCA_LIMIT, Math.round(count)))
+  if (wanted === cast.dcas.length) return cast
 
-/** Clears every pointer at a group that is being removed, in the same edit. */
-export function clearDeskGroupPointers(cast: CastSettings, groupId: string): CastSettings {
+  const dcas = cast.dcas.slice(0, wanted)
+  while (dcas.length < wanted) {
+    dcas.push({
+      id: crypto.randomUUID(),
+      label: `DCA ${dcas.length + 1}`,
+      mute: null,
+      unmute: null
+    })
+  }
+
+  const kept = new Set(dcas.map(dca => dca.id))
   return {
     ...cast,
-    performers: cast.performers.map(performer =>
-      performer.deskChannelId === groupId ? { ...performer, deskChannelId: null } : performer),
-    ensembles: cast.ensembles.map(ensemble =>
-      ensemble.deskChannelId === groupId ? { ...ensemble, deskChannelId: null } : ensemble)
+    dcas,
+    channels: cast.channels.map(channel =>
+      channel.dcaId !== null && !kept.has(channel.dcaId) ? { ...channel, dcaId: null } : channel)
   }
 }
 
@@ -159,17 +247,4 @@ export function describeDeskMessage(message: DeskMessage | null): string {
     return `sysex ${message.message.data.length} bytes → "${message.portName}"`
   }
   return `${message.message.kind} ch${message.message.channel} → "${message.portName}"`
-}
-
-// ── Resolution ─────────────────────────────────────────────────────────────
-
-/**
- * The group a performer's mic actually opens: their own, or failing that their
- * ensemble's, or nobody's. A performer keeps this across a pack swap — the desk never
- * knew a pack was involved.
- */
-export function resolvedGroupId(performer: RfPerformer, ensembles: RfEnsemble[]): string | null {
-  if (performer.deskChannelId !== null) return performer.deskChannelId
-  if (performer.ensembleId === null) return null
-  return ensembles.find(ensemble => ensemble.id === performer.ensembleId)?.deskChannelId ?? null
 }

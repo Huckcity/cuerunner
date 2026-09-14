@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
+import { useModal } from '../../hooks/useModal'
 import { relinkMissingMedia } from '../../hooks/useWorkspace'
 import './MissingMedia.css'
 
@@ -14,6 +15,7 @@ interface Props {
  * show folder that was copied without its media is one pick to repair, not one per cue.
  */
 export function MissingMediaDialog({ onClose }: Props) {
+  useModal()
   const missing = useStore(s => s.missingMedia)
   const cues = useStore(s => s.cues)
   const [locating, setLocating] = useState(false)
