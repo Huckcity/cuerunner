@@ -244,6 +244,25 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
             </div>
           )}
         </div>
+
+        <div className="toolbar-divider" />
+        {/* What the list is showing, for a show long enough that folding it away is the
+            only way to see the shape of it. Expand opens the top level and leaves the
+            nested groups as they were; Collapse closes everything. */}
+        <button
+          className="toolbar-list-btn"
+          onClick={() => useStore.getState().expandTopLevel()}
+          title="Open the top-level groups — groups inside them stay as you left them"
+        >
+          Expand
+        </button>
+        <button
+          className="toolbar-list-btn"
+          onClick={() => useStore.getState().collapseAll()}
+          title="Close every group"
+        >
+          Collapse
+        </button>
       </div>
 
       <div className="toolbar-view" role="tablist" aria-label="View">

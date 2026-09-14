@@ -68,8 +68,10 @@ export function CueList() {
   const moveCue = useStore(s => s.moveCue)
   const addAudioCuesFromFiles = useStore(s => s.addAudioCuesFromFiles)
 
-  // Collapse state is local UI state — not persisted to workspace
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(new Set())
+  // Collapse state is session state in the store — the toolbar's expand/collapse act on
+  // it, and it is not persisted to the workspace.
+  const collapsedGroupIds = useStore(s => s.collapsedGroupIds)
+  const toggleGroup = useStore(s => s.toggleGroup)
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; cueId: string } | null>(null)
@@ -86,13 +88,6 @@ export function CueList() {
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), [])
 
-  const toggleCollapse = useCallback((id: string) => {
-    setCollapsedGroupIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }, [])
 
   // A plain press puts the hand on one cue, shift extends from where the hand was, and
   // cmd/ctrl takes one cue in or out of the set. Every one of them ends with the cue that
@@ -107,21 +102,22 @@ export function CueList() {
 
   const renderItems = useMemo<RenderItem[]>(() => {
     const items: RenderItem[] = []
+    // A folded group takes its whole subtree with it: a cue under a hidden group is
+    // hidden too, so a group inside a group cannot leave its own children behind on the
+    // screen with nothing above them.
+    const hidden = new Set<string>()
     for (let i = 0; i < cues.length; i++) {
       const cue = cues[i]
-      if (cue.parentId !== null) {
-        // Skip children of collapsed groups
-        if (collapsedGroupIds.has(cue.parentId)) continue
-        items.push({ cue, depth: 1, flatIndex: i })
-      } else {
-        const isGroup = cue.type === 'group'
-        items.push({
-          cue,
-          depth: 0,
-          flatIndex: i,
-          ...(isGroup ? { collapsed: collapsedGroupIds.has(cue.id) } : {})
-        })
+      if (cue.parentId !== null &&
+          (hidden.has(cue.parentId) || collapsedGroupIds.has(cue.parentId))) {
+        hidden.add(cue.id)
+        continue
       }
+      // A group at any depth carries its own state: a group inside a group is folded on
+      // its own, and a chevron that always drew "open" for a nested one was a row that
+      // could not tell the truth about it.
+      const groupState = cue.type === 'group' ? { collapsed: collapsedGroupIds.has(cue.id) } : {}
+      items.push({ cue, depth: cue.parentId === null ? 0 : 1, flatIndex: i, ...groupState })
     }
     return items
   }, [cues, collapsedGroupIds])
@@ -242,11 +238,9 @@ export function CueList() {
         clearHoverTimer()
         hoverGroupIdRef.current = item.cue.id
         hoverTimerRef.current = setTimeout(() => {
-          setCollapsedGroupIds(prev => {
-            const next = new Set(prev)
-            next.delete(item.cue.id)
-            return next
-          })
+          // Expanding, not toggling: the operator is dragging onto this group, and a
+          // second hover must not fold it up again under the cue being dropped.
+          if (useStore.getState().collapsedGroupIds.has(item.cue.id)) toggleGroup(item.cue.id)
           hoverGroupIdRef.current = null
           hoverTimerRef.current = null
         }, 700)
@@ -258,7 +252,7 @@ export function CueList() {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const newDrop = e.clientY < rect.top + rect.height / 2 ? renderIndex : renderIndex + 1
     setDropRenderIndex(newDrop)
-  }, [renderItems, clearHoverTimer])
+  }, [renderItems, clearHoverTimer, toggleGroup])
 
   const handleScrollDragOver = useCallback((e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/x-cue-render-index')) return
@@ -412,7 +406,7 @@ export function CueList() {
                     ? groupLengthState(cues, cue.id, lengths)
                     : mediaLengthState(cue, lengths)}
                   collapsed={collapsed}
-                  onToggleCollapse={cue.type === 'group' ? () => toggleCollapse(cue.id) : undefined}
+                  onToggleCollapse={cue.type === 'group' ? () => toggleGroup(cue.id) : undefined}
                   onClick={e => handleRowClick(e, cue.id, visibleIds)}
                   onContextMenu={openCtxMenu}
                   renamingId={renamingId}

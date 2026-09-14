@@ -166,6 +166,23 @@ interface CueListState {
   // Running state
   setRunning: (id: string, state: RunningCue | null) => void
   clearAllRunning: () => void
+
+  /**
+   * The groups whose children are hidden, by id. Where the operator's eye is is not what
+   * the show is, so this is session state: it never dirties the workspace and never
+   * enters undo.
+   */
+  collapsedGroupIds: Set<string>
+  /** Opens or closes one group's children. */
+  toggleGroup: (id: string) => void
+  /**
+   * Opens the top-level groups and leaves the nested ones as the operator left them: a
+   * group inside a group is a decision somebody made, and opening everything to reach
+   * the top level would take that decision away.
+   */
+  expandTopLevel: () => void
+  /** Closes every group: collapsing has no partial reading. */
+  collapseAll: () => void
   syncCueDuration: (id: string, durationMs: number) => void
   lastRuns: Record<string, CueRunResult>
   setLastRun: (id: string, result: CueRunResult) => void
@@ -501,6 +518,7 @@ export const useStore = create<CueListState>((set) => ({
   selectedId: null,
   selectedIds: [],
   selectionAnchorId: null,
+  collapsedGroupIds: new Set<string>(),
   running: new Map(),
   lastRuns: {},
   log: [],
@@ -803,6 +821,24 @@ export const useStore = create<CueListState>((set) => ({
 
   clearAllRunning: () => set({ running: new Map() }),
 
+  toggleGroup: (id) => set(s => {
+    const collapsed = new Set(s.collapsedGroupIds)
+    if (collapsed.has(id)) collapsed.delete(id)
+    else collapsed.add(id)
+    return { collapsedGroupIds: collapsed }
+  }),
+
+  expandTopLevel: () => set(s => {
+    const topLevel = new Set(
+      s.cues.filter(cue => cue.type === 'group' && cue.parentId === null).map(cue => cue.id)
+    )
+    return { collapsedGroupIds: new Set([...s.collapsedGroupIds].filter(id => !topLevel.has(id))) }
+  }),
+
+  collapseAll: () => set(s => ({
+    collapsedGroupIds: new Set(s.cues.filter(cue => cue.type === 'group').map(cue => cue.id))
+  })),
+
   syncCueDuration: (id, durationMs) => set(s => {
     const cue = s.cues.find(c => c.id === id)
     if (!cue || cue.duration === durationMs) return s
@@ -912,6 +948,9 @@ export const useStore = create<CueListState>((set) => ({
       workspaceCreatedAt: identity?.createdAt ?? new Date().toISOString(),
       isDirty: false,
       ...(first === null ? NO_SELECTION : selectionFor(first)),
+      // A show opens with its groups open: what the last one had folded away is not this
+      // one's business.
+      collapsedGroupIds: new Set<string>(),
       running: new Map(),
       lastRuns: {},
       notice: null,
