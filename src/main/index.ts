@@ -155,7 +155,11 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 800,
+    // The toolbar is one row of controls that do not wrap, and the rightmost of them —
+    // the Cues/Scenes switch — is the one an operator reaches for to run the show. At
+    // 800 it fell off the edge and was clipped by the window, which clips rather than
+    // scrolls.
+    minWidth: 1000,
     minHeight: 500,
     title: 'WinsLab',
     backgroundColor: '#181818',

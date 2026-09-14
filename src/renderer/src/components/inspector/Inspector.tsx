@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSelectedCue, usePro } from '../../store'
 import { ProLock, ProMark } from '../license/ProLock'
 import { BasicTab } from './BasicTab'
@@ -81,6 +81,15 @@ export function Inspector() {
   const cue = useSelectedCue()
   const pro = usePro()
   const [activeTab, setActiveTab] = useState('Basics')
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  // The panel is one scrolling box, and the tab's content is remounted inside it — so
+  // without this the box keeps the last cue's scroll position, and walking the stack with
+  // the arrows shows the middle of one cue and the top of the next. The field an operator
+  // is watching must not move under them because they moved the selection.
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  }, [cue?.id, activeTab])
 
   if (!cue) {
     return (
@@ -113,7 +122,7 @@ export function Inspector() {
           </button>
         ))}
       </div>
-      <div className="inspector-body">
+      <div className="inspector-body" ref={bodyRef}>
         <TabContent key={cue.id} cue={cue} tab={tab} />
       </div>
     </div>
