@@ -80,7 +80,10 @@ fs.writeFileSync(
 /* ── Capture ─────────────────────────────────────────────────────────────── */
 
 const app = await electron.launch({
-  args: [appEntry, `--user-data-dir=${userDataDir}`],
+  // Electron 28+ picks a Wayland session's compositor and ignores DISPLAY, so the pin
+  // goes on the command line — the only lever that works — and the capture runs under
+  // Xvfb: a virtual X server nobody is looking at. Same reason e2e/helpers.ts pins it.
+  args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
   env: {
     ...process.env,
     WINSLAB_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString()
@@ -167,7 +170,13 @@ await page.locator('.settings-dialog').waitFor()
 await shot('09-settings.png', '.settings-dialog')
 await page.keyboard.press('Escape')
 
-await page.locator('.cue-row', { hasText: 'Count 8' }).click({ button: 'right' })
+// The cue list closes its context menu on any scroll, and a click scrolls the row into
+// view on the way in — so the row is brought into view first, and the list left a moment
+// to settle, so that the press itself is not a scroll.
+const contextRow = page.locator('.cue-row', { hasText: 'Count 8' })
+await contextRow.scrollIntoViewIfNeeded()
+await page.waitForTimeout(250)
+await contextRow.click({ button: 'right' })
 await page.locator('.cue-context-menu').waitFor()
 await shot('10-context-menu.png', '.cue-context-menu')
 await page.keyboard.press('Escape')
@@ -187,7 +196,7 @@ await page.locator('.btn-monitor').click()
 await client.close()
 
 // The wireless panel with the demo rack, so the figure shows a plot with a pack in
-// trouble rather than an empty table. Twelve packs need more height than the strip
+// trouble rather than an empty table. Twelve packs need more height than the dock
 // holds by default.
 await page.evaluate(() => (document.querySelector('.dock').style.height = '430px'))
 await page.locator('.btn-rf').click()
@@ -196,13 +205,16 @@ await page.locator('.rf-demo-btn').click()
 await page.locator('.rf-row[data-state="critical"]').waitFor()
 await shot('13-wireless.png', '.rf-panel')
 
-// The editor, with a swap made so the figure shows the record rather than an empty list.
+// The plot, with a swap made so the figure shows the record rather than an empty list.
+// The plot is a tab of Show Settings rather than a dialog of its own — a pack assignment
+// is show content, and everything that edits the show's setup is edited in one place — so
+// the panel's Edit button opens the dialog on that tab.
 await page.locator('.rf-edit').click()
-await page.locator('.plot-dialog').waitFor()
+await page.locator('.show-settings-dialog').waitFor()
 await page.locator('.plot-pack-row').first().locator('.plot-pack-performer').selectOption({ index: 2 })
 await page.locator('.plot-swaps').waitFor()
-await shot('16-plot.png', '.plot-dialog')
-await page.locator('.plot-close').click()
+await shot('16-plot.png', '.show-settings-dialog')
+await page.locator('.show-settings-close').click()
 
 // And the report the same session leaves behind.
 await page.locator('.rf-mode').click()
@@ -244,41 +256,25 @@ await page.locator('.script-line[data-line="5"] .script-line-no').click()
 await page.locator('.script-pin').waitFor()
 await page.evaluate(() => (document.querySelector('.dock').style.height = '430px'))
 await shot('15-script.png', '.script-panel')
-// The strip gives the window back: the scenes view wants all of it.
+// The dock gives the window back: the scenes view wants all of it.
 await page.locator('.btn-script').click()
 
-// The scenes view: the show as a matrix, edited in place. This is where the show is run
-// from and the only place it is edited, so the two figures are the same surface twice —
-// once as the operator watches it, once with the groups open for editing.
+// The scenes view: the show as a matrix, run and edited in place. The figure below is the
+// view with the show being built in it, which is the state its header is fullest in.
 await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
 await page.locator('.scenes-view').waitFor()
 // The view opens to run the show; building one is an Edit away.
 await page.locator('.scenes-edit').click()
-
-// A group on the desk, pointed at a local port so the figure shows a real message.
-await page.locator('.scenes-groups-toggle').click()
-const groups = page.locator('.scenes-groups')
-await groups.locator('.group-add').click()
-const groupLabel = groups.locator('.group-label').first()
-await groupLabel.fill('DCA 2 — Ensemble')
-await groupLabel.blur()
-await groups.locator('.group-delivery').first().selectOption('osc')
-await groups.locator('.group-host').first().fill('127.0.0.1')
-await groups.locator('.group-osc-port').first().fill('9000')
-await groups.locator('.group-osc-port').first().blur()
-await groups.locator('.group-address').first().fill('/dca/2/mute')
-await groups.locator('.group-address').first().blur()
-await groups.locator('.group-summary').first().waitFor()
-// Closed again while the show is built, so the grid has the window to itself.
-await page.locator('.scenes-groups-toggle').click()
 
 const openMics = async (column, from, to) => {
   for (let i = from; i <= to; i++) {
     await page.locator('.matrix-row').nth(i).locator('.matrix-cell').nth(column).click()
   }
 }
+// The grid's first column is the all-closed one, which is not a scene in the file, so a
+// scene's column is found by the id it carries rather than by its place on screen.
 const nameScene = async (index, name) => {
-  const field = page.locator('.matrix-scene').nth(index).locator('.scene-name-field')
+  const field = page.locator('.matrix-scene[data-scene-id]').nth(index).locator('.scene-name-field')
   await field.fill(name)
   await field.blur()
 }
@@ -290,29 +286,66 @@ await page.locator('.scenes-add').click()
 await nameScene(1, 'Wedding')
 await openMics(1, 4, 7)
 
-// The patch, in the editor the rest of the mic plot is set up in: the packs that feed that
-// group, so the figure shows a desk with something on it.
-await page.locator('.btn-rf').click()
-await page.locator('.rf-edit').click()
-const plotDialog = page.locator('.plot-dialog')
-for (let i = 0; i < 8; i++) {
-  await plotDialog.locator('.plot-pack-row').nth(i).locator('.plot-pack-group')
-    .selectOption({ label: 'DCA 2 — Ensemble' })
-}
-await plotDialog.locator('.plot-close').click()
-await page.locator('.btn-rf').click()
+// The first scene recalled, so the header says where the desk is and what is coming, and
+// the column the desk is on is the one the figure shows lit.
+await page.locator('.matrix-scene[data-scene-id] .matrix-recall').first().click()
+await page.locator('.matrix-scene[data-scene-id][data-current="true"]').waitFor()
 
-// The first number, so the header shows both the scene the desk is on and the one coming.
-await page.locator('.matrix-recall').first().click()
-await page.locator('.matrix-scene[data-current="true"]').waitFor()
-// The first figure is the view as the operator runs the show from it.
-await page.locator('.scenes-edit').click()
+// The other half of building a scene: the mics it has open, kept as an ensemble — what a
+// later scene applies with one press instead of a row of them.
+await page.locator('.scenes-ensemble').click()
+const ensembleName = page.locator('.matrix-ensemble-row').first().locator('.ensemble-name-field')
+await ensembleName.fill('Principals')
+await ensembleName.blur()
+
+// The grid is taller than the window's default by one row, and a screenshot cannot
+// scroll: the window is grown by that much so all twelve mics are in the figure rather
+// than eleven and a caption that claims twelve.
+await app.evaluate(({ BrowserWindow }) => {
+  BrowserWindow.getAllWindows()[0].setContentSize(1280, 800)
+})
+await page.waitForTimeout(150)
+
 await shot('18-scenes.png', '.scenes-view')
 
-await page.locator('.scenes-edit').click()
-await page.locator('.scenes-groups-toggle').click()
-await groups.waitFor()
-await shot('19-scenes-groups.png', '.scenes-view')
+// Show Settings on its Channels tab: the desk the show drives, the strips on the console
+// and the DCAs those strips ride. The tab is longer than the box a window of this size
+// gives a dialog, so the window is grown to the height the list wants before the shot:
+// the dialog is sized from the window, and a scrolled screenshot would leave either the
+// desk block or the DCAs below the fold.
+await app.evaluate(({ BrowserWindow }) => {
+  BrowserWindow.getAllWindows()[0].setContentSize(1280, 1800)
+})
+await page.locator('.toolbar-brand').click()
+await page.locator('.file-menu button[data-action="show-settings"]').click()
+await page.locator('.show-settings-dialog').waitFor()
+
+// Name the first strips the way the cast list does, so the console reads as a desk with
+// somebody on it rather than as twelve empty fields.
+const nameChannel = async (index, name) => {
+  const field = page.locator('.channel-row').nth(index).locator('.channel-name')
+  await field.fill(name)
+  await field.blur()
+}
+await nameChannel(0, 'Aldonza')
+await nameChannel(1, 'Sancho')
+await nameChannel(2, 'Cervantes')
+await nameChannel(3, 'Pedro')
+
+// Two faders doing the work of four strips: the leads share DCA 1 and the rest of the
+// quartet share DCA 2, which is what the rows read back as what they are carrying.
+const dcaOption = n => `${n} · DCA ${n}`
+const shareDca = async (index, dca) => {
+  await page.locator('.channel-row').nth(index).locator('.channel-dca')
+    .selectOption({ label: dcaOption(dca) })
+}
+await shareDca(1, 1)
+await shareDca(2, 2)
+await shareDca(3, 2)
+await page.locator('.dca-row').first().locator('.dca-carrying', { hasText: 'Aldonza' }).waitFor()
+await shot('19-show-settings.png', '.show-settings-dialog')
+await page.locator('.show-settings-close').click()
+
 await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))

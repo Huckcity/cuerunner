@@ -100,10 +100,9 @@
           <li><strong>Toolbar</strong> — the WinsLab menu (New, Open, Save, Save As, Recent, Settings), the workspace name with a dirty dot, and the add-cue buttons.</li>
           <li><strong>Cue list</strong> — the running order. One row per cue, with duration, pre-wait, post-wait, and any auto-advance in the columns on the right.</li>
           <li><strong>Inspector</strong> — settings for the selected cue. Tabs change with the cue type.</li>
-          <li><strong>Waveform / timeline</strong> — the waveform of the selected audio cue, or the timeline editor when a timeline-mode group is selected.</li>
-          <li><strong>Run log</strong> — hidden by default; the LOG button in the transport bar reveals it.</li>
-          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator, the strip buttons (LOG, MONITOR, RF, SCRIPT) and the selected cue.</li>
-          <li><strong>The strip</strong> — the panels along the bottom share one space and open one at a time: the run log, the show monitor, the wireless panel or the script. Whichever button is lit is the one showing.</li>
+          <li><strong>Waveform / timeline</strong> — what the dock shows for the selected cue: the waveform of an audio cue, or the timeline editor for a timeline-mode group.</li>
+          <li><strong>Dock</strong> — the panels along the bottom share one space and open one at a time: the selected cue, the run log, the show monitor, the wireless panel and the script. The tabs across the top of the dock — Cue, Log, Monitor, Wireless, Script — choose, and the chevron on the right hides it.</li>
+          <li><strong>Transport bar</strong> — STOP, GO, PANIC, the running indicator and the selected cue.</li>
         </ol>
       </section>
 
@@ -164,8 +163,9 @@
       <section id="workspaces" class="panel reveal delay-1">
         <h2>Workspaces</h2>
         <p>
-          A workspace is one show: the cue list plus audio and MIDI settings. Workspaces are saved
-          as <code>.wlab</code> files, which are plain JSON and safe to keep in version control.
+          A workspace is one show: the cue list, the settings, and the show's own setup — the
+          console, the cast and the mic plot. Workspaces are saved as <code>.wlab</code> files,
+          which are plain JSON and safe to keep in version control.
         </p>
         <div class="table-wrap">
           <table>
@@ -356,8 +356,8 @@
           </article>
         </div>
         <p style="margin-top: 12px">
-          The running indicator next to the LOG button counts the cues currently in pre-wait,
-          playing, or post-wait, and reads <em>idle</em> when nothing is running.
+          The running indicator at the left of the transport bar counts the cues currently in
+          pre-wait, playing, or post-wait, and reads <em>idle</em> when nothing is running.
         </p>
         <p>
           These keys are ignored while you are typing in a text field, so editing a cue name will
@@ -708,8 +708,8 @@ console.log(r.stdout.trim())</code></pre>
           still counts as sent.
         </p>
         <p>
-          The <strong>run log</strong> records every firing across the show. Open it with the LOG
-          button in the transport bar.
+          The <strong>run log</strong> records every firing across the show. Open it with the
+          <strong>Log</strong> tab in the dock.
         </p>
         <figure class="figure">
           <a href="./assets/guide/08-run-log.png" target="_blank" rel="noreferrer">
@@ -740,22 +740,22 @@ console.log(r.stdout.trim())</code></pre>
           A cue stack is only part of what is happening in the room. WinsLab also listens: it takes
           OSC and MIDI from the desks, tablets and cue lights around it, watches wireless
           transmitters against the mic plot, and notices when something on the network stops
-          answering. Those are the <strong>show services</strong>, and the MONITOR button opens the
-          panel that shows what they are doing.
+          answering. Those are the <strong>show services</strong>, and the Monitor tab in the dock
+          opens the panel that shows what they are doing.
         </p>
         <figure class="figure">
           <a href="./assets/guide/12-show-monitor.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/12-show-monitor.png" alt="The show monitor: a services column reading OSC input running, a devices column, and an event river listing OSC messages with their senders and arguments." />
+            <img src="./assets/guide/12-show-monitor.png" alt="The show monitor: the services that are listening and what each one is doing, with the devices they know about beside them and an alarm above the columns." />
           </a>
-          <figcaption>OSC arriving from a desk, with the services that are listening and the devices they know about beside it.</figcaption>
+          <figcaption>OSC arriving from a desk, with the services that are listening and the devices they know about beside them.</figcaption>
         </figure>
         <h3>The monitor</h3>
         <p>
-          Three columns, left to right. <strong>Services</strong> is what is listening and what it
-          is doing — a service that failed says why, and a restart button sits next to it.
+          Two columns, left to right. <strong>Services</strong> is what is listening and what it is
+          doing — a service that failed says why, and a restart button sits next to it.
           <strong>Devices</strong> is what is on stage or on the network, with the readings each one
-          reports. <strong>Events</strong> is what just arrived, newest last; scrolling up releases
-          the auto-follow so the view stops moving while you read.
+          reports. What arrives rather than what is running goes to the run log, where every message
+          the inputs carry is written with its sender and its arguments.
         </p>
         <p>
           Alarms appear above the columns and are also written to the run log, so an alarm outlives
@@ -801,7 +801,8 @@ console.log(r.stdout.trim())</code></pre>
         <h2>Wireless and the mic plot<span class="pro">Pro</span></h2>
         <p>
           The wireless panel answers the two questions asked most often in a radio-mic show: who is
-          wearing which pack, and which one is about to die. The RF button opens it.
+          wearing which pack, and which one is about to die. The <strong>Wireless</strong> button in
+          the dock opens it.
         </p>
         <figure class="figure">
           <a href="./assets/guide/13-wireless.png" target="_blank" rel="noreferrer">
@@ -840,8 +841,8 @@ console.log(r.stdout.trim())</code></pre>
         <p>
           The field names are the contract: a bridge written against a receiver's own API only has to
           emit them, and any field a channel does not report is simply left out — the panel shows
-          nothing for a reading that was never made rather than a zero. Add sources on the Show tab
-          in Settings, where the service also reports what it is doing.
+          nothing for a reading that was never made rather than a zero. Add sources on the Wireless
+          tab in Settings, where the service also reports what it is doing.
         </p>
         <p>
           <strong>Demo rack</strong> loads a simulated twelve-pack show with a pack in trouble, one
@@ -852,17 +853,19 @@ console.log(r.stdout.trim())</code></pre>
         </p>
         <h3>Entering your plot</h3>
         <p>
-          <strong>Edit plot…</strong> opens the cast and the packs. A performer is a name and a
-          role; a pack is a label, the receiver channel it is patched to, and the performer
-          wearing it. Channels are offered from what the wireless service is already hearing, so
-          a patch is picked rather than typed from memory — but the field stays free text,
-          because a pack that is switched off today is still part of tonight's plot.
+          <strong>Edit plot…</strong> opens Show Settings on its <strong>Mic plot</strong> tab: a
+          pack is a label, the receiver channel it is patched to, and the performer wearing it.
+          Channels are offered from what the wireless service is already hearing, so a patch is
+          picked rather than typed from memory — but the field stays free text, because a pack that
+          is switched off today is still part of tonight's plot. The performers the assignment picks
+          from come from the Cast tab of the same dialog, where a performer is a name, a role, and
+          the strip their mic is patched to.
         </p>
         <figure class="figure">
           <a href="./assets/guide/16-plot.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/16-plot.png" alt="The mic plot editor: a cast list of names, roles and notes above a pack list with labels, receiver channels and performer assignments." />
+            <img src="./assets/guide/16-plot.png" alt="Show Settings on the Mic plot tab: twelve packs with their receiver channels and the performer wearing each, and the swap log underneath recording the last change of hands." />
           </a>
-          <figcaption>The cast and the packs, with a pack just handed to a different performer.</figcaption>
+          <figcaption>The plot, with a pack just handed to a different performer and the swap it left behind.</figcaption>
         </figure>
         <p>
           Text fields commit when you leave them, so nothing is rewritten mid-word. Every change
@@ -900,8 +903,8 @@ console.log(r.stdout.trim())</code></pre>
           Alarms are raised on a crossing, not on every poll: a pack that sits at 8% for an hour says
           so once, and only says so again if it recovers and falls again. The defaults are a warning
           at 25% and critical at 10% battery, a warning below -75 dBm, and six seconds of silence
-          before a channel counts as gone. All four are set on the Show tab in Settings, and they
-          live in the workspace with the plot, so a show carries its own idea of what is bad.
+          before a channel counts as gone. All four are set on the Wireless tab in Settings, and
+          they live in the workspace with the plot, so a show carries its own idea of what is bad.
         </p>
         <p>
           The silence window is the one worth thinking about. Six seconds is long enough that a
@@ -958,9 +961,9 @@ console.log(r.stdout.trim())</code></pre>
       <section id="script-panel" class="panel reveal delay-4">
         <h2>The script, and the tablet<span class="pro">Pro</span></h2>
         <p>
-          Most operators keep the script open while they work. The SCRIPT button puts it in the
-          strip: the document, the cue that fires on each line pinned to it, and the line the next
-          GO will fire from marked as the show moves.
+          Most operators keep the script open while they work. The <strong>Script</strong> tab in
+          the dock opens it: the document, the cue that fires on each line pinned to it, and the
+          line the next GO will fire from marked as the show moves.
         </p>
         <figure class="figure">
           <a href="./assets/guide/15-script.png" target="_blank" rel="noreferrer">
@@ -987,7 +990,7 @@ console.log(r.stdout.trim())</code></pre>
           The companion serves a read-only view of the show — the running order, the next cue, what
           is running now, the script with the current line marked, and the recent alarms — to
           anything on the same network with a browser. There is nothing to install: open the address
-          the Show tab reports, with the token on the end of it.
+          the Network tab reports, with the token on the end of it.
         </p>
         <p>
           It is off until it is switched on, and it refuses every request that does not carry the
@@ -1008,24 +1011,30 @@ console.log(r.stdout.trim())</code></pre>
         <p>
           The <strong>Scenes</strong> switch at the top right opens the view it all happens in: the
           same show as a grid, filling the window in place of the cue list, with the transport bar —
-          GO, STOP, PANIC — exactly where it was. It is where the show is <em>run</em> and the only
-          place any of it is <em>edited</em>. There is nothing to open and no dialog to confirm,
-          because a second way to edit the same thing is a second way to get it wrong.
+          GO, STOP, PANIC — exactly where it was. It is where the show is <em>run</em>, and where
+          the scenes themselves are edited. Everything the grid is built from — the console, the
+          cast, the mic plot — is set up once in <strong>Show Settings</strong>, and the grid
+          carries no field for it, because a second way to edit the same thing is a second way to
+          get it wrong.
         </p>
         <figure class="figure">
           <a href="./assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/18-scenes.png" alt="The scenes view: scenes as columns with their mic counts and recall buttons, mics as rows with their performers and desk groups, filled cells for the mics open in each scene, and the recalled scene's column tinted." />
+            <img src="./assets/guide/18-scenes.png" alt="The scenes view in Edit mode: the all-closed column and two named scenes as columns with recall buttons, an ensemble row and twelve performer rows down the side, green cells for the mics open in each scene, and the recalled scene's column tinted." />
           </a>
-          <figcaption>Two scenes across, twelve mics down: the recalled scene's column lit with the people it has open, and the header naming where the desk is and what is coming.</figcaption>
+          <figcaption>Two scenes across, twelve mics down: the recalled scene's column lit with the people it has open, the ensemble they were grouped into above them, and the header naming where the desk is and what is coming.</figcaption>
         </figure>
         <h3>Reading it</h3>
         <p>
           A filled cell is a mic that is open in that scene. The column of the scene the desk is set
           to is tinted and the rows it opens are brightened, which together answer the question asked
-          most often in a radio-mic show: <em>who is on right now?</em> Each column is a name and two
-          presses: <strong>→</strong> sends that scene to the desk, and the ✕ beside it removes the
-          scene. How many mics a scene opens is the block of colour under it, so nothing spells it
-          out.
+          most often in a radio-mic show: <em>who is on right now?</em> The first column is
+          <strong>All closed</strong> — every mic the show drives, shut, which is what the desk
+          wants between numbers — and it is a place the desk can be rather than a scene anybody
+          builds. Each column after it is a name and two presses: <strong>→</strong> sends that
+          scene to the desk, and the ✕ beside it removes the scene; how many mics a scene opens is
+          the block of colour under it, so nothing spells it out. An <strong>ensemble</strong> row
+          sits above the mics: one named group, and a cell per scene saying whether that scene
+          applies it.
         </p>
         <h3>Following the show</h3>
         <p>
@@ -1045,42 +1054,64 @@ console.log(r.stdout.trim())</code></pre>
         <h3>Editing it</h3>
         <p>
           Click a cell to open or close that mic in that scene. <strong>Add scene</strong> appends a
-          column and the name is edited in the column header, where it is read. The rows are the
-          people wearing the mics; the pack's label and the desk group it feeds are set once at
-          setup, in the mic plot editor with the rest of the plot, so the grid carries no field for
-          them.
+          column and the name is edited in the column header, where it is read.
+          <strong>+ Ensemble</strong> takes the mics that are open in the scene the desk is on and
+          keeps them as a named group, applied to that scene from then on — the chorus that walks on
+          together in the next number is one press rather than a row of them, and a member the scene
+          closes anyway leaves the group reading as partly open rather than as a tick that lies. The
+          rows are the performers; the strip each mic is patched to, and the DCA it opens, are set
+          up once in Show Settings, so the grid carries no field for them.
         </p>
         <p>
           A deleted scene is not gone: <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> puts it back where it was,
-          with the mics it opens. The same undo covers the cues, the scenes and the mic plot, so an
-          edit made in either view is one press from being back.
+          with the mics it opens. The same undo covers the cues, the scenes and the whole of the
+          show's setup — the console, the cast and the mic plot — so an edit made in either view is
+          one press from being back.
         </p>
         <figure class="figure">
-          <a href="./assets/guide/19-scenes-groups.png" target="_blank" rel="noreferrer">
-            <img src="./assets/guide/19-scenes-groups.png" alt="The same view with the desk groups drawer open below the grid: a group with its label, OSC delivery and the two messages it sends, and what it is carrying." />
+          <a href="./assets/guide/19-show-settings.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/19-show-settings.png" alt="Show Settings on the Channels tab: the desk reading OSC to 127.0.0.1:8000 at the address pattern /dca/{n}/on, twelve channel strips each showing the DCA it rides, and the DCA rows below reading back which strips each one is carrying." />
           </a>
-          <figcaption>The same view, with the desk groups open: what each one carries, and the messages it opens and closes with.</figcaption>
+          <figcaption>Show Settings: the desk, the strips on the console, and the DCAs they ride. Two faders are carrying the first four strips.</figcaption>
         </figure>
-        <h3>The desk groups</h3>
+        <h3>Where it is set up</h3>
         <p>
-          <strong>Desk groups (N)</strong> opens a drawer along the bottom: each group's label, how
-          the desk is told to open and close it, the exact messages it will send, what is feeding it
-          and whether it is open now. MIDI is the common case — one note per group, open on note-on
-          and closed on note-off — and OSC covers desks that prefer it, with the open and the close
-          value on one address.
+          <strong>Show Settings</strong>, at the foot of the WinsLab menu, is the show's own setup —
+          kept with the workspace rather than with the machine, in three tabs: Channels, Cast and
+          Mic plot. Channels holds the desk: one connection for the whole show, OSC or MIDI, or no
+          desk at all. OSC is one host, one port and an address pattern with <code>{n}</code> where
+          a DCA's number goes — <code>/dca/{n}/on</code> unless the desk wants something else — and
+          the line under it reads the pattern back as the first and last message the show will send,
+          because a pattern and a port are easier to check as addresses than as a template. A MIDI
+          desk is a port and a channel, and each DCA is a note, numbered from one the same way.
+        </p>
+        <p>
+          Below it are the strips on the console and the DCAs they ride. A new show opens with
+          twelve of each, strip n on DCA n — a wireless show is one mic per fader, so this is the
+          arrangement it wants and not a guess — which leaves the tab holding the exceptions. A
+          strip's DCA is a select in its row, so a chorus can share one fader; a DCA can be given an
+          address or a note of its own where the desk numbers them differently, typed into the field
+          that shows the derived one as its placeholder; and a DCA row reads back which strips it
+          is carrying.
+        </p>
+        <p>
+          Cast is who is in the show: a performer, their role, and the strip their mic is patched
+          to. Ensembles are named groups of them — the chorus, the band — and they are what a scene
+          applies: applying one opens every member it holds, one press on the grid instead of a row
+          of them.
         </p>
         <h3>What a recall sends</h3>
         <p>
-          Only what changed. A group whose mics are all closed is closed, a group with any one of its
-          mics open is opened, and a group already in the right state is not mentioned at all — a
-          recall should be three messages, not a sweep of every fader. Groups that no mic is assigned
+          Only what changed. A DCA whose mics are all closed is closed, a DCA with any one of them
+          open is opened, and a DCA already in the right state is not mentioned at all — a
+          recall should be three messages, not a sweep of every fader. DCAs that no mic is routed
           to are left alone entirely, because the desk may well be doing something else with them.
         </p>
         <p>
           Editing never moves the desk. When the scene on stage has drifted from where the desk was
-          left, the view offers <strong>Apply to desk (N)</strong> with the number of groups behind,
-          and waits. <strong>Mics off</strong> closes everything the plot drives: the panic button for
-          mics rather than for sound.
+          left, the view offers <strong>Apply to desk (N)</strong> with the number of DCAs behind,
+          and waits. The all-closed column is the other half of the same idea: it is the press that
+          shuts everything the show drives, which is what the desk wants between numbers.
         </p>
         <h3>Following the show</h3>
         <p>
@@ -1090,19 +1121,21 @@ console.log(r.stdout.trim())</code></pre>
           pointed at a scene refuses rather than being read as “close everything”, and the run log
           carries the recall under the cue's own label, so the log reads as one story.
         </p>
-        <h3>Locking it</h3>
+        <h3>Edit and Done</h3>
         <p>
-          <strong>Lock</strong> is for curtain up. While it is on, recalling and applying stay live —
-          that is the point of the view — and every way of changing the show closes: the cells cannot
-          be moved, scenes cannot be added, renamed or removed, and the groups cannot be edited. A
-          stray click during a number cannot change who is open.
+          The view always opens to run the show: recall, the all-closed column and Apply to desk
+          stay live, and nothing else can be changed by a stray click. <strong>Edit</strong> is the
+          deliberate press that gives the grid and the names back — cells, scene names, Add scene
+          and + Ensemble — and <strong>Done</strong> hands the view back to the show with the line
+          under the header going away with it. A stray click during a number cannot change who is
+          open.
         </p>
         <div class="note">
-          The lock is saved with the workspace, so a show that was locked when the app last closed
-          comes back locked — including after a crash and recovery, which is exactly when you do not
-          want to be one click away from editing the plot. The desk's own state is different: it
-          belongs to the session, and a recall only remembers what the desk accepted, so a message
-          that could not be delivered is reported and tried again next time.
+          Which mode it was left in is not saved with the workspace: the file holds the scenes, and
+          the view reopens ready to run them — including after a crash and recovery, which is
+          exactly when you do not want to be one click away from editing the plot. The desk's own
+          state is different: it belongs to the session, and a recall only remembers what the desk
+          accepted, so a message that could not be delivered is reported and tried again next time.
         </div>
       </section>
 
@@ -1121,21 +1154,24 @@ console.log(r.stdout.trim())</code></pre>
             </thead>
             <tbody>
               <tr><td>Audio</td><td>Output device</td><td>Routes all playback to the chosen system output.</td></tr>
-              <tr><td>Audio</td><td>Sample rate, Base latency</td><td>Read-only readouts of the running audio engine: the sample rate in Hz and the base latency in ms. They report the live AudioContext and cannot be changed.</td></tr>
+              <tr><td>Audio</td><td>Sample rate, Buffer, Channels</td><td>What the audio engine is asked for. Each starts on the device's own answer — its rate, the engine's buffer, every channel it has — and a value picked here is remembered with the workspace.</td></tr>
+              <tr><td>Audio</td><td>Exclusive</td><td>Take the device for WinsLab alone, locking system sounds and conferencing apps out of it; a driver that refuses says why underneath.</td></tr>
+              <tr><td>Audio</td><td>Engine</td><td>Read-only readouts of the running audio engine: the backend, what it is running at, the device in use, the latency and where that figure came from, the voices and files playing, the memory it holds, and the underruns it has seen. They report the live engine and cannot be typed into.</td></tr>
               <tr><td>MIDI</td><td>Default output</td><td>Used by MIDI cues that do not name a port of their own; a cue with its own port overrides it.</td></tr>
-              <tr><td>Show</td><td>OSC input</td><td>The port WinsLab listens on for OSC, and whether it listens at all. 53000 matches the convention QLab uses, so one patch sheet covers both.</td></tr>
-              <tr><td>Show</td><td>MIDI input</td><td>Which input ports are opened. With none selected every available input is opened, and a port that appears later is opened when it arrives.</td></tr>
-              <tr><td>Show</td><td>Wireless telemetry</td><td>The sources the wireless panel reads, one row per source: a name, HTTP or file, and the URL or path. Each section also reports what its service is doing, so a change is confirmed on the screen that made it.</td></tr>
-              <tr><td>Show</td><td>Network presence</td><td>Whether to browse the network, which mDNS service types to browse, and how long a device may stay quiet before it counts as gone.</td></tr>
-              <tr><td>Show</td><td>Tablet companion</td><td>Whether to serve the show on the network, on which port, and with which token. The address to open on the tablet is reported underneath once the service is running.</td></tr>
+              <tr><td>Network</td><td>OSC input</td><td>The port WinsLab listens on for OSC, and whether it listens at all. 53000 matches the convention QLab uses, so one patch sheet covers both.</td></tr>
+              <tr><td>MIDI</td><td>MIDI input</td><td>Which input ports are opened. With none selected every available input is opened, and a port that appears later is opened when it arrives.</td></tr>
+              <tr><td>Wireless</td><td>Telemetry sources</td><td>The sources the wireless panel reads, one row per source: a name, HTTP or file, and the URL or path — and the battery, RF and silence thresholds below them that the alarms are raised on. Each section also reports what its service is doing, so a change is confirmed on the screen that made it.</td></tr>
+              <tr><td>Network</td><td>Network presence</td><td>Whether to browse the network, which mDNS service types to browse, and how long a device may stay quiet before it counts as gone.</td></tr>
+              <tr><td>Network</td><td>Tablet companion</td><td>Whether to serve the show on the network, on which port, and with which token. The address to open on the tablet is reported underneath once the service is running.</td></tr>
               <tr><td>License</td><td>License key</td><td>This machine's WinsLab Pro key: what it is licensed to, when it expires, Activate and Deactivate. See <a href="#pro">Free and Pro</a> above.</td></tr>
             </tbody>
           </table>
         </div>
         <p>
           Settings belong to the workspace, so they travel with the show, and changing them marks it
-          as unsaved. The Show tab's settings are the ones the Pro services read: without a license
-          they are kept with the show exactly as they are, and the services do not start.
+          as unsaved. The Network and Wireless tabs' settings are the ones the Pro services read:
+          without a license they are kept with the show exactly as they are, and the services do
+          not start.
         </p>
       </section>
 
@@ -1171,9 +1207,9 @@ console.log(r.stdout.trim())</code></pre>
           text field the field's own undo applies instead. Duplicate
           (<kbd>Ctrl/Cmd</kbd> + <kbd>D</kbd>) and delete
           (<kbd>Ctrl/Cmd</kbd> + <kbd>Backspace</kbd> or <kbd>Delete</kbd>) still need the cue list
-          focused. The history is one stack for the three things an edit destroys — the cue stack,
-          the scenes with their desk groups, and the mic plot — so an undo is never half a change,
-          and it keeps the last 50 edits.
+          focused. The history is one stack for everything an edit destroys — the cue stack, the
+          scenes, and the show's setup, the console, the cast and the mic plot — so an undo is
+          never half a change, and it keeps the last 50 edits.
         </div>
       </section>
 
@@ -1268,17 +1304,17 @@ console.log(r.stdout.trim())</code></pre>
           <article class="card">
             <h3>The wireless panel shows no readings</h3>
             <p>
-              The plot is there but no source is reporting. The Show tab in Settings reports what the
-              wireless service is doing, including why a source failed. A source has to return JSON
-              with a <code>channels</code> array — the shape is in
+              The plot is there but no source is reporting. The Wireless tab in Settings reports
+              what the wireless service is doing, including why a source failed. A source has to
+              return JSON with a <code>channels</code> array — the shape is in
               <a href="#wireless">Wireless and the mic plot</a>.
             </p>
           </article>
           <article class="card">
             <h3>Where are the error messages?</h3>
             <p>
-              In the run log (LOG button). Failures, HTTP statuses, and script output all land
-              there. See <a href="#results">Reading results</a>.
+              In the run log (the Log tab of the dock). Failures, HTTP statuses, and script output
+              all land there. See <a href="#results">Reading results</a>.
             </p>
           </article>
         </div>
@@ -1323,7 +1359,7 @@ console.log(r.stdout.trim())</code></pre>
             <li><kbd>Space</kbd> fires the highlighted cue.</li>
             <li>The highlight moves to whatever GO will fire next.</li>
             <li><kbd>Escape</kbd> stops everything; <kbd>Shift</kbd> + <kbd>Escape</kbd> stops with a fade.</li>
-            <li>If something looks wrong, open the LOG and read the red lines.</li>
+            <li>If something looks wrong, open the Log tab and read the red lines.</li>
           </ul>
         </div>
       </section>
