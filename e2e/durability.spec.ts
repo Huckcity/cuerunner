@@ -70,13 +70,17 @@ test('a save that cannot be written is reported and leaves the file untouched', 
 
 test('unsaved work is offered back after a session that ended without saving', async () => {
   const cue = {
-    id: 'w1', number: '1', name: 'Recovered Wait', type: 'wait',
+    id: 'c1', number: '1', name: 'Recovered Wait', type: 'wait',
     colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0,
     duration: 1000, advance: 'none', isArmed: true, notes: ''
   }
+  const secondCue = { ...cue, id: 'c2', number: '2', name: 'Where I Was' }
   const snapshot = {
     savedAt: Date.now(),
     sourcePath: null,
+    // The session was standing on the second cue when it ended: what GO would have fired
+    // next, and the first thing the operator needs back.
+    selectedCueId: 'c2',
     workspace: {
       version: 1,
       id: 'w2',
@@ -84,7 +88,7 @@ test('unsaved work is offered back after a session that ended without saving', a
       createdAt: '2026-01-01T00:00:00.000Z',
       audioSettings: { outputDeviceId: 'default' },
       midiSettings: { outputPortName: '' },
-      cues: [cue]
+      cues: [cue, secondCue]
     }
   }
 
@@ -96,11 +100,16 @@ test('unsaved work is offered back after a session that ended without saving', a
   const notice = page.locator('.app-notice[data-kind="recovery"]')
   await expect(notice).toBeVisible()
   await expect(notice).toContainText('Lost Show')
+  await expect(notice).toContainText('2 · Where I Was')
 
   await notice.getByRole('button', { name: 'Recover' }).click()
 
-  await expect(page.locator('.cue-row')).toHaveCount(1)
+  await expect(page.locator('.cue-row')).toHaveCount(2)
   await expect(page.locator('.cue-row').first()).toContainText('Recovered Wait')
+  // The place came back with the cues: the second row is where the session stood, so the
+  // next GO fires what it would have fired.
+  await expect(page.locator('.cue-row[data-selected="true"]')).toHaveCount(1)
+  await expect(page.locator('.cue-row[data-selected="true"]')).toContainText('Where I Was')
   await expect(page.locator('.workspace-name')).toContainText('Lost Show')
   // Recovered work is unsaved work: the file on disk is older than the session.
   await expect(page.locator('.workspace-name')).toContainText('●')

@@ -100,15 +100,31 @@ describe('recovery snapshots', () => {
   it('round-trips a snapshot and clears it again', async () => {
     expect(await readRecovery()).toBeNull()
 
-    await writeRecovery(workspaceWith([]), '/shows/My Show.wlab')
+    await writeRecovery(workspaceWith([]), '/shows/My Show.wlab', 'cue-7')
     const snapshot = await readRecovery()
 
     expect(snapshot?.workspace.name).toBe('Show')
     expect(snapshot?.sourcePath).toBe('/shows/My Show.wlab')
     expect(snapshot?.savedAt).toBeGreaterThan(0)
+    // The cue GO would have fired next travels with the work.
+    expect(snapshot?.selectedCueId).toBe('cue-7')
 
     await clearRecovery()
     expect(await readRecovery()).toBeNull()
+  })
+
+  it('reads a snapshot written before the place was recorded', async () => {
+    mkdirSync(userData, { recursive: true })
+    writeFileSync(
+      join(userData, 'recovery.wlab'),
+      JSON.stringify({ workspace: workspaceWith([]), savedAt: 1, sourcePath: null }),
+      'utf-8'
+    )
+
+    const snapshot = await readRecovery()
+
+    expect(snapshot?.workspace.name).toBe('Show')
+    expect(snapshot?.selectedCueId).toBeUndefined()
   })
 
   it('reads nothing from a snapshot that was half-written when the process died', async () => {
