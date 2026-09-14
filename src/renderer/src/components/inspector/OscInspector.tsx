@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import type { OscCue, OscArg, OscArgType } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
+import { NumberField, TextField } from '../common/Field'
 import { OSC_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: OscCue }
@@ -26,20 +27,20 @@ export function OscInspector({ cue }: Props) {
     <div>
       <div className="field-row">
         <label>Host</label>
-        <input value={cue.host} onChange={e => set({ host: e.target.value })} />
+        <TextField when="typed" value={cue.host} onValue={host => set({ host })} />
         <ResetButton label="Host" value={cue.host} defaultValue={OSC_DEFAULTS.host}
           onReset={() => set({ host: OSC_DEFAULTS.host })} />
       </div>
       <div className="field-row">
         <label>Port</label>
-        <input type="number" min={1} max={65535} value={cue.port}
-          onChange={e => set({ port: Number(e.target.value) })} />
+        <NumberField when="typed" min={1} max={65535} value={cue.port}
+          onValue={port => { if (port !== null) set({ port }) }} />
         <ResetButton label="Port" value={cue.port} defaultValue={OSC_DEFAULTS.port}
           onReset={() => set({ port: OSC_DEFAULTS.port })} />
       </div>
       <div className="field-row">
         <label>Address</label>
-        <input value={cue.address} onChange={e => set({ address: e.target.value })} />
+        <TextField when="typed" value={cue.address} onValue={address => set({ address })} />
         <ResetButton label="Address" value={cue.address} defaultValue={OSC_DEFAULTS.address}
           onReset={() => set({ address: OSC_DEFAULTS.address })} />
       </div>
@@ -57,12 +58,12 @@ export function OscInspector({ cue }: Props) {
             <option value="F">false</option>
           </select>
           {(arg.type === 'i' || arg.type === 'f') && (
-            <input type="number" value={arg.value as number}
-              onChange={e => updateArg(i, { value: Number(e.target.value) })} />
+            <NumberField when="typed" step={arg.type === 'i' ? 1 : 0.001} value={arg.value as number}
+              onValue={value => { if (value !== null) updateArg(i, { value }) }} />
           )}
           {arg.type === 's' && (
-            <input value={arg.value as string}
-              onChange={e => updateArg(i, { value: e.target.value })} />
+            <TextField when="typed" value={arg.value as string}
+              onValue={value => updateArg(i, { value })} />
           )}
           {(arg.type === 'T' || arg.type === 'F') && (
             <span className="inspector-hint" style={{ flex: 1, marginTop: 0 }}>

@@ -1,0 +1,11 @@
+/* A field that tells you it saved.
+ *
+ * The glow is the confirmation a raw input box does not give: a value typed and then
+ * left says that it took, once, and says nothing when there was nothing to say. It is
+ * the blue the focused input already uses, so it reads as the same field going quiet
+ * rather than as a second colour speaking. */
+.field[data-saved='true'] {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-blue-glow);
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}

@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import type { StopCue } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
+import { NumberField } from '../common/Field'
 import { STOP_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: StopCue }
@@ -36,17 +37,9 @@ export function StopInspector({ cue }: Props) {
       </div>
       <div className="field-row">
         <label>Fade duration (s)</label>
-        <input
-          type="number"
-          min={0}
-          step={0.1}
-          value={cue.fadeOutDuration / 1000}
+        <NumberField when="typed" min={0} step={0.1} value={cue.fadeOutDuration / 1000}
           disabled={!cue.fadeOut}
-          onChange={e => {
-            const s = parseFloat(e.target.value)
-            if (!isNaN(s) && s >= 0) set({ fadeOutDuration: Math.round(s * 1000) })
-          }}
-        />
+          onValue={seconds => { if (seconds !== null) set({ fadeOutDuration: Math.round(seconds * 1000) }) }} />
         <ResetButton label="Fade duration" value={cue.fadeOutDuration} defaultValue={STOP_DEFAULTS.fadeOutDuration}
           onReset={() => set({ fadeOutDuration: STOP_DEFAULTS.fadeOutDuration })} />
       </div>

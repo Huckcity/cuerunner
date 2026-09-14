@@ -2,7 +2,7 @@ import { useStore } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { addPack, assignPack, describeSwap, recordSwaps, removePack, updatePack } from '../../utils/rfPlot'
 import type { RfPlot, RfSwap } from '../../types/show'
-import { CommitInput } from '../show/CommitField'
+import { TextField } from '../common/Field'
 import './MicPlotTab.css'
 
 // The rf service names every device after the channel it reports, so a channel id is the
@@ -60,20 +60,20 @@ export function MicPlotTab() {
 
         {plot.packs.map(pack => (
           <div className="plot-pack-row" key={pack.id}>
-            <CommitInput
+            <TextField
               className="plot-pack-label"
               value={pack.label}
               placeholder="Label"
               aria-label="Pack label"
-              onCommit={label => apply(updatePack(plot, pack.id, { label }))}
+              onValue={label => apply(updatePack(plot, pack.id, { label }))}
             />
-            <CommitInput
+            <TextField
               className="plot-channel"
               list="plot-channels"
               value={pack.channelId ?? ''}
               placeholder="Channel"
               aria-label="Pack channel"
-              onCommit={channel => apply(updatePack(plot, pack.id, { channelId: channel.trim() || null }))}
+              onValue={channel => apply(updatePack(plot, pack.id, { channelId: channel.trim() || null }))}
             />
             <select
               className="plot-pack-performer"
@@ -89,12 +89,12 @@ export function MicPlotTab() {
                 <option key={performer.id} value={performer.id}>{performer.name}</option>
               ))}
             </select>
-            <CommitInput
+            <TextField
               className="plot-pack-notes"
               value={pack.notes}
               placeholder="Notes"
               aria-label="Pack notes"
-              onCommit={notes => apply(updatePack(plot, pack.id, { notes }))}
+              onValue={notes => apply(updatePack(plot, pack.id, { notes }))}
             />
             <button
               className="plot-remove"

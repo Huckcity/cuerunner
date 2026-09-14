@@ -8,7 +8,7 @@ import {
   updatePerformer
 } from '../../utils/cast'
 import type { CastSettings } from '../../types/show'
-import { CommitInput } from './CommitField'
+import { TextField } from '../common/Field'
 
 /** The DCA a strip drives, as the cast list names it: "DCA 4", or a label someone wrote. */
 function dcaLabel(cast: CastSettings, dcaId: string | null): string {
@@ -40,19 +40,19 @@ export function CastTab() {
 
         {cast.performers.map(performer => (
           <div className="performer-row" key={performer.id}>
-            <CommitInput
+            <TextField
               className="performer-name"
               value={performer.name}
               placeholder="Name"
               aria-label="Performer name"
-              onCommit={name => apply(updatePerformer(cast, performer.id, { name }))}
+              onValue={name => apply(updatePerformer(cast, performer.id, { name }))}
             />
-            <CommitInput
+            <TextField
               className="performer-role"
               value={performer.role}
               placeholder="Role"
               aria-label="Performer role"
-              onCommit={role => apply(updatePerformer(cast, performer.id, { role }))}
+              onValue={role => apply(updatePerformer(cast, performer.id, { role }))}
             />
             <select
               className="performer-channel"
@@ -74,12 +74,12 @@ export function CastTab() {
                 )
               })}
             </select>
-            <CommitInput
+            <TextField
               className="performer-notes"
               value={performer.notes}
               placeholder="Notes"
               aria-label="Performer notes"
-              onCommit={notes => apply(updatePerformer(cast, performer.id, { notes }))}
+              onValue={notes => apply(updatePerformer(cast, performer.id, { notes }))}
             />
             <button
               className="performer-remove"
@@ -106,12 +106,12 @@ export function CastTab() {
           return (
             <div className="ensemble-row" key={ensemble.id}>
               <div className="ensemble-fields">
-                <CommitInput
+                <TextField
                   className="ensemble-name"
                   value={ensemble.name}
                   placeholder="Ensemble"
                   aria-label="Ensemble name"
-                  onCommit={name => apply(updateEnsemble(cast, ensemble.id, { name }))}
+                  onValue={name => apply(updateEnsemble(cast, ensemble.id, { name }))}
                 />
                 <span className="ensemble-count">
                   {members.length === 1 ? '1 member' : `${members.length} members`}

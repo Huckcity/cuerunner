@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import type { FadeCue, FadeCurve } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
+import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
 
 interface Props { cue: FadeCue }
@@ -36,23 +37,15 @@ export function FadeInspector({ cue }: Props) {
       </div>
       <div className="field-row">
         <label>Target value</label>
-        <input type="number" min={0} max={1} step={0.01} value={cue.targetValue}
-          onChange={e => set({ targetValue: Number(e.target.value) })} />
+        <NumberField when="typed" min={0} max={1} step={0.01} value={cue.targetValue}
+          onValue={targetValue => { if (targetValue !== null) set({ targetValue }) }} />
         <ResetButton label="Target value" value={cue.targetValue} defaultValue={FADE_DEFAULTS.targetValue}
           onReset={() => set({ targetValue: FADE_DEFAULTS.targetValue })} />
       </div>
       <div className="field-row">
         <label>Duration (s)</label>
-        <input
-          type="number"
-          min={0}
-          step={0.1}
-          value={cue.duration / 1000}
-          onChange={e => {
-            const s = parseFloat(e.target.value)
-            if (!isNaN(s) && s >= 0) set({ duration: Math.round(s * 1000) })
-          }}
-        />
+        <NumberField when="typed" min={0} step={0.1} value={cue.duration / 1000}
+          onValue={seconds => { if (seconds !== null) set({ duration: Math.round(seconds * 1000) }) }} />
         <ResetButton label="Duration" value={cue.duration} defaultValue={FADE_DEFAULTS.duration}
           onReset={() => set({ duration: FADE_DEFAULTS.duration })} />
       </div>

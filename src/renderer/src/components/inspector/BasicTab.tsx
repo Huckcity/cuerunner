@@ -1,6 +1,7 @@
 import { useStore, useParentGroup } from '../../store'
 import type { Cue, CueColor } from '../../types/cue'
 import { ResetButton } from './ResetButton'
+import { NumberField, TextField } from '../common/Field'
 import { BASE_DEFAULTS } from '../../utils/cueDefaults'
 
 const COLORS: CueColor[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']
@@ -28,11 +29,11 @@ export function BasicTab({ cue }: Props) {
     <div>
       <div className="field-row">
         <label>Number</label>
-        <input value={cue.number} onChange={e => set({ number: e.target.value })} />
+        <TextField when="typed" value={cue.number} onValue={number => set({ number })} />
       </div>
       <div className="field-row">
         <label>Name</label>
-        <input value={cue.name} onChange={e => set({ name: e.target.value })} />
+        <TextField when="typed" value={cue.name} onValue={name => set({ name })} />
       </div>
       <div className="field-row">
         <label>Color</label>
@@ -56,32 +57,23 @@ export function BasicTab({ cue }: Props) {
       {inTimeline && (
         <div className="field-row">
           <label>Timeline offset (s)</label>
-          <input type="number" min={0} step={0.1} value={cue.timelineOffset / 1000}
-            onChange={e => {
-              const s = parseFloat(e.target.value)
-              if (!isNaN(s) && s >= 0) set({ timelineOffset: Math.round(s * 1000) })
-            }} />
+          <NumberField when="typed" min={0} step={0.1} value={cue.timelineOffset / 1000}
+            onValue={seconds => { if (seconds !== null) set({ timelineOffset: Math.round(seconds * 1000) }) }} />
           <ResetButton label="Timeline offset" value={cue.timelineOffset} defaultValue={BASE_DEFAULTS.timelineOffset}
             onReset={() => set({ timelineOffset: BASE_DEFAULTS.timelineOffset })} />
         </div>
       )}
       <div className="field-row">
         <label>Pre-wait (s)</label>
-        <input type="number" min={0} step={0.1} value={cue.preWait / 1000}
-          onChange={e => {
-            const s = parseFloat(e.target.value)
-            if (!isNaN(s) && s >= 0) set({ preWait: Math.round(s * 1000) })
-          }} />
+        <NumberField when="typed" min={0} step={0.1} value={cue.preWait / 1000}
+          onValue={seconds => { if (seconds !== null) set({ preWait: Math.round(seconds * 1000) }) }} />
         <ResetButton label="Pre-wait" value={cue.preWait} defaultValue={BASE_DEFAULTS.preWait}
           onReset={() => set({ preWait: BASE_DEFAULTS.preWait })} />
       </div>
       <div className="field-row">
         <label>Post-wait (s)</label>
-        <input type="number" min={0} step={0.1} value={cue.postWait / 1000}
-          onChange={e => {
-            const s = parseFloat(e.target.value)
-            if (!isNaN(s) && s >= 0) set({ postWait: Math.round(s * 1000) })
-          }} />
+        <NumberField when="typed" min={0} step={0.1} value={cue.postWait / 1000}
+          onValue={seconds => { if (seconds !== null) set({ postWait: Math.round(seconds * 1000) }) }} />
         <ResetButton label="Post-wait" value={cue.postWait} defaultValue={BASE_DEFAULTS.postWait}
           onReset={() => set({ postWait: BASE_DEFAULTS.postWait })} />
       </div>

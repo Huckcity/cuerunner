@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import type { ScriptCue } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
+import { NumberField } from '../common/Field'
 import { SCRIPT_DEFAULTS } from '../../utils/cueDefaults'
 
 const LANGUAGES: ScriptCue['language'][] = ['javascript']
@@ -33,12 +34,8 @@ export function ScriptInspector({ cue }: Props) {
 
       <div className="field-row">
         <label>Timeout (ms)</label>
-        <input
-          type="number"
-          min={0}
-          value={cue.timeout}
-          onChange={e => set({ timeout: Number(e.target.value) })}
-        />
+        <NumberField when="typed" min={0} value={cue.timeout}
+          onValue={timeout => { if (timeout !== null) set({ timeout }) }} />
         <ResetButton label="Timeout" value={cue.timeout} defaultValue={SCRIPT_DEFAULTS.timeout}
           onReset={() => set({ timeout: SCRIPT_DEFAULTS.timeout })} />
       </div>
