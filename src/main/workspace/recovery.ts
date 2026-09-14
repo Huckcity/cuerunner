@@ -9,6 +9,12 @@ export interface RecoverySnapshot {
   savedAt: number
   /** Path of the workspace it belongs to, or null if it was never saved. */
   sourcePath: string | null
+  /**
+   * The cue the session was standing on, which is the one GO would have fired next.
+   * Absent from snapshots written before it was recorded, and null when nothing was
+   * selected: a recovered show hands the operator back their place, not just their cues.
+   */
+  selectedCueId?: string | null
 }
 
 // Autosave writes here, not over the operator's file: a recovery snapshot is offered
@@ -17,9 +23,13 @@ function recoveryFilePath(): string {
   return join(app.getPath('userData'), 'recovery.wlab')
 }
 
-export async function writeRecovery(workspace: Workspace, sourcePath: string | null): Promise<void> {
+export async function writeRecovery(
+  workspace: Workspace,
+  sourcePath: string | null,
+  selectedCueId: string | null = null
+): Promise<void> {
   const filePath = recoveryFilePath()
-  const snapshot: RecoverySnapshot = { workspace, savedAt: Date.now(), sourcePath }
+  const snapshot: RecoverySnapshot = { workspace, savedAt: Date.now(), sourcePath, selectedCueId }
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(filePath, JSON.stringify(snapshot), 'utf-8')
 }

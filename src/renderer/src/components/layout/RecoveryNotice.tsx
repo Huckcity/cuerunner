@@ -9,6 +9,7 @@ interface Snapshot {
   workspace: Workspace
   savedAt: number
   sourcePath: string | null
+  selectedCueId?: string | null
   missingMedia: MissingMedia[]
 }
 
@@ -29,6 +30,13 @@ export function RecoveryNotice() {
 
   const name = snapshot.workspace.name || 'Untitled'
 
+  // Where the session was standing: the cue the recovered show hands back. Nothing when
+  // no cue was selected, and nothing when the cue it names is not in the snapshot — the
+  // snapshot is a file on disk, and a file can say anything.
+  const standingOn = snapshot.selectedCueId
+    ? snapshot.workspace.cues.find(candidate => candidate.id === snapshot.selectedCueId) ?? null
+    : null
+
   const recover = (): void => {
     const store = useStore.getState()
     store.loadWorkspace(
@@ -45,6 +53,9 @@ export function RecoveryNotice() {
       // and saving must write the file it came from, not a file with a new id.
       { id: snapshot.workspace.id, createdAt: snapshot.workspace.createdAt }
     )
+    // The place, not just the cues: standing where the session stood means the next GO
+    // fires what it would have fired.
+    if (standingOn !== null) store.select(standingOn.id)
     // The files the snapshot names may have moved since it was taken, so the same
     // missing-media report a normal open gives is shown here too.
     store.setMissingMedia(snapshot.missingMedia)
@@ -73,6 +84,9 @@ export function RecoveryNotice() {
     >
       Unsaved work from “{name}” ({formatClock(snapshot.savedAt)}) was found after the last
       session ended without saving.
+      {standingOn !== null && (
+        <> It was standing on <strong>{standingOn.number} · {standingOn.name || 'untitled'}</strong>.</>
+      )}
     </NoticeBar>
   )
 }
