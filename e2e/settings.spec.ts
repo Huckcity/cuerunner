@@ -178,6 +178,39 @@ test('settings dialog opens via Ctrl+, keyboard shortcut', async () => {
   await closeSettings(page)
 })
 
+test('the dialog is the same box on every tab, and only its own ways close it', async () => {
+  await openSettings(page)
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  const audio = await dialog.boundingBox()
+  expect(audio).not.toBeNull()
+
+  // A tab with a different amount on it does not move the frame: the header, the tab
+  // strip and the ✕ stay where the operator's pointer left them.
+  await dialog.getByRole('button', { name: 'License', exact: true }).click()
+  await expect(dialog.locator('.settings-tab[data-active="true"]')).toHaveText('License')
+  const license = await dialog.boundingBox()
+  expect(license).not.toBeNull()
+  expect({
+    x: Math.round(license!.x),
+    y: Math.round(license!.y),
+    width: Math.round(license!.width),
+    height: Math.round(license!.height)
+  }).toEqual({
+    x: Math.round(audio!.x),
+    y: Math.round(audio!.y),
+    width: Math.round(audio!.width),
+    height: Math.round(audio!.height)
+  })
+
+  // The backdrop is not a close button: half-typed is a state this panel is in, and a
+  // press that lands beside the dialog must not take it with it.
+  await page.locator('.settings-overlay').click({ position: { x: 5, y: 5 } })
+  await expect(dialog).toBeVisible()
+
+  // The ✕ still closes it.
+  await closeSettings(page)
+})
+
 test('settings are grouped by what is being set up, and close one way', async () => {
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })

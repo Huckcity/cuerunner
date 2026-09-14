@@ -15,9 +15,11 @@
   width: 520px;
   display: flex;
   flex-direction: column;
-  /* The Show tab is taller than a laptop screen once the services are on it, so the
-     body scrolls and the header, tabs and footer stay where they are. */
-  max-height: 88vh;
+  /* One box, whatever tab is on it. With no height of its own the dialog was as tall as
+     the tab's contents, so switching tabs re-centred the whole frame and the header, the
+     tab strip and the ✕ moved under the pointer. The body scrolls instead, which is also
+     what keeps the header, tabs and close where they were. */
+  height: min(88vh, 620px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
