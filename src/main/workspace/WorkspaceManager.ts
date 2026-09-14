@@ -7,7 +7,11 @@ import { migrateLegacyAudioRouting } from '../../shared/audioRouting'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { AudioCue, Cue } from '../../renderer/src/types/cue'
-import { defaultShowSettings, normalizeShowSettings } from '../../renderer/src/types/show'
+import {
+  CHANNEL_START_COUNT,
+  defaultShowSettings,
+  normalizeShowSettings
+} from '../../renderer/src/types/show'
 
 // Cues come out of a JSON file, so they can still carry fields a previous version
 // wrote and this one no longer knows about. Read and delete those through here.
@@ -40,6 +44,250 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   delete cue.autoContinue
   delete cue.autoFollow
   return cue
+}
+
+interface LegacyPack {
+  id: string
+  performerId?: string | null
+  deskChannelId?: string | null
+}
+
+interface LegacyPerformer {
+  id: string
+  name?: string
+  role?: string
+  notes?: string
+  ensembleId?: string | null
+  deskChannelId?: string | null
+  channelId?: string | null
+}
+
+interface LegacyEnsemble {
+  id: string
+  name?: string
+  deskChannelId?: string | null
+  members?: string[]
+}
+
+interface LegacyCast {
+  groups?: unknown[]
+  dcas?: LegacyDca[]
+  channels?: unknown[]
+  performers?: LegacyPerformer[]
+  ensembles?: LegacyEnsemble[]
+}
+
+/** A DCA as an earlier build wrote it: both of its messages, one field at a time. */
+interface LegacyDca {
+  id: string
+  label?: string
+  mute?: LegacyMessage | null
+  unmute?: LegacyMessage | null
+  note?: number | null
+  address?: string | null
+}
+
+type LegacyMessage =
+  | { kind: 'midi'; portName?: string; message?: { kind?: string; channel?: number; note?: number } }
+  | { kind: 'osc'; host?: string; port?: number; address?: string }
+
+/**
+ * Performers and desk groups used to live under the plot and the scenes section, keyed
+ * to packs: a pack carried the desk group it fed, and a scene named the packs open in
+ * it. Both moved up a level onto the cast — onto the performer, or the ensemble that
+ * grouped them — so a workspace saved before that move is rewritten in place, once. The
+ * pass after this one carries that routing the rest of the way, onto the channel strips
+ * that hold it now.
+ *
+ * A file already in the new shape has no `rf.plot.performers` or `scenes.channels` left
+ * to find, which is what makes this safe to run unconditionally on every load.
+ */
+function migratePlotCast(showSettings: Record<string, unknown>): void {
+  const rf = showSettings.rf as Record<string, unknown> | undefined
+  const plot = rf?.plot as Record<string, unknown> | undefined
+  const scenes = showSettings.scenes as Record<string, unknown> | undefined
+  const legacyPerformers = plot?.performers as
+    Array<Record<string, unknown>> | undefined
+  const legacyChannels = scenes?.channels as unknown[] | undefined
+  if (legacyPerformers === undefined && legacyChannels === undefined) return
+
+  const packs = ((plot?.packs as LegacyPack[] | undefined) ?? [])
+  const performers: Array<Record<string, unknown>> = (legacyPerformers ?? []).map(
+    (performer: Record<string, unknown>) => ({
+      ...performer,
+      ensembleId: null,
+      deskChannelId: null as string | null
+    })
+  )
+
+  // A performer's desk group used to live on whichever pack they wore. The first pack
+  // found wearing them is what they carry forward — the same "only the first legacy
+  // value survives" rule the audio-routing migration above already uses.
+  for (const pack of packs) {
+    if (!pack.deskChannelId || !pack.performerId) continue
+    const performer = performers.find(candidate => candidate.id === pack.performerId)
+    if (performer && performer.deskChannelId === null) performer.deskChannelId = pack.deskChannelId
+  }
+
+  const cast = (showSettings.cast as Record<string, unknown> | undefined) ?? {}
+  cast.performers = performers
+  cast.groups = legacyChannels ?? []
+  cast.ensembles = cast.ensembles ?? []
+  showSettings.cast = cast
+
+  if (plot) delete plot.performers
+  if (scenes) delete scenes.channels
+  for (const pack of packs) delete (pack as unknown as Record<string, unknown>).deskChannelId
+
+  // A scene's live list named packs; what it means now is who was wearing them. A pack
+  // nobody was wearing drops out rather than leaving a dangling id nothing can show.
+  const wornBy = new Map(packs.map(pack => [pack.id, pack.performerId ?? null]))
+  const list = (scenes?.list as Array<Record<string, unknown>> | undefined) ?? []
+  for (const scene of list) {
+    const live = (scene.live as string[] | undefined) ?? []
+    scene.live = [...new Set(
+      live.map(packId => wornBy.get(packId) ?? null).filter((id): id is string => id !== null)
+    )]
+  }
+}
+
+/**
+ * The second move, and the shape this build writes: a performer's desk routing left the
+ * performer for their channel strip, an ensemble became membership rather than a pointer
+ * on each of its members, and the desk's groups are the DCAs the show drives.
+ *
+ * What is preserved is what the desk was told: a performer who had a DCA — their own, or
+ * the one their ensemble carried for them — is given the channel strip that now carries
+ * it, named after them, which is the strip an operator would have made by hand. Nobody
+ * routed gets no strip, which is the state a new performer starts in.
+ */
+function migrateChannelRouting(showSettings: Record<string, unknown>): void {
+  const cast = showSettings.cast as LegacyCast | undefined
+  if (!cast) return
+  if (cast.channels !== undefined && cast.dcas !== undefined) return
+
+  const performers = cast.performers ?? []
+  const ensembles = cast.ensembles ?? []
+  const dcas = (cast.dcas ?? cast.groups ?? []) as LegacyDca[]
+
+  const ensembleDca = new Map(ensembles.map(ensemble => [ensemble.id, ensemble.deskChannelId ?? null]))
+  const channels: Array<{ id: string; name: string; dcaId: string | null }> = []
+  const migrated = performers.map(performer => {
+    const dcaId = performer.deskChannelId
+      ?? (performer.ensembleId ? ensembleDca.get(performer.ensembleId) ?? null : null)
+    const channelId = dcaId === null ? null : crypto.randomUUID()
+    if (channelId !== null) {
+      channels.push({ id: channelId, name: performer.name ?? '', dcaId })
+    }
+    return {
+      id: performer.id,
+      name: performer.name ?? '',
+      role: performer.role ?? '',
+      notes: performer.notes ?? '',
+      channelId
+    }
+  })
+
+  // A show whose performers were never routed keeps no strips here: an empty list reads
+  // as "not set up yet", and the defaults give it the twelve a new show starts with.
+  if (channels.length > 0) {
+    while (channels.length < CHANNEL_START_COUNT) {
+      channels.push({ id: crypto.randomUUID(), name: '', dcaId: null })
+    }
+    cast.channels = channels
+  } else {
+    delete cast.channels
+  }
+
+  // A strip used to carry whether it was in tonight's patch. One gesture answers that
+  // now — it is there or it is not — so the field goes with the shape that had it.
+  for (const channel of (cast.channels ?? []) as Array<Record<string, unknown>>) {
+    delete channel.enabled
+  }
+
+  cast.performers = migrated
+  cast.ensembles = ensembles.map(ensemble => ({
+    id: ensemble.id,
+    name: ensemble.name ?? '',
+    members: performers.filter(candidate => candidate.ensembleId === ensemble.id).map(candidate => candidate.id)
+  }))
+  cast.dcas = dcas
+  delete cast.groups
+}
+
+/**
+ * The third move: a DCA used to carry both of its messages, one field at a time, and a
+ * show had no connection of its own. What a DCA sends is now derived from its number
+ * through the show's connection, so the connection is read back off the DCAs that were
+ * patched — the pattern from the address of the first one, with its own number swapped
+ * for `{n}` — and every one of those DCAs keeps what it was sending as an override. A
+ * show does not start sending somewhere new because the app was updated; the derived
+ * messages are the default for a show that has never been told otherwise.
+ *
+ * A show that had DCAs and drove none of them is left driving none.
+ */
+function migrateDesk(showSettings: Record<string, unknown>): void {
+  const cast = showSettings.cast as LegacyCast | undefined
+  const dcas = cast?.dcas
+  if (dcas === undefined || showSettings.desk !== undefined) return
+
+  const unmuteOf = (dca: LegacyDca): LegacyMessage | null => dca.unmute ?? dca.mute ?? null
+  const patched = dcas.map(unmuteOf)
+  if (patched.every(message => message === null)) {
+    if (dcas.length > 0) showSettings.desk = { ...defaultShowSettings().desk, kind: 'none' }
+    return
+  }
+
+  const firstOsc = patched.find((message): message is Extract<LegacyMessage, { kind: 'osc' }> =>
+    message?.kind === 'osc')
+  const firstMidi = patched.find((message): message is Extract<LegacyMessage, { kind: 'midi' }> =>
+    message?.kind === 'midi')
+
+  if (firstOsc !== undefined) {
+    const pattern = addressPattern(firstOsc.address ?? '', 1)
+    showSettings.desk = {
+      ...defaultShowSettings().desk,
+      kind: 'osc',
+      host: firstOsc.host ?? '127.0.0.1',
+      port: firstOsc.port ?? 8000,
+      address: pattern
+    }
+  } else if (firstMidi !== undefined) {
+    showSettings.desk = {
+      ...defaultShowSettings().desk,
+      kind: 'midi',
+      midiPort: firstMidi.portName ?? '',
+      midiChannel: firstMidi.message?.channel ?? 1
+    }
+  }
+
+  const kind = (showSettings.desk as { kind: string } | undefined)?.kind
+  dcas.forEach((dca, index) => {
+    const message = patched[index]
+    if (message === null) return
+    if (kind === 'osc' && message.kind === 'osc') dca.address = message.address ?? null
+    if (kind === 'midi' && message.kind === 'midi') dca.note = message.message?.note ?? index + 1
+    delete dca.mute
+    delete dca.unmute
+  })
+}
+
+/**
+ * The address pattern a show was driving its DCAs with: the DCA whose own number sat in
+ * `/dca/7/mute` becomes `/dca/{n}/mute`, and an address with no number in it comes back
+ * unchanged — which leaves every DCA carrying its address as an override, since none of
+ * them is the pattern.
+ */
+function addressPattern(address: string, number: number): string {
+  const token = new RegExp(`(?<![0-9])${number}(?![0-9])`)
+  return token.test(address) ? address.replace(token, '{n}') : address
+}
+
+function migrateCast(showSettings: Record<string, unknown> | undefined): void {
+  if (!showSettings) return
+  migratePlotCast(showSettings)
+  migrateChannelRouting(showSettings)
+  migrateDesk(showSettings)
 }
 
 export function migrateWorkspace(workspace: Workspace): Workspace {
@@ -75,6 +323,11 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
   }
 
   workspace.cues = cues
+  // Pass 3: the show's setup is brought forward to this build's shape — from the plot
+  // and the scenes section onto the cast, and from desk routing on performers and
+  // ensembles onto the channel strips that carry it now — before defaulting fills in a
+  // shape that already agrees with the new one.
+  migrateCast(workspace.showSettings as Record<string, unknown> | undefined)
   // A workspace written before the show services existed has no port settings; the
   // defaults bring it up listening where a new one would.
   workspace.showSettings = normalizeShowSettings(workspace.showSettings)

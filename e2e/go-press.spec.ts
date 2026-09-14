@@ -1,17 +1,17 @@
 /**
- * Nothing may eat a GO press.
+ * What a GO press may land on.
  *
  * GO is the one control an operator presses without looking, so the press has to land on
  * whatever is in front of them — including the surfaces that hold focus: an open menu, the
- * settings dialog somebody left up, the missing-media list that opened by itself when the
- * show loaded. Each of those is on trial here: with it open, the space bar still fires the
- * cue the selection is standing on, and the surface is still there afterwards. A dialog's
- * own button does not take the press either — the space bar belongs to the show, not to
- * whatever happens to be focused.
+ * context menu over the cue list, the settings dialog, Show Settings, the missing-media
+ * list that opened by itself when the show loaded. Each of those is on trial here, and the
+ * rule it is tried against depends on the surface: a menu passes the press through to the
+ * show, while a modal panel stands the transport keys down — the operator is setting
+ * something up, not running it, and a Space typed into a name must not fire the next cue
+ * behind it. Closing the panel hands the keyboard back either way.
  *
- * A text field is the exception, and it is asserted here too: a space in a cue's name is a
- * space. The rule is about surfaces taking a press they were not asked for, not about
- * typing.
+ * A text field keeps the space it is given: the rule is about surfaces taking a press
+ * they were not asked for, not about typing.
  */
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import fs from 'node:fs'
@@ -52,20 +52,25 @@ test('the space bar fires the cue the selection is standing on', async () => {
   await expectTheFirstCueFired()
 })
 
-test('the settings dialog does not eat the press', async () => {
+test('the settings dialog stands the transport down', async () => {
   await standOnTheFirstCue()
   await page.keyboard.press('Control+,')
   await expect(page.locator('.settings-dialog')).toBeVisible()
 
   // The press comes from inside the dialog, with focus on the control that closes it —
-  // the one place a stolen space bar would be least forgivable: the operator gets a
-  // closed dialog and no cue.
+  // the one place a stolen space bar would be least forgivable: the operator would get a
+  // fired cue and a closed dialog. The modal owns the keyboard, so neither happens.
   await page.locator('.settings-close').focus()
   await page.keyboard.press('Space')
 
+  await expect(page.locator('.cue-row').first()).not.toHaveAttribute('data-running', 'true')
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-selected', 'true')
+
+  // Closing it hands the keyboard back to the show.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.settings-dialog')).toHaveCount(0)
+  await page.keyboard.press('Space')
   await expectTheFirstCueFired()
-  await expect(page.locator('.settings-dialog')).toBeVisible()
-  await page.locator('.settings-close').click()
 })
 
 test('an open menu does not eat the press', async () => {
@@ -80,7 +85,7 @@ test('an open menu does not eat the press', async () => {
   await page.keyboard.press('Escape')
 })
 
-test('the missing-media dialog does not eat the press', async () => {
+test('the missing-media dialog stands the transport down', async () => {
   // A show whose one audio file is not on this machine: it opens with the bar, and the
   // list behind the bar is a dialog nobody asked for, over a show that is already running.
   const showDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-go-press-'))
@@ -126,7 +131,7 @@ test('the missing-media dialog does not eat the press', async () => {
     await toolbarCueBtn(second.page, 'Wait').click()
 
     // The selection is made before the list is covered: the dialog is modal, so from the
-    // moment it opens the pointer belongs to it. The keyboard does not.
+    // moment it opens the pointer belongs to it.
     const rows = second.page.locator('.cue-row')
     await rows.nth(1).click()
     await second.page.locator('.missing-media-bar-review').click()
@@ -134,18 +139,25 @@ test('the missing-media dialog does not eat the press', async () => {
     await second.page.locator('.missing-media-dismiss').focus()
     await second.page.keyboard.press('Space')
 
+    // The modal owns the keyboard: the cue the selection was standing on has not moved.
+    await expect(rows.nth(1)).not.toHaveAttribute('data-running', 'true')
+    await expect(rows.nth(1)).toHaveAttribute('data-selected', 'true')
+
+    // Dismissing it hands the keyboard back to the show.
+    await second.page.keyboard.press('Escape')
+    await expect(second.page.locator('.missing-media-dialog')).toHaveCount(0)
+    await second.page.keyboard.press('Space')
     await expect(rows.nth(1)).toHaveAttribute('data-running', 'true')
     await expect(rows.nth(2)).toHaveAttribute('data-selected', 'true')
-    await expect(second.page.locator('.missing-media-dialog')).toBeVisible()
   } finally {
     if (second !== null) await closeApp(second.app)
     fs.rmSync(showDir, { recursive: true, force: true })
   }
 })
 
-test('the mic plot dialog does not eat the press', async () => {
-  // The plot is the licensed half of the app, and its own instance: the dialog is only
-  // reachable from the RF panel with a rack to patch.
+test('the Show Settings dialog stands the transport down', async () => {
+  // The plot is the licensed half of the app, and its own instance: the editor is a tab
+  // of Show Settings now, reachable from the RF panel with a rack to patch.
   const licensed = await launchApp({ license: mintLicense() })
   try {
     await toolbarCueBtn(licensed.page, 'Wait').click()
@@ -155,13 +167,23 @@ test('the mic plot dialog does not eat the press', async () => {
     await licensed.page.locator('.btn-rf').click()
     await licensed.page.locator('.rf-demo-btn').click()
     await licensed.page.locator('.rf-edit').click()
-    await expect(licensed.page.locator('.plot-dialog')).toBeVisible()
+    const dialog = licensed.page.locator('.show-settings-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('.show-settings-tab', { hasText: 'Mic plot' }))
+      .toHaveAttribute('data-active', 'true')
 
-    await licensed.page.locator('.plot-close').focus()
+    await licensed.page.locator('.show-settings-close').focus()
     await licensed.page.keyboard.press('Space')
 
+    // The modal owns the keyboard: the cue the selection was standing on has not moved.
+    await expect(licensed.page.locator('.cue-row').first())
+      .not.toHaveAttribute('data-running', 'true')
+
+    // And once it is closed the keyboard is the show's again.
+    await licensed.page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await licensed.page.keyboard.press('Space')
     await expect(licensed.page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
-    await expect(licensed.page.locator('.plot-dialog')).toBeVisible()
   } finally {
     await closeApp(licensed.app)
   }

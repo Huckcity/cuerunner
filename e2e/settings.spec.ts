@@ -14,7 +14,7 @@ test.afterAll(async () => {
 
 async function openSettings(p: Page) {
   await p.locator('.toolbar-brand').click()
-  await p.getByRole('button', { name: /Settings/ }).click()
+  await p.locator('.file-menu [data-action="settings"]').click()
   await expect(p.getByRole('dialog', { name: 'Settings' })).toBeVisible()
 }
 

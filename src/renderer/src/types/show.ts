@@ -148,14 +148,6 @@ export interface MidiInSettings {
 // the alarms that matter — a pack about to die on someone with an entrance — are raised
 // against the plot rather than against a channel number.
 
-/** One performer: who is wearing a pack, and in which role. */
-export interface RfPerformer {
-  id: string
-  name: string
-  role: string
-  notes: string
-}
-
 /** One transmitter, and the receiver channel it is patched to. */
 export interface RfPack {
   id: string
@@ -164,12 +156,6 @@ export interface RfPack {
   channelId: string | null
   performerId: string | null
   notes: string
-  /**
-   * The desk channel this mic feeds — the DCA or input it is grouped under — or null when
-   * the show does not drive the desk from here. Optional on disk: a plot saved before
-   * scenes existed has none.
-   */
-  deskChannelId?: string | null
 }
 
 // ── Scenes: who is on, and what that does to the desk ───────────────────────
@@ -182,32 +168,134 @@ export type DeskMessage =
   | { kind: 'midi'; portName: string; message: MidiMessageKind }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
 
-/** A group on the desk — a DCA, a mute group — and how it is opened and closed. */
-export interface DeskChannel {
-  id: string
-  /** What the desk calls it: "DCA 2 — Ensemble". */
-  label: string
-  /** How the desk is told to close it. Null leaves the group alone on a recall. */
-  mute: DeskMessage | null
-  /** How the desk is told to open it. */
-  unmute: DeskMessage | null
+// ── The desk: how the show reaches it, and what it is told ──────────────────
+//
+// One connection for the whole show. A DCA's message is derived from its number, so a
+// twelve-mic show is not twelve patches to type — which is what makes a new show runnable
+// before anything has been configured: a strip drives the DCA of its number, and a DCA is
+// sent the note or address of its own.
+
+export type DeskKind = 'none' | 'midi' | 'osc'
+
+/**
+ * Where the desk is and how it is spoken to. The address of the desk itself is the one
+ * thing the app cannot know, so it is a field rather than a guess; everything else has a
+ * default that works.
+ */
+export interface DeskSettings {
+  kind: DeskKind
+  /** MIDI output port, when the show drives the desk over MIDI. */
+  midiPort: string
+  /** MIDI channel its DCAs are sent on. */
+  midiChannel: number
+  host: string
+  port: number
+  /**
+   * The address a DCA is sent to, `{n}` standing in for its number: "/dca/{n}/on". A
+   * pattern with no `{n}` in it has the number appended.
+   */
+  address: string
 }
 
+/** A DCA on the desk: a number, what the show calls it, and how it is driven. */
+export interface Dca {
+  id: string
+  /** What the show calls it: "DCA 2", or "Chorus" when it is a group's fader. */
+  label: string
+  /** The note to send instead of the one its number derives. Null is the derived one. */
+  note: number | null
+  /** The address to send to instead of the one its number derives. Null is derived. */
+  address: string | null
+}
+
+/**
+ * Who is open in one scene.
+ *
+ * An applied ensemble is membership rather than a copy of it: adding a performer to the
+ * chorus puts them in every scene the chorus is applied to. A member a scene closes
+ * anyway is an exclusion, so the two stay independent — which is what keeps a scene a
+ * handful of decisions instead of a roster.
+ */
 export interface MicScene {
   id: string
   name: string
-  /** The packs that are open in this scene. Everything else the plot knows about closes. */
+  /** Performers open here on their own, whether or not they are in an ensemble. */
   live: string[]
+  /** The ensembles applied here: every member is open unless this scene excludes them. */
+  ensembles: string[]
+  /** Members of an applied ensemble this scene closes anyway. */
+  excluded: string[]
   notes: string
 }
 
 export interface ScenesSettings {
-  channels: DeskChannel[]
   list: MicScene[]
 }
 
+// ── Channels, the cast and the desk ─────────────────────────────────────────
+//
+// A show is set up in four lists: the channels on the console, the performers on stage
+// and where their mics are patched, the ensembles that group them, and the DCAs the desk
+// is told to open and close. Scenes runs that setup and says who is open in each scene;
+// nothing here moves the desk on its own.
+
+/**
+ * A channel strip on the console: one input, named for what is on the other end of it.
+ * Its number is its place in the list, so a show that starts with twelve has twelve of
+ * them and adding one appends the thirteenth.
+ */
+export interface ShowChannel {
+  id: string
+  /** What the console calls the strip: a performer, an instrument, a position. */
+  name: string
+  /**
+   * The DCA it drives. A strip starts on the DCA of its own number — the mic-per-fader
+   * arrangement a wireless show is set up as — and one that shares a fader with others is
+   * assigned by hand.
+   */
+  dcaId: string | null
+}
+
+/**
+ * One performer: a role in the show, not a physical mic. Which pack they are currently
+ * wearing is the plot's business (`RfPack.performerId`); where their mic is patched is
+ * theirs, and the DCA that opens for them is their channel's — so a performer keeps the
+ * same desk routing across a pack swap, because the desk never knew packs were involved.
+ */
+export interface Performer {
+  id: string
+  name: string
+  role: string
+  notes: string
+  /** The channel their mic is patched to, or null while they are not on the desk yet. */
+  channelId: string | null
+}
+
+/**
+ * A named group of performers — the chorus, the band. It is a grouping and nothing else:
+ * it exists to be applied to a scene so a handful of mics move together, and it is not
+ * desk routing, which is the channel's business. Membership is the list here rather than
+ * a pointer on each performer, because a performer can belong to more than one ensemble
+ * and an ensemble that is deleted should take its membership with it.
+ */
+export interface Ensemble {
+  id: string
+  name: string
+  members: string[]
+}
+
+/**
+ * The show's setup: the channels on the console, who is in the cast and where their mics
+ * are patched, the ensembles that group them, and the DCAs those channels open.
+ */
+export interface CastSettings {
+  channels: ShowChannel[]
+  performers: Performer[]
+  ensembles: Ensemble[]
+  dcas: Dca[]
+}
+
 export interface RfPlot {
-  performers: RfPerformer[]
   packs: RfPack[]
 }
 
@@ -292,11 +380,14 @@ export const DEFAULT_TIMEOUT_MS = 1500
 export interface ShowSettings {
   oscIn: OscInSettings
   midiIn: MidiInSettings
+  /** How the show reaches the desk, and what a DCA's own number means to it. */
+  desk: DeskSettings
   rf: RfSettings
   presence: PresenceSettings
   script: ScriptSettings
   companion: CompanionSettings
   scenes: ScenesSettings
+  cast: CastSettings
 }
 
 // ── The script, and the tablet reading it ───────────────────────────────────
@@ -386,13 +477,77 @@ export function defaultRfThresholds(): RfThresholds {
 
 export function defaultRfSettings(): RfSettings {
   return {
-    // No plot and no sources: an operator who wants either adds it, and the demo rack
+    // No packs and no sources: an operator who wants either adds it, and the demo rack
     // is one click away for anyone who wants to see what the panel does.
-    plot: { performers: [], packs: [] },
+    plot: { packs: [] },
     sources: [],
     swaps: [],
     thresholds: defaultRfThresholds()
   }
+}
+
+/** How many DCAs a show can drive, and how many a channel drives by its number. */
+export const DCA_LIMIT = 12
+export const CHANNEL_START_COUNT = 12
+
+/**
+ * What a DCA's own number sounds like on a desk that has never been told otherwise: the
+ * DCA is opened and closed at one address, the way most desks take a mute, and it is the
+ * address that carries the number.
+ */
+export const DEFAULT_DESK_ADDRESS = '/dca/{n}/on'
+export const DEFAULT_DESK_PORT = 8000
+
+/**
+ * The scene that is always in the view and never in the file: every mic closed. It is
+ * what a desk wants pressed between numbers, and it is not a scene anyone edits because
+ * there is nothing in an empty stage to move into or out of it.
+ */
+export const ALL_CLOSED_SCENE_ID = 'all-closed'
+
+/**
+ * The desk a show starts pointed at. Its own address is the one thing the app cannot
+ * know — the desk is somewhere in the room — so this is the local machine, and the port
+ * and the address pattern are what an operator changes once.
+ */
+export function defaultDeskSettings(): DeskSettings {
+  return {
+    kind: 'osc',
+    midiPort: '',
+    midiChannel: 1,
+    host: '127.0.0.1',
+    port: DEFAULT_DESK_PORT,
+    address: DEFAULT_DESK_ADDRESS
+  }
+}
+
+/** The DCAs a new show drives: twelve of them, labelled by number. */
+export function startingDcas(): Dca[] {
+  return Array.from({ length: DCA_LIMIT }, (_, index) => ({
+    id: crypto.randomUUID(),
+    label: `DCA ${index + 1}`,
+    note: null,
+    address: null
+  }))
+}
+
+/**
+ * The twelve strips a new show opens on, each driving the DCA of its own number: a mic
+ * per fader, which is what a wireless show is, so nothing has to be assigned before the
+ * first scene moves the desk.
+ */
+export function startingChannels(dcas: Dca[]): ShowChannel[] {
+  return Array.from({ length: CHANNEL_START_COUNT }, (_, index) => ({
+    id: crypto.randomUUID(),
+    name: '',
+    dcaId: dcas[index]?.id ?? null
+  }))
+}
+
+/** A show with nobody cast yet still has a console, wired to a desk and to itself. */
+export function defaultCastSettings(): CastSettings {
+  const dcas = startingDcas()
+  return { channels: startingChannels(dcas), performers: [], ensembles: [], dcas }
 }
 
 export function defaultShowSettings(): ShowSettings {
@@ -401,11 +556,13 @@ export function defaultShowSettings(): ShowSettings {
     // No port can be assumed to exist, and opening every input would answer to the
     // whole room's traffic. The operator picks the ports.
     midiIn: { enabled: false, portNames: [] },
+    desk: defaultDeskSettings(),
     rf: defaultRfSettings(),
     presence: defaultPresenceSettings(),
     script: defaultScriptSettings(),
     companion: defaultCompanionSettings(),
-    scenes: defaultScenesSettings()
+    scenes: defaultScenesSettings(),
+    cast: defaultCastSettings()
   }
 }
 
@@ -415,7 +572,7 @@ export function defaultScriptSettings(): ScriptSettings {
 
 /** A show with no scenes still has a desk; the list starts empty rather than guessed at. */
 export function defaultScenesSettings(): ScenesSettings {
-  return { channels: [], list: [] }
+  return { list: [] }
 }
 
 /** The companion is off until it is asked for: it puts the show on the network. */
@@ -437,9 +594,11 @@ export function defaultPresenceSettings(): PresenceSettings {
 export function normalizeShowSettings(settings: Partial<ShowSettings> | undefined): ShowSettings {
   const defaults = defaultShowSettings()
   const rf = settings?.rf
+  const cast = settings?.cast
   return {
     oscIn: { ...defaults.oscIn, ...settings?.oscIn },
     midiIn: { ...defaults.midiIn, ...settings?.midiIn },
+    desk: { ...defaults.desk, ...settings?.desk },
     rf: {
       plot: { ...defaults.rf.plot, ...rf?.plot },
       sources: rf?.sources ?? defaults.rf.sources,
@@ -450,8 +609,26 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
     script: { ...defaults.script, ...settings?.script },
     companion: { ...defaults.companion, ...settings?.companion },
     scenes: {
-      channels: settings?.scenes?.channels ?? defaults.scenes.channels,
-      list: settings?.scenes?.list ?? defaults.scenes.list
+      // A scene written before ensembles existed has an empty excluded list and no
+      // ensembles applied — which reads exactly as it behaved.
+      list: (settings?.scenes?.list ?? defaults.scenes.list).map(scene => ({
+        ...scene,
+        ensembles: scene.ensembles ?? [],
+        excluded: scene.excluded ?? []
+      }))
+    },
+    cast: {
+      channels: cast?.channels ?? defaults.cast.channels,
+      performers: cast?.performers ?? defaults.cast.performers,
+      ensembles: cast?.ensembles ?? defaults.cast.ensembles,
+      // A DCA written before overrides existed carries the messages it sent; the
+      // migration reads those into the connection and these two fields.
+      dcas: (cast?.dcas ?? defaults.cast.dcas).map(dca => ({
+        id: dca.id,
+        label: dca.label,
+        note: dca.note ?? null,
+        address: dca.address ?? null
+      }))
     }
   }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore, usePro } from '../../store'
+import { useModal } from '../../hooks/useModal'
 import { audioEngine } from '../../engine/audioEngineClient'
 import type { AudioDeviceInfo } from '../../engine/audioEngineClient'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
@@ -91,6 +92,7 @@ function ProHint({ onUnlock }: { onUnlock: () => void }) {
 }
 
 export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
+  useModal()
   const {
     audioSettings, midiSettings, showSettings, showServices, audioDeviceError,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,

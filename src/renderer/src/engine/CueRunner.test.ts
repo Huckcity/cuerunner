@@ -9,7 +9,6 @@ import type { ScriptRun } from './scriptHost'
 import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
-import { midiNoteMessages } from '../utils/scenes'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -907,23 +906,23 @@ describe('CueRunner — scene cues', () => {
     useStore.setState({
       showSettings: {
         ...defaults,
-        rf: {
-          ...defaults.rf,
-          plot: {
-            performers: [],
-            packs: [{
-              id: 'pack-1', label: 'Pack 1', channelId: null,
-              performerId: null, notes: '', deskChannelId: 'dca-1'
-            }]
-          }
+        // The show drives a MIDI desk, and the DCA is sent the note somebody gave it
+        // rather than the one its number makes.
+        desk: { ...defaults.desk, kind: 'midi', midiPort: 'Yamaha', midiChannel: 1 },
+        cast: {
+          // Ada's strip is what carries the routing now: the DCA is opened by the
+          // performer whose channel is assigned to it.
+          channels: [{ id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }],
+          performers: [{
+            id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
+          }],
+          ensembles: [],
+          dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', note: 36, address: null }]
         },
         scenes: {
-          channels: [{
-            id: 'dca-1',
-            label: 'DCA 1 — Principals',
-            ...midiNoteMessages('Yamaha', 1, 36)
-          }],
-          list: [{ id: 's-1', name: 'Wedding', live: ['pack-1'], notes: '' }]
+          list: [{
+            id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: ''
+          }]
         }
       },
       deskState: {},

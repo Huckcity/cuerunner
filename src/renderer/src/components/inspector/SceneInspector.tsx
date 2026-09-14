@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
+import { sceneLiveIds } from '../../utils/scenes'
 import type { SceneCue } from '../../types/cue'
 
 /**
@@ -9,10 +10,14 @@ import type { SceneCue } from '../../types/cue'
  */
 export function SceneInspector({ cue }: { cue: SceneCue }) {
   const scenes = useStore(s => s.showSettings.scenes.list)
+  const ensembles = useStore(s => s.showSettings.cast.ensembles)
   const updateCue = useStore(s => s.updateCue)
   const [recalling, setRecalling] = useState(false)
 
   const scene = scenes.find(candidate => candidate.id === cue.sceneId) ?? null
+  // Who a scene opens is what it names plus the members of the ensembles it applies, so
+  // the count is asked of the scene rather than read off its list.
+  const open = scene === null ? 0 : sceneLiveIds(scene, ensembles).length
 
   return (
     <div className="inspector-section">
@@ -33,7 +38,8 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
 
       {scenes.length === 0 ? (
         <p className="inspector-hint">
-          No scenes yet. Make them in the Scenes view, with the groups they drive.
+          No scenes yet. Make them in the Scenes view; which DCA a mic opens is set up in
+          Show Settings.
         </p>
       ) : scene === null ? (
         <p className="inspector-hint">
@@ -43,8 +49,8 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
       ) : (
         <p className="inspector-hint">
           Firing tells the desk the difference between “{scene.name}” and where it stands now:
-          {' '}{scene.live.length} mic{scene.live.length === 1 ? '' : 's'} open, groups already
-          in the right state left alone.
+          {' '}{open} performer{open === 1 ? '' : 's'} open, DCAs already in the right state
+          left alone.
         </p>
       )}
 

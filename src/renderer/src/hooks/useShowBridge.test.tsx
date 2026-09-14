@@ -8,7 +8,7 @@ import { useShowBridge } from './useShowBridge'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
 import { TEST_LICENSE } from '../../../test/license'
-import type { ShowEvent, ShowSnapshot } from '../types/show'
+import type { ShowEvent, ShowSettings, ShowSnapshot } from '../types/show'
 
 function Harness() {
   useShowBridge()
@@ -39,6 +39,8 @@ describe('useShowBridge', () => {
   let root: Root
   let emit: (events: ShowEvent[]) => void
   let off: Mock
+  /** The settings the show is holding, which is what the services are handed. */
+  let settings: ShowSettings
   let resolveSnapshot: (snapshot: ShowSnapshot) => void
 
   beforeEach(() => {
@@ -59,9 +61,10 @@ describe('useShowBridge', () => {
     vi.mocked(bridge.snapshot).mockImplementation(() => pending.promise)
     vi.mocked(bridge.configure).mockImplementation(() => Promise.resolve())
 
+    settings = defaultShowSettings()
     useStore.setState({
       license: { state: 'active', license: TEST_LICENSE },
-      showSettings: defaultShowSettings(),
+      showSettings: settings,
       showServices: [],
       showDevices: [],
       showAlerts: [],
@@ -118,7 +121,7 @@ describe('useShowBridge', () => {
 
   it('sends the settings on mount, and again when the operator changes them', async () => {
     await settle()
-    expect(vi.mocked(window.winslab.show.configure)).toHaveBeenCalledWith(defaultShowSettings())
+    expect(vi.mocked(window.winslab.show.configure)).toHaveBeenCalledWith(settings)
 
     act(() => { useStore.getState().updateOscInSettings({ port: 53010 }) })
     await settle()

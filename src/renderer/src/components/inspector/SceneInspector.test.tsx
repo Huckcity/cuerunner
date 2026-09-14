@@ -5,14 +5,16 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { SceneInspector } from './SceneInspector'
 import { useStore } from '../../store'
-import { defaultShowSettings, type MicScene, type ScenesSettings } from '../../types/show'
-import { midiNoteMessages } from '../../utils/scenes'
+import {
+  defaultShowSettings,
+  type CastSettings,
+  type MicScene,
+  type ScenesSettings
+} from '../../types/show'
 import type { SceneCue } from '../../types/cue'
 
-const note = midiNoteMessages('Yamaha', 1, 36)
-
-function scene(id: string, name: string, live: string[] = []): MicScene {
-  return { id, name, live, notes: '' }
+function scene(id: string, name: string, live: string[] = [], ensembles: string[] = []): MicScene {
+  return { id, name, live, ensembles, excluded: [], notes: '' }
 }
 
 describe('SceneInspector', () => {
@@ -34,27 +36,32 @@ describe('SceneInspector', () => {
     vi.clearAllMocks()
   })
 
-  function show(cue: SceneCue, scenes: Partial<ScenesSettings> = {}): void {
+  function show(
+    cue: SceneCue,
+    scenes: Partial<ScenesSettings> = {},
+    cast: Partial<CastSettings> = {}
+  ): void {
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
         ...defaults,
-        rf: {
-          ...defaults.rf,
-          plot: {
-            performers: [],
-            packs: [{
-              id: 'pack-1', label: 'Pack 1', channelId: null,
-              performerId: null, notes: '', deskChannelId: 'dca-1'
-            }]
-          }
+        // The show reaches its desk over MIDI on the port the other fixtures use, and
+        // this DCA is on a note of its own rather than the one its number derives.
+        desk: { ...defaults.desk, kind: 'midi', midiPort: 'Yamaha' },
+        cast: {
+          // Ada is patched to the strip that drives DCA 1, so a scene naming her has a
+          // message to send and a person to count.
+          channels: [{ id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }],
+          performers: [{
+            id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
+          }],
+          ensembles: [],
+          dcas: [{ id: 'dca-1', label: 'DCA 1', note: 36, address: null }],
+          ...cast
         },
-        scenes: {
-          channels: [{ id: 'dca-1', label: 'DCA 1', ...note }],
-          list: scenes.list ?? [scene('s-1', 'Wedding', ['pack-1'])]
-        }
+        scenes: { list: scenes.list ?? [scene('s-1', 'Wedding', ['p-1'])] }
       },
-      deskState: scenes.channels ? {} : {},
+      deskState: {},
       deskSceneId: null,
       log: [],
       cues: [cue]
@@ -96,12 +103,30 @@ describe('SceneInspector', () => {
 
   it('says what firing it will do, and refuses to when nothing is chosen', async () => {
     show(cue('s-1'))
-    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 mic open')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 performer open')
 
     show(cue(''))
     expect(container.querySelector('.inspector-hint')?.textContent)
       .toContain('close every mic on the desk')
     expect(container.querySelector<HTMLButtonElement>('.inspector-btn')?.disabled).toBe(true)
+  })
+
+  it('counts who an applied ensemble holds open, not just the names in the scene', () => {
+    // Applying an ensemble is how a scene carries a whole section, so the count the
+    // operator reads before pressing GO has to be everyone it opens.
+    show(
+      cue('s-1'),
+      { list: [scene('s-1', 'Wedding', [], ['ens-1'])] },
+      {
+        performers: [
+          { id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: null },
+          { id: 'p-2', name: 'Bea', role: 'Chorus', notes: '', channelId: null }
+        ],
+        ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }]
+      }
+    )
+
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('2 performers open')
   })
 
   it('recalls the scene by hand, under the cue that will fire it', async () => {

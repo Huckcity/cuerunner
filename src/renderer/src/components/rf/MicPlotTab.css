@@ -1,0 +1,87 @@
+/* The mic plot tab. The RF panel in the dock beside it is read-only — it answers "who is
+   wearing what, and which pack is in trouble" — so every change an operator makes during
+   a show is made here, and each one has to leave the same swap behind as any other
+   editor. The dialog shell is ShowSettings.css; this is the plot's own furniture. */
+.plot-pack-row {
+  display: grid;
+  /* Every field gets a floor it can be read at: fixed widths left the notes whatever was
+     over, which at the dialog's width was one letter of its placeholder. */
+  grid-template-columns:
+    minmax(90px, 0.9fr) minmax(100px, 1fr) minmax(120px, 1.1fr) minmax(140px, 1.4fr) 26px;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.plot-pack-row input,
+.plot-pack-row select {
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  padding: 4px 7px;
+  height: var(--h-input);
+  outline: none;
+  font-family: inherit;
+}
+
+.plot-pack-row input:focus,
+.plot-pack-row select:focus {
+  border-color: var(--border-focus);
+}
+
+.plot-channel {
+  font-family: var(--font-mono);
+}
+
+/* The patch is a channel id the telemetry reports, but a pack switched off tonight is
+   still in the plot, so the field is a suggestion rather than a list of the possible. */
+.plot-remove {
+  width: 26px;
+  height: var(--h-input);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.plot-remove:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* The swap log is the point of the editor: a pack that changed hands is a fact about
+   the night, and this is where the operator sees the last few land as they make them. */
+.plot-swaps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+}
+
+.plot-swap {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.plot-swap-time {
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.plot-swap-text {
+  color: var(--fg-secondary);
+}
+
+.plot-swaps-empty {
+  color: var(--fg-ghost);
+}

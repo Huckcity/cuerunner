@@ -46,6 +46,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const selectedId = useStore(s => s.selectedId)
   const pro = usePro()
   const openSettings = useStore(s => s.openSettings)
+  const openShowSettings = useStore(s => s.openShowSettings)
 
   const handleAddCue = (type: CueType) => {
     // A scene cue belongs to the scenes the license unlocks: without one there is
@@ -118,6 +119,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'open-demo': openDemoWorkspace,
     'save': save,
     'save-as': saveAs,
+    'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings
   }
   const fileActionsRef = useRef(fileActions)

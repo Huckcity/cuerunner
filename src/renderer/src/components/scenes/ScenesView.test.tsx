@@ -1,82 +1,84 @@
-// Scenes is the view the operator lives in at curtain up and the only place the show is
-// edited: a row per pack, a column per scene, the column the desk was last taken to lit
-// where the show is, and the desk groups in a drawer below. These tests pin that glance,
-// every editing control the old dialog used to hold, the two presses that move the desk —
-// a column's Recall and the header's Apply — and the run mode it opens in, which stops
-// every edit while leaving recall, Apply and Mics off working.
+// Scenes is the view the operator lives in at curtain up: a row per performer, a column
+// per scene, the column the desk was last taken to lit where the show is. Which DCA a
+// performer's mic opens is their channel's, and what that DCA is sent comes from the
+// show's one desk connection (`ShowSettings.test.tsx`) — these tests pin the glance, the
+// two presses that move the desk (a column's Recall and the header's Apply) and the run
+// mode it opens in, which stops every edit while leaving recall and Apply working. The
+// first column is the scene that is never edited: all closed.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScenesView } from './ScenesView'
 import { useStore } from '../../store'
-import { defaultShowSettings } from '../../types/show'
-import { midiNoteMessages, oscMessages } from '../../utils/scenes'
+import { ALL_CLOSED_SCENE_ID, defaultShowSettings } from '../../types/show'
 import type {
-  DeskChannel,
-  MicScene,
-  RfPack,
-  RfPerformer,
-  RfPlot,
-  ScenesSettings
+  CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, ShowChannel
 } from '../../types/show'
 
-const PORT = 'Desk'
-
-const ENSEMBLE: DeskChannel = {
-  id: 'dca-ensemble',
-  label: 'DCA 1 — Ensemble',
-  unmute: { kind: 'midi', portName: PORT, message: { kind: 'noteOn', channel: 0, note: 60, velocity: 127 } },
-  mute: { kind: 'midi', portName: PORT, message: { kind: 'noteOff', channel: 0, note: 60, velocity: 0 } }
+// The desk these tests drive: one connection for the show, MIDI on the port the desk
+// answers to, so what a recall put on the wire reads as a port and a note rather than a
+// literal address in every assertion. The note is the DCA's number — none of these
+// carries an override.
+const DESK: DeskSettings = {
+  kind: 'midi',
+  midiPort: 'Yamaha',
+  midiChannel: 3,
+  host: '127.0.0.1',
+  port: 8000,
+  address: '/dca/{n}/on'
 }
 
-const BAND: DeskChannel = {
-  id: 'dca-band',
-  label: 'DCA 2 — Band',
-  unmute: { kind: 'osc', host: '10.0.0.5', port: 9000, address: '/dca/2', args: [1] },
-  mute: { kind: 'osc', host: '10.0.0.5', port: 9000, address: '/dca/2', args: [0] }
+const ENSEMBLE: Dca = { id: 'dca-ensemble', label: 'DCA 1 — Ensemble', note: null, address: null }
+
+const BAND: Dca = { id: 'dca-band', label: 'DCA 2 — Band', note: null, address: null }
+
+/** A fader nobody is patched to: no scene drives it, so a recall leaves it where it is. */
+const SPARE: Dca = { id: 'dca-spare', label: 'DCA 3 — Spare', note: null, address: null }
+
+function channel(id: string, name: string, dcaId: string | null): ShowChannel {
+  return { id, name, dcaId }
 }
 
-const PERFORMERS: RfPerformer[] = [
-  { id: 'f1', name: 'Ada', role: 'Lead', notes: '' },
-  { id: 'f2', name: 'Bea', role: 'MD', notes: '' }
+const CHANNELS: ShowChannel[] = [
+  channel('ch-ada', 'Ada', 'dca-ensemble'),
+  channel('ch-extra', 'Extra', 'dca-ensemble'),
+  channel('ch-bea', 'Bea', 'dca-band')
 ]
 
-function pack(
-  id: string,
-  label: string,
-  deskChannelId: string | null,
-  performerId: string | null = null
-): RfPack {
-  return { id, label, channelId: null, performerId, notes: '', deskChannelId }
+function performer(id: string, name: string, channelId: string | null): Performer {
+  return { id, name, role: '', notes: '', channelId }
 }
 
-// Pack 1 on the ensemble, Pack 3 on the band: recalling a scene opens one group and
-// closes the other, which is the handful of messages the whole feature exists to send.
-const PLOT: RfPlot = {
-  performers: PERFORMERS,
-  packs: [
-    pack('p1', 'Pack 1', 'dca-ensemble', 'f1'),
-    pack('p2', 'Pack 2', 'dca-ensemble'),
-    pack('p3', 'Pack 3', 'dca-band', 'f2')
-  ]
-}
+// Ada and Extra ride the ensemble's strip, Bea the band's: recalling a scene opens one DCA
+// and closes the other, which is the handful of messages the whole feature exists to send.
+// Two performers on one strip is also what makes their cells pending together — the desk
+// holds one state per DCA, not one per performer.
+const PERFORMERS: Performer[] = [
+  performer('p1', 'Ada', 'ch-ada'),
+  performer('p2', 'Extra', 'ch-extra'),
+  performer('p3', 'Bea', 'ch-bea')
+]
 
-function scene(id: string, name: string, live: string[]): MicScene {
-  return { id, name, live, notes: '' }
+const CHORUS: Ensemble = { id: 'ens-chorus', name: 'Chorus', members: ['p1', 'p2'] }
+
+function scene(id: string, name: string, live: string[], overrides: Partial<MicScene> = {}): MicScene {
+  return { id, name, live, ensembles: [], excluded: [], notes: '', ...overrides }
 }
 
 const OPENING = scene('s1', 'Opening', ['p1'])
 const INTERVAL = scene('s2', 'Interval', ['p3'])
 
-function channel(overrides: Partial<DeskChannel> = {}): DeskChannel {
-  return { id: 'dca-1', label: 'DCA 1', mute: null, unmute: null, ...overrides }
-}
-
-function settings(
-  list: MicScene[],
-  channels: DeskChannel[] = [ENSEMBLE, BAND]
-): ScenesSettings {
-  return { channels, list }
+// Written out rather than taken from `defaultCastSettings`, whose twelve unnamed strips
+// have no routing to recall: a test about which DCA opens needs to know which strip a
+// performer is on.
+function cast(overrides: Partial<CastSettings> = {}): CastSettings {
+  return {
+    channels: CHANNELS,
+    performers: PERFORMERS,
+    ensembles: [],
+    dcas: [ENSEMBLE, BAND],
+    ...overrides
+  }
 }
 
 describe('ScenesView', () => {
@@ -84,7 +86,6 @@ describe('ScenesView', () => {
   let root: Root
   let midiSend: Mock
   let oscSend: Mock
-  let listPorts: Mock
 
   beforeEach(() => {
     ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -95,10 +96,8 @@ describe('ScenesView', () => {
 
     midiSend = window.winslab.midi.send as unknown as Mock
     oscSend = window.winslab.osc.send as unknown as Mock
-    listPorts = window.winslab.midi.listPorts as unknown as Mock
     midiSend.mockReset().mockResolvedValue({ ok: true })
     oscSend.mockReset().mockResolvedValue({ ok: true })
-    listPorts.mockReset().mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -106,9 +105,9 @@ describe('ScenesView', () => {
     container.remove()
     midiSend.mockReset()
     oscSend.mockReset()
-    listPorts.mockReset()
     useStore.setState({
       showSettings: defaultShowSettings(),
+      showSettingsTab: null,
       deskState: {},
       deskSceneId: null,
       scenesEditing: false
@@ -116,24 +115,25 @@ describe('ScenesView', () => {
   })
 
   interface ViewState {
-    scenes?: ScenesSettings
-    plot?: RfPlot
+    scenes?: MicScene[]
+    cast?: CastSettings
+    /** A case that asserts on the wire says which desk; the rest run a new show's OSC. */
+    desk?: Partial<DeskSettings>
     deskState?: Record<string, boolean>
     deskSceneId?: string | null
-    ports?: string[]
     /** Most of these tests are about editing, so they start in edit mode. */
     editing?: boolean
   }
 
   async function show(state: ViewState = {}): Promise<void> {
     const defaults = defaultShowSettings()
-    listPorts.mockResolvedValue(state.ports ?? [])
     await act(async () => {
       useStore.setState({
         showSettings: {
           ...defaults,
-          rf: { ...defaults.rf, plot: state.plot ?? defaults.rf.plot },
-          scenes: state.scenes ?? defaults.scenes
+          desk: { ...defaults.desk, ...state.desk },
+          cast: state.cast ?? cast(),
+          scenes: { list: state.scenes ?? [] }
         },
         deskState: state.deskState ?? {},
         deskSceneId: state.deskSceneId ?? null,
@@ -143,8 +143,19 @@ describe('ScenesView', () => {
     })
   }
 
-  function scenes(): ScenesSettings {
-    return useStore.getState().showSettings.scenes
+  function scenes(): MicScene[] {
+    return useStore.getState().showSettings.scenes.list
+  }
+
+  /** The scene columns, which is every column but the one that is always there. */
+  function sceneColumns(): Element[] {
+    return [...container.querySelectorAll('.matrix-scene[data-scene-id]')]
+  }
+
+  function allClosedColumn(): Element {
+    const column = container.querySelector('.matrix-scene[data-all-closed="true"]')
+    if (!column) throw new Error('no all-closed column')
+    return column
   }
 
   function columnFor(name: string): Element {
@@ -156,30 +167,16 @@ describe('ScenesView', () => {
     return column
   }
 
-  // Rows are found by who is wearing the mic; a pack nobody is wearing falls back to its
-  // label, which is what the view shows for it too.
-  function rowFor(who: string): Element {
-    const row = [...container.querySelectorAll('.matrix-row')].find(
-      candidate => candidate.querySelector('.matrix-performer')?.textContent === who
-    )
-    if (!row) throw new Error(`no mic row for ${who}`)
-    return row
-  }
-
-  function cellFor(label: string, sceneName: string): HTMLButtonElement {
+  function cellFor(name: string, sceneName: string): HTMLButtonElement {
     const cell = [...container.querySelectorAll<HTMLButtonElement>('.matrix-cell')].find(
-      candidate => candidate.getAttribute('aria-label') === `${label} in ${sceneName}`
+      candidate => candidate.getAttribute('aria-label') === `${name} in ${sceneName}`
     )
-    if (!cell) throw new Error(`no cell for ${label} in ${sceneName}`)
+    if (!cell) throw new Error(`no cell for ${name} in ${sceneName}`)
     return cell
   }
 
   function field<T extends HTMLElement = HTMLInputElement>(selector: string, index = 0): T {
     return container.querySelectorAll<T>(selector)[index]
-  }
-
-  function summary(): string {
-    return container.querySelector('.group-summary')!.textContent ?? ''
   }
 
   // The header readout as the operator reads it: the two labels and what they point at.
@@ -195,12 +192,6 @@ describe('ScenesView', () => {
     return { now: slot('.scenes-now') ?? '', next: slot('.scenes-next') }
   }
 
-  async function openGroups(): Promise<void> {
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('.scenes-groups-toggle')!.click()
-    })
-  }
-
   // Controlled inputs: setting the value through the prototype setter is what gets past
   // React's own tracker, so the dispatched event looks like a real keystroke.
   async function type(input: HTMLInputElement, value: string): Promise<void> {
@@ -211,86 +202,57 @@ describe('ScenesView', () => {
     })
   }
 
-  async function choose(select: HTMLSelectElement, value: string): Promise<void> {
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
-      setter.call(select, value)
-      select.dispatchEvent(new Event('change', { bubbles: true }))
-    })
-  }
-
   async function leave(input: HTMLElement): Promise<void> {
     await act(async () => {
       input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
     })
   }
 
-  it('gives every mic a row of who is wearing it, and every scene a named column', async () => {
+  it('gives every performer a row, and every scene a named column', async () => {
     await show({
-      scenes: settings([OPENING, scene('s3', 'Finale', ['p2', 'p3']), INTERVAL]),
-      plot: PLOT
+      scenes: [OPENING, scene('s3', 'Finale', ['p2', 'p3']), INTERVAL]
     })
 
-    expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('3 mics · 3 scenes')
+    expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('3 performers · 3 scenes')
 
-    const columns = [...container.querySelectorAll('.matrix-scene')]
-    expect(columns.map(column =>
+    expect(sceneColumns().map(column =>
       column.querySelector<HTMLInputElement>('.scene-name-field')?.value))
       .toEqual(['Opening', 'Finale', 'Interval'])
 
-    // The row is a name, and the column says the name and the two presses: how many mics a
-    // scene opens is already the block of colour beside it.
     const rows = [...container.querySelectorAll('.matrix-row')]
     expect(rows.map(row => row.querySelector('.matrix-performer')?.textContent))
-      .toEqual(['Ada', 'Pack 2', 'Bea'])
+      .toEqual(['Ada', 'Extra', 'Bea'])
     expect(rows.map(row => row.querySelectorAll('.matrix-cell').length)).toEqual([3, 3, 3])
-    expect(columns.every(column => column.querySelector('.matrix-scene-count') === null))
-      .toBe(true)
   })
 
-  it('counts a lone mic and scene in the singular', async () => {
+  it('counts a lone performer and scene in the singular', async () => {
     await show({
-      scenes: settings([OPENING]),
-      plot: { performers: [], packs: [pack('p1', 'Pack 1', 'dca-ensemble')] }
+      scenes: [OPENING],
+      cast: cast({ performers: [performer('p1', 'Ada', 'ch-ada')] })
     })
 
-    expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('1 mic · 1 scene')
+    expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('1 performer · 1 scene')
   })
 
-  it('reads each row as who is wearing the mic, and marks the ones nobody is', async () => {
-    await show({ scenes: settings([OPENING]), plot: PLOT })
+  it('toggles a performer in a scene through to the store', async () => {
+    await show({ scenes: [OPENING] })
 
-    expect(rowFor('Ada').querySelector('.matrix-performer')?.getAttribute('data-unassigned'))
-      .toBe('false')
-    expect(rowFor('Bea').querySelector('.matrix-performer')?.getAttribute('data-unassigned'))
-      .toBe('false')
-
-    // A pack nobody is wearing is still a row the show has to have: it reads as its label.
-    const spare = rowFor('Pack 2')
-    expect(spare.querySelector('.matrix-performer')?.getAttribute('data-unassigned')).toBe('true')
-    // And no row carries the patch any more: which group a mic feeds is set up with the plot.
-    expect(spare.querySelector('.matrix-group-select')).toBeNull()
-  })
-
-  it('toggles a mic in a scene through to the store', async () => {
-    await show({ scenes: settings([OPENING]), plot: PLOT })
-
-    const cell = cellFor('Pack 2', 'Opening')
+    const cell = cellFor('Extra', 'Opening')
     expect(cell.getAttribute('data-live')).toBe('false')
 
     await act(async () => { cell.click() })
 
-    expect(useStore.getState().showSettings.scenes.list[0].live).toEqual(['p1', 'p2'])
+    expect(scenes()[0].live).toEqual(['p1', 'p2'])
     expect(cell.getAttribute('data-live')).toBe('true')
 
     await act(async () => { cell.click() })
 
-    expect(useStore.getState().showSettings.scenes.list[0].live).toEqual(['p1'])
+    expect(scenes()[0].live).toEqual(['p1'])
     expect(cell.getAttribute('data-live')).toBe('false')
   })
 
   it('adds a scene from the header and renames it in place, refusing an empty name', async () => {
-    await show({ scenes: settings([]), plot: PLOT })
+    await show({ scenes: [] })
 
     expect(container.querySelectorAll('.matrix-scene')).toHaveLength(0)
     expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet.')
@@ -298,41 +260,227 @@ describe('ScenesView', () => {
 
     await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-add')!.click() })
 
-    expect(scenes().list.map(entry => entry.name)).toEqual(['Scene 1'])
-    expect(container.querySelectorAll('.matrix-scene')).toHaveLength(1)
+    expect(scenes().map(entry => entry.name)).toEqual(['Scene 1'])
+    // The all-closed column arrives with the first scene: the grid is what it belongs to.
+    expect(sceneColumns()).toHaveLength(1)
+    expect(container.querySelectorAll('.matrix-scene')).toHaveLength(2)
 
     const name = field('.scene-name-field')
     await type(name, 'Entrance')
     // Half a name is not a rename: the scene list is untouched until the field is left.
-    expect(scenes().list[0].name).toBe('Scene 1')
+    expect(scenes()[0].name).toBe('Scene 1')
 
     await leave(name)
-    expect(scenes().list[0].name).toBe('Entrance')
+    expect(scenes()[0].name).toBe('Entrance')
     expect(field<HTMLInputElement>('.scene-name-field').value).toBe('Entrance')
 
     // A scene without a name is a row nobody can find again, so the old one stays.
     await type(field('.scene-name-field'), '')
     await leave(field('.scene-name-field'))
-    expect(scenes().list[0].name).toBe('Entrance')
+    expect(scenes()[0].name).toBe('Entrance')
     expect(field<HTMLInputElement>('.scene-name-field').value).toBe('Entrance')
   })
 
   it('removes a scene from its column', async () => {
-    await show({ scenes: settings([OPENING, INTERVAL]), plot: PLOT })
+    await show({ scenes: [OPENING, INTERVAL] })
 
     await act(async () => {
       columnFor('Opening').querySelector<HTMLButtonElement>('.matrix-scene-remove')!.click()
     })
 
-    expect(scenes().list.map(entry => entry.name)).toEqual(['Interval'])
-    expect(container.querySelectorAll('.matrix-scene')).toHaveLength(1)
+    expect(scenes().map(entry => entry.name)).toEqual(['Interval'])
+    expect(sceneColumns()).toHaveLength(1)
+  })
+
+  it('always has the all-closed column, and never lets it be edited', async () => {
+    await show({ scenes: [OPENING, INTERVAL] })
+
+    const column = allClosedColumn()
+    expect(container.querySelectorAll('.matrix-scene')[0]).toBe(column)
+    expect(column.querySelector('.scene-name-static')?.textContent).toBe('All closed')
+
+    // A place the desk can be, not a scene with a name to type or a column to remove —
+    // while the scenes beside it have both.
+    expect(column.querySelector('.scene-name-field')).toBeNull()
+    expect(column.querySelector('.matrix-scene-remove')).toBeNull()
+    expect(sceneColumns()[0].querySelector('.scene-name-field')).not.toBeNull()
+    expect(sceneColumns()[0].querySelector('.matrix-scene-remove')).not.toBeNull()
+
+    // Every performer row leaves it a gap rather than a cell: there is nothing to open
+    // in a column that closes everything.
+    expect(container.querySelectorAll('.matrix-cell-blank')).toHaveLength(PERFORMERS.length)
+    expect(column.querySelectorAll('.matrix-cell')).toHaveLength(0)
+  })
+
+  it('recalls the all-closed column: everything the show drives is closed, and the column is current', async () => {
+    await show({
+      scenes: [OPENING, INTERVAL],
+      cast: cast({ dcas: [ENSEMBLE, BAND, SPARE] }),
+      desk: DESK,
+      deskState: { 'dca-ensemble': true, 'dca-band': true, 'dca-spare': true },
+      deskSceneId: 's1'
+    })
+
+    const column = allClosedColumn()
+    expect(column.getAttribute('data-current')).toBe('false')
+
+    await act(async () => {
+      column.querySelector<HTMLButtonElement>('.matrix-recall')!.click()
+    })
+
+    // Both faders a performer rides are closed, one message each. The spare is nobody's —
+    // the desk may well be doing something else with it — so it is left alone.
+    expect(midiSend).toHaveBeenCalledTimes(2)
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 1, velocity: 0 }]
+    })
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 2, velocity: 0 }]
+    })
+    expect(oscSend).not.toHaveBeenCalled()
+    expect(useStore.getState().deskState)
+      .toEqual({ 'dca-ensemble': false, 'dca-band': false, 'dca-spare': true })
+    expect(useStore.getState().deskSceneId).toBe(ALL_CLOSED_SCENE_ID)
+    expect(column.getAttribute('data-current')).toBe('true')
+  })
+
+  it('puts an ensemble above the performers, and applies it to a scene', async () => {
+    await show({ scenes: [OPENING, INTERVAL], cast: cast({ ensembles: [CHORUS] }) })
+
+    const grid = container.querySelector('.matrix-grid')!
+    const children = [...grid.children]
+    const ensembleAt = children.findIndex(child => child.classList.contains('matrix-ensemble-row'))
+    const performerAt = children.findIndex(child => child.classList.contains('matrix-row'))
+    expect(ensembleAt).toBeGreaterThan(-1)
+    expect(ensembleAt).toBeLessThan(performerAt)
+
+    const row = container.querySelector('.matrix-ensemble-row')!
+    expect(row.querySelector('.matrix-ensemble-count')?.textContent).toBe('2')
+
+    const cell = cellFor('Chorus', 'Opening')
+    expect(cell.getAttribute('data-applied')).toBe('off')
+
+    await act(async () => { cell.click() })
+
+    expect(scenes()[0].ensembles).toEqual(['ens-chorus'])
+    expect(cell.getAttribute('data-applied')).toBe('on')
+    // Every member is open by way of the ensemble, whatever the scene's own list says.
+    expect(cellFor('Ada', 'Opening').getAttribute('data-live')).toBe('true')
+    expect(cellFor('Extra', 'Opening').getAttribute('data-live')).toBe('true')
+
+    await act(async () => { cell.click() })
+
+    expect(scenes()[0].ensembles).toEqual([])
+    expect(cell.getAttribute('data-applied')).toBe('off')
+    expect(cellFor('Ada', 'Opening').getAttribute('data-live')).toBe('false')
+    expect(cellFor('Extra', 'Opening').getAttribute('data-live')).toBe('false')
+  })
+
+  it('closing a member inside an applied ensemble leaves the ensemble applied, the cell partial', async () => {
+    await show({ scenes: [OPENING, INTERVAL], cast: cast({ ensembles: [CHORUS] }) })
+
+    const cell = cellFor('Chorus', 'Opening')
+    await act(async () => { cell.click() })
+
+    await act(async () => { cellFor('Ada', 'Opening').click() })
+
+    // Closing her is an exclusion, not a membership change: she is still in the chorus,
+    // and the next scene that applies it opens her again.
+    expect(scenes()[0].excluded).toEqual(['p1'])
+    expect(scenes()[0].ensembles).toEqual(['ens-chorus'])
+    expect(cell.getAttribute('data-applied')).toBe('partial')
+    expect(cellFor('Ada', 'Opening').getAttribute('data-live')).toBe('false')
+    expect(cellFor('Extra', 'Opening').getAttribute('data-live')).toBe('true')
+  })
+
+  it('makes an ensemble out of the scene on the desk, and only then can one be made', async () => {
+    await show({ scenes: [OPENING, INTERVAL] })
+
+    const button = container.querySelector<HTMLButtonElement>('.scenes-ensemble')!
+    // Grouping the mics that are open needs a scene on the desk to read them from.
+    expect(button.disabled).toBe(true)
+
+    await act(async () => { useStore.setState({ deskSceneId: 's1' }) })
+    expect(button.disabled).toBe(false)
+
+    await act(async () => { button.click() })
+
+    const ensembles = useStore.getState().showSettings.cast.ensembles
+    expect(ensembles).toHaveLength(1)
+    expect(ensembles[0].name).toBe('Ensemble 1')
+    // Exactly who is open in the scene it was made from, applied to it.
+    expect(ensembles[0].members).toEqual(['p1'])
+    expect(scenes()[0].ensembles).toEqual([ensembles[0].id])
+    expect(cellFor(ensembles[0].name, 'Opening').getAttribute('data-applied')).toBe('on')
+
+    // The all-closed scene is a place the desk can be, not a scene with anyone open in
+    // it, so it leaves nothing to group.
+    await act(async () => { useStore.setState({ deskSceneId: ALL_CLOSED_SCENE_ID }) })
+    expect(button.disabled).toBe(true)
+  })
+
+  it('removes an ensemble from the grid and from the scenes that used it', async () => {
+    const used = scene('s1', 'Opening', [], { ensembles: ['ens-chorus'] })
+    await show({ scenes: [used, INTERVAL], cast: cast({ ensembles: [CHORUS] }) })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.matrix-ensemble-row .matrix-scene-remove')!.click()
+    })
+
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
+    expect(scenes()[0].ensembles).toEqual([])
+    expect(container.querySelector('.matrix-ensemble-row')).toBeNull()
+    // The performers it grouped are still the cast.
+    expect(container.querySelectorAll('.matrix-row')).toHaveLength(PERFORMERS.length)
+  })
+
+  it('reads the strip a performer is patched to, and a strip taken off its DCA drives nothing', async () => {
+    const OUT: Dca = { id: 'dca-out', label: 'DCA 1 — Out', note: null, address: null }
+
+    await show({
+      scenes: [scene('s1', 'Opening', ['p1', 'p3'])],
+      cast: cast({
+        // Ruth's strip is on no fader at all — that is what choosing “— no DCA —” in Show
+        // Settings leaves — so her mic opens nothing on the desk.
+        channels: [channel('ch-ruth', 'Ruth', null), channel('ch-bea', 'Bea', 'dca-band')],
+        performers: [performer('p1', 'Ruth', 'ch-ruth'), performer('p3', 'Bea', 'ch-bea')],
+        dcas: [OUT, BAND]
+      }),
+      desk: DESK,
+      deskState: { 'dca-out': false, 'dca-band': false },
+      deskSceneId: 's1'
+    })
+
+    const rows = [...container.querySelectorAll('.matrix-row')]
+    expect(rows.map(row => row.querySelector('.matrix-channel')?.textContent))
+      .toEqual(['Ch 1 · Ruth', 'Ch 2 · Bea'])
+    expect(rows.map(row => row.querySelector('.matrix-performer')?.textContent))
+      .toEqual(['Ruth', 'Bea'])
+
+    // A strip patched to no fader is patched to nothing: nobody's state is pending for it,
+    // and a recall leaves the whole desk alone but for the strip that still moves.
+    expect(cellFor('Ruth', 'Opening').getAttribute('data-pending')).toBe('false')
+    expect(cellFor('Bea', 'Opening').getAttribute('data-pending')).toBe('true')
+
+    await act(async () => {
+      columnFor('Opening').querySelector<HTMLButtonElement>('.matrix-recall')!.click()
+    })
+
+    expect(midiSend).toHaveBeenCalledTimes(1)
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note: 2, velocity: 127 }]
+    })
+    expect(useStore.getState().deskState).toEqual({ 'dca-out': false, 'dca-band': true })
   })
 
   it('runs the show without editing it: every cell is still, the column recall is live', async () => {
     await show({
-      scenes: settings([OPENING, INTERVAL]),
+      scenes: [OPENING, INTERVAL],
       editing: false,
-      plot: PLOT,
+      desk: DESK,
       deskState: { 'dca-ensemble': true, 'dca-band': false },
       deskSceneId: 's1'
     })
@@ -341,35 +489,40 @@ describe('ScenesView', () => {
     expect(cells.length).toBeGreaterThan(0)
     expect(cells.every(cell => cell.disabled)).toBe(true)
 
-    await act(async () => { cellFor('Pack 2', 'Opening').click() })
-    expect(useStore.getState().showSettings.scenes.list[0].live).toEqual(['p1'])
+    await act(async () => { cellFor('Extra', 'Opening').click() })
+    expect(scenes()[0].live).toEqual(['p1'])
 
     const recall = columnFor('Interval').querySelector<HTMLButtonElement>('.matrix-recall')
     expect(recall?.disabled).toBe(false)
     await act(async () => { recall?.click() })
 
+    // Interval opens the band and closes the ensemble: one message to each fader.
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOff', channel: 0, note: 60, velocity: 0 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 1, velocity: 0 }]
     })
-    expect(oscSend).toHaveBeenCalledWith({
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/2',
-      args: [{ type: 'i', value: 1 }]
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note: 2, velocity: 127 }]
     })
     expect(useStore.getState().deskSceneId).toBe('s2')
   })
 
   it('opens to run the show, and Edit and Done switch it, saying what the clicks now do', async () => {
-    await show({ scenes: settings([OPENING]), plot: PLOT, editing: false })
+    await show({ scenes: [OPENING], editing: false })
 
     const edit = container.querySelector<HTMLButtonElement>('.scenes-edit')
     expect(edit?.textContent).toBe('Edit')
     expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('false')
     expect(container.querySelector('.scenes-editing-hint')).toBeNull()
     expect(container.querySelector('.scenes-add')).toBeNull()
+    expect(container.querySelector('.scenes-ensemble')).toBeNull()
+    // The little fly-out buttons are gone: setting the show up is the menu's Show Settings.
     expect(container.querySelector('.scenes-plot')).toBeNull()
+    expect(container.querySelector('.scenes-show')).toBeNull()
+    expect(container.querySelector('.scenes-sources')).toBeNull()
+    expect(container.querySelector('.scenes-mics-off')).toBeNull()
 
     await act(async () => { edit?.click() })
 
@@ -379,39 +532,27 @@ describe('ScenesView', () => {
     expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('true')
     expect(container.querySelector('.scenes-editing-hint')?.textContent).toContain('Editing')
     expect(container.querySelector('.scenes-add')).not.toBeNull()
-    expect(container.querySelector('.scenes-plot')).not.toBeNull()
+    expect(container.querySelector('.scenes-ensemble')).not.toBeNull()
 
     await act(async () => { edit?.click() })
     expect(useStore.getState().scenesEditing).toBe(false)
   })
 
-  it('opens the mic plot and the telemetry sources from edit mode', async () => {
-    await show({ scenes: settings([OPENING]), plot: PLOT })
-
-    await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-plot')!.click() })
-    expect(container.querySelector('.plot-dialog')).not.toBeNull()
-
-    useStore.setState({ settingsTab: null })
-    await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-sources')!.click() })
-    expect(useStore.getState().settingsTab).toBe('wireless')
-  })
-
   it('marks the column the desk is in, and the rows follow it', async () => {
     await show({
-      scenes: settings([OPENING, INTERVAL]),
-      plot: PLOT,
+      scenes: [OPENING, INTERVAL],
       deskState: { 'dca-ensemble': true, 'dca-band': false },
       deskSceneId: 's1'
     })
 
     expect(columnFor('Opening').getAttribute('data-current')).toBe('true')
     expect(columnFor('Interval').getAttribute('data-current')).toBe('false')
+    expect(allClosedColumn().getAttribute('data-current')).toBe('false')
     expect([...container.querySelectorAll('.matrix-row')].map(row => row.getAttribute('data-on')))
       .toEqual(['true', 'false', 'false'])
 
     await show({
-      scenes: settings([OPENING, INTERVAL]),
-      plot: PLOT,
+      scenes: [OPENING, INTERVAL],
       deskState: { 'dca-ensemble': false, 'dca-band': true },
       deskSceneId: 's2'
     })
@@ -423,23 +564,23 @@ describe('ScenesView', () => {
   })
 
   it('names the scene the desk is on and the one coming, where the grid cannot', async () => {
-    const three = settings([OPENING, INTERVAL, scene('s3', 'Finale', ['p3'])])
+    const three = [OPENING, INTERVAL, scene('s3', 'Finale', ['p3'])]
 
     // Nothing recalled: the show has not started, so the first scene is what is coming.
-    await show({ scenes: three, plot: PLOT })
+    await show({ scenes: three })
     expect(where()).toEqual({ now: 'nothing recalled', next: '1 Opening' })
 
-    await show({ scenes: three, plot: PLOT, deskSceneId: 's2', deskState: { 'dca-band': true } })
+    await show({ scenes: three, deskSceneId: 's2', deskState: { 'dca-band': true } })
     expect(where()).toEqual({ now: '2 Interval', next: '3 Finale' })
 
     // The last scene has nothing after it, so the slot goes rather than naming a scene
     // that is not there.
-    await show({ scenes: three, plot: PLOT, deskSceneId: 's3', deskState: { 'dca-band': true } })
+    await show({ scenes: three, deskSceneId: 's3', deskState: { 'dca-band': true } })
     expect(where()).toEqual({ now: '3 Finale', next: null })
   })
 
   it('leaves the header to the empty state when there are no scenes to name', async () => {
-    await show({ plot: PLOT })
+    await show({})
 
     expect(container.querySelector('.scenes-where')).toBeNull()
     expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet')
@@ -447,23 +588,24 @@ describe('ScenesView', () => {
 
   it('marks the scene pending after an edit and applies exactly that change', async () => {
     await show({
-      scenes: settings([OPENING, INTERVAL]),
-      plot: PLOT,
+      scenes: [OPENING, INTERVAL],
+      desk: DESK,
       deskState: { 'dca-ensemble': true, 'dca-band': false },
       deskSceneId: 's1'
     })
 
     expect(container.querySelector('.matrix-apply')).toBeNull()
 
-    // Closing Pack 1 leaves the ensemble open on the desk: the column says so in amber
+    // Closing Ada leaves the ensemble open on the desk: the column says so in amber
     // and the header offers the one message that would close it.
-    await act(async () => { cellFor('Pack 1', 'Opening').click() })
+    await act(async () => { cellFor('Ada', 'Opening').click() })
 
     expect(columnFor('Opening').getAttribute('data-pending')).toBe('true')
-    // Both mics on the ensemble are pending together: the desk holds one state per group.
-    expect(cellFor('Pack 1', 'Opening').getAttribute('data-pending')).toBe('true')
-    expect(cellFor('Pack 2', 'Opening').getAttribute('data-pending')).toBe('true')
-    expect(cellFor('Pack 3', 'Interval').getAttribute('data-pending')).toBe('false')
+    // Ada and Extra ride the same strip, so both cells are pending together: the desk
+    // holds one state per DCA.
+    expect(cellFor('Ada', 'Opening').getAttribute('data-pending')).toBe('true')
+    expect(cellFor('Extra', 'Opening').getAttribute('data-pending')).toBe('true')
+    expect(cellFor('Bea', 'Interval').getAttribute('data-pending')).toBe('false')
 
     const apply = container.querySelector<HTMLButtonElement>('.matrix-apply')
     expect(apply?.textContent).toBe('Apply to desk (1)')
@@ -474,8 +616,8 @@ describe('ScenesView', () => {
 
     expect(midiSend).toHaveBeenCalledTimes(1)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOff', channel: 0, note: 60, velocity: 0 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 1, velocity: 0 }]
     })
     expect(oscSend).not.toHaveBeenCalled()
     expect(useStore.getState().deskState).toEqual({ 'dca-ensemble': false, 'dca-band': false })
@@ -483,43 +625,42 @@ describe('ScenesView', () => {
   })
 
   it('sends exactly the changes a column recall needs', async () => {
-    await show({ scenes: settings([OPENING, INTERVAL]), plot: PLOT })
+    await show({ scenes: [OPENING, INTERVAL], desk: DESK })
 
     await act(async () => {
       columnFor('Opening').querySelector<HTMLButtonElement>('.matrix-recall')?.click()
     })
 
-    expect(midiSend).toHaveBeenCalledTimes(1)
+    // Nothing has been recalled yet, so both faders are told: the one Opening opens and
+    // the one it closes.
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(midiSend).toHaveBeenCalledWith({
-      portName: PORT,
-      messages: [{ kind: 'noteOn', channel: 0, note: 60, velocity: 127 }]
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note: 1, velocity: 127 }]
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(oscSend).toHaveBeenCalledWith({
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/2',
-      args: [{ type: 'i', value: 0 }]
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 2, velocity: 0 }]
     })
+    expect(oscSend).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBe('s1')
   })
 
-  it('says the plot is empty, and goes straight to entering it', async () => {
-    await show({ scenes: settings([OPENING]), plot: { performers: [], packs: [] }, editing: false })
+  it('says the cast is empty, and goes straight to entering it', async () => {
+    await show({ scenes: [OPENING], cast: cast({ performers: [] }), editing: false })
 
-    expect(container.querySelector('.matrix-empty')?.textContent).toContain('The mic plot is empty')
+    expect(container.querySelector('.matrix-empty')?.textContent).toContain('The cast is empty')
     expect(container.querySelectorAll('.matrix-row').length).toBe(0)
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.matrix-empty-action')!.click()
     })
 
-    expect(useStore.getState().scenesEditing).toBe(true)
-    expect(container.querySelector('.plot-dialog')).not.toBeNull()
+    expect(useStore.getState().showSettingsTab).toBe('cast')
   })
 
   it('offers Edit from an empty show that is being run', async () => {
-    await show({ scenes: settings([]), plot: PLOT, editing: false })
+    await show({ scenes: [], editing: false })
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.matrix-empty-action')!.click()
@@ -529,159 +670,17 @@ describe('ScenesView', () => {
     expect(container.querySelector('.scenes-add')).not.toBeNull()
   })
 
-  it('keeps the desk groups shut until the header asks for them', async () => {
-    await show({ scenes: settings([OPENING]), plot: PLOT })
-
-    const toggle = container.querySelector<HTMLButtonElement>('.scenes-groups-toggle')
-    expect(toggle?.textContent).toBe('Desk groups (2)')
-    expect(container.querySelector('.scenes-groups')).toBeNull()
-
-    await act(async () => { toggle?.click() })
-    expect(container.querySelector('.scenes-groups')).not.toBeNull()
-    expect(toggle?.getAttribute('data-open')).toBe('true')
-
-    await act(async () => { toggle?.click() })
-    expect(container.querySelector('.scenes-groups')).toBeNull()
-  })
-
-  it('adds a group in the drawer and configures MIDI delivery', async () => {
-    await show({ scenes: settings([OPENING], []), plot: PLOT, ports: ['Yamaha', 'IEM rack'] })
-    await openGroups()
-
-    expect(container.querySelectorAll('.group-row')).toHaveLength(0)
-    await act(async () => { container.querySelector<HTMLButtonElement>('.group-add')!.click() })
-
-    expect(scenes().channels.map(entry => entry.label)).toEqual(['DCA 1'])
-    expect(container.querySelectorAll('.group-row')).toHaveLength(1)
-
-    const added = container.querySelectorAll('.group-row')[0]
-    const delivery = added.querySelector<HTMLSelectElement>('.group-delivery')!
-    expect([...delivery.options].map(option => option.value)).toEqual(['midi', 'osc', 'none'])
-    await choose(delivery, 'midi')
-    await choose(added.querySelector<HTMLSelectElement>('.group-port')!, 'Yamaha')
-    await choose(added.querySelector<HTMLSelectElement>('.group-channel')!, '3')
-    await choose(added.querySelector<HTMLSelectElement>('.group-note')!, '12')
-
-    const expected = midiNoteMessages('Yamaha', 3, 12)
-    const configured = scenes().channels[0]
-    expect(configured.unmute).toEqual(expected.unmute)
-    expect(configured.mute).toEqual(expected.mute)
-    expect(added.querySelector('.group-summary')?.textContent)
-      .toBe('noteOn ch3 → "Yamaha" / noteOff ch3 → "Yamaha"')
-  })
-
-  it('switches a group to OSC and sends one address for both states', async () => {
+  it('while the show is run, nothing edits it; recall and Apply stay live', async () => {
     await show({
-      scenes: settings([OPENING], [
-        channel({ id: 'dca-1', label: 'DCA 2', ...midiNoteMessages('Yamaha', 3, 12) })
-      ]),
-      plot: PLOT
-    })
-    await openGroups()
-
-    await choose(field<HTMLSelectElement>('.group-delivery'), 'osc')
-
-    await type(field('.group-host'), '10.0.0.5')
-    await leave(field('.group-host'))
-    await type(field('.group-osc-port'), '9000')
-    await leave(field('.group-osc-port'))
-    await type(field('.group-address'), '/dca/2/mute')
-    await leave(field('.group-address'))
-
-    const expected = oscMessages('10.0.0.5', 9000, '/dca/2/mute')
-    expect(scenes().channels[0].unmute).toEqual(expected.unmute)
-    expect(scenes().channels[0].mute).toEqual(expected.mute)
-    expect(summary())
-      .toBe('OSC /dca/2/mute 1 → 10.0.0.5:9000 / OSC /dca/2/mute 0 → 10.0.0.5:9000')
-  })
-
-  it('leaves a group alone on recall when its delivery is none', async () => {
-    await show({
-      scenes: settings([OPENING], [
-        channel({ id: 'dca-1', label: 'DCA 2', ...midiNoteMessages('Yamaha', 3, 12) })
-      ]),
-      plot: PLOT
-    })
-    await openGroups()
-
-    await choose(field<HTMLSelectElement>('.group-delivery'), 'none')
-
-    expect(container.querySelector('.group-port')).toBeNull()
-    expect(scenes().channels[0].unmute).toBeNull()
-    expect(scenes().channels[0].mute).toBeNull()
-    expect(summary()).toBe('nothing / nothing')
-  })
-
-  it('removes a group and clears the pointer on the packs that fed it', async () => {
-    await show({
-      scenes: settings([OPENING], [
-        channel({ id: 'dca-1' }),
-        channel({ id: 'dca-2', label: 'DCA 2' })
-      ]),
-      plot: {
-        performers: [],
-        packs: [
-          pack('pack-1', 'Pack 1', 'dca-1'),
-          pack('pack-2', 'Pack 2', 'dca-1'),
-          pack('pack-3', 'Pack 3', 'dca-2'),
-          pack('pack-4', 'Pack 4', null)
-        ]
-      }
-    })
-    await openGroups()
-
-    await act(async () => {
-      container.querySelectorAll<HTMLButtonElement>('.group-remove')[0].click()
-    })
-
-    expect(scenes().channels.map(entry => entry.id)).toEqual(['dca-2'])
-    expect(useStore.getState().showSettings.rf.plot.packs
-      .map(entry => [entry.id, entry.deskChannelId])).toEqual([
-      ['pack-1', null],
-      ['pack-2', null],
-      ['pack-3', 'dca-2'],
-      ['pack-4', null]
-    ])
-  })
-
-  it('shows which mics feed each group, and where that leaves it', async () => {
-    await show({
-      scenes: settings([OPENING], [
-        ENSEMBLE,
-        BAND,
-        channel({ id: 'dca-3', label: 'DCA 3' })
-      ]),
-      plot: PLOT,
+      scenes: [OPENING, INTERVAL],
+      editing: false,
+      desk: DESK,
+      deskState: { 'dca-ensemble': true, 'dca-band': true },
       deskSceneId: 's1'
     })
-    await openGroups()
-
-    const rows = [...container.querySelectorAll('.group-row')]
-    expect(rows.map(row => row.querySelector('.group-label') instanceof HTMLInputElement
-      ? (row.querySelector<HTMLInputElement>('.group-label')!.value)
-      : null)).toEqual(['DCA 1 — Ensemble', 'DCA 2 — Band', 'DCA 3'])
-
-    // Pack 1 is open in the scene, so its group is live and Pack 2 rides with it; the band
-    // is muted; a group with no message configured is not driven at all.
-    expect(rows.map(row => row.querySelector('.group-packs')?.textContent))
-      .toEqual(['Pack 1, Pack 2', 'Pack 3', 'nothing assigned'])
-    expect(rows.map(row => row.querySelector('.group-state')?.textContent))
-      .toEqual(['live', 'muted', '—'])
-  })
-
-  it('while the show is run, nothing edits it; recall, Apply and Mics off stay live', async () => {
-    await show({
-      scenes: settings([OPENING, INTERVAL]),
-      editing: false,
-      plot: PLOT,
-      deskState: { 'dca-ensemble': true, 'dca-band': true },
-      deskSceneId: 's1',
-      ports: ['Yamaha']
-    })
-    await openGroups()
 
     const disabled = (selector: string): boolean[] =>
-      [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>(selector)]
+      [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>(selector)]
         .map(control => control.disabled)
 
     expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
@@ -689,50 +688,33 @@ describe('ScenesView', () => {
     expect(container.querySelector('.matrix-scene-remove')).toBeNull()
     expect(disabled('.matrix-cell').every(Boolean)).toBe(true)
     expect(container.querySelector('.scenes-add')).toBeNull()
-    expect(disabled('.group-label').every(Boolean)).toBe(true)
-    expect(disabled('.group-delivery').every(Boolean)).toBe(true)
-    expect(disabled('.group-port').every(Boolean)).toBe(true)
-    expect(disabled('.group-channel').every(Boolean)).toBe(true)
-    expect(disabled('.group-note').every(Boolean)).toBe(true)
-    expect(disabled('.group-host').every(Boolean)).toBe(true)
-    expect(disabled('.group-osc-port').every(Boolean)).toBe(true)
-    expect(disabled('.group-address').every(Boolean)).toBe(true)
-    expect(container.querySelector('.group-remove')).toBeNull()
-    expect(container.querySelector('.group-add')).toBeNull()
+    expect(container.querySelector('.scenes-ensemble')).toBeNull()
 
-    // Edit is how the show is edited, and recall is what the view is for; both the Mics
-    // off press and the drawer's own toggle stay live.
+    // Edit is how the show is edited, and recall is what the view is for.
     expect(container.querySelector<HTMLButtonElement>('.scenes-edit')?.disabled).toBe(false)
-    expect(container.querySelector<HTMLButtonElement>('.scenes-groups-toggle')?.disabled).toBe(false)
     expect([...container.querySelectorAll<HTMLButtonElement>('.matrix-recall')]
       .every(recall => !recall.disabled)).toBe(true)
     expect(container.querySelector('.matrix-apply')?.textContent).toBe('Apply to desk (1)')
 
-    // Apply still moves the band, which is the one group the scene disagrees with.
+    // Apply still moves the band, which is the one fader the scene disagrees with.
     midiSend.mockClear()
     oscSend.mockClear()
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.matrix-apply')!.click()
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
-    expect(midiSend).not.toHaveBeenCalled()
-
-    // Mics off still closes the ensemble, which apply left open.
-    midiSend.mockClear()
-    oscSend.mockClear()
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('.scenes-mics-off')!.click()
-    })
     expect(midiSend).toHaveBeenCalledTimes(1)
-    expect(useStore.getState().deskSceneId).toBeNull()
+    expect(midiSend).toHaveBeenCalledWith({
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note: 2, velocity: 0 }]
+    })
 
-    // ...and a column recall still opens the band.
+    // ...and a column recall still opens the band and closes the ensemble.
     midiSend.mockClear()
     oscSend.mockClear()
     await act(async () => {
       columnFor('Interval').querySelector<HTMLButtonElement>('.matrix-recall')!.click()
     })
-    expect(oscSend).toHaveBeenCalledTimes(1)
+    expect(midiSend).toHaveBeenCalledTimes(2)
     expect(useStore.getState().deskSceneId).toBe('s2')
   })
 })

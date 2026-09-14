@@ -359,36 +359,103 @@ export async function editScenes(page: Page): Promise<void> {
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
 }
 
+/** The tabs of Show Settings, as the menu names them. */
+export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
+
+const SHOW_SETTINGS_TAB_LABEL: Record<ShowSettingsTab, string> = {
+  channels: 'Channels',
+  cast: 'Cast',
+  'mic-plot': 'Mic plot'
+}
+
 /**
- * A show set up through the view, in the order an operator would do it: a group on the
- * desk driven over OSC at a port the test owns, the pack that feeds it patched in the mic
- * plot, and a scene with that mic open in it.
+ * Show Settings is where the show's set-up lives — the DCAs, the cast and the mic plot —
+ * and it opens from the menu rather than from the Scenes view, so a show can be set up
+ * before the view it is run from is on screen.
+ */
+export async function openShowSettings(page: Page, tab?: ShowSettingsTab): Promise<void> {
+  await page.locator('.toolbar-brand').click()
+  await page.locator('[data-action="show-settings"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Show Settings' })
+  await expect(dialog).toBeVisible()
+  if (tab !== undefined) {
+    const button = dialog.locator('.show-settings-tab', { hasText: SHOW_SETTINGS_TAB_LABEL[tab] })
+    await button.click()
+    await expect(button).toHaveAttribute('data-active', 'true')
+  }
+}
+
+/**
+ * The address a DCA's place in the show makes under a pattern: `{n}` swapped for the
+ * number, or the number appended when the pattern has none — the app's own rule, written
+ * out here the way the OSC codec above is, so a spec says what the wire should carry
+ * without carrying the app into the test process.
+ */
+function addressAt(pattern: string, index: number): string {
+  const number = index + 1
+  if (pattern.includes('{n}')) return pattern.replaceAll('{n}', String(number))
+  const trimmed = pattern.trim()
+  if (trimmed === '') return `/${number}`
+  return trimmed.endsWith('/') ? `${trimmed}${number}` : `${trimmed}/${number}`
+}
+
+/**
+ * Points the show's desk at the test's own OSC listener. Where the desk is the one thing
+ * about a show the app cannot know, so the test says it — and the tab's read-back is
+ * asserted, because what it shows is what will actually be sent.
+ *
+ * The pattern is what a DCA's number is turned into; the default is the one a new show
+ * comes with, so a caller that does not pass one is exercising the defaults end to end.
+ */
+export async function pointDeskAtOsc(
+  page: Page,
+  port: number,
+  pattern = '/dca/{n}/on'
+): Promise<void> {
+  await openShowSettings(page)
+  const settings = page.locator('.show-settings-dialog')
+
+  await settings.locator('.desk-host').fill('127.0.0.1')
+  await settings.locator('.desk-host').blur()
+  await settings.locator('.desk-port').fill(String(port))
+  await settings.locator('.desk-port').blur()
+  await settings.locator('.desk-address').fill(pattern)
+  await settings.locator('.desk-address').blur()
+
+  // First and last of the addresses the pattern makes for this show's DCAs.
+  const last = Math.max(0, (await settings.locator('.dca-row').count()) - 1)
+  await expect(settings.locator('.desk-preview')).toContainText(addressAt(pattern, 0))
+  await expect(settings.locator('.desk-preview')).toContainText(addressAt(pattern, last))
+}
+
+/**
+ * A show set up through the view, in the order an operator would do it: the desk pointed
+ * at a port the test owns, the first performer named, and a scene with that performer open
+ * in it. The defaults do the wiring — a new show is a mic per fader, strip n on DCA n —
+ * and the desk is left driving one DCA: a one-mic show whose recall is about what changed,
+ * rather than the sweep of twelve a brand-new show puts on the wire.
  */
 export async function buildDeskShow(page: Page, port: number): Promise<void> {
   await liveRack(page)
+  await pointDeskAtOsc(page, port)
+  const settings = page.locator('.show-settings-dialog')
+
+  await settings.locator('.dca-count-select').selectOption('1')
+
+  // The demo cast is patched to the strips and strip 1 drives DCA 1, so nothing here has
+  // to be assigned. Naming the performer names their strip, which is what the grid shows.
+  await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
+  const performer = settings.locator('.performer-row').first()
+  const patched = await performer.locator('.performer-channel').evaluate(
+    select => (select as HTMLSelectElement).selectedOptions[0]?.textContent ?? ''
+  )
+  expect(patched).toBe('Ch 1 → DCA 1')
+  await performer.locator('.performer-name').fill('Ruth')
+  await performer.locator('.performer-name').blur()
+  await settings.locator('.show-settings-done').click()
+
   await openScenesView(page)
   await editScenes(page)
-
-  await page.locator('.scenes-groups-toggle').click()
-  const groups = page.locator('.scenes-groups')
-  await groups.locator('.group-add').click()
-  await groups.locator('.group-delivery').first().selectOption('osc')
-  await groups.locator('.group-host').first().fill('127.0.0.1')
-  await groups.locator('.group-osc-port').first().fill(String(port))
-  await groups.locator('.group-osc-port').first().blur()
-  await groups.locator('.group-address').first().fill('/dca/1/mute')
-  await groups.locator('.group-address').first().blur()
-  await expect(groups.locator('.group-summary').first()).toContainText('/dca/1/mute')
-
-  // Which group a mic feeds is set up with the plot, not in the grid the show is run from.
-  await page.locator('.btn-rf').click()
-  await page.locator('.rf-edit').click()
-  const dialog = page.locator('.plot-dialog')
-  await dialog.locator('.plot-pack-row').first().locator('.plot-pack-group')
-    .selectOption({ label: 'DCA 1' })
-  await dialog.locator('.plot-close').click()
-  await page.locator('.btn-rf').click()
-
   await page.locator('.scenes-add').click()
   await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
 }
@@ -402,7 +469,7 @@ export async function buildDeskShow(page: Page, port: number): Promise<void> {
 export async function oscPortOfItsOwn(page: Page): Promise<number> {
   const port = 43000 + Math.floor(Math.random() * 5000)
   await page.locator('.toolbar-brand').click()
-  await page.getByRole('button', { name: /Settings/ }).click()
+  await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Network', exact: true }).click()
   await dialog.locator('#settings-osc-port').fill(String(port))

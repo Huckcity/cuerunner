@@ -1,48 +1,101 @@
 // The feature is the last part of this file: given who is open in a scene, what does the
 // desk actually get told? Everything above it exists so that answer is a few messages
-// rather than a sweep of every fader.
+// rather than a sweep of every fader. Which DCA a performer's mic routes to is resolved by
+// `utils/cast.ts` (tested there); what is tested here is what a scene does with it — the
+// performers it names, the ensembles it applies, and the members it closes anyway.
 import { describe, it, expect } from 'vitest'
+import { midiNoteMessages, oscMessages } from './desk'
 import {
-  addDeskChannel,
   addScene,
-  describeDeskMessage,
-  deskSummary,
-  midiNoteMessages,
-  oscMessages,
-  removeDeskChannel,
+  ensembleState,
+  isPerformerLive,
+  removeEnsembleFromScenes,
+  removePerformerFromScenes,
   removeScene,
   sceneChanges,
-  setPackLive,
-  updateDeskChannel,
+  sceneLiveIds,
+  setEnsembleApplied,
+  setPerformerLive,
   updateScene
 } from './scenes'
-import type { DeskChannel, MicScene, RfPack, ScenesSettings } from '../types/show'
+import type {
+  CastSettings,
+  Dca,
+  DeskSettings,
+  Ensemble,
+  MicScene,
+  Performer,
+  ScenesSettings,
+  ShowChannel,
+  ShowSettings
+} from '../types/show'
+import { defaultShowSettings } from '../types/show'
 
-const { mute, unmute } = midiNoteMessages('Yamaha', 1, 36)
+// What the desk is told about the first two DCAs: the note of their own number, since
+// neither carries an override.
+const first = midiNoteMessages('Yamaha', 3, 1)
+const second = midiNoteMessages('Yamaha', 3, 2)
+
+const DCAS: Dca[] = [
+  { id: 'dca-1', label: 'DCA 1 — Principals', note: null, address: null },
+  { id: 'dca-2', label: 'DCA 2 — Ensemble', note: null, address: null },
+  // A DCA whose note is not the one its number makes.
+  { id: 'dca-3', label: 'DCA 3 — Spare', note: 36, address: null }
+]
+
+/** The desk the fixtures drive, so the wire messages are the ones asserted here. */
+const DESK: DeskSettings = {
+  kind: 'midi',
+  midiPort: 'Yamaha',
+  midiChannel: 3,
+  host: '127.0.0.1',
+  port: 8000,
+  address: '/dca/{n}/on'
+}
 
 function setup(): ScenesSettings {
   return {
-    channels: [
-      { id: 'dca-1', label: 'DCA 1 — Principals', mute, unmute },
-      { id: 'dca-2', label: 'DCA 2 — Ensemble', mute, unmute },
-      // A group the show knows about but has never been told how to drive.
-      { id: 'dca-3', label: 'DCA 3 — Spare', mute: null, unmute: null }
-    ],
-    list: [{ id: 's-1', name: 'Wedding', live: ['pack-1'], notes: '' }]
+    list: [{ id: 's-1', name: 'Wedding', live: ['perf-1'], ensembles: [], excluded: [], notes: '' }]
   }
 }
 
-function pack(id: string, deskChannelId: string | null): RfPack {
-  return { id, label: id, channelId: null, performerId: null, notes: '', deskChannelId }
+function scene(live: string[], ensembles: string[] = [], excluded: string[] = []): MicScene {
+  return { id: 's-1', name: 'Wedding', live, ensembles, excluded, notes: '' }
 }
 
-function scene(live: string[]): MicScene {
-  return { id: 's-1', name: 'Wedding', live, notes: '' }
+function performer(id: string, channelId: string | null): Performer {
+  return { id, name: id, role: '', notes: '', channelId }
+}
+
+function channel(id: string, dcaId: string | null): ShowChannel {
+  return { id, name: id, dcaId }
+}
+
+/**
+ * Two performers, each on their own strip: perf-1 opens DCA 1, perf-2 opens DCA 2. A
+ * third is in no DCA at all, which is what an unpatched mic looks like.
+ */
+function cast(): CastSettings {
+  return {
+    channels: [channel('ch-1', 'dca-1'), channel('ch-2', 'dca-2'), channel('ch-3', null)],
+    performers: [performer('perf-1', 'ch-1'), performer('perf-2', 'ch-2'), performer('perf-3', 'ch-3')],
+    ensembles: [],
+    dcas: DCAS
+  }
+}
+
+/** The whole show a recall reads: the cast above, on a desk that takes notes. */
+function show(castSettings: CastSettings = cast(), desk: DeskSettings = DESK): ShowSettings {
+  return { ...defaultShowSettings(), desk, cast: castSettings }
+}
+
+function ensemble(id: string, members: string[]): Ensemble {
+  return { id, name: id, members }
 }
 
 describe('scenes', () => {
   it('names a new scene after the ones already there', () => {
-    const first = addScene({ channels: [], list: [] })
+    const first = addScene({ list: [] })
     const named = addScene(first, '  Quick Change  ')
     const second = addScene(named)
 
@@ -50,6 +103,8 @@ describe('scenes', () => {
     expect(named.list[1].name).toBe('Quick Change')
     expect(second.list[2].name).toBe('Scene 3')
     expect(named.list[1].live).toEqual([])
+    expect(named.list[1].ensembles).toEqual([])
+    expect(named.list[1].excluded).toEqual([])
   })
 
   it('renames, updates and removes by id', () => {
@@ -62,118 +117,180 @@ describe('scenes', () => {
     expect(updateScene(start, 'nope', { name: 'x' }).list[0].name).toBe('Wedding')
   })
 
-  it('opens and closes one mic, and does not duplicate it', () => {
+  it('opens and closes one performer, and does not duplicate it', () => {
     const start = setup()
-    const opened = setPackLive(setPackLive(start, 's-1', 'pack-2', true), 's-1', 'pack-2', true)
-    const closed = setPackLive(opened, 's-1', 'pack-1', false)
+    const opened = setPerformerLive(
+      setPerformerLive(start, 's-1', 'perf-2', true, []), 's-1', 'perf-2', true, []
+    )
+    const closed = setPerformerLive(opened, 's-1', 'perf-1', false, [])
 
-    expect(opened.list[0].live).toEqual(['pack-1', 'pack-2'])
-    expect(closed.list[0].live).toEqual(['pack-2'])
+    expect(opened.list[0].live).toEqual(['perf-1', 'perf-2'])
+    expect(closed.list[0].live).toEqual(['perf-2'])
+  })
+
+  it('takes a performer off the cast list out of every scene, exclusions included', () => {
+    const start: ScenesSettings = {
+      list: [scene(['perf-1', 'perf-2'], [], ['perf-2'])]
+    }
+    const next = removePerformerFromScenes(start, 'perf-2')
+
+    expect(next.list[0].live).toEqual(['perf-1'])
+    expect(next.list[0].excluded).toEqual([])
   })
 })
 
-describe('desk channels', () => {
-  it('labels new groups after the ones already there', () => {
-    expect(addDeskChannel({ channels: [], list: [] }).channels[0].label).toBe('DCA 1')
-    expect(addDeskChannel({ channels: [], list: [] }, 'DCA 9 — Pit').channels[0].label).toBe('DCA 9 — Pit')
+describe('an ensemble applied to a scene', () => {
+  const chorus = ensemble('ens-1', ['perf-1', 'perf-2'])
+
+  it('opens every member, whoever the scene named by hand', () => {
+    const applied = setEnsembleApplied(setup(), 's-1', chorus, true)
+
+    expect(applied.list[0].ensembles).toEqual(['ens-1'])
+    // perf-1 was named by hand and is a member, so the ensemble carries them now: that is
+    // what lets an ensemble grow later without the scene being edited again.
+    expect(applied.list[0].live).toEqual([])
+    expect(sceneLiveIds(applied.list[0], [chorus])).toEqual(['perf-1', 'perf-2'])
   })
 
-  it('updates and removes without touching the scenes', () => {
-    const start = setup()
-    const patched = updateDeskChannel(start, 'dca-1', { unmute: mute })
-    const removed = removeDeskChannel(start, 'dca-1')
+  it('closes a member as an exclusion rather than as a removal', () => {
+    const applied = setEnsembleApplied(setup(), 's-1', chorus, true)
+    const oneOff = setPerformerLive(applied, 's-1', 'perf-2', false, [chorus])
 
-    expect(patched.channels[0].unmute).toEqual(mute)
-    expect(removed.channels.map(channel => channel.id)).toEqual(['dca-2', 'dca-3'])
-    expect(removed.list).toEqual(start.list)
-  })
-})
+    expect(oneOff.list[0].excluded).toEqual(['perf-2'])
+    expect(oneOff.list[0].ensembles).toEqual(['ens-1'])
+    expect(sceneLiveIds(oneOff.list[0], [chorus])).toEqual(['perf-1'])
+    expect(ensembleState(oneOff.list[0], chorus)).toBe('partial')
 
-describe('desk messages', () => {
-  it('builds the ordinary wireless group: open on note-on, closed on note-off', () => {
-    expect(unmute).toEqual({
-      kind: 'midi', portName: 'Yamaha', message: { kind: 'noteOn', channel: 1, note: 36, velocity: 127 }
-    })
-    expect(mute).toEqual({
-      kind: 'midi', portName: 'Yamaha', message: { kind: 'noteOff', channel: 1, note: 36, velocity: 0 }
-    })
+    // Pressing the same cell again puts them back: the exclusion is the only thing
+    // standing between the ensemble and the mic being open.
+    const back = sceneLiveIds(setPerformerLive(oneOff, 's-1', 'perf-2', true, [chorus]).list[0], [chorus])
+    expect(back.sort()).toEqual(['perf-1', 'perf-2'])
   })
 
-  it('builds the same thing over OSC, where the value is the difference', () => {
-    const pair = oscMessages('10.0.0.5', 9000, '/dca/2/mute')
+  it('reads as off, on, or partly on', () => {
+    const applied = setEnsembleApplied(setup(), 's-1', chorus, true)
+    const oneOff = setPerformerLive(applied, 's-1', 'perf-2', false, [chorus])
 
-    expect(pair.unmute).toEqual({ kind: 'osc', host: '10.0.0.5', port: 9000, address: '/dca/2/mute', args: [1] })
-    expect(pair.mute).toEqual({ kind: 'osc', host: '10.0.0.5', port: 9000, address: '/dca/2/mute', args: [0] })
+    expect(ensembleState(setup().list[0], chorus)).toBe('off')
+    expect(ensembleState(applied.list[0], chorus)).toBe('on')
+    expect(ensembleState(oneOff.list[0], chorus)).toBe('partial')
   })
 
-  it('describes a message the way the editor and the log need it', () => {
-    expect(describeDeskMessage(unmute)).toBe('noteOn ch1 → "Yamaha"')
-    expect(describeDeskMessage(oscMessages('10.0.0.5', 9000, '/dca/2/mute').mute))
-      .toBe('OSC /dca/2/mute 0 → 10.0.0.5:9000')
-    expect(describeDeskMessage(null)).toBe('nothing')
+  it('closes who it was holding open when it is unapplied, and keeps the rest', () => {
+    const applied = setEnsembleApplied({ list: [scene([], [], [])] }, 's-1', chorus, true)
+    const off = setEnsembleApplied(applied, 's-1', chorus, false)
+
+    expect(off.list[0].ensembles).toEqual([])
+    expect(off.list[0].excluded).toEqual([])
+    expect(sceneLiveIds(off.list[0], [chorus])).toEqual([])
+
+    // A performer the scene named by hand is the operator's decision, not the ensemble's.
+    const handPicked = setPerformerLive(off, 's-1', 'perf-1', true, [chorus])
+    expect(sceneLiveIds(handPicked.list[0], [chorus])).toEqual(['perf-1'])
+  })
+
+  it('unapplies itself from every scene when the ensemble is deleted', () => {
+    const applied = setEnsembleApplied(setup(), 's-1', chorus, true)
+    expect(removeEnsembleFromScenes(applied, 'ens-1').list[0].ensembles).toEqual([])
+  })
+
+  it('knows who is open by either route', () => {
+    const applied = setEnsembleApplied(setup(), 's-1', chorus, true)
+    expect(isPerformerLive(applied.list[0], [chorus], 'perf-1')).toBe(true)
+    expect(isPerformerLive(applied.list[0], [chorus], 'perf-3')).toBe(false)
+    expect(isPerformerLive(null, [chorus], 'perf-1')).toBe(false)
   })
 })
 
 describe('sceneChanges', () => {
-  const channels: DeskChannel[] = setup().channels
-  const packs = [pack('pack-1', 'dca-1'), pack('pack-2', 'dca-2')]
+  const plain = cast()
 
-  it('opens the groups carrying a mic that is live, and closes the rest', () => {
-    const changes = sceneChanges(packs, channels, scene(['pack-1']), {})
+  it('opens the DCAs carrying a performer who is live, and closes the rest', () => {
+    const changes = sceneChanges(show(plain), scene(['perf-1']), {})
 
     expect(changes).toEqual([
-      { channelId: 'dca-1', label: 'DCA 1 — Principals', live: true, message: unmute },
-      { channelId: 'dca-2', label: 'DCA 2 — Ensemble', live: false, message: mute }
+      { channelId: 'dca-1', label: 'DCA 1 — Principals', live: true, message: first.unmute },
+      { channelId: 'dca-2', label: 'DCA 2 — Ensemble', live: false, message: second.mute }
     ])
   })
 
-  it('stays silent about a group that is already in the state the scene asks for', () => {
+  it('stays silent about a DCA that is already in the state the scene asks for', () => {
     // This is what makes a recall a few messages: the desk is only told what changed.
-    const changes = sceneChanges(packs, channels, scene(['pack-1']), { 'dca-1': true, 'dca-2': false })
+    const changes = sceneChanges(show(plain), scene(['perf-1']), { 'dca-1': true, 'dca-2': false })
 
     expect(changes).toEqual([])
   })
 
-  it('opens a group when any one of its mics is live', () => {
-    const shared = [pack('pack-1', 'dca-1'), pack('pack-2', 'dca-1')]
+  it('opens a DCA when any one of the strips in it is live', () => {
+    const shared: CastSettings = {
+      ...plain,
+      channels: [channel('ch-1', 'dca-1'), channel('ch-2', 'dca-1'), channel('ch-3', null)]
+    }
 
-    expect(sceneChanges(shared, channels, scene(['pack-2']), {})).toHaveLength(1)
-    expect(sceneChanges(shared, channels, scene(['pack-2']), {})[0]).toMatchObject({ channelId: 'dca-1', live: true })
+    const changes = sceneChanges(show(shared), scene(['perf-2']), {})
+    expect(changes).toHaveLength(1)
+    expect(changes[0]).toMatchObject({ channelId: 'dca-1', live: true })
   })
 
-  it('leaves groups the plot does not drive alone, and groups with nothing to send', () => {
-    // dca-3 has no packs assigned; a group with no message configured cannot be told anything.
-    const changes = sceneChanges([pack('pack-1', 'dca-3')], channels, scene([]), {})
+  it('leaves DCAs nobody routes to alone, and says nothing at all with no desk', () => {
+    // Nobody is on a strip that feeds a DCA: the show has nothing to say about the desk.
+    const unrouted: CastSettings = { ...plain, performers: [performer('perf-3', 'ch-3')] }
+    expect(sceneChanges(show(unrouted), scene(['perf-3']), {})).toEqual([])
 
-    expect(changes).toEqual([])
+    // A show pointed at no desk drives none of them, however many mics are routed.
+    expect(sceneChanges(show(plain, { ...DESK, kind: 'none' }), scene(['perf-1']), {})).toEqual([])
+
+    // A MIDI desk with no port chosen is the same: a message to nowhere is not sent.
+    expect(sceneChanges(show(plain, { ...DESK, midiPort: '' }), scene(['perf-1']), {}))
+      .toEqual([])
+  })
+
+  it('sends what the connection and the DCA’s number make, for the desk in the show', () => {
+    const osc = sceneChanges(show(plain, {
+      ...DESK,
+      kind: 'osc',
+      host: '10.0.0.5',
+      port: 9000,
+      address: '/mixer/dca/{n}'
+    }), scene(['perf-1']), {})
+
+    expect(osc[0].message).toEqual(oscMessages('10.0.0.5', 9000, '/mixer/dca/1').unmute)
+    expect(osc[1].message).toEqual(oscMessages('10.0.0.5', 9000, '/mixer/dca/2').mute)
+  })
+
+  it('drives nothing for a strip that is on no fader', () => {
+    const unpatched: CastSettings = {
+      ...plain,
+      channels: [channel('ch-1', null), channel('ch-2', 'dca-2'), channel('ch-3', null)]
+    }
+
+    expect(sceneChanges(show(unpatched), scene(['perf-1']), {}))
+      .toEqual([{ channelId: 'dca-2', label: 'DCA 2 — Ensemble', live: false, message: second.mute }])
   })
 
   it('closes everything it knows about when there is no scene', () => {
-    const changes = sceneChanges(packs, channels, null, { 'dca-1': true, 'dca-2': true })
+    const changes = sceneChanges(show(plain), null, { 'dca-1': true, 'dca-2': true })
 
     expect(changes.map(change => change.live)).toEqual([false, false])
   })
 
   it('reopens the desk after a scene was changed but not recalled', () => {
-    // Recall, then close a mic in the scene: the difference is exactly one message.
-    const recalled = sceneChanges(packs, channels, scene(['pack-1', 'pack-2']), {})
+    // Recall, then close a performer in the scene: the difference is exactly one message.
+    const recalled = sceneChanges(show(plain), scene(['perf-1', 'perf-2']), {})
     const state = Object.fromEntries(recalled.map(change => [change.channelId, change.live]))
-    const edited = sceneChanges(packs, channels, scene(['pack-1']), state)
+    const edited = sceneChanges(show(plain), scene(['perf-1']), state)
 
     expect(edited).toEqual([
-      { channelId: 'dca-2', label: 'DCA 2 — Ensemble', live: false, message: mute }
+      { channelId: 'dca-2', label: 'DCA 2 — Ensemble', live: false, message: second.mute }
     ])
   })
-})
 
-describe('deskSummary', () => {
-  it('says what each group is carrying and whether it is open now', () => {
-    const summary = deskSummary([pack('pack-1', 'dca-1')], setup().channels, scene(['pack-1']))
+  it('opens the DCAs of an applied ensemble', () => {
+    const chorus = ensemble('ens-1', ['perf-1', 'perf-2'])
+    const withChorus: CastSettings = { ...plain, ensembles: [chorus] }
+    const applied = setEnsembleApplied(setup(), 's-1', chorus, true)
 
-    expect(summary.map(entry => [entry.channel.id, entry.packs.length, entry.live])).toEqual([
-      ['dca-1', 1, true],
-      ['dca-2', 0, false],
-      ['dca-3', 0, false]
-    ])
+    expect(sceneChanges(show(withChorus), applied.list[0], {}).map(change => change.live))
+      .toEqual([true, true])
   })
 })

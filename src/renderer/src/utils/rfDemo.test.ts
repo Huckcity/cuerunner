@@ -1,15 +1,17 @@
 // The demo rack is the one-click way to see the wireless panel do something: a source
-// the main process simulates plus a twelve-pack plot that names every channel it
-// reports. These tests hold the two together — the ids have to agree, or the demo
-// shows twelve unpatched rows.
+// the main process simulates, twelve packs, and the performers who wear them. These
+// tests hold the two lists together — the ids have to agree, or the demo shows twelve
+// unpatched rows.
 import { describe, it, expect } from 'vitest'
-import { demoPlot, demoSource } from './rfDemo'
+import { demoPacks, demoPerformers, demoSource } from './rfDemo'
 import {
   DEFAULT_POLL_MS,
   DEFAULT_TIMEOUT_MS,
   DEMO_PACK_COUNT,
   DEMO_SOURCE_ID,
-  demoChannelId
+  demoChannelId,
+  startingChannels,
+  startingDcas
 } from '../types/show'
 
 describe('demoSource', () => {
@@ -29,9 +31,9 @@ describe('demoSource', () => {
   })
 })
 
-describe('demoPlot', () => {
+describe('demoPacks and demoPerformers', () => {
   it('patches twelve packs to the twelve demo channels', () => {
-    const { packs } = demoPlot()
+    const packs = demoPacks()
 
     expect(packs).toHaveLength(DEMO_PACK_COUNT)
     expect(packs.map(p => p.label)).toEqual(
@@ -42,8 +44,9 @@ describe('demoPlot', () => {
     )
   })
 
-  it('gives every pack a distinct performer that exists in the plot', () => {
-    const { packs, performers } = demoPlot()
+  it('gives every pack a distinct performer that exists in the cast', () => {
+    const packs = demoPacks()
+    const performers = demoPerformers()
 
     expect(performers).toHaveLength(DEMO_PACK_COUNT)
     expect(new Set(performers.map(p => p.id)).size).toBe(DEMO_PACK_COUNT)
@@ -53,8 +56,21 @@ describe('demoPlot', () => {
     }
   })
 
+  it('patches every performer to the strip of their own number, so a scene moves them', () => {
+    const channels = startingChannels(startingDcas())
+    const performers = demoPerformers(channels)
+
+    // A performer with no strip is a row no scene can open, and the demo is the show
+    // somebody opens a scene on to see what the view does.
+    expect(performers.map(p => p.channelId)).toEqual(channels.map(channel => channel.id))
+
+    // With no console to patch them to, they are left unpatched rather than invented.
+    expect(demoPerformers().every(p => p.channelId === null)).toBe(true)
+  })
+
   it('casts the principals the panel names', () => {
-    const { packs, performers } = demoPlot()
+    const packs = demoPacks()
+    const performers = demoPerformers()
 
     expect(performers.find(p => p.id === packs[0].performerId))
       .toMatchObject({ name: 'Aldonza', role: 'lead' })
@@ -65,7 +81,7 @@ describe('demoPlot', () => {
   })
 
   it('hands the panel a role for every performer', () => {
-    const { performers } = demoPlot()
+    const performers = demoPerformers()
 
     expect(performers.map(p => p.role)).toEqual([
       'lead', 'comic lead', 'lead', 'ensemble', 'ensemble', 'ensemble',
