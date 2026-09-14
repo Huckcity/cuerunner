@@ -73,6 +73,28 @@ test('the settings dialog stands the transport down', async () => {
   await expectTheFirstCueFired()
 })
 
+test('the panel’s Escape closes the panel and nothing else', async () => {
+  await standOnTheFirstCue()
+  // A cue that is still running when the panel is closed: a post-wait far longer than
+  // this test gives the cue that, on the tab the selection already opens on. What the
+  // test holds is that the panel's Escape never reaches the transport.
+  await page.locator('.field-row').filter({ hasText: 'Post-wait' }).locator('input').fill('30')
+  await page.locator('.cue-row').first().click()
+  await page.keyboard.press('Space')
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+
+  await page.keyboard.press('Control+,')
+  await expect(page.locator('.settings-dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // One press, one thing: the panel closes, and the cue behind it is still running. An
+  // Escape that also stopped the show would cut a cue nobody asked to cut.
+  await expect(page.locator('.settings-dialog')).toHaveCount(0)
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+
+  await page.getByRole('button', { name: /STOP/ }).click()
+})
+
 test('an open menu does not eat the press', async () => {
   await standOnTheFirstCue()
   await page.locator('.cue-row').first().click({ button: 'right' })

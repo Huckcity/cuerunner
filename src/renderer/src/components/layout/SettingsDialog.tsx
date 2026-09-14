@@ -191,7 +191,10 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
   }
 
   return (
-    <div className="settings-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    // The backdrop is what the panel is drawn on, not a close button: a dialog that
+    // disappears because a press landed beside it takes the half-made change with it.
+    // It closes from its ✕ and from Escape.
+    <div className="settings-overlay">
       <div className="settings-dialog" role="dialog" aria-modal="true" aria-label="Settings">
         <div className="settings-header">
           <span className="settings-title">Settings</span>
