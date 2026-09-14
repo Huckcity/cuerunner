@@ -430,6 +430,7 @@ export async function openRecovery(): Promise<{
   workspace: Workspace
   savedAt: number
   sourcePath: string | null
+  selectedCueId?: string | null
   missingMedia: MissingMedia[]
 } | null> {
   const snapshot = await readRecovery()

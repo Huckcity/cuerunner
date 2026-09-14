@@ -24,7 +24,8 @@ export function CrashNotice() {
   return (
     <NoticeBar kind="crash" onDismiss={() => setCrash(null)}>
       The interface stopped unexpectedly at {formatClock(crash.at)} ({crash.reason}) and was
-      reloaded. Anything unsaved is gone; the workspace file on disk is untouched.
+      reloaded, which resets the show. The workspace file on disk is untouched, and unsaved work
+      from before the crash is offered back when the autosave caught it.
     </NoticeBar>
   )
 }
