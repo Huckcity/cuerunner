@@ -4,9 +4,10 @@ A plan for testing WinsLab against the systems it has to talk to in a real venue
 ETC Eos first, then the Allen & Heath SQ and Avantis desks — without a lighting rig or
 a mixer on the bench, and without a human clicking in either app.
 
-Written on `integration-test-harness`, off `main` at `e739956`. Nothing here is built
-yet; the milestones are near the end, and what has to be decided before the first one
-starts is the section after them.
+Written on `integration-test-harness`, off `main` at `e739956`. The midi-tcp transport of
+§3 G1 and the desk service behind it are in the tree, with unit and E2E tests; the peers
+come next. The milestones at the end say what each lane still needs, and §11 records the
+decisions — the first of them taken, in the direction this document recommended.
 
 ---
 
@@ -141,26 +142,26 @@ Three gaps stand between that and the harness, in the order they bite:
 **G1 — there is no MIDI-over-TCP output.** Both A&H ranges are controlled over TCP 51325.
 `MidiEngine` is `getPortCount`/`openPort`/`sendMessage` on OS ports
 (`src/main/midi/MidiEngine.ts`), and `midi:send` carries a port *name*; there is no path
-to a socket. Today that means a virtual MIDI port plus A&H's MIDI Control application in
-the middle, which is Windows/macOS-only and not automatable on the Linux runner. Two ways
-out, and they are not exclusive:
+to a socket. Without one, a show reaches a desk only through A&H's MIDI Control
+application, which is Windows/macOS-only and not automatable on the Linux runner.
 
-- *(a) no product change*: the A&H lane runs on the Windows/macOS runners with MIDI
-  Control installed, and the peer sits behind it. This is exactly the route users take
-  today, so it is worth having regardless.
-- *(b) a `midi-tcp` output in WinsLab*: a destination that is a host and port rather than
-  a port name (default 51325), with running-status and SysEx discipline. This is the only
-  way the A&H path is covered on the Linux lane, and it removes a vendor application from
-  every operator's machine. **This is a product decision, not a harness one** — see §11.
+**Decided, and built — both routes, the native one first.** A `midi-tcp` desk kind is now
+in the app:
 
-Should (b) be taken, it borrows the shape the OSC kind already has rather than inventing
-one: `DeskSettings` (`src/renderer/src/types/show.ts`) already carries `host` and `port`
-beside `midiPort`/`midiChannel`, so the new kind reuses them, and `DeskMessage` grows the
-matching variant beside its `midi` and `osc` cases — which also means a workspace
-migration and its test, the way every other change to that union has had one. The
-transport itself is a client socket with byte-stream discipline: messages split across
-reads, several to a read, and SysEx reassembled to `F7`. That last part is what §6's
-framing cases are for.
+- `DeskSettings.kind` gains `midi-tcp` with `tcpPort` beside the host it shares with the
+  OSC kind, and `DeskMessage` gains the matching variant; an older workspace is filled in
+  by the same `normalizeShowSettings` spread that fills every other new field, and the E2E
+  spec opens a file written without the field to prove it.
+- `MidiTcpEngine` owns one socket per desk, frame it with `stream.ts`
+  (running status, split messages, SysEx to `F7`) and encodes with the same `encode.ts`
+  the port-based engine uses — one encoder, one framer, both unit-tested.
+- `MidiTcpService` sits on the show runtime, so the desk's *own* messages — a scene
+  recalled at the desk, an answer to a get — reach the triggers instead of only leaving.
+- `midi:sendTcp` carries a scene's messages from the renderer, and the desk row in Show
+  Settings → Channels is where an operator points it at the room.
+
+A&H MIDI Control stays supported and stays exercised on the vendor lane, because it is
+still how anyone with a virtual port is driving their desk today.
 
 **G2 — no MSC.** Eos transmits and receives MIDI Show Control, and the SQ's cue list
 answers to MSC `GO`/`LOAD`/`RESET`. WinsLab has neither. The harness can carry MSC
@@ -182,19 +183,22 @@ matching language.
 ```
 integration/
   playwright.config.ts        per-suite config; testDir 'specs'; CI workers 1, retries 1
-  fixtures/
-    eos/                      captured OSC traffic + the showfile, each with provenance
-    sq/  avantis/             byte vectors + the profile tables the peer is built from
   peers/
-    eos.ts                    OSC peer: --live | --replay <fixture> | --record <out>
-    desk.ts                   MIDI-TCP peer: --profile sq|avantis, --port, --control <port>
-    control.ts                the peer control channel (HTTP on loopback) — shared
+    eos.ts                    the console: an OSC peer over UDP, `--tx-host`/`--tx-port` for
+                              where its output goes, `--cue-send-string`, `--control` for a
+                              read-only JSON view of what it thinks
+    desk.ts                   the desk: MIDI over TCP, `--profile sq|avantis`, `--port`,
+                              `--midi-channel`, `--fader-law`, `--control`, `--connect-burst`
   specs/
-    eos.spec.ts               WinsLab ↔ the Eos peer (and, tagged @vendor, real Eos)
+    harness-eos.spec.ts       the Eos peer held to ETC's own pages, no app running
+    harness-desk.spec.ts      the desk peers held to the A&H documents, no app running
+    eos.spec.ts               WinsLab ↔ the Eos peer: fire a cue, answer the console
     desk-sq.spec.ts           WinsLab ↔ the SQ peer
     desk-avantis.spec.ts      WinsLab ↔ the Avantis peer
-    desk-hardware.spec.ts     @hardware only: the same assertions, a real desk
-    harness.spec.ts           the peers tested against the documents, with no app
+    deskFixture.ts            the one-mic show the desk specs drive
+  fixtures/                   where captured traffic lands — the `--record`/`--replay`
+                              modes of §5, which are M2/M3 work: until then the peers are
+                              live models of the documents, held there by their own specs
 ```
 
 Scripts (the existing `scripts/run-e2e.js` already forwards stray arguments to
@@ -227,9 +231,10 @@ no privileges; `snd-virmidi` would need a `modprobe` that the runner's sudoers r
 not allow, which is the reason to use the one that is already there. macOS has IAC and
 Windows has loopMIDI for the lanes that need them.
 
-Ports are ephemeral and passed in: a spec starts its peer on port 0, reads the port back
-over the control channel, and writes it into the fixture. That keeps a PR lane with two
-desk profiles and one Eos peer from fighting over 51325 / 8000 / 53000.
+Ports are ephemeral and passed in: a spec starts its peer on port 0 and reads the bound
+port back from the handle it got (`peer.port`), which is what keeps a PR lane with two desk
+profiles and one Eos peer from fighting over 51325, 8000 or 53000. The control endpoint is
+for a human at a keyboard, not for the specs.
 
 The peers are usable with no app in the loop — `npm run peer:desk -- --profile sq` is a
 desk on a socket that any client can point at (QLab over MIDI Control, Bitfocus
@@ -242,15 +247,13 @@ against the documents rather than only against WinsLab.
 
 ## 5. The Eos peer
 
-Three modes, one implementation:
-
-- **`--live`** — a small Eos-shaped model: cue lists, cues with labels, a current and
-  pending cue. Enough to develop against and to demo the harness without ETC software.
-- **`--replay <fixture>`** — the same model, but every outbound message is the one the
-  real console sent, in order, with recorded timing. This is what the PR lane runs.
-- **`--record <out>`** — sits as the far end, forwards to real Eos, and writes both
-  directions with timestamps and provenance. This is how fixtures are made, on the vendor
-  lane or on a desk.
+One implementation, live today: the peer models an Eos-shaped show — cue lists, cues with
+labels, a current and pending cue — and answers on the socket. The `--record` and `--replay`
+modes this section first planned are M2/M3 work: a recording run against real ETCnomad (or a
+real desk) writes captures into `integration/fixtures/` with their provenance, and the peer
+replays them. Until then what keeps the peer near the truth is its own spec against ETC's
+pages, and the vendor lane when it lands — which is also why the lane matters more than the
+peer does.
 
 What it must model, because the specs lean on it:
 
@@ -379,9 +382,16 @@ first slice, not the ceiling.
    encoder is wrong). Assert the bytes, and the peer's scene state.
 2. Desk-originated scene: the peer recalls scene 7 on its own → WinsLab's MIDI trigger
    fires the bound cue. Assert the trigger fired and the log names the device.
-3. DCAs: a scene opens and closes the DCAs it names, and only those. Assert NRPN parameter
-   numbers and values against the profile tables — SQ's and Avantis's differ, which is why
-   they are two specs and two profiles.
+3. DCAs: a scene sends the notes its DCAs are numbered for, and only those, over the desk's
+   socket. What is asserted is the wire — the bytes, their order, and that a recall after a
+   failed one tries again — because **the desks and the app disagree about the close half,
+   and that disagreement is the harness doing its job**: WinsLab closes a DCA with a
+   note-off (velocity 0), an Avantis ignores note-off altogether (its OFF is a note-on with
+   velocity `01`–`3F`), and an SQ takes mutes as NRPN and notes as softkey/strip traffic.
+   So the specs pin the open case end to end and the close case as bytes, and the fix —
+   a desk profile that speaks each desk's own semantics — is roadmap B4's "console control
+   profiles" rather than anything the transport should have decided on its own. A peer that
+   quietly agreed with the app would have hidden this.
 4. Mute semantics: Avantis velocity `00` and note-off are ignored; `40`–`7F` is on,
    `01`–`3F` off. Assert all three, because that is where a "sensible" implementation is
    wrong.
@@ -396,9 +406,9 @@ first slice, not the ceiling.
 9. Timing: a scene recall reaches the wire within the post-wait budget the cue claims.
    Assert the measured interval, not just the state.
 
-**The peers, on their own** (`harness.spec.ts`) — every shape asserted in §5 and §6 against
-the documented examples, with no application running. This is what lets a peer be handed
-to someone else as a tool.
+**The peers, on their own** (`harness-eos.spec.ts`, `harness-desk.spec.ts`) — every shape
+asserted in §5 and §6 against the documented examples, with no application running. This is
+what lets a peer be handed to someone else as a tool.
 
 ---
 
@@ -498,13 +508,12 @@ Linux lane replays it.
 
 **Decisions**
 
-1. **MIDI-over-TCP output in WinsLab (G1).** Recommended: yes. It is the only way the A&H
-   path is covered in the Linux lane, and it removes a vendor application from every
-   operator's machine — A&H MIDI Control is a Windows/macOS install, and its absence is
-   the difference between "WinsLab talks to the desk" and "WinsLab talks to this other
-   program which talks to the desk". If the answer is no, the A&H lane still exists but
-   lives only on the vendor lane, and the Linux PR lane tests the desk protocol against
-   the peer through a virtual port rather than end to end.
+1. **MIDI-over-TCP output in WinsLab (G1). — taken: yes.** It is in the tree (§3): the
+   desk kind, the engine, the service, the bridge, the row, and the specs that hold them.
+   The alternative — the A&H lane living only behind MIDI Control on the Windows and macOS
+   runners — was not taken because it would have left the desk path untested on the lane
+   that runs on every pull request, and because it leaves a vendor application in the way of
+   every operator with a network cable.
 2. **A desk to validate against.** The hardware lane is the only thing that keeps a peer
    honest over time, and it needs an SQ or Avantis reachable from a runner for a few
    hours, occasionally. Without one this is planned and untested.

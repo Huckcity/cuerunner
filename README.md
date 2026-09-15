@@ -455,6 +455,17 @@ dropped.
     are doing. `npm run test:e2e:headed` is the opt-in to run it on the display you are
     using instead.
   - Single spec: `npm run test:e2e -- e2e/<spec>.spec.ts`
+- **Integration Tests**: `npm run test:integration` (Playwright, requires build)
+  - Tests WinsLab against the systems it meets in a venue — an ETC Eos console, and an
+    Allen & Heath SQ or Avantis desk — with a peer standing in for the device
+  - Location: `integration/specs`. The peers are `integration/peers/` and run on their own,
+    which is what makes them useful outside a test run: `npm run peer:eos`, and
+    `npm run peer:desk -- --profile sq` is a desk on a socket any client can point at
+  - No vendor software and no hardware on this lane: the peers are implementations of the
+    published protocols, and `harness-*.spec.ts` holds each one to its vendor's own
+    documents with no application running at all. `INTEGRATION-HARNESS.md` is the plan, the
+    lanes that *do* use the real console or a real desk, and what each lane claims
+  - Single spec: `npm run test:integration -- integration/specs/<spec>.spec.ts`
 
 **Before committing**:
 ```bash
@@ -471,6 +482,8 @@ GitHub Actions workflows in `.github/workflows/`:
   - Typecheck, unit tests, and the Electron-install contract on Ubuntu, on Node 24 (LTS)
     and 26 (current)
   - E2E tests on Windows, macOS, and Linux (Ubuntu under Xvfb)
+  - Integration tests on Linux: WinsLab against the protocol peers for the console and the
+    desk (no vendor software, no hardware)
 - **`build.yml`**: Runs when a release is published, or manually
   - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
   - Uploads to R2 (Cloudflare) and GitHub Releases
