@@ -923,11 +923,16 @@ export async function startEosPeer(options: EosPeerOptions = {}): Promise<EosPee
   }
 
   socket.on('message', (packet: Buffer, rinfo: RemoteInfo) => {
-    // The console answers from the address this peer sends to — an Eos does — so anything
-    // else on this socket is a client, whatever it claims to be.
-    const fromConsole = upstream !== null && rinfo.address === upstream.address && rinfo.port === upstream.port
-
     const messages = decodeOscPacket(packet)
+
+    // Direction is what the datagram says, not where it came from: a real Eos answers from
+    // an ephemeral port (v3.3.9.25 replied to a probe from 127.0.0.1:55166, not from 8000),
+    // so the source address says nothing. ETC's dictionary files every console-side message
+    // under /eos/out/ — events, active and pending text, get replies, notify — and that is
+    // the contract this reads. Assumption: the dictionary's few output rows without that
+    // prefix are echoes of a fader or cue list being reset, which are instructions as well,
+    // so reading them as client traffic costs nothing.
+    const fromConsole = upstream !== null && messages.some((message) => message.address.startsWith('/eos/out/'))
     if (messages.length === 0) log?.(`< ${packet.length} bytes that are not OSC`)
     for (const message of messages) {
       const inbound: EosInbound = {

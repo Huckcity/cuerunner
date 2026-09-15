@@ -556,6 +556,44 @@ test('proxies a console, records both directions, and replays the recording', as
   expect(listener.messages).toHaveLength(heard)
 })
 
+test('routes the console’s output by what it says, not by where it came from', async () => {
+  // A real Eos sends its output from an ephemeral port — a probe against v3.3.9.25 was
+  // answered from 127.0.0.1:55166, not from 8000 — so the stand-in here answers from a
+  // socket that has nothing to do with the one it listens on, which is the shape the
+  // vendor lane ran into: the console's own output was forwarded back at the console and
+  // the app heard nothing.
+  const consoleInput = await otherWire()
+  const consoleOutput = await otherWire()
+  const listener = await otherWire()
+  const file = recordingPath('ephemeral-console')
+  const proxy = await peerWith({
+    upstream: { host: '127.0.0.1', port: consoleInput.port },
+    tx: { host: '127.0.0.1', port: listener.port },
+    record: file
+  })
+
+  wire.send('/eos/cue/1/12/fire', [], proxy.port)
+  expect((await consoleInput.waitForAddress('/eos/cue/1/12/fire')).args).toEqual([])
+
+  consoleOutput.send('/eos/out/event/cue/1/12/fire', ['Blackout'], proxy.port)
+  consoleOutput.send('/eos/out/active/cue/text', ['1/12 5.0'], proxy.port)
+  expect((await listener.waitForAddress('/eos/out/event/cue/1/12/fire')).args).toEqual(['Blackout'])
+  expect((await listener.waitForAddress('/eos/out/active/cue/text')).args).toEqual(['1/12 5.0'])
+
+  // Not one byte of the console's own output goes back at it.
+  await consoleInput.settle()
+  expect(consoleInput.messages.map((message) => message.address)).toEqual(['/eos/cue/1/12/fire'])
+
+  // In the recording, the instruction is the app's and the rest is the console's.
+  const recording = readRecording(file)
+  expect(recording.exchanges.map((exchange) => exchange.direction)).toEqual(['to-console', 'from-console', 'from-console'])
+  expect(recording.exchanges.map((exchange) => exchange.address)).toEqual([
+    '/eos/cue/1/12/fire',
+    '/eos/out/event/cue/1/12/fire',
+    '/eos/out/active/cue/text'
+  ])
+})
+
 test('records the console’s own version when it answers one', async () => {
   const consolePeer = await peerWith({ version: '3.3.9.1', fixtureLibraryVersion: '3.3.9.2' })
   const file = recordingPath('version')
