@@ -13,8 +13,9 @@ let app: ElectronApplication
 let page: Page
 let root: string
 
-/** Four seconds of tone: long enough that a zoomed window is a different place. */
-function writeWav(filePath: string, seconds = 4): void {
+/** Twenty seconds of tone: long enough that a zoomed window is a different place, and
+    long enough that a playing cue outlives the presses a test makes around it. */
+function writeWav(filePath: string, seconds = 20): void {
   const sampleRate = 48000
   const frames = sampleRate * seconds
   const dataBytes = frames * 2
@@ -63,7 +64,7 @@ test.beforeEach(async () => {
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu-recent', { hasText: 'View.wlab' }).click()
   await page.locator('.cue-row', { hasText: 'Reel One' }).click()
-  await expect(page.locator('.waveform-total')).toHaveText('0:04.0')
+  await expect(page.locator('.waveform-total')).toHaveText('0:20.0')
 })
 
 test.afterEach(async () => {
@@ -93,21 +94,21 @@ test('the panel zooms into the file, and the same presses reach less of it', asy
   const span = async (): Promise<number> =>
     ms(await clickAt(0.85)) - ms(await clickAt(0.25))
 
-  // The whole four-second file: the two presses are 2400 ms apart.
-  expect(await span()).toBe(2400)
+  // The whole file: the two presses are twelve seconds apart.
+  expect(await span()).toBe(12_000)
 
-  // Two steps in, and the window is a second wide: the same presses are 600 ms apart,
-  // which is the whole point of a zoom — the panel is showing less of the track.
+  // Two steps in, and the window is five seconds wide: the same presses are three
+  // seconds apart, which is the whole point of a zoom — less of the track on screen.
   await page.locator('.waveform-zoom-btn', { hasText: '+' }).click()
   await page.locator('.waveform-zoom-btn', { hasText: '+' }).click()
   expect(await zoomLabel()).toBe('4×')
-  expect(await span()).toBe(600)
+  expect(await span()).toBe(3000)
 
   // And all the way back out: the window is the file again, and the presses with it.
   await page.locator('.waveform-zoom-btn', { hasText: '−' }).click()
   await page.locator('.waveform-zoom-btn', { hasText: '−' }).click()
   expect(await zoomLabel()).toBe('1×')
-  expect(await span()).toBe(2400)
+  expect(await span()).toBe(12_000)
 })
 
 test('the drum of a wheel pans a zoomed window along the file', async () => {
@@ -126,7 +127,7 @@ test('the drum of a wheel pans a zoomed window along the file', async () => {
 
 test('a cursor belongs to the cue it was placed on', async () => {
   // Placed on the first reel: it is a time in that file, so it is that cue's.
-  expect(await clickAt(0.5)).toBe('split 0:02.0')
+  expect(await clickAt(0.5)).toBe('split 0:10.0')
   expect(await zoomLabel()).toBe('1×')
 
   // The second reel has no cursor of its own — and no split to offer at one, however
@@ -139,7 +140,7 @@ test('a cursor belongs to the cue it was placed on', async () => {
 
   // Coming back to the first reel is coming back to where the operator was.
   await page.locator('.cue-row', { hasText: 'Reel One' }).click()
-  await expect(page.locator('.waveform-cursor')).toContainText('split 0:02.0')
+  await expect(page.locator('.waveform-cursor')).toContainText('split 0:10.0')
 })
 
 test('a zoom is a reading of the reel it was made on', async () => {
