@@ -78,7 +78,11 @@ jobs:
           EOS_CONSOLE_TX_PORT: ${{ vars.EOS_CONSOLE_TX_PORT || '8002' }}
           EOS_APP_PORT: ${{ vars.EOS_APP_PORT || '8001' }}
           EOS_RECORD: ${{ inputs.record && 'integration/fixtures/vendor/eos-ubox-win.json' || '' }}
-        run: npm run test:integration -- --grep @vendor
+        # The tag is quoted, and that is load bearing: under `shell: pwsh` — which is also
+        # the default shell on a Windows runner, so the line cannot dodge it — a bare
+        # `@vendor` is parsed as a splat, and the step dies a second in with "The variable
+        # '$vendor' cannot be retrieved because it has not been set" before any test runs.
+        run: npm run test:integration -- --grep "@vendor"
 
       - name: Upload results
         if: always()
