@@ -167,6 +167,62 @@ export async function exportShowBundle(): Promise<void> {
   }
 }
 
+/**
+ * Two files merged into a third: the other person's copy of the show, and the version the
+ * two of you started from. The result is written where the operator says and this show is
+ * left exactly as it is — a merge is something to look at before trusting it, and the
+ * show being merged into is still being worked on.
+ */
+export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again = false): Promise<void> {
+  const {
+    workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
+    triggerGuard, workspaceId, workspaceCreatedAt, showHistory, setMergeReport
+  } = useStore.getState()
+  // The show as it stands, unsaved edits included: merging in a version of a show that is
+  // not what is on screen is merging the wrong thing.
+  const workspace = buildWorkspace(
+    workspaceName,
+    cues,
+    audioSettings,
+    midiSettings,
+    showSettings,
+    { id: workspaceId, createdAt: workspaceCreatedAt },
+    triggerGuard,
+    showHistory
+  )
+  try {
+    const answer = await window.winslab.workspace.merge(workspace, workspacePath, {
+      policy,
+      ...(again ? { again: true } : {})
+    })
+    if (!answer.ok) {
+      reportFailure(answer.error)
+      return
+    }
+    if (!answer.merged) return
+    setMergeReport({
+      path: answer.merged.path,
+      notes: answer.merged.notes,
+      tally: answer.merged.tally,
+      policy
+    })
+  } catch (e) {
+    reportFailure(`Could not merge the show: ${message(e)}`)
+  }
+}
+
+/** Opens the show a merge wrote, over the one that is open. */
+export async function openMergedShow(filePath: string): Promise<void> {
+  if (!await guardDirty()) return
+  try {
+    const opened = await window.winslab.workspace.openPath(filePath)
+    loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
+    useStore.getState().setMergeReport(null)
+  } catch (e) {
+    reportFailure(`Could not open ${filePath}: ${message(e)}`)
+  }
+}
+
 /** A bundle in: a show and its media unpacked where the operator says, then opened. */
 export async function importShowBundle(): Promise<void> {
   if (!await guardDirty()) return

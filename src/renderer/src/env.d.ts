@@ -9,6 +9,7 @@ import type { NetworkRequest, NetworkResult } from './types/network'
 import type { PlaybackPanic } from './types/playback'
 import type { MissingMedia } from '../../shared/media'
 import type { WorkspaceDiff } from '../../shared/showfile'
+import type { MergeNote, MergeTally } from '../../shared/showfileMerge'
 import type { RedundancySettings } from '../../shared/redundancy'
 import type { AudioEngineBridge } from '../../shared/audio'
 import type { MenuAction } from '../../shared/fileMenu'
@@ -109,6 +110,22 @@ interface WinslabBridge {
     importBundle: () => Promise<
       | { ok: false; error: string }
       | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
+    >
+    merge: (
+      workspace: Workspace,
+      workspacePath: string | null,
+      options?: { policy?: 'ours' | 'theirs'; again?: boolean }
+    ) => Promise<
+      | { ok: false; error: string }
+      | {
+          ok: true
+          merged: {
+            path: string
+            notes: MergeNote[]
+            tally: MergeTally
+            inputs: { theirs: string; ancestor: string }
+          } | null
+        }
     >
     compare: (workspace: Workspace) => Promise<
       | { ok: false; error: string }

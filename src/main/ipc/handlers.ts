@@ -42,11 +42,14 @@ import {
   saveWorkspace,
   saveWorkspaceAs,
   compareWorkspace,
+  mergeShow,
   relinkWorkspaceMedia,
   getRecentFiles
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { exportBundle, importBundle } from '../workspace/bundle'
+import type { ConflictPolicy } from '../../shared/showfileMerge'
+import type { MergeInputs } from '../workspace/WorkspaceManager'
 import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
@@ -522,6 +525,36 @@ export function registerIpcHandlers(): void {
     const imported = await importBundle(getWin(event))
     return { ok: true, imported }
   })
+
+  // Two files merge into a third, written where the operator says. The files the last
+  // merge read are kept for a second attempt with the other side's choices: the report is
+  // where an operator learns there was a conflict, and re-running it should not mean
+  // finding the same two files again.
+  let lastMerge: { theirs: string; ancestor: string } | null = null
+  ipcMain.handle(
+    'workspace:merge',
+    async (
+      event,
+      workspace: Workspace,
+      workspacePath: string | null,
+      options: { policy?: ConflictPolicy; again?: boolean } = {}
+    ) => {
+      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+      const policy: ConflictPolicy = options.policy ?? 'ours'
+      if (options.again === true && !lastMerge) {
+        return { ok: false, error: 'there is no merge to try again' }
+      }
+      const merged = await mergeShow(
+        getWin(event),
+        workspace,
+        workspacePath,
+        policy,
+        options.again === true ? (lastMerge as MergeInputs) : undefined
+      )
+      if (merged) lastMerge = merged.inputs
+      return { ok: true, merged }
+    }
+  )
 
   ipcMain.handle('workspace:compare', async (event, workspace: Workspace) => {
     if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }

@@ -179,6 +179,18 @@ describe('the diff between two showfiles', () => {
     expect(diffWorkspaces(older, saved).empty).toBe(true)
   })
 
+  it('reports a cue pointed at another file in a file this build has never saved', () => {
+    // No `media` block on either side: an older file names its file under `filePath`, and
+    // the cue plays something else now. Reading that as unchanged would hide a relink.
+    const diff = diffWorkspaces(
+      workspace([cue({ id: 'a', filePath: 'walk-in.wav' })]),
+      workspace([cue({ id: 'a', filePath: 'bows.wav' })])
+    )
+    expect(diff.changed[0].fields).toEqual([
+      { field: 'media', from: 'walk-in.wav', to: 'bows.wav' }
+    ])
+  })
+
   it('reports a cue pointed at a different file', () => {
     const diff = diffWorkspaces(
       workspace([stored(cue({ id: 'a' }), 'walk-in.wav')]),

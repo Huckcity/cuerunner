@@ -9,6 +9,7 @@ import type { PlaybackPanic } from '../renderer/src/types/playback'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { MissingMedia } from '../shared/media'
 import type { ShowHistoryEntry, WorkspaceDiff } from '../shared/showfile'
+import type { MergeNote, MergeTally } from '../shared/showfileMerge'
 import {
   AUDIO_CHANNELS,
   AUDIO_SILENCE_THRESHOLD_DB,
@@ -312,6 +313,26 @@ contextBridge.exposeInMainWorld('winslab', {
       | { ok: false; error: string }
       | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
     > => ipcRenderer.invoke('workspace:importBundle'),
+    /**
+     * Two files merged into a third, written where the operator says. `again` runs the
+     * same merge over the files it read last time, with the other side's choices.
+     */
+    merge: (
+      workspace: Workspace,
+      workspacePath: string | null,
+      options?: { policy?: 'ours' | 'theirs'; again?: boolean }
+    ): Promise<
+      | { ok: false; error: string }
+      | {
+          ok: true
+          merged: {
+            path: string
+            notes: MergeNote[]
+            tally: MergeTally
+            inputs: { theirs: string; ancestor: string }
+          } | null
+        }
+    > => ipcRenderer.invoke('workspace:merge', workspace, workspacePath, options ?? {}),
     compare: (workspace: Workspace): Promise<
       | { ok: false; error: string }
       | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }

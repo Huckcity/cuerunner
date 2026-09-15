@@ -161,6 +161,7 @@ Object.defineProperty(window, 'winslab', {
       saveAs: vi.fn(() => Promise.resolve(null)),
       compare: vi.fn(() => Promise.resolve({ ok: true, comparison: null })),
       exportBundle: vi.fn(() => Promise.resolve({ ok: true, exported: null })),
+      merge: vi.fn(() => Promise.resolve({ ok: true, merged: null })),
       importBundle: vi.fn(() => Promise.resolve({ ok: true, imported: null })),
       recent: vi.fn(() => Promise.resolve([])),
       autosave: vi.fn(() => Promise.resolve()),

@@ -4,7 +4,8 @@ import {
   useWorkspace,
   openDemoWorkspace,
   exportShowBundle,
-  importShowBundle
+  importShowBundle,
+  mergeAnotherShow
 } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
 import { ProMark } from '../license/ProLock'
@@ -31,6 +32,7 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
 const PRO_FILE_ACTIONS = new Set<FileMenuAction>([
   'history',
   'compare',
+  'merge',
   'export-bundle',
   'import-bundle'
 ])
@@ -140,6 +142,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     // from another file. The menu entry says which one the operator asked for.
     'history': () => openChanges('history'),
     'compare': () => openChanges('compare'),
+    'merge': mergeAnotherShow,
     'export-bundle': exportShowBundle,
     'import-bundle': importShowBundle,
     'show-settings': () => openShowSettings('channels'),

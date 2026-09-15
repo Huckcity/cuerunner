@@ -3,6 +3,12 @@ import { readFile, mkdir, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
 import { hostname, userInfo } from 'os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
+import {
+  mergeWorkspaces,
+  type ConflictPolicy,
+  type MergeNote,
+  type MergeTally
+} from '../../shared/showfileMerge'
 import { readRecovery, writeFileAtomically } from './recovery'
 import { migrateLegacyAudioRouting } from '../../shared/audioRouting'
 import type { MediaReference, MissingMedia } from '../../shared/media'
@@ -907,6 +913,95 @@ export async function compareWithFile(
     JSON.parse(serialiseWorkspace(workspace, dirname(otherPath))) as Workspace
   )
   return { path: otherPath, diff: diffWorkspaces(other, mine) }
+}
+
+/**
+ * The merge itself, as the window asks for it: two files — the one to merge in, and the
+ * version the two sides started from — merged into this show, written to a file the
+ * operator names.
+ *
+ * A file rather than the open show, deliberately. A merge is a thing to look at before
+ * trusting it, the show being merged into is a document somebody is still working on, and
+ * writing the result somewhere new leaves every input exactly as it was — which is what
+ * makes a merge safe to try twice.
+ */
+export interface MergedShow {
+  path: string
+  notes: MergeNote[]
+  tally: MergeTally
+  /** The two files this merge read, for a second attempt with the other policy. */
+  inputs: MergeInputs
+}
+
+export async function mergeIntoNewFile(
+  win: BrowserWindow,
+  ours: Workspace,
+  oursPath: string | null,
+  theirsPath: string,
+  ancestorPath: string,
+  policy: ConflictPolicy = 'ours'
+): Promise<MergedShow | null> {
+  const [theirs, ancestor] = await Promise.all([
+    readWorkspaceFile(theirsPath),
+    readWorkspaceFile(ancestorPath)
+  ])
+  const result = mergeWorkspaces(ancestor, ours, theirs, { onConflict: policy })
+  // The history of the file being merged into is the one that continues: the other two
+  // are other files, and their entries belong to them.
+  const merged = { ...result.workspace, history: ours.history }
+
+  const suggested = `${ours.name || 'Untitled'} (merged)`
+  const where = await dialog.showSaveDialog(win, {
+    title: 'Save the Merged Show',
+    defaultPath: oursPath === null
+      ? `${suggested}.wlab`
+      : join(dirname(oursPath), `${suggested}.wlab`),
+    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }]
+  })
+  if (where.canceled || !where.filePath) return null
+  await writeFileAtomically(where.filePath, serialiseWorkspace(merged, dirname(where.filePath)))
+  await addToRecent(where.filePath).catch(() => {})
+  return {
+    path: where.filePath,
+    notes: result.notes,
+    tally: result.tally,
+    inputs: { theirs: theirsPath, ancestor: ancestorPath }
+  }
+}
+
+/** What a merge read, so a second attempt can start from the same two files. */
+export interface MergeInputs {
+  theirs: string
+  ancestor: string
+}
+
+/** Asks for the two files a merge needs, then merges them. */
+export async function mergeShow(
+  win: BrowserWindow,
+  ours: Workspace,
+  oursPath: string | null,
+  policy: ConflictPolicy = 'ours',
+  inputs?: MergeInputs
+): Promise<MergedShow | null> {
+  let files = inputs
+  if (!files) {
+    const theirs = await dialog.showOpenDialog(win, {
+      title: 'Merge which show in?',
+      message: 'The other person’s copy of the show',
+      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+      properties: ['openFile']
+    })
+    if (theirs.canceled || !theirs.filePaths[0]) return null
+    const ancestor = await dialog.showOpenDialog(win, {
+      title: 'Which version did the two of you start from?',
+      message: 'The copy both of you saved before working apart',
+      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+      properties: ['openFile']
+    })
+    if (ancestor.canceled || !ancestor.filePaths[0]) return null
+    files = { theirs: theirs.filePaths[0], ancestor: ancestor.filePaths[0] }
+  }
+  return { ...(await mergeIntoNewFile(win, ours, oursPath, files.theirs, files.ancestor, policy))!, inputs: files }
 }
 
 export function blankWorkspace(name = 'Untitled'): Workspace {

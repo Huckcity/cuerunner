@@ -10,6 +10,7 @@ export type FileMenuAction =
   | 'save-as'
   | 'history'
   | 'compare'
+  | 'merge'
   | 'export-bundle'
   | 'import-bundle'
   | 'show-settings'
@@ -39,6 +40,7 @@ export const FILE_MENU: FileMenuEntry[] = [
   // records its history whether or not this machine can read it: the data is the show's.
   { action: 'history', label: 'Show History…' },
   { action: 'compare', label: 'Compare Show…' },
+  { action: 'merge', label: 'Merge Show…' },
   'separator',
   // Handover: the show and the audio it plays as one file, in and out.
   { action: 'export-bundle', label: 'Export Bundle…' },

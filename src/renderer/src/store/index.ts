@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../types/cue'
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
+import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
@@ -57,6 +58,15 @@ export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
 
 /** The two halves of the Changes dialog: what this file did, and how it differs. */
 export type ChangesTab = 'history' | 'compare'
+
+/** What a merge did, as the window shows it: where the result is, and what to read. */
+export interface MergeReport {
+  path: string
+  notes: MergeNote[]
+  tally: MergeTally
+  /** The conflict policy this attempt used. */
+  policy: 'ours' | 'theirs'
+}
 
 export interface RunningCue {
   cueId: string
@@ -347,6 +357,13 @@ interface CueListState {
   changesTab: ChangesTab | null
   openChanges: (tab: ChangesTab) => void
   closeChanges: () => void
+
+  /**
+   * The last merge's report, or null when there is none to show. Not workspace content:
+   * it describes two other files and what the merge between them did.
+   */
+  mergeReport: MergeReport | null
+  setMergeReport: (report: MergeReport | null) => void
 
   /** Marks the session as having unsaved changes, e.g. after recovering a snapshot. */
   markDirty: () => void
@@ -694,6 +711,7 @@ export const useStore = create<CueListState>((set) => ({
   settingsTab: null,
   showSettingsTab: null,
   changesTab: null,
+  mergeReport: null,
 
   addCue: (type, afterId) => set(s => {
     const cue = createCue(type)
@@ -1241,6 +1259,8 @@ export const useStore = create<CueListState>((set) => ({
   openChanges: (changesTab) => set({ changesTab }),
 
   closeChanges: () => set({ changesTab: null }),
+
+  setMergeReport: (mergeReport) => set({ mergeReport }),
 
   markDirty: () => set({ isDirty: true }),
 

@@ -106,6 +106,15 @@ const MAX_SETTING_DEPTH = 2
 const NOT_AN_EDIT = new Set(['id', 'parentId', 'filePath', 'soundRegion'])
 
 /**
+ * The one field that is compared whether or not either side carries it. A file this
+ * build saved names a cue's file under `media`; a file old enough to predate that names
+ * it under `filePath`, which is otherwise not compared at all because it is this
+ * machine's route to the file. Reading both through one name is what keeps a cue pointed
+ * at a different file from reading as unchanged in a file that has not been saved since.
+ */
+const MEDIA_FIELD = 'media'
+
+/**
  * A value as an equality test sees it: object keys in a fixed order, undefined folded
  * into null. Two files that say the same thing in a different key order are the same
  * file here, which is what makes a migration that reorganises a section — or a file
@@ -150,7 +159,7 @@ function fieldChanges(before: Cue, after: Cue): FieldChange[] {
   const a = before as unknown as Record<string, unknown>
   const b = after as unknown as Record<string, unknown>
   const changes: FieldChange[] = []
-  const fields = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()
+  const fields = [...new Set([...Object.keys(a), ...Object.keys(b), MEDIA_FIELD])].sort()
   for (const field of fields) {
     if (NOT_AN_EDIT.has(field)) continue
     const from = fieldValue(a, field)
@@ -179,8 +188,13 @@ function fieldValue(cue: Record<string, unknown>, field: string): unknown {
   return cue[field] ?? null
 }
 
-/** Where each cue sits: its parent, and the cue before it among its own. */
-function places(cues: Cue[]): Map<string, CuePlace> {
+/**
+ * Where each cue sits: its parent, and the cue before it among its own. Exported because
+ * a three-way merge has to ask the same question of three files — whether two sides agree
+ * about where a cue goes cannot be read off a diff, whose idea of "moved" is the smallest
+ * set of cues that explains a reordering rather than the edit somebody made.
+ */
+export function cuePlaces(cues: Cue[]): Map<string, CuePlace> {
   const byId = new Map(cues.map(cue => [cue.id, cue]))
   const lastSibling = new Map<string | null, string>()
   const found = new Map<string, CuePlace>()
@@ -303,8 +317,8 @@ function title(workspace: Workspace): ShowTitle {
 export function diffWorkspaces(from: Workspace, to: Workspace): WorkspaceDiff {
   const before = new Map(from.cues.map(cue => [cue.id, cue]))
   const after = new Map(to.cues.map(cue => [cue.id, cue]))
-  const placeBefore = places(from.cues)
-  const placeAfter = places(to.cues)
+  const placeBefore = cuePlaces(from.cues)
+  const placeAfter = cuePlaces(to.cues)
   const moved = movedCues(from.cues, to.cues)
 
   const added: CueArrival[] = []

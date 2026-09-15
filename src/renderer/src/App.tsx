@@ -7,6 +7,7 @@ import { Inspector } from './components/inspector/Inspector'
 import { SettingsDialog } from './components/layout/SettingsDialog'
 import { ShowSettings } from './components/show/ShowSettings'
 import { ChangesDialog } from './components/changes/ChangesDialog'
+import { MergeReportDialog } from './components/changes/MergeReportDialog'
 import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
@@ -173,6 +174,7 @@ export function App() {
       {settingsTab !== null && <SettingsDialog initialTab={settingsTab} onClose={closeSettings} />}
       {showSettingsTab !== null && <ShowSettings />}
       {changesTab !== null && <ChangesDialog initialTab={changesTab} onClose={closeChanges} />}
+      <MergeReportDialog />
     </div>
   )
 }
