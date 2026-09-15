@@ -1,3 +1,4 @@
+import { describeMsc, parseMsc } from '../utils/msc'
 import type { Cue, CueTrigger } from '../types/cue'
 import type { ShowEvent } from '../types/show'
 
@@ -12,7 +13,10 @@ export function cueTriggers(cue: Cue): CueTrigger[] {
  * An OSC address is matched exactly: patterns and wildcards belong to the sender, and
  * matching prefixes here would let one message fire two cues that were meant to be
  * separate. A MIDI trigger ignores velocity and controller values for the same reason —
- * the value is how the desk expresses itself, not whether it meant this cue.
+ * the value is how the desk expresses itself, not whether it meant this cue. A show
+ * control trigger is the exception that looks like the rule: every field of the command
+ * is identity, including the cue number, because a console going to cue 12 is not a
+ * console going to the next one.
  */
 export function matchesTrigger(trigger: CueTrigger, event: ShowEvent): boolean {
   if (trigger.kind === 'osc') {
@@ -22,9 +26,20 @@ export function matchesTrigger(trigger: CueTrigger, event: ShowEvent): boolean {
   if (event.kind !== 'midi') return false
   if (event.device !== trigger.device) return false
 
+  if (trigger.kind === 'msc') {
+    const message = parseMsc(event.message)
+    if (message === null) return false
+    return message.deviceId === trigger.deviceId &&
+      message.format === trigger.format &&
+      message.command === trigger.command &&
+      message.cueNumber === trigger.cueNumber &&
+      message.cueList === trigger.cueList
+  }
+
   const incoming = event.message
   const wanted = trigger.message
-  // Sysex has no channel and no note to match on, so it can never answer a trigger.
+  // Sysex has no channel and no note to match on, so it can never answer a plain MIDI
+  // trigger — a console's command does, and that is what the `msc` kind is for.
   if (incoming.kind === 'sysex') return false
   if (incoming.channel !== wanted.channel) return false
 
@@ -63,6 +78,10 @@ export function describeTriggerSource(event: ShowEvent): string {
   }
   if (event.kind === 'midi') {
     const message = event.message
+    // A show control command is worth reading as the command it is rather than as a
+    // number of bytes: the log line is how an operator confirms which console spoke.
+    const msc = parseMsc(message)
+    if (msc !== null) return `MSC ${describeMsc(msc)} from "${event.device}"`
     const detail =
       message.kind === 'cc' ? `cc ${message.controller}` :
       message.kind === 'programChange' ? `program ${message.program}` :

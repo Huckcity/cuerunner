@@ -3,6 +3,7 @@
 // itself, not which cue it means.
 import { describe, it, expect } from 'vitest'
 import { cueTriggers, describeTriggerSource, matchesTrigger, triggeredCues } from './triggers'
+import { encodeMsc } from '../utils/msc'
 import type { Cue, CueTrigger, MidiMessageKind } from '../types/cue'
 import type { ShowEvent } from '../types/show'
 
@@ -84,6 +85,45 @@ describe('matchesTrigger', () => {
     const program = midiTrigger({ kind: 'programChange', channel: 2, program: 12 })
     expect(matchesTrigger(program, midiEvent({ kind: 'programChange', channel: 2, program: 12 }))).toBe(true)
     expect(matchesTrigger(program, midiEvent({ kind: 'programChange', channel: 2, program: 13 }))).toBe(false)
+  })
+})
+
+describe('a show control trigger', () => {
+  const go = { deviceId: 127, format: 'all' as const, command: 'go' as const, cueNumber: '12', cueList: '' }
+
+  it('answers the command the console sent, and nothing like it', () => {
+    const trigger: CueTrigger = { id: 't-msc', kind: 'msc', device: 'IAC Bus 1', ...go }
+    const event = (message: Parameters<typeof encodeMsc>[0]) => midiEvent(encodeMsc(message))
+
+    expect(matchesTrigger(trigger, event(go))).toBe(true)
+
+    // The cue number is the instruction: cue 13 is another cue's command, and a command
+    // that names no cue at all is not the same as one that names this one.
+    expect(matchesTrigger(trigger, event({ ...go, cueNumber: '13' }))).toBe(false)
+    expect(matchesTrigger({ id: 't', kind: 'msc', device: 'IAC Bus 1', ...go, cueNumber: '' },
+      event({ ...go, cueNumber: '' }))).toBe(true)
+    expect(matchesTrigger({ id: 't', kind: 'msc', device: 'IAC Bus 1', ...go, cueNumber: '' },
+      event(go))).toBe(false)
+
+    // A different list, command, format or device ID is a different instruction.
+    expect(matchesTrigger(trigger, event({ ...go, cueList: '2' }))).toBe(false)
+    expect(matchesTrigger(trigger, event({ ...go, command: 'load' }))).toBe(false)
+    expect(matchesTrigger(trigger, event({ ...go, format: 'lighting' }))).toBe(false)
+    expect(matchesTrigger(trigger, event({ ...go, deviceId: 3 }))).toBe(false)
+    // Another port is another console.
+    expect(matchesTrigger(trigger, midiEvent(encodeMsc(go), 'Other Port'))).toBe(false)
+  })
+
+  it('is not answered by a plain MIDI message, nor by a sysex that is not show control', () => {
+    const trigger: CueTrigger = { id: 't-msc', kind: 'msc', device: 'IAC Bus 1', ...go }
+
+    expect(matchesTrigger(trigger, midiEvent({ kind: 'noteOn', channel: 1, note: 60, velocity: 127 }))).toBe(false)
+    expect(matchesTrigger(trigger, midiEvent({ kind: 'sysex', data: [0x00, 0x20, 0x33, 0x02] }))).toBe(false)
+  })
+
+  it('is described as the command, so the log names what spoke', () => {
+    expect(describeTriggerSource(midiEvent(encodeMsc({ ...go, cueList: '2' }))))
+      .toBe('MSC Go cue 12 list 2 from "IAC Bus 1"')
   })
 })
 

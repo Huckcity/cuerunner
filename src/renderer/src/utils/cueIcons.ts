@@ -15,5 +15,6 @@ export const CUE_ICON: Record<CueType, string> = {
   network: '⊕',
   script: '{ }',
   scene: '◇',
-  devamp: '↩'
+  devamp: '↩',
+  msc: '⇢'
 }

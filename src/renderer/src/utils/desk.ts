@@ -179,24 +179,33 @@ export function deskMessages(
   const value = dca.note ?? dcaValue(index, desk.profile)
   const opened = profileMessages(desk.profile, channel, value, true)
   const closed = profileMessages(desk.profile, channel, value, false)
+  const unmute = deskMidi(desk, opened)
+  const mute = deskMidi(desk, closed)
+  // Both take the same envelope, so a null from either is the same "nowhere to send it".
+  if (unmute === null || mute === null) return null
+  return { ok: true, unmute, mute }
+}
 
+/**
+ * Any sequence of MIDI messages addressed at the show's desk, or null when the show
+ * drives no desk that takes MIDI at all.
+ *
+ * A DCA and a show control command both go this way, and they differ in what is sent
+ * rather than where: this is the where, so neither has to decide it twice.
+ */
+export function deskMidi(
+  desk: DeskSettings,
+  messages: MidiMessageKind[]
+): MidiDeskMessage | MidiTcpDeskMessage | null {
   if (desk.kind === 'midi') {
-    if (desk.midiPort === '') return null
-    return {
-      ok: true,
-      unmute: { kind: 'midi', portName: desk.midiPort, messages: opened },
-      mute: { kind: 'midi', portName: desk.midiPort, messages: closed }
-    }
+    return desk.midiPort === '' ? null : { kind: 'midi', portName: desk.midiPort, messages }
   }
-
-  // No address typed is the same nothing as no port chosen: the recall would report a
-  // failure that means less than the silence did.
-  if (desk.host.trim() === '') return null
-  return {
-    ok: true,
-    unmute: { kind: 'midi-tcp', host: desk.host, port: desk.tcpPort, messages: opened },
-    mute: { kind: 'midi-tcp', host: desk.host, port: desk.tcpPort, messages: closed }
+  if (desk.kind === 'midi-tcp') {
+    return desk.host.trim() === ''
+      ? null
+      : { kind: 'midi-tcp', host: desk.host, port: desk.tcpPort, messages }
   }
+  return null
 }
 
 export function describeDeskMessage(message: DeskMessage | null): string {

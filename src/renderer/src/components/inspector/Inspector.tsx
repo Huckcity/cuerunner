@@ -15,8 +15,10 @@ import { ScriptInspector } from './ScriptInspector'
 import { SceneInspector } from './SceneInspector'
 import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
+import { MscInspector } from './MscInspector'
 import type {
-  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue
+  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
+  MscCue
 } from '../../types/cue'
 import './Inspector.css'
 
@@ -34,7 +36,8 @@ const TYPE_TABS: Record<string, string[]> = {
   network: ['Basics', 'Network'],
   script: ['Basics', 'Script'],
   scene: ['Basics', 'Scene'],
-  devamp: ['Basics', 'Devamp']
+  devamp: ['Basics', 'Devamp'],
+  msc: ['Basics', 'Show Control']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -74,6 +77,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   }
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
+  if (tab === 'Show Control') return <MscInspector cue={cue as MscCue} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

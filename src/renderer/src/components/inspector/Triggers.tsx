@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../store'
 import { cueTriggers } from '../../engine/triggers'
-import type { Cue, CueTrigger, MidiMessageKind, TriggerMidiMessage } from '../../types/cue'
+import { MSC_COMMANDS, MSC_COMMAND_NAME, MSC_FORMATS, MSC_FORMAT_NAME, describeMsc, parseMsc } from '../../utils/msc'
+import type { Cue, CueTrigger, MidiMessageKind, MscCommand, MscFormat, TriggerMidiMessage } from '../../types/cue'
 import type { ShowEvent } from '../../types/show'
 import './Triggers.css'
 
@@ -36,6 +37,16 @@ function toTriggerMessage(message: TriggerableMidi): TriggerMidiMessage {
 /** How a trigger reads in the list: `OSC /eos/cue/12/fire`, `MIDI noteOn ch1 note 60 on "IAC Bus 1"`. */
 export function describeTrigger(trigger: CueTrigger): string {
   if (trigger.kind === 'osc') return `OSC ${trigger.address}`
+  if (trigger.kind === 'msc') {
+    const command = describeMsc({
+      deviceId: trigger.deviceId,
+      format: trigger.format,
+      command: trigger.command,
+      cueNumber: trigger.cueNumber,
+      cueList: trigger.cueList
+    })
+    return `Show Control ${command} from "${trigger.device}"`
+  }
 
   const { message, device } = trigger
   const detail =
@@ -46,16 +57,34 @@ export function describeTrigger(trigger: CueTrigger): string {
 }
 
 /** The trigger a learning session is looking for, or null when the event is not one. */
-function triggerFromEvent(learning: 'osc' | 'midi', event: ShowEvent): CueTrigger | null {
+function triggerFromEvent(learning: 'osc' | 'midi' | 'msc', event: ShowEvent): CueTrigger | null {
   if (learning === 'osc') {
     return event.kind === 'osc'
       ? { id: crypto.randomUUID(), kind: 'osc', address: event.address }
       : null
   }
-  // Sysex has no channel and no note, so it can never become a trigger; learning
-  // stays open and the next real message is the one that counts.
   if (event.kind !== 'midi') return null
   const message = event.message
+
+  if (learning === 'msc') {
+    // A command this app cannot read is not one it can learn either, so anything else on
+    // the river leaves the session open for the next message.
+    const msc = parseMsc(message)
+    if (msc === null) return null
+    return {
+      id: crypto.randomUUID(),
+      kind: 'msc',
+      device: event.device,
+      deviceId: msc.deviceId,
+      format: msc.format,
+      command: msc.command,
+      cueNumber: msc.cueNumber,
+      cueList: msc.cueList
+    }
+  }
+
+  // Sysex has no channel and no note, so it can never become a plain MIDI trigger;
+  // learning stays open and the next real message is the one that counts.
   if (message.kind === 'sysex') return null
   return {
     id: crypto.randomUUID(),
@@ -94,7 +123,15 @@ export function Triggers({ cue }: Props) {
   const [midiKind, setMidiKind] = useState<TriggerMidiKind>('noteOn')
   const [channel, setChannel] = useState(1)
   const [value, setValue] = useState(60)
-  const [learning, setLearning] = useState<'osc' | 'midi' | null>(null)
+  const [learning, setLearning] = useState<'osc' | 'midi' | 'msc' | null>(null)
+  // The show control form starts at the all-call and the all-types format, which is what
+  // a console's own document writes for "go, whoever is listening".
+  const [mscDevice, setMscDevice] = useState('')
+  const [mscDeviceId, setMscDeviceId] = useState(127)
+  const [mscFormat, setMscFormat] = useState<MscFormat>('all')
+  const [mscCommand, setMscCommand] = useState<MscCommand>('go')
+  const [mscCueNumber, setMscCueNumber] = useState('')
+  const [mscCueList, setMscCueList] = useState('')
 
   // The learn effect fires on the event river, so it must write against the cue as it
   // is now rather than whatever render closure it was created in.
@@ -126,7 +163,7 @@ export function Triggers({ cue }: Props) {
     updateCue(cue.id, { triggers: triggers.filter(trigger => trigger.id !== id) })
   }
 
-  function startLearning(kind: 'osc' | 'midi'): void {
+  function startLearning(kind: 'osc' | 'midi' | 'msc'): void {
     readRef.current = showEvents.length
     setLearning(kind)
   }
@@ -162,6 +199,20 @@ export function Triggers({ cue }: Props) {
         ? { kind: 'programChange', channel, program: value }
         : { kind: midiKind, channel, note: value }
     addTrigger({ id: crypto.randomUUID(), kind: 'midi', device, message })
+  }
+
+  function addMsc(): void {
+    if (mscDevice === '') return
+    addTrigger({
+      id: crypto.randomUUID(),
+      kind: 'msc',
+      device: mscDevice,
+      deviceId: mscDeviceId,
+      format: mscFormat,
+      command: mscCommand,
+      cueNumber: mscCueNumber.trim(),
+      cueList: mscCueList.trim()
+    })
   }
 
   return (
@@ -276,6 +327,95 @@ export function Triggers({ cue }: Props) {
             >Learn</button>
           </div>
           {learning === 'midi' && <LearningStrip onCancel={() => setLearning(null)} />}
+        </div>
+
+        <div className="trigger-section" data-kind="msc">
+          <div className="trigger-section-label">Show Control</div>
+          <div className="field-row">
+            <label htmlFor="trigger-msc-device">From</label>
+            <select
+              id="trigger-msc-device"
+              value={mscDevice}
+              onChange={e => setMscDevice(e.target.value)}
+            >
+              <option value="">— none —</option>
+              {ports.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </div>
+          <div className="field-row">
+            <label htmlFor="trigger-msc-command">Command</label>
+            <select
+              id="trigger-msc-command"
+              value={mscCommand}
+              onChange={e => setMscCommand(e.target.value as MscCommand)}
+            >
+              {MSC_COMMANDS.map(command => (
+                <option key={command} value={command}>{MSC_COMMAND_NAME[command]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-row">
+            <label htmlFor="trigger-msc-format">For</label>
+            <select
+              id="trigger-msc-format"
+              value={mscFormat}
+              onChange={e => setMscFormat(e.target.value as MscFormat)}
+            >
+              {MSC_FORMATS.map(format => (
+                <option key={format} value={format}>{MSC_FORMAT_NAME[format]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-row">
+            <label htmlFor="trigger-msc-device-id">Device ID</label>
+            <input
+              id="trigger-msc-device-id"
+              type="number"
+              min={0}
+              max={127}
+              value={mscDeviceId}
+              onChange={e => {
+                const n = clamp(e.target.value, 0, 127)
+                if (n !== null) setMscDeviceId(n)
+              }}
+            />
+          </div>
+          <div className="field-row">
+            <label htmlFor="trigger-msc-cue">Cue</label>
+            <input
+              id="trigger-msc-cue"
+              value={mscCueNumber}
+              placeholder="none named"
+              onChange={e => setMscCueNumber(e.target.value)}
+            />
+          </div>
+          <div className="field-row">
+            <label htmlFor="trigger-msc-list">List</label>
+            <input
+              id="trigger-msc-list"
+              value={mscCueList}
+              placeholder="its default"
+              onChange={e => setMscCueList(e.target.value)}
+            />
+          </div>
+          <p className="inspector-hint">
+            Fires on the console’s command as it sent it: every field has to match, so a
+            cue left empty answers a command that names no cue, not any command at all.
+          </p>
+          <div className="trigger-actions">
+            <button
+              type="button"
+              className="inspector-btn trigger-add"
+              disabled={mscDevice === ''}
+              onClick={addMsc}
+            >Add</button>
+            <button
+              type="button"
+              className="inspector-btn trigger-learn"
+              onClick={() => startLearning('msc')}
+            >Learn</button>
+          </div>
+          {learning === 'msc' && <LearningStrip onCancel={() => setLearning(null)} />}
         </div>
       </div>
     </>

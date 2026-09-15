@@ -1,3 +1,5 @@
+import { parseMsc } from '../utils/msc'
+import type { MscMessage } from '../utils/msc'
 import type { Cue, MidiMessageKind, RefirePolicy } from '../types/cue'
 import type { OscInEvent, ShowEvent } from '../types/show'
 
@@ -34,9 +36,15 @@ export function firingIdentity(event: ShowEvent): { surface: FireSurface; key: s
   if (event.kind !== 'midi') return null
 
   const message = event.message
-  // A note-off is the end of a press, never a firing of its own; it is what releases the
-  // hold `heldNote` records.
-  if (message.kind === 'sysex' || message.kind === 'noteOff') return null
+  // A show control command fires a cue like anything else, and a console that sends the
+  // same GO twice is the doubling this guard exists for. A sysex for anything else has
+  // no identity to match on, and neither does a note coming up: a release ends a press
+  // rather than starting one.
+  if (message.kind === 'sysex') {
+    const msc = parseMsc(message)
+    return msc === null ? null : { surface: 'midi', key: mscKey(event.device, msc) }
+  }
+  if (message.kind === 'noteOff') return null
 
   return { surface: 'midi', key: midiKey(event.device, message) }
 }
@@ -62,7 +70,7 @@ function datagramKey(event: OscInEvent): string {
   return `${event.address} ${event.args.map(arg => `${arg.type}:${String(arg.value)}`).join(' ')}`
 }
 
-/** The message kinds that can fire a cue at all: a sysex has no control to name. */
+/** The message kinds that can fire a cue at all: a sysex only when it is show control. */
 type FiringMidiKind = Exclude<MidiMessageKind, { kind: 'sysex' }>
 
 /**
@@ -80,6 +88,16 @@ function midiKey(device: string, message: FiringMidiKind): string {
     case 'programChange':
       return `${device} pc:${message.channel}:${message.program}`
   }
+}
+
+/**
+ * The same for a show control command, where the value *is* the identity: the command
+ * and the cue it names are the instruction, so a console going to cue 12 and then to 13
+ * is two firings however close together they arrive.
+ */
+function mscKey(device: string, message: MscMessage): string {
+  return `${device} msc:${message.deviceId}:${message.format}:${message.command}:` +
+    `${message.cueNumber}:${message.cueList}`
 }
 
 /**
