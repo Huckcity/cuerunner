@@ -1317,6 +1317,14 @@ export class CueRunner {
     if (event.type === 'error' && event.cueId === null) {
       // An engine-wide fault (device loss, engine crash) has no cue to blame.
       this.log({ level: 'error', message: `audio engine: ${event.message}` })
+      // A device fault is the engine already letting go of the sound: it panics what it
+      // was playing the moment the device goes. Its per-voice `ended` lines follow a
+      // couple of seconds later, because it waits for the audio thread to acknowledge
+      // that panic — and until they arrive every row would still read as playing, with
+      // the next GO on one of them refused as a repeat of a cue that is no longer making
+      // a sound. So the release the engine's `panic` line brings is taken here, with the
+      // fault, rather than when the silence finally gets reported.
+      if (event.code === 'device') this.handleExternalPanic()
       return
     }
 

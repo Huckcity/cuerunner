@@ -968,6 +968,46 @@ describe('CueRunner — engine failures are reported', () => {
     }))
   })
 
+  it('releases the show when the device goes, without waiting for the silence report', () => {
+    // The engine panics what it was playing the moment the device goes, but its per-voice
+    // `ended` lines only follow once the audio thread has acknowledged that panic — a
+    // couple of seconds, on a device that is no longer answering. Until then the rows
+    // would read as playing and the next GO on one of them would be refused as a repeat.
+    const cue = makeAudio({ id: 'a1', duration: 5000 })
+    const { runner, clearAllRunning, appendLog } = setup([cue])
+
+    runner.go()
+    vi.advanceTimersByTime(200)
+    clearAllRunning.mockClear()
+
+    emitEngineEvent({
+      type: 'error', cueId: null, runId: null, at: Date.now(), code: 'device',
+      message: 'audio device stopped unexpectedly', sessionId: 'test-session'
+    })
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'audio engine: audio device stopped unexpectedly' })
+    ])
+    expect(clearAllRunning).toHaveBeenCalled()
+  })
+
+  it('leaves a running show alone when the fault is not the device', () => {
+    // An engine-wide fault the engine did not panic for is reported and nothing more: a
+    // wait cue's own time has to survive the engine it was counting against.
+    const cue = makeWait({ id: 'w1', duration: 6000 })
+    const { runner, clearAllRunning } = setup([cue])
+
+    runner.go()
+    clearAllRunning.mockClear()
+
+    emitEngineEvent({
+      type: 'error', cueId: null, runId: null, at: Date.now(), code: 'engine',
+      message: 'audio engine exited (1)', sessionId: 'test-session'
+    })
+
+    expect(clearAllRunning).not.toHaveBeenCalled()
+  })
+
   it('tells the operator when the engine was replaced under the show', () => {
     const { appendLog } = setup([makeWait({ id: 'w1' })])
 
