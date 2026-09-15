@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   eos-windows:
-    runs-on: [self-hosted, windows, x64, ubox-win]
+    runs-on: [self-hosted, windows, x64, win-ci]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

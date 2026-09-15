@@ -9,8 +9,8 @@ on:
 jobs:
   # A release runs entirely on the homelab machines, like every other workflow here:
   # Linux and the packaging on ubox, the macOS half on the Mac mini, the Windows installer
-  # in the KVM guest on ubox (CLAUDE.md → CI runners). Nothing publishes from GitHub's
-  # runners, and nothing here waits on them.
+  # on the NUC (CLAUDE.md → CI runners). Nothing publishes from GitHub's runners, and
+  # nothing here waits on them.
   test:
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
@@ -65,7 +65,7 @@ jobs:
 
   build-windows:
     needs: [ test, test-e2e ]
-    runs-on: [self-hosted, windows, x64, ubox-win]
+    runs-on: [self-hosted, windows, x64, win-ci]
     steps:
       - uses: actions/checkout@v7
 

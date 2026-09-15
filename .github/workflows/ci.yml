@@ -1,6 +1,6 @@
 # Every lane runs on hardware in the homelab: Linux on `ubox`, macOS on the Mac mini beside
-# it, Windows in a KVM guest on `ubox` (CLAUDE.md → CI runners). None of it is billed, and
-# none of it stops when the account's included minutes run out.
+# it, Windows on a NUC of its own (CLAUDE.md → CI runners). None of it is billed, and none
+# of it stops when the account's included minutes run out.
 name: CI
 
 on:
@@ -143,7 +143,7 @@ jobs:
           # Windows runs in a KVM guest on ubox: the same x64 Windows the installer ships
           # for, from the same eval media GitHub's own windows-latest uses, at none of the
           # 2x minutes (CLAUDE.md → CI runners).
-          - runner: [self-hosted, windows, x64, ubox-win]
+          - runner: [self-hosted, windows, x64, win-ci]
             label: windows
           # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the
           # .dmg ships for, at none of the 10x minutes. It is a launchd agent in the
