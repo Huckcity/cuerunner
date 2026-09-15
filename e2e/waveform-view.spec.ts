@@ -72,12 +72,31 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true })
 })
 
-/** A click at a fraction of the canvas, and the time the panel says it landed on. */
+/**
+ * A click at a fraction of the canvas, and the time the panel says it landed on.
+ *
+ * The cursor appears when the panel has drawn the click, and a click that arrives while the
+ * canvas is still settling is a click into nothing. On the Windows runner — a VM with software
+ * rendering, which is also busy with whatever else the host is doing — that window is wide
+ * enough to lose, which is how this spec failed a lane that had passed without it five runs
+ * running. So the click is repeated until the panel has something to show, bounded: a panel
+ * that never draws a cursor for a click still fails, three attempts later.
+ */
 async function clickAt(fraction: number): Promise<string> {
-  const box = (await page.locator('.waveform-canvas').boundingBox())!
-  await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2)
-  await expect(page.locator('.waveform-cursor')).toBeVisible()
-  return page.locator('.waveform-cursor').innerText()
+  const canvas = page.locator('.waveform-canvas')
+  const cursor = page.locator('.waveform-cursor')
+  await expect(canvas).toBeVisible()
+
+  for (let attempt = 0; ; attempt++) {
+    const box = await canvas.boundingBox()
+    if (box) await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2)
+    try {
+      await expect(cursor).toBeVisible({ timeout: 2000 })
+      return cursor.innerText()
+    } catch (error) {
+      if (attempt >= 2) throw error
+    }
+  }
 }
 
 const zoomLabel = (): Promise<string> => page.locator('.waveform-zoom-label').innerText()
