@@ -43,6 +43,35 @@ installer:
 
 ## Getting Started
 
+### What it needs to run
+
+The audio engine is the part with a deadline: it has to render faster than the audio it plays.
+Measured on a Ryzen 7 5800X, one core, 44.1 kHz sources into a 48 kHz device
+(`node native/audio/tests/matrix-bench.mjs`):
+
+| The shape | Cost on one core | What that means |
+| --- | --- | --- |
+| The largest mix the engine supports — 24 voices × 32 outputs × 64 crosspoints, resampling live | 8.7x realtime | about **a quarter of one modern core** holds the 2x floor CI enforces |
+| A typical musical — 8 voices × 4 outputs × 4 crosspoints | 43x realtime | about **a twentieth of one core** |
+
+- **CPU**: any 64-bit machine from the last decade, two cores or more. The heaviest supported
+  show fits in a quarter of one modern core and a typical one in a twentieth, so what playback
+  depends on is one core's throughput rather than core count. Four cores is comfortable, and is
+  what this project is tested on.
+- **Memory**: 8 GB. The decoded-audio cache is bounded by design — 512 MB, 100 files, and any
+  single file whose decoded form would exceed 32 MB (about 90 seconds of stereo at 48 kHz)
+  streams from disk instead of being held — so memory does not grow with file length.
+- **Disk**: any. A stereo voice streams at roughly 380 KB/s, and a cue deep inside a long
+  recording is entered through a seek table rather than decoded from its start. An SSD shortens
+  show loading, not playback.
+- **Graphics**: none required. Software rendering works; a GPU is nicer to look at.
+- **OS**: Windows 10+, macOS 10.15+, or 64-bit Linux.
+
+If a machine cannot keep up, that shows up rather than hiding: the engine counts the audio it
+could not fill and warns about it, the show clock keeps wall time through a stall instead of
+drifting, and a desk or console it cannot reach says so. The bounds themselves are held by the
+acceptance suite in `native/audio/tests/`.
+
 ### Prerequisites
 
 - Node.js 20+ (Node 24 also supported)
