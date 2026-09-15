@@ -107,6 +107,16 @@ const defaultMidiSettings: MidiSettings = {
   outputPortName: '',
 }
 
+/**
+ * A place in one cue's file. The cursor is a time in a file, so it carries the cue it was
+ * placed in: the same number in another track is a different place, and drawing it there
+ * would be the panel claiming the operator pointed at something they did not.
+ */
+export interface WaveformCursor {
+  cueId: string
+  ms: number
+}
+
 interface CueListState {
   // Workspace metadata. The identity belongs to the show, not to a save: it comes out of
   // the file it was opened from and is written back unchanged, so saving a show twice
@@ -166,13 +176,16 @@ interface CueListState {
   toggleSelected: (id: string) => void
 
   /**
-   * Where the waveform cursor sits, in file milliseconds, for the cue being edited. It is
-   * where a split will be made and where a click on the waveform seeks to, so the two
-   * hands that set it — the click and the drag — write to the same place. Session state:
-   * a cursor is where somebody is looking, not part of the show.
+   * Where the waveform cursor sits, in file milliseconds, and which cue's file it is in.
+   * It is where a split will be made and where a click on the waveform seeks to, so the
+   * two hands that set it — the click and the drag — write to the same place. A cursor
+   * belongs to the track it was placed on: a time is a place in that file, and the same
+   * number in another track is a different place. Session state: a cursor is where
+   * somebody is looking, not part of the show.
    */
-  waveformCursorMs: number | null
-  setWaveformCursor: (ms: number | null) => void
+  waveformCursor: WaveformCursor | null
+  /** Places the cursor in one cue's file, or takes it away (null). */
+  setWaveformCursor: (cueId: string, ms: number | null) => void
 
   /**
    * Moves one edge of an audio cue's region, taking the cue that continues it along when
@@ -550,7 +563,7 @@ export const useStore = create<CueListState>((set) => ({
   selectedId: null,
   selectedIds: [],
   selectionAnchorId: null,
-  waveformCursorMs: null,
+  waveformCursor: null,
   collapsedGroupIds: new Set<string>(),
   running: new Map(),
   lastRuns: {},
@@ -846,7 +859,9 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  setWaveformCursor: (ms) => set({ waveformCursorMs: ms }),
+  setWaveformCursor: (cueId, ms) => set({
+    waveformCursor: ms === null ? null : { cueId, ms }
+  }),
 
   /**
    * Moves one edge of an audio cue's region, and the cue that continues it when the two
@@ -907,9 +922,11 @@ export const useStore = create<CueListState>((set) => ({
     const split = splitAudioCue(cue, atMs)
     if (split === null) return s
 
-    // The pair is named so that a hand reading the list sees two halves of one thing:
-    // both numbered from the cue that was split, and nothing else called the same.
-    const names = new Set(s.cues.map(c => c.name))
+    // The pair is named so that a hand reading the list sees two halves of one thing: the
+    // head keeps the name the cue had, and the tail takes the next one along. The cue's
+    // own name is not in the set of names to avoid — it is the name the pair is being
+    // given, and the head is the half that keeps the cue's identity.
+    const names = new Set(s.cues.filter(c => c.id !== id).map(c => c.name))
     const headName = partName(split.baseName, names)
     names.add(headName)
     const tailName = partName(split.baseName, names)
@@ -934,7 +951,7 @@ export const useStore = create<CueListState>((set) => ({
       selectionAnchorId: cue.id,
       // The cursor has been spent on the split; where it was is not where the next one
       // should be cut.
-      waveformCursorMs: null,
+      waveformCursor: null,
       isDirty: true,
       past: pushPast(s.past, snapshotOf(s)),
       future: []
@@ -1095,7 +1112,7 @@ export const useStore = create<CueListState>((set) => ({
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
       // Where the last show's cursor sat says nothing about this one.
-      waveformCursorMs: null,
+      waveformCursor: null,
       // Nothing has been told to this show's desk yet.
       deskState: {},
       deskSceneId: null,

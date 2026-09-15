@@ -41,7 +41,7 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const duplicateCues = useStore(s => s.duplicateCues)
   const updateCues = useStore(s => s.updateCues)
   const splitAudioCueAt = useStore(s => s.splitAudioCueAt)
-  const cursorMs = useStore(s => s.waveformCursorMs)
+  const cursor = useStore(s => s.waveformCursor)
   const menuRef = useRef<HTMLDivElement>(null)
   /** Where the keyboard is in the menu: the item per index, in the order drawn. */
   const [activeIndex, setActiveIndex] = useState(0)
@@ -110,12 +110,15 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const handleArmToggle = () => { updateCues(targets, { isArmed: !allArmed }); onClose() }
 
   // A split is offered when there is a place to make one: an audio cue whose region the
-  // waveform cursor is inside. The cursor is the same one a click on the waveform sets,
-  // so the operator chooses the point where they can see it and commits it here — the
-  // menu is beside the list, and the thing being pointed at is a time.
+  // waveform cursor is inside, and the cursor is this cue's — it is a time in a file, and
+  // a time in another track is a different place. The cursor is the same one a click on
+  // the waveform sets, so the operator chooses the point where they can see it and
+  // commits it here — the menu is beside the list, and the thing being pointed at is a
+  // time.
+  const atMs = cursor !== null && cursor.cueId === cue.id ? cursor.ms : null
   const splitSplit = !several && cue.type === 'audio' && cue.filePath !== '' &&
-    cursorMs !== null && cursorMs > cue.startTime && cursorMs < regionEndMs(cue)
-  const handleSplit = () => { splitAudioCueAt(cue.id, cursorMs!); onClose() }
+    atMs !== null && atMs > cue.startTime && atMs < regionEndMs(cue)
+  const handleSplit = () => { if (atMs !== null) splitAudioCueAt(cue.id, atMs); onClose() }
 
   return ReactDOM.createPortal(
     <div
@@ -135,7 +138,7 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
         <kbd>{formatShortcut('Mod+D')}</kbd>
       </button>
       {splitSplit && (
-        <button className="cue-context-menu-item" onClick={handleSplit} title={splitHint(cue, cursorMs!)} onMouseEnter={e => e.currentTarget.focus()}>
+        <button className="cue-context-menu-item" onClick={handleSplit} title={splitHint(cue, atMs)} onMouseEnter={e => e.currentTarget.focus()}>
           <span className="cue-context-menu-icon">✂</span>
           Split here
         </button>

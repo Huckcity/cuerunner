@@ -20,6 +20,13 @@ export interface WaveformRegion {
 /** What one frame of the panel shows, as fractions of the file. */
 export interface WaveformDraw {
   region: WaveformRegion
+  /**
+   * The window into the file the panel is looking at, as fractions: `0–1` is the whole
+   * file, and a zoomed panel is a narrower window inside it. Everything the frame draws
+   * is placed through this, so the view is the only thing that decides what "further
+   * along" means.
+   */
+  view: WaveformView
   /** Where the playhead is, if the cue is playing: null when it is not. */
   play: number | null
   /** Where a split would be made, if the cursor is over the panel: null when it is not. */
@@ -32,15 +39,39 @@ export interface WaveformDraw {
   onsets?: number[]
 }
 
+/** The slice of the file on screen, as fractions of the file. */
+export interface WaveformView {
+  start: number
+  end: number
+}
+
+/** The whole file: what the panel shows at 1×. */
+export const FULL_VIEW: WaveformView = { start: 0, end: 1 }
+
+/** How far a file fraction is from the left edge of the canvas, in device pixels. */
+export function viewX(fraction: number, view: WaveformView, width: number): number {
+  const span = Math.max(Number.EPSILON, view.end - view.start)
+  return Math.floor(((fraction - view.start) / span) * width)
+}
+
+/** Whether a file fraction is inside the window the panel is looking at. */
+export function inView(fraction: number, view: WaveformView): boolean {
+  return fraction >= view.start && fraction <= view.end
+}
+
 /**
  * Where the two boundary grips are drawn: a head across the top of the panel and a tail
  * across the bottom, so the pair is one gesture apart in either direction and neither
  * hides behind the playhead. Returned by the drawing code as well as used by it, so what
  * the pointer can grab is exactly what the eye can see.
+ *
+ * A boundary outside the window is `null`: a grip pinned to the edge of a zoomed view
+ * would be a handle pointing at a time the panel is not showing, and grabbing it would
+ * move a boundary the operator cannot see.
  */
 export interface WaveformHandles {
-  start: { x: number; y: number; r: number }
-  end: { x: number; y: number; r: number }
+  start: { x: number; y: number; r: number } | null
+  end: { x: number; y: number; r: number } | null
 }
 
 export interface WaveformLayout {
@@ -48,25 +79,33 @@ export interface WaveformLayout {
   /** File fractions the grips sit at. */
   startFraction: number
   endFraction: number
+  /** The window the grips were placed in. */
+  view: WaveformView
 }
 
 /** The grip radius, in CSS pixels; the drawing scales it for the device pixel ratio. */
 export const HANDLE_RADIUS = 9
 
 export function waveformLayout(
-  width: number, height: number, region: WaveformRegion
+  width: number, height: number, region: WaveformRegion, view: WaveformView = FULL_VIEW
 ): WaveformLayout {
   const startFraction = Math.max(0, Math.min(1, region.start))
   const endFraction = Math.max(0, Math.min(1, region.end))
-  const x = (fraction: number): number => Math.max(0, Math.min(width, Math.floor(fraction * width)))
+  const x = (fraction: number): number =>
+    Math.max(0, Math.min(width, viewX(fraction, view, width)))
   return {
     startFraction,
     endFraction,
+    view,
     handles: {
       // Top and bottom rather than both at the top: the two grips are then always both
       // visible, even when the region is narrow enough for them to overlap in x.
-      start: { x: x(startFraction), y: HANDLE_RADIUS * DPR, r: HANDLE_RADIUS * DPR },
-      end: { x: x(endFraction), y: height - HANDLE_RADIUS * DPR, r: HANDLE_RADIUS * DPR }
+      start: inView(startFraction, view)
+        ? { x: x(startFraction), y: HANDLE_RADIUS * DPR, r: HANDLE_RADIUS * DPR }
+        : null,
+      end: inView(endFraction, view)
+        ? { x: x(endFraction), y: height - HANDLE_RADIUS * DPR, r: HANDLE_RADIUS * DPR }
+        : null
     }
   }
 }
@@ -96,18 +135,23 @@ export function drawWaveform(
   ctx.lineTo(width, height / 2)
   ctx.stroke()
 
-  const layout = waveformLayout(width, height, draw.region)
-  const playX = draw.play === null ? null : Math.floor(draw.play * width)
-  const regionFrom = Math.floor(layout.startFraction * width)
-  const regionTo = Math.floor(layout.endFraction * width)
+  const layout = waveformLayout(width, height, draw.region, draw.view)
+  const view = draw.view
+  const viewSpan = Math.max(Number.EPSILON, view.end - view.start)
+  const playX = draw.play === null ? null : viewX(draw.play, view, width)
+  const regionFrom = viewX(layout.startFraction, view, width)
+  const regionTo = viewX(layout.endFraction, view, width)
   const yMid = height / 2
 
   for (let x = 0; x < width; x++) {
-    const from = Math.floor(x * buckets / width)
-    const to = Math.max(from + 1, Math.floor((x + 1) * buckets / width))
+    // The column's own slice of the file, read through the window: what one column is
+    // worth in buckets is the zoom, so a zoomed-in panel reads a few buckets closely
+    // instead of many of them coarsely.
+    const from = Math.min(buckets - 1, Math.floor((view.start + (x / width) * viewSpan) * buckets))
+    const to = Math.max(from + 1, Math.ceil((view.start + ((x + 1) / width) * viewSpan) * buckets))
     let min = 0
     let max = 0
-    for (let bucket = from; bucket < to && bucket < buckets; bucket++) {
+    for (let bucket = Math.max(0, from); bucket < to && bucket < buckets; bucket++) {
       const low = values[bucket * 2]
       const high = values[bucket * 2 + 1]
       if (low < min) min = low
@@ -130,8 +174,9 @@ export function drawWaveform(
     ctx.fillRect(x, yMax, 1, barHeight)
   }
 
-  // The playhead, if the cue is playing.
-  if (playX !== null && draw.play !== null && draw.play > 0 && draw.play < 1) {
+  // The playhead, if the cue is playing, and if it is inside the window: a line pinned to
+  // the edge of a zoomed view would be the panel claiming the music is somewhere it is not.
+  if (playX !== null && draw.play !== null && inView(draw.play, view)) {
     ctx.strokeStyle = PLAYHEAD_COLOR
     ctx.lineWidth = 1.5 * DPR
     ctx.beginPath()
@@ -150,8 +195,8 @@ export function drawWaveform(
 
   // The split cursor, where one would be made. Dashed, so it reads as a place rather
   // than as a state — the playhead is the solid line in this panel.
-  if (draw.cursor !== null) {
-    const cursorX = Math.floor(draw.cursor * width)
+  if (draw.cursor !== null && inView(draw.cursor, view)) {
+    const cursorX = viewX(draw.cursor, view, width)
     ctx.strokeStyle = CURSOR_COLOR
     ctx.lineWidth = 1 * DPR
     ctx.setLineDash([2 * DPR, 3 * DPR])
@@ -163,13 +208,18 @@ export function drawWaveform(
   }
 
   for (const onset of draw.onsets ?? []) {
-    const x = Math.floor(Math.max(0, Math.min(1, onset)) * width)
+    if (!inView(onset, view)) continue
+    const x = Math.max(0, Math.min(width, viewX(onset, view, width)))
     ctx.fillStyle = ONSET_COLOR
     ctx.fillRect(x, height - ONSET_HEIGHT * DPR, Math.max(1, Math.floor(DPR)), ONSET_HEIGHT * DPR)
   }
 
-  drawGrip(ctx, layout.handles.start, 'down', draw.region.start > 0)
-  drawGrip(ctx, layout.handles.end, 'up', layout.endFraction < 1)
+  if (layout.handles.start !== null) {
+    drawGrip(ctx, layout.handles.start, 'down', draw.region.start > 0)
+  }
+  if (layout.handles.end !== null) {
+    drawGrip(ctx, layout.handles.end, 'up', layout.endFraction < 1)
+  }
   return layout
 }
 
