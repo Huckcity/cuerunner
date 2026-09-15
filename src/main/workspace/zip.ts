@@ -235,12 +235,15 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
   const tailStart = size - tailSize
   const tail = await read(filePath, tailStart, tailSize)
 
+  // The end record is the last thing in the file bar its comment, so it is found from the
+  // end — and the comment length has to agree with where the record sits, or a signature
+  // that happens to appear inside some other archive's comment would be read as this one.
   let end = -1
   for (let at = tail.length - END_SIZE; at >= 0; at--) {
-    if (tail.readUInt32LE(at) === END_SIGNATURE) {
-      end = at
-      break
-    }
+    if (tail.readUInt32LE(at) !== END_SIGNATURE) continue
+    if (tail.readUInt16LE(at + 20) !== tail.length - at - END_SIZE) continue
+    end = at
+    break
   }
   if (end < 0) throw new Error('that file is not a zip archive')
 

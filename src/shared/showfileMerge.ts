@@ -175,68 +175,98 @@ function mergeCue(
 }
 
 /**
- * The order of the merged list: this show's, with the other side's cues inserted after
- * their own neighbours. Groups are put back together afterwards, because a cue list whose
- * children are not sitting under their group is a cue list the rest of the app cannot
- * read.
+ * The order of the merged list, group by group: the arrangement of whichever side moved
+ * the group's cues, with the other side's additions placed among the neighbours they were
+ * added after.
+ *
+ * One side moving a run of cues and the other not touching it is the ordinary case — the
+ * associate rearranges act two, the designer is in act one — and their arrangement is
+ * theirs to keep. When both sides rearranged the same list, this show's order is kept and
+ * `reportOrderConflicts` has already named the cues they disagree about.
+ *
+ * Groups come out with their children immediately after them, because a cue list whose
+ * children are not under their group is one the rest of the app cannot read, whatever
+ * order the two sides wanted.
  */
 function mergeOrder(
-  mine: Cue[],
-  yours: Cue[],
+  ancestor: Workspace,
+  mine: Workspace,
+  yours: Workspace,
   merged: Map<string, Cue>,
   surviving: Set<string>
 ): string[] {
-  const order = mine.filter(cue => surviving.has(cue.id)).map(cue => cue.id)
-  const position = new Map(order.map((id, index) => [id, index]))
-  const theirPosition = new Map(yours.map((cue, index) => [cue.id, index]))
+  // Which group a cue belongs to is the merge's answer, not either file's: a cue whose
+  // group was deleted on one side has been moved to the top level by now, and asking the
+  // files would leave it belonging to a group that is not in the result. Only the order
+  // within a group comes from the side that arranged it.
+  const childrenOf = (cues: Cue[], parentId: string | null): string[] =>
+    cues
+      .filter(cue => surviving.has(cue.id))
+      .filter(cue => (merged.get(cue.id) as Cue).parentId === parentId)
+      .map(cue => cue.id)
 
-  for (const cue of yours) {
-    if (!surviving.has(cue.id) || position.has(cue.id)) continue
-    // Straight after the nearest cue before it in the other file that made it into the
-    // merge; if there is none, just before the nearest one after it; if neither, at the
-    // end, which is where an operator appends a cue anyway.
-    let after = -1
-    for (let scan = (theirPosition.get(cue.id) as number) - 1; scan >= 0; scan--) {
-      const at = position.get(yours[scan].id)
-      if (at !== undefined) {
-        after = at
-        break
-      }
-    }
-    let at = order.length
-    if (after === -1) {
-      for (let scan = (theirPosition.get(cue.id) as number) + 1; scan < yours.length; scan++) {
-        const before = position.get(yours[scan].id)
+  const sequenceFor = (parentId: string | null): string[] => {
+    const baseSeq = childrenOf(ancestor.cues, parentId)
+    const mySeq = childrenOf(mine.cues, parentId)
+    const theirSeq = childrenOf(yours.cues, parentId)
+
+    // The order of the cues all three still have. An addition is not a rearrangement:
+    // adding a cue to the end of a list that was not otherwise touched must not read as
+    // this side having arranged the list.
+    const shared = (from: string[], others: string[][]): string[] =>
+      from.filter(id => others.every(other => other.includes(id)))
+    const baseOrder = shared(baseSeq, [mySeq, theirSeq])
+    const myOrder = shared(mySeq, [baseSeq, theirSeq])
+    const theirOrder = shared(theirSeq, [baseSeq, mySeq])
+    const same = (a: string[], b: string[]): boolean =>
+      a.length === b.length && a.every((id, index) => id === b[index])
+
+    const theirsWins = same(myOrder, baseOrder) && !same(theirOrder, baseOrder)
+    return theirsWins ? withExtras(theirSeq, mySeq) : withExtras(mySeq, theirSeq)
+  }
+
+  /** One side's order, with the other side's additions after their own neighbours. */
+  const withExtras = (order: string[], extra: string[]): string[] => {
+    const placed = [...order]
+    const position = new Map(placed.map((id, index) => [id, index]))
+    const extraPosition = new Map(extra.map((id, index) => [id, index]))
+    for (const id of extra) {
+      if (position.has(id)) continue
+      // Straight after the nearest cue before it in the other file that made it into the
+      // merge; if there is none, just before the nearest one after it; if neither, at the
+      // end, which is where an operator appends a cue anyway.
+      let at = placed.length
+      for (let scan = (extraPosition.get(id) as number) - 1; scan >= 0; scan--) {
+        const before = position.get(extra[scan])
         if (before !== undefined) {
-          at = before
+          at = before + 1
           break
         }
       }
-    } else {
-      at = after + 1
+      if (at === placed.length) {
+        for (let scan = (extraPosition.get(id) as number) + 1; scan < extra.length; scan++) {
+          const after = position.get(extra[scan])
+          if (after !== undefined) {
+            at = after
+            break
+          }
+        }
+      }
+      placed.splice(at, 0, id)
+      for (let index = at; index < placed.length; index++) position.set(placed[index], index)
     }
-    order.splice(at, 0, cue.id)
-    for (let index = at; index < order.length; index++) position.set(order[index], index)
+    return placed
   }
 
-  // Groups first, their children immediately after them, in the order they ended up in:
-  // a cue list whose children are not under their group is one the rest of the app cannot
-  // read, whatever order the two sides wanted.
-  const placed = new Set<string>()
-  const enclosed: string[] = []
-  const place = (id: string): void => {
-    if (placed.has(id)) return
-    placed.add(id)
-    enclosed.push(id)
-    for (const candidate of order) {
-      if (merged.get(candidate)?.parentId === id) place(candidate)
+  const order: string[] = []
+  const place = (parentId: string | null): void => {
+    for (const id of sequenceFor(parentId)) {
+      order.push(id)
+      place(id)
     }
   }
-  for (const id of order) {
-    if (merged.get(id)?.parentId === null) place(id)
-  }
-  for (const id of order) place(id)
-  return enclosed
+  place(null)
+  return order
 }
 
 const SECTIONS: Array<{ path: string; read: (workspace: Workspace) => unknown; write: (workspace: Workspace, value: unknown) => Workspace }> = [
@@ -387,7 +417,7 @@ export function mergeWorkspaces(
   reportOrderConflicts(ancestor, ours, theirs, merged, notes, tally)
   repairParents(merged, notes)
   const survivors = new Set(merged.keys())
-  const order = mergeOrder(ours.cues, theirs.cues, merged, survivors)
+  const order = mergeOrder(ancestor, ours, theirs, merged, survivors)
   const cues = order.map(id => merged.get(id)).filter((cue): cue is Cue => cue !== undefined)
   const settings = mergeSettings(ancestor, ours, theirs, options, notes, tally)
   return {

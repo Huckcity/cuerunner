@@ -118,6 +118,54 @@ describe('two people changing different things', () => {
     expect(merged.tally).toMatchObject({ oursOnly: 1, theirsOnly: 1 })
   })
 
+  it('keeps the other side’s arrangement of a list this show never touched', () => {
+    const ancestor = workspace([
+      cue({ id: 'a', number: '1', name: 'Walk-in' }),
+      cue({ id: 'b', number: '2', name: 'Interval' }),
+      cue({ id: 'c', number: '3', name: 'Bows' })
+    ])
+    // They rearranged the top level; this show is in act two and has not.
+    const theirs = workspace([
+      cue({ id: 'c', number: '3', name: 'Bows' }),
+      cue({ id: 'a', number: '1', name: 'Walk-in' }),
+      cue({ id: 'b', number: '2', name: 'Interval' })
+    ])
+
+    const merged = mergeWorkspaces(ancestor, ancestor, theirs)
+
+    expect(merged.workspace.cues.map(c => c.name)).toEqual(['Bows', 'Walk-in', 'Interval'])
+    // A move one side made is that side's, and the report has nothing to say about it.
+    expect(merged.notes).toEqual([])
+  })
+
+  it('keeps the other side’s arrangement inside a group, and this show’s addition with it', () => {
+    const ancestor = workspace([
+      group('g', 'Act 2'),
+      cue({ id: 'a', number: '1', name: 'Top of act', parentId: 'g' }),
+      cue({ id: 'b', number: '2', name: 'Changeover', parentId: 'g' }),
+      cue({ id: 'z', number: '3', name: 'Curtain call' })
+    ])
+    // They swapped the two cues inside the group; this show added a cue at the end.
+    const theirs = workspace([
+      group('g', 'Act 2'),
+      cue({ id: 'b', number: '2', name: 'Changeover', parentId: 'g' }),
+      cue({ id: 'a', number: '1', name: 'Top of act', parentId: 'g' }),
+      cue({ id: 'z', number: '3', name: 'Curtain call' })
+    ])
+    const ours = workspace([
+      group('g', 'Act 2'),
+      cue({ id: 'a', number: '1', name: 'Top of act', parentId: 'g' }),
+      cue({ id: 'b', number: '2', name: 'Changeover', parentId: 'g' }),
+      cue({ id: 'z', number: '3', name: 'Curtain call' }),
+      cue({ id: 'w', number: '4', name: 'Walk-down' })
+    ])
+
+    const merged = mergeWorkspaces(ancestor, ours, theirs)
+
+    expect(merged.workspace.cues.map(c => c.id)).toEqual(['g', 'b', 'a', 'z', 'w'])
+    expect(merged.notes).toEqual([])
+  })
+
   it('applies the same change made twice once', () => {
     const ours = workspace([cue({ id: 'b', number: '2', name: 'Interval', volume: 0.4 })])
     const theirs = workspace([cue({ id: 'b', number: '2', name: 'Interval', volume: 0.4 })])
