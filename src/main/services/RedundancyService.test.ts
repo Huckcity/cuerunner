@@ -41,12 +41,15 @@ interface Harness {
   events: RedundancyEvent[]
   /** The newest status this machine published. */
   latest: () => RedundancyEvent | null
-  /** Every change in who is driving this machine has announced. */
-  notices: () => RedundancyEvent[]
+  /**
+   * Every change in who is driving that this machine has announced, in order and once
+   * each: the decision rides in the status, so each one is counted by its own number.
+   */
+  notices: () => ShowNotice[]
   /** The alarms this machine has raised, as the operator would read them. */
   alerts: string[]
   /** The takeovers among them. */
-  takeovers: () => RedundancyEvent[]
+  takeovers: () => ShowNotice[]
   close: () => void
 }
 
