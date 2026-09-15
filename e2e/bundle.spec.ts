@@ -9,6 +9,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
+// The app's own reader, used here to say *what* differs if two bundles ever do: a bare
+// `Buffer.equals` failing says only "not the same file", and this assertion is the one
+// that would have to explain itself on a runner nobody can log into.
+import { readZip, readZipEntry } from '../src/main/workspace/zip'
 
 let app: ElectronApplication | undefined
 let root: string
@@ -109,6 +113,16 @@ async function openShow(page: Page): Promise<void> {
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 }
 
+/** An archive as content rather than as bytes: its entries, and the show it carries. */
+async function archiveContent(file: string): Promise<{ entries: string[]; show: string }> {
+  const entries = await readZip(file)
+  const show = entries.find(entry => entry.name === 'show.wlab')
+  return {
+    entries: entries.map(entry => `${entry.name} ${entry.size} ${entry.crc}`),
+    show: show ? (await readZipEntry(file, show)).toString('latin1') : ''
+  }
+}
+
 /**
  * A bundle is finished when its own end record is in the file — the writer creates the
  * file before it writes anything into it, so "the file exists" says nothing about whether
@@ -155,10 +169,14 @@ test('a show and its audio leave as one file and come back playable', async () =
   // workspace is a fixed value; asserting it here would be asserting that a running app
   // stops measuring its own media, which is not a promise it can make — the length and
   // silence scans land in the cues when they finish.
+  // The same show bundled twice is the same file: a bundle can be kept, compared, hashed.
+  // The content is compared first, so a failure says which entry differs and by how much
+  // rather than only that the two files are not equal.
   const again = path.join(root, 'Press Night again.wlabx')
   await exportTo(page, again)
   await waitForBundle(again)
-  expect(fs.readFileSync(again).subarray(0, 2).toString()).toBe('PK')
+  expect(await archiveContent(again)).toEqual(await archiveContent(bundled))
+  expect(fs.readFileSync(again).equals(fs.readFileSync(bundled))).toBe(true)
 
   // Now the handover: unpack the bundle into a folder, and open what comes out.
   fs.mkdirSync(unpacked, { recursive: true })
