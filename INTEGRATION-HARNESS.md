@@ -118,7 +118,7 @@ Nothing is "covered" by one lane; the honesty is in saying which lane claims wha
 | Lane | Where | Counterpart | Proves |
 |---|---|---|---|
 | **peers** | every PR, Linux (`ubox`) | `integration/peers/*` — an Eos OSC peer and an SQ/Avantis MIDI-TCP peer, both written from the vendor documents | WinsLab still emits the bytes and still reacts correctly to the bytes; the fixture contract has not moved |
-| **vendor** | nightly + on demand, `ubox-win` (and the Mac mini if it earns a slot) | real ETCnomad, real A&H MIDI Control | the fixtures are still what the real software does; Eos is not just a peer we invented |
+| **vendor** | nightly + on demand, `win-ci` (and the Mac mini if it earns a slot) | real ETCnomad, real A&H MIDI Control | the fixtures are still what the real software does; Eos is not just a peer we invented |
 | **hardware** | on demand only, wherever a desk is | a real SQ or Avantis on the LAN | the peer is a fair model of the desk, and the vendor lane's assumption (MIDI bytes are MIDI bytes) holds |
 
 Fixtures flow **from** the real thing **to** the fast lane: a `--record` run against real
@@ -507,7 +507,7 @@ what lets a peer be handed to someone else as a tool.
 | Where | Job | What runs |
 |---|---|---|
 | `ci.yml`, `[self-hosted, linux, x64, ubox]` | `integration` | `npm run test:integration` — peers only, no vendor software, no hardware. Failure uploads `test-results/`. |
-| new `integration-vendor.yml`, schedule + `workflow_dispatch` | `eos-windows` on `[self-hosted, windows, x64, ubox-win]` | the Eos spec with `--grep @vendor` against the installed ETCnomad; recording mode available as an input |
+| new `integration-vendor.yml`, schedule + `workflow_dispatch` | `eos-windows` on `[self-hosted, windows, x64, win-ci]` | the Eos spec with `--grep @vendor` against the installed ETCnomad; recording mode available as an input |
 | the same workflow, optional | `ah-macos` or `ah-windows` | the desk specs through A&H MIDI Control, proving the vendor-bridge route users actually take |
 | `workflow_dispatch` only, `desk_host` input | `hardware` | `desk-hardware.spec.ts` against a real desk on the LAN, on whichever runner can reach it |
 
@@ -541,13 +541,13 @@ Measured on the way in, so the next person does not have to find it out again:
 - **It has to run in the interactive session.** Started over SSH — Session 0 — the
   installer sits on a dialog nobody can see and never finishes. Started in the logged-in
   session (a scheduled task with `/IT`, the same trick the runner itself uses) it completes
-  unattended. That is now true of `ubox-win`: **Eos is installed there.**
-- **The guest is a small machine.** Windows Server 2025 Standard Evaluation, 1024×768,
-  ~71 GB free. ETC's stated minimums are 1920×1080, DirectX 11, 2 GB RAM and 3.5 GB disk.
-  Disk and RAM are fine; **the display and the 3D are the two things to watch** (`-vga std`
-  has no acceleration, and Windows falls back to software D3D). Server 2025 is also not a
-  supported OS for Eos — ETC list Windows 7/8/10/11 — so it is a "works until it does not"
-  arrangement rather than a supported one, and the Mac mini is the fallback if it stops.
+  unattended. That is now true of the Windows host, `win-ci`: **Eos is installed there.**
+- **The machine running it is not a small one any more.** It was first installed on the
+  KVM guest — Server 2025 Standard Evaluation at 1024×768 with software D3D, outside ETC's
+  supported list (they name Windows 7/8/10/11) and below Eos's stated minimums of 1920×1080,
+  DirectX 11, 2 GB RAM. It runs on the NUC now: Windows 10 Pro 22H2, a real GPU, inside
+  both. The guest stays as the fallback, and the caveat that used to sit here is about it
+  alone.
 - **OSC cannot be switched on from outside the GUI.** ETC's own guidance is explicit that
   the interface protocol (`Setup > Device Settings > Network > Interface Protocols > UDP
   Strings and OSC UDP`) and the OSC settings (`Setup > Show Control > OSC`) are console
@@ -611,6 +611,13 @@ app fires `/eos/cue/1/12/fire`, the console runs the cue, its own
 `/eos/get/version` self-test answers `3.3.9.25` with fixture library `3.3.9.2`, which is the
 documented shape, so the peer's model of that packet was right about the real thing.
 
+On 2026-09-15 the same lane ran green **in CI** for the first time — on the NUC that replaced
+the guest, after two fixes the run itself turned up: the machine needed PowerShell 7 (the
+job's steps declare `shell: pwsh`, and the guest never had it, which is why no run had ever
+reached a test), and the job needed its own tooling right — the tag quoted so pwsh stops
+reading `@vendor` as a splat, and the MSVC environment imported before the native engine is
+built.
+
 The hardware also corrected the recorder, which is what the ladder is for: Eos sends *to* its
 configured OSC UDP TX destination but *from an ephemeral port*, and the recorder had assumed
 the console's answers would arrive from the console's own address — so it read them as client
@@ -656,21 +663,20 @@ Linux lane replays it.
 2. **A desk to validate against.** The hardware lane is the only thing that keeps a peer
    honest over time, and it needs an SQ or Avantis reachable from a runner for a few
    hours, occasionally. Without one this is planned and untested.
-3. **Where the vendor lane runs. — answered: `ubox-win`, with a fallback.** ETCnomad is
-   installed there (§9), and the guest is a Windows machine with a logged-in session, which
-   is what a GUI application needs. Two caveats stand: Server 2025 is outside ETC's
-   supported list, and the guest's display and 3D are below Eos's stated minimums. The
-   position is therefore "it runs until it does not" — if it will not come up, the Mac mini
-   is the fallback, and its macOS support is at least as good as the guest's Server 2025.
+3. **Where the vendor lane runs. — answered: `win-ci`, with a fallback.** ETCnomad is
+   installed there (§9), and the machine is Windows with a logged-in session, which is what
+   a GUI application needs. The caveats that came with the guest — Server 2025 outside
+   ETC's supported list, display and 3D below Eos's stated minimums — are the guest's, and
+   the NUC is inside both. It has been green in CI since 2026-09-15; if it will not come
+   up, the guest is the fallback, and the Mac mini is the machine after that.
 
 **Risks**
 
-- **Eos on the Windows guest — answered, with a caveat.** It installs (`/S`, from the
-  interactive session) and it runs: the lane drove ETCnomad v3.3.9.25 on `ubox-win` and both
-  vendor tests passed. The caveat is unchanged and is why §9 still lists the fallback: Server
-  2025 is outside ETC's supported list and the guest's display and 3D are below Eos's stated
-  minimums, so it is "it runs until it does not" — and the Mac mini is the machine to move to
-  if it stops.
+- **Eos on the Windows host — answered.** It installs (`/S`, from the interactive session)
+  and it runs: the lane drove ETCnomad v3.3.9.25 on the guest, and since 2026-09-15 the same
+  two vendor tests pass in CI, on the NUC. What used to be the caveat applied to the guest —
+  Server 2025 outside ETC's supported list, display and 3D below Eos's minimums — and that
+  guest is still the fallback if the NUC stops.
 - **Firmware drift.** SQ and SQ+ have separate protocol documents, the Avantis document
   covers V2.0 and later, and Eos is on 3.3.x. Every fixture records the version it came
   from, and a vendor-lane run reports the version it tested, so a failure can be attributed
