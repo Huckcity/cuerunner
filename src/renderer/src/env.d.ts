@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { OscArg } from './types/cue'
+import type { MidiMessageKind, OscArg } from './types/cue'
 import type { Workspace } from './types/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from './types/show'
 import type { ActivationResult, LicenseStatus } from './types/license'
@@ -36,7 +36,8 @@ interface WinslabBridge {
     listPorts: () => Promise<string[]>
     listInputPorts: () => Promise<string[]>
     status: () => Promise<MidiAvailability>
-    send: (cmd: { portName: string; messages: any[] }) => Promise<{ ok: boolean; error?: string }>
+    send: (cmd: { portName: string; messages: MidiMessageKind[] }) => Promise<{ ok: boolean; error?: string }>
+    sendTcp: (cmd: { host: string; port: number; messages: MidiMessageKind[] }) => Promise<{ ok: boolean; error?: string }>
   }
   network: {
     request: (request: NetworkRequest) => Promise<NetworkResult>

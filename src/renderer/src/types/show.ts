@@ -166,6 +166,7 @@ export interface RfPack {
 
 export type DeskMessage =
   | { kind: 'midi'; portName: string; message: MidiMessageKind }
+  | { kind: 'midi-tcp'; host: string; port: number; message: MidiMessageKind }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
 
 // ── The desk: how the show reaches it, and what it is told ──────────────────
@@ -175,7 +176,7 @@ export type DeskMessage =
 // before anything has been configured: a strip drives the DCA of its number, and a DCA is
 // sent the note or address of its own.
 
-export type DeskKind = 'none' | 'midi' | 'osc'
+export type DeskKind = 'none' | 'midi' | 'osc' | 'midi-tcp'
 
 /**
  * Where the desk is and how it is spoken to. The address of the desk itself is the one
@@ -188,8 +189,16 @@ export interface DeskSettings {
   midiPort: string
   /** MIDI channel its DCAs are sent on. */
   midiChannel: number
+  /** Desk address for the kinds that reach it over the network. */
   host: string
+  /** OSC port. */
   port: number
+  /**
+   * MIDI-over-TCP port. 51325 is what an SQ and an Avantis both serve their MIDI on, and
+   * it is the only port either documents — so a show pointed at a desk needs no more
+   * than its address.
+   */
+  tcpPort: number
   /**
    * The address a DCA is sent to, `{n}` standing in for its number: "/dca/{n}/on". A
    * pattern with no `{n}` in it has the number appended.
@@ -497,6 +506,8 @@ export const CHANNEL_START_COUNT = 12
  */
 export const DEFAULT_DESK_ADDRESS = '/dca/{n}/on'
 export const DEFAULT_DESK_PORT = 8000
+/** The MIDI-over-TCP port both Allen & Heath ranges document, and serve. */
+export const DEFAULT_DESK_TCP_PORT = 51325
 
 /**
  * The scene that is always in the view and never in the file: every mic closed. It is
@@ -517,6 +528,7 @@ export function defaultDeskSettings(): DeskSettings {
     midiChannel: 1,
     host: '127.0.0.1',
     port: DEFAULT_DESK_PORT,
+    tcpPort: DEFAULT_DESK_TCP_PORT,
     address: DEFAULT_DESK_ADDRESS
   }
 }

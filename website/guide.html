@@ -1097,7 +1097,12 @@ console.log(r.stdout.trim())</code></pre>
           a DCA's number goes — <code>/dca/{n}/on</code> unless the desk wants something else — and
           the line under it reads the pattern back as the first and last message the show will send,
           because a pattern and a port are easier to check as addresses than as a template. A MIDI
-          desk is a port and a channel, and each DCA is a note, numbered from one the same way.
+          desk is a port and a channel, and each DCA is a note, numbered from one the same way. A
+          desk that serves MIDI on the network — an Allen &amp; Heath SQ or Avantis — is an address,
+          the port its MIDI is served on (<code>51325</code> unless someone has changed it) and the
+          channel its MIDI is set to: the same notes go down a socket to the desk rather than out of
+          a port this computer had to open, so nothing has to be bridged and the desk can stay in
+          the rack.
         </p>
         <p>
           Below it are the strips on the console and the DCAs they ride. A new show opens with

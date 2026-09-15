@@ -4,6 +4,8 @@ import { exec } from 'child_process'
 import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
+import { midiTcp } from '../midi/MidiTcpEngine'
+import type { MidiMessage } from '../midi/encode'
 import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../renderer/src/types/network'
 import { audioEngine } from '../audio/AudioEngine'
@@ -284,8 +286,15 @@ export function registerIpcHandlers(): void {
 
   // Both return what the engine did, so a cue that reached nothing is reported rather
   // than looking like every other successful firing.
-  ipcMain.handle('midi:send', async (_, cmd: { portName: string; messages: any[] }) => {
+  ipcMain.handle('midi:send', async (_, cmd: { portName: string; messages: MidiMessage[] }) => {
     return midi.send(cmd.portName, cmd.messages)
+  })
+
+  // A desk on the network — an SQ or an Avantis — where the same bytes go to a socket
+  // rather than to a port this machine opened. A channel of its own because the
+  // destination is an address, and the answer worth having is whether the desk took it.
+  ipcMain.handle('midi:sendTcp', async (_, cmd: { host: string; port: number; messages: MidiMessage[] }) => {
+    return midiTcp.send(cmd.host, cmd.port, cmd.messages)
   })
 
   // OSC

@@ -185,6 +185,9 @@
 .desk-address { flex: 1 1 190px; font-family: var(--font-mono); }
 .desk-midi-port { flex: 1 1 180px; }
 .desk-midi-channel { flex: 0 0 70px; }
+.desk-tcp-host { flex: 1 1 140px; }
+.desk-tcp-port { flex: 0 0 80px; }
+.desk-tcp-channel { flex: 0 0 70px; }
 
 .desk-hint {
   font-size: var(--text-base);

@@ -412,6 +412,34 @@ describe('ShowSettings', () => {
       expect(cast().dcas[3].note).toBeNull()
     })
 
+    it('drives the desk over the network, on the port the desk serves its MIDI on', async () => {
+      await show({ tab: 'channels' })
+
+      await choose(field<HTMLSelectElement>('.desk-kind'), 'midi-tcp')
+
+      // The default host is the local machine; clearing it is what an operator sees when
+      // they pick the kind before typing where the desk is.
+      await type(field('.desk-tcp-host'), '')
+      await leave(field('.desk-tcp-host'))
+      expect(container.querySelector('.desk-gap')?.textContent).toBe('No desk address.')
+
+      await type(field('.desk-tcp-host'), '10.0.0.5')
+      await leave(field('.desk-tcp-host'))
+      await type(field('.desk-tcp-port'), '51325')
+      await leave(field('.desk-tcp-port'))
+      await type(field('.desk-tcp-channel'), '3')
+      await leave(field('.desk-tcp-channel'))
+
+      expect(useStore.getState().showSettings.desk).toMatchObject({
+        kind: 'midi-tcp',
+        host: '10.0.0.5',
+        tcpPort: 51325,
+        midiChannel: 3
+      })
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends note 1 … 12 to 10.0.0.5:51325, on and off')
+    })
+
     it('sets how many DCAs the desk has, and a strip on a cut fader goes back to its own number', async () => {
       await show({
         tab: 'channels',

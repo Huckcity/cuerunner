@@ -8,7 +8,8 @@ import {
   describeDeskMessage,
   deskMessages,
   midiNoteMessages,
-  oscMessages
+  oscMessages,
+  tcpNoteMessages
 } from './desk'
 import { defaultDeskSettings } from '../types/show'
 import type { Dca, DeskSettings } from '../types/show'
@@ -23,6 +24,9 @@ function desk(overrides: Partial<DeskSettings> = {}): DeskSettings {
 
 /** The MIDI the show drives, on the port the fixtures use. */
 const midi = desk({ kind: 'midi', midiPort: 'Yamaha', midiChannel: 3 })
+
+/** The desk on the network, on the port an SQ and an Avantis both serve their MIDI on. */
+const tcp = desk({ kind: 'midi-tcp', host: '10.0.0.5', midiChannel: 3 })
 
 describe('a DCA’s number', () => {
   it('is its place in the list, counted the way the desk counts', () => {
@@ -52,6 +56,10 @@ describe('what a DCA sends', () => {
     expect(deskMessages(dca(), 3, midi)).toEqual(midiNoteMessages('Yamaha', 3, 4))
   })
 
+  it('is the same note over the desk’s own socket, which is where an SQ and an Avantis listen', () => {
+    expect(deskMessages(dca(), 3, tcp)).toEqual(tcpNoteMessages('10.0.0.5', 51325, 3, 4))
+  })
+
   it('is the override when somebody typed one, and only for its own kind', () => {
     expect(deskMessages(dca({ address: '/mixer/chorus' }), 3, desk())?.unmute)
       .toMatchObject({ kind: 'osc', address: '/mixer/chorus' })
@@ -63,6 +71,10 @@ describe('what a DCA sends', () => {
       .toMatchObject({ message: { kind: 'noteOn', note: 4 } })
     expect(deskMessages(dca({ note: 60 }), 3, desk())?.unmute)
       .toMatchObject({ kind: 'osc', address: '/dca/4/on' })
+    // The desk on the network is the MIDI arrangement over a socket, so an address is as
+    // meaningless to it as it is to a port.
+    expect(deskMessages(dca({ address: '/mixer/chorus' }), 3, tcp)?.unmute)
+      .toMatchObject({ kind: 'midi-tcp', message: { kind: 'noteOn', note: 4 } })
   })
 
   it('is nothing at all when there is no desk to send it to', () => {
@@ -70,6 +82,8 @@ describe('what a DCA sends', () => {
     // ...or when the desk is MIDI and no port has been chosen: a message to nowhere is a
     // failure the log would report for no reason.
     expect(deskMessages(dca(), 0, desk({ kind: 'midi', midiPort: '' }))).toBeNull()
+    // ...or when it is on the network and nobody has said where.
+    expect(deskMessages(dca(), 0, desk({ kind: 'midi-tcp', host: '   ' }))).toBeNull()
   })
 })
 
@@ -78,6 +92,8 @@ describe('describing a message', () => {
     const osc = oscMessages('10.0.0.5', 9000, '/dca/2/on')
     expect(describeDeskMessage(osc.unmute)).toBe('OSC /dca/2/on 1 → 10.0.0.5:9000')
     expect(describeDeskMessage(midiNoteMessages('Yamaha', 1, 36).mute)).toBe('noteOff ch1 → "Yamaha"')
+    expect(describeDeskMessage(tcpNoteMessages('10.0.0.5', 51325, 1, 36).mute))
+      .toBe('noteOff ch1 → 10.0.0.5:51325')
     expect(describeDeskMessage(null)).toBe('nothing')
   })
 })

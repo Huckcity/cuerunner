@@ -5,6 +5,7 @@
 // performers it names, the ensembles it applies, and the members it closes anyway.
 import { describe, it, expect } from 'vitest'
 import { midiNoteMessages, oscMessages } from './desk'
+import { defaultDeskSettings } from '../types/show'
 import {
   addScene,
   ensembleState,
@@ -45,12 +46,10 @@ const DCAS: Dca[] = [
 
 /** The desk the fixtures drive, so the wire messages are the ones asserted here. */
 const DESK: DeskSettings = {
+  ...defaultDeskSettings(),
   kind: 'midi',
   midiPort: 'Yamaha',
-  midiChannel: 3,
-  host: '127.0.0.1',
-  port: 8000,
-  address: '/dca/{n}/on'
+  midiChannel: 3
 }
 
 function setup(): ScenesSettings {

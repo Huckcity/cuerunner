@@ -1,0 +1,265 @@
+// The desk link against a real socket, because a MIDI-over-TCP desk is a TCP server: the
+// only honest test of a client is one that is listening on the other end. What is
+// asserted is what the desk received or what the app heard from it — never what the
+// engine says it did.
+//
+// Waits are on the event that matters (a socket accepted, a message decoded, the Nth
+// dial), not on a duration, so a loaded machine does not turn a race into a flake. The
+// one exception is the retry window below, where the absence of a dial over time is the
+// property under test.
+import { describe, it, expect, afterEach } from 'vitest'
+import { createConnection, createServer, type Server, type Socket } from 'node:net'
+import { MidiTcpEngine } from './MidiTcpEngine'
+import type { MidiMessageKind } from '../../renderer/src/types/cue'
+
+interface Desk {
+  port: number
+  host: string
+  /** Every connection the desk has accepted, in order. */
+  sockets: Socket[]
+  /** Every byte the client wrote, in order. */
+  received: number[]
+  close: () => Promise<void>
+}
+
+async function until(condition: () => boolean, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('timed out waiting for the desk')
+    await new Promise(resolve => setImmediate(resolve))
+  }
+}
+
+function closeServer(server: Server, sockets: Socket[]): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  for (const socket of sockets) socket.destroy()
+  server.close(() => resolve())
+  return promise
+}
+
+/** A desk that accepts connections and remembers what it was sent. */
+async function startDesk(port = 0): Promise<Desk> {
+  const sockets: Socket[] = []
+  const received: number[] = []
+  const server: Server = createServer(socket => {
+    sockets.push(socket)
+    socket.on('data', chunk => { received.push(...chunk) })
+  })
+  const { promise, resolve } = Promise.withResolvers<void>()
+  server.listen(port, '127.0.0.1', resolve)
+  await promise
+
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('the desk has no port')
+  return { port: address.port, host: '127.0.0.1', sockets, received, close: () => closeServer(server, sockets) }
+}
+
+/** A port nobody is listening on, which is what a desk that is switched off looks like. */
+async function deadPort(): Promise<number> {
+  const desk = await startDesk()
+  const { port } = desk
+  await desk.close()
+  return port
+}
+
+const engines: MidiTcpEngine[] = []
+const desks: Desk[] = []
+
+/** Dials are counted rather than timed: a test can wait for the third attempt instead of
+ *  waiting out two retry intervals. */
+function dials(): { connect: (host: string, port: number) => Socket; count: () => number } {
+  let count = 0
+  return {
+    connect: (host, port) => {
+      count++
+      return createConnection({ host, port })
+    },
+    count: () => count
+  }
+}
+
+function engine(retryMs = 20, connect = dials().connect): MidiTcpEngine {
+  const created = new MidiTcpEngine(connect, retryMs)
+  engines.push(created)
+  return created
+}
+
+async function desk(): Promise<Desk> {
+  const created = await startDesk()
+  desks.push(created)
+  return created
+}
+
+afterEach(async () => {
+  for (const created of engines.splice(0)) created.closeAll()
+  for (const created of desks.splice(0)) await created.close()
+})
+
+const NOTE_ON: MidiMessageKind = { kind: 'noteOn', channel: 1, note: 4, velocity: 127 }
+
+describe('sending to a desk', () => {
+  it('puts a recall’s bytes on the desk’s socket and says it arrived', async () => {
+    const deskUnderTest = await desk()
+    const link = engine()
+
+    const result = await link.send(deskUnderTest.host, deskUnderTest.port, [NOTE_ON])
+
+    expect(result).toEqual({ ok: true })
+    await until(() => deskUnderTest.received.length === 3)
+    // 0x90 | channel-1, the note, the velocity — the bytes a MIDI cable would carry.
+    expect(deskUnderTest.received).toEqual([0x90, 0x04, 0x7f])
+  })
+
+  it('keeps one socket for the whole show rather than dialling per recall', async () => {
+    const deskUnderTest = await desk()
+    const link = engine()
+
+    await link.send(deskUnderTest.host, deskUnderTest.port, [NOTE_ON])
+    await link.send(deskUnderTest.host, deskUnderTest.port, [NOTE_ON])
+
+    await until(() => deskUnderTest.received.length === 6)
+    expect(deskUnderTest.sockets).toHaveLength(1)
+  })
+
+  it('names the address when the desk is not there', async () => {
+    const port = await deadPort()
+    const link = engine()
+
+    const result = await link.send('127.0.0.1', port, [NOTE_ON])
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain(`127.0.0.1:${port}`)
+  })
+
+  it('does not deliver a recall it reported as failed', async () => {
+    const port = await deadPort()
+    const link = engine()
+    await link.send('127.0.0.1', port, [NOTE_ON])
+
+    // The desk comes up afterwards. The recall that failed is not waiting anywhere to be
+    // delivered late: a scene that lands two cues later moves the desk twice.
+    const late = await startDesk(port)
+    desks.push(late)
+    await until(() => late.sockets.length >= 1)
+
+    expect(late.received).toEqual([])
+  })
+})
+
+describe('hearing a desk', () => {
+  it('decodes the desk’s own scene recall, and says which desk it came from', async () => {
+    const deskUnderTest = await desk()
+    const link = engine()
+    const heard: Array<{ device: string; message: MidiMessageKind }> = []
+    link.onMessage = (device, message) => heard.push({ device, message })
+
+    link.open(deskUnderTest.host, deskUnderTest.port)
+    await until(() => deskUnderTest.sockets.length === 1)
+    // Bank select 0, program change 6: scene 7 on an SQ, sent because somebody recalled it
+    // at the desk rather than from a cue.
+    deskUnderTest.sockets[0].write(Buffer.from([0xb0, 0x00, 0x00, 0xc0, 0x06]))
+
+    await until(() => heard.length === 2)
+    expect(heard).toEqual([
+      { device: `127.0.0.1:${deskUnderTest.port}`, message: { kind: 'cc', channel: 1, controller: 0, value: 0 } },
+      { device: `127.0.0.1:${deskUnderTest.port}`, message: { kind: 'programChange', channel: 1, program: 6 } }
+    ])
+  })
+
+  it('is listening before any cue has been fired', async () => {
+    const deskUnderTest = await desk()
+    const link = engine()
+    const heard: MidiMessageKind[] = []
+    link.onMessage = (_device, message) => heard.push(message)
+
+    // No send: this is the operator moving the desk while the show waits.
+    link.open(deskUnderTest.host, deskUnderTest.port)
+    await until(() => deskUnderTest.sockets.length === 1)
+    deskUnderTest.sockets[0].write(Buffer.from([0x9b, 0x24, 0x7f]))
+
+    await until(() => heard.length === 1)
+    expect(heard[0]).toEqual({ kind: 'noteOn', channel: 12, note: 0x24, velocity: 0x7f })
+  })
+
+  it('hears a message that arrives in two writes', async () => {
+    const deskUnderTest = await desk()
+    const link = engine()
+    const heard: MidiMessageKind[] = []
+    link.onMessage = (_device, message) => heard.push(message)
+
+    link.open(deskUnderTest.host, deskUnderTest.port)
+    await until(() => deskUnderTest.sockets.length === 1)
+    deskUnderTest.sockets[0].write(Buffer.from([0x90, 0x3c]))
+    deskUnderTest.sockets[0].write(Buffer.from([0x7f]))
+
+    await until(() => heard.length === 1)
+    expect(heard[0]).toEqual({ kind: 'noteOn', channel: 1, note: 0x3c, velocity: 0x7f })
+  })
+})
+
+describe('the state of the link', () => {
+  it('reports the connection coming up, and the drop when it goes', async () => {
+    const deskUnderTest = await desk()
+    const link = engine()
+    const statuses: Array<[string, boolean]> = []
+    link.onStatus = (device, online) => statuses.push([device, online])
+
+    link.open(deskUnderTest.host, deskUnderTest.port)
+    await until(() => statuses.length === 1)
+    expect(statuses).toEqual([[`127.0.0.1:${deskUnderTest.port}`, true]])
+
+    // The desk is powered off mid-show: the socket ends, and that is reported.
+    deskUnderTest.sockets[0].destroy()
+    await until(() => statuses.length === 2)
+    expect(statuses[1]).toEqual([`127.0.0.1:${deskUnderTest.port}`, false])
+  })
+
+  it('alarms once for an outage while it keeps dialling', async () => {
+    const port = await deadPort()
+    const dialled = dials()
+    const link = engine(20, dialled.connect)
+    const statuses: Array<[string, boolean]> = []
+    link.onStatus = (device, online) => statuses.push([device, online])
+
+    link.open('127.0.0.1', port)
+    await until(() => dialled.count() >= 3)
+
+    // Three attempts, one report: a desk that is absent fails its dial every couple of
+    // seconds, and an alarm per attempt is an alarm nobody reads.
+    expect(statuses).toHaveLength(1)
+    expect(statuses[0][1]).toBe(false)
+  })
+
+  it('comes back on its own when the desk does', async () => {
+    const port = await deadPort()
+    const link = engine()
+    const statuses: Array<[string, boolean]> = []
+    link.onStatus = (device, online) => statuses.push([device, online])
+
+    link.open('127.0.0.1', port)
+    await until(() => statuses.length === 1)
+
+    const backAgain = await startDesk(port)
+    desks.push(backAgain)
+    await until(() => statuses.length === 2)
+    expect(statuses[1][1]).toBe(true)
+  })
+
+  it('lets go of the socket when the desk is no longer wanted', async () => {
+    const deskUnderTest = await desk()
+    const dialled = dials()
+    const link = engine(20, dialled.connect)
+
+    link.open(deskUnderTest.host, deskUnderTest.port)
+    // The dial is counted when it is asked for, so the event to wait on is the desk
+    // having accepted the connection.
+    await until(() => deskUnderTest.sockets.length === 1)
+    link.close(deskUnderTest.host, deskUnderTest.port)
+
+    // A real window here on purpose: what is under test is that nothing happens over the
+    // next retry interval, and an absence has nothing to await.
+    await new Promise(resolve => setTimeout(resolve, 80))
+    expect(dialled.count()).toBe(1)
+    expect(deskUnderTest.sockets[0].destroyed).toBe(true)
+  })
+})

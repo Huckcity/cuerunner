@@ -86,7 +86,8 @@ Object.defineProperty(window, 'winslab', {
       listPorts: vi.fn(() => Promise.resolve([])),
       listInputPorts: vi.fn(() => Promise.resolve([])),
       status: vi.fn(() => Promise.resolve({ available: true, error: null })),
-      send: vi.fn(() => Promise.resolve({ ok: true }))
+      send: vi.fn(() => Promise.resolve({ ok: true })),
+      sendTcp: vi.fn(() => Promise.resolve({ ok: true }))
     },
     network: {
       request: vi.fn(() => Promise.resolve({

@@ -10,7 +10,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScenesView } from './ScenesView'
 import { useStore } from '../../store'
-import { ALL_CLOSED_SCENE_ID, defaultShowSettings } from '../../types/show'
+import { ALL_CLOSED_SCENE_ID, defaultDeskSettings, defaultShowSettings } from '../../types/show'
 import type {
   CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, ShowChannel
 } from '../../types/show'
@@ -20,12 +20,10 @@ import type {
 // literal address in every assertion. The note is the DCA's number — none of these
 // carries an override.
 const DESK: DeskSettings = {
+  ...defaultDeskSettings(),
   kind: 'midi',
   midiPort: 'Yamaha',
-  midiChannel: 3,
-  host: '127.0.0.1',
-  port: 8000,
-  address: '/dca/{n}/on'
+  midiChannel: 3
 }
 
 const ENSEMBLE: Dca = { id: 'dca-ensemble', label: 'DCA 1 — Ensemble', note: null, address: null }

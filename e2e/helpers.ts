@@ -363,6 +363,17 @@ export async function openScenesView(page: Page): Promise<void> {
   await expect(page.locator('.scenes-view')).toBeVisible()
 }
 
+/**
+ * The run log, opened the way the toolbar button opens it — and left alone when it is
+ * already open, because the button toggles and a spec that pressed it twice would be
+ * asserting against a panel it had just closed.
+ */
+export async function openLogPanel(page: Page): Promise<void> {
+  const panel = page.locator('.log-panel')
+  if ((await panel.count()) === 0) await page.locator('.btn-log').click()
+  await expect(panel).toBeVisible()
+}
+
 /** The view opens to run the show; building one starts with the press that edits it. */
 export async function editScenes(page: Page): Promise<void> {
   const edit = page.locator('.scenes-edit')
@@ -440,15 +451,42 @@ export async function pointDeskAtOsc(
 }
 
 /**
+ * The same, over the desk's own MIDI socket. An SQ and an Avantis serve MIDI on 51325 and
+ * the test owns the port it points the show at, so the app is dialling a real socket.
+ */
+export async function pointDeskAtTcp(page: Page, port: number, host = '127.0.0.1'): Promise<void> {
+  await openShowSettings(page)
+  const settings = page.locator('.show-settings-dialog')
+
+  await settings.locator('.desk-kind').selectOption('midi-tcp')
+  await settings.locator('.desk-tcp-host').fill(host)
+  await settings.locator('.desk-tcp-host').blur()
+  await settings.locator('.desk-tcp-port').fill(String(port))
+  await settings.locator('.desk-tcp-port').blur()
+
+  // The read-back names the desk and the notes it makes, so a test that asserts on it is
+  // asserting on what will be sent rather than on the fields it typed.
+  const last = Math.max(0, (await settings.locator('.dca-row').count()) - 1)
+  await expect(settings.locator('.desk-preview')).toContainText(`note 1 … ${last + 1} to ${host}:${port}`)
+}
+
+/**
  * A show set up through the view, in the order an operator would do it: the desk pointed
  * at a port the test owns, the first performer named, and a scene with that performer open
  * in it. The defaults do the wiring — a new show is a mic per fader, strip n on DCA n —
  * and the desk is left driving one DCA: a one-mic show whose recall is about what changed,
  * rather than the sweep of twelve a brand-new show puts on the wire.
+ *
+ * `point` is which of the app's desk connections the caller is exercising; a show driven
+ * over the desk's own socket passes `pointDeskAtTcp`.
  */
-export async function buildDeskShow(page: Page, port: number): Promise<void> {
+export async function buildDeskShow(
+  page: Page,
+  port: number,
+  point: (page: Page, port: number) => Promise<void> = pointDeskAtOsc
+): Promise<void> {
   await liveRack(page)
-  await pointDeskAtOsc(page, port)
+  await point(page, port)
   const settings = page.locator('.show-settings-dialog')
 
   await settings.locator('.dca-count-select').selectOption('1')
