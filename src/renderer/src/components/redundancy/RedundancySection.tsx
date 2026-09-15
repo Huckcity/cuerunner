@@ -28,6 +28,8 @@ export function RedundancySection(): React.JSX.Element {
   // The age of the last word from the partner moves on its own; the store is written
   // only when something changes, so the page keeps the clock.
   const [, setTick] = useState(0)
+  /** Why the last change was not taken, if it was not. */
+  const [failed, setFailed] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = setInterval(() => setTick(tick => tick + 1), 500)
@@ -51,11 +53,21 @@ export function RedundancySection(): React.JSX.Element {
   }
 
   const update = (patch: Partial<RedundancySettings>): void => {
-    void window.winslab.redundancy.configure(patch).then(result => {
-      // What the main process accepted is what stands: a port out of range comes back
-      // as the port the machine has, not as the one that was typed.
-      setRedundancySettings(result.settings)
-    })
+    setFailed(null)
+    void window.winslab.redundancy.configure(patch).then(
+      result => {
+        // What the main process accepted is what stands: a port out of range comes back
+        // as the port the machine has, not as the one that was typed.
+        setRedundancySettings(result.settings)
+        if (!result.ok && result.error) setFailed(result.error)
+      },
+      error => {
+        // A settings file that cannot be written — a read-only profile, a full disk —
+        // leaves the machine as it was, and the operator is told rather than watching a
+        // control snap back with nothing said.
+        setFailed(error instanceof Error ? error.message : String(error))
+      }
+    )
   }
 
   const takeover = (): void => {
@@ -125,6 +137,16 @@ export function RedundancySection(): React.JSX.Element {
           <option value="auto">Take it over — this machine carries on by itself</option>
         </select>
       </div>
+
+      {failed !== null && (
+        <p className="inspector-hint license-hint">Those settings were not taken: {failed}</p>
+      )}
+      {settings.enabled && settings.token === '' && (
+        <p className="inspector-hint license-hint">
+          No token is set, so any machine that finds this port can claim the pair. Set one the
+          same on both machines.
+        </p>
+      )}
 
       <div className="field-section-title">The pair</div>
       <div className="field-row">

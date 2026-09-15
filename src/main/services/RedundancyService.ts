@@ -17,7 +17,8 @@ import {
   type RedundancyDigest,
   type RedundancySettings,
   type RedundancyStatus,
-  type ShowNotice
+  type ShowNotice,
+  type UnstampedNotice
 } from '../../shared/redundancy'
 import type { ShowSettings } from '../../renderer/src/types/show'
 
@@ -95,6 +96,16 @@ export class RedundancyService implements ShowService {
   private lastEvent: string | null = null
   /** The change in who is driving that the window has not been told yet. */
   private pending: ShowNotice | null = null
+  /** The last change this machine decided on, kept in the status for a window that reloads. */
+  private lastNotice: ShowNotice | null = null
+  /** Counts the decisions, so a window can act on each one exactly once. */
+  private noticeSeq = 0
+  /**
+   * The partner refused this machine on its own terms — a token that does not match, a
+   * machine id it already knows as its own. Nothing this end can do changes that, so
+   * dialling it every two seconds for the life of the app would be nothing but noise.
+   */
+  private refused = false
   private silent = false
   private listening = false
   private beatSeq = 0
@@ -109,6 +120,9 @@ export class RedundancyService implements ShowService {
 
   start(context: ServiceContext, _settings: ShowSettings): void {
     this.stop()
+    // The operator may have fixed what caused the refusal — a token, an address, an id
+    // copied from another machine — so a new start is the moment to try again.
+    this.refused = false
     this.context = context
     const config = (this.options.settings ?? defaultRedundancySettings)()
     // A machine whose role the operator has changed is not the machine that took the
@@ -126,6 +140,13 @@ export class RedundancyService implements ShowService {
       return
     }
 
+    if (config.token === '') {
+      context.bus.alert(
+        'warning',
+        this.id,
+        'Redundant playback: no token set, so any machine on this network that finds the port can claim the pair'
+      )
+    }
     this.bind(context)
     this.dial()
     this.beatTimer = setInterval(() => this.sendBeat(), this.options.heartbeatMs ?? HEARTBEAT_MS)
@@ -141,6 +162,9 @@ export class RedundancyService implements ShowService {
     this.beatTimer = null
     this.checkTimer = null
     this.retryTimer = null
+    // Before the sockets are closed, so nothing they do on the way out arms a timer this
+    // stop has already passed: a stopped machine does not dial anybody.
+    this.context = null
 
     for (const connection of [...this.connections]) this.close(connection, 'this machine stopped')
     this.connections.clear()
@@ -151,7 +175,8 @@ export class RedundancyService implements ShowService {
     this.silent = false
     this.lastPublished = ''
     this.lastState = ''
-    this.context = null
+    clearTimeout(this.retryTimer ?? undefined)
+    this.retryTimer = null
   }
 
   /**
@@ -254,7 +279,9 @@ export class RedundancyService implements ShowService {
   private forget(connection: PeerConnection): void {
     const wasPeer = this.peer.socket === connection.socket
     if (wasPeer) this.peer.socket = null
-    if (this.server === null) return
+    // A machine whose own port was taken is degraded, not finished: it is still paired by
+    // dialling, and its partner coming back is still its business.
+    if (this.context === null || this.refused) return
     if (wasPeer || connection.outgoing) this.scheduleRetry()
   }
 
@@ -312,6 +339,7 @@ export class RedundancyService implements ShowService {
         this.close(connection, message.reason)
         return
       case 'refuse':
+        this.refused = true
         this.lastEvent = `the machine at ${this.peerAddress()} refused this one: ${message.reason}`
         this.close(connection, 'refused')
         this.publish()
@@ -468,14 +496,14 @@ export class RedundancyService implements ShowService {
       const quietFor = this.peer.everHeard ? now - this.peer.lastHeardAt : 0
       this.lastEvent = `took the show over at ${clockTime(now)} (${reason})`
       this.context?.bus.alert('warning', this.id, `Redundant playback: this machine has the show — ${reason}`)
-      this.pending = {
+      this.pending = this.notice({
         kind: 'takeover',
         at: now,
         silentMs: quietFor,
         digest: this.peer.digest,
         reason,
         term: this.term
-      }
+      })
       this.publish()
     }
     return { driving: this.driving, term: this.term, adopted: !already }
@@ -493,7 +521,12 @@ export class RedundancyService implements ShowService {
     // A machine that has given the show back is not the sound any more, and says why in
     // its own words rather than the partner's.
     if (!this.driving) {
-      this.pending = { kind: 'stand-down', at, term: this.term, reason: 'the show was handed back' }
+      this.pending = this.notice({
+        kind: 'stand-down',
+        at,
+        term: this.term,
+        reason: 'the show was handed back'
+      })
     }
     this.publish()
     return { driving: this.driving, term: this.term }
@@ -516,12 +549,12 @@ export class RedundancyService implements ShowService {
     // so in its own words.
     if (this.driving && !driving && peer && suppressed) {
       this.lastEvent = `${peer.name} is running the show`
-      this.pending = {
+      this.pending = this.notice({
         kind: 'stand-down',
         at: this.now(),
         term: peer.term,
         reason: `${peer.name} is running the show`
-      }
+      })
     }
     this.driving = driving
   }
@@ -545,21 +578,30 @@ export class RedundancyService implements ShowService {
    * push the show's own events out of the history for nothing — and the window works out
    * how long ago the partner was heard from the stamp on the event.
    */
+  /** Stamps a decision with the next number in this machine's own count. */
+  private notice(notice: UnstampedNotice): ShowNotice {
+    this.noticeSeq += 1
+    return { ...notice, seq: this.noticeSeq }
+  }
+
+  /**
+   * Publishes the status, and the change in who is driving with it. The notice travels in
+   * the status rather than beside it because the window that has to act on it may not have
+   * been listening when it was made — a renderer that crashed mid-takeover comes back to a
+   * status, and only the status is guaranteed to still be there.
+   */
   private publish(): void {
     const context = this.context
     if (!context) return
+    if (this.pending !== null) {
+      this.lastNotice = this.pending
+      this.pending = null
+    }
     const status = this.status()
-    const notice = this.pending
-    this.pending = null
     const key = statusKey(status)
-    if (!notice && key === this.lastPublished) return
+    if (key === this.lastPublished) return
     this.lastPublished = key
-    context.bus.publish({
-      kind: 'redundancy',
-      at: status.at,
-      status,
-      ...(notice === null ? {} : { notice })
-    })
+    context.bus.publish({ kind: 'redundancy', at: status.at, status })
 
     // An unpaired machine has no row to rewrite: `start` has already said it is stopped
     // and disabled, and the status published above is what the settings tab reads.
@@ -601,7 +643,8 @@ export class RedundancyService implements ShowService {
       listening: this.listening,
       detail: this.describe(peer),
       peer,
-      lastEvent: this.lastEvent
+      lastEvent: this.lastEvent,
+      lastNotice: this.lastNotice
     }
   }
 
@@ -645,6 +688,10 @@ function statusKey(status: RedundancyStatus): string {
   return JSON.stringify({
     ...status,
     at: 0,
+    // The last notice is part of the status, but its arrival is already a change to
+    // `lastEvent` and to who is driving; leaving the whole object out of the key keeps the
+    // ageing of an old notice from looking like news.
+    lastNotice: status.lastNotice === null ? null : status.lastNotice.seq,
     peer: status.peer === null ? null : { ...status.peer, silentMs: 0 }
   })
 }

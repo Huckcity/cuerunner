@@ -1,5 +1,5 @@
 import type { MidiMessageKind, OscArg } from './cue'
-import type { RedundancyStatus, ShowNotice } from '../../../shared/redundancy'
+import type { RedundancyStatus } from '../../../shared/redundancy'
 
 // The show services are everything around the cue stack: the devices on stage, the
 // consoles they talk to, and the alarms when one of them stops answering. Everything
@@ -126,14 +126,13 @@ export interface ServiceEvent {
 export interface RedundancyEvent {
   kind: 'redundancy'
   at: number
-  status: RedundancyStatus
   /**
-   * Present on the event that announces a change in who is driving: this machine has
-   * claimed the show and has to put what the live machine was playing back on its own
-   * engine, or the show has moved to the other machine and this one has to stop playing
-   * it. Only the window can do either, because the cue list lives there.
+   * Everything the machine has to say, including the last change in who is driving —
+   * `status.lastNotice`. It travels inside the status rather than beside it because the
+   * window that has to act on it may have been reloading when it was made, and only the
+   * status is still there afterwards.
    */
-  notice?: ShowNotice
+  status: RedundancyStatus
 }
 
 export type ShowEvent =

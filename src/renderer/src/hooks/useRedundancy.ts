@@ -3,6 +3,7 @@ import { usePro, useStore } from '../store'
 import { cueRunner } from '../engine/CueRunner'
 import { audioEngine } from '../engine/audioEngineClient'
 import {
+  NOTICE_FRESH_MS,
   cueListHash,
   takeoverPlan,
   type MirrorCue,
@@ -44,10 +45,10 @@ const MAX_PREPARED = 8
 export function useRedundancy(): void {
   const pro = usePro()
   const enabled = useStore(s => s.redundancySettings?.enabled ?? false)
-  const notice = useStore(s => s.redundancyNotice)
-  // The term whose notice has already been acted on. A notice can reach the window twice
-  // — once live and once in the snapshot that follows a reload — and picking a show up
-  // twice would fire the cue a second time.
+  const notice = useStore(s => s.redundancy?.lastNotice ?? null)
+  // The sequence of the last decision acted on. A notice reaches a window more than once —
+  // it is carried in the status that a reload reads back — and acting on it twice would
+  // fire the cue a second time, or stop a show the operator started by hand afterwards.
   const actedOn = useRef(0)
 
   useEffect(() => {
@@ -165,9 +166,17 @@ export function useRedundancy(): void {
 
   useEffect(() => {
     if (!pro || !notice) return
-    useStore.getState().clearRedundancyNotice()
-    if (notice.term <= actedOn.current) return
-    actedOn.current = notice.term
+    if (notice.seq <= actedOn.current) return
+    // A notice the machine would not act on now is one from before: a takeover is only
+    // adopted while this machine is the one driving, and a stand-down only while it is
+    // not — anything else is a decision that has been overtaken, or that belongs to a
+    // window and a machine that have both moved on.
+    const driving = useStore.getState().redundancy?.driving ?? false
+    if (notice.kind === 'takeover' ? !driving : driving) return
+    // And it has to be recent. A window that opens onto an old status is not being handed
+    // a show: it is being shown what happened before it arrived.
+    if (Date.now() - notice.at > NOTICE_FRESH_MS) return
+    actedOn.current = notice.seq
 
     if (notice.kind === 'stand-down') {
       // The show has moved to the other machine, which is already playing it. This one
@@ -215,6 +224,7 @@ function toPlanCue(cue: Cue): PlanCue {
     type: cue.type,
     duration: cue.duration,
     startTime: cue.type === 'audio' ? cue.startTime : 0,
-    endTime: cue.type === 'audio' ? cue.endTime : null
+    endTime: cue.type === 'audio' ? cue.endTime : null,
+    loopCount: cue.type === 'audio' ? cue.loopCount : 0
   }
 }

@@ -16,7 +16,8 @@ import {
   defaultRedundancySettings,
   encodeMessage,
   type RedundancyDigest,
-  type RedundancySettings
+  type RedundancySettings,
+  type ShowNotice
 } from '../../shared/redundancy'
 
 /** The service's own timings, shortened: what is held here is the order, not a second. */
@@ -42,6 +43,8 @@ interface Harness {
   latest: () => RedundancyEvent | null
   /** Every change in who is driving this machine has announced. */
   notices: () => RedundancyEvent[]
+  /** The alarms this machine has raised, as the operator would read them. */
+  alerts: string[]
   /** The takeovers among them. */
   takeovers: () => RedundancyEvent[]
   close: () => void
@@ -123,9 +126,11 @@ async function start(
   const bus = new ShowBus()
   const health: Health[] = []
   const events: RedundancyEvent[] = []
+  const alerts: string[] = []
   bus.subscribe(batch => {
     for (const event of batch) {
       if (event.kind === 'redundancy') events.push(event)
+      if (event.kind === 'alert') alerts.push(event.alert.message)
     }
   })
   const service = new RedundancyService({
@@ -142,9 +147,10 @@ async function start(
     port: config.port,
     health,
     events,
+    alerts,
     latest: () => events.at(-1) ?? null,
-    notices: () => events.filter(event => event.notice !== undefined),
-    takeovers: () => events.filter(event => event.notice?.kind === 'takeover'),
+    notices: () => decisions(events),
+    takeovers: () => decisions(events).filter(notice => notice.kind === 'takeover'),
     close: () => {
       service.stop()
       bus.close()
@@ -192,6 +198,16 @@ function digest(overrides: Partial<RedundancyDigest> = {}): RedundancyDigest {
     prepared: 0,
     ...overrides
   }
+}
+
+/** The decisions in a batch of statuses, by the number the machine gave each one. */
+function decisions(events: RedundancyEvent[]): ShowNotice[] {
+  const bySeq = new Map<number, ShowNotice>()
+  for (const event of events) {
+    const notice = event.status.lastNotice
+    if (notice) bySeq.set(notice.seq, notice)
+  }
+  return [...bySeq.values()]
 }
 
 function hello(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -398,8 +414,8 @@ describe('two machines in a pair', () => {
     live.close()
 
     await until(() => backup.takeovers().length === 1, 'the takeover')
-    const notice = backup.takeovers()[0].notice
-    if (notice?.kind !== 'takeover') throw new Error('expected a takeover')
+    const notice = backup.takeovers()[0]
+    if (notice.kind !== 'takeover') throw new Error('expected a takeover')
     expect(notice.reason).toBe('the live machine stopped answering')
     expect(notice.term).toBe(1)
     expect(notice.digest?.show.name).toBe('Hamlet')
@@ -425,7 +441,7 @@ describe('two machines in a pair', () => {
     const result = await backup.service.command('takeover') as { adopted: boolean; term: number }
     expect(result.adopted).toBe(true)
     await until(() => backup.takeovers().length === 1, 'the takeover to be announced')
-    expect(backup.takeovers()[0].notice).toMatchObject({ kind: 'takeover', reason: 'the operator took the show' })
+    expect(backup.takeovers()[0]).toMatchObject({ kind: 'takeover', reason: 'the operator took the show' })
     expect(backup.latest()?.status.driving).toBe(true)
   })
 
@@ -440,8 +456,8 @@ describe('two machines in a pair', () => {
     expect(backup.latest()?.status.lastEvent).toContain('handed back')
     // And the window is told to stop playing: the machine the show went back to is
     // already the sound.
-    await until(() => backup.notices().some(event => event.notice?.kind === 'stand-down'), 'the stand-down')
-    expect(backup.notices().at(-1)?.notice).toMatchObject({ kind: 'stand-down', reason: 'the show was handed back' })
+    await until(() => backup.notices().some(notice => notice.kind === 'stand-down'), 'the stand-down')
+    expect(backup.notices().at(-1)).toMatchObject({ kind: 'stand-down', reason: 'the show was handed back' })
   })
 
   it('says when both machines are set to the same half', async () => {
@@ -602,14 +618,105 @@ describe('the handshake', () => {
     await far.close()
   })
 
+  it('keeps the last decision in the status, for a window that was not listening', async () => {
+    // A renderer that crashed mid-takeover comes back to a status, not to an event: the
+    // decision has to be in the status or the machine is left claiming a show it is not
+    // playing.
+    const live = await start('desk-a', 'id-a', { role: 'live' })
+    const other = await rawPeer((await awaiting(live)).port, hello('id-b', { term: 2, driving: true }))
+
+    await until(() => live.latest()?.status.lastNotice !== null, 'the decision')
+    expect(live.latest()?.status.lastNotice).toMatchObject({ kind: 'stand-down', seq: 1, term: 2 })
+    // And the decision travels with the status it was published in, so a snapshot taken
+    // now carries it.
+    expect(live.latest()?.status.lastNotice?.seq).toBe(1)
+    other.close()
+  })
+
+  it('stops dialling a partner that refused on purpose', async () => {
+    // A wrong token, a machine id copied from another machine: nothing this end can do
+    // changes the answer, so dialling every two seconds for the life of the app would be
+    // pure noise. The operator is looking at the settings that caused it.
+    const far = await rawServer({ t: 'refuse', reason: 'the token does not match' })
+    const machine = await start('desk-b', 'id-b', {
+      role: 'standby',
+      peerHost: '127.0.0.1',
+      peerPort: far.port
+    })
+
+    await until(() => machine.latest()?.status.lastEvent?.includes('refused this one') === true, 'the refusal')
+    const dialled = far.accepted()
+    await settle(TIMEOUT_MS * 3)
+    expect(far.accepted()).toBe(dialled)
+    await far.close()
+  })
+
+  it('leaves no dial armed behind a stopped service', async () => {
+    // A stop closes its sockets, and the closing of a socket is what arms a retry: a
+    // machine that has been stopped must not dial anybody two seconds later, or its
+    // partner reports a machine that is not there.
+    const far = await rawServer(hello('id-a'))
+    const machine = await start('desk-b', 'id-b', {
+      role: 'standby',
+      peerHost: '127.0.0.1',
+      peerPort: far.port
+    })
+    await until(() => machine.latest()?.status.peer?.name === 'id-a', 'the pair to meet')
+    const dialled = far.accepted()
+
+    machine.service.stop()
+    await settle(TIMEOUT_MS * 3)
+    expect(far.accepted()).toBe(dialled)
+    await far.close()
+  })
+
+  it('keeps dialling after a drop when its own port could not be taken', async () => {
+    // A machine whose listener is degraded is still paired by dialling: losing the
+    // partner must not end the pair.
+    const far = await rawServer(hello('id-a'))
+    const taken = createServer()
+    const listening = Promise.withResolvers<void>()
+    taken.listen(0, '0.0.0.0', listening.resolve)
+    await listening.promise
+
+    const machine = await start('desk-b', 'id-b', {
+      role: 'standby',
+      port: (taken.address() as AddressInfo).port,
+      peerHost: '127.0.0.1',
+      peerPort: far.port
+    })
+    await until(() => machine.latest()?.status.peer?.name === 'id-a', 'the pair to meet')
+    expect(machine.latest()?.status.listening).toBe(false)
+
+    const dialled = far.accepted()
+    far.sayAll({ t: 'bye', reason: 'going away' })
+    await until(() => far.accepted() > dialled, 'a dial after the drop')
+
+    const closed = Promise.withResolvers<void>()
+    taken.close(() => closed.resolve())
+    await closed.promise
+    await far.close()
+  })
+
+  it('says so at startup when a pair is enabled with no token', async () => {
+    // No token means the machine at the other end is whoever finds the port.
+    const machine = await start('desk-a', 'id-a', { token: '' })
+    await until(() => machine.alerts.length > 0, 'the warning')
+    expect(machine.alerts[0]).toContain('no token set')
+
+    const guarded = await start('desk-c', 'id-c', { token: 'sekrit' })
+    await settle(CHECK_MS * 4)
+    expect(guarded.alerts).toEqual([])
+  })
+
   it('tells the window when the show has moved to the other machine', async () => {
     // The machine that stood down stops being the sound: the window is told, and it is
     // told exactly once.
     const live = await start('desk-a', 'id-a', { role: 'live' })
     const other = await rawPeer((await awaiting(live)).port, hello('id-b', { term: 2, driving: true }))
 
-    await until(() => live.notices().length === 1, 'the stand-down')
-    expect(live.notices()[0].notice).toMatchObject({ kind: 'stand-down', term: 2 })
+    await until(() => live.notices().some(notice => notice.kind === 'stand-down'), 'the stand-down')
+    expect(live.notices().at(-1)).toMatchObject({ kind: 'stand-down', term: 2 })
     expect(live.latest()?.status.driving).toBe(false)
     other.close()
   })

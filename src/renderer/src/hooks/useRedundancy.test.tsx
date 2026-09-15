@@ -10,7 +10,12 @@ import { cueRunner } from '../engine/CueRunner'
 import { audioEngine } from '../engine/audioEngineClient'
 import { useStore } from '../store'
 import { TEST_LICENSE } from '../../../test/license'
-import { defaultRedundancySettings, type RedundancyDigest, type ShowNotice } from '../../../shared/redundancy'
+import {
+  NOTICE_FRESH_MS,
+  defaultRedundancySettings,
+  type RedundancyDigest,
+  type ShowNotice
+} from '../../../shared/redundancy'
 import type { AudioCue } from '../types/cue'
 import type { RedundancyEvent, ShowEvent } from '../types/show'
 
@@ -71,9 +76,9 @@ function digest(overrides: Partial<RedundancyDigest> = {}): RedundancyDigest {
 function statusEvent(overrides: Partial<RedundancyEvent['status']> = {}, notice?: ShowNotice): ShowEvent {
   return {
     kind: 'redundancy',
-    at: 1000,
+    at: notice?.at ?? 1000,
     status: {
-      at: 1000,
+      at: notice?.at ?? 1000,
       enabled: true,
       role: 'standby',
       name: 'desk-b',
@@ -83,9 +88,10 @@ function statusEvent(overrides: Partial<RedundancyEvent['status']> = {}, notice?
       detail: 'standing by — desk-a in sync',
       peer: null,
       lastEvent: null,
+      // The notice travels inside the status: it is what a window that reloaded reads back.
+      lastNotice: notice ?? null,
       ...overrides
-    },
-    ...(notice === undefined ? {} : { notice })
+    }
   }
 }
 
@@ -125,7 +131,7 @@ describe('useRedundancy', () => {
       running: new Map(),
       redundancy: null,
       redundancySettings: null,
-      redundancyNotice: null,
+
       log: []
     })
   })
@@ -213,7 +219,8 @@ describe('useRedundancy', () => {
 
     const notice: ShowNotice = {
       kind: 'takeover',
-      at: 2000,
+      at: Date.now(),
+      seq: 1,
       silentMs: 2000,
       digest: digest({
         running: [
@@ -250,7 +257,8 @@ describe('useRedundancy', () => {
 
     const notice: ShowNotice = {
       kind: 'takeover',
-      at: 2000,
+      at: Date.now(),
+      seq: 1,
       silentMs: 0,
       digest: digest(),
       reason: 'the operator took the show',
@@ -258,7 +266,6 @@ describe('useRedundancy', () => {
     }
     act(() => { useStore.getState().applyShowEvents([statusEvent({ driving: true, term: 1 }, notice)]) })
     await flush()
-    expect(useStore.getState().redundancyNotice).toBeNull()
     expect(adopt).toHaveBeenCalledTimes(1)
 
     // A notice that arrives by a second route — the snapshot of a window that reloaded
@@ -276,6 +283,70 @@ describe('useRedundancy', () => {
     expect(adopt).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores a decision that has been overtaken', async () => {
+    // A window opening onto an old status is being shown what happened, not handed a
+    // show: a takeover from ten minutes ago is not a cue to start, and a stand-down from
+    // before the operator took the show back is not a cue to stop.
+    useStore.setState({ redundancySettings: paired() })
+    render()
+    await flush()
+
+    const stale: ShowNotice = {
+      kind: 'takeover',
+      at: Date.now() - NOTICE_FRESH_MS - 1000,
+      seq: 4,
+      silentMs: 0,
+      digest: digest(),
+      reason: 'the live machine stopped answering',
+      term: 1
+    }
+    act(() => { useStore.getState().applyShowEvents([statusEvent({ driving: true, term: 1 }, stale)]) })
+    await flush()
+    expect(adopt).not.toHaveBeenCalled()
+
+    // And one that disagrees with the machine's own state: a takeover is only this
+    // machine's business while it is the one driving.
+    const wrong: ShowNotice = { ...stale, at: Date.now(), seq: 5 }
+    act(() => { useStore.getState().applyShowEvents([statusEvent({ driving: false, term: 1 }, wrong)]) })
+    await flush()
+    expect(adopt).not.toHaveBeenCalled()
+  })
+
+  it('acts on a hand-back even though the term has not moved', async () => {
+    // Taking the show over and handing it back are two decisions under one term: the
+    // sequence is what a window counts, or the hand-back would be dropped and the machine
+    // would keep playing the show it has just given away.
+    useStore.setState({ redundancySettings: paired() })
+    render()
+    await flush()
+
+    act(() => {
+      useStore.getState().applyShowEvents([statusEvent({ driving: true, term: 1 }, {
+        kind: 'takeover',
+        at: Date.now(),
+        seq: 1,
+        silentMs: 0,
+        digest: digest(),
+        reason: 'the operator took the show',
+        term: 1
+      })])
+    })
+    await flush()
+    expect(adopt).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      useStore.getState().applyShowEvents([statusEvent({ driving: false, term: 1 }, {
+        kind: 'stand-down',
+        at: Date.now(),
+        seq: 2,
+        term: 1,
+        reason: 'the show was handed back'
+      })])
+    })
+    await flush()
+    expect(standDown).toHaveBeenCalledTimes(1)
+  })
+
   it('stops playing when the show has moved to the other machine', async () => {
     // A machine that is no longer driving is no longer the sound. Two machines holding
     // the same cue is the one outcome a pair exists to prevent.
@@ -285,7 +356,8 @@ describe('useRedundancy', () => {
 
     const notice: ShowNotice = {
       kind: 'stand-down',
-      at: 3000,
+      at: Date.now(),
+      seq: 1,
       term: 2,
       reason: 'desk-a is running the show'
     }

@@ -1265,7 +1265,7 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td>Name</td><td>What the other machine calls this one in its status and its log. Two desks are easier to tell apart than two IP addresses.</td></tr>
               <tr><td>Port here</td><td>The port this machine listens on for its partner. 53110 unless you change it.</td></tr>
               <tr><td>Partner address and port</td><td>Where the other machine is. Left empty, this machine listens without dialling anything — which is what a machine waiting to be paired by its partner looks like.</td></tr>
-              <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed.</td></tr>
+              <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed — and the machine that is refused stops dialling rather than asking again every two seconds. Left empty, the pair is open to whoever finds the port, and the tab says so under the field.</td></tr>
               <tr><td>Silence before gone</td><td>How long the partner may say nothing before it is declared gone. Three seconds unless you change it — the same three seconds this app already gives a window that has stopped answering.</td></tr>
               <tr><td>When the partner goes quiet</td><td><strong>Tell me</strong> — the standby says the live machine is not answering and waits for a hand. <strong>Take it over</strong> — the standby claims the show itself.</td></tr>
             </tbody>

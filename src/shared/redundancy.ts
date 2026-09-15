@@ -372,6 +372,12 @@ export interface RedundancyStatus {
   peer: PeerStatus | null
   /** What this machine last did about its partner: a takeover, a stand-down, a refusal. */
   lastEvent: string | null
+  /**
+   * The last change in who is driving, carried here as well as announced once, because
+   * the window that has to act on it may not have been listening when it happened: a
+   * renderer that crashed mid-takeover comes back to a status, not to an event.
+   */
+  lastNotice: ShowNotice | null
 }
 
 /**
@@ -388,7 +394,14 @@ export type ShowNotice =
   | {
       kind: 'takeover'
       at: number
-      /** The term this machine claimed. A window picks up each term once and once only. */
+      /**
+       * Which decision this is, counted up by the machine that made it. A window acts on
+       * each notice once — and a notice can reach it twice, because the status carries the
+       * last one back to a window that reloaded — so this is what "once" is counted on.
+       * The term cannot serve: handing a show back leaves the term where it was.
+       */
+      seq: number
+      /** The term this machine claimed when it took the show. */
       term: number
       /** 'the live machine stopped answering' or 'the operator took the show'. */
       reason: string
@@ -401,7 +414,19 @@ export type ShowNotice =
    * The show has moved to the other machine — it claimed a higher term than this one.
    * This machine is no longer the sound, and must stop being it.
    */
-  | { kind: 'stand-down'; at: number; term: number; reason: string }
+  | { kind: 'stand-down'; at: number; seq: number; term: number; reason: string }
+
+/** A decision as the machine that made it holds it, before the sequence is stamped on. */
+export type UnstampedNotice =
+  | Omit<Extract<ShowNotice, { kind: 'takeover' }>, 'seq'>
+  | Omit<Extract<ShowNotice, { kind: 'stand-down' }>, 'seq'>
+
+/**
+ * How long a notice is worth acting on. A window that reloads a second after a takeover
+ * still adopts it; a window that opens ten minutes later does not start a cue from a
+ * takeover that has long since been played out, or stop one the operator began by hand.
+ */
+export const NOTICE_FRESH_MS = 15_000
 
 /**
  * Whether the two machines have the same show. It is a comparison of the mirror the
@@ -487,6 +512,8 @@ export function shouldTakeOver(input: {
  * file, so the caller says where that region begins; everything else is cue identity.
  */
 export type PlanCue = Pick<Cue, 'id' | 'number' | 'name' | 'type' | 'duration'> & {
+  /** 0 plays once, N repeats, -1 is a vamp. A looping cue has no end to have reached. */
+  loopCount: number
   /** Where the cue's own region begins in its file, ms. */
   startTime: number
   /**
@@ -585,7 +612,10 @@ export function takeoverPlan(
     // cue that plays the first twenty seconds of a three-minute track has finished after
     // twenty.
     const end = cue.endTime ?? (cue.duration > 0 ? cue.duration : entry.durationMs ?? 0)
-    if (end > 0 && reached >= end) {
+    // A cue that loops is not finished by reaching the end of its region — it goes round —
+    // and the position the engine reports for it is folded back inside the region on every
+    // pass, so "it is near the end" means nothing for a vamp.
+    if (cue.loopCount === 0 && end > 0 && reached >= end) {
       skipped.push({ cueId: cue.id, label, reason: 'it had reached its end before the takeover' })
       continue
     }

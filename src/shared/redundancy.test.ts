@@ -25,8 +25,14 @@ import {
 } from './redundancy'
 
 
-function audioCue(id: string, startTime = 0, duration = 180_000, endTime: number | null = null): PlanCue {
-  return { id, number: id, name: `Cue ${id}`, type: 'audio', startTime, duration, endTime }
+function audioCue(
+  id: string,
+  startTime = 0,
+  duration = 180_000,
+  endTime: number | null = null,
+  loopCount = 0
+): PlanCue {
+  return { id, number: id, name: `Cue ${id}`, type: 'audio', startTime, duration, endTime, loopCount }
 }
 
 function run(entry: Partial<MirrorCue> & { cueId: string }): MirrorCue {
@@ -257,7 +263,10 @@ describe('what a takeover picks up', () => {
     // The mirror says what the live machine was running; this machine's own cue decides
     // what can be done with it, so the cue that cannot be picked up is a local one.
     const local: PlanCue[] = [
-      { id: 'a', number: '1', name: 'Sting', type: 'midi', startTime: 0, duration: 0, endTime: null },
+      {
+        id: 'a', number: '1', name: 'Sting', type: 'midi',
+        startTime: 0, duration: 0, endTime: null, loopCount: 0
+      },
       audioCue('b', 5000, 60_000),
       audioCue('c')
     ]
