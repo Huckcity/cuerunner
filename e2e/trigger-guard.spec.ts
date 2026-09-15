@@ -168,5 +168,8 @@ test('the guard travels with the show and comes back with it', async () => {
   await page.locator('.file-menu button[data-action="settings"]').click()
   await expect(page.locator('#settings-guard-window')).toHaveValue('450')
 
+  // The show's own directory goes after the app holding it: on Windows the temp tree is
+  // still locked while the window is up, and the remove is what fails.
+  await closeApp(app)
   fs.rmSync(root, { recursive: true, force: true })
 })

@@ -86,7 +86,10 @@ test('a device that goes away mid-show silences the show, says why, and the show
   // And it stays on screen while the condition lasts, where a rig is checked.
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu [data-action="settings"]').click()
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await expect(dialog).toBeVisible()
+  // The warning lives beside the engine readout, which is the Audio tab's.
+  await dialog.getByRole('button', { name: 'Audio', exact: true }).click()
   await expect(page.locator('.settings-warning')).toContainText('stopped unexpectedly', { timeout: 15_000 })
   await page.keyboard.press('Escape')
 
