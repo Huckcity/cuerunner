@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { LogPanel, logRows } from './LogPanel'
+import { describeEvent } from '../monitor/MonitorPanel'
 import { useStore, type LogEntry } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { TEST_LICENSE } from '../../../../test/license'
@@ -30,6 +31,27 @@ const EVENTS: ShowEvent[] = [
   }
 ]
 
+/** A redundancy status carrying one line of what a machine has heard. */
+function status(at: number, detail: string): ShowEvent {
+  return {
+    kind: 'redundancy',
+    at,
+    status: {
+      at,
+      enabled: true,
+      role: 'standby',
+      name: 'desk-b',
+      driving: false,
+      term: 0,
+      listening: true,
+      detail,
+      peer: null,
+      lastEvent: null,
+      lastNotice: null
+    }
+  }
+}
+
 describe('logRows', () => {
   const log = [entry(1, AT, 'started'), entry(2, AT + 2000, 'completed in 2000ms')]
 
@@ -38,6 +60,37 @@ describe('logRows', () => {
     const rows = logRows(log, EVENTS, 'all')
     expect(rows.map(row => row.kind === 'entry' ? row.entry.message : row.event.kind))
       .toEqual(['started', 'osc', 'completed in 2000ms', 'midi'])
+  })
+
+  it('says a line that happened twice in a row once, with the count', () => {
+    // A machine's status can say the same thing twice in a second as its picture of its
+    // partner changes and changes back; two lines that read the same are one line that
+    // happened twice.
+    const twice: ShowEvent[] = [
+      status(AT + 1000, 'standing by — desk-a in sync'),
+      status(AT + 1400, 'standing by — desk-a in sync'),
+      status(AT + 2000, 'running the show — desk-a has gone quiet'),
+      status(AT + 2400, 'standing by — desk-a in sync')
+    ]
+    const rows = logRows([], twice, 'show')
+    expect(rows.map(row => row.repeat ?? 1)).toEqual([2, 1, 1])
+    expect(rows.map(row => row.kind === 'event' ? describeEvent(row.event) : row.entry.message))
+      .toEqual([
+        'standing by — desk-a in sync',
+        'running the show — desk-a has gone quiet',
+        'standing by — desk-a in sync'
+      ])
+  })
+
+  it('keeps two lines apart when they only look alike', () => {
+    // The label is part of what a line says: the same sentence from two cues is two
+    // pieces of news, and the same status with a different peer name is a change.
+    const rows = logRows(
+      [entry(1, AT, 'started'), { ...entry(2, AT + 10, 'started'), label: '2 · Entrance' }],
+      [],
+      'cues'
+    )
+    expect(rows.map(row => row.repeat ?? 1)).toEqual([1, 1])
   })
 
   it('filters to either half', () => {

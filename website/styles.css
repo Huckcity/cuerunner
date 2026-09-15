@@ -494,7 +494,10 @@ figure.figure {
   gap: 6px;
 }
 
-.figure img {
+.figure img,
+/* The clip is held to the column the figures are: a video carries its own width attribute,
+   and without this one it overflows the page it is meant to illustrate. */
+.figure video {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -511,6 +514,15 @@ figure.figure {
 
 .figure.shot-narrow {
   max-width: 380px;
+}
+
+/* A picture narrower than the column, shown at the size the app draws it: these are
+   screenshots of a panel or a dialog, and stretching one to the column's width makes the
+   text in it soft for nothing. */
+.figure.shot-native img,
+.figure.shot-native video {
+  width: auto;
+  max-width: 100%;
 }
 
 .note {

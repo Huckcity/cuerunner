@@ -270,15 +270,24 @@ export function RedundancySection(): React.JSX.Element {
   )
 }
 
-/** What is known about the partner, in the terms an operator checks it in. */
+/**
+ * What is known about the partner, in the terms an operator checks it in.
+ *
+ * A partner that was answering when the machine last spoke about it is answering: the
+ * beats are half a second apart, and a partner that had stopped would have been declared
+ * gone and reported as such. The age is worked out only for the machine that has gone
+ * quiet, where the status is published as the silence grows a second at a time — a number
+ * computed from a status that is merely old would say "last heard 12.5 s ago" beside a
+ * partner answering five times a second.
+ */
 function describePeer(status: RedundancyStatus): string {
   const peer = status.peer
   if (!peer) return 'nothing has answered yet'
-  const silence = peer.silentMs + (Date.now() - status.at)
-  const heard = silence < 1500
-    ? 'heard from just now'
-    : `last heard ${(silence / 1000).toFixed(1)} s ago`
   const what = `${peer.name} (${peer.role === 'live' ? 'live' : 'standby'})`
-  if (!peer.alive) return `${what} — gone quiet, ${heard}`
-  return `${what} — ${heard}, running ${peer.running} ${peer.running === 1 ? 'cue' : 'cues'}`
+  const running = `${peer.running} ${peer.running === 1 ? 'cue' : 'cues'}`
+  if (!peer.alive) {
+    const silence = peer.silentMs + (Date.now() - status.at)
+    return `${what} — gone quiet, last heard ${(silence / 1000).toFixed(1)} s ago`
+  }
+  return `${what} — answering, running ${running}`
 }

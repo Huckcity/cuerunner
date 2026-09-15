@@ -8,8 +8,9 @@
 // showing the real demo, so neither the guide nor the demo can drift from the product;
 // re-run after any UI change.
 //
-// The capture is pinned to CSS pixels, so the figures are the same size whichever
-// display the script runs on.
+// The capture is pinned to CSS pixels and runs on a display of its own (see
+// scripts/virtual-display.mjs), so the figures are the same whichever desk it was started
+// from — and no window appears on that desk while it runs.
 import { _electron as electron } from '@playwright/test'
 import { generateKeyPairSync } from 'node:crypto'
 import { Client } from 'node-osc'
@@ -19,6 +20,12 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLicense } from '../src/main/license/key.ts'
+import { underVirtualDisplay } from './virtual-display.mjs'
+
+// Before anything is launched: on Linux this re-runs the script under Xvfb, so the windows
+// this capture drives are on a display nobody is looking at rather than on the desk of
+// whoever started it.
+await underVirtualDisplay()
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const appEntry = path.join(root, 'out/main/index.js')

@@ -188,14 +188,16 @@ export class RedundancyService implements ShowService {
 
   /**
    * `publish` carries this machine's show, which the window owns and sends on every
-   * change; `takeover` is the operator taking the show from a partner that is still
-   * answering, and `release` hands it back.
+   * change; `status` answers with what this machine has heard right now, for a panel that
+   * is open and reading it; `takeover` is the operator taking the show from a partner that
+   * is still answering, and `release` hands it back.
    */
   async command(action: string, payload?: unknown): Promise<unknown> {
     // A stopped machine has no partner and no timer: a takeover taken here would be a
     // decision nothing could act on, and it would surface later as a notice from another
-    // shift. The operator is told instead.
-    if (this.context === null && action !== 'publish') {
+    // shift. The operator is told instead — except when asking what has been heard, which
+    // a stopped machine can answer truthfully.
+    if (this.context === null && action !== 'publish' && action !== 'status') {
       throw new Error('Redundant playback is not running on this machine')
     }
     switch (action) {
@@ -205,6 +207,10 @@ export class RedundancyService implements ShowService {
         this.publish()
         return { driving: this.driving, term: this.term }
       }
+      case 'status':
+        // Asked for, not announced: the age of a partner's silence is the panel's to
+        // watch, and it is a reading rather than an event.
+        return this.status()
       case 'takeover':
         return this.take(this.now(), 'the operator took the show')
       case 'release':
@@ -693,18 +699,30 @@ function clockTime(at: number): string {
 }
 
 /**
- * The status without the two numbers that move on their own — when it was taken and how
+ * The status without the numbers that move on their own — the time it was taken, and how
  * long the partner has been quiet — so that a heartbeat arriving is not a change the
  * window is told about.
+ *
+ * The silence is not thrown away, though: it is counted in steps of a second, because it
+ * is the one fact that changes with nothing happening at all, and the panel reads it. A
+ * partner that is answering keeps its silence inside the first step and never reaches the
+ * window; a partner that has gone gets a status a second for as long as it stays gone, so
+ * "last heard 4.2 s ago" is true when it is read rather than frozen at the moment it was
+ * written.
  */
 function statusKey(status: RedundancyStatus): string {
   return JSON.stringify({
     ...status,
     at: 0,
     // The last notice is part of the status, but its arrival is already a change to
-    // `lastEvent` and to who is driving; leaving the whole object out of the key keeps the
+    // `lastEvent` and to who is driving; keeping only its number out of the key stops the
     // ageing of an old notice from looking like news.
     lastNotice: status.lastNotice === null ? null : status.lastNotice.seq,
+    // And the silence is left out for the same reason: it is the one number that moves
+    // with nothing happening, and a status a second for every second a partner is quiet
+    // would fill the run log with rows that say the same thing. The panel watches that
+    // number by asking for the status on its own tick — see the `status` command — so the
+    // event stream stays a record of what changed.
     peer: status.peer === null ? null : { ...status.peer, silentMs: 0 }
   })
 }
