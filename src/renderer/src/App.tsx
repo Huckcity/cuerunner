@@ -18,6 +18,7 @@ import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useDeskButtons } from './hooks/useDeskButtons'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
+import { useRedundancy } from './hooks/useRedundancy'
 import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
@@ -51,6 +52,9 @@ export function App() {
   useCueTriggers()
   useDeskButtons()
   useCompanionPublisher()
+  // The other machine on the desk: what it is doing with the show, and what to do with
+  // the show it hands over.
+  useRedundancy()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)

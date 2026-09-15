@@ -4,7 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
-import type { RedundancyStatus, TakeoverNotice } from '../../../shared/redundancy'
+import type { RedundancySettings, RedundancyStatus, TakeoverNotice } from '../../../shared/redundancy'
 import type {
   CastSettings,
   CompanionSettings,
@@ -264,6 +264,13 @@ interface CueListState {
    * Like the services above, it is a fact about the machines rather than the show.
    */
   redundancy: RedundancyStatus | null
+  /**
+   * This machine's own half of the arrangement — its role, its name and where its
+   * partner is. Kept with the machine rather than in the workspace, and read from the
+   * main process at startup; null until it has been read.
+   */
+  redundancySettings: RedundancySettings | null
+  setRedundancySettings: (settings: RedundancySettings) => void
   /**
    * A takeover this machine has just decided on, waiting to be acted on. Whoever adopts
    * it takes it off the store, so a second renderer render or a replayed batch cannot
@@ -660,6 +667,7 @@ export const useStore = create<CueListState>((set) => ({
   showAlerts: [],
   showEvents: [],
   redundancy: null,
+  redundancySettings: null,
   redundancyTakeover: null,
   deskState: {},
   deskSceneId: null,
@@ -1156,6 +1164,8 @@ export const useStore = create<CueListState>((set) => ({
     // would fire the show a second time.
     redundancy: latestRedundancy(null, snapshot.events)
   })),
+
+  setRedundancySettings: (settings) => set({ redundancySettings: settings }),
 
   clearRedundancyTakeover: () => set({ redundancyTakeover: null }),
 
