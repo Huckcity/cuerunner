@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -88,6 +89,20 @@ describe('writing a zip', () => {
 
     await expect(writeZip(target, [{ name: 'media/huge.bin', file: huge }]))
       .rejects.toThrow('more than a bundle this app writes can hold')
+    expect(existsSync(target)).toBe(false)
+  })
+
+  it('leaves nothing behind when a write fails half way', async () => {
+    // A directory where the entry should be a file: it measures like a file and then
+    // cannot be read, which is what a write failing part way through looks like.
+    mkdirSync(join(dir, 'media'))
+    const target = join(dir, 'half-written.wlabx')
+    await expect(writeZip(target, [
+      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'media/folder', file: join(dir, 'media') }
+    ])).rejects.toThrow()
+    // The show entry was already written when the second one failed: the file is gone
+    // rather than left as something that looks like a bundle.
     expect(existsSync(target)).toBe(false)
   })
 

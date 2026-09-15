@@ -182,6 +182,17 @@ async function prepare(sources: ZipSource[]): Promise<Prepared[]> {
  */
 export async function writeZip(filePath: string, sources: ZipSource[]): Promise<void> {
   const entries = await prepare(sources)
+  try {
+    await writeEntries(filePath, entries)
+  } catch (error) {
+    // A write that failed half way leaves a file that looks like a bundle and is not one,
+    // at a path the operator chose and may hand to somebody. Nothing is better.
+    await rm(filePath, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+async function writeEntries(filePath: string, entries: Prepared[]): Promise<void> {
   const handle = await open(filePath, 'w')
   const writer = new Writer(handle)
   const directory: Array<{ name: Buffer; crc: number; size: number; offset: number }> = []
@@ -209,14 +220,16 @@ export async function writeZip(filePath: string, sources: ZipSource[]): Promise<
         size = source.data.length
         await writer.write(source.data)
       } else if (source.file !== undefined) {
-        const checksum = new Checksum()
-        const source_ = createReadStream(source.file, { highWaterMark: CHUNK })
-        source_.pipe(checksum)
-        for await (const chunk of checksum) {
-          await writer.write(chunk as Buffer)
+        // Iterated rather than piped: a read that fails — a file that went away, one
+        // this process may not read, a directory — has to reject this loop. `pipe` does
+        // not forward the source's error, and a media file that cannot be read would
+        // leave the export waiting on a stream that will never end.
+        for await (const chunk of createReadStream(source.file, { highWaterMark: CHUNK })) {
+          const bytes = chunk as Buffer
+          crc = crc32(bytes, crc)
+          size += bytes.length
+          await writer.write(bytes)
         }
-        crc = checksum.crc
-        size = checksum.size
       } else {
         throw new Error(`"${source.name}" has nothing in it`)
       }
