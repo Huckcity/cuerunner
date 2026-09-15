@@ -11,6 +11,12 @@ export interface AudioSettings {
   exclusive?: boolean
   /** Requested buffer size in frames. Absent leaves the engine's own. */
   bufferFrames?: number
+  /**
+   * Whether a new audio cue is born trimming the silence from its file's edges. A
+   * default, not a switch: it is copied into the cue when the cue is made, so turning
+   * it on or off changes nothing that is already in the show.
+   */
+  autoTrimSilence?: boolean
 }
 
 export interface MidiSettings {

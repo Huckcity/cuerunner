@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
+import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../types/cue'
 import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
@@ -221,6 +221,12 @@ interface CueListState {
   /** Closes every group: collapsing has no partial reading. */
   collapseAll: () => void
   syncCueDuration: (id: string, durationMs: number) => void
+  /**
+   * Writes down where a scan found the sound in a cue's file. A measurement rather than
+   * an edit, like the length: it does not dirty the session, and it is forgotten the
+   * moment the cue names another file.
+   */
+  syncCueSilence: (id: string, region: SoundRegion) => void
   lastRuns: Record<string, CueRunResult>
   setLastRun: (id: string, result: CueRunResult) => void
 
@@ -277,6 +283,17 @@ interface CueListState {
   mediaLengths: Record<string, MediaLengthAnswer>
   /** Records answers, or forgets one when a cue's file turns out to have changed. */
   setMediaLengths: (answers: Record<string, MediaLengthAnswer | null>) => void
+
+  /**
+   * Files the engine has refused to scan for silence, by cue id, and the path that was
+   * asked about. Session state, not workspace content: a silence measurement is a pass
+   * over a whole file, so a question the engine cannot answer has to be remembered or
+   * the pass would ask it again on every edit. Keyed by path, so a cue relinked to a
+   * different file is a question nobody has asked yet.
+   */
+  silenceFailures: Record<string, string>
+  /** Records a refusal, or forgets one when a cue is pointed at another file. */
+  setSilenceFailure: (cueId: string, filePath: string | null) => void
 
   // License. The machine's, not the show's: it is read from the main process before
   // the first frame, it never travels in a workspace, and it never dirties one.
@@ -504,6 +521,41 @@ function mergeServices(previous: ServiceStatus[], events: ShowEvent[]): ServiceS
 let _coalesceId: string | null = null
 let _coalesceTime = 0
 
+/** Whether a patch points the cue at a file other than the one it names now. */
+function cueRetargeted(cues: Cue[], id: string, patch: Partial<Cue>): boolean {
+  if (!('filePath' in patch) || patch.filePath === undefined) return false
+  const cue = cues.find(c => c.id === id)
+  return cue !== undefined && cue.type === 'audio' && cue.filePath !== patch.filePath
+}
+
+/**
+ * One cue with a patch applied. A cue pointed at another file loses the measurement
+ * that came back from the last one: where a scan found the sound is a fact about the
+ * file that answered, not about the cue.
+ */
+function patchedCue(cue: Cue, patch: Partial<Cue>): Cue {
+  const next = { ...cue, ...patch } as Cue
+  // Only an audio cue has a file to point somewhere else, and only a measurement has a
+  // file to belong to.
+  const was = cue.type === 'audio' ? cue : null
+  if (next.type === 'audio' && 'filePath' in patch && patch.filePath !== was?.filePath) {
+    next.soundRegion = null
+  }
+  return next
+}
+
+/** The refusals without the given cues, for cues that now name another file. */
+function forgetSilenceFailures(
+  failures: Record<string, string>,
+  ids: Iterable<string>
+): Record<string, string> {
+  const dropped = [...ids].filter(id => id in failures)
+  if (dropped.length === 0) return failures
+  const next = { ...failures }
+  for (const id of dropped) delete next[id]
+  return next
+}
+
 function shouldRecordUpdate(cueId: string): boolean {
   const now = Date.now()
   const record = cueId !== _coalesceId || now - _coalesceTime > 1000
@@ -582,6 +634,7 @@ export const useStore = create<CueListState>((set) => ({
   notice: null,
   missingMedia: [],
   mediaLengths: {},
+  silenceFailures: {},
   past: [],
   future: [],
 
@@ -593,6 +646,10 @@ export const useStore = create<CueListState>((set) => ({
 
   addCue: (type, afterId) => set(s => {
     const cue = createCue(type)
+    // Adding a cue is the one moment the show's answer to trimming silence is read: the
+    // setting is a default for new cues, never a switch over the ones already in the
+    // list, so turning it off does not rewrite the show behind the operator.
+    if (cue.type === 'audio') cue.trimSilence = s.audioSettings.autoTrimSilence === true
     const cues = [...s.cues]
 
     let insertIdx: number
@@ -638,6 +695,9 @@ export const useStore = create<CueListState>((set) => ({
       filePath,
       name,
       parentId,
+      // Dropped files are cues being added, so the default for new cues applies to them
+      // exactly as it does to one made with the toolbar.
+      trimSilence: s.audioSettings.autoTrimSilence === true
     }))
     cues.splice(insertIdx, 0, ...newCues)
     const lastAdded = newCues[newCues.length - 1]
@@ -683,8 +743,13 @@ export const useStore = create<CueListState>((set) => ({
 
   updateCue: (id, patch) => set(s => {
     const record = shouldRecordUpdate(id)
+    // A cue pointed at another file has not been measured against it: the sound region a
+    // scan wrote down belongs to the file that answered, and so does a refusal. The
+    // measurement pass asks the new file.
+    const retargeted = cueRetargeted(s.cues, id, patch)
     return {
-      cues: s.cues.map(c => c.id === id ? { ...c, ...patch } as Cue : c),
+      cues: s.cues.map(c => c.id === id ? patchedCue(c, patch) : c),
+      ...(retargeted ? { silenceFailures: forgetSilenceFailures(s.silenceFailures, [id]) } : {}),
       isDirty: true,
       past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
       future: record ? [] : s.future,
@@ -698,8 +763,12 @@ export const useStore = create<CueListState>((set) => ({
     // repeated writes to the same set in a breath (a run of swatch presses) coalesce the
     // way a run of keystrokes in one field does.
     const record = shouldRecordUpdate(`set:${ids.join(',')}`)
+    const retargeted = ids.filter(id => cueRetargeted(s.cues, id, patch))
     return {
-      cues: s.cues.map(c => touched.has(c.id) ? { ...c, ...patch } as Cue : c),
+      cues: s.cues.map(c => touched.has(c.id) ? patchedCue(c, patch) : c),
+      ...(retargeted.length > 0
+        ? { silenceFailures: forgetSilenceFailures(s.silenceFailures, retargeted) }
+        : {}),
       isDirty: true,
       past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
       future: record ? [] : s.future,
@@ -991,6 +1060,22 @@ export const useStore = create<CueListState>((set) => ({
     return { cues: s.cues.map(c => c.id === id ? { ...c, duration: durationMs } : c) }
   }),
 
+  syncCueSilence: (id, region) => set(s => {
+    const cue = s.cues.find(c => c.id === id)
+    if (!cue || cue.type !== 'audio') return s
+    const measured = cue.soundRegion
+    // The same answer to the same question is written once: a pass woken by an unrelated
+    // edit must not replace the object every surface is holding.
+    if (
+      measured != null &&
+      measured.startMs === region.startMs &&
+      measured.endMs === region.endMs &&
+      measured.durationMs === region.durationMs &&
+      measured.silent === region.silent
+    ) return s
+    return { cues: s.cues.map(c => c.id === id ? { ...c, soundRegion: region } : c) }
+  }),
+
   setLastRun: (id, result) => set(s => ({ lastRuns: { ...s.lastRuns, [id]: result } })),
 
   appendLog: (entries) => set(s => {
@@ -1041,12 +1126,17 @@ export const useStore = create<CueListState>((set) => ({
   applyRelinkedMedia: (paths) => set(s => {
     const resolved = new Map(Object.entries(paths))
     if (resolved.size === 0) return s
+    let failures = s.silenceFailures
+    const cues = s.cues.map(cue => {
+      if (cue.type !== 'audio' || !resolved.has(cue.id)) return cue
+      failures = forgetSilenceFailures(failures, [cue.id])
+      // A relinked cue is pointed at another file, and another file has not been
+      // measured: the measurement pass asks it as soon as the new path is in the cue.
+      return patchedCue(cue, { filePath: resolved.get(cue.id)! })
+    })
     return {
-      cues: s.cues.map(cue =>
-        cue.type === 'audio' && resolved.has(cue.id)
-          ? { ...cue, filePath: resolved.get(cue.id)! }
-          : cue
-      ),
+      cues,
+      ...(failures !== s.silenceFailures ? { silenceFailures: failures } : {}),
       isDirty: true,
       past: pushPast(s.past, snapshotOf(s)),
       future: [],
@@ -1065,6 +1155,16 @@ export const useStore = create<CueListState>((set) => ({
       }
     }
     return changed ? { mediaLengths: next } : s
+  }),
+
+  setSilenceFailure: (cueId, filePath) => set(s => {
+    const current = s.silenceFailures[cueId]
+    if (filePath === null) {
+      if (current === undefined) return s
+      return { silenceFailures: forgetSilenceFailures(s.silenceFailures, [cueId]) }
+    }
+    if (current === filePath) return s
+    return { silenceFailures: { ...s.silenceFailures, [cueId]: filePath } }
   }),
 
   setLicense: (license) => set({ license }),
@@ -1105,6 +1205,7 @@ export const useStore = create<CueListState>((set) => ({
       missingMedia: [],
       // What the last show's files answered says nothing about this one's either.
       mediaLengths: {},
+      silenceFailures: {},
       audioSettings: audioSettings ?? { ...defaultAudioSettings },
       midiSettings: midiSettings ?? { ...defaultMidiSettings },
       showSettings: showSettings ?? defaultShowSettings(),

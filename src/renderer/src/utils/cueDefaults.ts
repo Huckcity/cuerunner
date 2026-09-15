@@ -36,7 +36,10 @@ export const AUDIO_DEFAULTS = {
   outputs: null as AudioCrosspoint[] | null,
   loopCount: 0,
   playbackRate: 1,
-  trim: 1
+  trim: 1,
+  // A new cue plays its whole region unless the show says otherwise: the default is the
+  // one that surprises nobody, and the show that wants the other one sets it in Settings.
+  trimSilence: false
 }
 
 export const AUDIO_CROSSPOINT_DEFAULTS: AudioCrosspoint = { inputChannel: 0, outputChannel: 0, gain: 1 }

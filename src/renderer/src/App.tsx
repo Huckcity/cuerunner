@@ -13,6 +13,7 @@ import { MissingMediaBar } from './components/media/MissingMediaBar'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
 import { useMediaLengths } from './hooks/useMediaLengths'
+import { useSilenceTrim } from './hooks/useSilenceTrim'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
@@ -42,6 +43,9 @@ export function App() {
   usePlaybackBridge()
   // A loaded show measures its files before anything asks for a length.
   useMediaLengths()
+  // And a show playing with the silence trim on measures where its sound starts and
+  // stops, so firing a cue never waits on a scan.
+  useSilenceTrim()
   useShowBridge()
   useCueTriggers()
   useCompanionPublisher()

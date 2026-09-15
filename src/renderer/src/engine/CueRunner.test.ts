@@ -1196,6 +1196,80 @@ describe('CueRunner — devamp cues', () => {
     expect(engine.release).not.toHaveBeenCalled()
     expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'error' }))
   })
+
+  it('releases a trimmed vamp to where its sound stops, not into the tail', async () => {
+    // The engine plays a released voice out to the end of the file; a cue trimmed of its
+    // trailing silence has to say where its sound stops, or the show waits through the
+    // silence the trim exists to leave out.
+    const vamp = makeAudio({
+      id: 'a1', loopCount: -1, duration: 20_000, trimSilence: true,
+      soundRegion: { startMs: 2000, endMs: 8000, durationMs: 20_000, silent: false }
+    })
+    const devamp = makeDevamp('a1')
+    const { runner, setLastRun } = setup([vamp, devamp])
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.release).toHaveBeenCalledWith('a1', undefined, 8000)
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'success' }))
+  })
+})
+
+describe('CueRunner — silence trim', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  /** Two seconds of silence, six of sound, twelve of silence, in a twenty-second file. */
+  const SOUND = { startMs: 2000, endMs: 8000, durationMs: 20_000, silent: false }
+
+  it('plays the part of the file between the first and last audible samples', async () => {
+    const cue = makeAudio({ duration: 20_000, trimSilence: true, soundRegion: SOUND })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
+      startTime: 2000,
+      endTime: 8000
+    }))
+  })
+
+  it('keeps the part of the region the operator set inside the sound', async () => {
+    const cue = makeAudio({
+      duration: 20_000, trimSilence: true, soundRegion: SOUND, startTime: 3000, endTime: 5000
+    })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
+      startTime: 3000,
+      endTime: 5000
+    }))
+  })
+
+  it('plays the whole region unlicensed, and says so once per cue', async () => {
+    const cue = makeAudio({ duration: 20_000, trimSilence: true, soundRegion: SOUND })
+    const { runner, appendLog } = setup([cue], undefined, false)
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
+      startTime: 0,
+      endTime: null
+    }))
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Once per cue, not once per firing: a walk-in playlist is thirty cues, and thirty
+    // identical lines is a log nobody reads.
+    const notices = appendLog.mock.calls.flat(2).filter(entry => entry.message.includes('WinsLab Pro'))
+    expect(notices).toHaveLength(1)
+  })
 })
 
 describe('CueRunner — network cues', () => {
