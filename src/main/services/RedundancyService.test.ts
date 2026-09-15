@@ -438,6 +438,10 @@ describe('two machines in a pair', () => {
     await backup.service.command('release')
     await until(() => backup.latest()?.status.driving === false, 'the show to be handed back')
     expect(backup.latest()?.status.lastEvent).toContain('handed back')
+    // And the window is told to stop playing: the machine the show went back to is
+    // already the sound.
+    await until(() => backup.notices().some(event => event.notice?.kind === 'stand-down'), 'the stand-down')
+    expect(backup.notices().at(-1)?.notice).toMatchObject({ kind: 'stand-down', reason: 'the show was handed back' })
   })
 
   it('says when both machines are set to the same half', async () => {

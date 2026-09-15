@@ -483,12 +483,18 @@ export class RedundancyService implements ShowService {
 
   /** Gives the show back, so a live machine that has come back can drive again. */
   private release(): { driving: boolean; term: number } {
+    const at = this.now()
     this.tookOver = false
     // Who is driving is worked out before the line is written: the operator's own action
     // is the more useful thing for this machine to be saying afterwards.
     this.updateDriving()
-    this.lastEvent = `the show was handed back at ${clockTime(this.now())}`
+    this.lastEvent = `the show was handed back at ${clockTime(at)}`
     this.context?.bus.alert('info', this.id, 'Redundant playback: the show was handed back')
+    // A machine that has given the show back is not the sound any more, and says why in
+    // its own words rather than the partner's.
+    if (!this.driving) {
+      this.pending = { kind: 'stand-down', at, term: this.term, reason: 'the show was handed back' }
+    }
     this.publish()
     return { driving: this.driving, term: this.term }
   }
@@ -505,8 +511,10 @@ export class RedundancyService implements ShowService {
     const driving = this.tookOver || (this.config.role === 'live' && !suppressed)
     // A machine that has just stopped driving says why — and the window is told, because
     // a machine that is no longer the sound must stop making it. Two machines playing the
-    // same cue is the one outcome a pair exists to prevent.
-    if (this.driving && !driving && peer) {
+    // same cue is the one outcome a pair exists to prevent. Only the partner taking the
+    // show over reaches this: handing it back is the operator's own action, and it says
+    // so in its own words.
+    if (this.driving && !driving && peer && suppressed) {
       this.lastEvent = `${peer.name} is running the show`
       this.pending = {
         kind: 'stand-down',
@@ -553,13 +561,13 @@ export class RedundancyService implements ShowService {
       ...(notice === null ? {} : { notice })
     })
 
-    // The service's own row in the monitor says the same thing in one line. It is set
-    // only when it changes, so the row is not rewritten four times a second with the
-    // same sentence.
     // An unpaired machine has no row to rewrite: `start` has already said it is stopped
     // and disabled, and the status published above is what the settings tab reads.
     if (!this.config.enabled) return
 
+    // The service's own row in the monitor says the same thing in one line. It is set
+    // only when it changes, so the row is not rewritten four times a second with the
+    // same sentence.
     const state = status.peer === null
       ? (this.config.peerHost === '' ? 'running' : 'degraded')
       : status.peer.alive
