@@ -253,6 +253,10 @@ test('the standby takes the live machine’s show and warms the media before it 
 
   await expect(dialog.locator('.redundancy-line[data-field="machine"]')).toContainText('desk-b — standing by')
   await expect(dialog.locator('.redundancy-line[data-field="partner"]')).toContainText('desk-a (live)')
+  // A partner that is answering is described as answering — not with an age worked out
+  // from a status that has simply not changed since, which reads as a partner that has
+  // stopped.
+  await expect(dialog.locator('.redundancy-line[data-field="partner"]')).toContainText('answering')
   await expect(dialog.locator('.redundancy-line[data-field="show"]')).toContainText('In sync')
   await expect(dialog.locator('.settings-service[data-service="redundancy"]')).toHaveAttribute('data-state', 'running')
 

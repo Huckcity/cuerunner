@@ -26,6 +26,8 @@ const CHECK_MS = 10
 const TIMEOUT_MS = 200
 /** How much of that clock a case may spend waiting for a condition before it fails. */
 const BUDGET_MS = 2000
+/** How much the partner's silence grows between two statuses while it is quiet. */
+const SILENCE_STEP_MS = 1000
 
 interface Health {
   state: ServiceState
@@ -360,6 +362,37 @@ describe('a machine on its own', () => {
     await settle(TIMEOUT_MS * 3)
     expect(alone.takeovers()).toEqual([])
     expect(alone.latest()?.status.driving).toBe(false)
+  })
+
+  it('keeps the partner’s silence moving while it is quiet, and only then', async () => {
+    // The panel adds the time since the status was published to the silence that status
+    // reported, so a status that stopped coming while the partner was quiet would leave
+    // "last heard 12.5 s ago" on screen beside a partner answering five times a second.
+    // The status therefore goes out as the silence grows — a second at a time — and a
+    // partner that is answering never gets that far.
+    const { live, backup } = await pair()
+    await until(() => backup.latest()?.status.peer?.alive === true, 'the pair to meet')
+    await backup.service.command('publish', digest({ running: [] }))
+    await live.service.command('publish', digest({ running: [] }))
+    await until(() => backup.latest()?.status.peer?.inSync === true, 'the show to be mirrored')
+
+    const settled = backup.events.length
+    await settle(HEARTBEAT_MS * 10)
+    expect(backup.events.length).toBe(settled)
+
+    live.close()
+    await until(
+      () => (backup.latest()?.status.peer?.silentMs ?? 0) >= 1000,
+      'the silence to be reported as it grows'
+    )
+    // And it goes on growing in the panel: a second later there is another status, and
+    // another after that, each with a larger silence than the one before.
+    await settle(SILENCE_STEP_MS * 2 + CHECK_MS * 2)
+    const reported = backup.events
+      .map(event => event.status.peer?.silentMs ?? -1)
+      .filter(silence => silence >= SILENCE_STEP_MS)
+    expect(reported.length).toBeGreaterThan(1)
+    expect(reported).toEqual([...reported].sort((a, b) => a - b))
   })
 
   it('sets the monitor’s line on a change rather than on every look', async () => {

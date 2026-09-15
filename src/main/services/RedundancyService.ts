@@ -32,6 +32,17 @@ const CHECK_MS = 250
 /** How long after a failed dial the partner is tried again. */
 const RETRY_MS = 2000
 
+/**
+ * How much the partner's silence has to grow before the status is published again. The
+ * silence is the one fact that changes with nothing happening at all, and the panel is
+ * where the operator watches it — but a status five times a second would push the show's
+ * own events out of the history for a number nobody reads that finely. A second at a time
+ * it is: a partner that is answering keeps its silence under a second and never reaches
+ * this, so a healthy pair says nothing extra, and a partner that has gone keeps the
+ * panel's "last heard 4.2 s ago" true rather than frozen at the moment it was written.
+ */
+const SILENCE_REPORT_MS = 1000
+
 export interface RedundancyOptions {
   /**
    * This machine's half of the pair. Read when the service starts and whenever the
@@ -693,18 +704,27 @@ function clockTime(at: number): string {
 }
 
 /**
- * The status without the two numbers that move on their own — when it was taken and how
+ * The status without the numbers that move on their own — the time it was taken, and how
  * long the partner has been quiet — so that a heartbeat arriving is not a change the
  * window is told about.
+ *
+ * The silence is not thrown away, though: it is counted in steps of a second, because it
+ * is the one fact that changes with nothing happening at all, and the panel reads it. A
+ * partner that is answering keeps its silence inside the first step and never reaches the
+ * window; a partner that has gone gets a status a second for as long as it stays gone, so
+ * "last heard 4.2 s ago" is true when it is read rather than frozen at the moment it was
+ * written.
  */
 function statusKey(status: RedundancyStatus): string {
   return JSON.stringify({
     ...status,
     at: 0,
     // The last notice is part of the status, but its arrival is already a change to
-    // `lastEvent` and to who is driving; leaving the whole object out of the key keeps the
+    // `lastEvent` and to who is driving; keeping only its number out of the key stops the
     // ageing of an old notice from looking like news.
     lastNotice: status.lastNotice === null ? null : status.lastNotice.seq,
-    peer: status.peer === null ? null : { ...status.peer, silentMs: 0 }
+    peer: status.peer === null
+      ? null
+      : { ...status.peer, silentMs: Math.floor(status.peer.silentMs / SILENCE_REPORT_MS) }
   })
 }

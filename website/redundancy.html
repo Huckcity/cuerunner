@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redundant playback — Winslab</title>
+  <meta name="description" content="Two machines run the same show: one driving it, one standing by to carry it on if the first stops answering. A walkthrough of setting a pair up, what the two say to each other, what a takeover picks up and what it leaves behind." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Winslab Redundant Playback" />
+  <meta property="og:description" content="Two machines, one show. A walkthrough: setting the pair up, the heartbeat, the takeover, and what is carried forward." />
+  <meta property="og:url" content="https://huckcity.github.io/winslab/redundancy.html" />
+  <meta property="og:image" content="https://huckcity.github.io/winslab/assets/redundancy/pair-poster.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Winslab Redundant Playback" />
+  <meta name="twitter:description" content="Two machines, one show: the walkthrough." />
+  <link rel="icon" href="./assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="Winslab home">
+        <img src="./assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="./guide.html">User Guide</a>
+        <a href="./redundancy.html">Redundancy</a>
+        <a href="./reliability.html">Reliability</a>
+        <a href="./index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <section class="panel reveal">
+      <h1>Redundant playback<span class="pro">Pro</span></h1>
+      <p>
+        Two machines run the same show. One drives it; the other stands by, watching the same
+        workspace, mirroring which cue is running and how far into its file the engine has
+        reached, and holding the media for it ready. If the machine driving stops answering,
+        the one standing by takes the show over — with the running cue back where it was rather
+        than from the top — and says exactly what it picked up and what it could not.
+      </p>
+      <p>
+        This page is the walkthrough: what to set on each machine, what the two of them say to
+        each other, what a takeover looks like on screen, and what a pair deliberately does not
+        carry. Everything below was captured from two real copies of the app, one of them killed
+        outright mid-cue, by the same script that regenerates these images.
+      </p>
+      <div class="note">
+        The interface side of this feature is described in the <a href="./guide.html#redundancy">user
+        guide</a>. What follows is the same thing as an operator meets it: in order, with the
+        screens.
+      </div>
+    </section>
+
+    <section id="clip" class="panel reveal delay-1">
+      <h2>The pair, in one act</h2>
+      <p>
+        Two copies of the app side by side: on the left the machine running the show, on the
+        right the one standing by for it. The cue is fired, the show runs for a few seconds, and
+        then the machine driving it is closed the way a machine in a rack goes down — process,
+        socket and sound together, while its cue is playing. Nothing else is touched: no cue is
+        fired by hand and the show is never reloaded.
+      </p>
+      <figure class="figure">
+        <video
+          controls
+          muted
+          playsinline
+          preload="metadata"
+          poster="./assets/redundancy/pair-poster.png"
+          width="1600" height="500"
+          aria-label="Two Winslab windows side by side: the left one, running the show, plays a cue and then closes; the right one, standing by, reports the loss, takes the show over and carries the cue on."
+        >
+          <source src="./assets/redundancy/pair.mp4" type="video/mp4" />
+          <a href="./assets/redundancy/pair.mp4">Download the clip</a> (MP4, 1440p of two windows).
+        </video>
+        <figcaption>
+          The clip runs at real speed, half a second of capture to half a second of show. The
+          left window stops being redrawn when that machine goes down; what carries on is on the
+          right.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="setup" class="panel reveal delay-1">
+      <h2>1. Setting the pair up</h2>
+      <p>
+        Each machine is configured on its own, in <em>Settings → Redundancy</em>. The settings
+        belong to the machine rather than to the show — both machines open the same workspace
+        file, so a role written into the show would be read as the same answer by both of them —
+        and they are kept beside the license key, in <code>redundancy.json</code>, not in the
+        <code>.wlab</code>. Saving the show does not touch them, and copying the show to the
+        other machine does not carry them.
+      </p>
+
+      <div class="cards two-col">
+        <figure class="figure">
+          <a href="./assets/redundancy/01-settings-live.png" target="_blank" rel="noreferrer">
+            <img src="./assets/redundancy/01-settings-live.png" alt="The Redundancy tab on the machine running the show: redundant playback switched on, the role set to live, the name desk-live, the listener on port 53110 and the partner's address and port, a shared token, and a silence timeout of 3000 ms." />
+          </a>
+          <figcaption>The machine that runs the show: <em>Live</em>, listening on its own port, dialling the other one.</figcaption>
+        </figure>
+        <figure class="figure">
+          <a href="./assets/redundancy/02-settings-standby.png" target="_blank" rel="noreferrer">
+            <img src="./assets/redundancy/02-settings-standby.png" alt="The same tab on the machine standing by: the role set to standby, the name desk-backup, its own port 53111, and the live machine's address as its partner." />
+          </a>
+          <figcaption>The machine standing by: <em>Standby</em>, its own port, and the other machine's address.</figcaption>
+        </figure>
+      </div>
+
+      <p>What each setting does:</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Setting</th><th>What it means</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Redundant playback</td><td>Whether this machine is half of a pair at all. Off, it runs the show on its own, opens nothing, and says so.</td></tr>
+            <tr><td>Role</td><td><strong>Live</strong> runs the show. <strong>Standby</strong> mirrors it and waits. Both machines dial each other, so either role may be started first.</td></tr>
+            <tr><td>Name</td><td>What the other machine calls this one. Two desks are easier to tell apart than two addresses; the host name is the default.</td></tr>
+            <tr><td>Port here</td><td>The port this machine listens on for its partner.</td></tr>
+            <tr><td>Partner address and port</td><td>Where the other machine is. Left empty, this machine only listens — which is what a half-configured pair looks like, and the status says so instead of pretending.</td></tr>
+            <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed, and it stops dialling rather than asking every two seconds. Left empty, the pair is open to whoever finds the port, and the tab says so.</td></tr>
+            <tr><td>Silence before gone</td><td>How long the partner may say nothing before it is declared gone — three seconds unless you change it, the same three seconds this app already gives a window that has stopped answering.</td></tr>
+            <tr><td>When the partner goes quiet</td><td><strong>Tell me</strong>: the standby reports it and waits for a hand. <strong>Take it over</strong>: the standby claims the show itself.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        Set the same token on both machines, and the same partner address from the other side
+        — each machine names the other. The pair finds each other without a restart: the dial is
+        retried while the partner is not answering, and a machine that comes back is picked up
+        again by itself.
+      </div>
+    </section>
+
+    <section id="status" class="panel reveal delay-1">
+      <h2>2. The status, while nothing is wrong</h2>
+      <p>
+        Under the settings is the machine's own account of what it has heard. This is the part
+        an operator actually runs a show from: which half is driving, that the partner is
+        answering, and whether the two have the same show open.
+      </p>
+
+      <figure class="figure shot-native">
+        <a href="./assets/redundancy/03-status.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/03-status.png" alt="The status block on the machine standing by: this machine desk-backup standing by; partner desk-live answering; show in sync, one file warmed; last: desk-live is here, running the show; and a Take the show over now button." />
+        </a>
+        <figcaption>
+          The standby, with the live machine answering and both machines on the same show.
+        </figcaption>
+      </figure>
+
+      <p>With a cue running on the other machine, the same panel says so:</p>
+
+      <figure class="figure shot-native">
+        <a href="./assets/redundancy/05-mirror.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/05-mirror.png" alt="The status block while a cue runs on the live machine: partner desk-live answering, running one cue; show in sync, two files warmed there." />
+        </a>
+        <figcaption>
+          The mirror: one cue running on the partner, and two files warmed here — the media for
+          the cue being played and for the one the next GO would fire.
+        </figcaption>
+      </figure>
+
+      <p>
+        Three things are worth knowing about <em>answering</em> and <em>in sync</em>. The partner
+        is described as answering when it was answering half a second ago, because that is how
+        often the pair speak — a number that counted up from the last time anything changed would
+        read as a machine that had stopped. <em>In sync</em> is a comparison of the two shows,
+        not a hope: the same workspace, the same cue count, and a fingerprint of the cue list. And
+        the media being <em>warmed</em> means it is decoded into this machine's own engine
+        already, which is what makes a takeover start rather than decode.
+      </p>
+
+      <figure class="figure shot-native">
+        <a href="./assets/redundancy/04-running-live.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/04-running-live.png" alt="The cue list on the machine running the show, with the walk-in music cue playing." />
+        </a>
+        <figcaption>The same moment from the other side: the cue running on the machine that drives the show.</figcaption>
+      </figure>
+    </section>
+
+    <section id="takeover" class="panel reveal delay-1">
+      <h2>3. When the machine driving goes quiet</h2>
+      <p>
+        A partner that has said nothing for the stated silence is declared gone, once. It is an
+        alarm like any other — it appears in the monitor, in the alarm chip, and in the run log —
+        and on the machine that can do something about it, the service row says what happened:
+      </p>
+
+      <figure class="figure">
+        <a href="./assets/redundancy/07-alarm.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/07-alarm.png" alt="The show monitor with two alarms from redundant playback — desk-live has not answered for 3.1 s, and this machine has the show — and the services column showing redundant playback degraded: running the show, desk-live has gone quiet." />
+        </a>
+        <figcaption>
+          The alarm, and the row underneath it: the machine has taken the show and says why.
+        </figcaption>
+      </figure>
+
+      <p>
+        With <em>Take it over</em> the standby claims the show itself; with <em>Tell me</em> it
+        waits, and the operator presses <em>Take the show over now</em> on the same panel. Either
+        way the machine that is now driving says so, in the same status block as before:
+      </p>
+
+      <figure class="figure shot-native">
+        <a href="./assets/redundancy/08-took-over.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/08-took-over.png" alt="The Redundancy tab after the takeover: this machine desk-backup running the show, partner desk-live gone quiet, and the last line reading took the show over at a time, the live machine stopped answering." />
+        </a>
+        <figcaption>Like a takeover, this is announced once — a replayed event cannot fire the show twice.</figcaption>
+      </figure>
+    </section>
+
+    <section id="carried" class="panel reveal delay-1">
+      <h2>4. What the takeover carries</h2>
+      <p>
+        A takeover picks the show up rather than restarting it. The audio cue the live machine was
+        playing is put back on this machine's engine at the position it had reached, plus however
+        long passed between the last beat and the takeover — the position was true when the beat
+        arrived and the show ran on. The operator's place in the show comes across with it, so the
+        next GO fires what the live machine would have fired. Anything this machine was running on
+        its own is stopped first: after a takeover, what is playing is what the mirror says.
+      </p>
+
+      <figure class="figure">
+        <a href="./assets/redundancy/10-still-running.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/10-still-running.png" alt="The waveform panel on the machine that took the show over, showing overture.wav with the playhead twenty-five seconds into a thirty-second file." />
+        </a>
+        <figcaption>
+          The cue that was playing on the machine that died, playing here now — twenty-five
+          seconds into its file, not at the top of it.
+        </figcaption>
+      </figure>
+
+      <p>
+        Everything that could not be carried forward is named rather than faked, in the run log:
+      </p>
+
+      <figure class="figure">
+        <a href="./assets/redundancy/09-run-log.png" target="_blank" rel="noreferrer">
+          <img src="./assets/redundancy/09-run-log.png" alt="The run log: the pair finding each other and going in sync, then desk-live has not answered for 3.1 s, this machine has the show, took the show over 3.1 s after the live machine went quiet with one cue picked up at its position, and the cue starting." />
+        </a>
+        <figcaption>
+          The whole act in the log, from the pair meeting to the cue starting on this machine.
+        </figcaption>
+      </figure>
+
+      <ul class="tight-list">
+        <li><strong>Sound is carried; one-shots are not.</strong> A MIDI or OSC cue has already
+          reached its desk, and sending it again would be a second note.</li>
+        <li><strong>A half-finished wait, fade or script is not resumed.</strong> That work lived
+          on the machine that died.</li>
+        <li><strong>A cue in its post-wait had already finished</strong>, and the show's next GO
+          belongs to the cue after it.</li>
+        <li><strong>A cue that loops is picked up inside its loop</strong> rather than past the
+          end of a region it would have gone round again.</li>
+        <li><strong>Everything else is written down</strong> — in the log line above, next to the
+          cue it affected.</li>
+      </ul>
+    </section>
+
+    <section id="limits" class="panel reveal delay-1">
+      <h2>What a pair does not do</h2>
+      <p>
+        These are the honest edges. None of them is a surprise in the log; every one of them is
+        said out loud when it happens.
+      </p>
+      <ul class="tight-list">
+        <li>
+          <strong>Both machines must have the same show open.</strong> The status compares them
+          and says when they do not — including when the cue lists differ because the show was
+          edited and not saved on the live machine. A takeover is not attempted against a
+          different show.
+        </li>
+        <li>
+          <strong>Edits are not mirrored.</strong> The cue stack belongs to the workspace, and a
+          backup that silently rewrote its own copy would be a second editor rather than a
+          backup. Save on the live machine, and the other machine's copy is what the file says.
+        </li>
+        <li>
+          <strong>A silence cannot be told from a failure.</strong> If the link between the two
+          goes while both machines are running, the standby does what it is configured to do, and
+          the live machine stands down when it hears that the show has moved — which is audible
+          for a moment, on both machines. A pair belongs on a switch that is not also carrying
+          somebody else's video.
+        </li>
+        <li>
+          <strong>Two machines set to <em>Live</em> both believe they are driving</strong>, and
+          both panels say so rather than one of them quietly giving way. The term that settles a
+          returning machine is a claim about who took the show over, not a lock on the operator's
+          hands.
+        </li>
+      </ul>
+      <div class="note warn">
+        A takeover starts the cue at the position the mirror had, which is at best a quarter of a
+        second old and not sample-aligned with what the other machine was playing. The two
+        machines are not in a race to be exact; they are in a race to keep the show going.
+      </div>
+    </section>
+
+    <section id="checklist" class="panel reveal delay-1">
+      <h2>Rigging it on the night</h2>
+      <ol class="steps">
+        <li>Install the same version of Winslab on both machines and open the same workspace file on each.</li>
+        <li>On the machine that will drive: <em>Settings → Redundancy</em>, switch it on, set the role to <em>Live</em>, name it, give it a port, and put in the other machine's address and port.</li>
+        <li>On the machine that will stand by: the same, with the role set to <em>Standby</em>, its own port, and this machine's address as its partner.</li>
+        <li>Set the same token on both, and decide what should happen when the partner goes quiet.</li>
+        <li>Check the status on both: each one should name the other and say <em>In sync</em>. If it says the cue lists differ, save the show on the machine that has the edits.</li>
+        <li>Fire a cue on the live machine and watch the standby's panel: it should say the partner is answering and running a cue, and that files are warmed.</li>
+        <li>Sound-check the takeover itself: stop the live machine, watch the standby take the show and pick the cue up, then hand it back — <em>Give the show back</em> — and start the live machine again.</li>
+      </ol>
+      <p>
+        The panel, not the log, is what to watch on the night: it is the only place that says in
+        one line which machine is running the show, and the only place that says when the other
+        one was last heard from.
+      </p>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Winslab redundant playback. Every figure and the clip on this page are generated from the
+      application itself — two real copies of it, one killed mid-cue — by
+      <code>scripts/capture-redundancy.mjs</code>, which is the same script that produces the
+      images you have just read.
+    </p>
+  </footer>
+
+</body>
+</html>
