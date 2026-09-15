@@ -27,7 +27,7 @@
     "postinstall": "node scripts/postinstall.js",
     "build:native": "node scripts/build-native-audio.mjs",
     "build:ffmpeg": "node scripts/build-ffmpeg-linux.mjs",
-    "test:native": "node native/audio/tests/offline.mjs && node native/audio/tests/pace.mjs && node native/audio/tests/stream-seek.mjs && node native/audio/tests/stack.mjs && node native/audio/tests/stream-stall.mjs && node native/audio/tests/matrix-bench.mjs",
+    "test:native": "node native/audio/tests/offline.mjs && node native/audio/tests/pace.mjs && node native/audio/tests/analysis-priority.mjs && node native/audio/tests/long-file-start.mjs && node native/audio/tests/stream-seek.mjs && node native/audio/tests/stack.mjs && node native/audio/tests/stream-stall.mjs && node native/audio/tests/matrix-bench.mjs",
     "soak": "node native/audio/tests/soak.mjs",
     "presoak": "node scripts/ensure-native.mjs",
     "soak:report": "node scripts/soak-report.mjs",
