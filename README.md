@@ -41,6 +41,7 @@ installer:
 - **Triggers**: a cue that fires from an OSC address, a MIDI note or a console's own show control command, with nobody's hand on GO
 - **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network
 - **Scenes and the desk**: the view the show is run from, with the console's channels and the DCAs they open set up in Show Settings, ensembles that move a group of mics at once, and scene cues in the stack
+- **Redundant playback**: a second machine runs the same show, mirrors it cue by cue and warms the same media, and picks the show up where it stopped if the machine driving it goes quiet — the running audio cue back at the position it had reached, the operator's place in the show carried across, and everything that cannot be picked up named in the run log
 
 ## Getting Started
 
@@ -582,6 +583,32 @@ Desk and console integration:
   to the vendors' worked examples; `integration/specs/msc.spec.ts` drives a Show Control cue into
   an SQ's cue list and a key at the desk into a cue here
 
+Redundant playback:
+
+- **Two machines, one show.** Both run WinsLab with the same workspace open; one is set to
+  *Live* and drives it, the other to *Standby* and mirrors it. What crosses the network is
+  state rather than sound: which cue is running, how far into its file the engine has reached,
+  what the operator has selected, and a fingerprint of the cue list so the two machines check
+  they are running the same show rather than assuming it. The machine standing by also decodes
+  the same media into its own engine, so a cue it picks up starts rather than decoding
+- **A stated heartbeat, and a stated choice.** The pair says so five times a second, and a
+  partner that has said nothing for three seconds (configurable) is declared gone — the same
+  three seconds this app already gives a window that has stopped answering. What happens then
+  is the operator's setting: *Tell me*, and the standby reports it and waits for a hand;
+  *Take it over*, and it claims the show itself
+- **A takeover picks the show up.** The playing audio cue goes back on the engine at the
+  position it had reached plus the silence since the last beat, and the operator's place in
+  the show comes across with it, so the next GO fires what the live machine would have fired.
+  Everything else — a MIDI or OSC cue that has already gone out, a wait, a fade or a script
+  that was half-way through, a cue that had finished and was waiting to hand over — is named
+  in the run log rather than repeated. A machine that comes back after a takeover stands down
+  instead of both machines playing the same cue, and a machine that took the show can hand it
+  back. `e2e/redundancy.spec.ts` is the other machine: it speaks the protocol over a real
+  socket, goes silent, and holds the app to the position the cue comes back at
+- **The settings belong to the machine.** `redundancy.json` beside `license.key` — both
+  machines of a pair run the same workspace file, so a role written into the show would be
+  read as the same answer by both of them
+
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
 these in the context of the feature it affects.
 
@@ -605,7 +632,10 @@ keys are verified on the machine they are entered on:
   like any other, and using a key tells nobody that it was used.
 - **Enter it once**: *WinsLab ▾ → Settings… → License*. The license is kept beside the
   app's other settings in the user-data directory (`license.key`); it belongs to the
-  computer it was entered on, not to a workspace or a show file.
+  computer it was entered on, not to a workspace or a show file. A machine's half of a
+  redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
+  machines of a pair run the same workspace file, so which one is the main is a fact about
+  the machine rather than about the show.
 - **A session keeps the license it started with.** The key is checked when the app starts
   and when one is entered, so a show that began licensed finishes licensed: a key that
   runs out overnight locks the next launch rather than the performance.

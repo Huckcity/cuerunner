@@ -226,12 +226,13 @@ export class RedundancyService implements ShowService {
   private detach(connection: PeerConnection): void {
     if (!this.connections.delete(connection)) return
     connection.socket.destroy()
-    if (this.peer.socket === connection.socket) {
-      this.peer.socket = null
-    }
-    // The partner is dialled again until it answers: a machine that comes back from a
-    // restart is not a machine the operator should have to re-pair by hand.
-    if (connection.outgoing && this.server !== null) this.scheduleRetry()
+    if (this.peer.socket !== connection.socket) return
+    // The socket the partner was heard on has gone. It is dialled again until it answers:
+    // a machine that comes back from a restart is not a machine the operator should have
+    // to re-pair by hand — and which of the pair's two sockets was being used decides
+    // nothing about who may dial.
+    this.peer.socket = null
+    if (this.server !== null) this.scheduleRetry()
   }
 
   private scheduleRetry(): void {

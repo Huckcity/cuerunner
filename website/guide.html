@@ -66,6 +66,7 @@
         <li><a href="#triggers">Triggers<span class="pro">Pro</span></a></li>
         <li><a href="#script-panel">The script, and the tablet<span class="pro">Pro</span></a></li>
         <li><a href="#scenes">Scenes, and the desk<span class="pro">Pro</span></a></li>
+        <li><a href="#redundancy">Redundant playback<span class="pro">Pro</span></a></li>
         <li><a href="#settings">Settings</a></li>
         <li><a href="#keyboard">Keyboard reference</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -1237,6 +1238,85 @@ console.log(r.stdout.trim())</code></pre>
         </div>
       </section>
 
+      <section id="redundancy" class="panel reveal delay-4">
+        <h2>Redundant playback<span class="pro">Pro</span></h2>
+        <p>
+          Two machines can run the same show: one driving it, the other standing by to carry it on
+          if the first one stops. Both run WinsLab and both have the same workspace open, and what
+          passes between them is state rather than sound — which cue is running, how far into its
+          file the engine has reached, and what the operator has selected. A machine that is
+          standing by is therefore ready to <em>carry on</em> rather than ready to start again.
+        </p>
+        <h3>Setting a pair up</h3>
+        <p>
+          Everything is on the <strong>Redundancy</strong> tab of Settings, and it is this
+          machine's own half of the arrangement rather than the show's: both machines load the same
+          workspace file, so a role written into the show would be read as the same answer by both
+          of them. These settings are kept on the machine, beside the license key.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Setting</th><th>What it means</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Redundant playback</td><td>Whether this machine is half of a pair at all. Off, it runs the show on its own and nothing is opened.</td></tr>
+              <tr><td>Role</td><td><strong>Live</strong> — this machine runs the show. <strong>Standby</strong> — this machine mirrors it and waits.</td></tr>
+              <tr><td>Name</td><td>What the other machine calls this one in its status and its log. Two desks are easier to tell apart than two IP addresses.</td></tr>
+              <tr><td>Port here</td><td>The port this machine listens on for its partner. 53110 unless you change it.</td></tr>
+              <tr><td>Partner address and port</td><td>Where the other machine is. Left empty, this machine listens without dialling anything — which is what a machine waiting to be paired by its partner looks like.</td></tr>
+              <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed.</td></tr>
+              <tr><td>Silence before gone</td><td>How long the partner may say nothing before it is declared gone. Three seconds unless you change it — the same three seconds this app already gives a window that has stopped answering.</td></tr>
+              <tr><td>When the partner goes quiet</td><td><strong>Tell me</strong> — the standby says the live machine is not answering and waits for a hand. <strong>Take it over</strong> — the standby claims the show itself.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>What the two machines say to each other</h3>
+        <p>
+          Each machine dials the other, and the pair settles on one connection. After that they say
+          so five times a second, and each beat carries the state of the show that sent it. The
+          machine standing by keeps that mirror and, with nothing else to do before it is needed,
+          decodes the same media into its own audio engine: a cue it picks up starts rather than
+          decodes. Underneath the settings, the panel says what has been heard — which half is
+          running the show, when the partner was last heard from, whether the two have the same
+          show open, how many files the other machine has warmed, and what this machine last did
+          about it.
+        </p>
+        <h3>Taking the show over</h3>
+        <p>
+          A partner that has said nothing for the stated silence is declared gone, and the alarm is
+          raised once: in the Monitor panel, in the top-of-window alarm chip, and in the run log.
+          With <em>Take it over</em> the standby claims the show there and then; with <em>Tell
+          me</em> it waits for the operator, who can take the show from the same panel.
+        </p>
+        <p>
+          A takeover picks the show up rather than restarting it. An audio cue the live machine was
+          playing is put back at the position it had reached, plus however long passed between the
+          last beat and the takeover — the position was true when the beat arrived, and the show
+          has been running since. The operator's place in the show comes across with it, so the
+          next GO fires what the live machine would have fired. Everything else is named rather
+          than faked, in the run log: a MIDI or OSC cue has already reached its desk and sending it
+          again would be a second note; a wait, a fade or a script was part-way through work that
+          lived on the machine that died; a cue in its post-wait had already finished and the next
+          GO belongs to the cue after it.
+        </p>
+        <h3>Who is driving</h3>
+        <p>
+          A machine that comes back does not take the show back by being switched on: each claim to
+          the show carries a term, and the higher term is the one driving. The returning machine
+          hears a higher term than its own, stops driving, and says so — in its status and in its
+          log — rather than both machines playing the same cue. A machine that took the show over
+          can hand it back from the same panel.
+        </p>
+        <div class="note">
+          What a pair is not: the two machines must have the same show open, and the status says
+          plainly when they do not. Unsaved edits on the live machine are not mirrored — save, and
+          the other machine's copy is what the file says. And two machines both set to <em>Live</em>
+          both believe they are the one running the show: the status says that too, and leaves the
+          decision where it belongs, with the operator.
+        </div>
+      </section>
+
       <section id="settings" class="panel reveal delay-4">
         <h2>Settings</h2>
         <figure class="figure shot-narrow">
@@ -1262,13 +1342,16 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td>Wireless</td><td>Telemetry sources</td><td>The sources the wireless panel reads, one row per source: a name, HTTP or file, and the URL or path — and the battery, RF and silence thresholds below them that the alarms are raised on. Each section also reports what its service is doing, so a change is confirmed on the screen that made it.</td></tr>
               <tr><td>Network</td><td>Network presence</td><td>Whether to browse the network, which mDNS service types to browse, and how long a device may stay quiet before it counts as gone.</td></tr>
               <tr><td>Network</td><td>Tablet companion</td><td>Whether to serve the show on the network, on which port, and with which token. The address to open on the tablet is reported underneath once the service is running.</td></tr>
+              <tr><td>Redundancy</td><td>Redundant playback</td><td>This machine's half of a pair: its role, its name, where its partner is, the shared token, how long silence may last, and what to do when it does. Kept on the machine rather than in the workspace, because both machines of a pair run the same file. See <a href="#redundancy">Redundant playback</a>.</td></tr>
               <tr><td>License</td><td>License key</td><td>This machine's WinsLab Pro key: what it is licensed to, when it expires, Activate and Deactivate. See <a href="#pro">Free and Pro</a> above.</td></tr>
             </tbody>
           </table>
         </div>
         <p>
           Settings belong to the workspace, so they travel with the show, and changing them marks it
-          as unsaved. The Network and Wireless tabs' settings are the ones the Pro services read:
+          as unsaved. The Redundancy and License tabs are the exceptions, and deliberately so:
+          they are this machine's own settings, and the showfile they sit beside travels between
+          machines. The Network and Wireless tabs' settings are the ones the Pro services read:
           without a license they are kept with the show exactly as they are, and the services do
           not start.
         </p>
@@ -1446,6 +1529,7 @@ console.log(r.stdout.trim())</code></pre>
           <li><strong>One audio device at a time.</strong> WinsLab opens one output device and does not aggregate several into one; clock discipline across devices belongs to the operating system (an aggregate device) or to a Dante/AES67 layer. A rig with more channels presents them on one device.</li>
           <li><strong>Presence reports, it does not route.</strong> The network service notices that a device is there and when it leaves. Subscriptions, clocking and patching stay in Dante Controller or the device's own software.</li>
           <li><strong>Recording is not built in.</strong> WinsLab does not capture multitrack audio; a recorder runs alongside it. Triggers and OSC are how the two are tied together — a cue that arms the recorder, or a message from it that fires a cue.</li>
+          <li><strong>Redundant playback carries sound, not everything.</strong> A takeover puts a playing audio cue back at the position it had reached and brings the operator's place in the show across; a MIDI or OSC cue that has already gone out, a wait, a fade or a script that was half-way through, and a cue that had finished and was waiting to hand over are all named in the run log rather than repeated. See <a href="#redundancy">Redundant playback</a>.</li>
           <li><strong>Script cues are unsandboxed.</strong> Treat a workspace file as executable code.</li>
         </ul>
       </section>
@@ -1470,6 +1554,7 @@ console.log(r.stdout.trim())</code></pre>
             <li>The highlight moves to whatever GO will fire next.</li>
             <li><kbd>Escape</kbd> stops everything; <kbd>Shift</kbd> + <kbd>Escape</kbd> stops with a fade.</li>
             <li>If something looks wrong, open the Log tab and read the red lines.</li>
+            <li>With a pair rigged, the Monitor panel names the machine running the show and when the other one was last heard from.</li>
           </ul>
         </div>
       </section>
