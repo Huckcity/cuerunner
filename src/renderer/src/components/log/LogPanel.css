@@ -147,3 +147,12 @@
 .log-event[data-kind='osc'] .log-event-kind     { color: var(--accent-blue); }
 .log-event[data-kind='midi'] .log-event-kind    { color: var(--cue-color-purple); }
 .log-event[data-kind='device'] .log-event-kind  { color: var(--state-running-fg); }
+
+/* A line that happened more than once in a row, said once with the count beside it. */
+.log-repeat {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
