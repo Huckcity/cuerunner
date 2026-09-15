@@ -153,35 +153,54 @@ void DecodedCache::maintain() {
   }
 }
 
-bool DecodedCache::waveformFromResident(const std::string& path, int points, std::vector<float>& values,
-                                        int& channels, int& sampleRate, int64_t& frames) {
+/**
+ * The envelope of a region of a resident entry, in `points` buckets of interleaved
+ * min/max. The region arrives in ms and is resolved against the entry's own frame count,
+ * which is also reported: a caller that asked for the whole file gets the length it did
+ * not have to open the file to learn.
+ */
+bool DecodedCache::waveformFromResident(const std::string& path, int points, const RegionQuery& region,
+                                        ResidentEnvelope& out) {
   std::lock_guard<std::mutex> lock(mutex_);
   CacheEntry* entry = findLocked(path);
   if (entry == nullptr || !entry->resident) return false;
   entry->lastUse = ++useClock_;
-  channels = entry->channels;
-  sampleRate = entry->sampleRate;
-  frames = entry->frames;
-  values.assign(static_cast<size_t>(points) * 2, 0.0f);
+  out.channels = entry->channels;
+  out.sampleRate = entry->sampleRate;
+  out.frames = entry->frames;
+  const int sampleRate = entry->sampleRate > 0 ? entry->sampleRate : 1;
+  const auto toFrame = [sampleRate](double ms) {
+    return static_cast<int64_t>(ms * sampleRate / 1000.0 + 0.5);
+  };
+  int64_t startFrame = region.bounded ? toFrame(region.startMs) : 0;
+  int64_t endFrame = region.bounded ? toFrame(region.endMs) : entry->frames;
+  if (startFrame < 0) startFrame = 0;
+  if (startFrame > entry->frames) startFrame = entry->frames;
+  if (endFrame > entry->frames) endFrame = entry->frames;
+  if (endFrame < startFrame) endFrame = startFrame;
+  out.startFrame = startFrame;
+  out.endFrame = endFrame;
+  const int64_t span = endFrame - startFrame;
+  out.values.assign(static_cast<size_t>(points) * 2, 0.0f);
   for (int i = 0; i < points; i++) {
-    values[static_cast<size_t>(i) * 2] = 1.0e30f;
-    values[static_cast<size_t>(i) * 2 + 1] = -1.0e30f;
+    out.values[static_cast<size_t>(i) * 2] = 1.0e30f;
+    out.values[static_cast<size_t>(i) * 2 + 1] = -1.0e30f;
   }
-  const int fold = std::min(channels, 2);
-  for (int64_t frame = 0; frame < frames; frame++) {
-    const int64_t index = std::min<int64_t>(points - 1, frame * points / frames);
+  const int fold = std::min(entry->channels, 2);
+  for (int64_t frame = startFrame; frame < endFrame; frame++) {
+    const int64_t index = span > 0 ? std::min<int64_t>(points - 1, (frame - startFrame) * points / span) : 0;
     for (int c = 0; c < fold; c++) {
-      const float value = entry->data[static_cast<size_t>(frame) * static_cast<size_t>(channels) + static_cast<size_t>(c)];
+      const float value = entry->data[static_cast<size_t>(frame) * static_cast<size_t>(entry->channels) + static_cast<size_t>(c)];
       const size_t bucket = static_cast<size_t>(index) * 2;
-      if (value < values[bucket]) values[bucket] = value;
-      if (value > values[bucket + 1]) values[bucket + 1] = value;
+      if (value < out.values[bucket]) out.values[bucket] = value;
+      if (value > out.values[bucket + 1]) out.values[bucket + 1] = value;
     }
   }
   for (int i = 0; i < points; i++) {
     // A bucket no sample landed in stays a flat line rather than a sentinel.
-    if (values[static_cast<size_t>(i) * 2] > values[static_cast<size_t>(i) * 2 + 1]) {
-      values[static_cast<size_t>(i) * 2] = 0.0f;
-      values[static_cast<size_t>(i) * 2 + 1] = 0.0f;
+    if (out.values[static_cast<size_t>(i) * 2] > out.values[static_cast<size_t>(i) * 2 + 1]) {
+      out.values[static_cast<size_t>(i) * 2] = 0.0f;
+      out.values[static_cast<size_t>(i) * 2 + 1] = 0.0f;
     }
   }
   return true;

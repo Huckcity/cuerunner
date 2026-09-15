@@ -48,6 +48,39 @@ function writeFloatWav(path: string, channels: number, sampleRate: number, frame
   writeFileSync(path, buffer)
 }
 
+/** A WAV of one shape: the sample at each frame comes from `sampleAt`, so a test can put
+ *  a tone in one second of silence and ask the engine about that second. */
+function writeFloatWavShape(
+  path: string,
+  channels: number,
+  sampleRate: number,
+  frames: number,
+  sampleAt: (frame: number) => number
+): void {
+  const dataBytes = frames * channels * 4
+  const buffer = Buffer.alloc(44 + dataBytes)
+  buffer.write('RIFF', 0)
+  buffer.writeUInt32LE(36 + dataBytes, 4)
+  buffer.write('WAVE', 8)
+  buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(3, 20)
+  buffer.writeUInt16LE(channels, 22)
+  buffer.writeUInt32LE(sampleRate, 24)
+  buffer.writeUInt32LE(sampleRate * channels * 4, 28)
+  buffer.writeUInt16LE(channels * 4, 32)
+  buffer.writeUInt16LE(32, 34)
+  buffer.write('data', 36)
+  buffer.writeUInt32LE(dataBytes, 40)
+  for (let frame = 0; frame < frames; frame++) {
+    const value = sampleAt(frame)
+    for (let channel = 0; channel < channels; channel++) {
+      buffer.writeFloatLE(value, 44 + (frame * channels + channel) * 4)
+    }
+  }
+  writeFileSync(path, buffer)
+}
+
 /** Polls a condition the engine reports; hangs are the engine's fault, not a sleep guess. */
 async function waitUntil<T>(describe: string, probe: () => Promise<T | null>, timeoutMs = 3000): Promise<T> {
   const deadline = Date.now() + timeoutMs
@@ -207,6 +240,47 @@ describe('audioEngine client (against the real engine)', () => {
     const clamped = await audioEngine.waveform(workFilePath, 100000)
     expect(clamped.buckets).toBe(4096)
     expect(clamped.truncated).toBe(true)
+  })
+
+  it('answers for a window of a file rather than for the whole of it', async () => {
+    // Four seconds: silence, then a second of tone, then silence. Asking about the second
+    // second has to describe that second — a region the engine ignored would come back as
+    // the whole file, and the panel would draw the quiet parts where the loud one is.
+    const shaped = join(workDir, 'four-seconds.wav')
+    const sampleRate = 48000
+    writeFloatWavShape(shaped, 2, sampleRate, 4 * sampleRate, frame => {
+      const second = Math.floor(frame / sampleRate)
+      return second === 1 ? 0.5 : 0
+    })
+
+    const tone = await audioEngine.waveform(shaped, 64, { startMs: 1000, endMs: 2000 })
+    expect(tone.startMs).toBe(1000)
+    expect(tone.endMs).toBe(2000)
+    expect(tone.durationMs).toBeCloseTo(4000, 0)
+    expect(tone.sampled).toBe(false)
+    expect(Math.max(...tone.values)).toBeCloseTo(0.5, 2)
+
+    const silence = await audioEngine.waveform(shaped, 64, { startMs: 0, endMs: 1000 })
+    expect(Math.max(...silence.values.map(Math.abs))).toBeLessThan(0.01)
+  })
+
+  it('reports an onset inside a window as a time in the file', async () => {
+    // The attack is at one second. The detector counts from the first sample it is fed,
+    // so an answer that was not put back on the file's own clock would land at the top of
+    // the window instead of at the note.
+    const shaped = join(workDir, 'four-seconds.wav')
+    const sampleRate = 48000
+    writeFloatWavShape(shaped, 2, sampleRate, 4 * sampleRate, frame => {
+      const second = Math.floor(frame / sampleRate)
+      return second === 1 ? Math.sin((2 * Math.PI * 440 * frame) / sampleRate) * 0.6 : 0
+    })
+
+    const onsets = await audioEngine.onsets(shaped, 1, 2000, { startMs: 900, endMs: 2100 })
+    expect(onsets.startMs).toBe(900)
+    expect(onsets.endMs).toBe(2100)
+    expect(onsets.onsetsMs.length).toBeGreaterThan(0)
+    expect(onsets.onsetsMs[0]).toBeGreaterThan(950)
+    expect(onsets.onsetsMs[0]).toBeLessThan(1100)
   })
 
   it('fails loudly, and leaks no child, when the engine executable is missing', async () => {

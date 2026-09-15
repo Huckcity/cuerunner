@@ -29,6 +29,7 @@ import type {
   AudioFadeParam,
   AudioMetadata,
   AudioPanicResult,
+  AudioRegion,
   AudioProbe,
   AudioOnsets,
   AudioProgress,
@@ -318,14 +319,25 @@ export class NativeAudioEngine {
     return result
   }
 
-  onsets(filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets> {
-    return this.request('onsets', { filePath, sensitivity, maxOnsets }) as Promise<AudioOnsets>
+  onsets(
+    filePath: string,
+    sensitivity?: number,
+    maxOnsets?: number,
+    region?: AudioRegion
+  ): Promise<AudioOnsets> {
+    return this.request('onsets', {
+      filePath, sensitivity, maxOnsets, startMs: region?.startMs, endMs: region?.endMs
+    }) as Promise<AudioOnsets>
   }
 
-  waveform(filePath: string, points: number): Promise<AudioWaveform> {
+  waveform(filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform> {
     // The requested point count goes over the wire unchanged: the engine clamps it to
     // its own bound and reports back whether it had to, which is what the caller shows.
-    return this.request('waveform', { filePath, points }, SLOW_VERBS.waveform) as Promise<AudioWaveform>
+    return this.request(
+      'waveform',
+      { filePath, points, startMs: region?.startMs, endMs: region?.endMs },
+      SLOW_VERBS.waveform
+    ) as Promise<AudioWaveform>
   }
 
   private async spawnAndConnect(): Promise<void> {

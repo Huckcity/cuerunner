@@ -38,6 +38,36 @@ constexpr int kAckTimeoutMs = 2000;
 constexpr double kMinOnsetSensitivity = 0.1;
 constexpr double kMaxOnsetSensitivity = 10.0;
 
+/**
+ * The region length above which a waveform envelope is tapped rather than read through.
+ * At this length a bucket is already wider than a pixel of wall time on a full-width
+ * panel, so the transient a tap misses is one that could not have been drawn — and
+ * reading it through instead would cost a pass over the media: 0.4 ms per second of it,
+ * measured, which is eighteen seconds of a twelve-hour file. Below it, every sample is
+ * read: half a second of work at the very most.
+ */
+constexpr int64_t kExactWaveformSeconds = 1500;
+/** The media one tap covers, at most: a window per bucket, whichever is shorter. */
+constexpr int64_t kSampleWindowMs = 1000;
+/** Envelope and onset answers kept per engine: a show's files, with room for a few
+ *  windows inside them. */
+constexpr size_t kMaxAnalysisCacheEntries = 64;
+
+int64_t msFrame(double ms, int sampleRate) {
+  if (!(ms > 0.0) || sampleRate <= 0) return 0;
+  return static_cast<int64_t>(ms * static_cast<double>(sampleRate) / 1000.0 + 0.5);
+}
+
+double frameMs(int64_t frame, int sampleRate) {
+  return sampleRate > 0 && frame > 0 ? static_cast<double>(frame) * 1000.0 / static_cast<double>(sampleRate) : 0.0;
+}
+
+/** Regions are keys: unbounded is one key, a bounded window is its own. */
+bool sameRegion(const RegionQuery& a, const RegionQuery& b) {
+  if (a.bounded != b.bounded) return false;
+  return !a.bounded || (a.startMs == b.startMs && a.endMs == b.endMs);
+}
+
 std::string maResultText(ma_result result) { return std::string(ma_result_description(result)); }
 
 /**
@@ -1260,95 +1290,262 @@ void Engine::restartCapture() {
   }
 }
 
-bool Engine::waveform(const std::string& filePath, int points, WaveformDTO& out, EngineError& error) {
-  bool truncated = false;
+/**
+ * The envelope of a region, in `points` buckets of interleaved min/max.
+ *
+ * Two ways to measure it, and the file's own length chooses: a region short enough to
+ * read through is read sample by sample, and a long one — where a bucket is wider than
+ * a pixel of wall time and a transient inside it could not be drawn anyway — is tapped,
+ * one short window per bucket, reached by seeking. Taps are what make the envelope of a
+ * twelve-hour file cost a quarter of a second instead of eighteen, and the seek table
+ * the MP3 index builds is what makes a tap cheap.
+ *
+ * Results are kept, keyed by the file's stamp and the exact question asked, so the
+ * second look at a file is the first look's answer.
+ */
+bool Engine::waveformCached(const std::string& filePath, int points, const RegionQuery& region,
+                            const FileStamp& stamp, WaveformDTO& out) {
+  std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+  for (WaveformCacheEntry& entry : waveformCache_) {
+    if (entry.filePath != filePath || entry.points != points || !sameRegion(entry.region, region)) continue;
+    if (entry.stamp.bytes != stamp.bytes || entry.stamp.modified != stamp.modified) continue;
+    entry.lastUse = ++analysisCacheClock_;
+    out = entry.result;
+    return true;
+  }
+  return false;
+}
+
+void Engine::cacheWaveform(const std::string& filePath, int points, const RegionQuery& region, const FileStamp& stamp,
+                           const WaveformDTO& result) {
+  std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+  for (auto it = waveformCache_.begin(); it != waveformCache_.end(); ++it) {
+    if (it->filePath == filePath && it->points == points && sameRegion(it->region, region)) {
+      waveformCache_.erase(it);
+      break;
+    }
+  }
+  WaveformCacheEntry entry;
+  entry.filePath = filePath;
+  entry.points = points;
+  entry.region = region;
+  entry.stamp = stamp;
+  entry.result = result;
+  entry.lastUse = ++analysisCacheClock_;
+  waveformCache_.push_back(std::move(entry));
+  while (waveformCache_.size() > kMaxAnalysisCacheEntries) {
+    auto victim = waveformCache_.begin();
+    for (auto it = waveformCache_.begin(); it != waveformCache_.end(); ++it) {
+      if (it->lastUse < victim->lastUse) victim = it;
+    }
+    waveformCache_.erase(victim);
+  }
+}
+
+bool Engine::onsetsCached(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region,
+                          const FileStamp& stamp, OnsetDTO& out) {
+  std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+  for (OnsetCacheEntry& entry : onsetCache_) {
+    if (entry.filePath != filePath || !sameRegion(entry.region, region)) continue;
+    if (entry.sensitivity != sensitivity || entry.maxOnsets != maxOnsets) continue;
+    if (entry.stamp.bytes != stamp.bytes || entry.stamp.modified != stamp.modified) continue;
+    entry.lastUse = ++analysisCacheClock_;
+    out = entry.result;
+    return true;
+  }
+  return false;
+}
+
+void Engine::cacheOnsets(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region,
+                         const FileStamp& stamp, const OnsetDTO& result) {
+  std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+  for (auto it = onsetCache_.begin(); it != onsetCache_.end(); ++it) {
+    if (it->filePath == filePath && it->sensitivity == sensitivity && it->maxOnsets == maxOnsets &&
+        sameRegion(it->region, region)) {
+      onsetCache_.erase(it);
+      break;
+    }
+  }
+  OnsetCacheEntry entry;
+  entry.filePath = filePath;
+  entry.sensitivity = sensitivity;
+  entry.maxOnsets = maxOnsets;
+  entry.region = region;
+  entry.stamp = stamp;
+  entry.result = result;
+  entry.lastUse = ++analysisCacheClock_;
+  onsetCache_.push_back(std::move(entry));
+  while (onsetCache_.size() > kMaxAnalysisCacheEntries) {
+    auto victim = onsetCache_.begin();
+    for (auto it = onsetCache_.begin(); it != onsetCache_.end(); ++it) {
+      if (it->lastUse < victim->lastUse) victim = it;
+    }
+    onsetCache_.erase(victim);
+  }
+}
+
+bool Engine::waveform(const std::string& filePath, int points, const RegionQuery& region, WaveformDTO& out,
+                      EngineError& error) {
   if (points < 1) {
     error = {"invalid", "waveform needs at least one point"};
     return false;
   }
+  bool truncated = false;
   if (points > kMaxWaveformPoints) {
     points = kMaxWaveformPoints;
     truncated = true;
   }
 
-  std::vector<float> values(static_cast<size_t>(points) * 2, 0.0f);
-  for (int i = 0; i < points; i++) {
-    values[static_cast<size_t>(i) * 2] = 1.0e30f;
-    values[static_cast<size_t>(i) * 2 + 1] = -1.0e30f;
+  const FileStamp stamp = fileStampOf(filePath);
+  if (waveformCached(filePath, points, region, stamp, out)) return true;
+
+  WaveformDTO result;
+  result.filePath = filePath;
+  result.buckets = points;
+  result.truncated = truncated;
+
+  // A resident copy is the cheapest and most complete answer there is: it is the whole
+  // file in memory, so the region is scanned in full whatever its length.
+  ResidentEnvelope resident;
+  if (cache_.waveformFromResident(filePath, points, region, resident)) {
+    result.values = std::move(resident.values);
+    result.channels = resident.channels;
+    result.sampleRate = resident.sampleRate;
+    result.startMs = frameMs(resident.startFrame, resident.sampleRate);
+    result.endMs = frameMs(resident.endFrame, resident.sampleRate);
+    result.durationMs = frameMs(resident.frames, resident.sampleRate);
+    result.sampled = false;
+    cacheWaveform(filePath, points, region, stamp, result);
+    out = std::move(result);
+    return true;
   }
-  int sampleRate = 0;
-  int channels = 0;
-  int64_t frames = -1;
-  if (cache_.waveformFromResident(filePath, points, values, channels, sampleRate, frames)) {
-    // Served from the decoded copy: no disk pass, no media bytes moving anywhere.
-  } else {
-    std::string openError;
-    std::unique_ptr<Source> source = openSource(filePath, openError);
-    if (source == nullptr) {
-      error = {"decode", openError};
-      return false;
-    }
-    const SourceInfo info = source->info();
-    channels = info.channels;
-    sampleRate = info.sampleRate;
-    frames = info.frames;
-    if (channels <= 0 || sampleRate <= 0) {
-      error = {"decode", "media file reports an invalid format"};
-      return false;
-    }
-    if (frames <= 0) {
-      // The length is not stated: count it once, then scan with the real total so the
-      // buckets line up. Memory stays bounded either way.
-      std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
-      int64_t total = 0;
-      for (;;) {
-        if (analysisCancelled()) return cancelledScan(error);
-        const int64_t got = source->readFrames(chunk.data(), 8192);
-        if (got <= 0) break;
-        total += got;
-      }
-      frames = total;
-      source->seekToFrame(0);
-    }
-    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
-    int64_t consumed = 0;
+
+  std::string openError;
+  SourceError openCode = SourceError::None;
+  std::unique_ptr<Source> source = openSource(filePath, openError, &openCode);
+  if (source == nullptr) {
+    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    return false;
+  }
+  const SourceInfo info = source->info();
+  result.channels = info.channels;
+  result.sampleRate = info.sampleRate;
+  if (result.channels <= 0 || result.sampleRate <= 0) {
+    error = {"decode", "media file reports an invalid format"};
+    return false;
+  }
+  const int sampleRate = result.sampleRate;
+  int64_t frames = info.frames;
+  if (frames <= 0) {
+    // The length is not stated: count it once, then scan with the real total so the
+    // buckets line up. Memory stays bounded either way.
+    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(result.channels));
+    int64_t total = 0;
     for (;;) {
       if (analysisCancelled()) return cancelledScan(error);
       const int64_t got = source->readFrames(chunk.data(), 8192);
       if (got <= 0) break;
-      const int64_t base = consumed;
+      total += got;
+    }
+    frames = total;
+    source->seekToFrame(0);
+  }
+
+  int64_t startFrame = region.bounded ? msFrame(region.startMs, sampleRate) : 0;
+  int64_t endFrame = region.bounded ? msFrame(region.endMs, sampleRate) : frames;
+  if (startFrame < 0) startFrame = 0;
+  if (startFrame > frames) startFrame = frames;
+  if (endFrame < startFrame) endFrame = startFrame;
+  if (endFrame > frames) endFrame = frames;
+
+  result.durationMs = frameMs(frames, sampleRate);
+  result.startMs = frameMs(startFrame, sampleRate);
+  result.endMs = frameMs(endFrame, sampleRate);
+
+  const int64_t span = endFrame - startFrame;
+  const bool longRegion = span > static_cast<int64_t>(sampleRate) * kExactWaveformSeconds;
+  result.sampled = longRegion && info.canSeek;
+
+  result.values.assign(static_cast<size_t>(points) * 2, 0.0f);
+  for (int i = 0; i < points; i++) {
+    result.values[static_cast<size_t>(i) * 2] = 1.0e30f;
+    result.values[static_cast<size_t>(i) * 2 + 1] = -1.0e30f;
+  }
+  const int fold = std::min(result.channels, 2);
+
+  if (!result.sampled) {
+    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(result.channels));
+    if (startFrame > 0 && !source->seekToFrame(startFrame)) {
+      error = {"decode", "media file cannot be positioned"};
+      return false;
+    }
+    int64_t consumed = startFrame;
+    while (consumed < endFrame) {
+      if (analysisCancelled()) return cancelledScan(error);
+      const int64_t want = std::min<int64_t>(8192, endFrame - consumed);
+      const int64_t got = source->readFrames(chunk.data(), want);
+      if (got <= 0) break;
       for (int64_t frame = 0; frame < got; frame++) {
-        const int64_t absolute = base + frame;
-        const int64_t index = frames > 0 ? std::min<int64_t>(points - 1, absolute * points / frames) : 0;
-        for (int c = 0; c < std::min(channels, 2); c++) {
-          const float sample = chunk[frame * channels + c];
-          if (sample < values[static_cast<size_t>(index) * 2]) values[static_cast<size_t>(index) * 2] = sample;
-          if (sample > values[static_cast<size_t>(index) * 2 + 1]) values[static_cast<size_t>(index) * 2 + 1] = sample;
+        const int64_t index = span > 0
+                                  ? std::min<int64_t>(points - 1, (consumed + frame - startFrame) * points / span)
+                                  : 0;
+        for (int c = 0; c < fold; c++) {
+          const float sample =
+              chunk[static_cast<size_t>(frame) * static_cast<size_t>(result.channels) + static_cast<size_t>(c)];
+          const size_t bucket = static_cast<size_t>(index) * 2;
+          if (sample < result.values[bucket]) result.values[bucket] = sample;
+          if (sample > result.values[bucket + 1]) result.values[bucket + 1] = sample;
         }
       }
       consumed += got;
     }
-    frames = consumed;
+  } else {
+    const int64_t bucketFrames = std::max<int64_t>(1, span / points);
+    const int64_t windowFrames = std::max<int64_t>(
+        64, std::min<int64_t>(bucketFrames, static_cast<int64_t>(sampleRate) * kSampleWindowMs / 1000));
+    std::vector<float> chunk(static_cast<size_t>(windowFrames) * static_cast<size_t>(result.channels));
+    for (int i = 0; i < points; i++) {
+      if (analysisCancelled()) return cancelledScan(error);
+      const int64_t bucketStart = startFrame + span * i / points;
+      const int64_t bucketEnd = startFrame + span * (i + 1) / points;
+      const int64_t tap = bucketStart + (bucketEnd - bucketStart) / 2;
+      const int64_t wanted = std::min<int64_t>(windowFrames, endFrame - tap);
+      if (wanted <= 0 || !source->seekToFrame(tap)) continue;
+      int64_t got = 0;
+      while (got < wanted) {
+        const int64_t read =
+            source->readFrames(chunk.data() + static_cast<size_t>(got) * static_cast<size_t>(result.channels),
+                               wanted - got);
+        if (read <= 0) break;
+        got += read;
+      }
+      for (int64_t frame = 0; frame < got; frame++) {
+        for (int c = 0; c < fold; c++) {
+          const float sample =
+              chunk[static_cast<size_t>(frame) * static_cast<size_t>(result.channels) + static_cast<size_t>(c)];
+          const size_t bucket = static_cast<size_t>(i) * 2;
+          if (sample < result.values[bucket]) result.values[bucket] = sample;
+          if (sample > result.values[bucket + 1]) result.values[bucket + 1] = sample;
+        }
+      }
+    }
   }
 
   for (int i = 0; i < points; i++) {
-    if (values[static_cast<size_t>(i) * 2] > values[static_cast<size_t>(i) * 2 + 1]) {
-      values[static_cast<size_t>(i) * 2] = 0.0f;
-      values[static_cast<size_t>(i) * 2 + 1] = 0.0f;
+    // A bucket no sample landed in stays a flat line rather than a sentinel.
+    if (result.values[static_cast<size_t>(i) * 2] > result.values[static_cast<size_t>(i) * 2 + 1]) {
+      result.values[static_cast<size_t>(i) * 2] = 0.0f;
+      result.values[static_cast<size_t>(i) * 2 + 1] = 0.0f;
     }
   }
-  out.filePath = filePath;
-  out.buckets = points;
-  out.values = std::move(values);
-  out.sampleRate = sampleRate;
-  out.channels = channels;
-  out.durationMs = frames > 0 ? static_cast<double>(frames) * 1000.0 / static_cast<double>(sampleRate) : 0.0;
-  out.truncated = truncated;
+
+  cacheWaveform(filePath, points, region, stamp, result);
+  out = std::move(result);
   return true;
 }
 
-bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnsets, OnsetDTO& out,
-                    EngineError& error) {
+bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region,
+                    OnsetDTO& out, EngineError& error) {
   if (!std::isfinite(sensitivity)) {
     error = {"invalid", "sensitivity must be a finite number"};
     return false;
@@ -1362,9 +1559,17 @@ bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnse
     truncated = true;
   }
 
+  const FileStamp stamp = fileStampOf(filePath);
+  if (onsetsCached(filePath, sensitivity, maxOnsets, region, stamp, out)) return true;
+
+  OnsetDTO result;
+  result.filePath = filePath;
+
   int sampleRate = 0;
   int channels = 0;
   int64_t frames = -1;
+  int64_t startFrame = 0;
+  int64_t endFrame = -1;  // to the end of the file
   std::vector<double> onsetsMs;
 
   // A file the show has already decoded is scanned straight out of the cache: no disk
@@ -1386,10 +1591,17 @@ bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnse
     channels = resident->channels;
     sampleRate = resident->sampleRate;
     frames = resident->frames;
+    startFrame = region.bounded ? msFrame(region.startMs, sampleRate) : 0;
+    endFrame = region.bounded ? msFrame(region.endMs, sampleRate) : frames;
+    if (startFrame < 0) startFrame = 0;
+    if (startFrame > frames) startFrame = frames;
+    if (endFrame > frames) endFrame = frames;
+    if (endFrame < startFrame) endFrame = startFrame;
     OnsetDetector detector(sampleRate, sensitivity, maxOnsets);
     // One call: the samples are already in memory, so hitting the cap only stops the
     // analysis early, not any reading.
-    detector.feed(resident->data.data(), frames, channels);
+    detector.feed(resident->data.data() + static_cast<size_t>(startFrame) * static_cast<size_t>(channels),
+                  endFrame - startFrame, channels);
     detector.finish();
     onsetsMs = detector.onsetsMs();
     truncated = truncated || detector.capped();
@@ -1409,40 +1621,58 @@ bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnse
       error = {"decode", "media file reports an invalid format"};
       return false;
     }
-    if (frames <= 0) {
-      // The length is not stated: count it once, then scan from the start. The scan
-      // itself only ever holds one analysis frame, so this is bounded either way.
-      std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
-      int64_t total = 0;
-      for (;;) {
-        if (analysisCancelled()) return cancelledScan(error);
-        const int64_t got = source->readFrames(chunk.data(), 8192);
-        if (got <= 0) break;
-        total += got;
-      }
-      frames = total;
-      source->seekToFrame(0);
+    startFrame = region.bounded ? msFrame(region.startMs, sampleRate) : 0;
+    if (startFrame < 0) startFrame = 0;
+    if (frames > 0) {
+      if (startFrame > frames) startFrame = frames;
+      endFrame = region.bounded ? std::min(msFrame(region.endMs, sampleRate), frames) : -1;
+    } else if (region.bounded) {
+      endFrame = msFrame(region.endMs, sampleRate);
+    }
+    // A window that ends before it starts is an empty window, not one that runs to the
+    // end of the file: `-1` stays what it is, which is the whole file from here on.
+    if (region.bounded && endFrame >= 0 && endFrame < startFrame) endFrame = startFrame;
+    if (startFrame > 0 && !source->seekToFrame(startFrame)) {
+      error = {"decode", "media file cannot be positioned"};
+      return false;
     }
     OnsetDetector detector(sampleRate, sensitivity, maxOnsets);
     std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
+    int64_t consumed = startFrame;
     for (;;) {
       if (analysisCancelled()) return cancelledScan(error);
-      const int64_t got = source->readFrames(chunk.data(), 8192);
+      int64_t want = 8192;
+      if (endFrame >= 0) {
+        want = std::min<int64_t>(want, endFrame - consumed);
+        if (want <= 0) break;
+      }
+      const int64_t got = source->readFrames(chunk.data(), want);
       if (got <= 0) break;
       // False means the cap was reached: the rest of the file is not read at all.
       if (!detector.feed(chunk.data(), got, channels)) break;
+      consumed += got;
     }
     detector.finish();
     onsetsMs = detector.onsetsMs();
     truncated = truncated || detector.capped();
   }
 
-  out.filePath = filePath;
-  out.onsetsMs = std::move(onsetsMs);
-  out.durationMs = frames > 0 ? static_cast<double>(frames) * 1000.0 / static_cast<double>(sampleRate) : 0.0;
-  out.sampleRate = sampleRate;
-  out.channels = channels;
-  out.truncated = truncated;
+  // The detector counts from the first sample it was fed, and a windowed scan starts
+  // mid-file: every time it reports is that far into the file again.
+  const double startMs = frameMs(startFrame, sampleRate);
+  if (startMs > 0.0) {
+    for (double& onset : onsetsMs) onset += startMs;
+  }
+
+  result.onsetsMs = std::move(onsetsMs);
+  result.durationMs = frameMs(frames, sampleRate);
+  result.sampleRate = sampleRate;
+  result.channels = channels;
+  result.truncated = truncated;
+  result.startMs = startMs;
+  result.endMs = endFrame >= 0 ? frameMs(endFrame, sampleRate) : result.durationMs;
+  cacheOnsets(filePath, sensitivity, maxOnsets, region, stamp, result);
+  out = std::move(result);
   return true;
 }
 

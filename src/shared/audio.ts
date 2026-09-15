@@ -460,11 +460,23 @@ export interface AudioWaveform {
   filePath: string
   buckets: number
   values: number[]
+  /** The file's whole length, whatever part of it these buckets cover. */
   durationMs: number
   sampleRate: number
   channels: number
   /** True when the requested point count was clamped to the engine's limit. */
   truncated: boolean
+  /** The part of the file the buckets cover, in ms from its start. */
+  startMs: number
+  endMs: number
+  /**
+   * True when the buckets were measured from taps rather than every sample — what a
+   * region longer than about twenty-five minutes gets, so that drawing it costs a seek
+   * per bucket instead of a pass over the media. A sampled envelope is only ever shown
+   * where one bucket is more than a pixel of wall time, which is where a transient
+   * inside it could not have been drawn anyway.
+   */
+  sampled: boolean
 }
 
 /**
@@ -479,11 +491,24 @@ export interface AudioWaveform {
 export interface AudioOnsets {
   filePath: string
   onsetsMs: number[]
+  /** The file's whole length, whatever part of it was analysed. */
   durationMs: number
   sampleRate: number
   channels: number
   /** True when the cap on returned onsets was reached and the scan stopped early. */
   truncated: boolean
+  /** The part of the file that was analysed, in ms from its start. */
+  startMs: number
+  endMs: number
+}
+
+/**
+ * A window into a file, in ms from its start. Both ends together, because half a window
+ * is not one: a request with no region is the whole file.
+ */
+export interface AudioRegion {
+  startMs: number
+  endMs: number
 }
 
 /**
@@ -557,13 +582,21 @@ export interface AudioEngineBridge {
   devices(): Promise<AudioDeviceInfo[]>
   /** Apply device options. Rejects (with the reason) when the request cannot be honoured. */
   configure(options: DeviceOptions): Promise<AudioEngineInfo>
-  waveform(filePath: string, points: number): Promise<AudioWaveform>
   /**
-   * Where the notes and hits begin, for placing slice boundaries. `sensitivity` 1 is the
-   * default, higher is stricter — fewer onsets, for a file whose noise floor keeps
-   * crossing the threshold — and `maxOnsets` caps the reply.
+   * The peak envelope of a region of a file, in `points` buckets of interleaved
+   * min/max. No region is the whole file. A region long enough that one of its buckets
+   * is wider than a pixel of wall time comes back `sampled` — measured from taps rather
+   * than every sample — and a shorter one is read in full.
    */
-  onsets(filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets>
+  waveform(filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform>
+  /**
+   * Where the notes and hits begin in a region of a file, for placing slice boundaries.
+   * No region is the whole file, which on a long one is a scan of it: ask for the part
+   * that is on screen. `sensitivity` 1 is the default, higher is stricter — fewer
+   * onsets, for a file whose noise floor keeps crossing the threshold — and `maxOnsets`
+   * caps the reply.
+   */
+  onsets(filePath: string, sensitivity?: number, maxOnsets?: number, region?: AudioRegion): Promise<AudioOnsets>
   /** Subscribe to engine events. Returns the unsubscribe function. */
   onEvents(callback: (events: AudioEngineEvent[]) => void): () => void
   /** File dialog for choosing a cue's media. */
@@ -631,8 +664,14 @@ export interface AudioOnsetsPayload {
   /** 1 is the default; higher is stricter, lower finds more. */
   sensitivity?: number
   maxOnsets?: number
+  /** A window into the file; absent means the whole file. */
+  startMs?: number
+  endMs?: number
 }
 export interface AudioWaveformPayload {
   filePath: string
   points: number
+  /** A window into the file; absent means the whole file. */
+  startMs?: number
+  endMs?: number
 }

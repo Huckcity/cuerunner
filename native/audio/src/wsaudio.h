@@ -28,6 +28,17 @@ constexpr int kMaxWaveformPoints = 4096;
 constexpr int kMaxOnsets = 20000;
 
 /**
+ * The part of a file a whole-file read is asked about. Unbounded is the whole file; a
+ * bounded query is a window into it, which is what a zoomed panel asks for and what
+ * keeps a long file's reads proportional to what is on screen rather than to its length.
+ */
+struct RegionQuery {
+  bool bounded = false;
+  double startMs = 0.0;
+  double endMs = 0.0;
+};
+
+/**
  * A scan's answer: where notes or hits begin in a media file.
  *
  * A time is the middle of the analysis frame that caught the attack — an onset is the
@@ -42,6 +53,10 @@ struct OnsetDTO {
   int sampleRate = 0;
   int channels = 0;
   bool truncated = false;  // the scan hit the cap and stopped early
+  // The part of the file this answer covers, in ms from its start: the whole file
+  // unless the request named a region.
+  double startMs = 0.0;
+  double endMs = 0.0;
 };
 
 constexpr int kMaxOutputFrames = 4096;

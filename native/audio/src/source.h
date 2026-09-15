@@ -32,6 +32,18 @@ struct SourceInfo {
   bool canSeek = false;
 };
 
+/**
+ * A file's identity to a cache that outlives one open: its size and modification time.
+ * Two reads of the same path with the same stamp are the same media; a file edited in
+ * place between them is not, however equal its length.
+ */
+struct FileStamp {
+  int64_t bytes = 0;
+  int64_t modified = 0;
+};
+
+FileStamp fileStampOf(const std::string& path);
+
 class Source {
  public:
   virtual ~Source() = default;

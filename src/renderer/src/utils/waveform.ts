@@ -6,6 +6,15 @@
 export interface WaveformPeaks {
   values: ArrayLike<number>
   buckets: number
+  /**
+   * The part of the file these buckets cover, as fractions of it. Absent is the whole
+   * file. An envelope of a region is drawn only where it covers: stretched across the
+   * file it would be the panel drawing peaks the engine never measured.
+   */
+  from?: number
+  to?: number
+  /** True when the buckets came from taps rather than every sample. */
+  sampled?: boolean
 }
 
 /**
@@ -140,15 +149,27 @@ export function drawWaveform(
   const regionTo = viewX(layout.endFraction, view, width)
   const yMid = height / 2
 
+  // Where a file fraction falls among these buckets: the envelope's own window, which is
+  // the whole file unless the panel asked for a region.
+  const envelopeFrom = peaks.from ?? 0
+  const envelopeTo = peaks.to ?? 1
+  const envelopeSpan = Math.max(Number.EPSILON, envelopeTo - envelopeFrom)
+  const bucketAt = (fraction: number): number => ((fraction - envelopeFrom) / envelopeSpan) * buckets
+
   for (let x = 0; x < width; x++) {
     // The column's own slice of the file, read through the window: what one column is
     // worth in buckets is the zoom, so a zoomed-in panel reads a few buckets closely
     // instead of many of them coarsely.
-    const from = Math.min(buckets - 1, Math.floor((view.start + (x / width) * viewSpan) * buckets))
-    const to = Math.max(from + 1, Math.ceil((view.start + ((x + 1) / width) * viewSpan) * buckets))
+    const columnFrom = view.start + (x / width) * viewSpan
+    const columnTo = view.start + ((x + 1) / width) * viewSpan
+    // A column the envelope does not reach is left blank rather than filled from the
+    // edge bucket: it is a part of the file nothing has measured yet.
+    if (columnTo <= envelopeFrom || columnFrom >= envelopeTo) continue
+    const from = Math.max(0, Math.min(buckets - 1, Math.floor(bucketAt(columnFrom))))
+    const to = Math.max(from + 1, Math.min(buckets, Math.ceil(bucketAt(columnTo))))
     let min = 0
     let max = 0
-    for (let bucket = Math.max(0, from); bucket < to && bucket < buckets; bucket++) {
+    for (let bucket = from; bucket < to; bucket++) {
       const low = values[bucket * 2]
       const high = values[bucket * 2 + 1]
       if (low < min) min = low

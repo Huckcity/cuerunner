@@ -121,10 +121,21 @@ struct WaveformDTO {
   std::string filePath;
   int buckets = 0;
   std::vector<float> values;  // interleaved min/max per bucket
-  double durationMs = 0.0;
+  double durationMs = 0.0;     // the file's whole length, whatever the region
   int sampleRate = 0;
   int channels = 0;
   bool truncated = false;
+  // The part of the file these buckets cover, in ms from its start: the whole file
+  // unless the request named a region.
+  double startMs = 0.0;
+  double endMs = 0.0;
+  /**
+   * True when the buckets were measured from taps rather than every sample — what a
+   * long region gets, so that drawing it costs a seek per bucket instead of a pass over
+   * the media. A sampled envelope is only ever shown where one bucket is more than a
+   * pixel of wall time, which is where a transient inside it could not be drawn anyway.
+   */
+  bool sampled = false;
 };
 
 struct InfoDTO {
@@ -232,7 +243,8 @@ class Engine {
   InfoDTO info() const;
   bool devices(std::vector<DeviceDTO>& out, EngineError& error) const;
   bool configureDevice(const DeviceRequest& request, EngineError& error);
-  bool waveform(const std::string& filePath, int points, WaveformDTO& out, EngineError& error);
+  bool waveform(const std::string& filePath, int points, const RegionQuery& region, WaveformDTO& out,
+                EngineError& error);
   /**
    * Where notes or hits begin in a media file. `sensitivity` scales the adaptive
    * threshold — 1.0 is the default, higher is stricter and finds fewer onsets — and
@@ -241,7 +253,8 @@ class Engine {
    * analysis frame that caught its attack, which is the closest a 1024-sample window
    * gets to the instant of the hit.
    */
-  bool onsets(const std::string& filePath, double sensitivity, int maxOnsets, OnsetDTO& out, EngineError& error);
+  bool onsets(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region, OnsetDTO& out,
+              EngineError& error);
   int64_t scheduleHorizonMs() const { return options_.scheduleHorizonMs; }
   const EngineOptions& options() const { return options_; }
 
@@ -311,6 +324,42 @@ class Engine {
   std::condition_variable ackCv_;
   std::unordered_map<uint64_t, AckResult> acks_;
   std::atomic<uint64_t> nextAckId_{0};
+
+  /**
+   * Envelope and onset answers, kept per exact question asked and invalidated by the
+   * file's own stamp. Reading a long file to answer one of these is the expensive half
+   * of the panel, and a selection that comes back to a file — or an operator zooming
+   * back out — asks the same question again.
+   */
+  struct WaveformCacheEntry {
+    std::string filePath;
+    int points = 0;
+    RegionQuery region;
+    FileStamp stamp;
+    WaveformDTO result;
+    uint64_t lastUse = 0;
+  };
+  struct OnsetCacheEntry {
+    std::string filePath;
+    double sensitivity = 1.0;
+    int maxOnsets = 0;
+    RegionQuery region;
+    FileStamp stamp;
+    OnsetDTO result;
+    uint64_t lastUse = 0;
+  };
+  bool waveformCached(const std::string& filePath, int points, const RegionQuery& region, const FileStamp& stamp,
+                      WaveformDTO& out);
+  void cacheWaveform(const std::string& filePath, int points, const RegionQuery& region, const FileStamp& stamp,
+                     const WaveformDTO& result);
+  bool onsetsCached(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region,
+                    const FileStamp& stamp, OnsetDTO& out);
+  void cacheOnsets(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region,
+                   const FileStamp& stamp, const OnsetDTO& result);
+  std::mutex analysisCacheMutex_;
+  std::vector<WaveformCacheEntry> waveformCache_;
+  std::vector<OnsetCacheEntry> onsetCache_;
+  uint64_t analysisCacheClock_ = 0;
 
   struct PreparedFile {
     std::string path;

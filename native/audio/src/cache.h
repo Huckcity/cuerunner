@@ -6,6 +6,7 @@
 #pragma once
 
 #include "source.h"
+#include "wsaudio.h"
 
 #include <atomic>
 #include <cstdint>
@@ -16,6 +17,20 @@
 #include <vector>
 
 namespace ws {
+
+/**
+ * The envelope of a region of a resident entry: `points` buckets of interleaved min/max
+ * covering [startFrame, endFrame) of the file, with `frames` the file's whole length
+ * whatever the region. The region is resolved against the entry's own frame count.
+ */
+struct ResidentEnvelope {
+  std::vector<float> values;
+  int channels = 0;
+  int sampleRate = 0;
+  int64_t frames = -1;
+  int64_t startFrame = 0;
+  int64_t endFrame = 0;
+};
 
 struct CacheStats {
   int entries = 0;
@@ -68,8 +83,7 @@ class DecodedCache {
   // Computes min/max buckets from a resident entry while holding the cache lock, so a
   // concurrent eviction cannot free the samples mid-scan. Returns false when the file
   // is not resident (the caller then streams the file).
-  bool waveformFromResident(const std::string& path, int points, std::vector<float>& values, int& channels,
-                            int& sampleRate, int64_t& frames);
+  bool waveformFromResident(const std::string& path, int points, const RegionQuery& region, ResidentEnvelope& out);
 
   CacheStats stats() const;
 
