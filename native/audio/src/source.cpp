@@ -51,10 +51,22 @@ bool readMagic(const std::string& path, unsigned char* out, size_t count) {
   return got == count;
 }
 
+/** The sixteen bytes a Sony Wave64 file starts with: the "riff" GUID, sizes in 64 bits. */
+constexpr unsigned char kWave64RiffGuid[16] = {0x72, 0x69, 0x66, 0x66, 0x2E, 0x91, 0xCF, 0x11,
+                                               0xA5, 0xD6, 0x28, 0xDB, 0x04, 0xC1, 0x00, 0x00};
+
 Format sniffFormat(const std::string& path) {
-  unsigned char magic[12] = {};
+  unsigned char magic[16] = {};
   if (!readMagic(path, magic, sizeof(magic))) return Format::Unknown;
-  if (std::memcmp(magic, "RIFF", 4) == 0 && std::memcmp(magic + 8, "WAVE", 4) == 0) return Format::Wav;
+  // WAV under either of the headers a long file needs: RIFF states its sizes in 32 bits,
+  // so anything past four gigabytes is written as RF64 (EBU Tech 3306 — what a converter
+  // produces for a twelve-hour file) or as a Wave64, which is the same idea under Sony's
+  // GUID header. dr_wav reads all three; this only has to let them through.
+  if ((std::memcmp(magic, "RIFF", 4) == 0 || std::memcmp(magic, "RF64", 4) == 0) &&
+      std::memcmp(magic + 8, "WAVE", 4) == 0) {
+    return Format::Wav;
+  }
+  if (std::memcmp(magic, kWave64RiffGuid, sizeof(kWave64RiffGuid)) == 0) return Format::Wav;
   if (std::memcmp(magic, "fLaC", 4) == 0) return Format::Flac;
   if (std::memcmp(magic, "OggS", 4) == 0) return Format::Ogg;
   if (std::memcmp(magic, "FORM", 4) == 0 &&

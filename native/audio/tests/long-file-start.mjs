@@ -25,7 +25,7 @@
  */
 import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, ftruncateSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -251,6 +251,101 @@ try {
   check(`the second region makes sound promptly (${secondSound === null ? 'never' : `${secondSound} ms`})`,
     secondSound !== null && secondSound < SOUND_DEADLINE_MS, `${secondSound} ms`)
   await client.request('stop', { cueId: 'storm', fadeMs: 0 }).promise
+
+  // A twelve-hour WAV cannot be a RIFF file: its sizes are 32-bit, so the same recording
+  // arrives as RF64 (EBU Tech 3306) or under Sony's Wave64 GUID. Both are WAV to dr_wav;
+  // the sniffer is what has to let them through, and a region deep inside one has to
+  // start as promptly as the MP3's does. The fixture is sparse: a header, one thirty-
+  // second region six hours in, and holes everywhere else.
+  console.log('\nthe same twelve hours as a WAV (RF64, past what a RIFF header can state)')
+  const WAV_HOURS = 12
+  const WAV_FRAMES = WAV_HOURS * 3600 * SAMPLE_RATE
+  const WAV_CHANNELS = 2
+  const wavBytes = WAV_FRAMES * WAV_CHANNELS * 2
+  const wavPath = join(workDir, 'rain-rf64.wav')
+  {
+    const header = Buffer.alloc(80)
+    header.write('RF64', 0)
+    header.writeUInt32LE(0xffffffff, 4)
+    header.write('WAVE', 8)
+    header.write('ds64', 12)
+    header.writeUInt32LE(28, 16)
+    header.writeBigUInt64LE(BigInt(72 + wavBytes), 20)
+    header.writeBigUInt64LE(BigInt(wavBytes), 28)
+    header.writeBigUInt64LE(BigInt(WAV_FRAMES), 36)
+    header.writeUInt32LE(0, 44)
+    header.write('fmt ', 48)
+    header.writeUInt32LE(16, 52)
+    header.writeUInt16LE(1, 56)
+    header.writeUInt16LE(WAV_CHANNELS, 58)
+    header.writeUInt32LE(SAMPLE_RATE, 60)
+    header.writeUInt32LE(SAMPLE_RATE * WAV_CHANNELS * 2, 64)
+    header.writeUInt16LE(WAV_CHANNELS * 2, 68)
+    header.writeUInt16LE(16, 70)
+    header.write('data', 72)
+    header.writeUInt32LE(0xffffffff, 76)
+    writeFileSync(wavPath, header)
+    const wavFd = openSync(wavPath, 'r+')
+    const toneFrames = REGION_SECONDS * SAMPLE_RATE
+    const tone = Buffer.alloc(toneFrames * WAV_CHANNELS * 2)
+    for (let frame = 0; frame < toneFrames; frame++) {
+      const value = Math.round(Math.sin((2 * Math.PI * 300 * frame) / SAMPLE_RATE) * 12000)
+      tone.writeInt16LE(value, frame * WAV_CHANNELS * 2)
+      tone.writeInt16LE(value, frame * WAV_CHANNELS * 2 + 2)
+    }
+    writeSync(wavFd, tone, 0, tone.length, 80 + DEEP_START_SECONDS * SAMPLE_RATE * WAV_CHANNELS * 2)
+    ftruncateSync(wavFd, 80 + wavBytes)
+    closeSync(wavFd)
+  }
+  let wavPrepared = null
+  let wavRefusal = null
+  try {
+    wavPrepared = await client.request('prepare', { cueId: 'rain', filePath: wavPath }).promise
+  } catch (error) {
+    wavRefusal = error.message
+  }
+  check('the WAV states its twelve hours',
+    wavPrepared !== null && Math.abs(wavPrepared.durationMs - WAV_HOURS * 3600000) < 2000,
+    wavRefusal ?? `${wavPrepared?.durationMs} ms`)
+  const wavMarker = statSync(capturePath).size
+  const wavStart = client.request('start', { cueId: 'rain', whenMs: 0, options: options(DEEP_START_SECONDS) })
+  let wavStartError = null
+  try {
+    await wavStart.promise
+  } catch (error) {
+    wavStartError = error.message
+  }
+  const wavSound = wavStartError === null ? await firstSound(capturePath, wavMarker, wavStart.sent, 6000) : null
+  check(`the WAV region makes sound promptly (${wavSound === null ? 'never' : `${wavSound} ms`})`,
+    wavStartError === null && wavSound !== null && wavSound < SOUND_DEADLINE_MS, wavStartError ?? `${wavSound} ms`)
+  await client.request('stop', { cueId: 'rain', fadeMs: 0 }).promise
+
+  // Sony's Wave64 is the same container under a GUID header — the one a converter writes
+  // for .w64 — and the fixture here is a real one, a second of tone at 8 kHz.
+  console.log('\na Wave64, from the other converter')
+  const w64 = join(repoRoot, 'native', 'audio', 'tests', 'fixtures', 'tone.w64')
+  let w64Prepared = null
+  let w64Refusal = null
+  try {
+    w64Prepared = await client.request('prepare', { cueId: 'w64', filePath: w64 }).promise
+  } catch (error) {
+    w64Refusal = error.message
+  }
+  check('a Wave64 is read as wav',
+    w64Prepared !== null && w64Prepared.format === 'wav' && w64Prepared.sampleRate === 8000,
+    w64Refusal ?? JSON.stringify(w64Prepared))
+  const w64Marker = statSync(capturePath).size
+  const w64Start = client.request('start', { cueId: 'w64', whenMs: 0, options: options(0) })
+  let w64StartError = null
+  try {
+    await w64Start.promise
+  } catch (error) {
+    w64StartError = error.message
+  }
+  const w64Sound = w64StartError === null ? await firstSound(capturePath, w64Marker, w64Start.sent, 4000) : null
+  check(`the Wave64 plays (${w64Sound === null ? 'never' : `${w64Sound} ms`})`,
+    w64StartError === null && w64Sound !== null && w64Sound < SOUND_DEADLINE_MS, w64StartError ?? `${w64Sound} ms`)
+  await client.request('stop', { cueId: 'w64', fadeMs: 0 }).promise
 
   console.log('\nthe engine is stopped while it is reading the file end to end')
   let scanFinished = false
