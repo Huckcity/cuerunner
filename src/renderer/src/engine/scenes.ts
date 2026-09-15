@@ -44,8 +44,13 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
   const changes = sceneChanges(state.showSettings, scene, state.deskState)
 
   const failures: string[] = []
+  const refused: string[] = []
   const deskState = { ...state.deskState }
   for (const change of changes) {
+    if (change.message === null) {
+      refused.push(`${change.label}: ${change.error}`)
+      continue
+    }
     if (await sendDeskMessage(change.message)) {
       deskState[change.channelId] = change.live
     } else {
@@ -66,6 +71,15 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
 
   const log = useStore.getState().appendLog
   log([{ level: 'info', label, message: summary }])
+  if (refused.length > 0) {
+    // Not a connection that failed but a desk that does not have this fader: the operator
+    // has to change the show, not the cable.
+    log([{
+      level: 'error',
+      label,
+      message: `Cannot be told to this desk — ${refused.join('; ')}`
+    }])
+  }
   if (failures.length > 0) {
     // The state that was remembered above is only the state that got there, so the next
     // recall will try again for the rest.
@@ -92,7 +106,7 @@ async function sendDeskMessage(message: DeskMessage): Promise<boolean> {
     if (message.kind === 'midi') {
       const result = await window.winslab.midi.send({
         portName: message.portName,
-        messages: [message.message]
+        messages: message.messages
       })
       return result.ok
     }
@@ -100,7 +114,7 @@ async function sendDeskMessage(message: DeskMessage): Promise<boolean> {
       const result = await window.winslab.midi.sendTcp({
         host: message.host,
         port: message.port,
-        messages: [message.message]
+        messages: message.messages
       })
       return result.ok
     }

@@ -164,9 +164,16 @@ export interface RfPack {
 // groups whose state actually changes are sent, so a scene recall is a handful of
 // messages rather than a slam of every fader on the desk.
 
+/**
+ * One DCA's open or close, ready for the transport that carries it.
+ *
+ * A MIDI one is a *sequence* rather than a message: what a desk takes as "open this fader"
+ * is the desk's own arrangement, and on an SQ it is four NRPN controllers where the app's
+ * generic convention sends one note.
+ */
 export type DeskMessage =
-  | { kind: 'midi'; portName: string; message: MidiMessageKind }
-  | { kind: 'midi-tcp'; host: string; port: number; message: MidiMessageKind }
+  | { kind: 'midi'; portName: string; messages: MidiMessageKind[] }
+  | { kind: 'midi-tcp'; host: string; port: number; messages: MidiMessageKind[] }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
 
 // ── The desk: how the show reaches it, and what it is told ──────────────────
@@ -179,15 +186,36 @@ export type DeskMessage =
 export type DeskKind = 'none' | 'midi' | 'osc' | 'midi-tcp'
 
 /**
+ * What the desk takes as an open and as a close.
+ *
+ * `note` is the app's own arrangement — a note on to open, a note off to close — and what
+ * a desk nobody has asked about takes. `sq` and `avantis` are the two ranges whose
+ * documents have been read: an SQ mutes with NRPN on page 02 and has eight DCAs, an
+ * Avantis mutes with a note-on whose velocity says which half of the pair it is, on the
+ * channel four above its own.
+ */
+export type DeskProfile = 'note' | 'sq' | 'avantis'
+
+/**
  * Where the desk is and how it is spoken to. The address of the desk itself is the one
  * thing the app cannot know, so it is a field rather than a guess; everything else has a
  * default that works.
  */
 export interface DeskSettings {
   kind: DeskKind
+  /**
+   * What the desk takes as an open and a close. A workspace saved before profiles existed
+   * has none, and the migration fills in `note` — which is what that show was already
+   * sending, so an update moves nothing on the desk.
+   */
+  profile: DeskProfile
   /** MIDI output port, when the show drives the desk over MIDI. */
   midiPort: string
-  /** MIDI channel its DCAs are sent on. */
+  /**
+   * The desk's MIDI channel, 1–16 as the desk's own setup screen shows it. Where the DCAs
+   * are addressed is derived from it, because that is the desk's rule and not the
+   * operator's: an Avantis answers for its DCAs four channels above its own.
+   */
   midiChannel: number
   /** Desk address for the kinds that reach it over the network. */
   host: string
@@ -211,7 +239,10 @@ export interface Dca {
   id: string
   /** What the show calls it: "DCA 2", or "Chorus" when it is a group's fader. */
   label: string
-  /** The note to send instead of the one its number derives. Null is the derived one. */
+  /**
+   * What this DCA is addressed by on the desk, instead of the number its place derives:
+   * the note on a desk that takes notes, the NRPN parameter on an SQ. Null is derived.
+   */
   note: number | null
   /** The address to send to instead of the one its number derives. Null is derived. */
   address: string | null
@@ -524,6 +555,10 @@ export const ALL_CLOSED_SCENE_ID = 'all-closed'
 export function defaultDeskSettings(): DeskSettings {
   return {
     kind: 'osc',
+    // A desk nobody has described takes the arrangement this app has always sent: one
+    // note, on to open and off to close. Naming the range is how an operator says which
+    // desk is actually in the room.
+    profile: 'note',
     midiPort: '',
     midiChannel: 1,
     host: '127.0.0.1',

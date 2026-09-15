@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { recallScene } from './scenes'
 import { useStore } from '../store'
-import { midiNoteMessages } from '../utils/desk'
+import type { MidiDeskMessage } from '../utils/desk'
 import {
   ALL_CLOSED_SCENE_ID,
   defaultDeskSettings,
@@ -22,7 +22,22 @@ const DESK: DeskSettings = {
   midiPort: 'Yamaha',
   midiChannel: 1
 }
-const noteOf = (index: number) => midiNoteMessages('Yamaha', 1, index + 1)
+/**
+ * What the first DCAs are sent: the note of their own number, on the port and channel the
+ * show is pointed at, in the arrangement a desk nobody has described is sent.
+ */
+const noteOf = (index: number): { mute: MidiDeskMessage; unmute: MidiDeskMessage } => ({
+  unmute: {
+    kind: 'midi',
+    portName: 'Yamaha',
+    messages: [{ kind: 'noteOn', channel: 1, note: index + 1, velocity: 127 }]
+  },
+  mute: {
+    kind: 'midi',
+    portName: 'Yamaha',
+    messages: [{ kind: 'noteOff', channel: 1, note: index + 1, velocity: 0 }]
+  }
+})
 
 /** Two DCAs, one strip each, and the two performers patched to them. */
 function cast(): CastSettings {
@@ -99,11 +114,11 @@ describe('recallScene', () => {
     // DCA 1 carries the live mic: opened. DCA 2's mic is closed: muted. Nothing else.
     expect(midiSend).toHaveBeenCalledWith({
       portName: 'Yamaha',
-      messages: [noteOf(0).unmute.message]
+      messages: noteOf(0).unmute.messages
     })
     expect(midiSend).toHaveBeenCalledWith({
       portName: 'Yamaha',
-      messages: [noteOf(1).mute.message]
+      messages: noteOf(1).mute.messages
     })
     expect(oscSend).not.toHaveBeenCalled()
 
@@ -130,7 +145,7 @@ describe('recallScene', () => {
     await recallScene('s-2')
 
     expect(midiSend).toHaveBeenCalledTimes(1)
-    expect(midiSend.mock.calls[0][0]).toMatchObject({ messages: [noteOf(1).unmute.message] })
+    expect(midiSend.mock.calls[0][0]).toMatchObject({ messages: noteOf(1).unmute.messages })
   })
 
   it('opens the DCAs of an ensemble the scene applies', async () => {
@@ -169,7 +184,7 @@ describe('recallScene', () => {
 
     // Ruth is open in the finale, but her strip rides no fader: only DCA 2 is told.
     expect(midiSend).toHaveBeenCalledTimes(1)
-    expect(midiSend.mock.calls[0][0]).toMatchObject({ messages: [noteOf(1).unmute.message] })
+    expect(midiSend.mock.calls[0][0]).toMatchObject({ messages: noteOf(1).unmute.messages })
   })
 
   it('closes everything the show drives when the all-closed scene is recalled', async () => {
@@ -178,7 +193,7 @@ describe('recallScene', () => {
     await recallScene(ALL_CLOSED_SCENE_ID)
 
     expect(midiSend).toHaveBeenCalledWith(expect.objectContaining({
-      messages: [noteOf(0).mute.message]
+      messages: noteOf(0).mute.messages
     }))
     expect(useStore.getState().deskState).toEqual({ 'dca-1': false, 'dca-2': false })
     // The desk is somewhere: it is on the scene that is always there, not nowhere.
@@ -209,6 +224,51 @@ describe('recallScene', () => {
     expect(useStore.getState().deskState).toEqual({ 'dca-1': true, 'dca-2': true })
     expect(useStore.getState().deskSceneId).toBe('s-1')
     expect(logMessages()).toEqual(['no scene by that id — it may have been deleted (s-deleted)'])
+  })
+
+  it('says which DCA a desk cannot be told about, rather than going quiet', async () => {
+    // Nine strips on an SQ, which has eight DCAs: the ninth has no fader on this desk.
+    // The operator reads which one and why, and the rest of the scene still goes out.
+    const nine: CastSettings = {
+      channels: Array.from({ length: 9 }, (_, index) => ({
+        id: `ch-${index + 1}`,
+        name: `Ch ${index + 1}`,
+        dcaId: `dca-${index + 1}`
+      })),
+      performers: Array.from({ length: 9 }, (_, index) => ({
+        id: `p-${index + 1}`,
+        name: `P${index + 1}`,
+        role: '',
+        notes: '',
+        channelId: `ch-${index + 1}`
+      })),
+      ensembles: [],
+      dcas: Array.from({ length: 9 }, (_, index) => ({
+        id: `dca-${index + 1}`,
+        label: `DCA ${index + 1}`,
+        note: null,
+        address: null
+      }))
+    }
+    seed({}, null, nine, { ...defaultDeskSettings(), kind: 'midi-tcp', host: '10.0.0.5', profile: 'sq' })
+
+    // The show's own scene names one performer, so DCA 1 opens and the rest close.
+    useStore.setState(state => ({
+      showSettings: {
+        ...state.showSettings,
+        scenes: { list: [{ id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' }] }
+      }
+    }))
+
+    const result = await recallScene('s-1')
+
+    expect(result.failures).toEqual([])
+    expect(result.changes.at(-1)).toMatchObject({ label: 'DCA 9', message: null })
+    // Eight DCAs went out, and the DCA that cannot be told is not recorded as having been
+    // told: the next recall tries it again.
+    expect(tcpSend).toHaveBeenCalledTimes(8)
+    expect(Object.keys(useStore.getState().deskState)).toHaveLength(8)
+    expect(logMessages()).toContain('Cannot be told to this desk — DCA 9: an SQ has eight DCAs')
   })
 
   it('does not pretend a DCA was told when the desk did not answer', async () => {

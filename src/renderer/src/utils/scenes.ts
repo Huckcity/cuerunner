@@ -202,7 +202,10 @@ export interface DeskChange {
   label: string
   /** True when the group is being opened, false when it is being closed. */
   live: boolean
-  message: DeskMessage
+  /** What to send, or null when this desk cannot be told about the DCA at all. */
+  message: DeskMessage | null
+  /** Why there is nothing to send, when that is the case. */
+  error?: string
 }
 
 /**
@@ -235,14 +238,27 @@ export function sceneChanges(
     const shouldBeLive = routed.some(performer => live.has(performer.id))
     if (deskState[dca.id] === shouldBeLive) return
 
-    const messages = deskMessages(dca, index, show.desk)
-    if (messages === null) return
+    const send = deskMessages(dca, index, show.desk)
+    if (send === null) return
+    if (!send.ok) {
+      // The desk is there and cannot be told about this DCA — past the end of its list,
+      // or on a channel it does not answer on. The reason travels with the change so the
+      // operator reads it instead of a fader that quietly never moves.
+      changes.push({
+        channelId: dca.id,
+        label: dca.label,
+        live: shouldBeLive,
+        message: null,
+        error: send.error
+      })
+      return
+    }
 
     changes.push({
       channelId: dca.id,
       label: dca.label,
       live: shouldBeLive,
-      message: shouldBeLive ? messages.unmute : messages.mute
+      message: shouldBeLive ? send.unmute : send.mute
     })
   })
 

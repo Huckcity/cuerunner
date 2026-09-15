@@ -1,4 +1,5 @@
-import type { Dca, DeskMessage, DeskSettings } from '../types/show'
+import type { MidiMessageKind } from '../types/cue'
+import type { Dca, DeskMessage, DeskProfile, DeskSettings } from '../types/show'
 
 /**
  * How the desk is driven.
@@ -7,6 +8,12 @@ import type { Dca, DeskMessage, DeskSettings } from '../types/show'
  * twelve-mic show is not twelve patches to type. A DCA that carries an override — a desk
  * that numbers its DCAs differently, a mute group on another address — is sent that
  * instead, and only for the connection it belongs to.
+ *
+ * What a desk makes of a number is the profile, because "open this fader" is the desk's
+ * own arrangement and not the app's: a desk that takes notes takes one note, an SQ takes a
+ * sequence of NRPN controllers and has eight DCAs, and an Avantis takes a note whose
+ * velocity says which half of the pair it is, four channels above its own. A desk nobody
+ * has described is sent what this app has always sent — one note, on and off.
  */
 
 /** The number a DCA's own message carries: DCA 1 is note 1, and the DCA's place in the list. */
@@ -27,18 +34,6 @@ export function dcaAddress(pattern: string, index: number): string {
   return trimmed.endsWith('/') ? `${trimmed}${number}` : `${trimmed}/${number}`
 }
 
-/** The ordinary desk arrangement for a wireless group: one note, on for open and off for closed. */
-export function midiNoteMessages(
-  portName: string,
-  channel: number,
-  note: number
-): { mute: MidiDeskMessage; unmute: MidiDeskMessage } {
-  return {
-    unmute: { kind: 'midi', portName, message: { kind: 'noteOn', channel, note, velocity: 127 } },
-    mute: { kind: 'midi', portName, message: { kind: 'noteOff', channel, note, velocity: 0 } }
-  }
-}
-
 /** The same arrangement over OSC: one address, open value and close value. */
 export function oscMessages(
   host: string,
@@ -53,21 +48,91 @@ export function oscMessages(
   }
 }
 
+/* ── What each desk takes ────────────────────────────────────────────────────── */
+
 /**
- * The MIDI arrangement, over the desk's network port instead of a cable: the same note
- * on the same channel, addressed at the desk rather than at a port this machine has
- * opened. Where the bytes go is the whole difference; what they are is the desk's.
+ * An SQ mutes with NRPN: `B0 63 02 B0 62 <parameter> B0 06 00 B0 26 <01|00>`. Its DCAs
+ * are the parameters 0–7 of page 02, so DCA 1 is parameter 0 — the desk numbers them from
+ * zero where the show numbers them from one.
  */
-export function tcpNoteMessages(
-  host: string,
-  port: number,
-  channel: number,
-  note: number
-): { mute: MidiTcpDeskMessage; unmute: MidiTcpDeskMessage } {
-  return {
-    unmute: { kind: 'midi-tcp', host, port, message: { kind: 'noteOn', channel, note, velocity: 127 } },
-    mute: { kind: 'midi-tcp', host, port, message: { kind: 'noteOff', channel, note, velocity: 0 } }
+export const SQ_DCA_PAGE = 0x02
+export const SQ_DCA_COUNT = 8
+
+/**
+ * An Avantis's DCAs are notes 36–45 on the channel four above the desk's own, and its
+ * mute is a note-on whose velocity says which half of the pair it is: a received velocity
+ * of 00 and a note-off are both ignored, which is why velocity 00 ends the message rather
+ * than the message being the note-off the app's own arrangement sends.
+ */
+export const AVANTIS_DCA_FIRST_NOTE = 0x36
+export const AVANTIS_DCA_COUNT = 16
+export const AVANTIS_CHANNEL_OFFSET = 4
+export const AVANTIS_MUTE_ON = 0x7f
+export const AVANTIS_MUTE_OFF = 0x3f
+
+/** The number this DCA's place makes on this desk, before any override. */
+export function dcaValue(index: number, profile: DeskProfile): number {
+  if (profile === 'sq') return index
+  if (profile === 'avantis') return AVANTIS_DCA_FIRST_NOTE + index
+  return dcaNumber(index)
+}
+
+/** The MIDI channel this profile's DCAs answer on. */
+export function dcaChannel(profile: DeskProfile, midiChannel: number): number {
+  return profile === 'avantis' ? midiChannel + AVANTIS_CHANNEL_OFFSET : midiChannel
+}
+
+/**
+ * How many DCAs the desk's own list has, or null when the profile addresses as many as
+ * the show drives.
+ */
+export function dcaLimit(profile: DeskProfile): number | null {
+  if (profile === 'sq') return SQ_DCA_COUNT
+  if (profile === 'avantis') return AVANTIS_DCA_COUNT
+  return null
+}
+
+/**
+ * What the profile cannot address at all, or null when it can: a DCA past the desk's own
+ * list, or a channel past the ones MIDI has.
+ */
+export function dcaGap(profile: DeskProfile, index: number, midiChannel: number): string | null {
+  if (profile === 'sq' && index >= SQ_DCA_COUNT) return 'an SQ has eight DCAs'
+  if (profile === 'avantis' && index >= AVANTIS_DCA_COUNT) return 'an Avantis has sixteen DCAs'
+  if (profile === 'avantis' && dcaChannel(profile, midiChannel) > 16) {
+    return 'an Avantis answers four channels above its own, so its MIDI channel is 12 or lower'
   }
+  return null
+}
+
+/** An SQ's mute: select the parameter and its page, then set the value. */
+export function sqMute(channel: number, parameter: number, on: boolean): MidiMessageKind[] {
+  const cc = (controller: number, value: number): MidiMessageKind =>
+    ({ kind: 'cc', channel, controller, value })
+  return [cc(0x63, SQ_DCA_PAGE), cc(0x62, parameter), cc(0x06, 0x00), cc(0x26, on ? 0x01 : 0x00)]
+}
+
+/** An Avantis's mute: the note carrying which half, then velocity 00 to end it. */
+export function avantisMute(channel: number, note: number, on: boolean): MidiMessageKind[] {
+  return [
+    { kind: 'noteOn', channel, note, velocity: on ? AVANTIS_MUTE_ON : AVANTIS_MUTE_OFF },
+    { kind: 'noteOn', channel, note, velocity: 0x00 }
+  ]
+}
+
+/**
+ * The desk's own arrangement for one DCA, as the messages it takes. `value` is what the
+ * DCA is addressed by on this desk — a note, or an SQ's NRPN parameter.
+ */
+export function profileMessages(
+  profile: DeskProfile,
+  channel: number,
+  value: number,
+  on: boolean
+): MidiMessageKind[] {
+  if (profile === 'sq') return sqMute(channel, value, on)
+  if (profile === 'avantis') return avantisMute(channel, value, on)
+  return [{ kind: on ? 'noteOn' : 'noteOff', channel, note: value, velocity: on ? 127 : 0 }]
 }
 
 /** A message over one of the ways this app speaks to a desk. */
@@ -76,30 +141,57 @@ export type MidiTcpDeskMessage = Extract<DeskMessage, { kind: 'midi-tcp' }>
 export type OscDeskMessage = Extract<DeskMessage, { kind: 'osc' }>
 
 /**
- * What a DCA sends: its own patch when it carries an override for this connection,
- * otherwise the message its number makes. Null when the show drives no desk — and when
- * it drives a MIDI desk whose port has not been chosen, because a message to nowhere is
- * worse than none: the recall would report a failure that means nothing.
+ * What a DCA is sent on this show: its own patch when it carries an override, otherwise
+ * the message its number makes.
+ *
+ * `null` is nothing to send at all — a show that drives no desk, and a MIDI one whose port
+ * or address has not been chosen, because a message to nowhere is worse than none: the
+ * recall would report a failure that means nothing. `{ error }` is the other kind of
+ * nothing: a desk that is there and cannot be told about this DCA, which the operator is
+ * owed rather than left to notice.
  */
+export type DeskSend =
+  | { ok: true; mute: DeskMessage; unmute: DeskMessage }
+  | { ok: false; error: string }
+
 export function deskMessages(
   dca: Dca,
   index: number,
   desk: DeskSettings
-): { mute: DeskMessage; unmute: DeskMessage } | null {
+): DeskSend | null {
+  if (desk.kind === 'none') return null
+
+  if (desk.kind === 'osc') {
+    const address = dca.address ?? dcaAddress(desk.address, index)
+    return { ok: true, ...oscMessages(desk.host, desk.port, address) }
+  }
+
+  // Over a port and over the desk's own socket the desk's semantics are the same; only
+  // the way the bytes leave this machine differs.
+  const gap = dcaGap(desk.profile, index, desk.midiChannel)
+  if (gap !== null) return { ok: false, error: gap }
+  const channel = dcaChannel(desk.profile, desk.midiChannel)
+  const value = dca.note ?? dcaValue(index, desk.profile)
+  const opened = profileMessages(desk.profile, channel, value, true)
+  const closed = profileMessages(desk.profile, channel, value, false)
+
   if (desk.kind === 'midi') {
     if (desk.midiPort === '') return null
-    return midiNoteMessages(desk.midiPort, desk.midiChannel, dca.note ?? dcaNumber(index))
+    return {
+      ok: true,
+      unmute: { kind: 'midi', portName: desk.midiPort, messages: opened },
+      mute: { kind: 'midi', portName: desk.midiPort, messages: closed }
+    }
   }
-  if (desk.kind === 'midi-tcp') {
-    // No address typed is the same nothing as no port chosen: the recall would report a
-    // failure that means less than the silence did.
-    if (desk.host.trim() === '') return null
-    return tcpNoteMessages(desk.host, desk.tcpPort, desk.midiChannel, dca.note ?? dcaNumber(index))
+
+  // No address typed is the same nothing as no port chosen: the recall would report a
+  // failure that means less than the silence did.
+  if (desk.host.trim() === '') return null
+  return {
+    ok: true,
+    unmute: { kind: 'midi-tcp', host: desk.host, port: desk.tcpPort, messages: opened },
+    mute: { kind: 'midi-tcp', host: desk.host, port: desk.tcpPort, messages: closed }
   }
-  if (desk.kind === 'osc') {
-    return oscMessages(desk.host, desk.port, dca.address ?? dcaAddress(desk.address, index))
-  }
-  return null
 }
 
 export function describeDeskMessage(message: DeskMessage | null): string {
@@ -107,15 +199,13 @@ export function describeDeskMessage(message: DeskMessage | null): string {
   if (message.kind === 'osc') {
     return `OSC ${message.address} ${message.args.join(' ')} → ${message.host}:${message.port}`
   }
-  if (message.kind === 'midi-tcp') {
-    const where = `${message.host}:${message.port}`
-    if (message.message.kind === 'sysex') {
-      return `sysex ${message.message.data.length} bytes → ${where}`
-    }
-    return `${message.message.kind} ch${message.message.channel} → ${where}`
-  }
-  if (message.message.kind === 'sysex') {
-    return `sysex ${message.message.data.length} bytes → "${message.portName}"`
-  }
-  return `${message.message.kind} ch${message.message.channel} → "${message.portName}"`
+  const where = message.kind === 'midi-tcp'
+    ? `${message.host}:${message.port}`
+    : `"${message.portName}"`
+  // A vendor arrangement is several messages and no single one of them says what it does,
+  // so the count is the honest description.
+  if (message.messages.length !== 1) return `${message.messages.length} messages → ${where}`
+  const [only] = message.messages
+  if (only.kind === 'sysex') return `sysex ${only.data.length} bytes → ${where}`
+  return `${only.kind} ch${only.channel} → ${where}`
 }

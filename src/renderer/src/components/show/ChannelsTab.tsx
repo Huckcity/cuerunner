@@ -8,9 +8,9 @@ import {
   updateChannel,
   updateDca
 } from '../../utils/cast'
-import { dcaAddress, dcaNumber } from '../../utils/desk'
+import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue } from '../../utils/desk'
 import { DCA_LIMIT } from '../../types/show'
-import type { CastSettings, DeskSettings } from '../../types/show'
+import type { CastSettings, DeskProfile, DeskSettings } from '../../types/show'
 import { TextField, NumberField } from '../common/Field'
 
 const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
@@ -32,9 +32,21 @@ function deskPreview(desk: DeskSettings, dcas: number): string {
   if (desk.kind === 'osc') {
     return `Sends ${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, last)} to ${desk.host}:${desk.port}, with 1 to open and 0 to close`
   }
-  const notes = `Sends note ${dcaNumber(0)} … ${dcaNumber(last)}`
-  if (desk.kind === 'midi-tcp') return `${notes} to ${desk.host}:${desk.tcpPort}, on and off`
-  return `${notes} to "${desk.midiPort}", on and off`
+  const where = desk.kind === 'midi-tcp' ? `${desk.host}:${desk.tcpPort}` : `"${desk.midiPort}"`
+  // A desk with fewer faders than the show drives is worth saying here, before the night:
+  // a recall of the DCAs past its list cannot be sent, and the operator should not have to
+  // fire one to find out.
+  const limit = dcaLimit(desk.profile)
+  const beyond = limit === null || dcas <= limit
+    ? ''
+    : `; the desk has ${limit}, so ${dcas - limit} of the show's DCAs are not sent`
+  if (desk.profile === 'sq') {
+    return `Sends an SQ's DCA mutes — NRPN page 02 on channel ${desk.midiChannel} — to ${where}${beyond}`
+  }
+  if (desk.profile === 'avantis') {
+    return `Sends an Avantis's DCA mutes — note-on, 7F on and 3F off, on channel ${dcaChannel(desk.profile, desk.midiChannel)} — to ${where}${beyond}`
+  }
+  return `Sends note ${dcaNumber(0)} … ${dcaNumber(last)} to ${where}, on and off${beyond}`
 }
 
 /**
@@ -95,6 +107,27 @@ export function ChannelsTab() {
             <option value="midi-tcp">MIDI (TCP)</option>
             <option value="none">No desk</option>
           </select>
+
+          {/* What the desk takes as an open and a close. The app's own arrangement is the
+              default because it is what every show has been sending; naming the desk is how
+              an operator says which range is actually in the room. */}
+          {desk.kind === 'midi' || desk.kind === 'midi-tcp' ? (
+            <>
+              <label className="desk-label" htmlFor="desk-profile">Model</label>
+              <select
+                id="desk-profile"
+                className="desk-profile"
+                aria-label="Desk model"
+                value={desk.profile}
+                title="What this desk takes as an open and a close"
+                onChange={e => updateDeskSettings({ profile: e.target.value as DeskProfile })}
+              >
+                <option value="note">Any desk — note on, note off</option>
+                <option value="sq">Allen &amp; Heath SQ</option>
+                <option value="avantis">Allen &amp; Heath Avantis</option>
+              </select>
+            </>
+          ) : null}
 
           {desk.kind === 'osc' && (
             <>
@@ -304,16 +337,18 @@ export function ChannelsTab() {
                       }))}
                     />
                   )}
-                  {desk.kind === 'midi' && (
+                  {(desk.kind === 'midi' || desk.kind === 'midi-tcp') && (
                     <NumberField
                       className="dca-override"
-                      value={dca.note ?? dcaNumber(index)}
+                      value={dca.note ?? dcaValue(index, desk.profile)}
                       min={0}
                       max={127}
-                      aria-label={`DCA ${dcaNumber(index)} note`}
-                      title="Sent instead of the note of its number."
+                      aria-label={`DCA ${dcaNumber(index)} number`}
+                      title={desk.profile === 'sq'
+                        ? 'Sent instead of the NRPN parameter its place makes — 0 for DCA 1'
+                        : 'Sent instead of the note its place makes'}
                       onValue={note => apply(updateDca(cast, dca.id, {
-                        note: note === dcaNumber(index) ? null : note
+                        note: note === dcaValue(index, desk.profile) ? null : note
                       }))}
                     />
                   )}

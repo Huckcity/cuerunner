@@ -4,7 +4,8 @@
 // `utils/cast.ts` (tested there); what is tested here is what a scene does with it — the
 // performers it names, the ensembles it applies, and the members it closes anyway.
 import { describe, it, expect } from 'vitest'
-import { midiNoteMessages, oscMessages } from './desk'
+import { oscMessages } from './desk'
+import type { MidiDeskMessage } from './desk'
 import { defaultDeskSettings } from '../types/show'
 import {
   addScene,
@@ -32,10 +33,29 @@ import type {
 } from '../types/show'
 import { defaultShowSettings } from '../types/show'
 
+/**
+ * What the show sends one DCA on the port and channel these fixtures drive: a note on to
+ * open and a note off to close — the arrangement a desk nobody has described is sent.
+ */
+function overPort(note: number): { mute: MidiDeskMessage; unmute: MidiDeskMessage } {
+  return {
+    unmute: {
+      kind: 'midi',
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note, velocity: 127 }]
+    },
+    mute: {
+      kind: 'midi',
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note, velocity: 0 }]
+    }
+  }
+}
+
 // What the desk is told about the first two DCAs: the note of their own number, since
 // neither carries an override.
-const first = midiNoteMessages('Yamaha', 3, 1)
-const second = midiNoteMessages('Yamaha', 3, 2)
+const first = overPort(1)
+const second = overPort(2)
 
 const DCAS: Dca[] = [
   { id: 'dca-1', label: 'DCA 1 — Principals', note: null, address: null },
@@ -242,6 +262,31 @@ describe('sceneChanges', () => {
     // A MIDI desk with no port chosen is the same: a message to nowhere is not sent.
     expect(sceneChanges(show(plain, { ...DESK, midiPort: '' }), scene(['perf-1']), {}))
       .toEqual([])
+  })
+
+  it('carries the reason when the desk has no DCA to move', () => {
+    // An SQ has eight DCAs and a show may drive more. The ninth cannot be told to this
+    // desk at all — a different thing from a desk that did not answer — and the change
+    // says so rather than being dropped where nobody would read it.
+    const nine: CastSettings = {
+      channels: [...cast().channels, channel('ch-9', 'dca-9')],
+      performers: [...cast().performers, performer('perf-9', 'ch-9')],
+      ensembles: [],
+      dcas: Array.from({ length: 9 }, (_, index) => ({
+        id: `dca-${index + 1}`,
+        label: `DCA ${index + 1}`,
+        note: null,
+        address: null
+      }))
+    }
+    const sq: DeskSettings = { ...DESK, kind: 'midi-tcp', host: '10.0.0.5', profile: 'sq' }
+    const closed = Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [`dca-${index + 1}`, false])
+    )
+
+    expect(sceneChanges(show(nine, sq), scene(['perf-9']), closed)).toEqual([
+      { channelId: 'dca-9', label: 'DCA 9', live: true, message: null, error: 'an SQ has eight DCAs' }
+    ])
   })
 
   it('sends what the connection and the DCA’s number make, for the desk in the show', () => {
