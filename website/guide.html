@@ -374,7 +374,7 @@
       <section id="cue-types" class="panel reveal delay-3">
         <h2>Cue types</h2>
         <p>
-          Nine cue types share the timing model and differ in what they do when they run. The tabs
+          The cue types share the timing model and differ in what they do when they run. The tabs
           in the inspector change with the selected cue.
         </p>
         <div class="table-wrap">
@@ -385,6 +385,7 @@
             <tbody>
               <tr><td>Audio</td><td>Playing sound files</td><td>Basics, Audio, Timing</td></tr>
               <tr><td>MIDI</td><td>Sending MIDI messages to gear</td><td>Basics, MIDI</td></tr>
+              <tr><td>Show Control</td><td>Telling a lighting console or an automation system to go, stop, load or reset</td><td>Basics, Show Control</td></tr>
               <tr><td>OSC</td><td>Sending OSC messages over the network</td><td>Basics, OSC</td></tr>
               <tr><td>Wait</td><td>Pausing the sequence</td><td>Basics, Wait</td></tr>
               <tr><td>Fade</td><td>Ramping another cue's volume or pan</td><td>Basics, Fade</td></tr>
@@ -392,6 +393,8 @@
               <tr><td>Group</td><td>Organising and triggering other cues</td><td>Basics, Group</td></tr>
               <tr><td>Network</td><td>HTTP requests to other systems</td><td>Basics, Network</td></tr>
               <tr><td>Script</td><td>Running JavaScript at a cue point</td><td>Basics, Script</td></tr>
+              <tr><td>Devamp</td><td>Releasing a cue that is vamping its section</td><td>Basics, Devamp</td></tr>
+              <tr><td>Scene<span class="pro">Pro</span></td><td>Recalling a scene, so GO moves the desk with the show</td><td>Basics, Scene</td></tr>
             </tbody>
           </table>
         </div>
@@ -475,6 +478,40 @@
         <p>
           Messages are sent in order, all at once, when the cue runs. Channels are 1–16. On Linux,
           MIDI needs the native module built against ALSA — see <a href="#install">Install</a>.
+        </p>
+      </section>
+
+      <section id="show-control" class="panel reveal delay-3">
+        <h2>Show control cues</h2>
+        <p>
+          A show control cue tells another console what to do: the lighting desk on the next GO, an
+          automation system on a reset, a playback machine on a load. It sends
+          <strong>MIDI Show Control</strong>, so the cue it names is the receiving desk's own — its
+          numbering, not a cue number of ours.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Field</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Command</td><td>Go, Stop, Resume, Load or Reset. Load puts a cue in standby without running it, and Reset carries no cue data — the two fields below are not offered for it.</td></tr>
+              <tr><td>For</td><td>What kind of equipment the command is addressed to: Lighting, Sound, Machinery, Video, Projection, or Everything.</td></tr>
+              <tr><td>Device</td><td>The receiving console's Show Control device ID, 0–127. 127 is the all-call every device has to answer, which is what a new cue sends; both this and <em>For</em> have to match before a console acts.</td></tr>
+              <tr><td>Cue</td><td>The cue number on that console, as its operator would type it — <code>12</code>, <code>5.4</code>. Empty means the next cue in its list.</td></tr>
+              <tr><td>List</td><td>The console's cue list. Empty is whatever it has open.</td></tr>
+              <tr><td>Send</td><td><em>To the show's desk</em> goes out on the connection Show Settings → Channels already has, which is how a cue list on the sound desk is reached with no cable from this machine; <em>To a MIDI port</em> goes out of a port of this computer, which is how the lighting console at the end of an interface is reached.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A cue with nowhere to go says so in the run log rather than reporting a send it did not
+          make — including a show whose desk is driven over OSC, which carries addresses rather
+          than MIDI Show Control.
+        </p>
+        <p>
+          The other direction is a trigger: a cue can answer a console's own command, matched on
+          every field the console sent. See <a href="#triggers">Triggers</a>.
         </p>
       </section>
 
@@ -948,12 +985,20 @@ console.log(r.stdout.trim())</code></pre>
           </a>
           <figcaption>One OSC trigger on a cue, with the add and learn controls below.</figcaption>
         </figure>
-        <h3>OSC and MIDI triggers</h3>
+        <h3>OSC, MIDI and show control triggers</h3>
         <p>
           An OSC trigger is an address, matched exactly — <code>/eos/cue/12/fire</code> fires the cue
           it is on and nothing else. A MIDI trigger is a message on an input port: a note-on or
           note-off (any velocity), a controller (any value), or a program change. The value a desk
           sends is how it expresses itself, not which cue it means, so it is not part of the match.
+        </p>
+        <p>
+          A show control trigger is a console's own MIDI Show Control command: the command, what it
+          was addressed to, the device ID, and the cue it names — every field matched, because a
+          console going to cue 12 is not a console going to the next one. Pick the port the command
+          arrives on, then <strong>Learn</strong> while the desk sends one, or type the fields from
+          the console's own document. It is how a lighting desk's GO turns into the sound cue that
+          follows it.
         </p>
         <p>
           <strong>Learn</strong> is usually faster than typing: press it, then send the message from
@@ -1103,6 +1148,16 @@ console.log(r.stdout.trim())</code></pre>
           channel its MIDI is set to: the same notes go down a socket to the desk rather than out of
           a port this computer had to open, so nothing has to be bridged and the desk can stay in
           the rack.
+        </p>
+        <p>
+          Beside the connection is the desk's <strong>model</strong>: an Allen &amp; Heath SQ, an
+          Avantis, or <em>any desk</em> that takes a note on to open a fader and a note off to close
+          it. Naming the desk is what makes a scene recall work on it, because the arrangement
+          follows the desk's own document rather than ours: an SQ is sent the NRPN mutes it reads
+          instead of a note it would ignore, and an Avantis is closed with the note-on at a velocity
+          in <code>01</code>–<code>3F</code>, which is what its OFF is. The line under the row reads
+          back what will be sent in those terms, and says so when the show drives more DCAs than the
+          desk has — eight on an SQ, sixteen on an Avantis.
         </p>
         <p>
           Below it are the strips on the console and the DCAs they ride. A new show opens with
@@ -1278,6 +1333,17 @@ console.log(r.stdout.trim())</code></pre>
               Check the cue's port on the MIDI tab; if the cue does not name one, it falls back to
               the Default output set on the MIDI tab in Settings. On Linux, MIDI silently does
               nothing unless the native module was built with ALSA headers available.
+            </p>
+          </article>
+          <article class="card">
+            <h3>A show control cue does nothing</h3>
+            <p>
+              Read the log line for the cue: it names what could not go where. A cue pointed at the
+              show's desk needs a desk that takes MIDI — an OSC connection carries addresses, not
+              show control — and one pointed at a MIDI port needs a port chosen (its own, or the
+              Default output on the MIDI tab in Settings). On the receiving console, check that its
+              Show Control device ID and command format match the cue's <em>Device</em> and
+              <em>For</em>: both have to match before a console acts on a command.
             </p>
           </article>
           <article class="card">

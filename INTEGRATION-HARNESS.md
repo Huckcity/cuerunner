@@ -9,6 +9,13 @@ peers and the lanes above are built and green, and M2's acceptance has been met 
 hardware. The milestones at the end say what each lane still needs, and §11 records the
 decisions — the first of them taken, in the direction this document recommended.
 
+Since then, B4's two halves have landed. The desk is told in its own arrangement (§3, below):
+`DeskSettings.profile` names the range, and an SQ's mute is the NRPN sequence its document
+says rather than the note-on the app had been sending — which is what the desk specs found and
+now hold. And show control exists in both directions: a Show Control cue sends MIDI Show
+Control, an `msc` trigger answers a console's own command, and `msc.spec.ts` drives the round
+trip against the peer's SQ profile. Art-Net and sACN output are still untouched.
+
 ---
 
 ## 1. The question the harness rests on, answered first
@@ -62,8 +69,10 @@ Two consequences worth their own line:
   literally (§3, G3).
 
 Eos also speaks MIDI Show Control in and out (`MSC Receive`, `MSC Transmit`, Rx/Tx
-device IDs, a cue-list filter) — the same roadmap item, B4 in
-`ENGINE-REVIEW-2-AND-ROADMAP.md`, that WinsLab has not built yet.
+device IDs, a cue-list filter) — B4 in `ENGINE-REVIEW-2-AND-ROADMAP.md`, which WinsLab now
+has: the Show Control cue goes out and an `msc` trigger comes in. Eos's own MSC is not driven
+by any lane here, because the Eos peer is an OSC console on a socket and MSC reaches a console
+over MIDI.
 
 ### Allen & Heath: the desktop apps are not the desk
 
@@ -135,9 +144,11 @@ unvalidated rather than as evidence.
 | MIDI in | `src/main/services/MidiInputService.ts`, port names polled every 2 s | via a virtual port |
 | HTTP out | `NetworkCue` → `src/main/network/NetworkClient.ts` | not a desk protocol |
 | Panic | OSC `/winslab/panic`, MIDI CC 120 = 0 | yes |
-| Desk/scene messages | `utils/desk.ts` → note on/off, or OSC to `/dca/{n}/on` on port 8000 | partially |
+| Desk/scene messages | `utils/desk.ts` → a per-desk arrangement (a note pair, or an SQ's NRPN mute) | yes |
+| Show control out | `MscCue` → `midi:send` / `midi:sendTcp`, `utils/msc.ts` | yes — an SQ's cue list answers MSC |
+| Show control in | `engine/triggers.ts`, `msc` triggers | yes — a console's own command |
 
-Three gaps stand between that and the harness, in the order they bite:
+Three gaps stood between that and the harness, in the order they bit. What became of each:
 
 **G1 — there is no MIDI-over-TCP output.** Both A&H ranges are controlled over TCP 51325.
 `MidiEngine` is `getPortCount`/`openPort`/`sendMessage` on OS ports
@@ -163,10 +174,14 @@ in the app:
 A&H MIDI Control stays supported and stays exercised on the vendor lane, because it is
 still how anyone with a virtual port is driving their desk today.
 
-**G2 — no MSC.** Eos transmits and receives MIDI Show Control, and the SQ's cue list
-answers to MSC `GO`/`LOAD`/`RESET`. WinsLab has neither. The harness can carry MSC
-fixtures from day one (the desks' side is already published); the specs land when the
-product does. B4 in the roadmap.
+**G2 — no MSC. Built.** Eos transmits and receives MIDI Show Control, and the SQ's cue list
+answers to MSC `GO`/`LOAD`/`RESET`; WinsLab now does both directions — a Show Control cue out,
+an `msc` trigger in — with the codec (`utils/msc.ts`) held to the vendors' worked examples
+rather than to its own opinion. `msc.spec.ts` drives the round trip against the peer's SQ
+profile, and the spec's own §7 cases say what is asserted. What is *not* proven anywhere is a
+real console's MSC transmit behaviour: no document here says an SQ sends a command when its own
+GO is pressed, so the peer's `pressGo` is the specification's provision (2.6) rather than a
+vendor claim — a hardware lane is what would settle it.
 
 **G3 — triggers match OSC addresses literally.** `matchesTrigger` is an exact string
 compare, by an explicit decision ("patterns and wildcards belong to the sender", held by
@@ -323,6 +338,11 @@ issue number goes in the fixture's provenance):
 - Mutes: NRPN select (`Bn 63 MB`, `Bn 62 LB`, `Bn 06 00`) then `Bn 26 01` on / `Bn 26 00`
   off; increment (`Bn 60 00`) toggles. Level and mute parameter numbers come from the
   reference tables in issue 5.
+- MIDI Show Control: the cue list answers a command — `F0 7F <device> 02 <format> <command>
+  <cue in ASCII> 00 <cue list> F7` — so a GO moves the peer's own cue list and `state.cue`
+  says where it is standing. `pressGo()` is the desk's own key, transmitting the command it
+  produced; LOAD and RESET leave the list standing somewhere too, and STOP/RESUME are
+  recorded but move nothing, which is all this peer has a reason to model.
 - Levels: NRPN coarse+fine `Bn 06 VC` / `Bn 26 VF`, in either the 16384-step linear law or
   the 255-step audio law — the desk's `NRPN Fader Law` setting decides, and both are worth
   a case.
@@ -392,16 +412,15 @@ first slice, not the ceiling.
    encoder is wrong). Assert the bytes, and the peer's scene state.
 2. Desk-originated scene: the peer recalls scene 7 on its own → WinsLab's MIDI trigger
    fires the bound cue. Assert the trigger fired and the log names the device.
-3. DCAs: a scene sends the notes its DCAs are numbered for, and only those, over the desk's
-   socket. What is asserted is the wire — the bytes, their order, and that a recall after a
-   failed one tries again — because **the desks and the app disagree about the close half,
-   and that disagreement is the harness doing its job**: WinsLab closes a DCA with a
-   note-off (velocity 0), an Avantis ignores note-off altogether (its OFF is a note-on with
-   velocity `01`–`3F`), and an SQ takes mutes as NRPN and notes as softkey/strip traffic.
-   So the specs pin the open case end to end and the close case as bytes, and the fix —
-   a desk profile that speaks each desk's own semantics — is roadmap B4's "console control
-   profiles" rather than anything the transport should have decided on its own. A peer that
-   quietly agreed with the app would have hidden this.
+3. DCAs: a scene sends the arrangement the profile names for each DCA, and only those, over
+   the desk's socket. What is asserted is the wire and the desk's own mute state — because
+   **the desks and the app disagreed about the close half, and that disagreement was the
+   harness doing its job**: WinsLab used to close a DCA with a note-off (velocity 0), which an
+   Avantis ignores outright (its OFF is a note-on at `01`–`3F`) and which an SQ does not read
+   as a mute at all (its DCAs are NRPN parameters on page 02). The fix is the desk profile
+   this document called B4's "console control profiles": the show names its desk and the
+   arrangement follows, so the open *and* the close are asserted end to end, on the desk's own
+   state rather than on the bytes being sent.
 4. Mute semantics: Avantis velocity `00` and note-off are ignored; `40`–`7F` is on,
    `01`–`3F` off. Assert all three, because that is where a "sensible" implementation is
    wrong.
@@ -415,6 +434,17 @@ first slice, not the ceiling.
 8. Duplicate delivery: the peer sends the same scene recall twice. Assert one scene move.
 9. Timing: a scene recall reaches the wire within the post-wait budget the cue claims.
    Assert the measured interval, not just the state.
+
+**Show control — the desk's cue list** (`msc.spec.ts`)
+
+1. A Show Control cue sends the command down the desk's own socket. The peer reads
+   `F0 7F 7F 02 7F 01 31 32 00 F7` as Go cue 12 — its own list is standing there afterwards —
+   and the assertion is on both the decoded command and the desk's cue.
+2. The desk's own GO (`pressGo`) comes back to the app and the cue bound to it fires. Assert
+   the log names the command and the socket it came from.
+3. The same GO twice inside the show's window fires once: the guard covers show control the way
+   it covers a datagram, and the case waits past the window so the count is the guard's answer
+   rather than the timing's.
 
 **The peers, on their own** (`harness-eos.spec.ts`, `harness-desk.spec.ts`) — every shape
 asserted in §5 and §6 against the documented examples, with no application running. This is
@@ -548,7 +578,10 @@ session replays on Linux.
 
 **M3 — hardware, and MSC when the product has it.**
 `desk-hardware.spec.ts` pointed at a real SQ or Avantis by `desk_host`; fixtures recorded
-from the desk and replayed on Linux; MSC fixtures and specs when B4 lands.
+from the desk and replayed on Linux.
+**MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and answers
+the desk's own GO, and the peer's `pressGo` says in its own comment where the specification ends
+and a hardware lane would have to start.
 *Acceptance*: the same assertions that pass against the peer pass against the desk, with
 only the host changing; a recorded desk fixture is committed with its provenance and the
 Linux lane replays it.

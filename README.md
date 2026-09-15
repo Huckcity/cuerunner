@@ -16,9 +16,10 @@ around them are **WinsLab Pro** — one license key, checked on the machine. See
 
 ### Free
 
-- **10 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, Script and Devamp cues (the eleventh, Scene, drives the desk from the stack and is part of Pro)
+- **11 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, Script, Devamp and Show Control cues (the twelfth, Scene, drives the desk from the stack and is part of Pro)
 - **Audio Playback**: per-cue level, pan, rate, and trim with fade-in, loop counts, and a waveform that is a region editor — drag either boundary, split a cue at the cursor, zoom from the whole file down to a second of it, and the engine's note detection makes the attacks easy to land on
 - **MIDI Control**: Send MIDI messages to external instruments and gear
+- **Show Control**: a cue that says Go, Stop, Resume, Load or Reset to a lighting console or an automation system — MIDI Show Control, naming the receiving console's own cue number, over a MIDI port or the show's desk connection
 - **OSC Integration**: Send Open Sound Control messages for networked control
 - **Show Sequencing**: Group cues, set auto-advance, pre/post-wait delays, and arm/disarm
 - **Vamps and devamps**: a cue can loop a section until a Devamp cue releases it, and the release plays out of the loop on the sample. A section is a cue, so a track can carry as many as the show needs — a verse vamp and a chorus vamp are two cues, each with its own devamp
@@ -37,7 +38,7 @@ installer:
 - **The show around the cue stack**: OSC and MIDI input, the show monitor, network presence, and the wireless service that reads a telemetry source
 - **Trim silence**: audio cues can play only the part of a file between its first and last audible samples — measured by the engine when the file is chosen, a default for new cues in a show that asks for it, and a toggle of its own on every cue
 - **Wireless and the mic plot**: who is wearing which pack, the alarm before a battery dies on someone with an entrance, a swap log, and the night's report
-- **Triggers**: a cue that fires from an OSC address or a MIDI note with nobody's hand on GO
+- **Triggers**: a cue that fires from an OSC address, a MIDI note or a console's own show control command, with nobody's hand on GO
 - **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network
 - **Scenes and the desk**: the view the show is run from, with the console's channels and the DCAs they open set up in Show Settings, ensembles that move a group of mics at once, and scene cues in the stack
 
@@ -556,13 +557,19 @@ Desk and console integration:
 - A desk is reached over its own MIDI socket — an Allen & Heath SQ or Avantis on port 51325,
   set up in Show Settings → Channels — as well as through Allen & Heath MIDI Control's virtual
   ports. A cue that cannot reach the desk says so in the run log rather than doing nothing
-- **DCA messages are the app's convention, and the desks do not speak it yet.** The app opens
-  and closes a DCA with a note-on and a note-off; an Avantis takes the note-on as a mute but
-  ignores note-off (its OFF is a note-on below velocity 0x40), and on an SQ a note that low
-  means nothing at all — its mutes are NRPN. So a scene's DCA **opens** work on an Avantis and
-  **closes** do not, and on an SQ neither does. The per-desk profiles that close this gap are
-  B4 in `ENGINE-REVIEW-2-AND-ROADMAP.md`; `integration/specs/desk-sq.spec.ts` and
-  `desk-avantis.spec.ts` pin the exact bytes, and §7 of `INTEGRATION-HARNESS.md` is the finding
+- **A desk is told in its own arrangement.** Show Settings → Channels names the desk — an SQ,
+  an Avantis, or any desk that takes a note on and a note off — and a DCA's message follows
+  from what that desk's document says a mute is: an SQ's NRPN parameter on page 02, an
+  Avantis's note-on at velocity `7F` to open and `3F` to close, on the channel four above its
+  own. A DCA the profile cannot address (an SQ has eight, an Avantis sixteen) is reported
+  rather than going quiet. The harness found the difference (`INTEGRATION-HARNESS.md` §7) and
+  `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each
+  desk does with the bytes rather than to what the app sent
+- **Show control goes both ways.** A Show Control cue sends MIDI Show Control — Go, Stop,
+  Resume, Load, Reset — to a console or an automation system, with its own cue number and cue
+  list; a trigger on a cue answers the command a console sends, matched on every field it
+  carries. The codec is held to the vendors' worked examples, and an SQ's cue list answering
+  MSC over its own socket is driven by `integration/specs/msc.spec.ts`
 
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
 these in the context of the feature it affects.
