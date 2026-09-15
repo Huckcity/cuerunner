@@ -78,6 +78,29 @@ async function makeItAVamp(): Promise<void> {
   await expect(page.locator('.field-row', { hasText: 'Loop count' }).locator('input')).toHaveValue('-1')
 }
 
+/** Renames the selected cue from the inspector's Basics tab, where its name lives. */
+async function renameSelectedCue(name: string): Promise<void> {
+  const field = page.locator('.field-row').filter({ hasText: 'Name' }).locator('input')
+  await field.fill(name)
+  await field.press('Enter')
+}
+
+/** A devamp cue pointed at one cue by name, fired the way an operator fires it. */
+async function fireDevampAt(name: string): Promise<void> {
+  await addCueFromMoreMenu(page, 'Devamp')
+  await page.locator('.inspector-tab', { hasText: 'Devamp' }).click()
+  const select = page.locator('.field-row', { hasText: 'Release' }).locator('select')
+  const value = await select.locator('option', { hasText: name }).first().getAttribute('value')
+  if (value === null) throw new Error(`no cue named ${name} to release`)
+  await select.selectOption(value)
+
+  // Adding the cue selected it; firing goes through the row, so the inspector follows
+  // the show rather than the other way round.
+  await page.locator('.cue-row', { hasText: 'Devamp' }).last().click()
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /GO/ }).click()
+}
+
 /** A devamp cue, pointed at the audio cue it releases. */
 async function addDevamp(targetName: string): Promise<void> {
   await addCueFromMoreMenu(page, 'Devamp')
@@ -119,6 +142,57 @@ test('a vamp loops forever, and a devamp plays it out', async () => {
   // looping for the rest of the night.
   await expect(page.locator('.cue-row').first()).not.toHaveAttribute('data-running', 'true', { timeout: 5000 })
   await expect(page.locator('.running-badge')).toHaveText('idle')
+})
+
+test('a track can carry more than one vamp section, each with its own devamp', async () => {
+  test.setTimeout(90_000)
+
+  // A section is a cue, and the operator's way of making a second one is to take a copy
+  // of the cue and move its region: the copy is the same music over a different slice of
+  // the file, and it holds nothing that fires it, so one cue cannot fire the other.
+  await page.locator('.cue-row', { hasText: 'Playoff' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
+  await renameSelectedCue('Verse')
+  await page.locator('.cue-row').first().click({ button: 'right' })
+  await page.locator('.cue-context-menu-item', { hasText: 'Duplicate' }).click()
+  await expect(page.locator('.cue-row')).toHaveCount(2)
+
+  // The copy is the second section: the back half of the file, looping.
+  await page.locator('.cue-row').nth(1).click()
+  await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
+  await renameSelectedCue('Chorus')
+  await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
+  const start = page.locator('.field-row', { hasText: 'Start time' }).locator('input')
+  await start.fill('0.5')
+  await start.press('Enter')
+  await makeItAVamp()
+
+  // And the cue it was cut from is the opening section.
+  await page.locator('.cue-row', { hasText: 'Verse' }).click()
+  await makeItAVamp()
+
+  // Fire both: two sections of one file, looping at once. That is what a verse vamp and
+  // a chorus vamp are — two cues, each with its own section, so the operator can move
+  // between them without either one guessing at the other.
+  await page.locator('.cue-row', { hasText: 'Verse' }).click()
+  await page.getByRole('button', { name: /GO/ }).click()
+  // The show's firing window: this is a second, deliberate press.
+  await page.waitForTimeout(400)
+  await page.getByRole('button', { name: /GO/ }).click()
+
+  await expect(page.locator('.cue-row', { hasText: 'Verse' })).toHaveAttribute('data-running', 'true')
+  await expect(page.locator('.cue-row', { hasText: 'Chorus' })).toHaveAttribute('data-running', 'true')
+
+  // Still both, well past the length of the file: they are looping, not playing out.
+  await page.waitForTimeout(2500)
+  await expect(page.locator('.running-badge')).toContainText('2 running')
+
+  // And the sections are released one at a time: the devamp aimed at the chorus plays
+  // that section out and stops it, and the verse keeps vamping underneath.
+  await fireDevampAt('Chorus')
+  await expect(page.locator('.cue-row', { hasText: 'Chorus' })).not.toHaveAttribute('data-running', 'true', { timeout: 5000 })
+  await expect(page.locator('.cue-row', { hasText: 'Verse' })).toHaveAttribute('data-running', 'true')
+  await expect(page.locator('.running-badge')).toContainText('1 running')
 })
 
 test('a devamp aimed at a cue that is not vamping says so', async () => {

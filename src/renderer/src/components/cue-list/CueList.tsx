@@ -327,22 +327,17 @@ export function CueList() {
     const key = e.key.toLowerCase()
 
     if (e.key === 'Escape') {
-      // Escape here means "put that down": close the menu, or drop the selection. Only
-      // when there is something to put down does the press stop travelling, and then it
-      // stops in both worlds — the synthetic event for the React tree, the native one
-      // for the window listener that binds Escape to STOP. A bare Escape with nothing
-      // open is not this list's press: it is the show's, and the panel's, and must reach
-      // them.
+      // Escape's job in this list is to put down what the operator is holding: the
+      // context menu, or the rename a row has open. The selection is not one of those —
+      // it is where they are standing, and it is what the waveform panel and GO are
+      // drawn from — so a bare Escape is left to the window, which stops the show. An
+      // Escape that dropped the selection would take the panel with it and leave the
+      // next GO firing nothing.
       if (ctxMenu !== null) {
         e.stopPropagation()
         e.nativeEvent.stopPropagation()
         closeCtxMenu()
-        return
       }
-      if (selectedId === null) return
-      e.stopPropagation()
-      e.nativeEvent.stopPropagation()
-      select(null)
       return
     }
 

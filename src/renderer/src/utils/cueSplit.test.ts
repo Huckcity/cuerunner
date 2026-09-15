@@ -105,7 +105,7 @@ describe('store — splitAudioCueAt', () => {
       selectedId: 'a1',
       selectedIds: ['a1'],
       selectionAnchorId: 'a1',
-      waveformCursorMs: null,
+      waveformCursor: null,
       past: [],
       future: [],
       isDirty: false
@@ -127,9 +127,22 @@ describe('store — splitAudioCueAt', () => {
   it('names the pair so they read as two halves of one thing', () => {
     useStore.getState().splitAudioCueAt('a1', 30_000)
 
+    // The head keeps the name the operator gave the cue — a split track is still that
+    // track — and the tail is the same name, numbered.
     const cues = useStore.getState().cues
-    expect(cues[0].name).toBe('Clip 1')
-    expect(cues[1].name).toBe('Clip 1 2')
+    expect(cues[0].name).toBe('Walk-in Music')
+    expect(cues[1].name).toBe('Walk-in Music 2')
+  })
+
+  it('numbers the tail past a name that is already taken', () => {
+    const other = cue({ id: 'a2', number: '2', name: 'Walk-in Music 2' })
+    useStore.setState({ cues: [cue(), other] })
+
+    useStore.getState().splitAudioCueAt('a1', 30_000)
+
+    const cues = useStore.getState().cues
+    expect(cues[0].name).toBe('Walk-in Music')
+    expect(cues[1].name).toBe('Walk-in Music 3')
   })
 
   it('is one edit, and one undo puts the original cue back', () => {
@@ -146,9 +159,9 @@ describe('store — splitAudioCueAt', () => {
   })
 
   it('spends the cursor it cut with', () => {
-    useStore.setState({ waveformCursorMs: 30_000 })
+    useStore.setState({ waveformCursor: { cueId: 'a1', ms: 30_000 } })
     useStore.getState().splitAudioCueAt('a1', 30_000)
-    expect(useStore.getState().waveformCursorMs).toBeNull()
+    expect(useStore.getState().waveformCursor).toBeNull()
   })
 
   it('does nothing when the point is outside the region', () => {
@@ -166,7 +179,7 @@ describe('store — setRegionBoundary', () => {
       selectedId: 'a1',
       selectedIds: ['a1'],
       selectionAnchorId: 'a1',
-      waveformCursorMs: null,
+      waveformCursor: null,
       past: [],
       future: [],
       isDirty: false

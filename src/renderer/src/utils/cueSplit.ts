@@ -54,9 +54,12 @@ export function splitAudioCue(cue: AudioCue, atMs: number): CueSplit | null {
   if (to <= from) return null
   if (atMs <= from || atMs >= to) return null
 
-  // Distinct from the cue's own name, so the two halves do not read as one cue listed
-  // twice, and short enough to sit in a row beside its number.
-  const baseName = `Clip ${cue.number}`
+  // What the pair is called, before the numbering that keeps the two apart: the name the
+  // operator gave the cue. A track cut in two is still that track, and a name the app
+  // invents ("Clip 3") is a name the operator has to correct before they can see which
+  // two rows are the pair. A cue that has no name of its own is named by its number,
+  // which is what the list shows for it anyway.
+  const baseName = cue.name.trim() === '' ? `Clip ${cue.number}` : cue.name
   const tail: Omit<AudioCue, 'id' | 'number' | 'name'> = {
     ...cue,
     // The cut is a butt splice: nothing fades in where the operator is trying to make

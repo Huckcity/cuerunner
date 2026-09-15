@@ -71,6 +71,18 @@ test('navigating away from the group clears the amber cursor', async () => {
   await expect(page.locator('.tl-playhead')).not.toBeVisible()
 })
 
+test('the timeline is framed off the window’s edges', async () => {
+  // The panel is drawn on the window's own edge when the timeline is expanded, so the
+  // frame is what keeps the row labels, the ruler and a block at time zero off the
+  // bezel — where there is nothing beside them to grab.
+  const labels = (await page.locator('.tl-labels-col').boundingBox())!
+  const tracks = (await page.locator('.tl-tracks-outer').boundingBox())!
+  const windowWidth = await page.evaluate(() => window.innerWidth)
+
+  expect(labels.x).toBeGreaterThanOrEqual(8)
+  expect(windowWidth - (tracks.x + tracks.width)).toBeGreaterThanOrEqual(8)
+})
+
 test('switching back to sequence mode hides the timeline editor', async () => {
   await page.locator('.inspector-tab', { hasText: 'Group' }).click()
   const modeSelect = page.locator('.inspector select')

@@ -115,9 +115,10 @@ test('splitting at the cursor leaves two cues that play what the one did', async
   await page.locator('.cue-context-menu-item', { hasText: 'Split here' }).click()
 
   await expect(page.locator('.cue-row')).toHaveCount(2)
-  // The pair is named so the two halves read as one thing split.
-  await expect(page.locator('.cue-row').first()).toContainText('Clip 1')
-  await expect(page.locator('.cue-row').nth(1)).toContainText('Clip 1 2')
+  // The pair keeps the name the cue had: a track cut in two is still that track, and the
+  // two halves read as one thing split.
+  await expect(page.locator('.cue-row').first()).toContainText('Walk-in Music')
+  await expect(page.locator('.cue-row').nth(1)).toContainText('Walk-in Music 2')
 
   // The head plays the first half of the file and the tail the rest: together, the file.
   await page.locator('.cue-row').first().click()
