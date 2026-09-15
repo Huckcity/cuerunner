@@ -8,6 +8,7 @@ import type { NetworkRequest, NetworkResult } from '../renderer/src/types/networ
 import type { PlaybackPanic } from '../renderer/src/types/playback'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { MissingMedia } from '../shared/media'
+import type { ShowHistoryEntry } from '../shared/showfile'
 import {
   AUDIO_CHANNELS,
   AUDIO_SILENCE_THRESHOLD_DB,
@@ -283,9 +284,13 @@ contextBridge.exposeInMainWorld('winslab', {
       cueId: string
     ): Promise<{ workspace: Workspace; missingMedia: MissingMedia[] }> =>
       ipcRenderer.invoke('workspace:relink', workspace, workspacePath, cueId),
-    save: (workspace: Workspace, existingPath: string | null): Promise<string | null> =>
+    /** A save writes the file and returns, with the path, the history it wrote into it. */
+    save: (
+      workspace: Workspace,
+      existingPath: string | null
+    ): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
       ipcRenderer.invoke('workspace:save', workspace, existingPath),
-    saveAs: (workspace: Workspace): Promise<string | null> =>
+    saveAs: (workspace: Workspace): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
       ipcRenderer.invoke('workspace:saveAs', workspace),
     recent: (): Promise<string[]> =>
       ipcRenderer.invoke('workspace:recent'),

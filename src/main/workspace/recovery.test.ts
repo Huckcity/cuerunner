@@ -88,10 +88,10 @@ describe('saveWorkspace', () => {
     const file = join(dir, 'show.wlab')
     const win = {} as never
 
-    expect(await saveWorkspace(win, workspaceWith([]), file)).toBe(file)
+    expect(await saveWorkspace(win, workspaceWith([]), file)).toMatchObject({ path: file })
     expect(JSON.parse(readFileSync(file, 'utf-8')).name).toBe('Show')
 
-    expect(await saveWorkspace(win, workspaceWith([]), file)).toBe(file)
+    expect(await saveWorkspace(win, workspaceWith([]), file)).toMatchObject({ path: file })
     expect(readFileSync(`${file}.bak`, 'utf-8')).toContain('"Show"')
   })
 })

@@ -1,5 +1,6 @@
 import type { Cue } from './cue'
 import type { ShowSettings } from './show'
+import type { ShowHistoryEntry } from '../../../shared/showfile'
 
 export interface AudioSettings {
   outputDeviceId: string
@@ -80,6 +81,13 @@ export interface Workspace {
   id: string
   name: string
   createdAt: string
+  /**
+   * What the file's saves have changed, oldest first, written by the app rather than by
+   * the renderer. Optional: a workspace saved before the history existed has none, and
+   * the first save that changes something adds the first entry. A save that changes
+   * nothing adds nothing, which is what keeps an untouched showfile byte-identical.
+   */
+  history?: ShowHistoryEntry[]
   audioSettings: AudioSettings
   midiSettings: MidiSettings
   /**

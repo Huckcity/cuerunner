@@ -120,12 +120,12 @@ describe('store — saveSucceeded', () => {
 
   it('clears dirty flag', () => {
     useStore.getState().addCue('wait')
-    useStore.getState().saveSucceeded('/shows/my-show.wlab', 'My Show')
+    useStore.getState().saveSucceeded('/shows/my-show.wlab', 'My Show', [])
     expect(useStore.getState().isDirty).toBe(false)
   })
 
   it('updates path and name', () => {
-    useStore.getState().saveSucceeded('/new/path.wlab', 'Renamed')
+    useStore.getState().saveSucceeded('/new/path.wlab', 'Renamed', [])
     expect(useStore.getState().workspacePath).toBe('/new/path.wlab')
     expect(useStore.getState().workspaceName).toBe('Renamed')
   })

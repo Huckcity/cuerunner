@@ -93,8 +93,11 @@ interface WinslabBridge {
       workspacePath: string | null,
       cueId: string
     ) => Promise<{ workspace: Workspace; missingMedia: MissingMedia[] }>
-    save: (workspace: Workspace, existingPath: string | null) => Promise<string | null>
-    saveAs: (workspace: Workspace) => Promise<string | null>
+    save: (
+      workspace: Workspace,
+      existingPath: string | null
+    ) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
+    saveAs: (workspace: Workspace) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
     recent: () => Promise<string[]>
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null) => Promise<void>
     recovery: () => Promise<{
