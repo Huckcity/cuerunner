@@ -42,6 +42,7 @@ installer:
 - **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network
 - **Scenes and the desk**: the view the show is run from, with the console's channels and the DCAs they open set up in Show Settings, ensembles that move a group of mics at once, and scene cues in the stack
 - **Redundant playback**: a second machine runs the same show, mirrors it cue by cue and warms the same media, and picks the show up where it stopped if the machine driving it goes quiet — the running audio cue back at the position it had reached, the operator's place in the show carried across, and everything that cannot be picked up named in the run log
+- **The showfile as a versionable artifact**: what each save changed, read back from the file itself; a cue-by-cue comparison with another version of the show; two people's copies merged into one with the cues they both changed named rather than decided quietly; and a bundle that carries the show and every file it plays as a single `.wlabx` for handover
 
 ## Getting Started
 
@@ -441,7 +442,22 @@ Workspaces are saved as `.wlab` files (JSON format matching the `Workspace` inte
 
 ```json
 {
+  "version": 1,
+  "id": "uuid",
   "name": "My Show",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "history": [
+    {
+      "at": "2026-09-15T19:40:12.511Z",
+      "by": "adam",
+      "machine": "stage-box",
+      "cues": [{ "kind": "edited", "id": "uuid", "label": "1 Intro Music", "fields": ["volume"] }],
+      "settings": []
+    }
+  ],
+  "audioSettings": { "outputDeviceId": "default" },
+  "midiSettings": { "outputPortName": "" },
+  "triggerGuard": { "windowMs": 300 },
   "cues": [
     {
       "id": "uuid",
@@ -449,18 +465,37 @@ Workspaces are saved as `.wlab` files (JSON format matching the `Workspace` inte
       "number": "1",
       "name": "Intro Music",
       "filePath": "/path/to/file.mp3",
-      "outputs": [{ "volume": 1, "pan": 0 }],
+      "media": { "path": "walk-in.wav", "originalPath": "/path/to/file.mp3" },
+      "volume": 1,
+      "outputs": null,
       "preWait": 0,
       "postWait": 0,
       "advance": "on-end",
       "isArmed": true
       // ... other fields
     }
-  ],
-  "audioSettings": { /* output device */ },
-  "midiSettings": { /* default output port */ }
+  ]
 }
 ```
+
+Two properties of this file are load-bearing, and both are held by tests
+(`src/main/workspace/determinism.test.ts`, `src/main/workspace/history.test.ts`,
+`e2e/showfile.spec.ts`):
+
+- **The bytes are a function of the show and the folder it is saved into.** The file's `id` and
+  `createdAt` belong to the show and are written back as they came; nothing carries a save
+  timestamp. Saving a show that has not changed puts the same bytes back, so a workspace can
+  live in version control without every save being a diff.
+- **`history` records what a save changed, and only when it changed something.** Each entry
+  names the cues added, removed, edited and moved and the settings that changed — not the old
+  values, which are in the file the save replaced. An unedited save appends nothing; bringing
+  an older file up to this version's shape is a change to the file rather than to the show and
+  is not recorded as an edit.
+
+An `.wlabx` bundle is a zip holding `show.wlab` and a `media/` folder, with the showfile's media
+paths relative to the archive root. Entries are stored uncompressed in name order with fixed
+timestamps, so two bundles of one show are byte-identical, and each entry's CRC is checked on
+the way out.
 
 `WorkspaceManager` (main process) handles I/O and auto-migrates legacy fields on load: old
 `childIds` arrays become `parentId` pointers, missing timing fields are filled with defaults,

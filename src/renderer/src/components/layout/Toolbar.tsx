@@ -158,7 +158,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
 
   const fileItem = (item: FileMenuItem) => (
     <button key={item.action} data-action={item.action} onClick={() => handleMenuAction(fileActions[item.action])}>
-      <span>{item.label}</span>
+      <span className="file-menu-label">{item.label}</span>
       {PRO_FILE_ACTIONS.has(item.action) && <ProMark />}
       {item.accelerator && <kbd>{shortcutLabel(item.accelerator)}</kbd>}
     </button>

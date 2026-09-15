@@ -99,6 +99,25 @@ test('the panel’s Escape closes the panel and nothing else', async () => {
   await page.getByRole('button', { name: /STOP/ }).click()
 })
 
+test('the changes dialog stands the transport down', async () => {
+  await standOnTheFirstCue()
+  // This machine is unlicensed, so what the dialog draws is the lock rather than a list of
+  // saves — the frame and the modal registration are the same either way, and those are
+  // what this rule is about.
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button[data-action="history"]').click()
+  await expect(page.getByRole('dialog', { name: 'Changes' })).toBeVisible()
+
+  await page.locator('.changes-dialog .settings-close').focus()
+  await page.keyboard.press('Space')
+  await expect(page.locator('.cue-row').first()).not.toHaveAttribute('data-running', 'true')
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Changes' })).toHaveCount(0)
+  await page.keyboard.press('Space')
+  await expectTheFirstCueFired()
+})
+
 test('an open menu does not eat the press', async () => {
   await standOnTheFirstCue()
   await page.locator('.cue-row').first().click({ button: 'right' })

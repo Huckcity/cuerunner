@@ -138,8 +138,10 @@
           The cue stack is free, and it is the whole of the free app: every cue type, the
           timeline, the waveform, the run log, workspaces and the demo show.
           <strong>WinsLab Pro</strong> is the rest of the show — the services that listen, the
-          views the show is run from, and the panels that read it. Every Pro section in this
-          guide is marked <span class="pro">Pro</span>.
+          views the show is run from, the panels that read it, and the showfile's own history:
+          reading what its saves changed, comparing it with another version, merging two
+          people's copies, and handing it over as one file. Every Pro section in this guide is
+          marked <span class="pro">Pro</span>.
         </p>
         <p>
           Pro is unlocked with a license key: <em>WinsLab ▾ → Settings… → License</em>, paste
@@ -182,6 +184,11 @@
               <tr><td>Save As</td><td>WinsLab menu, <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Always asks for a path.</td></tr>
               <tr><td>Recent</td><td>WinsLab menu</td><td>The last ten workspaces, kept in the app's user data folder.</td></tr>
               <tr><td>Rename</td><td>Double-click the workspace name</td><td><kbd>Enter</kbd> commits, <kbd>Escape</kbd> cancels.</td></tr>
+              <tr><td>Show History<span class="pro">Pro</span></td><td>WinsLab menu</td><td>What each of the file's saves changed, newest first. See <em>What the file remembers</em>.</td></tr>
+              <tr><td>Compare Show<span class="pro">Pro</span></td><td>WinsLab menu</td><td>What changed between another saved show and this one. See <em>Comparing two versions</em>.</td></tr>
+              <tr><td>Merge Show<span class="pro">Pro</span></td><td>WinsLab menu</td><td>Two people's copies merged into a new file. See <em>Merging two people's work</em>.</td></tr>
+              <tr><td>Export Bundle<span class="pro">Pro</span></td><td>WinsLab menu</td><td>The show and its audio as one <code>.wlabx</code>. See <em>Handing a show over as one file</em>.</td></tr>
+              <tr><td>Import Bundle<span class="pro">Pro</span></td><td>WinsLab menu</td><td>Unpacks a <code>.wlabx</code> into a folder and opens it.</td></tr>
             </tbody>
           </table>
         </div>
@@ -216,12 +223,98 @@
           appears in a bar at the top of the window, and the run log records it.
         </p>
 
+        <h3>What the file remembers<span class="pro">Pro</span></h3>
+        <p>
+          Every save that changes the show writes a line into the file: who saved it, when, and
+          what moved — the cues added, removed, edited and moved, and the settings that changed.
+          <em>WinsLab ▾ → Show History…</em> reads those lines back, newest first, with the detail
+          of each entry behind a disclosure.
+        </p>
+        <p>
+          A save that changes nothing writes the same bytes back and adds no line, which is what
+          makes a showfile safe to keep in version control: a show opened, saved and closed
+          without an edit is the same file. Bringing an older file up to this version's shape is a
+          change to the file rather than to the show, so it is not recorded as an edit. A file
+          remembers its last two hundred changes and lets the oldest fall off.
+        </p>
+        <p>
+          The history lives in the <code>.wlab</code>, so it survives being copied, emailed or
+          handed over. It is written whether or not this machine is licensed — it is the show's
+          own record of itself — and reading it in the app is part of Pro.
+        </p>
+
+        <h3>Comparing two versions<span class="pro">Pro</span></h3>
+        <p>
+          <em>WinsLab ▾ → Compare Show…</em> takes another saved show and says what changed from
+          it to the show on screen: the cues added, the cues removed, the cues edited with the
+          fields that changed, the cues that moved, and the settings that moved with them. The
+          file you pick is the older side, so read the heading as "what changed since this was
+          written" — the version from last night's rehearsal against the one you are holding.
+        </p>
+        <p>
+          The comparison is about the show rather than about the machine: the audio file a cue
+          plays is compared by the file's own name, so a show copied into another folder, or onto
+          another machine, does not read as every cue having been edited.
+        </p>
+
+        <h3>Merging two people's work<span class="pro">Pro</span></h3>
+        <p>
+          <em>WinsLab ▾ → Merge Show…</em> merges another person's copy of the show into yours,
+          and asks for the version the two of you started from. That third file is not
+          bookkeeping: with two files alone, "I changed this" and "you changed it" look the same,
+          and a merge that cannot tell them apart throws one person's work away.
+        </p>
+        <p>
+          A cue one side changed is taken. A cue both sides changed in different fields is put
+          together. A cue both sides changed in the same field is a conflict: the merge keeps one
+          side's value and names the conflict — the cue, both values, and whose was kept — rather
+          than deciding quietly. The order is this show's, with the other side's cues placed among
+          the neighbours they were added after, and groups stay together.
+        </p>
+        <p>
+          What a merge will not pretend to do is said rather than guessed: the audio file a cue
+          plays is this show's, because the other copy resolved its media on the other machine; a
+          cue whose group went away comes back at the top level; and each of those is listed in
+          the report.
+        </p>
+        <p>
+          The merge writes a <strong>new</strong> file and leaves both inputs exactly as they
+          were, so it is safe to try twice. The report's second button runs the same merge over
+          the same two files again with the other side's choices for the conflicts.
+        </p>
+
+        <h3>Handing a show over as one file<span class="pro">Pro</span></h3>
+        <p>
+          <em>WinsLab ▾ → Export Bundle…</em> writes the show and every audio file it plays into
+          one <code>.wlabx</code>: a zip holding <code>show.wlab</code> and a
+          <code>media/</code> folder, with the showfile pointing inside it. It opens in any file
+          manager, and its bytes are a function of the show, so two exports of the same show are
+          the same file. A file the show names that is not on this machine is reported rather than
+          failing the export.
+        </p>
+        <p>
+          <em>Import Bundle…</em> asks where the show should live, unpacks it there and opens it:
+          the audio is in the folder beside the showfile, so every cue plays without anything to
+          relink. If the folder already holds files by those names, the app asks before replacing
+          them. A bundle whose contents do not match the checksums it carries is refused rather
+          than half-unpacked.
+        </p>
+
         <h3>Moving a show between machines</h3>
         <p>
-          Audio cues store the absolute path of their file. Copying only the
-          <code>.wlab</code> to another machine — or moving the audio files — leaves those cues
-          pointing at a path that no longer exists. Keep the audio next to the workspace and copy
-          the whole folder, or re-point each audio cue with the Browse button.
+          An audio cue's file is stored twice: relative to the workspace folder when it lives
+          inside it, and always as the absolute path it had at the last save. Copying the whole
+          show folder to another machine — or another drive — keeps every cue pointing at its
+          file, and a file that stayed behind while the workspace moved is still found by its
+          absolute path. A file that neither of those finds is reported in the missing-media bar,
+          and one press re-points every file that moved with it.
+        </p>
+        <p>
+          For a handover, or when the audio is scattered across a desktop and three render
+          folders, <em>Export Bundle…</em> puts the show and every file it plays into one
+          <code>.wlabx</code> instead. Copying only the <code>.wlab</code> — without its audio and
+          without a bundle — still leaves audio cues pointing at paths that were never on the
+          other machine.
         </p>
         <p>
           Workspaces written by older versions are migrated on load: missing timing fields are

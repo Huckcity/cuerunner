@@ -6,11 +6,12 @@
 // worth doing next — open the result, or run the same merge over the same two files with
 // the other side's choices, which is why the merge remembers them.
 import { useEffect } from 'react'
-import { useStore, usePro } from '../../store'
+import { usePro } from '../../store'
 import { useModal } from '../../hooks/useModal'
 import { ProLock } from '../license/ProLock'
 import { openMergedShow, mergeAnotherShow } from '../../hooks/useWorkspace'
 import type { MergeTally } from '../../../../shared/showfileMerge'
+import type { MergeReport } from '../../store'
 import './Changes.css'
 
 function fileName(path: string): string {
@@ -30,19 +31,24 @@ function summarise(tally: MergeTally): string {
   return parts.length === 0 ? 'nothing to merge' : parts.join(', ')
 }
 
-export function MergeReportDialog() {
+interface Props {
+  report: MergeReport
+  onClose: () => void
+}
+
+export function MergeReportDialog({ report, onClose }: Props) {
+  // Mounted only while there is a report to show, which is what makes this honest: a
+  // modal that is always mounted stands the transport keys down whether or not anything
+  // is on screen.
   useModal()
-  const report = useStore(s => s.mergeReport)
-  const setMergeReport = useStore(s => s.setMergeReport)
   const pro = usePro()
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent): void => { if (e.key === 'Escape') setMergeReport(null) }
+    const handler = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [setMergeReport])
+  }, [onClose])
 
-  if (!report) return null
   const conflicts = report.notes.filter(note => note.conflict).length
   const decided = report.policy === 'ours' ? 'this show’s' : 'the other show’s'
 
@@ -58,7 +64,7 @@ export function MergeReportDialog() {
           <span className="settings-title">Merged</span>
           <button
             className="settings-close"
-            onClick={() => setMergeReport(null)}
+            onClick={onClose}
             aria-label="Close merge report"
             title="Close (Esc)"
           >✕</button>

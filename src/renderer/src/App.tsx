@@ -62,6 +62,8 @@ export function App() {
   const closeSettings = useStore(s => s.closeSettings)
   const changesTab = useStore(s => s.changesTab)
   const closeChanges = useStore(s => s.closeChanges)
+  const mergeReport = useStore(s => s.mergeReport)
+  const setMergeReport = useStore(s => s.setMergeReport)
   const showSettingsTab = useStore(s => s.showSettingsTab)
   const setLicense = useStore(s => s.setLicense)
   const pro = usePro()
@@ -174,7 +176,9 @@ export function App() {
       {settingsTab !== null && <SettingsDialog initialTab={settingsTab} onClose={closeSettings} />}
       {showSettingsTab !== null && <ShowSettings />}
       {changesTab !== null && <ChangesDialog initialTab={changesTab} onClose={closeChanges} />}
-      <MergeReportDialog />
+      {mergeReport !== null && (
+        <MergeReportDialog report={mergeReport} onClose={() => setMergeReport(null)} />
+      )}
     </div>
   )
 }

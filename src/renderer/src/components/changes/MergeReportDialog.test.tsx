@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MergeReportDialog } from './MergeReportDialog'
-import { useStore } from '../../store'
+import { useStore, type MergeReport } from '../../store'
 import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement
@@ -54,9 +54,9 @@ afterEach(() => {
   useStore.setState({ license: { state: 'unlicensed' }, mergeReport: null })
 })
 
-async function show(): Promise<void> {
+async function show(report: MergeReport | null = useStore.getState().mergeReport): Promise<void> {
   await act(async () => {
-    root.render(<MergeReportDialog />)
+    root.render(report === null ? null : <MergeReportDialog report={report} onClose={() => {}} />)
   })
 }
 
@@ -101,8 +101,7 @@ describe('the merge report', () => {
   })
 
   it('does not draw the conflict line when nobody disagreed', async () => {
-    useStore.setState({ mergeReport: report({ notes: [], policy: 'ours' }) })
-    await show()
+    await show(report({ notes: [], policy: 'ours' }))
 
     expect(container.querySelector('.changes-note')).toBeNull()
     expect(container.querySelector('.changes-empty')?.textContent).toContain('nothing needed deciding')
