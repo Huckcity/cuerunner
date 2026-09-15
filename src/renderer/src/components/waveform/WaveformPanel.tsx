@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useStore, useSelectedCue } from '../../store'
+import { useStore, useSelectedCue, usePro } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueRunner } from '../../engine/CueRunner'
 import { PlaybackWarnings } from '../layout/PlaybackWarnings'
@@ -8,6 +8,7 @@ import {
   type WaveformLayout, type WaveformPeaks, type WaveformRegion, type WaveformView
 } from '../../utils/waveform'
 import { regionEndMs } from '../../utils/cueSplit'
+import { playRegion } from '../../utils/silenceTrim'
 import type { AudioCue } from '../../types/cue'
 import './WaveformPanel.css'
 
@@ -76,6 +77,7 @@ export function WaveformPanel() {
   const running = useStore(s => s.running)
   const cursor = useStore(s => s.waveformCursor)
   const setWaveformCursor = useStore(s => s.setWaveformCursor)
+  const pro = usePro()
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -107,6 +109,12 @@ export function WaveformPanel() {
   const [dragging, setDragging] = useState<DragMode | null>(null)
 
   const audioCue = selectedCue?.type === 'audio' ? selectedCue as AudioCue : null
+  /**
+   * Whether the trim applies to this cue here: the cue asks for it and this machine is
+   * licensed to apply it. The same two questions `CueRunner` asks before a firing, so
+   * what the panel shades is what the engine will sound.
+   */
+  const trim = pro && audioCue?.trimSilence === true
   const runState = audioCue ? running.get(audioCue.id) : undefined
   const isPlaying = runState?.state === 'playing'
 
@@ -121,13 +129,26 @@ export function WaveformPanel() {
   const totalMs = (): number =>
     (durationRef.current || (audioCue?.duration ?? 0)) * 1000
 
-  /** The cue's region as fractions of the file. `totalMs` is milliseconds, like the cue. */
-  const regionOf = (cue: AudioCue, totalMs: number): WaveformRegion => {
+  /** A span of the file, in ms, as fractions of it; a null end is the end of the file. */
+  const fractionsOf = (startMs: number, endMs: number | null, totalMs: number): WaveformRegion => {
     if (totalMs <= 0) return { start: 0, end: 1 }
     return {
-      start: Math.max(0, cue.startTime / totalMs),
-      end: Math.min(regionEndMs(cue) / totalMs, 1)
+      start: Math.max(0, startMs / totalMs),
+      end: Math.min((endMs ?? totalMs) / totalMs, 1)
     }
+  }
+
+  /** The cue's region as fractions of the file. `totalMs` is milliseconds, like the cue. */
+  const regionOf = (cue: AudioCue, totalMs: number): WaveformRegion =>
+    fractionsOf(cue.startTime, regionEndMs(cue), totalMs)
+
+  /**
+   * What the cue will play, as fractions of the file: the region with the silence trim
+   * folded in. The region is the operator's; this is the part of it with sound in it.
+   */
+  const playedOf = (cue: AudioCue, totalMs: number): WaveformRegion => {
+    const played = playRegion(cue, trim)
+    return fractionsOf(played.startMs, played.endMs, totalMs)
   }
 
   // The window the panel is looking at, in ms and clamped to the file. Clamped on the way
@@ -356,12 +377,13 @@ export function WaveformPanel() {
     const shown = cursorMs === null ? null : Math.min(Math.max(cursorMs / length, 0), 1)
     layoutRef.current = drawWaveform(canvas, envelope, {
       region,
+      played: playedOf(audioCue, length),
       view,
       play: isPlaying ? playFraction : null,
       cursor: shown,
       onsets: length > 0 ? onsets.map(ms => ms / length) : []
     })
-  }, [peaks, playFraction, audioCue?.startTime, audioCue?.endTime, audioCue?.duration, cursorMs, isPlaying, onsets, view.start, view.end])
+  }, [peaks, playFraction, audioCue?.startTime, audioCue?.endTime, audioCue?.duration, audioCue?.soundRegion, trim, cursorMs, isPlaying, onsets, view.start, view.end])
 
   useEffect(draw, [draw])
 
@@ -496,7 +518,14 @@ export function WaveformPanel() {
   const totalDuration = durationRef.current || audioCue.duration / 1000
   const hoverTime = hoverFraction != null ? hoverFraction * totalDuration : null
   const playTime = playFraction * totalDuration
-  const trimmed = audioCue.startTime > 0 || regionEndMs(audioCue) < totalDuration * 1000 - 1
+  // The tag speaks for what the cue will play, which with the trim on is the measured
+  // part of it rather than the region the operator drew. The ✕ beside it undoes an edit
+  // of theirs, so it is offered only when there is one: a reset next to a region nobody
+  // moved is a button that appears to do nothing.
+  const played = playRegion(audioCue, trim)
+  const playedEndMs = played.endMs ?? totalDuration * 1000
+  const playsWholeFile = played.startMs <= 0 && playedEndMs >= totalDuration * 1000 - 1
+  const regionEdited = audioCue.startTime > 0 || regionEndMs(audioCue) < totalDuration * 1000 - 1
   const cursorTime = cursorMs
   const cursorOverRegion = cursorTime !== null &&
     cursorTime > audioCue.startTime && cursorTime < regionEndMs(audioCue)
@@ -523,13 +552,15 @@ export function WaveformPanel() {
             sampled
           </span>
         )}
-        {trimmed && (
+        {!playsWholeFile && (
           <span className="waveform-region-tag" title="The part of the file this cue plays">
-            plays {formatTime(audioCue.startTime)}–{formatTime(regionEndMs(audioCue))}
-            <button
-              onClick={() => updateCue(audioCue.id, { startTime: 0, endTime: null })}
-              title="Play the whole file"
-            >✕</button>
+            plays {formatTime(played.startMs)}–{formatTime(playedEndMs)}
+            {regionEdited && (
+              <button
+                onClick={() => updateCue(audioCue.id, { startTime: 0, endTime: null })}
+                title="Play the whole file"
+              >✕</button>
+            )}
           </span>
         )}
         {cursorOverRegion && (

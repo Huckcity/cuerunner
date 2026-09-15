@@ -8,6 +8,7 @@ import { AudioInspector } from './AudioInspector'
 import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueRunner } from '../../engine/CueRunner'
+import { TEST_LICENSE } from '../../../../test/license'
 import type { AudioCue } from '../../types/cue'
 
 vi.mock('../../engine/audioEngineClient')
@@ -94,7 +95,13 @@ describe('AudioInspector', () => {
     container.remove()
     warn.mockRestore()
     vi.restoreAllMocks()
-    useStore.setState({ cues: [], audioSettings: { outputDeviceId: 'default' } })
+    useStore.setState({
+      cues: [],
+      audioSettings: { outputDeviceId: 'default' },
+      license: { state: 'unlicensed' },
+      silenceFailures: {},
+      settingsTab: null
+    })
   })
 
   async function show(cue: AudioCue, tab = 'Audio'): Promise<void> {
@@ -169,6 +176,137 @@ describe('AudioInspector', () => {
 
     expect(container.querySelector('button[title="Start time is at its default"]')).toHaveProperty('disabled', true)
     expect(container.querySelector('button[title="End time is at its default"]')).toHaveProperty('disabled', true)
+  })
+
+  // The trim row reads the measurement rather than the file, so what it says differs by
+  // which of the two the cue has: a measured cue, one still waiting on the scan, and one
+  // whose scan will never answer.
+  it('reads the trim as what comes off each end of the file', async () => {
+    await show(audioCue({
+      filePath: '/shows/walk-in.wav',
+      trimSilence: true,
+      soundRegion: { startMs: 2000, endMs: 8000, durationMs: 11000, silent: false }
+    }), 'Time & Loops')
+
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe('cuts 2.0s at the head · 3.0s at the tail')
+  })
+
+  it('names the ends that carry silence, and says so when neither does', async () => {
+    await show(audioCue({
+      filePath: '/shows/walk-in.wav',
+      trimSilence: true,
+      soundRegion: { startMs: 0, endMs: 8000, durationMs: 11000, silent: false }
+    }), 'Time & Loops')
+    expect(container.querySelector('.trim-silence-readout')?.textContent).toBe('cuts 3.0s at the tail')
+
+    await show(audioCue({
+      filePath: '/shows/walk-in.wav',
+      trimSilence: true,
+      soundRegion: { startMs: 0, endMs: 11000, durationMs: 11000, silent: false }
+    }), 'Time & Loops')
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe('no silence at the edges of this file')
+  })
+
+  it('says when the region itself sits inside the silence rather than the sound', async () => {
+    // The amounts are zero here for the opposite reason to the case above: there is
+    // silence, and the region the operator set is entirely inside it. Saying the file has
+    // no silence at its edges would be the row misreading its own measurement.
+    await show(audioCue({
+      filePath: '/shows/walk-in.wav',
+      trimSilence: true,
+      startTime: 0,
+      endTime: 1000,
+      soundRegion: { startMs: 2000, endMs: 8000, durationMs: 11000, silent: false }
+    }), 'Time & Loops')
+
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe("the region sits in the file's silence")
+  })
+
+  it('says the whole file plays when nothing in it crosses the threshold', async () => {
+    await show(audioCue({
+      filePath: '/shows/walk-in.wav',
+      trimSilence: true,
+      soundRegion: { startMs: 0, endMs: 11000, durationMs: 11000, silent: true }
+    }), 'Time & Loops')
+
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe('no sound above -60 dBFS — the whole file plays')
+  })
+
+  it('says it is measuring until the file has been scanned', async () => {
+    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
+    await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
+
+    expect(container.querySelector('.trim-silence-readout')?.textContent).toBe('measuring…')
+  })
+
+  it('says a file could not be read to measure it', async () => {
+    useStore.setState({ silenceFailures: { a1: '/shows/broken.wav' } })
+    await show(audioCue({ filePath: '/shows/broken.wav', trimSilence: true }), 'Time & Loops')
+
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe('the file could not be read to measure it')
+  })
+
+  it('asks the question again after the cue is pointed at another file', async () => {
+    useStore.setState({
+      license: { state: 'active', license: TEST_LICENSE },
+      silenceFailures: { a1: '/shows/broken.wav' }
+    })
+    await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
+
+    expect(container.querySelector('.trim-silence-readout')?.textContent).toBe('measuring…')
+  })
+
+  it('still reads a measured file with the trim off', async () => {
+    await show(audioCue({
+      filePath: '/shows/walk-in.wav',
+      soundRegion: { startMs: 2000, endMs: 8000, durationMs: 11000, silent: false }
+    }), 'Time & Loops')
+
+    expect(container.querySelector<HTMLInputElement>('#inspector-trim-silence')!.checked).toBe(false)
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe('measured: cuts 2.0s at the head · 3.0s at the tail (trim is off)')
+  })
+
+  it('turns the trim on the cue from the checkbox', async () => {
+    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
+    await show(audioCue({ filePath: '/shows/walk-in.wav' }), 'Time & Loops')
+
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('#inspector-trim-silence')!.click()
+    })
+
+    expect(useStore.getState().cues[0]).toMatchObject({ trimSilence: true })
+  })
+
+  it('locks the trim on an unlicensed machine and says why', async () => {
+    await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
+
+    const box = container.querySelector<HTMLInputElement>('#inspector-trim-silence')!
+    expect(box.checked).toBe(true)
+    expect(box.disabled).toBe(true)
+    // Nothing is scanning on a machine that may not apply the result, so the row says
+    // what it is waiting on rather than that it is measuring.
+    expect(container.querySelector('.trim-silence-readout')?.textContent)
+      .toBe('measured once this machine is licensed')
+
+    const hint = container.querySelector<HTMLParagraphElement>('.license-hint')!
+    expect(hint.className).toContain('inspector-hint')
+    expect(hint.textContent).toContain('WinsLab Pro')
+    await act(async () => { hint.querySelector<HTMLButtonElement>('.license-link')!.click() })
+    expect(useStore.getState().settingsTab).toBe('license')
+  })
+
+  it('leaves the row plain on a licensed machine', async () => {
+    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
+    await show(audioCue({ filePath: '/shows/walk-in.wav' }), 'Time & Loops')
+
+    expect(container.querySelector<HTMLInputElement>('#inspector-trim-silence')!.disabled).toBe(false)
+    expect(container.querySelector('.license-hint')).toBeNull()
   })
 
   async function browse(cue: AudioCue): Promise<void> {

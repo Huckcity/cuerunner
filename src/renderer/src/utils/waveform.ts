@@ -30,6 +30,13 @@ export interface WaveformRegion {
 export interface WaveformDraw {
   region: WaveformRegion
   /**
+   * What playback will actually use, as fractions of the file: the region with any
+   * silence trim folded in. Null or absent when the cue plays its region as it stands —
+   * the shading then follows `region` — and the grips always do, because a grip is where
+   * a drag takes hold of the operator's own region, which the trim never rewrites.
+   */
+  played?: WaveformRegion | null
+  /**
    * The window into the file the panel is looking at, as fractions: `0–1` is the whole
    * file, and a zoomed panel is a narrower window inside it. Everything the frame draws
    * is placed through this, so the view is the only thing that decides what "further
@@ -145,8 +152,13 @@ export function drawWaveform(
   const view = draw.view
   const viewSpan = Math.max(Number.EPSILON, view.end - view.start)
   const playX = draw.play === null ? null : viewX(draw.play, view, width)
-  const regionFrom = viewX(layout.startFraction, view, width)
-  const regionTo = viewX(layout.endFraction, view, width)
+  // The outside shading follows what the cue will play — the region with the trim folded
+  // in — while the grips follow the region itself: a grip is what a drag takes hold of,
+  // and the trim is not the operator's to drag. Dimming a part the cue will sound, or
+  // lighting one it will not, is the panel misreading its own file.
+  const played = draw.played ?? { start: layout.startFraction, end: layout.endFraction }
+  const playedFrom = viewX(Math.max(0, Math.min(1, played.start)), view, width)
+  const playedTo = viewX(Math.max(0, Math.min(1, played.end)), view, width)
   const yMid = height / 2
 
   // Where a file fraction falls among these buckets: the envelope's own window, which is
@@ -181,9 +193,10 @@ export function drawWaveform(
     const barHeight = Math.max(1, yMin - yMax)
 
     // Three states, all visible at once: the part of the file this cue plays, the part it
-    // has played, and the part outside the region, which is dimmer than the rest — the
-    // trim is the shape of the cue and the operator has to be able to see it.
-    const inside = x >= regionFrom && x <= regionTo
+    // has played, and the part it will not, which is dimmer than the rest — the silence a
+    // trim drops sits in that dim border beside the file beyond the region, and the
+    // operator has to be able to see the shape of what they will hear.
+    const inside = x >= playedFrom && x <= playedTo
     ctx.fillStyle = !inside
       ? WAVEFORM_COLOR_OUTSIDE
       : playX !== null && x <= playX
@@ -276,7 +289,7 @@ function drawGrip(
 
 const WAVEFORM_COLOR = '#2a6099'
 const WAVEFORM_COLOR_PLAYED = '#4a9eff'
-/** Outside the cue's region: the part of the file this cue does not play. */
+/** Outside what the cue plays: the file beyond its region, and the silence a trim drops. */
 const WAVEFORM_COLOR_OUTSIDE = '#1d3a63'
 const PLAYHEAD_COLOR = '#ffffff'
 const BG_COLOR = '#111'

@@ -35,6 +35,7 @@ Everything below is in the same download and is unlocked by a key, not by anothe
 installer:
 
 - **The show around the cue stack**: OSC and MIDI input, the show monitor, network presence, and the wireless service that reads a telemetry source
+- **Trim silence**: audio cues can play only the part of a file between its first and last audible samples — measured by the engine when the file is chosen, a default for new cues in a show that asks for it, and a toggle of its own on every cue
 - **Wireless and the mic plot**: who is wearing which pack, the alarm before a battery dies on someone with an entrance, a swap log, and the night's report
 - **Triggers**: a cue that fires from an OSC address or a MIDI note with nobody's hand on GO
 - **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network

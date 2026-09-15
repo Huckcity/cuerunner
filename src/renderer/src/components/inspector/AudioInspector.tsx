@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useStore } from '../../store'
+import { useStore, usePro } from '../../store'
 import type { AudioCue, AudioCrosspoint } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
@@ -10,12 +10,87 @@ import { cueRunner } from '../../engine/CueRunner'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { resampleNotice } from '../../utils/sampleRate'
 import { AUDIO_DEFAULTS } from '../../utils/cueDefaults'
+import { trimAmounts } from '../../utils/silenceTrim'
+import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
 
 interface Props { cue: AudioCue; tab: string }
+
+/** A trim amount, in the units the region fields are typed in; under a tenth of a second
+ *  the rounded figure would read as no cut at all, so those are stated in ms. */
+function trimSize(ms: number): string {
+  return ms < 100 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+/** What the trim drops, as the sides it comes off: both when both carry silence, one
+ *  when only that one does, and nothing at all when the amounts are zero. */
+function trimSentence(amounts: { headMs: number; tailMs: number }): string {
+  const sides: string[] = []
+  if (amounts.headMs > 0) sides.push(`${trimSize(amounts.headMs)} at the head`)
+  if (amounts.tailMs > 0) sides.push(`${trimSize(amounts.tailMs)} at the tail`)
+  return sides.length === 0
+    ? 'no silence at the edges of this file'
+    : `cuts ${sides.join(' · ')}`
+}
+
+/**
+ * What the trim would take off this cue's own region, or null when there is nothing to
+ * read yet. The question goes to `trimAmounts` with the flag set either way, because the
+ * measurement is worth reading before the trim is on: the answer is already on the file,
+ * and the readout says which of the two states it is describing.
+ */
+function measuredAmounts(cue: AudioCue): { headMs: number; tailMs: number } | null {
+  const sound = cue.soundRegion
+  if (cue.filePath === '' || sound == null || sound.silent) return null
+  return cue.trimSilence === true ? trimAmounts(cue) : trimAmounts({ ...cue, trimSilence: true })
+}
+
+/** Whether the cue's own region overlaps the part of the file that has sound in it. */
+function regionTouchesSound(cue: AudioCue): boolean {
+  const sound = cue.soundRegion
+  if (sound == null) return true
+  const regionEnd = cue.endTime ?? sound.durationMs
+  return sound.startMs < regionEnd && sound.endMs > cue.startTime
+}
+
+/**
+ * What the row says about this cue. The flag, the operator's region, the measurement and
+ * a refusal arrive at different times, so the sentence follows the state the cue is in
+ * rather than the flag alone — a cue whose file has been measured says what is on the
+ * file even with the trim off, which is what an operator comparing two machines reads.
+ */
+function trimReadout(cue: AudioCue, refused: boolean, pro: boolean): string {
+  const amounts = measuredAmounts(cue)
+  if (cue.trimSilence !== true) {
+    return amounts === null ? '' : `measured: ${trimSentence(amounts)} (trim is off)`
+  }
+  if (cue.filePath === '') return 'choosing a file will measure it'
+  if (cue.soundRegion?.silent === true) {
+    return `no sound above ${AUDIO_SILENCE_THRESHOLD_DB} dBFS — the whole file plays`
+  }
+  if (amounts !== null) {
+    // Nothing to drop says two very different things: a region that already sits inside
+    // the sound, and one placed entirely in the silence at an end. The second is worth
+    // saying plainly — the cue is about to play a stretch of nothing.
+    if (amounts.headMs === 0 && amounts.tailMs === 0 && !regionTouchesSound(cue)) {
+      return "the region sits in the file's silence"
+    }
+    return trimSentence(amounts)
+  }
+  if (refused) return 'the file could not be read to measure it'
+  // The scan is part of Pro, and the measurement pass does not read a file for a machine
+  // that may not apply the result, so the waiting state says what it is waiting on.
+  return pro ? 'measuring…' : 'measured once this machine is licensed'
+}
 
 export function AudioInspector({ cue, tab }: Props) {
   const update = useStore(s => s.updateCue)
   const outputDeviceId = useStore(s => s.audioSettings.outputDeviceId)
+  const openSettings = useStore(s => s.openSettings)
+  // A refusal is keyed by the path it was for, so a cue pointed at another file since
+  // then is asking about the new one — the same question the measurement pass asks.
+  const refusedPath = useStore(s => s.silenceFailures[cue.id])
+  const trimRefused = refusedPath !== undefined && refusedPath === cue.filePath
+  const pro = usePro()
   const set = (patch: Partial<AudioCue>) => update(cue.id, patch)
 
   const [loading, setLoading] = useState(false)
@@ -124,6 +199,32 @@ export function AudioInspector({ cue, tab }: Props) {
           <ResetButton label="End time" value={cue.endTime} defaultValue={AUDIO_DEFAULTS.endTime}
             onReset={() => set({ endTime: AUDIO_DEFAULTS.endTime })} />
         </div>
+        {/* The trim acts on the region the two fields above describe: with it on, the cue
+            plays the part of that region between the file's first and last audible
+            samples. What that comes to is read out here, because the scan that measures
+            the file runs on its own and the fields alone cannot say what it found. */}
+        <div className="field-row">
+          <label htmlFor="inspector-trim-silence">Trim silence</label>
+          <input
+            id="inspector-trim-silence"
+            type="checkbox"
+            checked={cue.trimSilence === true}
+            disabled={!pro}
+            onChange={e => set({ trimSilence: e.target.checked })}
+          />
+          <span className="inspector-readout trim-silence-readout">
+            {trimReadout(cue, trimRefused, pro)}
+          </span>
+        </div>
+        {!pro && (
+          <p className="inspector-hint license-hint">
+            WinsLab Pro: the trim leaves the silence at the edges of the file unheard.
+            Without a license this cue plays its whole region.{' '}
+            <button className="license-link" onClick={() => openSettings('license')}>
+              Enter a license key
+            </button>
+          </p>
+        )}
         <div className="field-row">
           <label>Fade in (s)</label>
           <NumberField when="typed" min={0} step={0.1} value={toSeconds(cue.fadeInDuration)}

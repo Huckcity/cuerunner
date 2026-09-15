@@ -9,6 +9,7 @@ import { NumberField, TextField } from '../common/Field'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../types/workspace'
+import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
@@ -298,6 +299,35 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               {audioDeviceError !== null && info !== null && !backendHasNoDevice(info.backend) && (
                 <p className="settings-device-error" role="alert">{audioDeviceError}</p>
               )}
+
+              <div className="field-section-title">New audio cues</div>
+              {!pro && (
+                <p className="inspector-hint license-hint">
+                  WinsLab Pro: the silence in a cue's file is measured and trimmed on a
+                  licensed machine. The setting travels with the show either way.{' '}
+                  <button className="license-link" onClick={() => setTab('license')}>
+                    Enter a license key
+                  </button>
+                </p>
+              )}
+              <div className="field-row">
+                <label htmlFor="settings-auto-trim">Trim silence</label>
+                <input
+                  id="settings-auto-trim"
+                  type="checkbox"
+                  checked={audioSettings.autoTrimSilence ?? false}
+                  disabled={!pro}
+                  onChange={e => updateAudioSettings({ autoTrimSilence: e.target.checked })}
+                />
+                <span className="settings-info">Trim every new audio cue</span>
+              </div>
+              <p className="inspector-hint">
+                A new audio cue starts at the first audible sample of its file and ends at
+                the last, where silence is anything below {AUDIO_SILENCE_THRESHOLD_DB} dBFS.
+                It is a default for the cues being added, not a switch over the show: the
+                cues already in the list keep the trim they were made with, and one can be
+                turned on its own in the cue's panel.
+              </p>
 
               <div className="field-section-title">Engine</div>
               {info ? (
