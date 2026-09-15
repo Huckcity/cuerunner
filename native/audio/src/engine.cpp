@@ -38,6 +38,14 @@ constexpr int kAckTimeoutMs = 2000;
 constexpr double kMinOnsetSensitivity = 0.1;
 constexpr double kMaxOnsetSensitivity = 10.0;
 
+// A silence scan's threshold bounds, in dBFS. Out of range is either a typo or an
+// attempt to ask a question the samples cannot answer: below -120 dBFS the line sits
+// under the noise floor of any 24-bit converter, where what it separates is dither from
+// dither, and above 0 dBFS nothing short of a clipped sample can cross it. Clamped
+// rather than refused, the way an oversized waveform point count is.
+constexpr double kMinSilenceThresholdDb = -120.0;
+constexpr double kMaxSilenceThresholdDb = 0.0;
+
 /**
  * The region length above which a waveform envelope is tapped rather than read through.
  * At this length a bucket is already wider than a pixel of wall time on a full-width
@@ -920,7 +928,8 @@ bool Engine::seekCue(const std::string& cueId, double positionMs, double whenMs,
 }
 
 /**
- * Ends a voice's loop and plays it out to the end of the file.
+ * Ends a voice's loop and plays it out to the end of the file — or to `endMs` when one
+ * is named, which is where a cue trimmed of its trailing silence stops hearing the file.
  *
  * The whole verb is the one transition a vamp needs: the voice keeps its position, its
  * gain envelope and its routing, and only the region it is allowed to play changes — so
@@ -928,15 +937,22 @@ bool Engine::seekCue(const std::string& cueId, double positionMs, double whenMs,
  * no known length has no end to play out to, and a voice that is not looping is not
  * vamping, so neither is released; the caller is told which it got.
  */
-bool Engine::releaseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, double endMs, CommandResultDTO& out,
+                        EngineError& error) {
   if (!finiteNumber(whenMs)) {
     error = {"invalid", "release needs a finite time"};
+    return false;
+  }
+  if (hasEnd && !finiteNumber(endMs)) {
+    error = {"invalid", "release needs a finite end"};
     return false;
   }
   Command command;
   command.kind = Command::Release;
   copyStr(command.cueId, sizeof(command.cueId), cueId);
   command.whenMs = whenMs;
+  command.hasEndMs = hasEnd;
+  command.endMs = endMs;
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
   out.atMs = clockMs();
@@ -1384,6 +1400,43 @@ void Engine::cacheOnsets(const std::string& filePath, double sensitivity, int ma
   }
 }
 
+bool Engine::silenceCached(const std::string& filePath, double thresholdDb, const FileStamp& stamp, SilenceDTO& out) {
+  std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+  for (SilenceCacheEntry& entry : silenceCache_) {
+    if (entry.filePath != filePath || entry.thresholdDb != thresholdDb) continue;
+    if (entry.stamp.bytes != stamp.bytes || entry.stamp.modified != stamp.modified) continue;
+    entry.lastUse = ++analysisCacheClock_;
+    out = entry.result;
+    return true;
+  }
+  return false;
+}
+
+void Engine::cacheSilence(const std::string& filePath, double thresholdDb, const FileStamp& stamp,
+                          const SilenceDTO& result) {
+  std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+  for (auto it = silenceCache_.begin(); it != silenceCache_.end(); ++it) {
+    if (it->filePath == filePath && it->thresholdDb == thresholdDb) {
+      silenceCache_.erase(it);
+      break;
+    }
+  }
+  SilenceCacheEntry entry;
+  entry.filePath = filePath;
+  entry.thresholdDb = thresholdDb;
+  entry.stamp = stamp;
+  entry.result = result;
+  entry.lastUse = ++analysisCacheClock_;
+  silenceCache_.push_back(std::move(entry));
+  while (silenceCache_.size() > kMaxAnalysisCacheEntries) {
+    auto victim = silenceCache_.begin();
+    for (auto it = silenceCache_.begin(); it != silenceCache_.end(); ++it) {
+      if (it->lastUse < victim->lastUse) victim = it;
+    }
+    silenceCache_.erase(victim);
+  }
+}
+
 bool Engine::waveform(const std::string& filePath, int points, const RegionQuery& region, WaveformDTO& out,
                       EngineError& error) {
   if (points < 1) {
@@ -1672,6 +1725,118 @@ bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnse
   result.startMs = startMs;
   result.endMs = endFrame >= 0 ? frameMs(endFrame, sampleRate) : result.durationMs;
   cacheOnsets(filePath, sensitivity, maxOnsets, region, stamp, result);
+  out = std::move(result);
+  return true;
+}
+
+/**
+ * A file's audible extent, in one pass over its samples.
+ *
+ * Every frame's channels are compared against one linear threshold, so the answer is
+ * the caller's own definition of silence rather than a gate that opens and closes: the
+ * scan is where a trim's two edges come from, and an edge that wandered with the noise
+ * floor would move a cue under the operator. The whole file is read, but only the two
+ * frame indices that matter are kept, so a long file costs a pass and two numbers.
+ */
+bool Engine::silence(const std::string& filePath, double thresholdDb, SilenceDTO& out, EngineError& error) {
+  if (!std::isfinite(thresholdDb)) {
+    error = {"invalid", "thresholdDb must be a finite number"};
+    return false;
+  }
+  thresholdDb = std::clamp(thresholdDb, kMinSilenceThresholdDb, kMaxSilenceThresholdDb);
+
+  const FileStamp stamp = fileStampOf(filePath);
+  if (silenceCached(filePath, thresholdDb, stamp, out)) return true;
+
+  SilenceDTO result;
+  result.filePath = filePath;
+
+  const double threshold = std::pow(10.0, thresholdDb / 20.0);
+  int64_t firstFrame = -1;
+  int64_t lastFrame = -1;
+  int64_t consumed = 0;
+  const auto fold = [&](const float* samples, int64_t frames, int channels) {
+    for (int64_t frame = 0; frame < frames; frame++) {
+      const float* values = samples + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+      for (int channel = 0; channel < channels; channel++) {
+        if (std::fabs(static_cast<double>(values[channel])) <= threshold) continue;
+        if (firstFrame < 0) firstFrame = consumed + frame;
+        lastFrame = consumed + frame;
+        // One channel over the line makes the frame audible; the rest cannot move the
+        // edge.
+        break;
+      }
+    }
+    consumed += frames;
+  };
+
+  int sampleRate = 0;
+  int channels = 0;
+  int64_t frames = -1;
+
+  // A file the show has already decoded is scanned straight out of the cache: no disk
+  // pass and no second decode, so a scan costs nothing on a file that is playing.
+  CacheEntry* resident = nullptr;
+  if (cache_.isResident(filePath)) {
+    bool cacheHit = false;
+    bool bypassed = false;
+    std::string cacheError;
+    resident = cache_.pin(filePath, cacheHit, bypassed, cacheError);
+  }
+  if (resident != nullptr && (resident->channels <= 0 || resident->sampleRate <= 0)) {
+    // An entry that cannot describe itself is no better than the file.
+    cache_.release(resident);
+    resident = nullptr;
+  }
+
+  if (resident != nullptr) {
+    channels = resident->channels;
+    sampleRate = resident->sampleRate;
+    frames = resident->frames;
+    fold(resident->data.data(), frames, channels);
+    cache_.release(resident);
+  } else {
+    std::string openError;
+    std::unique_ptr<Source> source = openSource(filePath, openError);
+    if (source == nullptr) {
+      error = {"decode", openError};
+      return false;
+    }
+    const SourceInfo info = source->info();
+    channels = info.channels;
+    sampleRate = info.sampleRate;
+    frames = info.frames;
+    if (channels <= 0 || sampleRate <= 0) {
+      error = {"decode", "media file reports an invalid format"};
+      return false;
+    }
+    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
+    for (;;) {
+      if (analysisCancelled()) return cancelledScan(error);
+      const int64_t got = source->readFrames(chunk.data(), 8192);
+      if (got <= 0) break;
+      fold(chunk.data(), got, channels);
+    }
+  }
+
+  // A file whose length is not stated — an MP3 with no Xing frame — reports what the
+  // scan actually read; a stated length is the better number when there is one.
+  result.durationMs = frameMs(frames > 0 ? frames : consumed, sampleRate);
+  result.sampleRate = sampleRate;
+  result.channels = channels;
+  result.silent = firstFrame < 0;
+  if (result.silent) {
+    // Nothing crossed the threshold: the bounds are the whole file, because a file with
+    // no sound in it has no silence at its edges to trim.
+    result.startMs = 0.0;
+    result.endMs = result.durationMs;
+  } else {
+    result.startMs = frameMs(firstFrame, sampleRate);
+    // The last audible sample is a sample long, so the edge is its far side: the trim
+    // keeps the sample that was heard and drops what follows it.
+    result.endMs = frameMs(lastFrame + 1, sampleRate);
+  }
+  cacheSilence(filePath, thresholdDb, stamp, result);
   out = std::move(result);
   return true;
 }

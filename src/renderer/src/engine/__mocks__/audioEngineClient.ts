@@ -107,6 +107,15 @@ export const audioEngine = {
     channels: 2,
     truncated: false
   })),
+  silence: vi.fn(async (filePath: string) => ({
+    filePath,
+    startMs: 0,
+    endMs: 0,
+    durationMs: 0,
+    sampleRate: 48000,
+    channels: 2,
+    silent: true
+  })),
   probe: vi.fn(async (filePath: string) => ({
     filePath,
     format: 'wav' as const,

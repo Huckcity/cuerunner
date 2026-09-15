@@ -32,6 +32,7 @@ import type {
   AudioRegion,
   AudioProbe,
   AudioOnsets,
+  AudioSilence,
   AudioProgress,
   AudioSeekResult,
   AudioStartOptions,
@@ -54,6 +55,10 @@ const SLOW_VERBS: Record<string, number> = {
   prepare: SLOW_REQUEST_TIMEOUT_MS,
   probe: SLOW_REQUEST_TIMEOUT_MS,
   waveform: SLOW_REQUEST_TIMEOUT_MS,
+  // A silence scan always reads the whole file, and the files this is for are the long
+  // ones — an hour of it is a pass over a gigabyte, which the default deadline would cut
+  // off mid-read.
+  silence: SLOW_REQUEST_TIMEOUT_MS,
   configure: SLOW_REQUEST_TIMEOUT_MS,
   devices: SLOW_REQUEST_TIMEOUT_MS
 }
@@ -263,8 +268,8 @@ export class NativeAudioEngine {
     return this.request('seek', { cueId, positionMs, whenMs }) as Promise<AudioSeekResult>
   }
 
-  release(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
-    return this.request('release', { cueId, whenMs }) as Promise<AudioCommandResult>
+  release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
+    return this.request('release', { cueId, whenMs, endMs }) as Promise<AudioCommandResult>
   }
 
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult> {
@@ -328,6 +333,10 @@ export class NativeAudioEngine {
     return this.request('onsets', {
       filePath, sensitivity, maxOnsets, startMs: region?.startMs, endMs: region?.endMs
     }) as Promise<AudioOnsets>
+  }
+
+  silence(filePath: string, thresholdDb?: number): Promise<AudioSilence> {
+    return this.request('silence', { filePath, thresholdDb }, SLOW_VERBS.silence) as Promise<AudioSilence>
   }
 
   waveform(filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform> {

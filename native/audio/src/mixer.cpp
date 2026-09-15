@@ -471,10 +471,23 @@ void Mixer::apply(const Command& cmd) {
         // the voice is free to play whatever lies between where it is now and the end.
         // Its position is left alone: the next sample it renders is the next sample of
         // the music, which is what makes the release sample-accurate.
+        //
+        // A cue trimmed of its trailing silence names where its sound stops, and that
+        // edge replaces the file's own. Clamped to the media: a release past the end of
+        // the file is only ever asking for all of it, and an end at the top of the file
+        // leaves nothing to play — that empty region is finished below rather than left
+        // with no end to reach.
+        const double sourceEnd = static_cast<double>(voice->sourceFrames);
+        const double sourceEndMs = sourceEnd * 1000.0 / static_cast<double>(voice->sampleRate);
+        const double releasedEnd =
+            cmd.hasEndMs
+                ? static_cast<double>(frameForMs(std::clamp(cmd.endMs, 0.0, sourceEndMs), voice->sampleRate))
+                : sourceEnd;
         voice->segmentStartFrame = 0.0;
-        voice->segmentEndFrame = static_cast<double>(voice->sourceFrames);
+        voice->segmentEndFrame = releasedEnd;
         voice->loopCount = 0;
         voice->loopsCompleted = 0;
+        if (releasedEnd <= 0.0) finishVoice(*voice, now, EndReason::Complete);
         applied = true;
       }
       ackVoices = activeVoiceCount();

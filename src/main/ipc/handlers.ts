@@ -13,6 +13,7 @@ import {
   type AudioCancelPayload,
   type AudioReleasePayload,
   type AudioOnsetsPayload,
+  type AudioSilencePayload,
   type AudioConfigurePayload,
   type AudioEngineEvent,
   type AudioFadePayload,
@@ -235,7 +236,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(AUDIO_CHANNELS.seek, (_, payload: AudioSeekPayload) =>
     audioVerb(() => audioEngine.seek(payload.cueId, payload.positionMs, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.release, (_, payload: AudioReleasePayload) =>
-    audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs)))
+    audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs, payload.endMs)))
   ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
     audioVerb(() => audioEngine.cancel(payload.cueId, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.routing, (_, payload: AudioRoutingPayload) =>
@@ -259,6 +260,8 @@ export function registerIpcHandlers(): void {
   // cached, nothing counted.
   ipcMain.handle(AUDIO_CHANNELS.onsets, (_, payload: AudioOnsetsPayload) =>
     audioVerb(() => audioEngine.onsets(payload.filePath, payload.sensitivity, payload.maxOnsets, regionOf(payload))))
+  ipcMain.handle(AUDIO_CHANNELS.silence, (_, payload: AudioSilencePayload) =>
+    audioVerb(() => audioEngine.silence(payload.filePath, payload.thresholdDb)))
   ipcMain.handle(AUDIO_CHANNELS.probe, (_, payload: AudioProbePayload) =>
     audioVerb(() => audioEngine.probe(payload.filePath)))
 
