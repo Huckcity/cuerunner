@@ -36,13 +36,30 @@ test('clicking below the cues clears the selection', async () => {
   await expect(page.locator('.inspector-empty')).toBeVisible()
 })
 
-test('Escape clears the selection', async () => {
+test('Escape stops the show and leaves the selection where it is', async () => {
   await toolbarCueBtn(page, 'Wait').click()
-  await expect(page.locator('.cue-row[data-selected="true"]')).toHaveCount(1)
+  const row = page.locator('.cue-row').first()
+  await row.click()
 
+  // Long enough that nothing but the Escape can have ended it.
+  await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
+  const duration = page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input')
+  await duration.fill('30000')
+  await duration.press('Enter')
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(row).toHaveAttribute('data-running', 'true')
+
+  // GO moves the selection on, and there is nothing after this cue: the operator puts
+  // their hand back on the row they are watching, which is where the panel below the
+  // list — the waveform the show is being read from — is drawn from.
+  await row.click()
+  await expect(row).toHaveAttribute('data-selected', 'true')
+
+  // Escape is the show's press.
   await page.locator('.cue-list-container').press('Escape')
 
-  await expect(page.locator('.cue-row[data-selected="true"]')).toHaveCount(0)
+  await expect(row).not.toHaveAttribute('data-running', 'true')
+  await expect(row).toHaveAttribute('data-selected', 'true')
 })
 
 test('cues created after deselecting a group are top-level', async () => {

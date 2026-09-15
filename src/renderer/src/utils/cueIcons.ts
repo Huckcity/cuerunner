@@ -14,5 +14,6 @@ export const CUE_ICON: Record<CueType, string> = {
   group: '▤',
   network: '⊕',
   script: '{ }',
-  scene: '◇'
+  scene: '◇',
+  devamp: '↩'
 }

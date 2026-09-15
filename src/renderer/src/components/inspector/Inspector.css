@@ -272,6 +272,33 @@
   line-height: var(--line-height-base);
 }
 
+/* Vamping is the loop count by another name, so it is a press rather than a field: the
+   state is one of "loops until released or not", and a checkbox would say the same. */
+.vamp-toggle {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vamp-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
+.vamp-toggle[data-active='true'] {
+  background: var(--accent-amber-bg);
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
 /* Script cue source editor */
 .inspector-code {
   width: 100%;

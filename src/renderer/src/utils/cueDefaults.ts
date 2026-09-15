@@ -1,6 +1,6 @@
 import type {
-  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, Cue, CueType,
-  AudioCrosspoint
+  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, Cue,
+  CueType, AudioCrosspoint
 } from '../types/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -8,7 +8,7 @@ import type {
 
 type BaseDefaults = Pick<
   Cue,
-  'colorLabel' | 'preWait' | 'postWait' | 'timelineOffset' | 'duration' | 'advance' | 'isArmed'
+  'colorLabel' | 'preWait' | 'postWait' | 'timelineOffset' | 'duration' | 'advance' | 'isArmed' | 'refire'
 >
 
 export const BASE_DEFAULTS: BaseDefaults = {
@@ -18,7 +18,10 @@ export const BASE_DEFAULTS: BaseDefaults = {
   timelineOffset: 0,
   duration: 0,
   advance: 'none',
-  isArmed: true
+  isArmed: true,
+  // A cue that is running is not restarted by a second press of the same thing. See
+  // `RefirePolicy`: the opt-out is there for the cue that is itself the repeat.
+  refire: 'ignore'
 }
 
 export const AUDIO_DEFAULTS = {
@@ -161,6 +164,14 @@ export function createCue(type: CueType): Cue {
         // every mic on the desk, so the runner refuses it instead.
         sceneId: ''
       } satisfies SceneCue
+    case 'devamp':
+      return {
+        ...base('Devamp'),
+        type: 'devamp',
+        // Empty until it is pointed at one, for the same reason: a devamp aimed at
+        // nothing must do nothing rather than guess which cue was vamping.
+        targetCueId: ''
+      } satisfies DevampCue
   }
 }
 

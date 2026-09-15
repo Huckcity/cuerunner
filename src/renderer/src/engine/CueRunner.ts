@@ -1,5 +1,5 @@
 import type {
-  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue
+  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue
 } from '../types/cue'
 import { audioEngine } from './audioEngineClient'
 import type {
@@ -9,10 +9,13 @@ import type {
   AudioStartOptions
 } from './audioEngineClient'
 import { SampleScheduler, SCHEDULER_LOOKAHEAD_MS } from './scheduler'
+import { InputGuard, refirePolicy } from './inputGuard'
+import type { FireSurface } from './inputGuard'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
 import { network } from './networkClient'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
+import type { TriggerGuardSettings } from '../types/workspace'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
 type ClearAllRunning = () => void
@@ -129,6 +132,9 @@ interface RunnerDeps {
   // Whether this machine may run the Pro cues. Read per firing rather than latched at
   // init: a key can be entered or removed while the show is loaded.
   isPro: () => boolean
+  // How long each firing surface stays deaf after it fires. Read per press, because the
+  // operator can change it while the show is loaded.
+  getTriggerGuard: () => TriggerGuardSettings
 }
 
 export class CueRunner {
@@ -149,6 +155,10 @@ export class CueRunner {
   // STOP — a network request, a script — cannot resume the show.
   private generation = 0
   private runSeq = 0
+  // What each firing surface last fired, and which notes are still down. Owned here
+  // because this is the one place every surface reaches — the keyboard, a trigger, the
+  // GO button — and a guard that lived in one of them would be a guard on one of them.
+  private guard = new InputGuard(() => this.deps?.getTriggerGuard().windowMs ?? 0)
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -186,6 +196,16 @@ export class CueRunner {
     const cue = cues[targetIdx]
     if (!cue || !cue.isArmed) return
 
+    // The hand that shook. Every way of firing a cue reaches the runner, so the window
+    // is asked here rather than at each of them — and Space, which the OS repeats while
+    // it is held down, is exactly what it is for.
+    if (!this.guard.accepts('key', 'go', this.now())) return
+
+    // A cue that is already in flight is left where it is, unless it was told it may be
+    // restarted. Checked before the selection moves, so an ignored press changes nothing
+    // at all rather than moving the operator's hand somewhere the show is not going.
+    if (this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
+
     // When the fired cue is a group, skip over its children to find the next
     // cue that should receive selection focus after GO
     const nextCue = (() => {
@@ -220,7 +240,7 @@ export class CueRunner {
     setSelected(selectionTarget?.id ?? null)
 
     // Firing a cue that is already in flight replaces it rather than stacking a second
-    // copy of it on the same cue id.
+    // copy of it on the same cue id — which is what a cue set to restart is asking for.
     if (this.hasActiveRun(cue.id)) this.stop(cue.id)
 
     const startMs = this.now()
@@ -236,11 +256,18 @@ export class CueRunner {
     }
   }
 
+  /**
+   * Fires one named cue. `atMs` says the caller already knows when this belongs on the
+   * clock — an advance chain handing over, a timeline placing a child — and such a call
+   * is the show's own plumbing, not a press: the interlock is only for a firing that
+   * happens *now*, which is what an operator's hand and a remote trigger produce.
+   */
   goById(id: string, atMs?: number, parent?: CueRun): void {
     const { getCues } = this.deps!
     const cues = getCues()
     const cue = cues.find(c => c.id === id)
     if (!cue || !cue.isArmed) return
+    if (atMs === undefined && this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
     const idx = cues.findIndex(c => c.id === id)
     const nextCue = cues[idx + 1] ?? null
     this.fireCue(cue, atMs ?? this.now(), (doneAt, run) => {
@@ -471,6 +498,9 @@ export class CueRunner {
       case 'scene':
         this.executeScene(cue as SceneCue, finish)
         break
+      case 'devamp':
+        this.executeDevamp(cue as DevampCue, finish)
+        break
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
@@ -691,6 +721,40 @@ export class CueRunner {
       })
   }
 
+  /**
+   * Releases a vamping cue: the target stops looping and plays out to the end of its
+   * file, from wherever the loop had reached. The engine does the work on the audio
+   * thread, so the join is a sample rather than a seam; this cue then completes, which
+   * is what lets the next cue of a group start over music that is still playing — that
+   * is the whole point of a devamp.
+   */
+  private executeDevamp(cue: DevampCue, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    if (cue.targetCueId === '') {
+      // A devamp pointed at nothing must not be read as "release everything": the cue
+      // that is vamping is a decision the operator made, and guessing at it silently is
+      // not this cue's business.
+      this.log({ level: 'error', message: 'no cue chosen to release', label })
+      finish(this.now(), { outcome: 'error', error: 'no cue chosen' })
+      return
+    }
+    const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
+    // Releasing a cue that is not looping is a no-op the engine reports, and that is not
+    // an error: the operator's devamp arrived after the vamp had already ended.
+    void audioEngine.release(cue.targetCueId).then(result => {
+      const detail: Partial<CueRunResult> = {}
+      if (!result.applied) {
+        detail.outcome = 'error'
+        detail.error = target === undefined
+          ? 'the cue it releases is not in the show'
+          : 'that cue was not looping'
+      }
+      finish(this.now(), detail)
+    }).catch(error => {
+      finish(this.now(), { outcome: 'error', error: errorMessage(error) })
+    })
+  }
+
   private executeScene(cue: SceneCue, finish: Finish): void {
     const label = this.cueLabel(cue)
     if (!this.deps!.isPro()) {
@@ -814,7 +878,8 @@ export class CueRunner {
         if (child.duration > 0 && seekOffsetMs >= child.duration) continue
         // Fire-and-forget types have already happened — don't replay
         if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
-            child.type === 'network' || child.type === 'script' || child.type === 'stop') continue
+            child.type === 'network' || child.type === 'script' || child.type === 'stop' ||
+            child.type === 'devamp') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }
     }
@@ -1038,6 +1103,35 @@ export class CueRunner {
     return this.runs.has(cueId) || (this.timelineTasks.get(cueId)?.size ?? 0) > 0
   }
 
+  /**
+   * Whether this firing may happen, asked by the surfaces that see events the runner
+   * does: a show's OSC and MIDI arrive as whole messages, and the note that is being
+   * held is only visible here. The operator's own GO asks through `go()` instead, which
+   * asks this on the way past.
+   */
+  acceptsFire(surface: FireSurface, key: string): boolean {
+    return this.guard.accepts(surface, key, this.now())
+  }
+
+  /** A note going down, so that holding it is not the same as pressing it again. */
+  pressNote(key: string): void {
+    this.guard.pressNote(key, this.now())
+  }
+
+  /** A note coming up. Never gated: a release is not a firing. */
+  releaseNote(key: string): void {
+    this.guard.releaseNote(key)
+  }
+
+  /**
+   * Forgets who fired what, and what was down. A show that has just loaded has no history
+   * for the guard to be deaf to — the file's own state did not press anything — and a
+   * note that was down when the last one ended is a note nobody is holding now.
+   */
+  resetGuards(): void {
+    this.guard.reset()
+  }
+
   // True when a global STOP or PANIC has happened since the given generation started.
   private isStale(generation: number): boolean {
     return generation !== this.generation
@@ -1082,6 +1176,10 @@ export class CueRunner {
     scriptHost.cancelAll()
     void audioEngine.panic(PANIC_FADE_MS).catch(() => {})
     this.deps!.clearAllRunning()
+    // The stuck control is what an operator reaches for PANIC to fix: a pad whose
+    // note-off never came is not a note anybody is holding, and leaving it held would
+    // keep that trigger dead for the rest of the night.
+    this.guard.reset()
   }
 
   /**
@@ -1219,6 +1317,14 @@ export class CueRunner {
     if (event.type === 'error' && event.cueId === null) {
       // An engine-wide fault (device loss, engine crash) has no cue to blame.
       this.log({ level: 'error', message: `audio engine: ${event.message}` })
+      // A device fault is the engine already letting go of the sound: it panics what it
+      // was playing the moment the device goes. Its per-voice `ended` lines follow a
+      // couple of seconds later, because it waits for the audio thread to acknowledge
+      // that panic — and until they arrive every row would still read as playing, with
+      // the next GO on one of them refused as a repeat of a cue that is no longer making
+      // a sound. So the release the engine's `panic` line brings is taken here, with the
+      // fault, rather than when the silence finally gets reported.
+      if (event.code === 'device') this.handleExternalPanic()
       return
     }
 

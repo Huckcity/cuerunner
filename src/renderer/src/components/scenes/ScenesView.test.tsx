@@ -2,7 +2,7 @@
 // per scene, the column the desk was last taken to lit where the show is. Which DCA a
 // performer's mic opens is their channel's, and what that DCA is sent comes from the
 // show's one desk connection (`ShowSettings.test.tsx`) — these tests pin the glance, the
-// two presses that move the desk (a column's Recall and the header's Apply) and the run
+// two presses that move the desk (a column's recall and the header's Recall now) and the run
 // mode it opens in, which stops every edit while leaving recall and Apply working. The
 // first column is the scene that is never edited: all closed.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
@@ -608,7 +608,7 @@ describe('ScenesView', () => {
     expect(cellFor('Bea', 'Interval').getAttribute('data-pending')).toBe('false')
 
     const apply = container.querySelector<HTMLButtonElement>('.matrix-apply')
-    expect(apply?.textContent).toBe('Apply to desk (1)')
+    expect(apply?.textContent).toBe('Recall now (1)')
 
     midiSend.mockClear()
     oscSend.mockClear()
@@ -694,7 +694,7 @@ describe('ScenesView', () => {
     expect(container.querySelector<HTMLButtonElement>('.scenes-edit')?.disabled).toBe(false)
     expect([...container.querySelectorAll<HTMLButtonElement>('.matrix-recall')]
       .every(recall => !recall.disabled)).toBe(true)
-    expect(container.querySelector('.matrix-apply')?.textContent).toBe('Apply to desk (1)')
+    expect(container.querySelector('.matrix-apply')?.textContent).toBe('Recall now (1)')
 
     // Apply still moves the band, which is the one fader the scene disagrees with.
     midiSend.mockClear()

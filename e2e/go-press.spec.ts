@@ -34,6 +34,10 @@ test.afterAll(async () => {
 
 /** Nothing running, nothing open, and the first cue selected: GO fires it or nothing did. */
 async function standOnTheFirstCue(): Promise<void> {
+  // An operator presses GO when they mean it, and the previous test's press is still
+  // inside the firing window — that is what the window is for. Thirty milliseconds is
+  // not long enough to be a second press of the same hand.
+  await page.waitForTimeout(400)
   await page.getByRole('button', { name: /STOP/ }).click()
   await page.keyboard.press('Escape')
   await page.locator('.cue-row').first().click()
@@ -221,4 +225,23 @@ test('a text field keeps the space it is given', async () => {
   // allowed to keep the press, because a space in a name is a space.
   await expect(name).toHaveValue('Walk ')
   await expect(page.locator('.cue-row').first()).toHaveAttribute('data-selected', 'true')
+})
+
+test('Escape closes the context menu without stopping the show', async () => {
+  // The menu's own Escape and the transport's Escape are the same key: put the menu
+  // down is what the operator meant, and the cue behind it keeps playing.
+  await standOnTheFirstCue()
+  await page.locator('.field-row').filter({ hasText: 'Post-wait' }).locator('input').fill('30')
+  await page.locator('.cue-row').first().click()
+  await page.keyboard.press('Space')
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+
+  await page.locator('.cue-row').first().click({ button: 'right' })
+  await expect(page.locator('.cue-context-menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await expect(page.locator('.cue-context-menu')).toHaveCount(0)
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+
+  await page.getByRole('button', { name: /STOP/ }).click()
 })

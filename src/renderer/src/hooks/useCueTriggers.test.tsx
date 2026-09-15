@@ -70,6 +70,10 @@ describe('useCueTriggers', () => {
       }
     })
     goById = vi.spyOn(cueRunner, 'goById').mockImplementation(() => {})
+    // The guard is real here on purpose — a hook that asked it in the wrong order looked
+    // fine against a stub and blocked every MIDI note in the app. What the tests control
+    // is where the guard starts from.
+    cueRunner.resetGuards()
 
     useStore.setState({ license: { state: 'active', license: TEST_LICENSE }, cues: [], log: [] })
     act(() => { root.render(<Harness />) })

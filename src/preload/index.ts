@@ -9,6 +9,7 @@ import type { MissingMedia } from '../shared/media'
 import {
   AUDIO_CHANNELS,
   type AudioCancelPayload,
+  type AudioReleasePayload,
   type AudioCancelResult,
   type AudioClockReading,
   type AudioCommandResult,
@@ -29,6 +30,8 @@ import {
   type AudioProgressPayload,
   type AudioProbe,
   type AudioProbePayload,
+  type AudioOnsetsPayload,
+  type AudioOnsets,
   type AudioRoutingPayload,
   type AudioSeekPayload,
   type AudioSeekResult,
@@ -117,6 +120,8 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
     seek: (cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> =>
       invokeAudio(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
+    release: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs } satisfies AudioReleasePayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
       invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */
@@ -145,6 +150,8 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.configure, { options } satisfies AudioConfigurePayload),
     waveform: (filePath: string, points: number): Promise<AudioWaveform> =>
       invokeAudio(AUDIO_CHANNELS.waveform, { filePath, points } satisfies AudioWaveformPayload),
+    onsets: (filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets> =>
+      invokeAudio(AUDIO_CHANNELS.onsets, { filePath, sensitivity, maxOnsets } satisfies AudioOnsetsPayload),
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),

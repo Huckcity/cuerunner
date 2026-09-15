@@ -114,6 +114,8 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   const [windowHeight, setWindowHeight] = useState(() => window.innerHeight)
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true')
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  /** The tab the dock last unfolded for, so a real change is told from a re-render. */
+  const lastRevealTab = useRef<DockTab>(tab)
 
   useEffect(() => {
     const measure = (): void => setWindowHeight(window.innerHeight)
@@ -128,6 +130,8 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   // The Scenes view has no cue list to have selected from, so it has no Cue tab: the
   // dock there is the show's panels, or just its tabs.
   const tabs = view === 'scenes' ? TABS.filter(entry => entry.id !== 'cue') : TABS
+  // The mark says which panel is *loaded*, so it stays on when the dock is folded away:
+  // a collapsed dock with no tab marked is a dock the operator cannot read.
   const showBody = !collapsed && !(view === 'scenes' && tab === 'cue')
 
   const choose = (next: DockTab): void => {
@@ -136,6 +140,19 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
     else onTab(next)
     setCollapsed(false)
   }
+
+  // Somebody else asking for a panel — an alarm chip on the transport, a locked feature
+  // pointing at Settings — goes through the same door as a press on the tab. A tab
+  // written straight into state while the dock was collapsed was a panel that appeared
+  // nowhere at all, and the collapse is remembered across sessions.
+  useEffect(() => {
+    if (tab !== lastRevealTab.current) {
+      lastRevealTab.current = tab
+      setCollapsed(false)
+    }
+  }, [tab])
+
+
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>): void => {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -212,7 +229,7 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
             role="tab"
             className={`dock-tab ${className}`}
             aria-selected={tab === id}
-            data-active={tab === id && showBody}
+            data-active={tab === id}
             data-locked={gated === true && !pro}
             onClick={() => choose(id)}
           >

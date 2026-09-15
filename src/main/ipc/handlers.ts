@@ -10,6 +10,8 @@ import { audioEngine } from '../audio/AudioEngine'
 import {
   AUDIO_CHANNELS,
   type AudioCancelPayload,
+  type AudioReleasePayload,
+  type AudioOnsetsPayload,
   type AudioConfigurePayload,
   type AudioEngineEvent,
   type AudioFadePayload,
@@ -222,6 +224,8 @@ export function registerIpcHandlers(): void {
     audioVerb(() => audioEngine.stopAll(payload.fadeMs)))
   ipcMain.handle(AUDIO_CHANNELS.seek, (_, payload: AudioSeekPayload) =>
     audioVerb(() => audioEngine.seek(payload.cueId, payload.positionMs, payload.whenMs)))
+  ipcMain.handle(AUDIO_CHANNELS.release, (_, payload: AudioReleasePayload) =>
+    audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
     audioVerb(() => audioEngine.cancel(payload.cueId, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.routing, (_, payload: AudioRoutingPayload) =>
@@ -243,6 +247,8 @@ export function registerIpcHandlers(): void {
     audioVerb(() => audioEngine.waveform(payload.filePath, payload.points)))
   // A workspace footprint asks about every cue: headers only, nothing decoded, nothing
   // cached, nothing counted.
+  ipcMain.handle(AUDIO_CHANNELS.onsets, (_, payload: AudioOnsetsPayload) =>
+    audioVerb(() => audioEngine.onsets(payload.filePath, payload.sensitivity, payload.maxOnsets)))
   ipcMain.handle(AUDIO_CHANNELS.probe, (_, payload: AudioProbePayload) =>
     audioVerb(() => audioEngine.probe(payload.filePath)))
 

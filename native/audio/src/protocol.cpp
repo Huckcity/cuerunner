@@ -392,6 +392,19 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "release") {
+    CommandResultDTO result;
+    EngineError error;
+    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
+    if (engine.releaseCue(text(root, "cueId", ""), whenMs, result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
   } else if (verb == "cancel") {
     CancelResultDTO result;
     EngineError error;
@@ -556,6 +569,23 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       cJSON_AddNumberToObject(body, "sampleRate", result.sampleRate);
       cJSON_AddNumberToObject(body, "channels", result.channels);
       cJSON_AddBoolToObject(body, "truncated", result.truncated);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "onsets") {
+    OnsetDTO result;
+    EngineError error;
+    if (engine.onsets(text(root, "filePath", ""), number(root, "sensitivity", 1.0),
+                      integer(root, "maxOnsets", 0), result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
+      cJSON_AddNumberToObject(body, "durationMs", result.durationMs);
+      cJSON_AddNumberToObject(body, "sampleRate", result.sampleRate);
+      cJSON_AddNumberToObject(body, "channels", result.channels);
+      cJSON_AddBoolToObject(body, "truncated", result.truncated);
+      cJSON* onsets = cJSON_AddArrayToObject(body, "onsetsMs");
+      for (double onset : result.onsetsMs) cJSON_AddItemToArray(onsets, cJSON_CreateNumber(onset));
       out = replyOk(id, body);
     } else {
       out = replyError(id, error.code, error.message);

@@ -138,6 +138,18 @@ export function AudioInspector({ cue, tab }: Props) {
           <ResetButton label="Loop count" value={cue.loopCount} defaultValue={AUDIO_DEFAULTS.loopCount}
             onReset={() => set({ loopCount: AUDIO_DEFAULTS.loopCount })} />
         </div>
+        {/* Vamping is this same region looping forever; the two are one state, so the
+            button and the field are one control apart rather than two stories. */}
+        <button
+          className="vamp-toggle"
+          data-active={cue.loopCount < 0}
+          onClick={() => set({ loopCount: cue.loopCount < 0 ? AUDIO_DEFAULTS.loopCount : -1 })}
+          title={cue.loopCount < 0
+            ? 'Play the section once instead of looping it'
+            : 'Loop the section until a devamp cue releases it'}
+        >
+          {cue.loopCount < 0 ? '◉ Vamping — the section loops until released' : '○ Make this a vamp'}
+        </button>
         <p className="inspector-hint" style={{ marginTop: 0 }}>0 = play once, -1 = forever</p>
       </div>
     )

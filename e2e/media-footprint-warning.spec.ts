@@ -77,11 +77,14 @@ async function openShow(page: Page, userDataDir: string, wlab: string): Promise<
   await expect(page.locator('.cue-row', { hasText: 'Overture' })).toBeVisible()
 }
 
+/** Settings opens on General; the engine readout, and the warnings beside it, are the
+    Audio tab's. */
 async function openSettingsAudio(page: Page) {
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Audio', exact: true }).click()
   return dialog
 }
 

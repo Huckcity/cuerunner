@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useMemo } from 'react'
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore } from '../../store'
 import { CueRow } from './CueRow'
@@ -65,6 +65,7 @@ export function CueList() {
   const toggleSelected = useStore(s => s.toggleSelected)
   const removeCues = useStore(s => s.removeCues)
   const duplicateCues = useStore(s => s.duplicateCues)
+  const updateCues = useStore(s => s.updateCues)
   const moveCue = useStore(s => s.moveCue)
   const addAudioCuesFromFiles = useStore(s => s.addAudioCuesFromFiles)
 
@@ -172,6 +173,24 @@ export function CueList() {
     estimateSize: () => 32,
     overscan: 5
   })
+  // Held in a ref so the effect below can follow the selection without depending on the
+  // virtualizer object, which is a new one every render.
+  const virtualizerRef = useRef(virtualizer)
+  virtualizerRef.current = virtualizer
+
+  /**
+   * The list follows the selection.
+   *
+   * The rows are virtualized, so a selection that moves past the bottom edge is a
+   * selection nobody can see — and the selection is where GO will fire. Arrow keys and
+   * the runner both move it, and neither is a pointer that already knows where it is.
+   */
+  useEffect(() => {
+    if (selectedId === null) return
+    const index = renderItems.findIndex(item => item.cue.id === selectedId)
+    if (index < 0) return
+    virtualizerRef.current.scrollToIndex(index, { align: 'auto' })
+  }, [selectedId, renderItems])
 
   // ── File-drop handlers ────────────────────────────────────────────────────
 
@@ -297,15 +316,28 @@ export function CueList() {
   // ── Keyboard ──────────────────────────────────────────────────────────────
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // A modal owns the keyboard while it is up, exactly as the transport bindings do:
+    // the panel's Escape closes the panel, and this list must not eat it on the way
+    // past — nor act on arrows and Delete that were meant for the panel.
+    if (useStore.getState().modals > 0) return
+
     // Windows and Linux have no Cmd key, so accept either modifier. The key is
     // lower-cased because Shift makes e.key upper-case.
     const mod = e.metaKey || e.ctrlKey
     const key = e.key.toLowerCase()
 
     if (e.key === 'Escape') {
-      if (ctxMenu) { closeCtxMenu(); return }
-      // Escape drops the selection, so the next cue is created outside the current group
-      select(null)
+      // Escape's job in this list is to put down what the operator is holding: the
+      // context menu, or the rename a row has open. The selection is not one of those —
+      // it is where they are standing, and it is what the waveform panel and GO are
+      // drawn from — so a bare Escape is left to the window, which stops the show. An
+      // Escape that dropped the selection would take the panel with it and leave the
+      // next GO firing nothing.
+      if (ctxMenu !== null) {
+        e.stopPropagation()
+        e.nativeEvent.stopPropagation()
+        closeCtxMenu()
+      }
       return
     }
 
@@ -325,8 +357,18 @@ export function CueList() {
     } else if (key === 'd' && mod) {
       e.preventDefault()
       if (selectedIds.length > 0) duplicateCues(selectedIds)
+    } else if (key === 'a' && mod && e.shiftKey) {
+      // Arming is how a cue is taken out of tonight's show, and it happens mid-run:
+      // making it a right-click means reaching for the mouse in the dark. The set is
+      // armed together, by the press rather than half by it — the same rule the menu's
+      // Arm/Disarm follows.
+      e.preventDefault()
+      const targetCues = cues.filter(c => selectedIds.includes(c.id))
+      if (targetCues.length === 0) return
+      const allArmed = targetCues.every(c => c.isArmed)
+      updateCues(selectedIds, { isArmed: !allArmed })
     }
-  }, [renderItems, selectedId, selectedIds, select, removeCues, duplicateCues, ctxMenu, closeCtxMenu])
+  }, [renderItems, selectedId, selectedIds, select, removeCues, duplicateCues, updateCues, cues, ctxMenu, closeCtxMenu])
 
   // ── Drop indicator ────────────────────────────────────────────────────────
 

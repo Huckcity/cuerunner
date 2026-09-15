@@ -18,6 +18,7 @@ export function useAutosave(): void {
         audioSettings,
         midiSettings,
         showSettings,
+        triggerGuard,
         workspaceId,
         workspaceCreatedAt,
         selectedId
@@ -26,7 +27,7 @@ export function useAutosave(): void {
       const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
         id: workspaceId,
         createdAt: workspaceCreatedAt
-      })
+      }, triggerGuard)
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when
       // "where was I" is the first question.
       window.winslab.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {

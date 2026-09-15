@@ -878,6 +878,248 @@ console.log(`winslab-audio acceptance — binary ${binary}`)
   check('a cue started after the refusals really plays', Math.abs(sampleAt(wav, 24000)) > 0.1, `sample ${sampleAt(wav, 24000)}`)
 }
 
+// --- 19. release ends a loop and plays the rest of the file ----------------
+//
+// The vamp's second verb. A cue looping a section is a vamp; a devamp releases it, and
+// the music continues from wherever the loop had reached rather than restarting at the
+// seam. The ramp fixture says on every sample where it came from, so a release that
+// jumped, restarted or spliced is readable off the output.
+{
+  console.log('\nrelease plays the tail out of a loop')
+  const released = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: true,
+    frames: SAMPLE_RATE * 6,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+      // Loops 2s-3s of the four-second file, forever: a vamp.
+      {
+        atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0,
+        options: { startTime: 2000, endTime: 3000, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null }
+      },
+      { atMs: 2500, verb: 'release', cueId: 'ramp' }
+    ]
+  })
+
+  const reply = replyFor(released.summary, 2)
+  check('the release is applied', reply.ok === true && reply.result.applied === true, JSON.stringify(reply))
+
+  // Where the loop was when it was released: 0.5s into a section that started at 2s.
+  check(
+    'the sample at the release is the one the loop had reached',
+    near(sampleAt(released.wav, 120000), 120000 / 480000, 2e-4),
+    `${sampleAt(released.wav, 120000)} at frame 120000`
+  )
+  // An eighth of a second later the position has advanced through the file. A voice that
+  // had gone on looping would be back at 2s (0.20833) here; one that restarted would be
+  // at 0.033.
+  check(
+    'the released voice keeps advancing through the file',
+    near(sampleAt(released.wav, 126000), 126000 / 480000, 2e-4),
+    `${sampleAt(released.wav, 126000)} at frame 126000`
+  )
+  check(
+    'the voice plays past the end of the section it was looping',
+    near(sampleAt(released.wav, 168000), 168000 / 480000, 2e-4),
+    `${sampleAt(released.wav, 168000)} at frame 168000 (3.5s into the file)`
+  )
+  // The file is four seconds, so the last sample is frame 191999: a voice that stopped
+  // at the section end would be silent a quarter of a second before this.
+  check(
+    'and it plays right up to the last sample of the file',
+    near(sampleAt(released.wav, 191999), 191999 / 480000, 2e-4) && Math.abs(sampleAt(released.wav, 192001)) < 1e-6,
+    `${sampleAt(released.wav, 191999)} at frame 191999`
+  )
+  const ended = events(released.summary, 'ended')
+  check(
+    'the released voice ends complete',
+    ended.length === 1 && ended[0].reason === 'complete',
+    JSON.stringify(ended)
+  )
+
+  // A voice that is not looping is not vamping: a release would be a verb that silently
+  // did nothing, so it says so instead of reporting a change that did not happen.
+  const straight = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 24000,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'ramp', filePath: rampPath },
+      {
+        atMs: 0, verb: 'start', cueId: 'ramp', whenMs: 0,
+        options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null }
+      },
+      { atMs: 100, verb: 'release', cueId: 'ramp' }
+    ]
+  })
+  const straightReply = replyFor(straight.summary, 2)
+  check(
+    'releasing a voice that is not looping changes nothing',
+    straightReply.ok === true && straightReply.result.applied === false,
+    JSON.stringify(straightReply)
+  )
+}
+
+// --- 20. onsets: where a note or a hit begins ------------------------------
+//
+// The slicer's scan. Four 1kHz bursts separated by digital silence are the positive
+// control — all four come back, and nothing in the gaps — while a steady tone and a
+// silent file are the negative controls: a detector that fires on those is detecting
+// frames, not hits. A file whose channels cancel when they are averaged proves the
+// scan folds them the way the engine says it does.
+{
+  console.log('\nonset detection')
+  const burstStartsMs = [250, 750, 1250, 1750]
+  // 60ms of 1kHz, 2ms of attack and 6ms of release: the envelope a sampled hit has,
+  // rather than a rectangle, whose corner would be a click in its own right.
+  const burstFrames = Math.round(0.06 * SAMPLE_RATE)
+  const attackFrames = Math.round(0.002 * SAMPLE_RATE)
+  const releaseFrames = Math.round(0.006 * SAMPLE_RATE)
+  const burstEnvelope = (within) => {
+    if (within < 0 || within >= burstFrames) return 0
+    if (within < attackFrames) return 0.5 * (1 - Math.cos((Math.PI * within) / attackFrames))
+    if (within >= burstFrames - releaseFrames) {
+      return 0.5 * (1 - Math.cos((Math.PI * (burstFrames - within)) / releaseFrames))
+    }
+    return 1
+  }
+  const burstStarts = burstStartsMs.map((ms) => Math.round((ms / 1000) * SAMPLE_RATE))
+  const burstSample = (frame) => {
+    let envelope = 0
+    for (const start of burstStarts) envelope += burstEnvelope(frame - start)
+    return 0.6 * envelope * Math.sin((2 * Math.PI * 1000 * frame) / SAMPLE_RATE)
+  }
+  const burstPath = join(workDir, 'bursts.wav')
+  writeFloatWav(burstPath, 2, SAMPLE_RATE, SAMPLE_RATE * 2, (channel, frame) => burstSample(frame))
+  const tonePath = join(workDir, 'steady-tone.wav')
+  writeFloatWav(tonePath, 2, SAMPLE_RATE, SAMPLE_RATE, (channel, frame) =>
+    0.6 * Math.sin((2 * Math.PI * 1000 * frame) / SAMPLE_RATE)
+  )
+  const silentPath = join(workDir, 'digital-silence.wav')
+  writeFloatWav(silentPath, 2, SAMPLE_RATE, SAMPLE_RATE, () => 0)
+  const cancellingPath = join(workDir, 'cancelling.wav')
+  writeFloatWav(cancellingPath, 2, SAMPLE_RATE, SAMPLE_RATE, (channel, frame) =>
+    channel === 0 ? burstSample(frame) : -burstSample(frame)
+  )
+  // A bed of noise with three louder stretches in it. The bed is what makes sensitivity
+  // observable: with no noise the median flux is zero and every setting finds the same
+  // hits, however strict it is. xorshift keeps the fixture identical on every run and
+  // every platform, so the only thing that decides whether a step is found is the
+  // threshold it is measured against.
+  const steppedPath = join(workDir, 'noise-bed.wav')
+  const stepStarts = [400, 900, 1400].map((ms) => Math.round((ms * SAMPLE_RATE) / 1000))
+  const stepFrames = Math.round(0.08 * SAMPLE_RATE)
+  const bedFrames = SAMPLE_RATE * 2
+  const bed = new Float32Array(bedFrames)
+  let noiseState = 0x9e3779b9
+  for (let frame = 0; frame < bedFrames; frame++) {
+    noiseState ^= noiseState << 13
+    noiseState ^= noiseState >>> 17
+    noiseState ^= noiseState << 5
+    const inStep = stepStarts.some((start) => frame >= start && frame < start + stepFrames)
+    bed[frame] = (inStep ? 0.4 : 0.1) * (((noiseState >>> 0) / 4294967295) * 2 - 1)
+  }
+  writeFloatWav(steppedPath, 2, SAMPLE_RATE, bedFrames, (channel, frame) => bed[frame])
+  const absentPath = join(workDir, 'no-such-file.wav')
+
+  const { summary } = runEngine({
+    sampleRate: SAMPLE_RATE,
+    channels: 2,
+    blockFrames: 512,
+    stopWhenIdle: false,
+    frames: 512,
+    commands: [
+      { atMs: 0, verb: 'onsets', filePath: burstPath },
+      // The same file again, warm in the decoded cache this time: the answer must not
+      // depend on which side of the cache the file happened to fall.
+      { atMs: 0, verb: 'prepare', cueId: 'warm', filePath: burstPath },
+      { atMs: 0, verb: 'onsets', filePath: burstPath },
+      { atMs: 0, verb: 'onsets', filePath: burstPath, sensitivity: 5.0 },
+      { atMs: 0, verb: 'onsets', filePath: burstPath, maxOnsets: 2 },
+      { atMs: 0, verb: 'onsets', filePath: tonePath },
+      { atMs: 0, verb: 'onsets', filePath: silentPath },
+      { atMs: 0, verb: 'onsets', filePath: cancellingPath },
+      { atMs: 0, verb: 'onsets', filePath: absentPath },
+      { atMs: 0, verb: 'onsets', filePath: steppedPath },
+      { atMs: 0, verb: 'onsets', filePath: steppedPath, sensitivity: 0.5 },
+      { atMs: 0, verb: 'onsets', filePath: steppedPath, sensitivity: 5.0 }
+    ]
+  })
+
+  const cold = replyFor(summary, 0).result
+  const warm = replyFor(summary, 2).result
+  const stricter = replyFor(summary, 3).result
+  const capped = replyFor(summary, 4).result
+  const tone = replyFor(summary, 5).result
+  const silent = replyFor(summary, 6).result
+  const cancelling = replyFor(summary, 7).result
+  const absent = replyFor(summary, 8)
+  const bedDefault = replyFor(summary, 9).result
+  const bedLooser = replyFor(summary, 10).result
+  const bedStricter = replyFor(summary, 11).result
+
+  check('every burst is found and nothing else in the file', cold.onsetsMs.length === 4, JSON.stringify(cold.onsetsMs))
+  check(
+    'each onset lands within 10ms of its burst',
+    cold.onsetsMs.every((ms, index) => Math.abs(ms - burstStartsMs[index]) <= 10),
+    JSON.stringify(cold.onsetsMs)
+  )
+  check(
+    'the scan describes the file it scanned',
+    near(cold.durationMs, 2000, 1) && cold.sampleRate === SAMPLE_RATE && cold.channels === 2 && cold.truncated === false,
+    JSON.stringify({ durationMs: cold.durationMs, sampleRate: cold.sampleRate, channels: cold.channels, truncated: cold.truncated })
+  )
+  check(
+    'a warm file scans exactly like a cold one',
+    JSON.stringify(warm.onsetsMs) === JSON.stringify(cold.onsetsMs),
+    JSON.stringify(warm.onsetsMs)
+  )
+  check(
+    'a stricter sensitivity finds no onsets the default did not',
+    stricter.onsetsMs.length <= cold.onsetsMs.length,
+    `${stricter.onsetsMs.length} at 5.0 vs ${cold.onsetsMs.length} at 1.0`
+  )
+  check(
+    'the cap is honoured and the truncation is admitted',
+    capped.onsetsMs.length === 2 && capped.truncated === true,
+    JSON.stringify({ onsetsMs: capped.onsetsMs, truncated: capped.truncated })
+  )
+  check('a steady tone has no onsets', tone.onsetsMs.length === 0, JSON.stringify(tone.onsetsMs))
+  check('digital silence has no onsets', silent.onsetsMs.length === 0, JSON.stringify(silent.onsetsMs))
+  check(
+    'the scan averages the first two channels',
+    cancelling.onsetsMs.length === 0,
+    JSON.stringify(cancelling.onsetsMs)
+  )
+  check(
+    'a missing file is refused as undecodable',
+    absent.ok === false && absent.error.code === 'decode',
+    JSON.stringify(absent)
+  )
+  // Sensitivity has to move the threshold the way the parameter says it does. With a
+  // noise bed present the median flux is no longer zero, so the three steps in it are
+  // only as findable as the setting they are measured against allows.
+  check(
+    'the three steps over a noise bed are found, and its noise is not',
+    bedDefault.onsetsMs.length === 3 && [400, 900, 1400].every((ms, index) => Math.abs(bedDefault.onsetsMs[index] - ms) <= 10),
+    JSON.stringify(bedDefault.onsetsMs)
+  )
+  check(
+    'a looser setting finds at least as many as the default',
+    bedLooser.onsetsMs.length >= bedDefault.onsetsMs.length,
+    `${bedLooser.onsetsMs.length} at 0.5 vs ${bedDefault.onsetsMs.length} at 1.0`
+  )
+  check(
+    'a stricter setting gives up onsets rather than inventing them',
+    bedStricter.onsetsMs.length < bedDefault.onsetsMs.length,
+    `${bedStricter.onsetsMs.length} at 5.0 vs ${bedDefault.onsetsMs.length} at 1.0`
+  )
+}
+
 rmSync(workDir, { recursive: true, force: true })
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

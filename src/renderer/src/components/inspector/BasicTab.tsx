@@ -1,5 +1,5 @@
 import { useStore, useParentGroup } from '../../store'
-import type { Cue } from '../../types/cue'
+import type { Cue, RefirePolicy } from '../../types/cue'
 import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'
 import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'
@@ -92,6 +92,16 @@ export function BasicTab({ cue }: Props) {
         <ResetButton label="Advance" value={cue.advance ?? BASE_DEFAULTS.advance} defaultValue={BASE_DEFAULTS.advance}
           onReset={() => set({ advance: BASE_DEFAULTS.advance })} />
       </div>
+      <div className="field-row">
+        <label>Fired again</label>
+        <select value={cue.refire ?? BASE_DEFAULTS.refire} onChange={e => set({ refire: e.target.value as RefirePolicy })}>
+          <option value="ignore">Leave it running</option>
+          <option value="restart">Restart it</option>
+        </select>
+      </div>
+      <p className="inspector-hint">
+        What GO, a trigger or the space bar does to this cue while it is already running.
+      </p>
       <div className="field-row">
         <label>Armed</label>
         <input type="checkbox" checked={cue.isArmed}

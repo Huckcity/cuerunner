@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSelectedCue, usePro } from '../../store'
 import { ProLock, ProMark } from '../license/ProLock'
 import { BasicTab } from './BasicTab'
@@ -14,7 +14,10 @@ import { NetworkInspector } from './NetworkInspector'
 import { ScriptInspector } from './ScriptInspector'
 import { SceneInspector } from './SceneInspector'
 import { StopInspector } from './StopInspector'
-import type { Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue } from '../../types/cue'
+import { DevampInspector } from './DevampInspector'
+import type {
+  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue
+} from '../../types/cue'
 import './Inspector.css'
 
 // Basics is what every cue shares, then what this type does, then what else can fire
@@ -30,7 +33,8 @@ const TYPE_TABS: Record<string, string[]> = {
   group: ['Basics', 'Group'],
   network: ['Basics', 'Network'],
   script: ['Basics', 'Script'],
-  scene: ['Basics', 'Scene']
+  scene: ['Basics', 'Scene'],
+  devamp: ['Basics', 'Devamp']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -69,6 +73,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
     )
   }
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
+  if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 
@@ -76,6 +81,15 @@ export function Inspector() {
   const cue = useSelectedCue()
   const pro = usePro()
   const [activeTab, setActiveTab] = useState('Basics')
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  // The panel is one scrolling box, and the tab's content is remounted inside it — so
+  // without this the box keeps the last cue's scroll position, and walking the stack with
+  // the arrows shows the middle of one cue and the top of the next. The field an operator
+  // is watching must not move under them because they moved the selection.
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+  }, [cue?.id, activeTab])
 
   if (!cue) {
     return (
@@ -108,7 +122,7 @@ export function Inspector() {
           </button>
         ))}
       </div>
-      <div className="inspector-body">
+      <div className="inspector-body" ref={bodyRef}>
         <TabContent key={cue.id} cue={cue} tab={tab} />
       </div>
     </div>

@@ -29,6 +29,18 @@
   min-width: 0;
 }
 
+/* The standing warning, in the one strip that is always on screen. One line, ellipsised:
+   the long form is in the dock's Cue tab and in Settings, and this is what says there is
+   something to read. */
+.transport-warning {
+  font-size: var(--text-sm);
+  color: var(--accent-amber);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .transport-right {
   text-align: right;
   font-size: var(--text-base);

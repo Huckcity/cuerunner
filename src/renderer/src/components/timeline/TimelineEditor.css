@@ -113,6 +113,10 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  /* The panel is drawn on the window's own edge when the timeline is expanded, and the
+     tracks are the panel's whole width: a frame keeps the row labels, the ruler and a
+     block at time zero off the bezel, where there is nothing left to grab. */
+  padding: 0 var(--space-3);
 }
 
 .tl-labels-col {

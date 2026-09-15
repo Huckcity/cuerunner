@@ -156,6 +156,9 @@ test('the view follows the show past the side of the window', async () => {
   await page.locator('#scene-cue-select').selectOption({ label: 'Number 19' })
   await page.locator('.btn-go').click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+  // The show has moved: the scenes view follows what the desk was told, so the cue has to
+  // have landed before the view is asked where the show is.
+  await expect(page.locator('.scenes-now')).toContainText('Number 19')
 
   const current = page.locator('.matrix-scene[data-current="true"]')
   await expect(current).toHaveCount(1)
@@ -197,7 +200,10 @@ test('the view follows the show past the side of the window', async () => {
   await page.locator('.matrix-scroll').evaluate(el => { el.scrollLeft = 0 })
   await expect(columns.nth(14)).not.toBeInViewport()
 
-  // And the next recall brings it back to the show, whichever hand moved the desk.
+  // And the next recall brings it back to the show, whichever hand moved the desk. The
+  // press waits out the firing window first: two GO presses in one breath are one firing,
+  // and this is a second, deliberate press rather than a hand that shook.
+  await page.waitForTimeout(400)
   await page.locator('.btn-go').click()
   await expect(page.locator('.scenes-now')).toContainText('Number 19')
   await expect(columns.nth(18)).toHaveAttribute('data-current', 'true')

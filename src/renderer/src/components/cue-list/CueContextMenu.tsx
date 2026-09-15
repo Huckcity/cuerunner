@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
 import type { Cue } from '../../types/cue'
 import { useStore } from '../../store'
 import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'
+import { regionEndMs } from '../../utils/cueSplit'
 import { formatShortcut } from '../../utils/shortcuts'
 import './CueContextMenu.css'
 
@@ -15,7 +16,15 @@ interface Props {
 }
 
 const MENU_WIDTH = 176
-const MENU_HEIGHT = 250
+const MENU_HEIGHT = 300
+
+/** What the split item would do, where the cursor is: "Split at 1:23.4". */
+function splitHint(cue: Cue, atMs: number): string {
+  const seconds = atMs / 1000
+  const min = Math.floor(seconds / 60)
+  const sec = seconds % 60
+  return `Split “${cue.name}” at ${min}:${sec.toFixed(1).padStart(4, '0')}`
+}
 
 /**
  * What the right-click does, to what it was opened over.
@@ -31,10 +40,27 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const removeCues = useStore(s => s.removeCues)
   const duplicateCues = useStore(s => s.duplicateCues)
   const updateCues = useStore(s => s.updateCues)
+  const splitAudioCueAt = useStore(s => s.splitAudioCueAt)
+  const cursor = useStore(s => s.waveformCursor)
   const menuRef = useRef<HTMLDivElement>(null)
+  /** Where the keyboard is in the menu: the item per index, in the order drawn. */
+  const [activeIndex, setActiveIndex] = useState(0)
 
   const clampedX = Math.min(x, window.innerWidth - MENU_WIDTH - 4)
   const clampedY = Math.min(y, window.innerHeight - MENU_HEIGHT - 4)
+
+  // The menu takes the keyboard when it opens, and gives it back when it closes. Every
+  // action in it is reachable with the arrows and Enter, because on a keyboard-only desk
+  // it was reachable no other way — and the Mod+D it prints beside Duplicate did not work
+  // while the menu was up, since focus never entered the portal.
+  useEffect(() => {
+    const items = menuRef.current?.querySelectorAll<HTMLElement>('.cue-context-menu-item')
+    items?.[activeIndex]?.focus()
+  }, [activeIndex])
+
+  /** Every item the arrows walk, in the order they are drawn. */
+  const itemCount = (): number =>
+    menuRef.current?.querySelectorAll('.cue-context-menu-item').length ?? 0
 
   useEffect(() => {
     const onMouseDown = (e: MouseEvent) => {
@@ -42,8 +68,29 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
         onClose()
       }
     }
+    // Escape closes the menu here rather than only in the list's handler: the press has
+    // to be swallowed either way, or dismissing a menu stops the show behind it.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        e.preventDefault()
+        onClose()
+        return
+      }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+      e.preventDefault()
+      const count = itemCount()
+      if (count === 0) return
+      setActiveIndex(current => (current + (e.key === 'ArrowDown' ? 1 : count - 1)) % count)
+    }
     document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
+    // Capture, on the document: the press is taken before anything else can read it,
+    // including the window listener that would stop the show.
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
   }, [onClose])
 
   const targets = selectedIds.includes(cue.id) ? selectedIds : [cue.id]
@@ -62,31 +109,50 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const handleDelete = () => { removeCues(targets); onClose() }
   const handleArmToggle = () => { updateCues(targets, { isArmed: !allArmed }); onClose() }
 
+  // A split is offered when there is a place to make one: an audio cue whose region the
+  // waveform cursor is inside, and the cursor is this cue's — it is a time in a file, and
+  // a time in another track is a different place. The cursor is the same one a click on
+  // the waveform sets, so the operator chooses the point where they can see it and
+  // commits it here — the menu is beside the list, and the thing being pointed at is a
+  // time.
+  const atMs = cursor !== null && cursor.cueId === cue.id ? cursor.ms : null
+  const splitSplit = !several && cue.type === 'audio' && cue.filePath !== '' &&
+    atMs !== null && atMs > cue.startTime && atMs < regionEndMs(cue)
+  const handleSplit = () => { if (atMs !== null) splitAudioCueAt(cue.id, atMs); onClose() }
+
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
       className="cue-context-menu"
       style={{ left: clampedX, top: clampedY }}
       onContextMenu={e => e.preventDefault()}
+      role="menu"
     >
-      <button className="cue-context-menu-item" onClick={handleRename}>
+      <button className="cue-context-menu-item" onClick={handleRename} onMouseEnter={e => e.currentTarget.focus()}>
         <span className="cue-context-menu-icon">✎</span>
         Rename
       </button>
-      <button className="cue-context-menu-item" onClick={handleDuplicate}>
+      <button className="cue-context-menu-item" onClick={handleDuplicate} onMouseEnter={e => e.currentTarget.focus()}>
         <span className="cue-context-menu-icon">⧉</span>
         Duplicate{count}
         <kbd>{formatShortcut('Mod+D')}</kbd>
       </button>
-      <button className="cue-context-menu-item cue-context-menu-item--danger" onClick={handleDelete}>
+      {splitSplit && (
+        <button className="cue-context-menu-item" onClick={handleSplit} title={splitHint(cue, atMs)} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">✂</span>
+          Split here
+        </button>
+      )}
+      <button className="cue-context-menu-item cue-context-menu-item--danger" onClick={handleDelete} onMouseEnter={e => e.currentTarget.focus()}>
         <span className="cue-context-menu-icon">✕</span>
         Delete{count}
         <kbd>Del</kbd>
       </button>
       <div className="cue-context-menu-separator" />
-      <button className="cue-context-menu-item" onClick={handleArmToggle}>
+      <button className="cue-context-menu-item" onClick={handleArmToggle} onMouseEnter={e => e.currentTarget.focus()}>
         <span className="cue-context-menu-icon">{allArmed ? '○' : '●'}</span>
         {allArmed ? 'Disarm' : 'Arm'}{count}
+        <kbd>{formatShortcut('Mod+Shift+A')}</kbd>
       </button>
       <div className="cue-context-menu-separator" />
       {/* The eight colours, drawn where the cue is: the same pick as the inspector's, for

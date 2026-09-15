@@ -74,7 +74,6 @@ export function RecoveryNotice() {
   return (
     <NoticeBar
       kind="recovery"
-      onDismiss={discard}
       actions={
         <>
           <button className="app-notice-action" onClick={recover}>Recover</button>

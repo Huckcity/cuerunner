@@ -25,6 +25,24 @@ constexpr int kMaxPendingOps = 256;
 constexpr int kMaxStreams = 16;
 constexpr int kMaxRampsPerParam = 4;
 constexpr int kMaxWaveformPoints = 4096;
+constexpr int kMaxOnsets = 20000;
+
+/**
+ * A scan's answer: where notes or hits begin in a media file.
+ *
+ * A time is the middle of the analysis frame that caught the attack — an onset is the
+ * instant of the hit itself, and that is as close as a 1024-sample window gets to it.
+ * Results of this shape are built on the command thread that asked for them and read
+ * there — the audio callback never touches one.
+ */
+struct OnsetDTO {
+  std::string filePath;
+  std::vector<double> onsetsMs;  // ascending; the frame centre that caught each onset
+  double durationMs = 0.0;
+  int sampleRate = 0;
+  int channels = 0;
+  bool truncated = false;  // the scan hit the cap and stopped early
+};
 
 constexpr int kMaxOutputFrames = 4096;
 
@@ -118,7 +136,8 @@ struct Command {
     Fade = 6,
     Routing = 7,
     Panic = 8,
-    Shutdown = 9
+    Shutdown = 9,
+    Release = 10
   } kind = None;
 
   char cueId[kMaxCueIdLen] = {};

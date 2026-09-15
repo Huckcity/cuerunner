@@ -43,6 +43,9 @@ test('regression: GO does not skip over the next cue when advance is none', asyn
 
 test('GO on the last cue clears selection', async () => {
   await page.locator('.cue-row').last().click()
+  // The firing guard stands between two GO presses: this is a second press, and to the
+  // guard it has to look like one.
+  await page.waitForTimeout(400)
   await page.getByRole('button', { name: /GO/ }).click()
 
   // No next cue — selection should be null
@@ -57,6 +60,7 @@ test('advance on-start skips selection past the auto-fired cue', async () => {
   await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
   await page.locator('.field-row').filter({ hasText: 'Advance' }).locator('select').selectOption('on-start')
 
+  await page.waitForTimeout(400)
   await page.getByRole('button', { name: /GO/ }).click()
 
   // With two cues and advance=on-start on cue 1, selection skips past cue 2 → null

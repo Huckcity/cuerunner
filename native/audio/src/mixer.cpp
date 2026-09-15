@@ -461,6 +461,25 @@ void Mixer::apply(const Command& cmd) {
       }
       break;
     }
+    case Command::Release: {
+      Voice* voice = findVoice(cmd.cueId);
+      // A voice that is not looping is not vamping, and one whose file has no stated
+      // length has no later to play to: either way there is nothing to release, and the
+      // caller is told so rather than being told a change happened.
+      if (voice != nullptr && voice->loopCount != 0 && voice->sourceFrames > 0) {
+        // The released region starts at the top of the file rather than at the loop, so
+        // the voice is free to play whatever lies between where it is now and the end.
+        // Its position is left alone: the next sample it renders is the next sample of
+        // the music, which is what makes the release sample-accurate.
+        voice->segmentStartFrame = 0.0;
+        voice->segmentEndFrame = static_cast<double>(voice->sourceFrames);
+        voice->loopCount = 0;
+        voice->loopsCompleted = 0;
+        applied = true;
+      }
+      ackVoices = activeVoiceCount();
+      break;
+    }
     case Command::Seek: {
       Voice* voice = findVoice(cmd.cueId);
       if (voice != nullptr) {

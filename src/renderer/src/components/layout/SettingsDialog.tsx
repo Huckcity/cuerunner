@@ -8,6 +8,7 @@ import { PlaybackWarnings } from './PlaybackWarnings'
 import { NumberField, TextField } from '../common/Field'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
+import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../types/workspace'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
@@ -57,6 +58,9 @@ function NumberRow({ id, label, value, min, max, disabled, onValue }: NumberRowP
 
 /** The tabs, by what the operator is setting up rather than by which service does it. */
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  // First, because it is about the show as a whole rather than about any one of the
+  // things the other tabs are the settings for.
+  { id: 'general', label: 'General' },
   { id: 'audio', label: 'Audio' },
   { id: 'midi', label: 'MIDI' },
   { id: 'network', label: 'Network' },
@@ -77,12 +81,13 @@ function ProHint({ onUnlock }: { onUnlock: () => void }) {
   )
 }
 
-export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
+export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   useModal()
   const {
     audioSettings, midiSettings, showSettings, showServices, audioDeviceError,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
-    updateRfSettings, updatePresenceSettings, updateCompanionSettings
+    updateRfSettings, updatePresenceSettings, updateCompanionSettings,
+    triggerGuard, updateTriggerGuard
   } = useStore()
   const pro = usePro()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
@@ -187,6 +192,27 @@ export function SettingsDialog({ onClose, initialTab = 'audio' }: Props) {
         </div>
 
         <div className="settings-body">
+          {tab === 'general' && (
+            <>
+              <div className="field-row">
+                <label htmlFor="settings-guard-window">Trigger guard</label>
+                <NumberField
+                  id="settings-guard-window"
+                  value={triggerGuard.windowMs}
+                  min={TRIGGER_GUARD_MIN_MS}
+                  max={TRIGGER_GUARD_MAX_MS}
+                  step={10}
+                  onValue={next => { if (next !== null) updateTriggerGuard({ windowMs: next }) }}
+                />
+                <span className="settings-info">ms</span>
+              </div>
+              <p className="inspector-hint">
+                How long the space bar, the OSC listener and the MIDI inputs each stay deaf
+                after they fire a cue. A footswitch that bounces, a desk that sends twice and
+                a key held down are one firing each, not two. Zero turns the window off.
+              </p>
+            </>
+          )}
           {tab === 'audio' && (
             <>
               <div className="field-row">

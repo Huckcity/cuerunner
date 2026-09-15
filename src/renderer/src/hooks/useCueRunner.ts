@@ -23,6 +23,7 @@ export function useCueRunner() {
       appendLog,
       getWorkspacePath: () => useStore.getState().workspacePath,
       getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName,
+      getTriggerGuard: () => useStore.getState().triggerGuard,
       isPro: () => isPro(useStore.getState().license)
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])

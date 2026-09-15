@@ -21,6 +21,20 @@ async function addScriptCue(script: string, timeoutMs: number): Promise<void> {
   await page.locator('.field-row').filter({ hasText: 'Timeout' }).locator('input').fill(String(timeoutMs))
 }
 
+async function go(): Promise<void> {
+  await page.getByRole('button', { name: /GO/ }).click()
+}
+
+/**
+ * GO for a press that follows another one. The show's firing window treats two firings in
+ * one breath as one — that is what it is for — so a test that means a second press says so
+ * by waiting the window out, rather than by being quick enough to look like a bounce.
+ */
+async function goAgain(): Promise<void> {
+  await page.waitForTimeout(400)
+  await go()
+}
+
 test('a script that never yields is stopped by its timeout, not by the app hanging', async () => {
   await addScriptCue('while (true) {}', 1500)
 
@@ -29,7 +43,7 @@ test('a script that never yields is stopped by its timeout, not by the app hangi
   await page.locator('.inspector-tab', { hasText: 'Script' }).click()
   await expect(page.locator('.field-row').filter({ hasText: 'Timeout' }).locator('input')).toHaveValue('1500')
 
-  await page.getByRole('button', { name: /GO/ }).click()
+  await go()
 
   // The interface answers while the script spins: this call hangs if the script is
   // running on the renderer's thread.
@@ -46,7 +60,7 @@ test('a script that never yields is stopped by its timeout, not by the app hangi
 test('STOP takes a running script away with it', async () => {
   // Long enough that the timeout cannot be what ends this run
   await addScriptCue('while (true) {}', 120_000)
-  await page.getByRole('button', { name: /GO/ }).click()
+  await go()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 
   // The STOP button, not Escape: focus is in the script textarea, where the keyboard
@@ -59,13 +73,13 @@ test('STOP takes a running script away with it', async () => {
   // The app is still a working show: a following cue fires normally.
   await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
   await page.locator('.cue-row').nth(1).click()
-  await page.getByRole('button', { name: /GO/ }).click()
+  await goAgain()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 })
 
 test('a stop cue aimed at a script takes that run away too', async () => {
   await addScriptCue('while (true) {}', 120_000)
-  await page.getByRole('button', { name: /GO/ }).click()
+  await go()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 
   // A stop cue for the script alone, not for everything.
@@ -74,7 +88,7 @@ test('a stop cue aimed at a script takes that run away too', async () => {
   await page.locator('.field-row').filter({ hasText: 'Target' }).locator('select').selectOption({ index: 1 })
 
   await page.locator('.cue-row').nth(1).click()
-  await page.getByRole('button', { name: /GO/ }).click()
+  await goAgain()
 
   // The script is gone, and it records nothing: nothing was wrong with it.
   await expect(page.locator('.running-badge')).toHaveText('idle')
@@ -87,7 +101,7 @@ test('a stop cue aimed at a script takes that run away too', async () => {
   // quick enough to see it — this one cannot finish before the assertion.
   await expect.poll(() => page.evaluate(() => 1 + 1)).toBe(2)
   await addScriptCue('while (true) {}', 120_000)
-  await page.getByRole('button', { name: /GO/ }).click()
+  await goAgain()
   await expect(page.locator('.running-badge')).toContainText('1 running')
 })
 
@@ -100,7 +114,7 @@ test('a stop cue aimed at a group reaches the scripts inside it', async () => {
   await expect(page.locator('.cue-row[data-depth="1"]')).toHaveCount(2)
 
   await page.locator('.cue-row').first().click()
-  await page.getByRole('button', { name: /GO/ }).click()
+  await go()
   await expect(page.locator('.running-badge')).toContainText('running')
 
   // The stop cue lands outside the group, aimed at the group itself.
@@ -109,7 +123,7 @@ test('a stop cue aimed at a group reaches the scripts inside it', async () => {
   await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
   await page.locator('.field-row').filter({ hasText: 'Target' }).locator('select').selectOption({ index: 1 })
   await page.locator('.cue-row').last().click()
-  await page.getByRole('button', { name: /GO/ }).click()
+  await goAgain()
 
   // Both children are gone, and the group does not carry on to the second.
   await expect(page.locator('.running-badge')).toHaveText('idle')

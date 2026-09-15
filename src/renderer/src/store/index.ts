@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue } from '../types/cue'
 import type { MissingMedia } from '../../../shared/media'
-import type { AudioSettings, MidiSettings, WorkspaceIdentity } from '../types/workspace'
+import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
+import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
 import type {
   CastSettings,
@@ -25,6 +26,7 @@ import type {
   ShowSnapshot
 } from '../types/show'
 import { createCue } from '../utils/cueDefaults'
+import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
   addEnsemble,
@@ -46,7 +48,7 @@ export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'audio' | 'midi' | 'network' | 'wireless' | 'license'
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'license'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -103,6 +105,16 @@ const defaultAudioSettings: AudioSettings = {
 
 const defaultMidiSettings: MidiSettings = {
   outputPortName: '',
+}
+
+/**
+ * A place in one cue's file. The cursor is a time in a file, so it carries the cue it was
+ * placed in: the same number in another track is a different place, and drawing it there
+ * would be the panel claiming the operator pointed at something they did not.
+ */
+export interface WaveformCursor {
+  cueId: string
+  ms: number
 }
 
 interface CueListState {
@@ -163,6 +175,31 @@ interface CueListState {
   /** Cmd-click: this cue in the set, or out of it. */
   toggleSelected: (id: string) => void
 
+  /**
+   * Where the waveform cursor sits, in file milliseconds, and which cue's file it is in.
+   * It is where a split will be made and where a click on the waveform seeks to, so the
+   * two hands that set it — the click and the drag — write to the same place. A cursor
+   * belongs to the track it was placed on: a time is a place in that file, and the same
+   * number in another track is a different place. Session state: a cursor is where
+   * somebody is looking, not part of the show.
+   */
+  waveformCursor: WaveformCursor | null
+  /** Places the cursor in one cue's file, or takes it away (null). */
+  setWaveformCursor: (cueId: string, ms: number | null) => void
+
+  /**
+   * Moves one edge of an audio cue's region, taking the cue that continues it along when
+   * the two meet there: a split pair is one boundary in two cues, and dragging it on one
+   * side only would leave a gap nobody asked for.
+   */
+  setRegionBoundary: (id: string, edge: 'start' | 'end', ms: number) => void
+
+  /**
+   * Splits an audio cue at a point in its own file, as one edit: the cue keeps its
+   * identity and triggers over the head of the region and a continuation takes the tail.
+   */
+  splitAudioCueAt: (id: string, atMs: number) => void
+
   // Running state
   setRunning: (id: string, state: RunningCue | null) => void
   clearAllRunning: () => void
@@ -191,6 +228,13 @@ interface CueListState {
   log: LogEntry[]
   appendLog: (entries: LogEntryInput[]) => void
   clearLog: () => void
+
+  /**
+   * How long each firing surface stays deaf after it fires a cue. Workspace content: it
+   * travels with the show, because the desk that sends twice travels with the show too.
+   */
+  triggerGuard: TriggerGuardSettings
+  updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
 
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
@@ -333,7 +377,8 @@ interface CueListState {
     audioSettings?: AudioSettings,
     midiSettings?: MidiSettings,
     showSettings?: ShowSettings,
-    identity?: WorkspaceIdentity
+    identity?: WorkspaceIdentity,
+    triggerGuard?: TriggerGuardSettings
   ) => void
   saveSucceeded: (path: string, name: string) => void
   setWorkspaceName: (name: string) => void
@@ -518,11 +563,13 @@ export const useStore = create<CueListState>((set) => ({
   selectedId: null,
   selectedIds: [],
   selectionAnchorId: null,
+  waveformCursor: null,
   collapsedGroupIds: new Set<string>(),
   running: new Map(),
   lastRuns: {},
   log: [],
   showSettings: defaultShowSettings(),
+  triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -812,6 +859,105 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
+  setWaveformCursor: (cueId, ms) => set({
+    waveformCursor: ms === null ? null : { cueId, ms }
+  }),
+
+  /**
+   * Moves one edge of an audio cue's region, and the cue that continues it when the two
+   * meet at that edge.
+   *
+   * A split leaves a pair that shares a boundary, and a boundary that moves on one side
+   * only is a gap or an overlap the operator never asked for — so the two move together,
+   * as one edit and one undo. The pairing is read from the times rather than recorded: a
+   * cue that starts exactly where this one ends is playing on from it, wherever the pair
+   * came from. The edges are held a millisecond apart, because a region of no length is
+   * a cue that plays nothing and two grips with no way to pull them apart again.
+   */
+  setRegionBoundary: (id, edge, ms) => set(s => {
+    const cue = s.cues.find(c => c.id === id)
+    if (!cue || cue.type !== 'audio') return s
+    const filesEnd = Math.max(cue.duration, regionEndMs(cue))
+    const cuePatch: Partial<AudioCue> = edge === 'end' ? { endTime: 0 } : { startTime: 0 }
+    let target = Math.max(0, Math.min(Math.round(ms), filesEnd))
+
+    // The head stops short of the tail and the tail of the head: whichever edge is being
+    // moved, the other one of its own cue wins when they would touch. A region of no
+    // length plays nothing, and the two grips would have no way to be pulled apart.
+    if (edge === 'start') target = Math.min(target, regionEndMs(cue) - 1)
+    else target = Math.max(target, cue.startTime + 1)
+    if (edge === 'end') cuePatch.endTime = target
+    else cuePatch.startTime = target
+
+    const partner: AudioCue | undefined = s.cues.find((c): c is AudioCue =>
+      c.id !== id && c.type === 'audio' && (edge === 'end'
+        ? c.startTime === cue.endTime
+        : regionEndMs(c) === cue.startTime))
+    const partnerPatch: Partial<AudioCue> | null = partner === undefined
+      ? null
+      : edge === 'end'
+        ? { startTime: target }
+        : { endTime: target }
+
+    const next = s.cues.map(c => {
+      if (c.id === cue.id) return { ...c, ...cuePatch } as Cue
+      if (partnerPatch !== null && partner !== undefined && c.id === partner.id) {
+        return { ...c, ...partnerPatch } as Cue
+      }
+      return c
+    })
+    const unchanged = next.every((c, i) => c === s.cues[i])
+    if (unchanged) return s
+    return {
+      cues: next,
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  splitAudioCueAt: (id, atMs) => set(s => {
+    const cue = s.cues.find(c => c.id === id)
+    if (!cue || cue.type !== 'audio') return s
+    const split = splitAudioCue(cue, atMs)
+    if (split === null) return s
+
+    // The pair is named so that a hand reading the list sees two halves of one thing: the
+    // head keeps the name the cue had, and the tail takes the next one along. The cue's
+    // own name is not in the set of names to avoid — it is the name the pair is being
+    // given, and the head is the half that keeps the cue's identity.
+    const names = new Set(s.cues.filter(c => c.id !== id).map(c => c.name))
+    const headName = partName(split.baseName, names)
+    names.add(headName)
+    const tailName = partName(split.baseName, names)
+
+    const tail: AudioCue = {
+      ...split.tail,
+      id: crypto.randomUUID(),
+      number: `${cue.number}b`,
+      name: tailName
+    }
+    const at = s.cues.findIndex(c => c.id === id)
+    const cues = [...s.cues]
+    cues[at] = { ...split.head, name: headName }
+    cues.splice(at + 1, 0, tail)
+
+    // The two halves are what the operator is holding: the boundary is in the waveform,
+    // and which half they go on to trim depends on what they saw there.
+    return {
+      cues,
+      selectedIds: [cue.id, tail.id],
+      selectedId: tail.id,
+      selectionAnchorId: cue.id,
+      // The cursor has been spent on the split; where it was is not where the next one
+      // should be cut.
+      waveformCursor: null,
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
   setRunning: (id, state) => set(s => {
     const running = new Map(s.running)
     if (state === null) running.delete(id)
@@ -935,7 +1081,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -962,6 +1108,11 @@ export const useStore = create<CueListState>((set) => ({
       audioSettings: audioSettings ?? { ...defaultAudioSettings },
       midiSettings: midiSettings ?? { ...defaultMidiSettings },
       showSettings: showSettings ?? defaultShowSettings(),
+      // A file written before the guard existed has none: the normalizer both fills it in
+      // and holds a value typed outside its range to the range.
+      triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // Where the last show's cursor sat says nothing about this one.
+      waveformCursor: null,
       // Nothing has been told to this show's desk yet.
       deskState: {},
       deskSceneId: null,
@@ -986,6 +1137,11 @@ export const useStore = create<CueListState>((set) => ({
 
   updateMidiSettings: (patch) => set(s => ({
     midiSettings: { ...s.midiSettings, ...patch },
+    isDirty: true
+  })),
+
+  updateTriggerGuard: (patch) => set(s => ({
+    triggerGuard: normalizeTriggerGuard({ ...s.triggerGuard, ...patch }),
     isDirty: true
   })),
 

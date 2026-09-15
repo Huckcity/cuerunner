@@ -6,9 +6,10 @@ import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue } from '../types/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
+import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },
@@ -29,6 +30,11 @@ const scriptHostMock = scriptHost as unknown as {
 
 const engine = vi.mocked(audioEngine)
 const requestMock = vi.mocked(network.request)
+
+// A verb added to the engine client after this suite's automock was written is a key
+// the mock does not carry. Named here, with the shape the real call answers, so a test
+// can ask what the runner sent without the mock being the thing under test.
+engine.release = vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })) as unknown as typeof engine.release
 
 /** Hands an event to every engine-event handler the runner installed. */
 function emitEngineEvent(event: AudioEngineEvent): void {
@@ -127,6 +133,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true):
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
     isPro: () => licensed
   })
   runners.push(runner)
@@ -398,6 +405,97 @@ describe('CueRunner — stop and panic', () => {
 
     const states = setRunning.mock.calls.map(c => c[1]?.state ?? null)
     expect(states).not.toContain('playing')
+  })
+})
+
+// What a second firing does to a cue that is already running. The guard's window has
+// passed in each of these — an operator who waits and presses again is a second press,
+// and that is the one the policy is about.
+describe('CueRunner — re-firing a running cue', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  const starts = (setRunning: Mock, id: string): number =>
+    setRunning.mock.calls.filter(c => c[0] === id && c[1]?.state === 'playing').length
+
+  it('leaves a running cue alone when it is fired again', () => {
+    const cue = makeWait({ id: 'w1', duration: 5000 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    runner.resetGuards()
+    runner.go()
+
+    expect(starts(setRunning, 'w1')).toBe(1)
+  })
+
+  it('restarts a running cue that was told it may be restarted', () => {
+    // The cue that is itself the repeat — a stinger, a hold chord — asks for the old
+    // behaviour, which is the whole reason the policy is a setting rather than a rule.
+    const cue = makeWait({ id: 'w1', duration: 5000, refire: 'restart' })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    runner.resetGuards()
+    runner.go()
+
+    expect(starts(setRunning, 'w1')).toBe(2)
+  })
+
+  it('holds the selection where it is when the press is ignored', () => {
+    // An ignored press is not a press: moving the operator's hand on to the next cue
+    // would leave them standing somewhere the show is not going.
+    const cue1 = makeWait({ id: 'w1', number: '1', duration: 5000 })
+    const cue2 = makeWait({ id: 'w2', number: '2' })
+    const { runner, setSelected } = setup([cue1, cue2])
+
+    runner.go()
+    runner.resetGuards()
+    // The selection advanced to w2 on the first GO; press again while w1 still runs by
+    // asking for w1 directly, the way a trigger does.
+    runner.goById('w1')
+
+    expect(setSelected).toHaveBeenCalledTimes(1)
+    expect(setSelected).toHaveBeenLastCalledWith('w2')
+  })
+
+  it('ignores a trigger on a running cue without disturbing the cue that is playing', () => {
+    const cue = makeWait({ id: 'w1', duration: 5000 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    const before = setRunning.mock.calls.length
+    runner.resetGuards()
+    runner.goById('w1')
+
+    // Nothing was stopped and nothing was started: the run that was going is the run.
+    expect(setRunning.mock.calls.length).toBe(before)
+    expect(starts(setRunning, 'w1')).toBe(1)
+  })
+
+  it('still fires a cue whose run has ended', () => {
+    const cue = makeWait({ id: 'w1', duration: 1000 })
+    const { runner, setRunning } = setup([cue])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+    runner.resetGuards()
+    runner.goById('w1')
+
+    expect(starts(setRunning, 'w1')).toBe(2)
+  })
+
+  it('does not make an advance chain wait for a cue it has never fired', () => {
+    // The chain hands over at a sample time, which is the show's own plumbing rather
+    // than a press: the interlock must never stand between two cues of one GO.
+    const cue1 = makeWait({ id: 'w1', duration: 1000, advance: 'on-end' })
+    const cue2 = makeWait({ id: 'w2', duration: 1000 })
+    const { runner, setRunning } = setup([cue1, cue2])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+
+    expect(starts(setRunning, 'w2')).toBe(1)
   })
 })
 
@@ -870,6 +968,46 @@ describe('CueRunner — engine failures are reported', () => {
     }))
   })
 
+  it('releases the show when the device goes, without waiting for the silence report', () => {
+    // The engine panics what it was playing the moment the device goes, but its per-voice
+    // `ended` lines only follow once the audio thread has acknowledged that panic — a
+    // couple of seconds, on a device that is no longer answering. Until then the rows
+    // would read as playing and the next GO on one of them would be refused as a repeat.
+    const cue = makeAudio({ id: 'a1', duration: 5000 })
+    const { runner, clearAllRunning, appendLog } = setup([cue])
+
+    runner.go()
+    vi.advanceTimersByTime(200)
+    clearAllRunning.mockClear()
+
+    emitEngineEvent({
+      type: 'error', cueId: null, runId: null, at: Date.now(), code: 'device',
+      message: 'audio device stopped unexpectedly', sessionId: 'test-session'
+    })
+
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'audio engine: audio device stopped unexpectedly' })
+    ])
+    expect(clearAllRunning).toHaveBeenCalled()
+  })
+
+  it('leaves a running show alone when the fault is not the device', () => {
+    // An engine-wide fault the engine did not panic for is reported and nothing more: a
+    // wait cue's own time has to survive the engine it was counting against.
+    const cue = makeWait({ id: 'w1', duration: 6000 })
+    const { runner, clearAllRunning } = setup([cue])
+
+    runner.go()
+    clearAllRunning.mockClear()
+
+    emitEngineEvent({
+      type: 'error', cueId: null, runId: null, at: Date.now(), code: 'engine',
+      message: 'audio engine exited (1)', sessionId: 'test-session'
+    })
+
+    expect(clearAllRunning).not.toHaveBeenCalled()
+  })
+
   it('tells the operator when the engine was replaced under the show', () => {
     const { appendLog } = setup([makeWait({ id: 'w1' })])
 
@@ -1000,6 +1138,63 @@ describe('CueRunner — scene cues', () => {
     }))
     expect(window.winslab.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBeNull()
+  })
+})
+
+// A devamp releases a vamping cue: the music leaves its loop and plays out to the end of
+// the file. The cue itself is finished the moment it has asked, which is what lets a
+// group's next cue start over the tail.
+describe('CueRunner — devamp cues', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  function makeDevamp(targetCueId: string, overrides: Partial<DevampCue> = {}): DevampCue {
+    return {
+      id: 'd1', number: '9', name: 'Devamp', type: 'devamp',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      targetCueId,
+      ...overrides
+    }
+  }
+
+  it('asks the engine to release the cue it names', async () => {
+    const vamp = makeAudio({ id: 'a1', loopCount: -1, startTime: 2000, endTime: 3000 })
+    const devamp = makeDevamp('a1')
+    const { runner, setLastRun } = setup([vamp, devamp])
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.release).toHaveBeenCalledWith('a1')
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('reports a cue that was not looping rather than pretending it released one', async () => {
+    const straight = makeAudio({ id: 'a1', loopCount: 0 })
+    const devamp = makeDevamp('a1')
+    const { runner, setLastRun } = setup([straight, devamp])
+    engine.release.mockResolvedValueOnce({ ok: true, at: 0, applied: false })
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({
+      outcome: 'error',
+      error: 'that cue was not looping'
+    }))
+  })
+
+  it('refuses to release anything when it has not been pointed at a cue', async () => {
+    // A devamp with no target must not be read as "release everything": which cue is
+    // vamping is the operator's decision, not a guess this cue gets to make.
+    const { runner, setLastRun } = setup([makeAudio({ id: 'a1', loopCount: -1 }), makeDevamp('')])
+
+    runner.goById('d1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(engine.release).not.toHaveBeenCalled()
+    expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'error' }))
   })
 })
 

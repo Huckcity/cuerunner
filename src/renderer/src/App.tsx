@@ -126,7 +126,7 @@ export function App() {
       <NoticeHost />
       <MissingMediaBar />
       <Toolbar
-        onOpenSettings={() => openSettings('audio')}
+        onOpenSettings={() => openSettings('general')}
         view={view}
         onSwitchView={setView}
       />

@@ -23,7 +23,7 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
     <div className="inspector-section">
       <div className="field-section-title">Scene</div>
       <div className="field-row">
-        <label htmlFor="scene-cue-select">Recall</label>
+        <label htmlFor="scene-cue-select">Scene</label>
         <select
           id="scene-cue-select"
           value={cue.sceneId}
@@ -48,7 +48,7 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
         </p>
       ) : (
         <p className="inspector-hint">
-          Firing tells the desk the difference between “{scene.name}” and where it stands now:
+          Recalling it tells the desk the difference between “{scene.name}” and where it stands now:
           {' '}{open} performer{open === 1 ? '' : 's'} open, DCAs already in the right state
           left alone.
         </p>

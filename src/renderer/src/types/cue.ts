@@ -11,6 +11,17 @@ export type CueType =
   | 'network'
   | 'script'
   | 'scene'
+  | 'devamp'
+
+/**
+ * What a second firing does to a cue that is already running.
+ *
+ * `ignore` leaves it alone: the second press was a hand that shook, a desk that sent
+ * twice, or a note that bounced, and the cue that is running is the cue that was meant.
+ * `restart` is what the app used to do unconditionally — it is right for a cue that is
+ * itself the repeat (a stinger, a hold chord), which is why it stays one setting away.
+ */
+export type RefirePolicy = 'ignore' | 'restart'
 
 /**
  * A message a cue answers to, when nobody's hand is on the GO button.
@@ -48,6 +59,12 @@ export interface CueBase {
    * existed has none, and the migration fills the list in.
    */
   triggers?: CueTrigger[]
+  /**
+   * What a second firing does while this cue is running. Optional on disk for the same
+   * reason as `triggers`, and absent means `ignore` — a show written before the policy
+   * existed keeps every behaviour it had except the one that was the bug.
+   */
+  refire?: RefirePolicy
   /**
    * The line of the script this cue fires on, 1-based, for the script panel and the
    * tablet reading it. Null or absent means it is not pinned to anything.
@@ -166,6 +183,17 @@ export interface ScriptCue extends CueBase {
  * the mics with it. The work — which groups change, and the messages that change them —
  * belongs to the scene, so this cue only names one.
  */
+/**
+ * A cue that releases a vamping cue: the target stops looping its section and plays out
+ * to the end of its file, from wherever the loop had reached. It acts on another cue the
+ * way a stop or a fade does, which is why it names one instead of holding music itself.
+ */
+export interface DevampCue extends CueBase {
+  type: 'devamp'
+  /** The cue to release. Empty means it is not pointed at anything yet. */
+  targetCueId: string
+}
+
 export interface SceneCue extends CueBase {
   type: 'scene'
   /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
@@ -183,3 +211,4 @@ export type Cue =
   | NetworkCue
   | ScriptCue
   | SceneCue
+  | DevampCue

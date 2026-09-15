@@ -426,9 +426,19 @@
         <h3>Waveform</h3>
         <p>
           Selecting an audio cue shows its waveform below the cue list, with the played part drawn
-          in a lighter blue and a playhead while it runs. Click anywhere on the waveform to set the
-          cue's start time there; if the cue is already playing, it seeks to that point instead. A
-          dashed orange marker shows a non-zero start time, with a reset button in the header.
+          in a lighter blue and a playhead while it runs. The part of the file the cue plays — its
+          region — is drawn as a brighter band with a round handle at either end: drag the head or
+          the tail to trim it, and the two halves of a split move together so the join stays a join.
+          The header says what the region plays, with a reset that puts the whole file back.
+        </p>
+        <p>
+          Click anywhere on the waveform to place the cursor there; if the cue is already playing,
+          the click seeks to that point instead. The cursor is the place a split cuts at — choose
+          <em>Split here</em> from the cue's right-click menu — and it belongs to the cue it was
+          placed on, so it is not drawn on the next track you select. The <strong>−</strong> and
+          <strong>+</strong> buttons zoom from the whole file in to a second of it, keeping the
+          cursor where it is on screen; <kbd>Ctrl</kbd> (or <kbd>Cmd</kbd>) and the wheel does the
+          same at the pointer, and the wheel alone pans along the file.
         </p>
         <p>
           Accepted file types are mp3, wav, ogg, flac, m4a, and aiff in the file picker; the drop
@@ -1193,7 +1203,7 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Save As</td><td>Anywhere</td></tr>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>,</kbd></td><td>Open Settings</td><td>Anywhere</td></tr>
               <tr><td><kbd>Arrow Up</kbd> / <kbd>Arrow Down</kbd></td><td>Move the cue selection</td><td>Cue list</td></tr>
-              <tr><td><kbd>Escape</kbd></td><td>Clear the selection, or close the context menu</td><td>Cue list</td></tr>
+              <tr><td><kbd>Escape</kbd></td><td>Close the context menu, or cancel a rename — a bare press is the transport's</td><td>Cue list</td></tr>
               <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue</td><td>Cue list</td></tr>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd></td><td>Undo</td><td>Anywhere except a text field</td></tr>
               <tr><td><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Redo</td><td>Anywhere except a text field</td></tr>

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
 import { CueRunner } from './CueRunner'
 import type { Cue, WaitCue, GroupCue } from '../types/cue'
+import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
 
 vi.mock('./audioEngineClient')
 vi.mock('./networkClient', () => ({
@@ -50,6 +51,7 @@ function setup(cues: Cue[]) {
     appendLog: vi.fn(),
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
     isPro: () => true
   })
   runners.push(runner)
@@ -166,6 +168,8 @@ describe('CueRunner — group cue (playlist mode)', () => {
     expect(fired(setRunning)).not.toContain('w2')
 
     vi.advanceTimersByTime(100)
+    // A second press is a second press: the guard's window has passed.
+    runner.resetGuards()
     runner.go()
     expect(fired(setRunning)).toContain('w2')
     expect(timesFired(setRunning, 'w1')).toBe(1)
@@ -177,8 +181,12 @@ describe('CueRunner — group cue (playlist mode)', () => {
 
     runner.go()
     vi.advanceTimersByTime(100)
+    // A second press is a second press: the guard's window has passed.
+    runner.resetGuards()
     runner.go()
     vi.advanceTimersByTime(100)
+    // A second press is a second press: the guard's window has passed.
+    runner.resetGuards()
     runner.go()
 
     expect(timesFired(setRunning, 'w1')).toBe(2)
@@ -193,6 +201,8 @@ describe('CueRunner — group cue (playlist mode)', () => {
 
     runner.go()
     vi.advanceTimersByTime(100)
+    // A second press is a second press: the guard's window has passed.
+    runner.resetGuards()
     runner.go()
 
     expect(fired(setRunning)).not.toContain('w2')
@@ -207,6 +217,8 @@ describe('CueRunner — group cue (playlist mode)', () => {
     expect(setSelected).toHaveBeenLastCalledWith('g1')
 
     vi.advanceTimersByTime(100)
+    // A second press is a second press: the guard's window has passed.
+    runner.resetGuards()
     runner.go()
     expect(setSelected).toHaveBeenLastCalledWith('next')
   })
@@ -228,6 +240,7 @@ describe('CueRunner — group cue (playlist mode)', () => {
     runner.go()
     vi.advanceTimersByTime(100)
     runner.stop()
+    runner.resetGuards()
     runner.go()
 
     expect(timesFired(setRunning, 'w1')).toBe(2)
@@ -258,6 +271,7 @@ describe('CueRunner — selection skips group children', () => {
       appendLog: vi.fn(),
       getWorkspacePath: () => null,
       getMidiDefaultPort: () => 'default-midi-port',
+      getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
       isPro: () => true
     })
     runners.push(runner)
