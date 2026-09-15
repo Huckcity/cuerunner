@@ -6,6 +6,13 @@
 // app's account of itself: the point of a peer is that it can disagree. The app names the
 // desk in Show Settings — the profile — and what arrives is what the document says an SQ
 // takes, so the desk's own mute state moving is the assertion that the profile is right.
+//
+// The cases run in order and each leaves DCA 1 somewhere, which the next one needs: a
+// recall that changes nothing sends nothing, and an assertion about the wire would then be
+// about the app's bookkeeping instead of about the desk. Leaving it at: 1 open, 2 closed,
+// 3 closed (the desk's own recall moves no DCA), 4 open again, 5 open as far as the app
+// knows — the close it attempts is refused by a desk that is not there, which is the point
+// of that case. An editor who adds a case in the middle has to say where it leaves the DCA.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'

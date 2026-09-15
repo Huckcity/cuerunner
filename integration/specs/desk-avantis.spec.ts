@@ -6,6 +6,9 @@
 // (V2.0+): base MIDI channel N, DCAs on N+4 at notes 36–45 hex, mutes as a note-on whose
 // velocity says which half of the pair it is. What is asserted is the wire and the desk's
 // own state, so what the app sends is judged by the desk that receives it.
+//
+// The cases run in order and leave DCA 1 open, closed, closed: the last one needs a change
+// to exist before it can be refused, which is what the close before it leaves behind.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
