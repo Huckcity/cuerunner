@@ -21,13 +21,16 @@ export function useAutosave(): void {
         triggerGuard,
         workspaceId,
         workspaceCreatedAt,
+        showHistory,
         selectedId
       } = useStore.getState()
       if (!isDirty) return
+      // The file's own history travels with the snapshot: a recovered session is the same
+      // show, and its record of what it has done so far is part of what it is.
       const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
         id: workspaceId,
         createdAt: workspaceCreatedAt
-      }, triggerGuard)
+      }, triggerGuard, showHistory)
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when
       // "where was I" is the first question.
       window.winslab.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {

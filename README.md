@@ -581,7 +581,16 @@ Playback and platform limits:
 Behaviour worth knowing before a show:
 
 - Fixed caps: the run log keeps the last 500 lines, a single script run emits at most 200 lines,
-  and run-log messages and network response bodies are cut off at 4000 characters
+  and run-log messages and network response bodies are cut off at 4000 characters. A showfile
+  remembers its last 200 saves that changed something, and an entry naming more than 100 cues
+  says how many more there were
+- The showfile's history is written per save, so it says who saved a change and what that save
+  moved, not who typed which keystroke. Two people editing one file at once is not a thing the
+  format supports; the merge is for the two files that result
+- A merge asks for the version the two sides started from, because two files alone cannot tell
+  "I changed this" from "you changed it". A cue's audio file is not merged — the two copies
+  resolved their media on two different machines — so a disagreement about it is reported and
+  the show being merged into keeps its own
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`
