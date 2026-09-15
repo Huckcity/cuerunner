@@ -92,6 +92,11 @@ export function dcaLimit(profile: DeskProfile): number | null {
   return null
 }
 
+/** Whether this profile's DCAs can answer on this channel at all. */
+export function deskChannelGap(profile: DeskProfile, midiChannel: number): boolean {
+  return profile === 'avantis' && dcaChannel(profile, midiChannel) > 16
+}
+
 /**
  * What the profile cannot address at all, or null when it can: a DCA past the desk's own
  * list, or a channel past the ones MIDI has.
@@ -99,7 +104,7 @@ export function dcaLimit(profile: DeskProfile): number | null {
 export function dcaGap(profile: DeskProfile, index: number, midiChannel: number): string | null {
   if (profile === 'sq' && index >= SQ_DCA_COUNT) return 'an SQ has eight DCAs'
   if (profile === 'avantis' && index >= AVANTIS_DCA_COUNT) return 'an Avantis has sixteen DCAs'
-  if (profile === 'avantis' && dcaChannel(profile, midiChannel) > 16) {
+  if (deskChannelGap(profile, midiChannel)) {
     return 'an Avantis answers four channels above its own, so its MIDI channel is 12 or lower'
   }
   return null

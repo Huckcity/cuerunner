@@ -8,7 +8,7 @@ import {
   updateChannel,
   updateDca
 } from '../../utils/cast'
-import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue } from '../../utils/desk'
+import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue, deskChannelGap } from '../../utils/desk'
 import { DCA_LIMIT } from '../../types/show'
 import type { CastSettings, DeskProfile, DeskSettings } from '../../types/show'
 import { TextField, NumberField } from '../common/Field'
@@ -19,6 +19,11 @@ const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
 function deskGap(desk: DeskSettings): string | null {
   if (desk.kind === 'midi' && desk.midiPort === '') return 'No MIDI port chosen.'
   if (desk.kind === 'midi-tcp' && desk.host.trim() === '') return 'No desk address.'
+  // A channel the DCAs do not answer on is the same kind of missing as an address nobody
+  // typed: the row says so rather than previewing a send that cannot happen.
+  if (deskChannelGap(desk.profile, desk.midiChannel) && desk.kind !== 'none' && desk.kind !== 'osc') {
+    return 'An Avantis answers four channels above its own, so its MIDI channel is 12 or lower.'
+  }
   return null
 }
 
@@ -39,12 +44,12 @@ function deskPreview(desk: DeskSettings, dcas: number): string {
   const limit = dcaLimit(desk.profile)
   const beyond = limit === null || dcas <= limit
     ? ''
-    : `; the desk has ${limit}, so ${dcas - limit} of the show's DCAs are not sent`
+    : `; the desk has ${limit}, so ${dcas - limit} of the show’s DCAs are not sent`
   if (desk.profile === 'sq') {
-    return `Sends an SQ's DCA mutes — NRPN page 02 on channel ${desk.midiChannel} — to ${where}${beyond}`
+    return `Sends an SQ’s DCA mutes — NRPN page 02 on channel ${desk.midiChannel} — to ${where}${beyond}`
   }
   if (desk.profile === 'avantis') {
-    return `Sends an Avantis's DCA mutes — note-on, 7F on and 3F off, on channel ${dcaChannel(desk.profile, desk.midiChannel)} — to ${where}${beyond}`
+    return `Sends an Avantis’s DCA mutes — note-on, 7F on and 3F off, on channel ${dcaChannel(desk.profile, desk.midiChannel)} — to ${where}${beyond}`
   }
   return `Sends note ${dcaNumber(0)} … ${dcaNumber(last)} to ${where}, on and off${beyond}`
 }

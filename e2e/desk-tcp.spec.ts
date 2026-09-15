@@ -59,6 +59,32 @@ test('the desk row takes an address and reads back what the show would send', as
   await settings.locator('.show-settings-done').click()
 })
 
+test('the desk row takes the desk’s own name, and reads back what that desk is sent', async () => {
+  await openShowSettings(page)
+  const settings = page.locator('.show-settings-dialog')
+
+  // The same show, three desks. What changes is the arrangement the desk takes, which is
+  // the difference between a recall that moves it and one it ignores — so the row says
+  // which arrangement is in force rather than leaving it to the wire.
+  await settings.locator('.desk-profile').selectOption('sq')
+  await expect(settings.locator('.desk-preview')).toHaveText(
+    'Sends an SQ’s DCA mutes — NRPN page 02 on channel 1 — to 10.0.0.5:51325; ' +
+    'the desk has 8, so 4 of the show’s DCAs are not sent'
+  )
+
+  await settings.locator('.desk-profile').selectOption('avantis')
+  await expect(settings.locator('.desk-preview')).toHaveText(
+    'Sends an Avantis’s DCA mutes — note-on, 7F on and 3F off, on channel 5 — to 10.0.0.5:51325'
+  )
+
+  await settings.locator('.desk-profile').selectOption('note')
+  await expect(settings.locator('.desk-preview')).toHaveText(
+    'Sends note 1 … 12 to 10.0.0.5:51325, on and off'
+  )
+
+  await settings.locator('.show-settings-done').click()
+})
+
 test('a show written before the desk had a socket opens on the port the desks use', async () => {
   // The file is what an operator's workspace looks like after the upgrade: a desk pointed
   // over the network, and no MIDI-over-TCP port, because the field did not exist when it
@@ -95,6 +121,9 @@ test('a show written before the desk had a socket opens on the port the desks us
   const settings = page.locator('.show-settings-dialog')
   await expect(settings.locator('.desk-tcp-host')).toHaveValue('10.0.0.5')
   await expect(settings.locator('.desk-tcp-port')).toHaveValue('51325')
+  // A file written before desks had a profile is sent what it was always sent: the app's
+  // own note arrangement. Nothing moves on the desk because the app was updated.
+  await expect(settings.locator('.desk-profile')).toHaveValue('note')
   await settings.locator('.show-settings-done').click()
 
   // Saved, the port is the show's own rather than a value this build filled in on the way

@@ -9,17 +9,24 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { DeskProfile } from '../../src/renderer/src/types/show'
 
 export interface DeskShowOptions {
   /** The peer's port: where the show's desk is. */
   port: number
-  /** The MIDI channel both ends are set to. */
-  channel: number
   /**
-   * The note DCA 1 is driven by. It is 1 on an SQ by the app's own convention, and 36 on
-   * an Avantis, where the DCAs live on the base channel + 4 at notes 36–45.
+   * The MIDI channel both ends are set to: the desk's own, 1–16 as its Utility screen
+   * shows it. Where its DCAs answer is derived from that by the profile.
    */
-  dcaNote: number
+  channel: number
+  /** What the desk takes as an open and a close — the range the peer is standing in for. */
+  profile: DeskProfile
+  /**
+   * A DCA number override, for a show that has been told its desk numbers its faders
+   * differently. Left out, DCA 1 is addressed the way the profile derives it, which is
+   * what the specs assert: the derivation is under test, not a fixture's arithmetic.
+   */
+  dcaNote?: number
   /**
    * The scene the desk recalls of its own accord in the desk-originated case, and the cue
    * that answers to it. It is transmitted as bank select + program change on the base
@@ -33,7 +40,7 @@ export interface DeskShowOptions {
 export const DESK_SHOW_NAME = 'Desk Show'
 
 export function writeDeskShow(options: DeskShowOptions): string {
-  const { port, channel, dcaNote, deskScene = 7 } = options
+  const { port, channel, profile, dcaNote, deskScene = 7 } = options
   const root = mkdtempSync(join(tmpdir(), 'winslab-desk-'))
   const path = join(root, `${DESK_SHOW_NAME}.wlab`)
   const device = `127.0.0.1:${port}`
@@ -48,6 +55,7 @@ export function writeDeskShow(options: DeskShowOptions): string {
     showSettings: {
       desk: {
         kind: 'midi-tcp',
+        profile,
         midiPort: '',
         midiChannel: channel,
         host: '127.0.0.1',
@@ -61,7 +69,7 @@ export function writeDeskShow(options: DeskShowOptions): string {
           { id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: 'ch-1' }
         ],
         ensembles: [],
-        dcas: [{ id: 'dca-1', label: 'DCA 1', note: dcaNote, address: null }]
+        dcas: [{ id: 'dca-1', label: 'DCA 1', note: dcaNote ?? null, address: null }]
       },
       scenes: {
         list: [
