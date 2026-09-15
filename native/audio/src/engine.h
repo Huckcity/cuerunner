@@ -227,10 +227,13 @@ class Engine {
   bool cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error);
   /**
    * Ends a voice's loop and plays it out to the end of the file, from wherever the loop
-   * is. The verb a devamp cue sends: the voice leaves its loop without being restarted,
-   * so the release lands on the sample the operator aimed at rather than at a seam.
+   * is — or to `endMs` when `hasEnd` names one, which is where a cue trimmed of its
+   * trailing silence stops hearing the file. The verb a devamp cue sends: the voice
+   * leaves its loop without being restarted, so the release lands on the sample the
+   * operator aimed at rather than at a seam.
    */
-  bool releaseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
+  bool releaseCue(const std::string& cueId, double whenMs, bool hasEnd, double endMs, CommandResultDTO& out,
+                  EngineError& error);
   bool fadeCue(const std::string& cueId, int param, double value, double durationMs, int curve, double whenMs,
                CommandResultDTO& out, EngineError& error);
   bool routeCue(const std::string& cueId, bool automatic, const std::vector<Crosspoint>& points,
@@ -255,6 +258,15 @@ class Engine {
    */
   bool onsets(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region, OnsetDTO& out,
               EngineError& error);
+  /**
+   * Where a file's sound starts and stops, from a scan of its samples: the first and
+   * last frames whose samples rise above `thresholdDb` dBFS, and the whole length the
+   * scan read. `thresholdDb` is clamped to a workable range rather than refused, the
+   * way an oversized point count is. A file that never crosses the threshold answers
+   * `silent` with its whole length as the bounds — a file that is quiet end to end has
+   * no silence at its edges to trim.
+   */
+  bool silence(const std::string& filePath, double thresholdDb, SilenceDTO& out, EngineError& error);
   int64_t scheduleHorizonMs() const { return options_.scheduleHorizonMs; }
   const EngineOptions& options() const { return options_; }
 
@@ -326,10 +338,10 @@ class Engine {
   std::atomic<uint64_t> nextAckId_{0};
 
   /**
-   * Envelope and onset answers, kept per exact question asked and invalidated by the
-   * file's own stamp. Reading a long file to answer one of these is the expensive half
-   * of the panel, and a selection that comes back to a file — or an operator zooming
-   * back out — asks the same question again.
+   * Envelope, onset and silence answers, kept per exact question asked and invalidated
+   * by the file's own stamp. Reading a long file to answer one of these is the expensive
+   * half of the panel, and a selection that comes back to a file — or an operator
+   * zooming back out — asks the same question again.
    */
   struct WaveformCacheEntry {
     std::string filePath;
@@ -348,6 +360,13 @@ class Engine {
     OnsetDTO result;
     uint64_t lastUse = 0;
   };
+  struct SilenceCacheEntry {
+    std::string filePath;
+    double thresholdDb = 0.0;
+    FileStamp stamp;
+    SilenceDTO result;
+    uint64_t lastUse = 0;
+  };
   bool waveformCached(const std::string& filePath, int points, const RegionQuery& region, const FileStamp& stamp,
                       WaveformDTO& out);
   void cacheWaveform(const std::string& filePath, int points, const RegionQuery& region, const FileStamp& stamp,
@@ -356,9 +375,12 @@ class Engine {
                     const FileStamp& stamp, OnsetDTO& out);
   void cacheOnsets(const std::string& filePath, double sensitivity, int maxOnsets, const RegionQuery& region,
                    const FileStamp& stamp, const OnsetDTO& result);
+  bool silenceCached(const std::string& filePath, double thresholdDb, const FileStamp& stamp, SilenceDTO& out);
+  void cacheSilence(const std::string& filePath, double thresholdDb, const FileStamp& stamp, const SilenceDTO& result);
   std::mutex analysisCacheMutex_;
   std::vector<WaveformCacheEntry> waveformCache_;
   std::vector<OnsetCacheEntry> onsetCache_;
+  std::vector<SilenceCacheEntry> silenceCache_;
   uint64_t analysisCacheClock_ = 0;
 
   struct PreparedFile {

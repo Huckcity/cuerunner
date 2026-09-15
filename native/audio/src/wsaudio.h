@@ -59,6 +59,29 @@ struct OnsetDTO {
   double endMs = 0.0;
 };
 
+/**
+ * A scan's answer: a file's audible extent, so a cue can play the part of it that has
+ * sound in it rather than the silence at its edges.
+ *
+ * Both bounds are times in ms from the file's own start, which is what makes trimming
+ * a region like any other. `startMs` is the first sample above the threshold and
+ * `endMs` the far side of the last one — the whole length of the sample that was heard,
+ * so a file whose last audible frame is N ends at (N + 1) samples' worth of ms.
+ *
+ * A file that never crosses the threshold is `silent`, and its bounds are the whole of
+ * what the scan read rather than nothing at all: a quiet ambience has no silence at its
+ * edges to trim, and a cue trimmed to no length at all would play nothing.
+ */
+struct SilenceDTO {
+  std::string filePath;
+  double startMs = 0.0;
+  double endMs = 0.0;
+  double durationMs = 0.0;  // the whole length of what the scan read
+  int sampleRate = 0;
+  int channels = 0;
+  bool silent = false;
+};
+
 constexpr int kMaxOutputFrames = 4096;
 
 enum class Curve : int { Linear = 0, SCurve = 1, Logarithmic = 2 };
@@ -160,6 +183,9 @@ struct Command {
   double whenMs = 0.0;
   double fadeMs = 0.0;
   double positionMs = 0.0;
+  // A release's named end, in file ms: absent plays out to the end of the file.
+  bool hasEndMs = false;
+  double endMs = 0.0;
   Param param = Param::Volume;
   Curve curve = Curve::Linear;
   double value = 0.0;

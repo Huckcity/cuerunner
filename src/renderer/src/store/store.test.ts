@@ -1306,3 +1306,98 @@ describe('store — show services', () => {
     expect(state.showEvents[0]).toMatchObject({ address: '/snapshot/2' })
   })
 })
+
+describe('store — silence trim', () => {
+  beforeEach(() => {
+    resetStore()
+    useStore.setState({
+      audioSettings: { outputDeviceId: 'default' },
+      silenceFailures: {},
+      isDirty: false
+    })
+  })
+
+  const cue = (index = 0): AudioCue => useStore.getState().cues[index] as AudioCue
+  const REGION = { startMs: 500, endMs: 9000, durationMs: 20_000, silent: false }
+
+  it('is born on a cue added while the show says new cues trim their silence', () => {
+    useStore.getState().updateAudioSettings({ autoTrimSilence: true })
+
+    useStore.getState().addCue('audio')
+    useStore.getState().addAudioCuesFromFiles([{ filePath: '/media/walk.wav', name: 'Walk-in' }])
+
+    expect(cue(0).trimSilence).toBe(true)
+    expect(cue(1).trimSilence).toBe(true)
+  })
+
+  it('is a default for new cues, not a switch over the show', () => {
+    useStore.getState().addCue('audio')
+    expect(cue().trimSilence).toBe(false)
+
+    // Turning it on rewrites nothing that is already in the list: the cue keeps the
+    // answer it was born with, which is what the setting being a default means.
+    useStore.getState().updateAudioSettings({ autoTrimSilence: true })
+    expect(cue().trimSilence).toBe(false)
+  })
+
+  it('writes a measurement onto its cue without making the session dirty', () => {
+    useStore.getState().addCue('audio')
+    const id = cue().id
+    // The cue being added is an edit; the measurement that follows is not.
+    useStore.setState({ isDirty: false })
+
+    useStore.getState().syncCueSilence(id, REGION)
+
+    expect(cue().soundRegion).toEqual(REGION)
+    expect(useStore.getState().isDirty).toBe(false)
+
+    // The same answer to the same question is not a new state every pass.
+    const before = useStore.getState().cues
+    useStore.getState().syncCueSilence(id, REGION)
+    expect(useStore.getState().cues).toBe(before)
+  })
+
+  it('forgets a measurement and a refusal when the cue is pointed at another file', () => {
+    useStore.getState().addCue('audio')
+    const id = cue().id
+    useStore.getState().syncCueSilence(id, REGION)
+    useStore.getState().setSilenceFailure(id, '/media/old.wav')
+
+    useStore.getState().updateCue(id, { filePath: '/media/other.wav' })
+
+    expect(cue().filePath).toBe('/media/other.wav')
+    expect(cue().soundRegion).toBeNull()
+    expect(useStore.getState().silenceFailures).toEqual({})
+  })
+
+  it('does the same for a relink, which is the other way a cue changes its file', () => {
+    useStore.getState().addCue('audio')
+    const id = cue().id
+    useStore.getState().syncCueSilence(id, REGION)
+    useStore.getState().setSilenceFailure(id, '/media/old.wav')
+
+    useStore.getState().applyRelinkedMedia({ [id]: '/media/relinked.wav' })
+
+    expect(cue().filePath).toBe('/media/relinked.wav')
+    expect(cue().soundRegion).toBeNull()
+    expect(useStore.getState().silenceFailures).toEqual({})
+  })
+
+  it('remembers a refusal by path, and lets it go on request', () => {
+    useStore.getState().setSilenceFailure('a1', '/media/broken.wav')
+    expect(useStore.getState().silenceFailures).toEqual({ a1: '/media/broken.wav' })
+
+    const before = useStore.getState().silenceFailures
+    useStore.getState().setSilenceFailure('a1', '/media/broken.wav')
+    expect(useStore.getState().silenceFailures).toBe(before)
+
+    useStore.getState().setSilenceFailure('a1', null)
+    expect(useStore.getState().silenceFailures).toEqual({})
+  })
+
+  it('says nothing about the last show once another is loaded', () => {
+    useStore.getState().setSilenceFailure('a1', '/media/broken.wav')
+    useStore.getState().loadWorkspace([], 'Next show', null)
+    expect(useStore.getState().silenceFailures).toEqual({})
+  })
+})

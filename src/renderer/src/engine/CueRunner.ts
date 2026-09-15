@@ -14,6 +14,7 @@ import type { FireSurface } from './inputGuard'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
 import { network } from './networkClient'
+import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 import type { TriggerGuardSettings } from '../types/workspace'
 
@@ -52,10 +53,14 @@ function plannedPlaybackMs(options: AudioStartOptions, durationMs: number): numb
 }
 
 /** The engine options a cue plays with, offset into the file for a seek. */
-function startOptions(cue: AudioCue, seekMs = 0): AudioStartOptions {
+function startOptions(cue: AudioCue, seekMs = 0, trim = false): AudioStartOptions {
+  // The region the cue plays, silence trim and all. An offset — a timeline that starts
+  // part-way into the cue — moves the region's own start, and the trim still holds the
+  // head of the file: an offset that lands in the trimmed silence is silence.
+  const played = playRegion(cue, trim)
   return {
-    startTime: cue.startTime + seekMs,
-    endTime: cue.endTime,
+    startTime: Math.max(played.startMs, cue.startTime + seekMs),
+    endTime: played.endMs,
     loopCount: cue.loopCount,
     rate: cue.playbackRate,
     trim: cue.trim,
@@ -155,6 +160,9 @@ export class CueRunner {
   // STOP — a network request, a script — cannot resume the show.
   private generation = 0
   private runSeq = 0
+  // Cues whose silence trim was skipped for want of a licence, so a walk-in playlist
+  // says it once per cue rather than once per GO.
+  private trimNotices = new Set<string>()
   // What each firing surface last fired, and which notes are still down. Owned here
   // because this is the one place every surface reaches — the keyboard, a trigger, the
   // GO button — and a guard that lived in one of them would be a guard on one of them.
@@ -519,7 +527,7 @@ export class CueRunner {
       return
     }
 
-    const options = startOptions(cue, run.seekMs)
+    const options = startOptions(cue, run.seekMs, this.trimAtFire(cue))
     this.track(run, this.scheduler!.schedule({
       at,
       early: () => {
@@ -722,6 +730,33 @@ export class CueRunner {
   }
 
   /**
+   * Whether a cue's silence trim applies right now: the cue asked for it and this machine
+   * may apply it. A show written on a licensed machine opens on an unlicensed one with
+   * its cues intact and its trims unattended — the cue plays its whole region, which is
+   * what the cue did before the trim existed.
+   */
+  private trimApplies(cue: AudioCue): boolean {
+    return cue.trimSilence === true && this.deps!.isPro()
+  }
+
+  /** The trim as a cue's own firing sees it, which is also where a lapsed licence is said. */
+  private trimAtFire(cue: AudioCue): boolean {
+    if (this.trimApplies(cue)) return true
+    if (cue.trimSilence !== true) return false
+    if (!this.trimNotices.has(cue.id)) {
+      // Once per cue: a log line per firing would bury the show it is describing, and the
+      // cue's own panel already carries the lock.
+      this.trimNotices.add(cue.id)
+      this.log({
+        level: 'info',
+        message: 'silence trim needs WinsLab Pro — playing the whole region',
+        label: this.cueLabel(cue)
+      })
+    }
+    return false
+  }
+
+  /**
    * Releases a vamping cue: the target stops looping and plays out to the end of its
    * file, from wherever the loop had reached. The engine does the work on the audio
    * thread, so the join is a sample rather than a seam; this cue then completes, which
@@ -739,9 +774,18 @@ export class CueRunner {
       return
     }
     const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
+    // Releasing a trimmed cue plays out to where its sound stops. The engine would
+    // otherwise play to the end of the file, which for a cue trimmed of its tail is the
+    // silence the trim exists to leave out — and the show would wait through it.
+    const releaseEndMs = target?.type === 'audio' && this.trimApplies(target as AudioCue)
+      ? (target as AudioCue).soundRegion?.endMs
+      : undefined
     // Releasing a cue that is not looping is a no-op the engine reports, and that is not
     // an error: the operator's devamp arrived after the vamp had already ended.
-    void audioEngine.release(cue.targetCueId).then(result => {
+    const released = releaseEndMs === undefined
+      ? audioEngine.release(cue.targetCueId)
+      : audioEngine.release(cue.targetCueId, undefined, releaseEndMs)
+    void released.then(result => {
       const detail: Partial<CueRunResult> = {}
       if (!result.applied) {
         detail.outcome = 'error'
@@ -1259,7 +1303,12 @@ export class CueRunner {
           progress: 0
         })
 
-        const options: AudioStartOptions = { ...startOptions(audioCue), startTime: positionMs }
+        const options: AudioStartOptions = {
+          ...startOptions(audioCue, 0, this.trimApplies(audioCue)),
+          // The operator pointed at a place in the file; that is where it plays from,
+          // even if the trim would have started the cue later.
+          startTime: positionMs
+        }
         const planned = audioCue.loopCount === 0 && audioCue.duration > 0
           ? plannedPlaybackMs(options, audioCue.duration)
           : null

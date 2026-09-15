@@ -389,6 +389,15 @@
   flex-shrink: 0;
 }
 
+/* The silence trim's readout is a sentence rather than a value: the 36px box above would
+   clip the measurement it reports, so it takes the rest of the row and wraps. */
+.trim-silence-readout {
+  flex: 1;
+  width: auto;
+  text-align: left;
+  white-space: normal;
+}
+
 /* Routing matrix: one row per crosspoint, file channel → device channel with a gain
    trim. Rows are as narrow as the panel allows, and the list is not limited to a pair. */
 .routing-matrix {

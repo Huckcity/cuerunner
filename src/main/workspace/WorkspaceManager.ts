@@ -39,6 +39,9 @@ function migrateCue(cue: Cue & Record<string, unknown>): Cue {
   if (cue.type === 'audio') {
     if (cue.playbackRate === undefined) cue.playbackRate = 1.0
     if (cue.trim === undefined) cue.trim = 1.0
+    // A cue saved before silence trimming existed is not trimming anything, and a scan
+    // started on somebody's show unasked is not a migration, it is a surprise.
+    if (cue.trimSilence === undefined) cue.trimSilence = false
     // Per-cue device and channel-pair routing was never wired to the audio graph: only
     // the first output was ever audible, which is what the routing migration keeps.
     const routing = migrateLegacyAudioRouting(legacyFields(cue))

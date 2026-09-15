@@ -417,7 +417,10 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     CommandResultDTO result;
     EngineError error;
     const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
-    if (engine.releaseCue(text(root, "cueId", ""), whenMs, result, error)) {
+    // `endMs`, when present, is a time in the file, not on the clock: it is where a cue
+    // trimmed of its trailing silence stops hearing the file.
+    const bool hasEnd = hasNumber(root, "endMs");
+    if (engine.releaseCue(text(root, "cueId", ""), whenMs, hasEnd, number(root, "endMs", 0.0), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -612,6 +615,22 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       cJSON_AddNumberToObject(body, "endMs", result.endMs);
       cJSON* onsets = cJSON_AddArrayToObject(body, "onsetsMs");
       for (double onset : result.onsetsMs) cJSON_AddItemToArray(onsets, cJSON_CreateNumber(onset));
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "silence") {
+    SilenceDTO result;
+    EngineError error;
+    if (engine.silence(text(root, "filePath", ""), number(root, "thresholdDb", -60.0), result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
+      cJSON_AddNumberToObject(body, "startMs", result.startMs);
+      cJSON_AddNumberToObject(body, "endMs", result.endMs);
+      cJSON_AddNumberToObject(body, "durationMs", result.durationMs);
+      cJSON_AddNumberToObject(body, "sampleRate", result.sampleRate);
+      cJSON_AddNumberToObject(body, "channels", result.channels);
+      cJSON_AddBoolToObject(body, "silent", result.silent);
       out = replyOk(id, body);
     } else {
       out = replyError(id, error.code, error.message);

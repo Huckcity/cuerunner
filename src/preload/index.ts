@@ -8,6 +8,7 @@ import type { PlaybackPanic } from '../renderer/src/types/playback'
 import type { MissingMedia } from '../shared/media'
 import {
   AUDIO_CHANNELS,
+  AUDIO_SILENCE_THRESHOLD_DB,
   type AudioCancelPayload,
   type AudioReleasePayload,
   type AudioCancelResult,
@@ -31,6 +32,8 @@ import {
   type AudioProbe,
   type AudioProbePayload,
   type AudioRegion,
+  type AudioSilencePayload,
+  type AudioSilence,
   type AudioOnsetsPayload,
   type AudioOnsets,
   type AudioRoutingPayload,
@@ -121,8 +124,8 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
     seek: (cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> =>
       invokeAudio(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
-    release: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
-      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs } satisfies AudioReleasePayload),
+    release: (cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs, endMs } satisfies AudioReleasePayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
       invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */
@@ -159,6 +162,8 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.onsets, {
         filePath, sensitivity, maxOnsets, startMs: region?.startMs, endMs: region?.endMs
       } satisfies AudioOnsetsPayload),
+    silence: (filePath: string, thresholdDb: number = AUDIO_SILENCE_THRESHOLD_DB): Promise<AudioSilence> =>
+      invokeAudio(AUDIO_CHANNELS.silence, { filePath, thresholdDb } satisfies AudioSilencePayload),
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),

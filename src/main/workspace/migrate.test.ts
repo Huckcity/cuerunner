@@ -78,6 +78,27 @@ describe('migrateWorkspace', () => {
     expect(audio.outputs).toBeNull()
   })
 
+  it('reads a cue saved before silence trimming as not trimming', () => {
+    const audio = migrateWorkspace(workspaceWith([
+      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: null }
+    ])).cues[0] as AudioCue
+
+    expect(audio.trimSilence).toBe(false)
+    // Nothing measured the file a show was written before this existed with, and a load
+    // does not start reading files on somebody's behalf.
+    expect(audio.soundRegion).toBeUndefined()
+  })
+
+  it('keeps a cue that was saved trimming its silence, and the measurement with it', () => {
+    const soundRegion = { startMs: 400, endMs: 3100, durationMs: 9000, silent: false }
+    const audio = migrateWorkspace(workspaceWith([
+      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: null, trimSilence: true, soundRegion }
+    ])).cues[0] as AudioCue
+
+    expect(audio.trimSilence).toBe(true)
+    expect(audio.soundRegion).toEqual(soundRegion)
+  })
+
   it('turns a legacy childIds list into parent pointers in that order', () => {
     const cues = migrateWorkspace(workspaceWith([
       { id: 'g1', type: 'group', mode: 'sequence', childIds: ['c2', 'c1'] },

@@ -103,6 +103,38 @@ export interface AudioCue extends CueBase {
   loopCount: number
   playbackRate: number
   trim: number
+  /**
+   * Whether this cue plays only the part of its file between its first and last audible
+   * samples, leaving the silence at the edges unheard. Optional on disk: a workspace
+   * saved before this existed has none, and absent means off. It never rewrites the
+   * region the operator set — turning it off plays the whole region again, unchanged.
+   */
+  trimSilence?: boolean
+  /**
+   * What the last measurement found: the audible extent of this cue's file. Written
+   * down when the file is scanned, because playback must not wait for a scan — a cue
+   * with the trim on and no measurement yet plays its whole region, which is exactly
+   * what the cue did before the trim was asked for.
+   */
+  soundRegion?: SoundRegion | null
+}
+
+/**
+ * The part of a file that is not silence, in ms from the file's own start.
+ *
+ * `silent` is a file whose samples never cross the threshold: its bounds span the whole
+ * file, because a track with no sound in it has no silence at its edges to trim and a
+ * cue trimmed to no length is a cue that plays nothing.
+ */
+export interface SoundRegion {
+  startMs: number
+  endMs: number
+  /**
+   * The whole length of the file, ms, as the scan measured it — carried so a cue whose
+   * own length nobody has probed yet can still say how much silence it is dropping.
+   */
+  durationMs: number
+  silent: boolean
 }
 
 export type MidiMessageKind =

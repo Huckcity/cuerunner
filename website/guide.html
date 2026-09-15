@@ -418,6 +418,7 @@
               <tr><td>Pan</td><td>L100 – R100</td><td>Applies live to the playing cue.</td></tr>
               <tr><td>Start time</td><td>seconds</td><td>Where playback begins in the file. Also set by clicking the waveform.</td></tr>
               <tr><td>End time</td><td>seconds</td><td>Leave empty to play to the end of the file.</td></tr>
+              <tr><td>Trim silence<span class="pro">Pro</span></td><td>on / off</td><td>Plays only the part of the file between its first and last audible samples, so the silence before the first note and after the last one is neither heard nor waited through. The engine measures the file when the cue is given one. The region the operator set is left exactly as it is — the trim narrows what plays from it, and turning the trim off gives the whole region back. A cue added while the show says new cues trim their silence is born with this on.</td></tr>
               <tr><td>Fade in</td><td>seconds</td><td>Ramps up from silence when the cue starts.</td></tr>
               <tr><td>Loop count</td><td>-1 or 0+</td><td>0 plays once, a positive number is how many extra times the cue repeats, and -1 repeats until the cue is stopped or the show moves on.</td></tr>
             </tbody>
@@ -430,6 +431,9 @@
           region — is drawn as a brighter band with a round handle at either end: drag the head or
           the tail to trim it, and the two halves of a split move together so the join stays a join.
           The header says what the region plays, with a reset that puts the whole file back.
+          A cue trimmed of its silence is drawn for what it will play: the silence at the edges is
+          shaded like the rest of the file the cue does not play, and the header reports the part
+          that will be heard rather than the region as it was set.
         </p>
         <p>
           Click anywhere on the waveform to place the cursor there; if the cue is already playing,
@@ -1166,6 +1170,7 @@ console.log(r.stdout.trim())</code></pre>
               <tr><td>Audio</td><td>Output device</td><td>Routes all playback to the chosen system output.</td></tr>
               <tr><td>Audio</td><td>Sample rate, Buffer, Channels</td><td>What the audio engine is asked for. Each starts on the device's own answer — its rate, the engine's buffer, every channel it has — and a value picked here is remembered with the workspace.</td></tr>
               <tr><td>Audio</td><td>Exclusive</td><td>Take the device for WinsLab alone, locking system sounds and conferencing apps out of it; a driver that refuses says why underneath.</td></tr>
+              <tr><td>Audio</td><td>Trim silence in new cues<span class="pro">Pro</span></td><td>Whether a new audio cue starts with the silence at the edges of its file trimmed away — silence being anything below −60 dBFS. A default for cues being added, not a switch over the show: changing it never touches a cue that is already in the list, and every cue carries its own toggle in the inspector.</td></tr>
               <tr><td>Audio</td><td>Engine</td><td>Read-only readouts of the running audio engine: the backend, what it is running at, the device in use, the latency and where that figure came from, the voices and files playing, the memory it holds, and the underruns it has seen. They report the live engine and cannot be typed into.</td></tr>
               <tr><td>MIDI</td><td>Default output</td><td>Used by MIDI cues that do not name a port of their own; a cue with its own port overrides it.</td></tr>
               <tr><td>Network</td><td>OSC input</td><td>The port WinsLab listens on for OSC, and whether it listens at all. 53000 matches the convention QLab uses, so one patch sheet covers both.</td></tr>

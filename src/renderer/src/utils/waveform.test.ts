@@ -1,8 +1,8 @@
 // The waveform is drawn from the engine's bounded envelope: one bucket read per pixel,
 // and no decoded audio anywhere in the renderer. What these tests hold is the panel's
-// reading of a cue: which part of the file is inside the region, where the playhead is,
-// and where the two grips are — the last of these because the pointer grabs exactly what
-// the drawing says is there.
+// reading of a cue: which part of the file is inside the region, which part the cue will
+// actually play, where the playhead is, and where the two grips are — the last of these
+// because the pointer grabs exactly what the drawing says is there.
 import { describe, it, expect } from 'vitest'
 import {
   drawWaveform, waveformLayout, viewX, FULL_VIEW, HANDLE_RADIUS, DPR, type WaveformPeaks
@@ -16,16 +16,21 @@ interface Recorded {
   canvas: HTMLCanvasElement
   calls: string[]
   bars: string[]
+  /** The fill colour in force at each of `bars`, in the same order. */
+  colors: string[]
 }
 
 function recordingCanvas(width: number, height: number): Recorded {
   const calls: string[] = []
   const bars: string[] = []
+  const colors: string[] = []
+  let fillStyle = ''
   const ctx = {
     clearRect: () => calls.push('clear'),
     fillRect: (...args: unknown[]) => {
       calls.push(`fillRect:${args.join(',')}`)
       bars.push(String(args.join(',')))
+      colors.push(fillStyle)
     },
     beginPath: () => {},
     closePath: () => {},
@@ -35,7 +40,7 @@ function recordingCanvas(width: number, height: number): Recorded {
     stroke: () => {},
     fill: () => calls.push('fill'),
     setLineDash: () => {},
-    set fillStyle(_v: string) {},
+    set fillStyle(value: string) { fillStyle = value },
     set strokeStyle(_v: string) {},
     set lineWidth(_v: number) {}
   }
@@ -44,12 +49,14 @@ function recordingCanvas(width: number, height: number): Recorded {
     height,
     getContext: () => ctx
   } as unknown as HTMLCanvasElement
-  return { canvas, calls, bars }
+  return { canvas, calls, bars, colors }
 }
 
 const region = { start: 0, end: 1 }
 /** The whole file on screen: what the panel shows until somebody zooms in. */
 const view = FULL_VIEW
+/** The dim a bar is drawn in when it is a part of the file the cue will not play. */
+const OUTSIDE = '#1d3a63'
 
 describe('drawWaveform', () => {
   it('draws one bar per column without touching the samples', () => {
@@ -124,6 +131,59 @@ describe('drawWaveform', () => {
     drawWaveform(canvas, peaks([-1, 1], 1), { region: { start: 0.25, end: 0.75 }, view, play: null, cursor: null })
 
     expect(calls.filter(call => call === 'arc').length).toBe(2)
+  })
+
+  it('shades the parts of the file the played region leaves out', () => {
+    // The region and what the cue will play are two different things once a silence trim
+    // is on: the dim border has to follow the sound, or the panel promises silence where
+    // the cue will play and hides the part that is music.
+    const { canvas, colors } = recordingCanvas(100, 32)
+
+    drawWaveform(canvas, peaks([-1, 1], 1), {
+      region, played: { start: 0.25, end: 0.75 }, view, play: null, cursor: null
+    })
+
+    // One fill per bar, after the background fill: both outside spans are dim and the
+    // middle is not.
+    const columns = colors.slice(1)
+    expect(columns.slice(0, 25).every(color => color === OUTSIDE)).toBe(true)
+    expect(columns[25]).not.toBe(OUTSIDE)
+    expect(columns[75]).not.toBe(OUTSIDE)
+    expect(columns.slice(76).every(color => color === OUTSIDE)).toBe(true)
+  })
+
+  it('keeps the grips on the region the operator set when the played region is narrower', () => {
+    // A grip is what a drag takes hold of, and a drag edits the region, never the trim: a
+    // grip that moved onto the sound would be the panel handing the boundary away.
+    const { canvas } = recordingCanvas(100, 20)
+
+    const layout = drawWaveform(canvas, peaks([-1, 1], 1), {
+      region, played: { start: 0.25, end: 0.75 }, view, play: null, cursor: null
+    })
+
+    expect(layout.handles.start?.x).toBe(0)
+    expect(layout.handles.end?.x).toBe(100)
+  })
+
+  it('shades from the region itself when no played region is given', () => {
+    // A caller that names only the region gets the region drawn: the played span is an
+    // extra reading of the same file, not a replacement for it — an omitted played
+    // region and an explicit null alike.
+    const plain = recordingCanvas(100, 20)
+    const nulled = recordingCanvas(100, 20)
+    const half = { start: 0.25, end: 0.75 }
+
+    drawWaveform(plain.canvas, peaks([-1, 1], 1), { region: half, view, play: null, cursor: null })
+    drawWaveform(nulled.canvas, peaks([-1, 1], 1), {
+      region: half, played: null, view, play: null, cursor: null
+    })
+
+    expect(nulled.colors).toEqual(plain.colors)
+    const columns = plain.colors.slice(1)
+    expect(columns[24]).toBe(OUTSIDE)
+    expect(columns[25]).not.toBe(OUTSIDE)
+    expect(columns[76]).toBe(OUTSIDE)
+    expect(columns[99]).toBe(OUTSIDE)
   })
 })
 

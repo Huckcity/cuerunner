@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AudioEngineError, NativeAudioEngine, audioEngine } from './AudioEngine'
-import type { AudioEngineEvent, AudioStartOptions } from '../../shared/audio'
+import type { AudioEndedEvent, AudioEngineEvent, AudioStartOptions } from '../../shared/audio'
 
 const repoRoot = resolve(__dirname, '..', '..', '..')
 const binaryName = process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio'
@@ -281,6 +281,123 @@ describe('audioEngine client (against the real engine)', () => {
     expect(onsets.onsetsMs.length).toBeGreaterThan(0)
     expect(onsets.onsetsMs[0]).toBeGreaterThan(950)
     expect(onsets.onsetsMs[0]).toBeLessThan(1100)
+  })
+
+  it('measures where a file sound starts and stops, so a trim has edges to cut at', async () => {
+    // Three seconds: silence, a second of tone, silence. The bounds have to land on the
+    // tone — a scan that answered the file's own edges would leave the trim nothing to
+    // drop, and one that answered anywhere else would cut into the cue.
+    const shaped = join(workDir, 'tone-in-the-middle.wav')
+    const sampleRate = 48000
+    writeFloatWavShape(shaped, 2, sampleRate, 3 * sampleRate, frame => {
+      const second = Math.floor(frame / sampleRate)
+      return second === 1 ? Math.sin((2 * Math.PI * 440 * frame) / sampleRate) * 0.6 : 0
+    })
+
+    const silence = await audioEngine.silence(shaped)
+    expect(silence.silent).toBe(false)
+    expect(silence.sampleRate).toBe(sampleRate)
+    expect(silence.channels).toBe(2)
+    expect(silence.durationMs).toBeCloseTo(3000, 3)
+    expect(silence.startMs).toBeGreaterThanOrEqual(1000)
+    expect(silence.startMs).toBeLessThan(1002)
+    expect(silence.endMs).toBeGreaterThan(1998)
+    expect(silence.endMs).toBeLessThanOrEqual(2000)
+  })
+
+  it('answers a file that is silent end to end with its whole length as the bounds', async () => {
+    // A file with no sound in it has no silence at its edges to trim: the bounds are the
+    // whole file, so a cue playing it still plays the cue rather than nothing at all.
+    const quiet = join(workDir, 'silent.wav')
+    const sampleRate = 48000
+    writeFloatWavShape(quiet, 2, sampleRate, 2 * sampleRate, () => 0)
+
+    const silence = await audioEngine.silence(quiet)
+    expect(silence.silent).toBe(true)
+    expect(silence.startMs).toBe(0)
+    expect(silence.durationMs).toBeCloseTo(2000, 3)
+    expect(silence.endMs).toBe(silence.durationMs)
+    expect(silence.sampleRate).toBe(sampleRate)
+    expect(silence.channels).toBe(2)
+  })
+
+  it('clamps a threshold outside the workable range rather than refusing it', async () => {
+    // A scan is bounded work, so a nonsense threshold is put back on the range and
+    // answered: a typo must not be the one thing that stops a cue's trim from arriving.
+    const shaped = join(workDir, 'tone-in-the-middle.wav')
+    const sampleRate = 48000
+    writeFloatWavShape(shaped, 2, sampleRate, 2 * sampleRate, frame => (frame >= sampleRate ? 0.5 : 0))
+
+    // Far below what any converter can represent: clamped to the floor, where digital
+    // silence is still below the line, so the bounds are the tone's own.
+    const tooLow = await audioEngine.silence(shaped, -1000)
+    expect(tooLow.silent).toBe(false)
+    expect(tooLow.startMs).toBeGreaterThanOrEqual(1000)
+    expect(tooLow.startMs).toBeLessThan(1002)
+    expect(tooLow.endMs).toBeGreaterThan(1998)
+    expect(tooLow.endMs).toBeLessThanOrEqual(2000)
+
+    // Above full scale, where nothing in a normalised file can cross: clamped to 0 dBFS,
+    // which answers with a file whose samples never rose above the line.
+    const tooHigh = await audioEngine.silence(shaped, 1000)
+    expect(tooHigh.silent).toBe(true)
+    expect(tooHigh.startMs).toBe(0)
+    expect(tooHigh.endMs).toBe(tooHigh.durationMs)
+  })
+
+  it('releases a loop out to the end the trim names, not to the end of the file', async () => {
+    // A cue trimmed of its trailing silence releases to where its sound stops. The voice
+    // loops a region of a three-second file, so the run's own length says which end it
+    // played to: the named end is 700 ms after the top of the region, and a release that
+    // had ignored it would play the region out to 2500 ms.
+    const shaped = join(workDir, 'release-end.wav')
+    const sampleRate = 48000
+    writeFloatWavShape(shaped, 2, sampleRate, 3 * sampleRate, () => 0.5)
+    await audioEngine.prepare('r2', shaped)
+    const started = await audioEngine.start('r2', (await audioEngine.clock()).clockMs + 10, {
+      ...loopOptions(),
+      startTime: 500,
+      endTime: 2500
+    })
+    await waitUntil('r2 to play', async () => {
+      const progress = await audioEngine.progress('r2')
+      return progress !== null && progress.playing ? progress : null
+    })
+
+    const released = await audioEngine.release('r2', undefined, 1200)
+    expect(released.applied).toBe(true)
+    const ended = await waitUntil('the released run to end', async () =>
+      events.find((event): event is AudioEndedEvent => event.type === 'ended' && event.runId === started.runId) ?? null
+    )
+    expect(ended.reason).toBe('complete')
+    const playedMs = ended.at - started.startAtMs
+    expect(playedMs).toBeGreaterThan(600)
+    expect(playedMs).toBeLessThan(1500)
+  })
+
+  it('finishes a loop a release names an end behind, rather than playing past it', async () => {
+    // A trimmed vamp whose loop has already carried it past the end its trim names has
+    // nothing left to play: the run ends where it stands rather than being left to play
+    // the rest of its region — 2000 ms of it — and on into the file's own tail.
+    const shaped = join(workDir, 'release-end.wav')
+    await audioEngine.prepare('r3', shaped)
+    const started = await audioEngine.start('r3', (await audioEngine.clock()).clockMs + 10, {
+      ...loopOptions(),
+      startTime: 500,
+      endTime: 2500
+    })
+    await waitUntil('r3 to pass the end its release will name', async () => {
+      const progress = await audioEngine.progress('r3')
+      return progress !== null && progress.elapsedMs > 900 ? progress : null
+    })
+
+    const released = await audioEngine.release('r3', undefined, 700)
+    expect(released.applied).toBe(true)
+    const ended = await waitUntil('the released run to end', async () =>
+      events.find((event): event is AudioEndedEvent => event.type === 'ended' && event.runId === started.runId) ?? null
+    )
+    expect(ended.reason).toBe('complete')
+    expect(ended.at - started.startAtMs).toBeLessThan(1200)
   })
 
   it('fails loudly, and leaks no child, when the engine executable is missing', async () => {

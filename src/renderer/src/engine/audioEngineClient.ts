@@ -31,6 +31,7 @@ import type {
   AudioPanicResult,
   AudioProbe,
   AudioOnsets,
+  AudioSilence,
   AudioProgress,
   AudioSeekResult,
   AudioRegion,
@@ -53,6 +54,7 @@ export type {
   AudioProbe,
   AudioProgress,
   AudioSeekResult,
+  AudioSilence,
   AudioStartOptions,
   AudioStartResult,
   AudioWaveform,
@@ -422,11 +424,12 @@ export class AudioEngineClient {
   }
 
   /**
-   * Ends a running voice's loop and plays it out to the end of the file. The verb a
-   * devamp cue sends; `applied` says whether there was a loop to release.
+   * Ends a running voice's loop and plays it out to the end of the file — or to `endMs`
+   * when the cue is trimmed of its trailing silence, which is where its sound stops.
+   * The verb a devamp cue sends; `applied` says whether there was a loop to release.
    */
-  async release(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
-    const result = await bridge().release(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
+  async release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
+    const result = await bridge().release(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs), endMs)
     return { ...result, at: this.toShowMs(result.at) }
   }
 
@@ -481,6 +484,11 @@ export class AudioEngineClient {
   /** Where the notes and hits begin, for placing slice boundaries. */
   onsets(filePath: string, sensitivity = 1, maxOnsets = 2000, region?: AudioRegion): Promise<AudioOnsets> {
     return bridge().onsets(filePath, sensitivity, maxOnsets, region)
+  }
+
+  /** Where a file's sound starts and stops, for trimming the silence at its edges. */
+  silence(filePath: string, thresholdDb?: number): Promise<AudioSilence> {
+    return bridge().silence(filePath, thresholdDb)
   }
 
   waveform(filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform> {

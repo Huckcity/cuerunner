@@ -84,10 +84,23 @@ export const AUDIO_CHANNELS = {
   waveform: 'audio:waveform',
   /** Times where notes or hits begin, for placing a slice boundary. */
   onsets: 'audio:onsets',
+  /** Where a file's sound starts and stops, for trimming the silence at its edges. */
+  silence: 'audio:silence',
   pickFile: 'audio:pickFile',
   /** Main pushes AudioEngineEvent[] here; preload subscribes with `onEvents`. */
   events: 'audio:events'
 } as const
+
+/**
+ * The level below which a sample counts as silence, in dBFS.
+ *
+ * A digital master's own dither and a quiet room's floor sit under it; a hissy tape rip
+ * sits over it, and that is the scan saying there is no silence at the file's edges to
+ * trim — which is true, and better than cutting into the hiss. The engine scans with
+ * this number and the UI names it, which is why it lives here rather than in either of
+ * them.
+ */
+export const AUDIO_SILENCE_THRESHOLD_DB = -60
 
 /** Fade shapes, matching the Web Audio behaviour the renderer was built against. */
 export type AudioFadeCurve = 'linear' | 'sCurve' | 'logarithmic'
@@ -503,6 +516,30 @@ export interface AudioOnsets {
 }
 
 /**
+ * A file's audible extent: where its sound starts and where it ends, from a scan of the
+ * decoded samples. Both are times in ms from the file's own start, so trimming silence
+ * is a region like any other and nothing downstream has to know a scan happened.
+ *
+ * `silent` is a file that never crosses the threshold, from end to end. Its bounds are
+ * the whole file rather than nothing at all: room tone and a quiet ambience have no
+ * silence *at their edges* to trim, and a cue trimmed to no length at all would be a cue
+ * the operator asked to hear and cannot.
+ */
+export interface AudioSilence {
+  filePath: string
+  /** Where the first sample above the threshold is, ms from the file's start. */
+  startMs: number
+  /** Where the last sample above the threshold ends, ms from the file's start. */
+  endMs: number
+  /** The whole length of what the scan read, ms. */
+  durationMs: number
+  sampleRate: number
+  channels: number
+  /** Nothing crossed the threshold; the bounds are the whole file. */
+  silent: boolean
+}
+
+/**
  * A window into a file, in ms from its start. Both ends together, because half a window
  * is not one: a request with no region is the whole file.
  */
@@ -550,12 +587,13 @@ export interface AudioEngineBridge {
    */
   seek(cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult>
   /**
-   * End a looping voice's loop and play it out to the end of the file, from wherever the
-   * loop had reached. `applied` is false when the cue was not looping or its file has no
-   * stated length: there was nothing to release, and the caller is told rather than
-   * having a change reported that did not happen.
+   * End a looping voice's loop and play it out to the end of the file, or to `endMs`
+   * when one is named — a cue trimmed of its trailing silence plays out to where its
+   * sound stops, not into the silence. `applied` is false when the cue was not looping
+   * or its file has no stated length: there was nothing to release, and the caller is
+   * told rather than having a change reported that did not happen.
    */
-  release(cueId: string, whenMs?: number): Promise<AudioCommandResult>
+  release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult>
   /** Drop the cue's future-dated verbs (a scheduled start, a scheduled stop/fade). */
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult>
   /**
@@ -597,6 +635,14 @@ export interface AudioEngineBridge {
    * caps the reply.
    */
   onsets(filePath: string, sensitivity?: number, maxOnsets?: number, region?: AudioRegion): Promise<AudioOnsets>
+  /**
+   * Where a file's sound starts and stops, from a scan of its samples. The whole file
+   * is read — on a long one that is a pass over it, so ask when a cue is added or its
+   * file changes, not on every frame. `thresholdDb` defaults to
+   * `AUDIO_SILENCE_THRESHOLD_DB`; a value outside the engine's workable range is
+   * clamped rather than refused, the way an oversized point count is.
+   */
+  silence(filePath: string, thresholdDb?: number): Promise<AudioSilence>
   /** Subscribe to engine events. Returns the unsubscribe function. */
   onEvents(callback: (events: AudioEngineEvent[]) => void): () => void
   /** File dialog for choosing a cue's media. */
@@ -632,6 +678,8 @@ export interface AudioSeekPayload {
 export interface AudioReleasePayload {
   cueId: string
   whenMs?: number
+  /** Where to play out to, in file ms; absent is the end of the file. */
+  endMs?: number
 }
 export interface AudioCancelPayload {
   cueId: string
@@ -674,4 +722,9 @@ export interface AudioWaveformPayload {
   /** A window into the file; absent means the whole file. */
   startMs?: number
   endMs?: number
+}
+export interface AudioSilencePayload {
+  filePath: string
+  /** dBFS below which a sample is silence; absent leaves the decision to the engine. */
+  thresholdDb?: number
 }
