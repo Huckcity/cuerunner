@@ -104,6 +104,10 @@ test('the desk’s own buttons are assigned by mute group, and only on a desk th
   await settings.locator('.desk-button-back').selectOption('6')
   await expect(settings.locator('.desk-button-go')).toHaveValue('5')
   await expect(settings.locator('.desk-button-back')).toHaveValue('6')
+  // What the keys move, where the operator assigns them: the scenes, in the order the Scenes
+  // view shows them.
+  await expect(settings.locator('.desk-hint'))
+    .toHaveText('GO recalls the next scene, BACK the one before it, in the order the Scenes view shows them.')
 
   // One group cannot be both: the row says so rather than leaving a show that steps forward
   // and back on the same press.

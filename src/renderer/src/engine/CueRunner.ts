@@ -196,15 +196,6 @@ export class CueRunner {
   }
 
   go(): void {
-    this.goFrom('key', 'go')
-  }
-
-  /**
-   * Fires the selected cue on behalf of one surface: the keyboard, a desk's own button, a
-   * remote trigger. The window is asked here rather than at each of them — with the identity
-   * of the thing that was pressed, so the desk's GO and a hand on Space are two hands.
-   */
-  goFrom(surface: FireSurface, key: string): void {
     const { getCues, getSelected, setSelected } = this.deps!
     const cues = getCues()
     const selectedId = getSelected()
@@ -218,7 +209,7 @@ export class CueRunner {
     // The hand that shook. Every way of firing a cue reaches the runner, so the window
     // is asked here rather than at each of them — and Space, which the OS repeats while
     // it is held down, is exactly what it is for.
-    if (!this.guard.accepts(surface, key, this.now())) return
+    if (!this.guard.accepts('key', 'go', this.now())) return
 
     // A cue that is already in flight is left where it is, unless it was told it may be
     // restarted. Checked before the selection moves, so an ignored press changes nothing
@@ -273,43 +264,6 @@ export class CueRunner {
     if (cue.advance === 'on-start' && nextCue) {
       this.goById(nextCue.id, startMs)
     }
-  }
-
-  /**
-   * Stands the show back one cue: the selection moves to the cue before the one it is on, so
-   * the next GO fires that one again.
-   *
-   * Nothing is fired here, and that is the difference between this and a desk's GO with a
-   * minus sign. In a mixer's cue list a cue is a *state* — the faders and mutes it recalls —
-   * so going back is recalling the previous state. Here a cue is an action, and re-running
-   * the one before would restart its music rather than undo it; so the show stands back, and
-   * the operator decides whether the next GO is what they want.
-   *
-   * The walk skips a group's children, because the selection stands on the cues a GO fires.
-   */
-  back(surface: FireSurface = 'key', key = 'back'): void {
-    const { getCues, getSelected, setSelected } = this.deps!
-    if (!this.guard.accepts(surface, key, this.now())) return
-
-    const cues = getCues()
-    const selectedId = getSelected()
-    // With nothing selected the show is past the end of the list — which is where a back
-    // press most often happens, the GO having just gone one too far.
-    const from = selectedId ? cues.findIndex(c => c.id === selectedId) : cues.length
-    let target: Cue | null = null
-    for (let i = (from < 0 ? cues.length : from) - 1; i >= 0; i--) {
-      if (cues[i].parentId === null) {
-        target = cues[i]
-        break
-      }
-    }
-
-    if (target === null) {
-      this.log({ level: 'info', message: 'already at the first cue' })
-      return
-    }
-    setSelected(target.id)
-    this.log({ level: 'info', message: 'stood back — the next GO fires this', label: this.cueLabel(target) })
   }
 
   /**

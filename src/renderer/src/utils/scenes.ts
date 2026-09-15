@@ -196,6 +196,21 @@ export function setEnsembleApplied(
   }
 }
 
+/**
+ * Where a desk button moves the show's scenes to, or null when there is nowhere to go.
+ *
+ * The walk is the list as the Scenes view shows it. The all-closed scene is a place *before*
+ * the list rather than a scene in it — a desk wants it pressed between numbers, and it is not
+ * something to move into or out of — so a GO from there is the first scene and a BACK from
+ * there is nothing, exactly as if no scene had been recalled yet. A scene the show no longer
+ * has is the same: deleted scenes leave `deskSceneId` pointing at something that is gone, and
+ * the next GO should start the list again rather than refuse.
+ */
+export function sceneStep(list: MicScene[], current: string | null, step: 1 | -1): MicScene | null {
+  const index = current === null ? -1 : list.findIndex(scene => scene.id === current)
+  return list[(index < 0 ? -1 : index) + step] ?? null
+}
+
 /** One group the desk has to be told about, and what to tell it. */
 export interface DeskChange {
   channelId: string

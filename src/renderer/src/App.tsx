@@ -16,7 +16,7 @@ import { useMediaLengths } from './hooks/useMediaLengths'
 import { useSilenceTrim } from './hooks/useSilenceTrim'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
-import { useDeskTransport } from './hooks/useDeskTransport'
+import { useDeskButtons } from './hooks/useDeskButtons'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
@@ -49,7 +49,7 @@ export function App() {
   useSilenceTrim()
   useShowBridge()
   useCueTriggers()
-  useDeskTransport()
+  useDeskButtons()
   useCompanionPublisher()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)

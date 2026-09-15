@@ -995,8 +995,9 @@ console.log(r.stdout.trim())</code></pre>
         </p>
         <p>
           A sound desk has no GO key and does not send show control, so a show driven from the desk
-          is run from a spare <strong>mute group</strong> assigned to a key at the desk — see
-          <a href="#scenes">Scenes, and the desk</a> — which the app reads as GO and BACK. Anything
+          is run from spare <strong>mute groups</strong> assigned to keys at the desk — see
+          <a href="#scenes">Scenes, and the desk</a> — which the app reads as GO and BACK for the
+          scenes. Anything
           else the desk transmits works too: a soft key or footswitch set to send a MIDI note
           transmits one on the press (soft keys are notes from C3 upward, one per key), and a scene
           recalled on the desk sends its bank and program change. Pick the desk's own connection as
@@ -1175,10 +1176,12 @@ console.log(r.stdout.trim())</code></pre>
           <strong>BACK button</strong>, each a mute group. A console reports a key press only when
           the key has been given a console function, so a show's transport is a spare mute group
           rather than a MIDI note: pick the group here, assign that group to a key on the desk, and
-          the key runs the show. GO fires the cue the show is standing on; BACK stands it back one
-          cue, ready for the next GO. A key press is a mute toggle, so either half moves the show —
-          and a <em>DCA's</em> mute is deliberately not read as a press, so a scene recall coming
-          back off the desk cannot fire the show.
+          the key walks the scenes — GO to the next one, BACK to the one before, in the order the
+          Scenes view shows them. A key press is a mute toggle, so either half moves the show. The
+          desk's own report of where its groups stand primes the app rather than moving it, so a
+          show opened onto a desk that was left with a group muted does not recall a scene by
+          itself; and a <em>DCA's</em> mute is deliberately not read as a press, so a scene recall
+          coming back off the desk cannot run the show.
         </p>
         <p>
           Below it are the strips on the console and the DCAs they ride. A new show opens with

@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { oscMessages } from './desk'
 import type { MidiDeskMessage } from './desk'
-import { defaultDeskSettings } from '../types/show'
+import { ALL_CLOSED_SCENE_ID, defaultDeskSettings } from '../types/show'
 import {
   addScene,
   ensembleState,
@@ -16,6 +16,7 @@ import {
   removeScene,
   sceneChanges,
   sceneLiveIds,
+  sceneStep,
   setEnsembleApplied,
   setPerformerLive,
   updateScene
@@ -336,5 +337,46 @@ describe('sceneChanges', () => {
 
     expect(sceneChanges(show(withChorus), applied.list[0], {}).map(change => change.live))
       .toEqual([true, true])
+  })
+})
+
+describe('the walk a desk’s keys take through the scenes', () => {
+  const list = [
+    { id: 's-1', name: 'Wedding', live: [], ensembles: [], excluded: [], notes: '' },
+    { id: 's-2', name: 'Interval', live: [], ensembles: [], excluded: [], notes: '' },
+    { id: 's-3', name: 'Finale', live: [], ensembles: [], excluded: [], notes: '' }
+  ]
+
+  it('starts at the first scene when nothing has been recalled', () => {
+    expect(sceneStep(list, null, 1)?.id).toBe('s-1')
+  })
+
+  it('moves one scene at a time, either way', () => {
+    expect(sceneStep(list, 's-1', 1)?.id).toBe('s-2')
+    expect(sceneStep(list, 's-3', -1)?.id).toBe('s-2')
+  })
+
+  it('has nowhere to go at either end', () => {
+    expect(sceneStep(list, 's-3', 1)).toBeNull()
+    expect(sceneStep(list, 's-1', -1)).toBeNull()
+    expect(sceneStep(list, null, -1)).toBeNull()
+  })
+
+  it('starts the list again from the all-closed scene, which is before it rather than in it', () => {
+    // Every mic closed is where a desk sits between numbers: it is not a scene to move into or
+    // out of, so the walk treats it as the top of the list.
+    expect(sceneStep(list, ALL_CLOSED_SCENE_ID, 1)?.id).toBe('s-1')
+    expect(sceneStep(list, ALL_CLOSED_SCENE_ID, -1)).toBeNull()
+  })
+
+  it('starts the list again from a scene the show no longer has', () => {
+    // Deleting a scene leaves wherever the desk stood pointing at nothing; the next GO should
+    // begin the list rather than refuse with nothing to recall.
+    expect(sceneStep(list, 's-gone', 1)?.id).toBe('s-1')
+    expect(sceneStep(list, 's-gone', -1)).toBeNull()
+  })
+
+  it('has nowhere to go in a show with no scenes', () => {
+    expect(sceneStep([], null, 1)).toBeNull()
   })
 })

@@ -1,9 +1,10 @@
-// What the desk's own buttons mean to a show: which device they arrive from, and which
-// action each group has been given. Both are small decisions with a lot riding on them —
-// a show that listens to the wrong device hears nothing, and one that reads the wrong group
-// runs itself — so they are pinned here rather than inside the hook that reads the river.
+// What the desk's own buttons mean to a show: which device they arrive from, which group has
+// been given which action, and which groups are worth asking the desk about. Small decisions
+// with a lot riding on them — a show that listens to the wrong device hears nothing, and one
+// that reads the wrong group moves through the scenes on somebody else's key — so they are
+// pinned here rather than inside the hook that reads the river.
 import { describe, it, expect } from 'vitest'
-import { deskButtonAction, deskDevice } from './useDeskTransport'
+import { deskButtonAction, deskDevice, watchedGroups } from './useDeskButtons'
 import { defaultDeskSettings } from '../types/show'
 import type { DeskSettings } from '../types/show'
 
@@ -47,5 +48,16 @@ describe('what a group does on this show', () => {
     // The panel refuses the assignment in as many words; this is the answer for a file
     // written by hand, and going on is the safer half of a contradiction.
     expect(deskButtonAction({ go: 5, back: 5 }, 5)).toBe('go')
+  })
+})
+
+describe('the groups the desk is asked about', () => {
+  it('is the ones the show listens to, once each', () => {
+    expect(watchedGroups(desk({ buttons: { go: 5, back: 6 } }))).toEqual([5, 6])
+  })
+
+  it('is only what has been assigned', () => {
+    expect(watchedGroups(desk({ buttons: { go: 5, back: null } }))).toEqual([5])
+    expect(watchedGroups(desk({ buttons: { go: null, back: null } }))).toEqual([])
   })
 })

@@ -1,9 +1,8 @@
 import { useStore } from '../store'
 import { describeDeskMessage } from '../utils/desk'
+import { sendDeskMessage } from './deskSend'
 import { sceneChanges, type DeskChange } from '../utils/scenes'
 import { ALL_CLOSED_SCENE_ID } from '../types/show'
-import type { OscArg } from '../types/cue'
-import type { DeskMessage } from '../types/show'
 
 export interface RecallResult {
   /** The scene that was recalled, or null when everything was closed. */
@@ -51,7 +50,8 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
       refused.push(`${change.label}: ${change.error}`)
       continue
     }
-    if (await sendDeskMessage(change.message)) {
+    const sent = await sendDeskMessage(change.message)
+    if (sent.ok) {
       deskState[change.channelId] = change.live
     } else {
       failures.push(`${change.label}: ${describeDeskMessage(change.message)}`)
@@ -99,39 +99,4 @@ function describeChanges(opened: number, closed: number): string {
   if (opened > 0) parts.push(`${opened} opened`)
   if (closed > 0) parts.push(`${closed} closed`)
   return parts.join(', ')
-}
-
-async function sendDeskMessage(message: DeskMessage): Promise<boolean> {
-  try {
-    if (message.kind === 'midi') {
-      const result = await window.winslab.midi.send({
-        portName: message.portName,
-        messages: message.messages
-      })
-      return result.ok
-    }
-    if (message.kind === 'midi-tcp') {
-      const result = await window.winslab.midi.sendTcp({
-        host: message.host,
-        port: message.port,
-        messages: message.messages
-      })
-      return result.ok
-    }
-    const result = await window.winslab.osc.send({
-      host: message.host,
-      port: message.port,
-      address: message.address,
-      args: message.args.map(toOscArg)
-    })
-    return result.ok
-  } catch {
-    // A desk that is not there is a failure to report, not a reason to stop the show.
-    return false
-  }
-}
-
-/** The desk model carries plain numbers; the OSC bridge wants them typed. */
-function toOscArg(value: number): OscArg {
-  return { type: Number.isInteger(value) ? 'i' : 'f', value }
 }

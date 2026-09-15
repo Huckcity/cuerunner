@@ -305,6 +305,12 @@ export function ChannelsTab() {
             One mute group cannot be both buttons.
           </div>
         )}
+        {hasMuteGroups(desk) && !gap && !sameButton(desk) && (
+          <div className="desk-hint">
+            GO recalls the next scene, BACK the one before it, in the order the Scenes view
+            shows them.
+          </div>
+        )}
 
         {/* What the show sends, read back from the connection: a pattern and a port are
             easier to check as addresses. This is the only place the convention lives, so a

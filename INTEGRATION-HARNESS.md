@@ -465,14 +465,20 @@ first slice, not the ceiling.
 
 **The desk's own buttons** (`desk-buttons.spec.ts`)
 
-1. A mute group the show assigned as its GO key fires the cue the show is standing on, and the
-   selection moves on: the assertion is both the cue that started and where the show now stands.
-2. The BACK key stands the show back one cue, and the GO key after it plays that cue again —
-   back is a position, not a re-fire.
-3. The same key twice inside the window steps once.
-4. A **DCA mute is not a button**: page 02 moved nothing, which is the case that keeps a show
-   from running itself when a scene recall comes back off the desk.
+1. The desk's own report does not move the show. The peer connects with the GO group already
+   muted, so its burst is the state a room could have been left in; the app has to prime on it
+   rather than recall a scene the moment the show opens.
+2. A mute group the show assigned as its GO key recalls the *next scene* and the desk moves with
+   it — the assertion is both the recall's own log line and the peer's mute state, which is the
+   app's DCA message arriving at the desk.
+3. The next GO moves on, and BACK recalls the scene before. The BACK group is the one the desk's
+   report never mentioned, so that press is also what proves the app's own get was answered: a
+   group nothing has primed would swallow its first press.
+4. A **DCA mute is not a button**: page 02 — the message the app sends itself — moved nothing,
+   which is the case that keeps a show from running itself when a recall comes back off the desk.
 5. A group nobody assigned does nothing.
+6. The same state arriving twice steps once: the desk's own toggle is what tells one press from
+   two, so the window the triggers use is not needed here.
 
 **Show control, and a key assigned to a MIDI note** (`msc.spec.ts`)
 
@@ -627,9 +633,10 @@ from the desk and replayed on Linux.
 cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
 so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane.
 **The desk's own buttons are read as mute groups**, which is how a show is run from the surface
-without assigning anything as a MIDI note: `desk-buttons.spec.ts` holds GO, BACK, the window in
-front of them, and the DCA mute that must not be read as a press. What no lane here has is a
-desk to press the key on — the hardware lane is where the message a key really sends is checked.
+without assigning anything as a MIDI note: `desk-buttons.spec.ts` holds the desk's report at
+connect, GO and BACK walking the scenes, the DCA mute that must not be read as a press, and the
+duplicate delivery that is one step. What no lane here has is a desk to press the key on — the
+hardware lane is where the message a key really sends is checked.
 *Acceptance*: the same assertions that pass against the peer pass against the desk, with
 only the host changing; a recorded desk fixture is committed with its provenance and the
 Linux lane replays it.

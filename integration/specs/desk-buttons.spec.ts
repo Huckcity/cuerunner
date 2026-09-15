@@ -1,23 +1,24 @@
-// Running a show from the desk's own buttons.
+// Running a show's scenes from the desk's own buttons.
 //
 // A console reports a key press only when the key has been assigned to a console function —
-// which is why a show's transport buttons are mute groups: the group is assigned to a key at
-// the desk, the key toggles it, and the desk transmits the mute message the group would have
+// which is why a show's GO and BACK keys are spare mute groups: the group is assigned to a key
+// at the desk, the key toggles it, and the desk transmits the mute message the group would have
 // sent if a hand had muted it. The operator sets two fields and touches nothing else.
 //
-// What is asserted is the show moving — the cue that started, and where the selection stands
-// — from messages the peer sends the way a hand on the surface sends them, never from the
-// app's account of itself.
+// What is asserted is the *desk* moving — the mute the peer records, and the desk's own state —
+// from messages it sends the way a hand on the surface sends them, never from the app's account
+// of itself. The app's own DCA messages are the other half of the cases: they are page 02, and
+// a show that read them as a key press would run itself on every scene recall.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
-import { BACK_GROUP, GO_GROUP, writeDeskButtonsShow } from './deskButtonsFixture'
+import { BACK_GROUP, CHANNEL, GO_GROUP, writeDeskButtonsShow } from './deskButtonsFixture'
 
-/** The channel the desk is set to, and the one the show is told it is. */
-const CHANNEL = 1
-/** The SQ's mute-group page: page 04, parameter <group - 1>, fine byte on or off. */
+/** The SQ's mute-group page: page 04, parameter <group - 1>, absolute form. */
 const MUTE_GROUP_PAGE = 0x04
+/** DCA 1's own mute, as the peer keys it: page 02, parameter 0. */
+const DCA_KEY = '02:00'
 
 let app: ElectronApplication
 let page: Page
@@ -25,42 +26,29 @@ let userDataDir: string
 let peer: DeskPeer
 
 /**
- * A hand on one of the desk's keys: the desk transmits the group's mute, and which half of
- * the toggle it landed on is the desk's business rather than the show's.
+ * A hand on one of the desk's keys: the desk transmits the group's mute, toggling it.
+ * `on` is the state the group lands in, which is what a press alternates.
  */
-function pressKey(group: number): void {
-  peer.setMute(CHANNEL, group - 1, true, MUTE_GROUP_PAGE)
+function pressKey(group: number, on: boolean): void {
+  peer.setMute(CHANNEL, group - 1, on, MUTE_GROUP_PAGE)
 }
 
-/** How many cues the show has started, as the log shows them. */
-function starts(): Promise<number> {
-  return page.locator('.log-panel .log-row', { hasText: 'started' }).count()
+/** The desk's own record of DCA 1's mute, which a scene recall moves. */
+function dcaMute(): boolean | undefined {
+  return peer.state.mutes[DCA_KEY]?.on
 }
 
-/** How many times one cue has started, by the line that names it. */
-function startsOf(cue: string): Promise<number> {
-  return page.locator('.log-panel .log-row', { hasText: cue }).filter({ hasText: 'started' }).count()
-}
-
-/** The row the next GO would fire. */
-function standingOn(): Promise<string> {
-  return page.locator('.cue-row[data-selected="true"]').innerText()
-}
-
-/**
- * Past the show's firing window.
- *
- * The cases press the *same* key, and the window is the show's: a press a few milliseconds
- * after the case above would be refused for the right reason and the count below would say
- * nothing about what this case is testing.
- */
-function pastTheWindow(): Promise<void> {
-  return page.waitForTimeout(400)
+/** The lines a scene recall wrote, which name the button that caused it. */
+function recalls(from: string): Promise<number> {
+  return page.locator('.log-panel .log-row', { hasText: from }).count()
 }
 
 test.beforeAll(async () => {
-  peer = await startDeskPeer({ profile: 'sq', midiChannel: CHANNEL })
-  const show = writeDeskButtonsShow({ port: peer.port, channel: CHANNEL })
+  peer = await startDeskPeer({ profile: 'sq', midiChannel: CHANNEL, connectBurst: true })
+  // The desk is already sitting with the GO group muted when the app arrives — a room that
+  // was left that way — so its report at connect is a state and not a press.
+  peer.setMute(CHANNEL, GO_GROUP - 1, true, MUTE_GROUP_PAGE)
+  const show = writeDeskButtonsShow({ port: peer.port })
   ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
   await openFromRecent(page, userDataDir, show)
   await openLogPanel(page)
@@ -71,64 +59,80 @@ test.afterAll(async () => {
   await peer.close()
 })
 
-test('the desk’s GO key fires the cue the show is standing on', async () => {
-  // The show opens standing on its first cue, and the key is the mute group the file
-  // assigned — nothing is pressed in the window.
-  await expect.poll(standingOn).toContain('One')
-
-  pressKey(GO_GROUP)
-
-  await expect(page.locator('.log-panel .log-row', { hasText: '1 · One' }))
-    .toContainText('started')
-  // And the show has moved on, which is what makes it a GO rather than a one-off.
-  await expect.poll(standingOn).toContain('Two')
-})
-
-test('the desk’s BACK key stands the show back one cue', async () => {
-  await pastTheWindow()
-  pressKey(BACK_GROUP)
-
-  await expect(page.locator('.log-panel .log-row', { hasText: 'stood back' }))
-    .toContainText('1 · One')
-  await expect.poll(standingOn).toContain('One')
-
-  // Back is not a re-fire: the cue stands ready, and the GO key is what plays it again.
-  await pastTheWindow()
-  pressKey(GO_GROUP)
-  await expect.poll(async () => startsOf('1 · One')).toBe(2)
-})
-
-test('a key that bounces steps the show once', async () => {
-  await pastTheWindow()
-  const before = await starts()
-
-  pressKey(GO_GROUP)
-  pressKey(GO_GROUP)
-
-  await expect.poll(starts).toBe(before + 1)
-  // Past the window again, so a second step would have arrived by now.
-  await pastTheWindow()
-  expect(await starts()).toBe(before + 1)
-})
-
-test('a DCA mute is not a button, so the show does not run when the desk moves', async () => {
-  // The app drives DCAs itself and the desk may echo what it was told: page 02 is a fader
-  // moving, and a show that read it as a key press would run itself on every scene recall.
-  await pastTheWindow()
-  const before = await starts()
-
-  peer.setMute(CHANNEL, 0, true, 0x02)
+test('the desk reporting its own state does not run the show', async () => {
+  // The desk reports where its groups stand as soon as a client connects, and the GO group is
+  // muted in this room: without priming, that report would read as a key press and recall a
+  // scene the moment the show opened. What says the report arrived is the monitor's own line
+  // for it — the peer answers a get without recording one, so an assertion about the app's
+  // question would be an assertion about something the desk does not keep.
+  await expect.poll(async () =>
+    page.locator('.log-panel .log-row.log-event[data-kind="midi"]').count()
+  ).toBeGreaterThan(0)
 
   await page.waitForTimeout(400)
-  expect(await starts()).toBe(before)
+  expect(await recalls('Desk GO')).toBe(0)
+  expect(await recalls('Desk BACK')).toBe(0)
+  // Nothing has been sent to the desk either: a recall is the app's own messages, and this
+  // show has not recalled anything.
+  expect(dcaMute()).toBeUndefined()
+})
+
+test('the desk’s GO key recalls the next scene, and the desk moves with it', async () => {
+  // The group is muted at the desk, so the operator's press takes it off — the first scene is
+  // still what a GO from the top of the list means. This group was primed by the desk's report;
+  // the BACK key in the next case is the one the report never mentions, so that press is what
+  // proves the app's own question was answered.
+  pressKey(GO_GROUP, false)
+
+  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk GO' }))
+    .toContainText('Scene "Wedding"')
+  // The desk is where the scene says: DCA 1 open, which is the app's own message and not a
+  // key press — the next GO is what moves the show on.
+  await expect.poll(dcaMute).toBe(true)
+})
+
+test('the next GO moves on, and BACK stands the show back', async () => {
+  pressKey(GO_GROUP, true)
+  await expect(page.locator('.log-panel .log-row', { hasText: 'Scene "Interval"' }))
+    .toContainText('Desk GO')
+  await expect.poll(dcaMute).toBe(false)
+
+  // The desk's other key walks the same list backwards, and the scene it lands on is recalled.
+  pressKey(BACK_GROUP, true)
+  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk BACK' }))
+    .toContainText('Scene "Wedding"')
+  await expect.poll(dcaMute).toBe(true)
+})
+
+test('a scene message the app sent itself is not a key press', async () => {
+  // The recall above sent DCA 1 open on page 02, and the desk reports what it was told. That
+  // is the app's own message coming back: reading it as a button would make the show run itself.
+  const before = await recalls('Desk GO')
+
+  peer.emit([0xb0, 0x63, 0x02, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x00])
+
+  await page.waitForTimeout(400)
+  expect(await recalls('Desk GO')).toBe(before)
 })
 
 test('a group nobody assigned does nothing', async () => {
-  await pastTheWindow()
-  const before = await starts()
+  const before = await recalls('Desk GO') + await recalls('Desk BACK')
 
-  pressKey(7)
+  pressKey(7, true)
 
   await page.waitForTimeout(400)
-  expect(await starts()).toBe(before)
+  expect(await recalls('Desk GO') + await recalls('Desk BACK')).toBe(before)
+})
+
+test('the same state arriving twice is one step, not two', async () => {
+  // A desk with two sends, or a message repeated on the wire: the second says nothing the
+  // first did not, so the show stands where the first press left it.
+  const before = await recalls('Desk GO')
+
+  pressKey(GO_GROUP, false)
+  pressKey(GO_GROUP, false)
+
+  await expect.poll(() => recalls('Desk GO')).toBe(before + 1)
+  await page.waitForTimeout(400)
+  expect(await recalls('Desk GO')).toBe(before + 1)
 })

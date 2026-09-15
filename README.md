@@ -568,11 +568,13 @@ Desk and console integration:
 - **A show run from the desk's own buttons.** A console reports a key press only when the key
   has been assigned to a console function, so the buttons a show runs from are spare **mute
   groups**: Show Settings → Channels says which group the operator's GO and BACK keys are,
-  those two groups are assigned to keys at the desk, and pressing them runs the show. No MIDI
-  note is set up anywhere. GO fires the cue the show is standing on and BACK stands it back one,
-  ready for the next GO; the desk's message is read by `utils/deskInput.ts`, and a DCA's own mute
-  deliberately is not read as a press, so a scene recall coming back off the desk cannot run the
-  show. `integration/specs/desk-buttons.spec.ts` drives all of it against the peer
+  those two groups are assigned to keys at the desk, and pressing them walks the show's scenes
+  — GO to the next, BACK to the one before, in the order the Scenes view shows them. No MIDI
+  note is set up anywhere. The desk's message is read by `utils/deskInput.ts`; the desk's own
+  report of its state primes the app rather than moving it — a show opened onto a desk with a
+  group already muted must not recall a scene by itself — and a DCA's own mute deliberately is
+  not read as a press, so a scene recall coming back off the desk cannot run the show.
+  `integration/specs/desk-buttons.spec.ts` drives all of it against the peer
 - **Or any control that sends something.** A soft key assigned to a MIDI note, a footswitch, a
   scene recalled at the desk — whatever the desk transmits is a MIDI trigger on its own
   connection, and `Learn` writes the trigger from what arrives. A lighting console's own show
