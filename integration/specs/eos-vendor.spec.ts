@@ -8,7 +8,6 @@
 // two disagree, this one is right.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
-import dgram from 'node:dgram'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { startEosPeer, type EosPeer } from '../peers/eos'
@@ -19,6 +18,15 @@ import { firedAddress, VERSION_ANSWER, writeEosShow } from './eosFixture'
 const TARGET = process.env.EOS_TARGET
 /** The cue the show fires, in cue list 1. Any show with a cue in it will do the chain. */
 const CUE = Number(process.env.EOS_CUE ?? 12)
+/**
+ * Where the app listens for the console, and where the recorder listens when one is in the
+ * way. Both are fixed, and not out of laziness: a console's OSC TX destination is a setting
+ * somebody types into the desk *once*, so the port at this end has to be the same port on
+ * every run — which is also why these are environment variables rather than numbers in a
+ * fixture.
+ */
+const APP_PORT = Number(process.env.EOS_APP_PORT ?? 8001)
+const RELAY_PORT = Number(process.env.EOS_RELAY_PORT ?? 8002)
 /**
  * Where a recording of what the console answered is written. With it set, the spec puts a
  * peer in front of the console as a recording proxy and points the app at that instead —
@@ -57,30 +65,25 @@ let proxy: EosPeer | undefined
  * whoever reads it is standing in front of the desk.
  */
 function checklist(): string {
+  // Where the console's output has to go: the app itself, or the recorder when one is
+  // standing in front of it. Both are fixed ports, which is what makes them typable once.
+  const txPort = RECORD === undefined ? appPort : RELAY_PORT
   return [
     `Nothing answered at ${TARGET} — every one of these is a console setting:`,
     '  1. ECU > Settings > Network > Interface Protocols → "UDP Strings & OSC" enabled on the active interface.',
     `  2. Setup > System > Show Control > OSC → {OSC RX} and {OSC TX} on, OSC UDP RX Port ${consolePort},`,
-    `     OSC UDP TX IP Address this machine, OSC UDP TX Port ${appPort}.`,
-    '  3. Setup > System > Show Control → {Network List Receive} on (it is by default).',
+    `     OSC UDP TX IP Address this machine, OSC UDP TX Port ${txPort}.`,
+    '  3. Setup > System > Show Control > {Network List Receive} on (it is by default).',
     '  4. The firewall allows the console’s UDP traffic in and out.',
     `  5. A show is open with cue ${CUE} in cue list 1 (or set EOS_CUE to a cue that exists).`,
     '  6. ETCnomad is past its shell: it answers OSC as soon as a show is open.',
     ...(RECORD === undefined
       ? []
-      : [`  7. This run is *recording*: the console’s OSC UDP TX Port must be ${proxy?.port}, because the recorder sits between the console and the app.`]),
+      : [`  7. This run is *recording*: OSC UDP TX Port ${RELAY_PORT} is the recorder, which relays to the app on ${appPort}.`]),
     '',
-    'On the runner this is provisioned once by hand — INTEGRATION-HARNESS.md §9 has the walkthrough.'
+    `The ports are the lane's own settings: EOS_APP_PORT (${appPort}) and EOS_RELAY_PORT (${RELAY_PORT}).`,
+    'INTEGRATION-HARNESS.md §9 has the walkthrough.'
   ].join('\n')
-}
-
-/** A port nobody is on, asked of the kernel rather than guessed at. */
-async function freeUdpPort(): Promise<number> {
-  const socket = dgram.createSocket('udp4')
-  await new Promise<void>(resolve => socket.bind(0, '127.0.0.1', resolve))
-  const { port } = socket.address()
-  await new Promise<void>(resolve => socket.close(resolve))
-  return port
 }
 
 test.beforeAll(async () => {
@@ -88,7 +91,7 @@ test.beforeAll(async () => {
   const [host, port] = (TARGET ?? '127.0.0.1:0').split(':')
   consoleHost = host
   consolePort = Number(port)
-  appPort = await freeUdpPort()
+  appPort = APP_PORT
 
   // Three ways this lane can be pointed, and the app cannot tell them apart:
   //  - at a console (nothing between the two);
@@ -97,10 +100,10 @@ test.beforeAll(async () => {
   showHost = consoleHost
   showPort = consolePort
   const relay = TARGET === undefined && REPLAY !== undefined
-    ? { replay: REPLAY, tx: { host: '127.0.0.1', port: appPort } }
+    ? { port: RELAY_PORT, replay: REPLAY, tx: { host: '127.0.0.1', port: appPort } }
     : RECORD === undefined
       ? null
-      : { upstream: { host: consoleHost, port: consolePort }, record: RECORD, tx: { host: '127.0.0.1', port: appPort } }
+      : { port: RELAY_PORT, upstream: { host: consoleHost, port: consolePort }, record: RECORD, tx: { host: '127.0.0.1', port: appPort } }
 
   if (relay !== null) {
     if (RECORD !== undefined) mkdirSync(dirname(RECORD), { recursive: true })
