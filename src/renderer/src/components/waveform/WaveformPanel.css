@@ -52,6 +52,7 @@
 /* The region and the cursor: what the cue plays and where a split would be made. Both
    are statements about the file, so they read in the same shape as the file name. */
 .waveform-region-tag,
+.waveform-sampled-tag,
 .waveform-cursor {
   display: flex;
   align-items: center;
@@ -64,6 +65,15 @@
   padding: 1px 6px;
   border-radius: var(--radius-md);
   white-space: nowrap;
+}
+
+/* A sampled envelope is a reading of the file, not the whole of it: said quietly, in the
+   panel's own voice, because the operator should be able to tell the two apart. */
+.waveform-sampled-tag {
+  color: var(--fg-tertiary);
+  background: var(--bg-card);
+  text-transform: none;
+  cursor: help;
 }
 
 .waveform-cursor {
@@ -113,6 +123,10 @@
   justify-content: center;
   font-size: var(--text-sm);
   color: var(--fg-ghost);
+  /* A statement about the panel, not a thing over it: a press meant for the waveform
+     while it is still being measured is the operator placing a boundary, and the panel
+     knows where a boundary goes as soon as it knows the file's length. */
+  pointer-events: none;
 }
 
 /* Engine warnings in the header: one line, with the rest in the tooltip and in

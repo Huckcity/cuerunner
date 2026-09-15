@@ -38,6 +38,19 @@ int curveFromName(const std::string& name) {
   return static_cast<int>(Curve::Linear);
 }
 
+/**
+ * The region a whole-file read is asked about: `startMs` and `endMs` together name a
+ * window into the file, and neither leaves the read unbounded, which is the whole file.
+ */
+RegionQuery regionOf(const cJSON* root) {
+  RegionQuery region;
+  if (!hasNumber(root, "startMs") || !hasNumber(root, "endMs")) return region;
+  region.bounded = true;
+  region.startMs = number(root, "startMs", 0.0);
+  region.endMs = number(root, "endMs", 0.0);
+  return region;
+}
+
 int paramFromName(const std::string& name) {
   if (name == "pan") return static_cast<int>(Param::Pan);
   if (name == "trim") return static_cast<int>(Param::Trim);
@@ -567,7 +580,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "waveform") {
     WaveformDTO result;
     EngineError error;
-    if (engine.waveform(text(root, "filePath", ""), integer(root, "points", 512), result, error)) {
+    if (engine.waveform(text(root, "filePath", ""), integer(root, "points", 512), regionOf(root), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
       cJSON_AddNumberToObject(body, "buckets", result.buckets);
@@ -577,6 +590,9 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       cJSON_AddNumberToObject(body, "sampleRate", result.sampleRate);
       cJSON_AddNumberToObject(body, "channels", result.channels);
       cJSON_AddBoolToObject(body, "truncated", result.truncated);
+      cJSON_AddNumberToObject(body, "startMs", result.startMs);
+      cJSON_AddNumberToObject(body, "endMs", result.endMs);
+      cJSON_AddBoolToObject(body, "sampled", result.sampled);
       out = replyOk(id, body);
     } else {
       out = replyError(id, error.code, error.message);
@@ -585,13 +601,15 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     OnsetDTO result;
     EngineError error;
     if (engine.onsets(text(root, "filePath", ""), number(root, "sensitivity", 1.0),
-                      integer(root, "maxOnsets", 0), result, error)) {
+                      integer(root, "maxOnsets", 0), regionOf(root), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
       cJSON_AddNumberToObject(body, "durationMs", result.durationMs);
       cJSON_AddNumberToObject(body, "sampleRate", result.sampleRate);
       cJSON_AddNumberToObject(body, "channels", result.channels);
       cJSON_AddBoolToObject(body, "truncated", result.truncated);
+      cJSON_AddNumberToObject(body, "startMs", result.startMs);
+      cJSON_AddNumberToObject(body, "endMs", result.endMs);
       cJSON* onsets = cJSON_AddArrayToObject(body, "onsetsMs");
       for (double onset : result.onsetsMs) cJSON_AddItemToArray(onsets, cJSON_CreateNumber(onset));
       out = replyOk(id, body);

@@ -30,6 +30,7 @@ import {
   type AudioProgressPayload,
   type AudioProbe,
   type AudioProbePayload,
+  type AudioRegion,
   type AudioOnsetsPayload,
   type AudioOnsets,
   type AudioRoutingPayload,
@@ -148,10 +149,16 @@ contextBridge.exposeInMainWorld('winslab', {
       invokeAudio(AUDIO_CHANNELS.devices),
     configure: (options: DeviceOptions): Promise<AudioEngineInfo> =>
       invokeAudio(AUDIO_CHANNELS.configure, { options } satisfies AudioConfigurePayload),
-    waveform: (filePath: string, points: number): Promise<AudioWaveform> =>
-      invokeAudio(AUDIO_CHANNELS.waveform, { filePath, points } satisfies AudioWaveformPayload),
-    onsets: (filePath: string, sensitivity?: number, maxOnsets?: number): Promise<AudioOnsets> =>
-      invokeAudio(AUDIO_CHANNELS.onsets, { filePath, sensitivity, maxOnsets } satisfies AudioOnsetsPayload),
+    waveform: (filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform> =>
+      invokeAudio(AUDIO_CHANNELS.waveform, {
+        filePath, points, startMs: region?.startMs, endMs: region?.endMs
+      } satisfies AudioWaveformPayload),
+    onsets: (
+      filePath: string, sensitivity?: number, maxOnsets?: number, region?: AudioRegion
+    ): Promise<AudioOnsets> =>
+      invokeAudio(AUDIO_CHANNELS.onsets, {
+        filePath, sensitivity, maxOnsets, startMs: region?.startMs, endMs: region?.endMs
+      } satisfies AudioOnsetsPayload),
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),

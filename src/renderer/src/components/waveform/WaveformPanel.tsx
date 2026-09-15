@@ -57,6 +57,17 @@ const SNAP_MS = 100
  */
 const ZOOM_LEVELS = [1, 2, 4, 8, 16, 32]
 
+/**
+ * The window beyond which the panel stops asking for onsets. A window this long is
+ * about two minutes of reading on the engine's side, and the ticks it returns are places
+ * a hand cannot aim at anyway: at that span a hit is a fraction of a pixel, and a
+ * boundary that jumped to one would be the panel moving the operator's work.
+ */
+const ONSET_WINDOW_MS = 120_000
+const ONSET_CAP = 2000
+/** One question per resting place: a pan drags the window across the file frame by frame. */
+const WINDOW_DEBOUNCE_MS = 120
+
 export function WaveformPanel() {
   const selectedCue = useSelectedCue()
   const updateCue = useStore(s => s.updateCue)
@@ -70,6 +81,8 @@ export function WaveformPanel() {
   const containerRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
   const peaksRef = useRef<WaveformPeaks | null>(null)
+  /** The file the drawn envelope belongs to, so another file's shape is never drawn for it. */
+  const peaksFileRef = useRef<string | null>(null)
   const durationRef = useRef(0)
   const layoutRef = useRef<WaveformLayout | null>(null)
   /** The drag in progress, or null. `grab` is the file fraction the boundary started at. */
@@ -222,47 +235,86 @@ export function WaveformPanel() {
     return () => window.removeEventListener('blur', cancel)
   }, [])
 
-  // Ask the engine for the envelope when the selected audio cue or its file changes
+  // The engine is asked about the window on screen rather than about the file: the
+  // envelope of what is visible, and — while the window is short enough that a hit is a
+  // place a hand can aim at — the onsets inside it. That is what keeps a twelve-hour
+  // file's panel proportional to the screen instead of to the file, and what lets a zoom
+  // ask its own question and get a sharper answer than a whole-file envelope could hold.
   useEffect(() => {
     if (!audioCue?.filePath) {
       peaksRef.current = null
+      peaksFileRef.current = null
       durationRef.current = 0
       setPeaks(null)
       setOnsets([])
       return
     }
 
+    // A different file is a different drawing: the shape of the last one must not stand
+    // in for it while its own envelope is on its way.
+    if (peaksFileRef.current !== audioCue.filePath) {
+      peaksRef.current = null
+      peaksFileRef.current = audioCue.filePath
+      setPeaks(null)
+      setOnsets([])
+    }
+
     let current = true
     setLoading(true)
-    // Both answers are about the same file and arrive independently: the envelope is what
-    // is drawn, the onsets are what a drag snaps to, and a file whose onsets cannot be
-    // read still has a waveform.
-    audioEngine.onsets(audioCue.filePath).then(result => {
-      if (current) setOnsets(result.onsetsMs)
-    }).catch(() => {
-      if (current) setOnsets([])
-    })
-    audioEngine.waveform(audioCue.filePath, PEAK_BUCKETS)
-      .then(data => {
-        if (!current) return
-        const envelope: WaveformPeaks = { values: data.values, buckets: data.buckets }
-        peaksRef.current = envelope
-        durationRef.current = data.durationMs / 1000
-        setPeaks(envelope)
-        if (data.durationMs > 0) syncCueDuration(audioCue.id, Math.round(data.durationMs))
-      })
-      .catch(() => {
-        // A file the engine cannot read leaves the panel empty rather than showing the
-        // previous cue's waveform against this cue's timing.
-        if (!current) return
-        peaksRef.current = null
-        durationRef.current = 0
-        setPeaks(null)
-      })
-      .finally(() => { if (current) setLoading(false) })
+    // A pan drags the window across the file frame by frame; one question per resting
+    // place is the same answer for a fraction of the reading. The first question about a
+    // file is asked at once: there is nothing on screen to hold the place for it.
+    const timer = setTimeout(() => {
+      // The window as it stands when the question is asked, rather than as it stood when
+      // the effect ran: a file's length arriving can move the clamped window under it.
+      const { startMs, spanMs: span, total: fileMs } = viewRef.current
+      const region = span > 0 && span < fileMs ? { startMs, endMs: startMs + span } : undefined
+      // The envelope is what is drawn and the onsets are what a drag snaps to; they
+      // arrive independently, and a file whose onsets cannot be read still has a waveform.
+      if (region === undefined || spanMs <= ONSET_WINDOW_MS) {
+        audioEngine.onsets(audioCue.filePath, 1, ONSET_CAP, region).then(result => {
+          if (current) setOnsets(result.onsetsMs)
+        }).catch(() => {
+          if (current) setOnsets([])
+        })
+      } else {
+        // Ticks a hand cannot aim at are not ticks: at this span a hit is a fraction of
+        // a pixel, and asking for every one of them across twelve hours is a minute of
+        // reading for nothing on screen.
+        setOnsets([])
+      }
+      audioEngine.waveform(audioCue.filePath, PEAK_BUCKETS, region)
+        .then(data => {
+          if (!current) return
+          const fileMs = data.durationMs
+          const envelope: WaveformPeaks = {
+            values: data.values,
+            buckets: data.buckets,
+            from: fileMs > 0 ? data.startMs / fileMs : 0,
+            to: fileMs > 0 ? data.endMs / fileMs : 1,
+            sampled: data.sampled
+          }
+          peaksRef.current = envelope
+          durationRef.current = fileMs / 1000
+          setPeaks(envelope)
+          if (fileMs > 0) syncCueDuration(audioCue.id, Math.round(fileMs))
+        })
+        .catch(() => {
+          // A file the engine cannot read leaves the panel empty rather than showing
+          // the previous cue's waveform against this cue's timing.
+          if (!current) return
+          peaksRef.current = null
+          durationRef.current = 0
+          setPeaks(null)
+        })
+        .finally(() => { if (current) setLoading(false) })
+    }, peaksRef.current === null ? 0 : WINDOW_DEBOUNCE_MS)
 
-    return () => { current = false }
-  }, [audioCue?.filePath, audioCue?.id, syncCueDuration])
+    return () => {
+      current = false
+      clearTimeout(timer)
+    }
+  }, [audioCue?.filePath, audioCue?.id, zoom, viewStartMs, syncCueDuration])
 
   // rAF loop for playhead while playing: the client keeps the engine's last reported
   // position, so a frame costs nothing across IPC.
@@ -463,6 +515,14 @@ export function WaveformPanel() {
           )}
           <span className="waveform-total">{formatTime(totalDuration * 1000)}</span>
         </span>
+        {peaks?.sampled && (
+          <span
+            className="waveform-sampled-tag"
+            title="Drawn from samples of each column rather than every one: the shape of a long file, without reading all of it"
+          >
+            sampled
+          </span>
+        )}
         {trimmed && (
           <span className="waveform-region-tag" title="The part of the file this cue plays">
             plays {formatTime(audioCue.startTime)}–{formatTime(regionEndMs(audioCue))}
@@ -497,8 +557,11 @@ export function WaveformPanel() {
       </div>
       <div className="waveform-canvas-frame">
         <div ref={containerRef} className="waveform-canvas-container">
-          {loading && <div className="waveform-loading">Loading waveform…</div>}
-          {!loading && !peaks && audioCue.filePath && (
+          {/* The overlay is for a panel with nothing to draw. A window being re-measured
+              has the previous envelope on screen, and a finger over the waveform while
+              it is being redrawn is the operator placing a boundary, not a wait. */}
+          {!peaks && loading && <div className="waveform-loading">Loading waveform…</div>}
+          {!peaks && !loading && audioCue.filePath && (
             <div className="waveform-loading">Could not read the waveform.</div>
           )}
           {!audioCue.filePath && (
@@ -509,7 +572,7 @@ export function WaveformPanel() {
             className="waveform-canvas"
             data-dragging={dragging ?? undefined}
             data-onsets={onsets.length}
-            style={{ opacity: loading || !peaks ? 0 : 1 }}
+            style={{ opacity: peaks ? 1 : 0 }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

@@ -22,6 +22,13 @@
 #undef STB_VORBIS_HEADER_ONLY
 
 namespace ws {
+
+FileStamp fileStampOf(const std::string& path) {
+  struct stat st{};
+  if (::stat(path.c_str(), &st) != 0) return {};
+  return {static_cast<int64_t>(st.st_size), static_cast<int64_t>(st.st_mtime)};
+}
+
 namespace {
 
 int64_t fileSizeOf(const std::string& path) {
@@ -30,17 +37,8 @@ int64_t fileSizeOf(const std::string& path) {
   return static_cast<int64_t>(st.st_size);
 }
 
-/** What a file's identity is to the index below: same size and mtime, same media. */
-struct FileStamp {
-  int64_t bytes = 0;
-  int64_t modified = 0;
-};
-
-FileStamp stampOf(const std::string& path) {
-  struct stat st{};
-  if (::stat(path.c_str(), &st) != 0) return {};
-  return {static_cast<int64_t>(st.st_size), static_cast<int64_t>(st.st_mtime)};
-}
+/** What a file's identity is to the caches below: same size and mtime, same media. */
+FileStamp stampOf(const std::string& path) { return fileStampOf(path); }
 
 // Reads a 4-byte magic without assuming anything about the file.
 bool readMagic(const std::string& path, unsigned char* out, size_t count) {
@@ -104,10 +102,16 @@ struct Mp3Index {
 
 /** Entries kept: a show's media, with room for files that have been relinked away. */
 constexpr size_t kMaxIndexedFiles = 64;
-/** Seek points per file, and the media each one covers. A seek decodes forward over at
- *  most one gap, so these two are the dials for a table's size and a seek's cost. */
-constexpr int64_t kMaxSeekPoints = 512;
-constexpr int64_t kSeekPointSeconds = 10;
+/**
+ * Seek points per file, and the media each one covers. A seek decodes forward from the
+ * point before its target, so this spacing is what a seek costs — and it is what a
+ * strided pass over the file costs, one seek per bucket. A second apart is fine-grained
+ * enough that a thousand seeks over twelve hours take a quarter of a second, and the
+ * table itself is about a megabyte for a file that long. Measuring one out is the same
+ * pass at any density: the enumeration walks the frames once either way.
+ */
+constexpr int64_t kMaxSeekPoints = 65536;
+constexpr int64_t kSeekPointSeconds = 1;
 /** Below this length a file is short enough that a seek's decode-forward is not worth a
  *  pass to avoid. */
 constexpr int64_t kSeekTableAfterSeconds = 600;

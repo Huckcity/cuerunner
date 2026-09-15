@@ -8,6 +8,7 @@ import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../renderer/src/types/network'
 import { audioEngine } from '../audio/AudioEngine'
 import {
+  AudioRegion,
   AUDIO_CHANNELS,
   type AudioCancelPayload,
   type AudioReleasePayload,
@@ -190,6 +191,15 @@ export function registerIpcHandlers(): void {
       error => refusalFrom(error)
     )
 
+  /**
+   * The window a waveform or onset request names, if it names one. Both ends together,
+   * because half a window is not one — and neither is a request for the whole file.
+   */
+  const regionOf = (payload: { startMs?: number; endMs?: number }): AudioRegion | undefined =>
+    payload.startMs === undefined || payload.endMs === undefined
+      ? undefined
+      : { startMs: payload.startMs, endMs: payload.endMs }
+
   ipcMain.handle('audio:pickFile', async (event) => {
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Audio File',
@@ -244,11 +254,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(AUDIO_CHANNELS.configure, (_, payload: AudioConfigurePayload) =>
     audioVerb(() => audioEngine.configure(payload.options)))
   ipcMain.handle(AUDIO_CHANNELS.waveform, (_, payload: AudioWaveformPayload) =>
-    audioVerb(() => audioEngine.waveform(payload.filePath, payload.points)))
+    audioVerb(() => audioEngine.waveform(payload.filePath, payload.points, regionOf(payload))))
   // A workspace footprint asks about every cue: headers only, nothing decoded, nothing
   // cached, nothing counted.
   ipcMain.handle(AUDIO_CHANNELS.onsets, (_, payload: AudioOnsetsPayload) =>
-    audioVerb(() => audioEngine.onsets(payload.filePath, payload.sensitivity, payload.maxOnsets)))
+    audioVerb(() => audioEngine.onsets(payload.filePath, payload.sensitivity, payload.maxOnsets, regionOf(payload))))
   ipcMain.handle(AUDIO_CHANNELS.probe, (_, payload: AudioProbePayload) =>
     audioVerb(() => audioEngine.probe(payload.filePath)))
 
