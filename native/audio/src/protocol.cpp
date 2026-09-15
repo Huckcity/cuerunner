@@ -283,6 +283,14 @@ std::string eventLine(const Event& event, const std::string& sessionId) {
   return out;
 }
 
+std::string requestVerb(const std::string& line) {
+  cJSON* root = cJSON_Parse(line.c_str());
+  if (root == nullptr) return std::string();
+  const std::string verb = text(root, "verb", "");
+  cJSON_Delete(root);
+  return verb;
+}
+
 std::string handleRequestLine(Engine& engine, const std::string& line, bool& shutdown) {
   shutdown = false;
   cJSON* root = cJSON_Parse(line.c_str());
