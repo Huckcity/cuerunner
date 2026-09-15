@@ -1290,6 +1290,14 @@ console.log(r.stdout.trim())</code></pre>
           me</em> it waits for the operator, who can take the show from the same panel.
         </p>
         <p>
+          One thing silence cannot tell apart: a machine that has died and a network that has
+          stopped carrying its beats. If the link between the two goes while both machines are
+          running, the standby does what it is configured to do, and the live machine — still
+          playing — is told the show has moved and stands down. What the audience hears in that
+          second is both machines inside the same cue. A pair belongs on a switch that is not
+          also carrying somebody else's video.
+        </p>
+        <p>
           A takeover picks the show up rather than restarting it. An audio cue the live machine was
           playing is put back at the position it had reached, plus however long passed between the
           last beat and the takeover — the position was true when the beat arrived, and the show
@@ -1533,6 +1541,7 @@ console.log(r.stdout.trim())</code></pre>
           <li><strong>One audio device at a time.</strong> WinsLab opens one output device and does not aggregate several into one; clock discipline across devices belongs to the operating system (an aggregate device) or to a Dante/AES67 layer. A rig with more channels presents them on one device.</li>
           <li><strong>Presence reports, it does not route.</strong> The network service notices that a device is there and when it leaves. Subscriptions, clocking and patching stay in Dante Controller or the device's own software.</li>
           <li><strong>Recording is not built in.</strong> WinsLab does not capture multitrack audio; a recorder runs alongside it. Triggers and OSC are how the two are tied together — a cue that arms the recorder, or a message from it that fires a cue.</li>
+          <li><strong>A pair reads silence as failure.</strong> A machine that has stopped and a network that has stopped carrying its beats look the same to the machine standing by, so a partition can hand the show to the backup while the live machine is still playing it — both machines say so in their status and their log, and the live machine stops as soon as it is told. See <a href="#redundancy">Redundant playback</a>.</li>
           <li><strong>Redundant playback carries sound, not everything.</strong> A takeover puts a playing audio cue back at the position it had reached and brings the operator's place in the show across; a MIDI or OSC cue that has already gone out, a wait, a fade or a script that was half-way through, and a cue that had finished and was waiting to hand over are all named in the run log rather than repeated. See <a href="#redundancy">Redundant playback</a>.</li>
           <li><strong>Script cues are unsandboxed.</strong> Treat a workspace file as executable code.</li>
         </ul>
