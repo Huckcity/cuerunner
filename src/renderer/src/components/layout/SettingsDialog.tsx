@@ -13,6 +13,7 @@ import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../types/show'
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
+import { RedundancySection } from '../redundancy/RedundancySection'
 import './SettingsDialog.css'
 
 interface Props {
@@ -66,6 +67,9 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'midi', label: 'MIDI' },
   { id: 'network', label: 'Network' },
   { id: 'wireless', label: 'Wireless' },
+  // Next to the licence for the same reason: these are this machine's own settings
+  // rather than the show's, so the two tabs the workspace does not carry sit together.
+  { id: 'redundancy', label: 'Redundancy' },
   { id: 'license', label: 'License' }
 ]
 
@@ -665,6 +669,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
 
             </>
           )}
+
+          {tab === 'redundancy' && <RedundancySection />}
 
           {tab === 'license' && <LicenseSection />}
         </div>

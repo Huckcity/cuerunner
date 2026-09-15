@@ -251,7 +251,11 @@ test('settings are grouped by what is being set up, and close one way', async ()
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
-  await expect(dialog.locator('.settings-tab')).toHaveText(['General', 'Audio', 'MIDI', 'Network', 'Wireless', 'License'])
+  // Redundancy and License are the machine's own settings rather than the show's, and
+  // they sit last, together.
+  await expect(dialog.locator('.settings-tab')).toHaveText([
+    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Redundancy', 'License'
+  ])
 
   // MIDI out and MIDI in are one subject, on one tab.
   await dialog.getByRole('button', { name: 'MIDI', exact: true }).click()

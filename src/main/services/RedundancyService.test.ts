@@ -347,7 +347,10 @@ describe('two machines in a pair', () => {
     await backup.service.command('publish', digest({ running: [] }))
     await live.service.command('publish', digest({ running: [], show: { id: 'other', name: 'Macbeth', cues: 3, hash: 'ffff' } }))
 
-    await until(() => backup.latest()?.status.peer?.note.startsWith('a different show'), 'the mismatch to be noticed')
+    await until(
+      () => backup.latest()?.status.peer?.note.startsWith('a different show') === true,
+      'the mismatch to be noticed'
+    )
     expect(backup.latest()?.status.peer?.note).toContain('Macbeth')
   })
 

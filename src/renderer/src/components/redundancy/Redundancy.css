@@ -1,0 +1,44 @@
+/* Redundant playback: the machine's own half of a pair, and what it has heard from the
+   other one. The status is the part an operator reads during a show, so the two facts
+   that matter — is this machine running it, and has the partner been heard from — are
+   the two that carry colour. */
+
+.redundancy-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+}
+
+.redundancy-line {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  line-height: var(--line-height-base);
+}
+
+.redundancy-label {
+  flex: 0 0 7rem;
+  color: var(--fg-muted);
+}
+
+.redundancy-value {
+  color: var(--fg-body);
+}
+
+/* The machine that is running the show says so in the colour a running service uses;
+   the one standing by is not a fault, so it stays quiet. */
+.redundancy-line[data-driving='true'] .redundancy-value {
+  color: var(--state-running-fg);
+}
+
+/* A partner that has gone quiet is the one alarm this feature exists for. */
+.redundancy-line[data-alive='false'] .redundancy-value {
+  color: var(--accent-amber);
+}
+
+.redundancy-actions {
+  display: flex;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
