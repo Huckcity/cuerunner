@@ -245,6 +245,16 @@ class Engine {
   int64_t scheduleHorizonMs() const { return options_.scheduleHorizonMs; }
   const EngineOptions& options() const { return options_; }
 
+  /**
+   * Asks a whole-file scan in progress (a waveform envelope, an onset pass) to stop at
+   * its next chunk. The transport's file-reading threads are joined as the process goes down,
+   * and a twelve-hour file's scan would otherwise make that wait minutes long — after
+   * the client that asked for it has gone. A cancelled scan reports an error; nothing
+   * is left to receive it.
+   */
+  void cancelAnalysis() { analysisCancelled_.store(true, std::memory_order_release); }
+  bool analysisCancelled() const { return analysisCancelled_.load(std::memory_order_acquire); }
+
   // Offline rendering drives the same mixer with a caller-owned clock. `pump` runs the
   // service work (acks, reclaims, stream fills) on the caller's thread, because the
   // offline mode deliberately has no background thread.
@@ -327,6 +337,8 @@ class Engine {
   std::atomic<bool> deviceRunning_{false};
   std::atomic<bool> expectedDeviceStop_{false};
   std::atomic<bool> silentStop_{false};
+  /** Set by cancelAnalysis(): a scan in progress stops at its next chunk. */
+  std::atomic<bool> analysisCancelled_{false};
   int healthTick_ = 0;
   mutable std::mutex errorMutex_;
   mutable std::string lastError_;

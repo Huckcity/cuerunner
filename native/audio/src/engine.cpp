@@ -40,6 +40,15 @@ constexpr double kMaxOnsetSensitivity = 10.0;
 
 std::string maResultText(ma_result result) { return std::string(ma_result_description(result)); }
 
+/**
+ * The refusal a whole-file scan returns when the engine is stopping under it: there is
+ * no client left to read the answer by then, only a process waiting to go down.
+ */
+bool cancelledScan(EngineError& error) {
+  error = {"cancelled", "the engine is stopping; the scan was not finished"};
+  return false;
+}
+
 // The session identity is minted per process, not derived from the clock: a respawned
 // engine starts its frame counter at zero again, and the id is the only thing that says
 // so. Random rather than monotonic because nothing persists across a respawn — a
@@ -469,6 +478,20 @@ void Engine::handleBackgroundWork() {
     submitCommand(command, ack, ignored);
   }
 
+  // Acks first, then the file work. A command's acknowledgement is a promise to the
+  // connection thread, which is waiting on it with a deadline, and everything below can
+  // take real time: a stream fill decodes, and a reposition inside one decodes forward
+  // to its target. An ack queued before that work starts is answered before it starts —
+  // a start that is already audible is not reported as one that never arrived.
+  Event event;
+  while (events_.pop(event)) {
+    if (event.kind == Event::Ack) {
+      resolveAck(event);
+      continue;
+    }
+    if (eventCallback_) eventCallback_(event);
+  }
+
   ReclaimItem item;
   while (reclaim_.pop(item)) {
     if (item.cacheEntry != nullptr) cache_.release(static_cast<CacheEntry*>(item.cacheEntry));
@@ -479,15 +502,6 @@ void Engine::handleBackgroundWork() {
   // The state check is cheap but not free; a hundred milliseconds of latency on a device
   // that has already gone is plenty.
   if ((healthTick_++ % 50) == 0) checkDeviceHealth();
-
-  Event event;
-  while (events_.pop(event)) {
-    if (event.kind == Event::Ack) {
-      resolveAck(event);
-      continue;
-    }
-    if (eventCallback_) eventCallback_(event);
-  }
 }
 
 void Engine::resolveAck(const Event& event) {
@@ -1288,6 +1302,7 @@ bool Engine::waveform(const std::string& filePath, int points, WaveformDTO& out,
       std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
       int64_t total = 0;
       for (;;) {
+        if (analysisCancelled()) return cancelledScan(error);
         const int64_t got = source->readFrames(chunk.data(), 8192);
         if (got <= 0) break;
         total += got;
@@ -1298,6 +1313,7 @@ bool Engine::waveform(const std::string& filePath, int points, WaveformDTO& out,
     std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
     int64_t consumed = 0;
     for (;;) {
+      if (analysisCancelled()) return cancelledScan(error);
       const int64_t got = source->readFrames(chunk.data(), 8192);
       if (got <= 0) break;
       const int64_t base = consumed;
@@ -1399,6 +1415,7 @@ bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnse
       std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
       int64_t total = 0;
       for (;;) {
+        if (analysisCancelled()) return cancelledScan(error);
         const int64_t got = source->readFrames(chunk.data(), 8192);
         if (got <= 0) break;
         total += got;
@@ -1409,6 +1426,7 @@ bool Engine::onsets(const std::string& filePath, double sensitivity, int maxOnse
     OnsetDetector detector(sampleRate, sensitivity, maxOnsets);
     std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(channels));
     for (;;) {
+      if (analysisCancelled()) return cancelledScan(error);
       const int64_t got = source->readFrames(chunk.data(), 8192);
       if (got <= 0) break;
       // False means the cap was reached: the rest of the file is not read at all.

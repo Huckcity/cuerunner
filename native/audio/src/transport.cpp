@@ -39,13 +39,14 @@ struct SocketServer::Client {
   std::thread thread;
   bool alive = true;
   /**
-   * Analysis requests handed to the server's thread that have not been answered yet.
-   * Their replies are written from that thread, so this connection's handle may not
-   * close — nor this object be freed — until the count is back to zero.
+   * File work handed to the server's worker threads that has not been answered yet —
+   * a probe and a scan both count here. Their replies are written from those threads, so
+   * this connection's handle may not close, nor this object be freed, until the count is
+   * back to zero.
    */
   std::mutex workMutex;
   std::condition_variable workDone;
-  int pendingAnalysis = 0;
+  int pendingFileWork = 0;
 #if defined(_WIN32)
   void* handle = nullptr;
 #else
@@ -86,7 +87,12 @@ SocketServer::SocketServer(Engine& engine) : engine_(engine) {}
 
 SocketServer::~SocketServer() {
   close();
-  stopAnalysis();
+  // A scan a long file is in the middle of stops here rather than being waited for: a
+  // twelve-hour pass would hold the process open for minutes after the client that
+  // asked for it is gone.
+  engine_.cancelAnalysis();
+  stopFileWork(scans_);
+  stopFileWork(probes_);
 }
 
 bool SocketServer::listen(const std::string& path, std::string& error) {
@@ -134,7 +140,8 @@ bool SocketServer::listen(const std::string& path, std::string& error) {
 #endif
   path_ = path;
   listening_.store(true, std::memory_order_release);
-  analysis_ = std::thread([this] { analysisLoop(); });
+  probes_.thread = std::thread([this] { fileWorkLoop(probes_); });
+  scans_.thread = std::thread([this] { fileWorkLoop(scans_); });
   logLine("listening on %s", path.c_str());
   return true;
 }
@@ -235,13 +242,14 @@ void SocketServer::handleClient(Client* client) {
       buffer.erase(0, newline + 1);
       while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
       if (!line.empty()) {
-        // A whole-file read (the waveform envelope, the onset scan) is handed to the
-        // analysis thread: the connection's own thread has the verbs that run the show
-        // to get to, and a scan of a long file is a second of work it must not be stuck
-        // behind. The reply still comes back on this connection.
+        // A whole-file read is handed to a worker thread: the connection's own thread has
+        // the verbs that run the show to get to, and reading a long file is not their
+        // business. The reply still comes back on this connection.
         const std::string verb = requestVerb(line);
         if (verb == "waveform" || verb == "onsets") {
-          enqueueAnalysis(client, std::move(line));
+          enqueueFileWork(scans_, client, std::move(line));
+        } else if (verb == "probe") {
+          enqueueFileWork(probes_, client, std::move(line));
         } else {
           bool shutdown = false;
           const std::string reply = handleRequestLine(engine_, line, shutdown);
@@ -271,7 +279,7 @@ void SocketServer::removeClient(Client* client) {
   // is bounded by one file's scan.
   {
     std::unique_lock<std::mutex> lock(client->workMutex);
-    client->workDone.wait(lock, [client] { return client->pendingAnalysis == 0; });
+    client->workDone.wait(lock, [client] { return client->pendingFileWork == 0; });
   }
 #if defined(_WIN32)
   if (client->handle != nullptr) {
@@ -285,64 +293,64 @@ void SocketServer::removeClient(Client* client) {
   noteClientCount();
 }
 
-void SocketServer::enqueueAnalysis(Client* client, std::string line) {
+void SocketServer::enqueueFileWork(FileWork& worker, Client* client, std::string line) {
   {
     std::lock_guard<std::mutex> lock(client->workMutex);
-    client->pendingAnalysis++;
+    client->pendingFileWork++;
   }
   {
-    std::lock_guard<std::mutex> lock(analysisMutex_);
-    if (!analysisStopping_) {
-      analysisQueue_.push_back(AnalysisJob{client, std::move(line)});
+    std::lock_guard<std::mutex> lock(worker.mutex);
+    if (!worker.stopping) {
+      worker.queue.push_back(AnalysisJob{client, std::move(line)});
     } else {
-      finishAnalysis(client);
+      finishFileWork(client);
       return;
     }
   }
-  analysisWork_.notify_one();
+  worker.work.notify_one();
 }
 
-void SocketServer::analysisLoop() {
+void SocketServer::fileWorkLoop(FileWork& worker) {
   for (;;) {
     AnalysisJob job;
     bool haveJob = false;
     std::vector<Client*> abandoned;
     {
-      std::unique_lock<std::mutex> lock(analysisMutex_);
-      analysisWork_.wait(lock, [this] { return analysisStopping_ || !analysisQueue_.empty(); });
-      if (analysisStopping_) {
+      std::unique_lock<std::mutex> lock(worker.mutex);
+      worker.work.wait(lock, [&worker] { return worker.stopping || !worker.queue.empty(); });
+      if (worker.stopping) {
         // A stop leaves whatever is still queued unrun. Each waiting client is released
         // here rather than left waiting on a count that would never come back down.
-        for (const AnalysisJob& queued : analysisQueue_) abandoned.push_back(queued.client);
-        analysisQueue_.clear();
+        for (const AnalysisJob& queued : worker.queue) abandoned.push_back(queued.client);
+        worker.queue.clear();
       } else {
-        job = std::move(analysisQueue_.front());
-        analysisQueue_.pop_front();
+        job = std::move(worker.queue.front());
+        worker.queue.pop_front();
         haveJob = true;
       }
     }
-    for (Client* client : abandoned) finishAnalysis(client);
+    for (Client* client : abandoned) finishFileWork(client);
     if (!haveJob) return;
 
     bool shutdown = false;
     const std::string reply = handleRequestLine(engine_, job.line, shutdown);
     if (!reply.empty()) job.client->send(reply);
-    finishAnalysis(job.client);
+    finishFileWork(job.client);
   }
 }
 
-void SocketServer::finishAnalysis(Client* client) {
+void SocketServer::finishFileWork(Client* client) {
   std::lock_guard<std::mutex> lock(client->workMutex);
-  if (--client->pendingAnalysis == 0) client->workDone.notify_all();
+  if (--client->pendingFileWork == 0) client->workDone.notify_all();
 }
 
-void SocketServer::stopAnalysis() {
+void SocketServer::stopFileWork(FileWork& worker) {
   {
-    std::lock_guard<std::mutex> lock(analysisMutex_);
-    analysisStopping_ = true;
+    std::lock_guard<std::mutex> lock(worker.mutex);
+    worker.stopping = true;
   }
-  analysisWork_.notify_all();
-  if (analysis_.joinable()) analysis_.join();
+  worker.work.notify_all();
+  if (worker.thread.joinable()) worker.thread.join();
 }
 
 void SocketServer::noteClientCount() {

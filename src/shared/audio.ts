@@ -497,8 +497,12 @@ export interface AudioEngineBridge {
    */
   prepare(cueId: string, filePath: string): Promise<AudioMetadata>
   /**
-   * Measure a media file without decoding it or touching the cache. Safe to call for
-   * every cue in a workspace; `prepare` is still what warms a cue's media for playback.
+   * Measure a media file. Never touches the decoded cache, and never holds media of
+   * its own. Safe to call for every cue in a workspace, with one caveat: a file whose
+   * header states no length (an MP3 with no Xing/Info frame) has to be read to be
+   * measured, so it costs a pass over the file — once. A long file is indexed by that
+   * same first pass, which is what lets a later start deep inside it begin at once.
+   * `prepare` is still what warms a cue's media for playback.
    */
   probe(filePath: string): Promise<AudioProbe>
   /**

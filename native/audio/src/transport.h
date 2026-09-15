@@ -40,22 +40,35 @@ class SocketServer {
     Client* client = nullptr;
     std::string line;
   };
+  /**
+   * A thread for requests that read a whole file, with its own queue.
+   *
+   * They run off the connection's thread because everything the show is run with goes
+   * through that one: a GO's prepare and start, the clock read behind every timer in the
+   * window, the progress read behind every row. None of it may wait for a file to be
+   * read — that wait is the delay between the press and the sound.
+   *
+   * There are two of them, not one, because a probe and a scan are different kinds of
+   * long: a probe is what the workspace's durations wait on and a scan of a long file
+   * runs for minutes, and neither may hold the other up.
+   */
+  struct FileWork {
+    std::deque<AnalysisJob> queue;
+    std::mutex mutex;
+    std::condition_variable work;
+    std::thread thread;
+    bool stopping = false;
+  };
 
   void acceptLoop();
   void handleClient(Client* client);
   void removeClient(Client* client);
   void noteClientCount();
 
-  // Requests that read a whole file — the waveform envelope and the onset scan — run on
-  // this thread instead of the connection's. On a long file one of them takes a second
-  // or more, and everything the show is run with goes through the same connection: a
-  // GO's prepare and start, the clock read behind every timer in the window, the
-  // progress read behind every row. None of it may wait for a file to be scanned — that
-  // wait is the delay between the press and the sound.
-  void enqueueAnalysis(Client* client, std::string line);
-  void analysisLoop();
-  static void finishAnalysis(Client* client);
-  void stopAnalysis();
+  void enqueueFileWork(FileWork& worker, Client* client, std::string line);
+  void fileWorkLoop(FileWork& worker);
+  void stopFileWork(FileWork& worker);
+  static void finishFileWork(Client* client);
 
   Engine& engine_;
   std::string path_;
@@ -64,11 +77,9 @@ class SocketServer {
   mutable std::mutex clientsMutex_;
   std::vector<Client*> clients_;
   std::function<void(int)> clientCountCallback_;
-  std::deque<AnalysisJob> analysisQueue_;
-  std::mutex analysisMutex_;
-  std::condition_variable analysisWork_;
-  std::thread analysis_;
-  bool analysisStopping_ = false;
+  /** `probe` reads a file to measure it; `waveform` and `onsets` read it end to end. */
+  FileWork probes_;
+  FileWork scans_;
 #if defined(_WIN32)
   /** The first pipe instance, created before any thread exists and taken by the accept loop. */
   void* listenHandle_ = nullptr;

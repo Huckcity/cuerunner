@@ -3,10 +3,16 @@
 #include "m4a.h"
 #include "util.h"
 
+#include <algorithm>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <mutex>
+#include <set>
 #include <sys/stat.h>
+#include <unordered_map>
 
 #include "dr_flac.h"
 #include "dr_mp3.h"
@@ -22,6 +28,18 @@ int64_t fileSizeOf(const std::string& path) {
   struct stat st{};
   if (::stat(path.c_str(), &st) != 0) return 0;
   return static_cast<int64_t>(st.st_size);
+}
+
+/** What a file's identity is to the index below: same size and mtime, same media. */
+struct FileStamp {
+  int64_t bytes = 0;
+  int64_t modified = 0;
+};
+
+FileStamp stampOf(const std::string& path) {
+  struct stat st{};
+  if (::stat(path.c_str(), &st) != 0) return {};
+  return {static_cast<int64_t>(st.st_size), static_cast<int64_t>(st.st_mtime)};
 }
 
 // Reads a 4-byte magic without assuming anything about the file.
@@ -48,6 +66,118 @@ Format sniffFormat(const std::string& path) {
   // Raw MP3 frame sync: 11 bits set.
   if (magic[0] == 0xFF && (magic[1] & 0xE0) == 0xE0) return Format::Mp3;
   return Format::Unknown;
+}
+
+/**
+ * The MP3 index: what dr_mp3 has to read a file from end to end to learn.
+ *
+ * A file whose header states no length costs a pass over every frame just to be
+ * measured, and every seek without a table costs a decode forward — from the start, or
+ * from wherever the decoder sits — to the target. On a twelve-hour download the second
+ * of those is minutes, and that is the file an operator has trimmed a thirty-second
+ * region out of, with the region somewhere in the middle.
+ *
+ * Both answers are read once per file and kept: the frame count, and a dr_mp3 seek table
+ * keyed by the file's size and modification time, so a later open binds the table and
+ * asks the decoder for nothing. dr_mp3 only references a bound table, so the entry owns
+ * the memory and each source holds the entry for as long as its decoder may use it.
+ */
+struct Mp3Index {
+  int64_t fileBytes = 0;
+  int64_t modified = 0;
+  int64_t frames = -1;
+  std::vector<drmp3_seek_point> seekPoints;
+  uint64_t lastUse = 0;
+};
+
+/** Entries kept: a show's media, with room for files that have been relinked away. */
+constexpr size_t kMaxIndexedFiles = 64;
+/** Seek points per file, and the media each one covers. A seek decodes forward over at
+ *  most one gap, so these two are the dials for a table's size and a seek's cost. */
+constexpr int64_t kMaxSeekPoints = 512;
+constexpr int64_t kSeekPointSeconds = 10;
+/** Below this length a file is short enough that a seek's decode-forward is not worth a
+ *  pass to avoid. */
+constexpr int64_t kSeekTableAfterSeconds = 600;
+
+struct Mp3IndexStore {
+  std::mutex mutex;
+  /** Paths with a build in flight; a second opener waits on `ready` rather than
+   *  measuring the same file again — the build is the expensive half of opening a long
+   *  file, and doing it twice would make the show's own verbs pay for it twice. */
+  std::condition_variable ready;
+  std::set<std::string> building;
+  std::unordered_map<std::string, std::shared_ptr<Mp3Index>> entries;
+  uint64_t clock = 0;
+};
+
+Mp3IndexStore& mp3Indexes() {
+  static Mp3IndexStore store;
+  return store;
+}
+
+/**
+ * The index for `decoder`. A fresh entry is used as it stands; a cold file is measured
+ * once — whoever asks first does the reading, and anyone who asks while that is running
+ * waits for it. The build itself runs outside the lock: the probe thread measures a file
+ * the show is not waiting on, and only the entry is published under it.
+ */
+std::shared_ptr<Mp3Index> mp3IndexFor(const std::string& path, drmp3* decoder, const FileStamp& stamp) {
+  for (;;) {
+    {
+      std::unique_lock<std::mutex> lock(mp3Indexes().mutex);
+      const auto it = mp3Indexes().entries.find(path);
+      if (it != mp3Indexes().entries.end() && it->second->fileBytes == stamp.bytes &&
+          it->second->modified == stamp.modified) {
+        it->second->lastUse = ++mp3Indexes().clock;
+        return it->second;
+      }
+      if (mp3Indexes().building.insert(path).second) break;
+      mp3Indexes().ready.wait(lock);
+    }
+  }
+
+  auto index = std::make_shared<Mp3Index>();
+  index->fileBytes = stamp.bytes;
+  index->modified = stamp.modified;
+
+  // Stated by a Xing/Info header, or read frame by frame. dr_mp3 answers without
+  // seeking when the header states it.
+  const drmp3_uint64 frames = drmp3_get_pcm_frame_count(decoder);
+  index->frames = frames > 0 ? static_cast<int64_t>(frames) : -1;
+
+  const int64_t seconds = index->frames > 0 && decoder->sampleRate > 0
+                              ? index->frames / static_cast<int64_t>(decoder->sampleRate)
+                              : 0;
+  if (seconds >= kSeekTableAfterSeconds) {
+    const int64_t wanted = std::min<int64_t>(kMaxSeekPoints, std::max<int64_t>(1, seconds / kSeekPointSeconds));
+    index->seekPoints.resize(static_cast<size_t>(wanted));
+    uint32_t count = static_cast<uint32_t>(wanted);
+    if (drmp3_calculate_seek_points(decoder, &count, index->seekPoints.data())) {
+      index->seekPoints.resize(count);
+    } else {
+      // A table that could not be built is no table: the file seeks the way it always
+      // did rather than through a half-filled one.
+      index->seekPoints.clear();
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(mp3Indexes().mutex);
+    index->lastUse = ++mp3Indexes().clock;
+    mp3Indexes().building.erase(path);
+    auto& entries = mp3Indexes().entries;
+    entries[path] = index;
+    while (entries.size() > kMaxIndexedFiles) {
+      auto victim = entries.begin();
+      for (auto it = entries.begin(); it != entries.end(); ++it) {
+        if (it->second->lastUse < victim->second->lastUse) victim = it;
+      }
+      entries.erase(victim);
+    }
+  }
+  mp3Indexes().ready.notify_all();
+  return index;
 }
 
 // --- WAV -------------------------------------------------------------------
@@ -135,8 +265,15 @@ class Mp3Source final : public Source {
     info_.format = Format::Mp3;
     info_.sampleRate = static_cast<int>(mp3_.sampleRate);
     info_.channels = static_cast<int>(mp3_.channels);
-    const drmp3_uint64 frames = drmp3_get_pcm_frame_count(&mp3_);
-    info_.frames = frames > 0 ? static_cast<int64_t>(frames) : -1;
+    // The length and, for a long file, where to enter it: measured once per file rather
+    // than once per open. The decoder itself is asked for nothing the table can answer,
+    // so opening a twelve-hour file is a header read.
+    index_ = mp3IndexFor(path, &mp3_, stampOf(path));
+    info_.frames = index_->frames > 0 ? index_->frames : -1;
+    if (!index_->seekPoints.empty()) {
+      drmp3_bind_seek_table(&mp3_, static_cast<drmp3_uint32>(index_->seekPoints.size()),
+                            index_->seekPoints.data());
+    }
     info_.canSeek = true;
     return true;
   }
@@ -157,6 +294,8 @@ class Mp3Source final : public Source {
   bool initialized_ = false;
   FileIo io_{};
   SourceInfo info_{};
+  // Keeps the bound seek table alive for as long as this decoder may seek with it.
+  std::shared_ptr<Mp3Index> index_;
 };
 
 // --- FLAC ------------------------------------------------------------------
