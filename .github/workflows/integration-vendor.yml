@@ -72,10 +72,11 @@ jobs:
           # as repository variables instead.
           EOS_TARGET: ${{ vars.EOS_TARGET || '127.0.0.1:8000' }}
           EOS_CUE: ${{ vars.EOS_CUE || '12' }}
-          # The ports the console's own settings have to name (§9): the app listens on the
-          # first, and a recording run puts the recorder on the second.
+          # The port the console's own OSC TX destination names (§9) — it is typed into the
+          # desk once, so it is single-valued: the app listens there in a direct run, and the
+          # recorder listens there (with the app behind it on EOS_APP_PORT) when recording.
+          EOS_CONSOLE_TX_PORT: ${{ vars.EOS_CONSOLE_TX_PORT || '8002' }}
           EOS_APP_PORT: ${{ vars.EOS_APP_PORT || '8001' }}
-          EOS_RELAY_PORT: ${{ vars.EOS_RELAY_PORT || '8002' }}
           EOS_RECORD: ${{ inputs.record && 'integration/fixtures/vendor/eos-ubox-win.json' || '' }}
         run: npm run test:integration -- --grep @vendor
 
