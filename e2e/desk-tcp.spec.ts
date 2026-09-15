@@ -98,15 +98,22 @@ test('a show written before the desk had a socket opens on the port the desks us
   await settings.locator('.show-settings-done').click()
 
   // Saved, the port is the show's own rather than a value this build filled in on the way
-  // through — the next file carries it.
+  // through — the next file carries it. The write is the app's, not this test's, so what is
+  // asserted is the file *becoming* that: a single read after the dirty marker clears is a
+  // race the test wins on a fast machine and loses on a busy one, which is a test bug rather
+  // than a finding.
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button[data-action="save"]').click()
   await expect(page.locator('.workspace-name')).not.toContainText('●')
 
-  const saved = JSON.parse(fs.readFileSync(showPath, 'utf-8')) as {
-    showSettings: { desk: { host: string; tcpPort: number } }
-  }
-  expect(saved.showSettings.desk).toMatchObject({ host: '10.0.0.5', tcpPort: 51325 })
+  await expect
+    .poll(() => {
+      const saved = JSON.parse(fs.readFileSync(showPath, 'utf-8')) as {
+        showSettings: { desk: { host: string; tcpPort: number } }
+      }
+      return saved.showSettings.desk
+    }, { timeout: 15_000 })
+    .toMatchObject({ host: '10.0.0.5', tcpPort: 51325 })
 })
 
 test('a scene recalled at a desk that is not there says so, and the show carries on', async () => {
