@@ -551,6 +551,19 @@ Behaviour worth knowing before a show:
 - OSC input is part of WinsLab Pro: with no license the app sends OSC and does not listen
   for it
 
+Desk and console integration:
+
+- A desk is reached over its own MIDI socket — an Allen & Heath SQ or Avantis on port 51325,
+  set up in Show Settings → Channels — as well as through Allen & Heath MIDI Control's virtual
+  ports. A cue that cannot reach the desk says so in the run log rather than doing nothing
+- **DCA messages are the app's convention, and the desks do not speak it yet.** The app opens
+  and closes a DCA with a note-on and a note-off; an Avantis takes the note-on as a mute but
+  ignores note-off (its OFF is a note-on below velocity 0x40), and on an SQ a note that low
+  means nothing at all — its mutes are NRPN. So a scene's DCA **opens** work on an Avantis and
+  **closes** do not, and on an SQ neither does. The per-desk profiles that close this gap are
+  B4 in `ENGINE-REVIEW-2-AND-ROADMAP.md`; `integration/specs/desk-sq.spec.ts` and
+  `desk-avantis.spec.ts` pin the exact bytes, and §7 of `INTEGRATION-HARNESS.md` is the finding
+
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
 these in the context of the feature it affects.
 

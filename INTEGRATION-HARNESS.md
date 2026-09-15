@@ -4,9 +4,9 @@ A plan for testing WinsLab against the systems it has to talk to in a real venue
 ETC Eos first, then the Allen & Heath SQ and Avantis desks — without a lighting rig or
 a mixer on the bench, and without a human clicking in either app.
 
-Written on `integration-test-harness`, off `main` at `e739956`. The midi-tcp transport of
-§3 G1 and the desk service behind it are in the tree, with unit and E2E tests; the peers
-come next. The milestones at the end say what each lane still needs, and §11 records the
+Merged as `d8e2137`. The transport of §3 G1 is in the tree with its unit and E2E tests, the
+peers and the lanes above are built and green, and M2's acceptance has been met against real
+hardware. The milestones at the end say what each lane still needs, and §11 records the
 decisions — the first of them taken, in the direction this document recommended.
 
 ---
@@ -540,9 +540,8 @@ a client instructing it) rather than from where a datagram came from.
 
 *Remaining*: nothing. A session from the console is committed — `integration/fixtures/vendor/
 eos-ubox-win.json`, 2.8 KB, its provenance naming Eos `3.3.9.25` read from the console's own
-`/eos/get/version` — and the Linux lane replays it with no console anywhere. The workflow's
-first run also needs this branch on `main`, because `workflow_dispatch` only sees workflows
-that exist on the default branch.
+`/eos/get/version` — and the Linux lane replays it with no console anywhere. The workflow is on
+`main` since the merge, so `workflow_dispatch` can see it and the nightly schedule is live.
 *Acceptance*: met — WinsLab fired a cue in the console software, the console's own
 `/eos/out/event/cue/1/12/fire` came back, the cue that answers it fired, and the recorded
 session replays on Linux.
@@ -578,11 +577,12 @@ Linux lane replays it.
 
 **Risks**
 
-- **Eos on the Windows guest is unmeasured.** ETCnomad is a GUI application with no
-  documented headless switch, and it will be installed on Windows *Server* 2025 with
-  Desktop Experience. The first M2 task is to find out, before any of the rest of M2 is
-  built. If it will not run there, the lane moves to the Mac mini — which is closer to the
-  desk-side reality anyway, since Eos on a Mac is common.
+- **Eos on the Windows guest — answered, with a caveat.** It installs (`/S`, from the
+  interactive session) and it runs: the lane drove ETCnomad v3.3.9.25 on `ubox-win` and both
+  vendor tests passed. The caveat is unchanged and is why §9 still lists the fallback: Server
+  2025 is outside ETC's supported list and the guest's display and 3D are below Eos's stated
+  minimums, so it is "it runs until it does not" — and the Mac mini is the machine to move to
+  if it stops.
 - **Firmware drift.** SQ and SQ+ have separate protocol documents, the Avantis document
   covers V2.0 and later, and Eos is on 3.3.x. Every fixture records the version it came
   from, and a vendor-lane run reports the version it tested, so a failure can be attributed
