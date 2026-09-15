@@ -100,6 +100,8 @@ export class RedundancyService implements ShowService {
   private lastNotice: ShowNotice | null = null
   /** Counts the decisions, so a window can act on each one exactly once. */
   private noticeSeq = 0
+  /** The token the missing-token warning was last raised for, so it is raised once. */
+  private warnedToken: string | null = null
   /**
    * The partner refused this machine on its own terms — a token that does not match, a
    * machine id it already knows as its own. Nothing this end can do changes that, so
@@ -140,12 +142,17 @@ export class RedundancyService implements ShowService {
       return
     }
 
-    if (config.token === '') {
-      context.bus.alert(
-        'warning',
-        this.id,
-        'Redundant playback: no token set, so any machine on this network that finds the port can claim the pair'
-      )
+    // Raised when the machine's token changes rather than on every start: a show being
+    // saved twice is not two warnings, and the fact has not changed between them.
+    if (config.token !== this.warnedToken) {
+      this.warnedToken = config.token
+      if (config.token === '') {
+        context.bus.alert(
+          'warning',
+          this.id,
+          'Redundant playback: no token set, so any machine on this network that finds the port can claim the pair'
+        )
+      }
     }
     this.bind(context)
     this.dial()
