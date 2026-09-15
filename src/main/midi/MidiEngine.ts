@@ -1,15 +1,5 @@
 import type { MidiAvailability } from '../../renderer/src/types/midi'
-
-type MidiMessage = {
-  kind: string
-  channel?: number
-  note?: number
-  velocity?: number
-  controller?: number
-  value?: number
-  program?: number
-  data?: number[]
-}
+import { encodeMidiMessage, type MidiMessage } from './encode'
 
 export interface MidiSendResult {
   ok: boolean
@@ -142,14 +132,7 @@ export class MidiEngine {
       }
     }
     try {
-      for (const msg of messages) {
-        const ch = (msg.channel ?? 1) - 1
-        if (msg.kind === 'noteOn') out.sendMessage([0x90 | ch, msg.note!, msg.velocity!])
-        else if (msg.kind === 'noteOff') out.sendMessage([0x80 | ch, msg.note!, msg.velocity!])
-        else if (msg.kind === 'cc') out.sendMessage([0xB0 | ch, msg.controller!, msg.value!])
-        else if (msg.kind === 'programChange') out.sendMessage([0xC0 | ch, msg.program!])
-        else if (msg.kind === 'sysex') out.sendMessage([0xF0, ...msg.data!, 0xF7])
-      }
+      for (const msg of messages) out.sendMessage(encodeMidiMessage(msg))
       return { ok: true }
     } catch (error) {
       // A device unplugged mid-show leaves a handle that throws on every later send.

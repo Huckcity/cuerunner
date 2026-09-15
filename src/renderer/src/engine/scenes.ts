@@ -96,6 +96,14 @@ async function sendDeskMessage(message: DeskMessage): Promise<boolean> {
       })
       return result.ok
     }
+    if (message.kind === 'midi-tcp') {
+      const result = await window.winslab.midi.sendTcp({
+        host: message.host,
+        port: message.port,
+        messages: [message.message]
+      })
+      return result.ok
+    }
     const result = await window.winslab.osc.send({
       host: message.host,
       port: message.port,

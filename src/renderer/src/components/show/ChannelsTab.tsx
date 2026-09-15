@@ -18,7 +18,23 @@ const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
 /** What the desk is missing before it can be driven at all, or null when it is ready. */
 function deskGap(desk: DeskSettings): string | null {
   if (desk.kind === 'midi' && desk.midiPort === '') return 'No MIDI port chosen.'
+  if (desk.kind === 'midi-tcp' && desk.host.trim() === '') return 'No desk address.'
   return null
+}
+
+/**
+ * What the show sends, read back from the connection. A pattern and a port are easier to
+ * check as addresses than as fields, and this is the only place the convention lives, so
+ * a DCA row is left saying what it is rather than what goes out of it.
+ */
+function deskPreview(desk: DeskSettings, dcas: number): string {
+  const last = Math.max(0, dcas - 1)
+  if (desk.kind === 'osc') {
+    return `Sends ${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, last)} to ${desk.host}:${desk.port}, with 1 to open and 0 to close`
+  }
+  const notes = `Sends note ${dcaNumber(0)} … ${dcaNumber(last)}`
+  if (desk.kind === 'midi-tcp') return `${notes} to ${desk.host}:${desk.tcpPort}, on and off`
+  return `${notes} to "${desk.midiPort}", on and off`
 }
 
 /**
@@ -75,6 +91,8 @@ export function ChannelsTab() {
           >
             <option value="osc">OSC</option>
             <option value="midi">MIDI</option>
+            {/* The desk's own socket: an SQ and an Avantis both serve MIDI on 51325. */}
+            <option value="midi-tcp">MIDI (TCP)</option>
             <option value="none">No desk</option>
           </select>
 
@@ -142,6 +160,42 @@ export function ChannelsTab() {
             </>
           )}
 
+          {desk.kind === 'midi-tcp' && (
+            <>
+              <label className="desk-label" htmlFor="desk-tcp-host">Host</label>
+              <TextField
+                id="desk-tcp-host"
+                className="desk-tcp-host"
+                value={desk.host}
+                placeholder="10.0.0.5"
+                aria-label="Desk host"
+                onValue={host => updateDeskSettings({ host })}
+              />
+              <label className="desk-label" htmlFor="desk-tcp-port">Port</label>
+              <NumberField
+                id="desk-tcp-port"
+                className="desk-tcp-port"
+                value={desk.tcpPort}
+                min={1}
+                max={65535}
+                aria-label="Desk MIDI TCP port"
+                title="The desk's MIDI over TCP port — 51325 on an SQ and on an Avantis"
+                onValue={tcpPort => { if (tcpPort !== null) updateDeskSettings({ tcpPort }) }}
+              />
+              <label className="desk-label" htmlFor="desk-tcp-channel">Channel</label>
+              <NumberField
+                id="desk-tcp-channel"
+                className="desk-tcp-channel"
+                value={desk.midiChannel}
+                min={1}
+                max={16}
+                aria-label="Desk MIDI channel"
+                title="The channel the desk's MIDI is set to — Utility → General → MIDI on an SQ"
+                onValue={midiChannel => { if (midiChannel !== null) updateDeskSettings({ midiChannel }) }}
+              />
+            </>
+          )}
+
           {desk.kind === 'none' && (
             <span className="desk-hint">Nothing is sent: the show is a roster and a set of cues.</span>
           )}
@@ -151,11 +205,7 @@ export function ChannelsTab() {
             easier to check as addresses. This is the only place the convention lives, so a
             DCA row is left saying what it is rather than what goes out of it. */}
         {desk.kind !== 'none' && !gap && (
-          <div className="desk-preview">{
-            desk.kind === 'osc'
-              ? `Sends ${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, Math.max(0, cast.dcas.length - 1))} to ${desk.host}:${desk.port}, with 1 to open and 0 to close`
-              : `Sends note ${dcaNumber(0)} … ${dcaNumber(Math.max(0, cast.dcas.length - 1))} to "${desk.midiPort}", on and off`
-          }</div>
+          <div className="desk-preview">{deskPreview(desk, cast.dcas.length)}</div>
         )}
         {gap !== null && <div className="desk-preview desk-gap">{gap}</div>}
       </div>

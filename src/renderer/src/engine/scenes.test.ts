@@ -1,12 +1,13 @@
 // Recalling a scene is the one thing here that touches the room, so what is tested is
 // what goes out on the wire, what is remembered about it, and what happens when the desk
 // does not answer.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { recallScene } from './scenes'
 import { useStore } from '../store'
 import { midiNoteMessages } from '../utils/desk'
 import {
   ALL_CLOSED_SCENE_ID,
+  defaultDeskSettings,
   defaultShowSettings,
   type CastSettings,
   type DeskSettings,
@@ -16,12 +17,10 @@ import {
 // The desk the fixtures drive, and what its first two DCAs are sent: the note of their
 // own number, on the port and channel the show is pointed at.
 const DESK: DeskSettings = {
+  ...defaultDeskSettings(),
   kind: 'midi',
   midiPort: 'Yamaha',
-  midiChannel: 1,
-  host: '127.0.0.1',
-  port: 8000,
-  address: '/dca/{n}/on'
+  midiChannel: 1
 }
 const noteOf = (index: number) => midiNoteMessages('Yamaha', 1, index + 1)
 
@@ -75,14 +74,17 @@ function logMessages(): string[] {
 }
 
 describe('recallScene', () => {
-  let midiSend: ReturnType<typeof vi.fn>
-  let oscSend: ReturnType<typeof vi.fn>
+  let midiSend: Mock
+  let oscSend: Mock
+  let tcpSend: Mock
 
   beforeEach(() => {
     midiSend = vi.mocked(window.winslab.midi.send)
     oscSend = vi.mocked(window.winslab.osc.send)
+    tcpSend = vi.mocked(window.winslab.midi.sendTcp)
     midiSend.mockResolvedValue({ ok: true })
     oscSend.mockResolvedValue({ ok: true })
+    tcpSend.mockResolvedValue({ ok: true })
     seed()
   })
 
@@ -230,5 +232,42 @@ describe('recallScene', () => {
     const result = await recallScene('s-1')
 
     expect(result.failures).toHaveLength(2)
+  })
+
+  it('drives a desk on the network over its own socket, not through a MIDI port', async () => {
+    seed({}, null, cast(), { ...defaultDeskSettings(), kind: 'midi-tcp', host: '10.0.0.5' })
+
+    const result = await recallScene('s-1')
+
+    expect(result.failures).toEqual([])
+    expect(tcpSend).toHaveBeenCalledWith({
+      host: '10.0.0.5',
+      // The port an SQ and an Avantis both serve their MIDI on, which is what a show
+      // pointed at a desk should not have to be told.
+      port: 51325,
+      messages: [{ kind: 'noteOn', channel: 1, note: 1, velocity: 127 }]
+    })
+    expect(midiSend).not.toHaveBeenCalled()
+  })
+
+  it('reports a desk on the network that did not take the message, naming where it is', async () => {
+    seed({}, null, cast(), { ...defaultDeskSettings(), kind: 'midi-tcp', host: '10.0.0.5' })
+    tcpSend.mockResolvedValue({
+      ok: false,
+      error: 'The desk at 10.0.0.5:51325 did not answer'
+    })
+
+    const result = await recallScene('s-1')
+
+    expect(result.failures).toEqual([
+      'DCA 1 — Principals: noteOn ch1 → 10.0.0.5:51325',
+      'DCA 2 — Ensemble: noteOff ch1 → 10.0.0.5:51325'
+    ])
+    // Nothing is remembered as done: the next recall tries the whole difference again.
+    expect(useStore.getState().deskState).toEqual({})
+    expect(logMessages()).toEqual([
+      'Scene "Wedding" — 1 opened, 1 closed',
+      'Could not reach the desk: DCA 1 — Principals: noteOn ch1 → 10.0.0.5:51325, DCA 2 — Ensemble: noteOff ch1 → 10.0.0.5:51325'
+    ])
   })
 })

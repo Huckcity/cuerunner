@@ -43,6 +43,35 @@ installer:
 
 ## Getting Started
 
+### What it needs to run
+
+The audio engine is the part with a deadline: it has to render faster than the audio it plays.
+Measured on a Ryzen 7 5800X, one core, 44.1 kHz sources into a 48 kHz device
+(`node native/audio/tests/matrix-bench.mjs`):
+
+| The shape | Cost on one core | What that means |
+| --- | --- | --- |
+| The largest mix the engine supports — 24 voices × 32 outputs × 64 crosspoints, resampling live | 8.7x realtime | about **a quarter of one modern core** holds the 2x floor CI enforces |
+| A typical musical — 8 voices × 4 outputs × 4 crosspoints | 43x realtime | about **a twentieth of one core** |
+
+- **CPU**: any 64-bit machine from the last decade, two cores or more. The heaviest supported
+  show fits in a quarter of one modern core and a typical one in a twentieth, so what playback
+  depends on is one core's throughput rather than core count. Four cores is comfortable, and is
+  what this project is tested on.
+- **Memory**: 8 GB. The decoded-audio cache is bounded by design — 512 MB, 100 files, and any
+  single file whose decoded form would exceed 32 MB (about 90 seconds of stereo at 48 kHz)
+  streams from disk instead of being held — so memory does not grow with file length.
+- **Disk**: any. A stereo voice streams at roughly 380 KB/s, and a cue deep inside a long
+  recording is entered through a seek table rather than decoded from its start. An SSD shortens
+  show loading, not playback.
+- **Graphics**: none required. Software rendering works; a GPU is nicer to look at.
+- **OS**: Windows 10+, macOS 10.15+, or 64-bit Linux.
+
+If a machine cannot keep up, that shows up rather than hiding: the engine counts the audio it
+could not fill and warns about it, the show clock keeps wall time through a stall instead of
+drifting, and a desk or console it cannot reach says so. The bounds themselves are held by the
+acceptance suite in `native/audio/tests/`.
+
 ### Prerequisites
 
 - Node.js 20+ (Node 24 also supported)
@@ -455,6 +484,17 @@ dropped.
     are doing. `npm run test:e2e:headed` is the opt-in to run it on the display you are
     using instead.
   - Single spec: `npm run test:e2e -- e2e/<spec>.spec.ts`
+- **Integration Tests**: `npm run test:integration` (Playwright, requires build)
+  - Tests WinsLab against the systems it meets in a venue — an ETC Eos console, and an
+    Allen & Heath SQ or Avantis desk — with a peer standing in for the device
+  - Location: `integration/specs`. The peers are `integration/peers/` and run on their own,
+    which is what makes them useful outside a test run: `npm run peer:eos`, and
+    `npm run peer:desk -- --profile sq` is a desk on a socket any client can point at
+  - No vendor software and no hardware on this lane: the peers are implementations of the
+    published protocols, and `harness-*.spec.ts` holds each one to its vendor's own
+    documents with no application running at all. `INTEGRATION-HARNESS.md` is the plan, the
+    lanes that *do* use the real console or a real desk, and what each lane claims
+  - Single spec: `npm run test:integration -- integration/specs/<spec>.spec.ts`
 
 **Before committing**:
 ```bash
@@ -471,6 +511,8 @@ GitHub Actions workflows in `.github/workflows/`:
   - Typecheck, unit tests, and the Electron-install contract on Ubuntu, on Node 24 (LTS)
     and 26 (current)
   - E2E tests on Windows, macOS, and Linux (Ubuntu under Xvfb)
+  - Integration tests on Linux: WinsLab against the protocol peers for the console and the
+    desk (no vendor software, no hardware)
 - **`build.yml`**: Runs when a release is published, or manually
   - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
   - Uploads to R2 (Cloudflare) and GitHub Releases

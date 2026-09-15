@@ -53,8 +53,26 @@ export function oscMessages(
   }
 }
 
-/** A message over one of the two ways this app speaks to a desk. */
+/**
+ * The MIDI arrangement, over the desk's network port instead of a cable: the same note
+ * on the same channel, addressed at the desk rather than at a port this machine has
+ * opened. Where the bytes go is the whole difference; what they are is the desk's.
+ */
+export function tcpNoteMessages(
+  host: string,
+  port: number,
+  channel: number,
+  note: number
+): { mute: MidiTcpDeskMessage; unmute: MidiTcpDeskMessage } {
+  return {
+    unmute: { kind: 'midi-tcp', host, port, message: { kind: 'noteOn', channel, note, velocity: 127 } },
+    mute: { kind: 'midi-tcp', host, port, message: { kind: 'noteOff', channel, note, velocity: 0 } }
+  }
+}
+
+/** A message over one of the ways this app speaks to a desk. */
 export type MidiDeskMessage = Extract<DeskMessage, { kind: 'midi' }>
+export type MidiTcpDeskMessage = Extract<DeskMessage, { kind: 'midi-tcp' }>
 export type OscDeskMessage = Extract<DeskMessage, { kind: 'osc' }>
 
 /**
@@ -72,6 +90,12 @@ export function deskMessages(
     if (desk.midiPort === '') return null
     return midiNoteMessages(desk.midiPort, desk.midiChannel, dca.note ?? dcaNumber(index))
   }
+  if (desk.kind === 'midi-tcp') {
+    // No address typed is the same nothing as no port chosen: the recall would report a
+    // failure that means less than the silence did.
+    if (desk.host.trim() === '') return null
+    return tcpNoteMessages(desk.host, desk.tcpPort, desk.midiChannel, dca.note ?? dcaNumber(index))
+  }
   if (desk.kind === 'osc') {
     return oscMessages(desk.host, desk.port, dca.address ?? dcaAddress(desk.address, index))
   }
@@ -82,6 +106,13 @@ export function describeDeskMessage(message: DeskMessage | null): string {
   if (message === null) return 'nothing'
   if (message.kind === 'osc') {
     return `OSC ${message.address} ${message.args.join(' ')} → ${message.host}:${message.port}`
+  }
+  if (message.kind === 'midi-tcp') {
+    const where = `${message.host}:${message.port}`
+    if (message.message.kind === 'sysex') {
+      return `sysex ${message.message.data.length} bytes → ${where}`
+    }
+    return `${message.message.kind} ch${message.message.channel} → ${where}`
   }
   if (message.message.kind === 'sysex') {
     return `sysex ${message.message.data.length} bytes → "${message.portName}"`

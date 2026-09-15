@@ -217,3 +217,59 @@ jobs:
           name: e2e-results-${{ matrix.label }}
           path: test-results/
           retention-days: 7
+
+  # The harness: WinsLab talking to a peer that stands in for the console and the desk.
+  # No vendor software and no hardware on this lane — the peers are implementations of the
+  # vendors' published protocols, written from their own documents (INTEGRATION-HARNESS.md,
+  # §2), and `harness-*.spec.ts` holds them to those documents with no app running at all.
+  # What really exercises a desk — an SQ, an Avantis, a console running ETCnomad — is the
+  # vendor and hardware lanes, which are nightly and on demand rather than per pull request.
+  integration:
+    runs-on: [self-hosted, linux, x64, ubox]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install ALSA dev headers
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      # Same reason as the E2E lane above: this one launches real Electron windows, so it
+      # needs the libraries a Chromium process links against and the Xvfb that
+      # scripts/run-e2e.js puts them on.
+      - name: Install runtime dependencies
+        if: runner.environment == 'github-hosted'
+        run: npx playwright install-deps
+
+      - name: Runtime dependencies are provisioned on the runner
+        if: runner.environment == 'self-hosted'
+        run: |
+          missing=()
+          for pkg in libnss3 libgbm1 libasound2t64 libatk-bridge2.0-0t64 libcups2t64 \
+                     libxkbcommon0 libgtk-3-0t64 xvfb; do
+            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::missing on this runner: ${missing[*]} — provision the host (CLAUDE.md → CI runners)"
+            exit 1
+          fi
+          echo 'runtime libraries present'
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-results
+          path: test-results/
+          retention-days: 7

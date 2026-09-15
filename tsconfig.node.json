@@ -9,6 +9,7 @@
     "src/renderer/src/utils/scriptDocument.ts",
     "src/renderer/src/utils/waveform.ts",
     "e2e/**/*",
+    "integration/**/*",
     "scripts/**/*"
   ],
   "compilerOptions": {

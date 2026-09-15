@@ -3,6 +3,7 @@ import type { Workspace } from '../renderer/src/types/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../renderer/src/types/show'
 import type { ActivationResult, LicenseStatus } from '../renderer/src/types/license'
 import type { MidiAvailability } from '../renderer/src/types/midi'
+import type { MidiMessageKind } from '../renderer/src/types/cue'
 import type { NetworkRequest, NetworkResult } from '../renderer/src/types/network'
 import type { PlaybackPanic } from '../renderer/src/types/playback'
 import type { MissingMedia } from '../shared/media'
@@ -184,8 +185,11 @@ contextBridge.exposeInMainWorld('winslab', {
     /** Whether MIDI can work at all in this build, and why not when it cannot. */
     status: (): Promise<MidiAvailability> =>
       ipcRenderer.invoke('midi:status'),
-    send: (cmd: { portName: string; messages: any[] }): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke('midi:send', cmd)
+    send: (cmd: { portName: string; messages: MidiMessageKind[] }): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('midi:send', cmd),
+    /** MIDI to a desk on the network, which is where an SQ and an Avantis listen. */
+    sendTcp: (cmd: { host: string; port: number; messages: MidiMessageKind[] }): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('midi:sendTcp', cmd)
   },
   network: {
     /**

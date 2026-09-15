@@ -1,0 +1,91 @@
+name: Integration (vendor)
+
+# The lane that keeps the peers honest: real console software, on a machine that has been
+# provisioned for it (INTEGRATION-HARNESS.md §9). It is not a per-pull-request lane — the
+# ETCnomad package is three quarters of a gigabyte and the app wants a GUI session — so it
+# runs nightly and on demand, and its job is twofold: prove the peer still behaves the way
+# the console does, and record what the console actually said so the peer lane can replay a
+# real session on Linux.
+on:
+  schedule:
+    # Before the soak, which owns the small hours.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      record:
+        description: Record the console's answers to a fixture the peer lane replays
+        type: boolean
+        default: false
+
+concurrency:
+  group: integration-vendor
+  cancel-in-progress: false
+
+jobs:
+  eos-windows:
+    runs-on: [self-hosted, windows, x64, ubox-win]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # The console software is installed by hand, once, because its installer and its OSC
+      # settings are both interactive — see INTEGRATION-HARNESS.md §9. What the workflow
+      # can do is refuse to pretend it is there: a run that cannot find the console fails
+      # with the step that is missing rather than with a mysterious timeout in a spec.
+      - name: The console software is provisioned on this runner
+        shell: pwsh
+        run: |
+          # ETC's own deployment script looks for exactly this path (INTEGRATION-HARNESS.md §9).
+          $console = 'C:\Program Files\ETC\EosFamily\v3\Eos\Eos.exe'
+          if (-not (Test-Path $console)) {
+            throw "ETCnomad is not installed on this runner — §9 of INTEGRATION-HARNESS.md has the walkthrough: download the 'Consoles and ETCnomad PC' package from ETC's All Eos Family Software Versions page, install it with /S, then open it once and enable UDP Strings & OSC (Setup > Device Settings > Network) and OSC RX/TX (Setup > Show Control > OSC) — both of those are console settings, so they are done by hand."
+          }
+          Write-Host "found $console"
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Launch the console software
+        shell: pwsh
+        run: |
+          # The launcher a person uses, where ETC's installer actually puts it (the install
+          # tree was read off the runner rather than guessed: Eos.exe is the marker, and the
+          # shell that starts it lives beside its own utilities). The show it comes up on is
+          # whatever the provisioned session left as last-used, which is what the spec's
+          # checklist describes: a cue in cue list 1, and OSC RX/TX configured.
+          $launcher = 'C:\Program Files\ETC\EosFamily\v3\ETC_Launch\ETC_LaunchOffline.exe'
+          Start-Process -FilePath $launcher
+          # The shell takes a while — it loads the fixture library, and it may open on the
+          # shell rather than straight into a show. Nothing here depends on being fast or on
+          # what comes up: the spec's first test waits for the console to answer and fails
+          # with the checklist if it never does. This step says what is running, no more.
+          Start-Sleep -Seconds 20
+          Get-Process -Name ETC_LaunchOffline, Eos -ErrorAction SilentlyContinue |
+            Select-Object Name, Id, SessionId | Format-Table -AutoSize | Out-String | Write-Host
+
+      - name: Integration (vendor)
+        env:
+          # The console is on this machine. A run against a console elsewhere sets these
+          # as repository variables instead.
+          EOS_TARGET: ${{ vars.EOS_TARGET || '127.0.0.1:8000' }}
+          EOS_CUE: ${{ vars.EOS_CUE || '12' }}
+          # The port the console's own OSC TX destination names (§9) — it is typed into the
+          # desk once, so it is single-valued: the app listens there in a direct run, and the
+          # recorder listens there (with the app behind it on EOS_APP_PORT) when recording.
+          EOS_CONSOLE_TX_PORT: ${{ vars.EOS_CONSOLE_TX_PORT || '8002' }}
+          EOS_APP_PORT: ${{ vars.EOS_APP_PORT || '8001' }}
+          EOS_RECORD: ${{ inputs.record && 'integration/fixtures/vendor/eos-ubox-win.json' || '' }}
+        run: npm run test:integration -- --grep @vendor
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-vendor-results
+          path: |
+            test-results/
+            integration/fixtures/vendor/
+          retention-days: 14

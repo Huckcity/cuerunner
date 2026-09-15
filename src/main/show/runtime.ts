@@ -2,6 +2,7 @@ import { ShowBus } from '../bus/ShowBus'
 import { ServiceHost, type CommandResult, type ShowService } from '../bus/ServiceHost'
 import { OscInputService } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
+import { MidiTcpService } from '../services/MidiTcpService'
 import { WirelessService } from '../services/WirelessService'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
@@ -11,6 +12,7 @@ export function defaultServices(): ShowService[] {
   return [
     new OscInputService(),
     new MidiInputService(),
+    new MidiTcpService(),
     new WirelessService(),
     new PresenceService(),
     new CompanionService()
