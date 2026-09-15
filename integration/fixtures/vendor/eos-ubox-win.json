@@ -1,0 +1,102 @@
+{
+  "provenance": {
+    "kind": "eos",
+    "target": "127.0.0.1:8000",
+    "version": "3.3.9.25",
+    "versionSource": "console",
+    "recordedAt": "2026-09-15T15:25:33.297Z",
+    "recordedBy": "winslab-win",
+    "note": "",
+    "timing": "a replay sends each answer as fast as its consumer reads it; the offsets are for judging the fixture, not for pacing a reply"
+  },
+  "exchanges": [
+    {
+      "at": 2639,
+      "direction": "to-console",
+      "address": "/eos/get/version",
+      "args": [],
+      "bytes": "2f656f732f6765742f76657273696f6e000000002c000000"
+    },
+    {
+      "at": 2654,
+      "direction": "from-console",
+      "address": "/eos/out/get/version",
+      "args": [
+        "3.3.9.25",
+        "3.3.9.2",
+        0
+      ],
+      "bytes": "2f656f732f6f75742f6765742f76657273696f6e000000002c73736900000000332e332e392e323500000000332e332e392e320000000000"
+    },
+    {
+      "at": 2954,
+      "direction": "to-console",
+      "address": "/eos/cue/1/12/fire",
+      "args": [],
+      "bytes": "2f656f732f6375652f312f31322f6669726500002c000000"
+    },
+    {
+      "at": 2989,
+      "direction": "from-console",
+      "address": "/eos/out/event/cue/1/12/fire",
+      "args": [
+        ""
+      ],
+      "bytes": "2f656f732f6f75742f6576656e742f6375652f312f31322f66697265000000002c73000000000000"
+    },
+    {
+      "at": 3015,
+      "direction": "from-console",
+      "address": "/eos/out/active/cue",
+      "args": [
+        0.009999999776482582
+      ],
+      "bytes": "2f656f732f6f75742f6163746976652f637565002c6600003c23d70a"
+    },
+    {
+      "at": 3016,
+      "direction": "from-console",
+      "address": "/eos/out/active/cue/text",
+      "args": [
+        "1/12 4.9 1%"
+      ],
+      "bytes": "2f656f732f6f75742f6163746976652f6375652f74657874000000002c730000312f313220342e3920312500"
+    },
+    {
+      "at": 4012,
+      "direction": "from-console",
+      "address": "/eos/out/active/cue",
+      "args": [
+        0.20000000298023224
+      ],
+      "bytes": "2f656f732f6f75742f6163746976652f637565002c6600003e4ccccd"
+    },
+    {
+      "at": 4469,
+      "direction": "from-console",
+      "address": "/eos/out/active/cue/text",
+      "args": [
+        "1/12 4.0 20%"
+      ],
+      "bytes": "2f656f732f6f75742f6163746976652f6375652f74657874000000002c730000312f313220342e302032302500000000"
+    },
+    {
+      "at": 5019,
+      "direction": "from-console",
+      "address": "/eos/out/active/cue",
+      "args": [
+        0.4099999964237213
+      ],
+      "bytes": "2f656f732f6f75742f6163746976652f637565002c6600003ed1eb85"
+    },
+    {
+      "at": 5021,
+      "direction": "from-console",
+      "address": "/eos/out/active/cue/text",
+      "args": [
+        "1/12 2.9 41%"
+      ],
+      "bytes": "2f656f732f6f75742f6163746976652f6375652f74657874000000002c730000312f313220322e392034312500000000"
+    }
+  ]
+}

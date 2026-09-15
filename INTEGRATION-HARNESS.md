@@ -538,11 +538,14 @@ traffic and forwarded them upstream instead of relaying them to `tx`. Direction 
 from the address space ETC documents (`/eos/out/…` is the console speaking, everything else is
 a client instructing it) rather than from where a datagram came from.
 
-*Remaining*: a recorded session from the console, committed with its provenance, for the Linux
-lane to replay. The console's own settings are provisioned (§9); the recording is a
-`workflow_dispatch` run with `record: true` — which needs this branch on `main`, because
-`workflow_dispatch` only sees workflows that exist on the default branch.
-*Acceptance*: met, except for that fixture.
+*Remaining*: nothing. A session from the console is committed — `integration/fixtures/vendor/
+eos-ubox-win.json`, 2.8 KB, its provenance naming Eos `3.3.9.25` read from the console's own
+`/eos/get/version` — and the Linux lane replays it with no console anywhere. The workflow's
+first run also needs this branch on `main`, because `workflow_dispatch` only sees workflows
+that exist on the default branch.
+*Acceptance*: met — WinsLab fired a cue in the console software, the console's own
+`/eos/out/event/cue/1/12/fire` came back, the cue that answers it fired, and the recorded
+session replays on Linux.
 
 **M3 — hardware, and MSC when the product has it.**
 `desk-hardware.spec.ts` pointed at a real SQ or Avantis by `desk_host`; fixtures recorded
