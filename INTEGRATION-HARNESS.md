@@ -146,7 +146,8 @@ unvalidated rather than as evidence.
 | Panic | OSC `/winslab/panic`, MIDI CC 120 = 0 | yes |
 | Desk/scene messages | `utils/desk.ts` → a per-desk arrangement (a note pair, or an SQ's NRPN mute) | yes |
 | Show control out | `MscCue` → `midi:send` / `midi:sendTcp`, `utils/msc.ts` | yes — an SQ's cue list answers MSC |
-| Show control in | `engine/triggers.ts`, `msc` triggers | yes — a console's own command |
+| Show control in | `engine/triggers.ts`, `msc` triggers | a console that transmits one (Eos does; the sound desks do not — G2) |
+| A desk's own button | a soft key assigned to a MIDI note → `midi` trigger | yes — a note from a key somebody assigned |
 
 Three gaps stood between that and the harness, in the order they bit. What became of each:
 
@@ -174,14 +175,35 @@ in the app:
 A&H MIDI Control stays supported and stays exercised on the vendor lane, because it is
 still how anyone with a virtual port is driving their desk today.
 
-**G2 — no MSC. Built.** Eos transmits and receives MIDI Show Control, and the SQ's cue list
-answers to MSC `GO`/`LOAD`/`RESET`; WinsLab now does both directions — a Show Control cue out,
-an `msc` trigger in — with the codec (`utils/msc.ts`) held to the vendors' worked examples
-rather than to its own opinion. `msc.spec.ts` drives the round trip against the peer's SQ
-profile, and the spec's own §7 cases say what is asserted. What is *not* proven anywhere is a
-real console's MSC transmit behaviour: no document here says an SQ sends a command when its own
-GO is pressed, so the peer's `pressGo` is the specification's provision (2.6) rather than a
-vendor claim — a hardware lane is what would settle it.
+**G2 — no MSC. Built.** The SQ's cue list answers MSC `GO`/`LOAD`/`RESET`, and Eos transmits
+and receives it; WinsLab now does both directions — a Show Control cue out, an `msc` trigger
+in — with the codec (`utils/msc.ts`) held to the vendors' worked examples rather than to its own
+opinion. `msc.spec.ts` drives the command into the peer's SQ and holds what the desk does with
+it.
+
+**What the sound desks do *not* do, and where that leaves the trigger half.** Neither an SQ nor
+an Avantis transmits MSC, and neither has a GO key: the SQ's document describes MSC only as
+something the cue list *accepts*, and this was written down here as a doubt ("no document here
+says an SQ sends a command when its own GO is pressed") before a peer method existed to make it
+concrete — the method is gone. So an `msc` trigger is for a console that transmits one, which is
+a lighting console on a MIDI path (Eos does; §1), and the *hardware* lane is the only place it
+can be driven end to end, because no peer here is a console on a cable.
+
+What a sound desk is heard through instead is its own controls, and how far that reaches:
+
+- **A soft key or footswitch assigned to a MIDI note** transmits on the press — "the SQ does not
+  send note on/off messages when a Soft Key is pressed unless the Soft Key is set to a MIDI note
+  on/off function", one sequential note per key from C3 (0x30). A plain MIDI trigger listens to
+  it, and `msc.spec.ts` holds that path: a key pressed at the desk fires the cue bound to it.
+- **A scene recalled on the desk** transmits its bank and program change, which is the desk-originated
+  case the desk specs already drive.
+- **A mute key** transmits the mute — the SQ "sends and receives absolute On or Off mute
+  messages" — as the NRPN sequence `B0 63 MB B0 62 LB B0 06 00 B0 26 01`. **No trigger kind
+  reads that sequence today**: a MIDI trigger matches a note, a controller or a program change,
+  and the four controllers of an NRPN mute are none of those. A show that wants "the operator
+  muted DCA 4 at the desk" as a firing source needs a desk trigger that decodes the sequence
+  against the profile's own tables (page 02 for DCAs, page 04 for mute groups). That work is not
+  started; assigning the key to a MIDI note instead is what works today.
 
 **G3 — triggers match OSC addresses literally.** `matchesTrigger` is an exact string
 compare, by an explicit decision ("patterns and wildcards belong to the sender", held by
@@ -340,9 +362,12 @@ issue number goes in the fixture's provenance):
   reference tables in issue 5.
 - MIDI Show Control: the cue list answers a command — `F0 7F <device> 02 <format> <command>
   <cue in ASCII> 00 <cue list> F7` — so a GO moves the peer's own cue list and `state.cue`
-  says where it is standing. `pressGo()` is the desk's own key, transmitting the command it
-  produced; LOAD and RESET leave the list standing somewhere too, and STOP/RESUME are
-  recorded but move nothing, which is all this peer has a reason to model.
+  says where it is standing. LOAD and RESET leave the list standing somewhere too, and
+  STOP/RESUME are recorded but move nothing, which is all this peer has a reason to model.
+  A desk *receives* these: see G2 above for why nothing here has it transmit one.
+- Soft keys: notes from C3 (0x30) upward, one per key, `pressSoftKey()` sending the press at
+  velocity 7F and the release after it — the desk's own configurable button, and only a key
+  assigned to a MIDI note sends anything.
 - Levels: NRPN coarse+fine `Bn 06 VC` / `Bn 26 VF`, in either the 16384-step linear law or
   the 255-step audio law — the desk's `NRPN Fader Law` setting decides, and both are worth
   a case.
@@ -435,16 +460,21 @@ first slice, not the ceiling.
 9. Timing: a scene recall reaches the wire within the post-wait budget the cue claims.
    Assert the measured interval, not just the state.
 
-**Show control — the desk's cue list** (`msc.spec.ts`)
+**Show control, and the desk's own button** (`msc.spec.ts`)
 
 1. A Show Control cue sends the command down the desk's own socket. The peer reads
    `F0 7F 7F 02 7F 01 31 32 00 F7` as Go cue 12 — its own list is standing there afterwards —
    and the assertion is on both the decoded command and the desk's cue.
-2. The desk's own GO (`pressGo`) comes back to the app and the cue bound to it fires. Assert
-   the log names the command and the socket it came from.
-3. The same GO twice inside the show's window fires once: the guard covers show control the way
-   it covers a datagram, and the case waits past the window so the count is the guard's answer
-   rather than the timing's.
+2. A soft key the operator assigned to a MIDI note fires the cue that answers to it. The peer
+   presses key 3, which is note 0x32, and the log names the message and the socket. This is the
+   case that says a show can be driven from the desk without the desk having a GO key.
+3. The same key twice inside the show's window fires once: the guard covers a desk button the
+   way it covers a datagram, and the case waits past the window so the count is the guard's
+   answer rather than the timing's.
+4. A key the show does not listen to fires nothing — the trigger is one note, not "any traffic
+   from the desk".
+5. A mute key is *not* here, and cannot be: its message is the NRPN sequence the desk's own
+   mutes are, and no trigger kind reads one. G2 says what building that would take.
 
 **The peers, on their own** (`harness-eos.spec.ts`, `harness-desk.spec.ts`) — every shape
 asserted in §5 and §6 against the documented examples, with no application running. This is
@@ -579,9 +609,12 @@ session replays on Linux.
 **M3 — hardware, and MSC when the product has it.**
 `desk-hardware.spec.ts` pointed at a real SQ or Avantis by `desk_host`; fixtures recorded
 from the desk and replayed on Linux.
-**MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and answers
-the desk's own GO, and the peer's `pressGo` says in its own comment where the specification ends
-and a hardware lane would have to start.
+**MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and fires a
+cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
+so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane.
+**The desk's mute keys are the piece still missing**: the desk transmits them, and no trigger
+kind reads the NRPN sequence they are. A desk trigger that decodes one against the profile's
+tables is what would close it.
 *Acceptance*: the same assertions that pass against the peer pass against the desk, with
 only the host changing; a recorded desk fixture is committed with its provenance and the
 Linux lane replays it.

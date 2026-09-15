@@ -1,5 +1,5 @@
 // The show the show control spec drives: one cue that tells a desk's cue list to GO, and
-// one that answers the desk when it GOes on its own.
+// one that answers a button on the desk itself.
 //
 // Written as a workspace file rather than typed into the view, for the same reason the
 // desk show is: the desk's address is the peer's ephemeral port, which no form can be told
@@ -7,6 +7,14 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+/** The soft key the show listens to — a button somebody assigned at the desk. */
+export const SOFT_KEY = 3
+/**
+ * The note that key sends, from the SQ's document: soft keys are notes from C3 (0x30)
+ * upward, one per key, "controlled using standard MIDI Note On/Off messages".
+ */
+export const SOFT_KEY_NOTE = 0x30 + SOFT_KEY - 1
 
 export interface MscShowOptions {
   /** The peer's port: where the show's desk is. */
@@ -71,7 +79,7 @@ export function writeMscShow(options: MscShowOptions): string {
       {
         id: 'w-1',
         number: '2',
-        name: 'Desk called a cue',
+        name: 'Desk pressed a key',
         type: 'wait',
         colorLabel: 'none',
         parentId: null,
@@ -84,15 +92,14 @@ export function writeMscShow(options: MscShowOptions): string {
         notes: '',
         triggers: [
           {
-            // The desk's own socket, reported the way MidiTcpService names it.
-            id: 't-msc',
-            kind: 'msc',
+            // The desk's own button, heard on the desk's own socket — reported the way
+            // MidiTcpService names it. There is nothing show-control about this: a desk
+            // has no GO key, so what a show listens to is a key somebody assigned to send
+            // a MIDI note, and this is the note soft key 3 sends.
+            id: 't-key',
+            kind: 'midi',
             device: `127.0.0.1:${port}`,
-            deviceId: 127,
-            format: 'all',
-            command: 'go',
-            cueNumber: cue,
-            cueList: ''
+            message: { kind: 'noteOn', channel: 1, note: SOFT_KEY_NOTE, velocity: 127 }
           }
         ]
       }

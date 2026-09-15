@@ -511,7 +511,8 @@
         </p>
         <p>
           The other direction is a trigger: a cue can answer a console's own command, matched on
-          every field the console sent. See <a href="#triggers">Triggers</a>.
+          every field the console sent, or a button on the sound desk itself. See
+          <a href="#triggers">Triggers</a>.
         </p>
       </section>
 
@@ -991,6 +992,17 @@ console.log(r.stdout.trim())</code></pre>
           it is on and nothing else. A MIDI trigger is a message on an input port: a note-on or
           note-off (any velocity), a controller (any value), or a program change. The value a desk
           sends is how it expresses itself, not which cue it means, so it is not part of the match.
+        </p>
+        <p>
+          A sound desk has no GO key and does not send show control, so a show driven from the
+          desk listens to a control somebody assigned there: a soft key or footswitch set to send
+          <strong>a MIDI note</strong> transmits one on the press (soft keys are notes from C3
+          upward, one per key), and a scene recalled on the desk sends its bank and program
+          change. Pick the desk's own connection as the device — it is named as
+          <code>address:port</code>, and <strong>Learn</strong> fills it in for you — and the cue
+          fires when that key is pressed. A mute key is the exception: it transmits its mute,
+          which is a long NRPN message rather than a note, and no trigger reads one yet, so
+          assign the key to a MIDI note if it has to fire a cue.
         </p>
         <p>
           A show control trigger is a console's own MIDI Show Control command: the command, what it

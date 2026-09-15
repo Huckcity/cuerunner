@@ -565,11 +565,18 @@ Desk and console integration:
   rather than going quiet. The harness found the difference (`INTEGRATION-HARNESS.md` §7) and
   `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each
   desk does with the bytes rather than to what the app sent
-- **Show control goes both ways.** A Show Control cue sends MIDI Show Control — Go, Stop,
+- **Show control, both directions.** A Show Control cue sends MIDI Show Control — Go, Stop,
   Resume, Load, Reset — to a console or an automation system, with its own cue number and cue
   list; a trigger on a cue answers the command a console sends, matched on every field it
   carries. The codec is held to the vendors' worked examples, and an SQ's cue list answering
   MSC over its own socket is driven by `integration/specs/msc.spec.ts`
+- **A show driven from the desk's own button.** Neither sound desk has a GO key and neither
+  transmits MSC — the SQ's document describes MSC only as something its cue list *accepts* —
+  so what a show listens to is a control somebody assigned at the desk: a soft key set to send
+  a MIDI note transmits on the press (`9N <note> 7F`), a scene recalled at the desk sends its
+  bank and program change, and either is a MIDI trigger on the desk's own connection. A **mute
+  key** transmits its mute, but that message is the NRPN sequence the desk's mutes are and no
+  trigger kind reads one yet — `INTEGRATION-HARNESS.md` G2 says what closing that would take
 
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
 these in the context of the feature it affects.

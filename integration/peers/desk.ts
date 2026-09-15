@@ -227,12 +227,19 @@ export interface DeskPeer {
   /** Move a fader as the desk's own surface would: `note` is the addressed channel. */
   moveFader(channel: number, value: number, note?: number): void
   /**
-   * The desk's own GO key: the cue list moves, and the desk transmits the command it just
-   * produced — which is what a show control trigger answers. The specification provides
-   * for a controlled device that transmits its own commands (2.6); no vendor document
-   * here says an SQ does, so a hardware lane is what would settle it.
+   * A Soft Key on the desk, which is the desk's own configurable button. The SQ only
+   * transmits for a key that has been assigned to a MIDI note — "the SQ does not send note
+   * on/off messages when a Soft Key is pressed unless the Soft Key is set to a MIDI note
+   * on/off function" — so this models a desk somebody has set up that way, which is what an
+   * operator pointing a show at a desk does. Each key is a note from C3 (0x30) upward, a
+   * press at velocity 7F and a release at 00; this sends the whole tap.
+   *
+   * A key *assigned to a function* — a mute group, say — performs that function instead and
+   * transmits the function's own message (a mute is the NRPN sequence `B0 63 MB B0 62 LB
+   * B0 06 00 B0 26 01`), which is a message this peer can be made to send but that no
+   * trigger in the app reads yet. That gap is in `INTEGRATION-HARNESS.md`, not hidden here.
    */
-  pressGo(cue?: string): void
+  pressSoftKey(key: number): void
   /** Raw bytes on the wire, for drips, SysEx and hand-built running-status streams. */
   emit(bytes: number[] | Uint8Array): void
   /**
@@ -309,14 +316,6 @@ function mscOf(data: number[]): MscFields | null {
     cueNumber: fields[0] ?? '',
     cueList: fields[1] ?? ''
   }
-}
-
-/** The bytes the desk itself transmits when its own GO is pressed. */
-function mscBytes(cue: string): number[] {
-  const body = cue === ''
-    ? []
-    : [...[...cue].map(character => character.charCodeAt(0) & 0x7f), 0x00]
-  return [0xf0, MSC_UNIVERSAL, 0x7f, MSC_SUB_ID, 0x7f, 0x01, ...body, 0xf7]
 }
 
 /**
@@ -1136,22 +1135,14 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
     state.faders[keyOf(profile === 'avantis' ? channel : SQ_LEVEL_PAGE, note)] = { value: level, label }
   }
 
-  function pressGo(cue = ''): void {
-    // The Avantis document this peer was written from does not give it show control, so
-    // its GO key does not transmit one. Whether a real one does is a hardware-lane
-    // question, which is exactly what this peer must not answer for itself.
+  function pressSoftKey(key: number): void {
+    // Every range this peer stands in for has soft keys; only the SQ's are modelled, since
+    // the Avantis document gives its controls no note messages to send.
     if (profile !== 'sq') return
-    // The command the desk's own GO produced: the all-call device ID and the all-types
-    // format, which is the shape the vendor document's own examples are written in.
-    const msc: MscFields = {
-      deviceId: 0x7f,
-      format: 0x7f,
-      command: 'go',
-      cueNumber: cue,
-      cueList: ''
-    }
-    send(mscBytes(cue))
-    applyMsc(msc)
+    const note = SQ_SOFT_KEYS + Math.max(0, key - 1)
+    if (key < 1 || key > SQ_SOFT_KEY_COUNT) return
+    send([0x90 | channelNibble, note, 0x7f])
+    send([0x80 | channelNibble, note, 0x00])
   }
 
   function emitConnectBurst(): void {
@@ -1218,7 +1209,7 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
     recallScene,
     setMute,
     moveFader,
-    pressGo,
+    pressSoftKey,
     emit(bytes) {
       send([...bytes])
     },
