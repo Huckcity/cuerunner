@@ -1,6 +1,6 @@
 import type {
-  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, Cue,
-  CueType, AudioCrosspoint
+  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue,
+  MscCue, Cue, CueType, AudioCrosspoint
 } from '../types/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -82,6 +82,21 @@ export const SCRIPT_DEFAULTS = {
   language: 'javascript' as const,
   script: '',
   timeout: 60000
+}
+
+export const MSC_DEFAULTS = {
+  command: 'go' as const,
+  // The all-types format and the all-call device ID, which is the pair the desks' own
+  // documents write for "go, whoever is listening": every device has to answer the
+  // all-call, so a cue nobody has addressed yet still reaches the console in the room.
+  format: 'all' as const,
+  deviceId: 127,
+  cueNumber: '',
+  cueList: '',
+  // The show's own desk connection, because a show has already been pointed at one; a
+  // console on a cable is the other answer, and it is one field away.
+  destination: 'desk' as const,
+  portName: ''
 }
 
 let _counter = 1
@@ -175,6 +190,12 @@ export function createCue(type: CueType): Cue {
         // nothing must do nothing rather than guess which cue was vamping.
         targetCueId: ''
       } satisfies DevampCue
+    case 'msc':
+      return {
+        ...base('Show Control'),
+        type: 'msc',
+        ...MSC_DEFAULTS
+      } satisfies MscCue
   }
 }
 

@@ -164,9 +164,16 @@ export interface RfPack {
 // groups whose state actually changes are sent, so a scene recall is a handful of
 // messages rather than a slam of every fader on the desk.
 
+/**
+ * One DCA's open or close, ready for the transport that carries it.
+ *
+ * A MIDI one is a *sequence* rather than a message: what a desk takes as "open this fader"
+ * is the desk's own arrangement, and on an SQ it is four NRPN controllers where the app's
+ * generic convention sends one note.
+ */
 export type DeskMessage =
-  | { kind: 'midi'; portName: string; message: MidiMessageKind }
-  | { kind: 'midi-tcp'; host: string; port: number; message: MidiMessageKind }
+  | { kind: 'midi'; portName: string; messages: MidiMessageKind[] }
+  | { kind: 'midi-tcp'; host: string; port: number; messages: MidiMessageKind[] }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
 
 // ── The desk: how the show reaches it, and what it is told ──────────────────
@@ -179,15 +186,54 @@ export type DeskMessage =
 export type DeskKind = 'none' | 'midi' | 'osc' | 'midi-tcp'
 
 /**
+ * What the desk takes as an open and as a close.
+ *
+ * `note` is the app's own arrangement — a note on to open, a note off to close — and what
+ * a desk nobody has asked about takes. `sq` and `avantis` are the two ranges whose
+ * documents have been read: an SQ mutes with NRPN on page 02 and has eight DCAs, an
+ * Avantis mutes with a note-on whose velocity says which half of the pair it is, on the
+ * channel four above its own.
+ */
+export type DeskProfile = 'note' | 'sq' | 'avantis'
+
+/**
+ * The desk's own buttons, as the desk numbers its mute groups.
+ *
+ * A console reports a key press only when the key does something the console can name, so
+ * the buttons a show runs from are mute groups: one is assigned to a key at the desk, the
+ * key toggles it, and the desk transmits the mute the group would have sent anyway. A mute
+ * group is what a theatre show has spare — the muting is done with DCAs — so a show pays
+ * nothing for it, and the operator presses a button on the desk with no MIDI setup at all.
+ *
+ * Both are null on a desk nobody has set up, and on a show run from the window.
+ */
+export interface DeskButtons {
+  /** The mute group assigned to the desk's GO button. */
+  go: number | null
+  /** The mute group assigned to the desk's BACK button. */
+  back: number | null
+}
+
+/**
  * Where the desk is and how it is spoken to. The address of the desk itself is the one
  * thing the app cannot know, so it is a field rather than a guess; everything else has a
  * default that works.
  */
 export interface DeskSettings {
   kind: DeskKind
+  /**
+   * What the desk takes as an open and a close. A workspace saved before profiles existed
+   * has none, and the migration fills in `note` — which is what that show was already
+   * sending, so an update moves nothing on the desk.
+   */
+  profile: DeskProfile
   /** MIDI output port, when the show drives the desk over MIDI. */
   midiPort: string
-  /** MIDI channel its DCAs are sent on. */
+  /**
+   * The desk's MIDI channel, 1–16 as the desk's own setup screen shows it. Where the DCAs
+   * are addressed is derived from it, because that is the desk's rule and not the
+   * operator's: an Avantis answers for its DCAs four channels above its own.
+   */
   midiChannel: number
   /** Desk address for the kinds that reach it over the network. */
   host: string
@@ -204,6 +250,11 @@ export interface DeskSettings {
    * pattern with no `{n}` in it has the number appended.
    */
   address: string
+  /**
+   * The desk's own buttons. Optional on disk: a workspace saved before a desk could be run
+   * from has none, and the migration fills in a show with no buttons — which is what it had.
+   */
+  buttons: DeskButtons
 }
 
 /** A DCA on the desk: a number, what the show calls it, and how it is driven. */
@@ -211,7 +262,10 @@ export interface Dca {
   id: string
   /** What the show calls it: "DCA 2", or "Chorus" when it is a group's fader. */
   label: string
-  /** The note to send instead of the one its number derives. Null is the derived one. */
+  /**
+   * What this DCA is addressed by on the desk, instead of the number its place derives:
+   * the note on a desk that takes notes, the NRPN parameter on an SQ. Null is derived.
+   */
   note: number | null
   /** The address to send to instead of the one its number derives. Null is derived. */
   address: string | null
@@ -524,12 +578,19 @@ export const ALL_CLOSED_SCENE_ID = 'all-closed'
 export function defaultDeskSettings(): DeskSettings {
   return {
     kind: 'osc',
+    // A desk nobody has described takes the arrangement this app has always sent: one
+    // note, on to open and off to close. Naming the range is how an operator says which
+    // desk is actually in the room.
+    profile: 'note',
     midiPort: '',
     midiChannel: 1,
     host: '127.0.0.1',
     port: DEFAULT_DESK_PORT,
     tcpPort: DEFAULT_DESK_TCP_PORT,
-    address: DEFAULT_DESK_ADDRESS
+    address: DEFAULT_DESK_ADDRESS,
+    // A desk nobody has assigned a button on: the show runs from the window until the
+    // operator says which mute group their GO key is.
+    buttons: { go: null, back: null }
   }
 }
 
@@ -610,7 +671,13 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
   return {
     oscIn: { ...defaults.oscIn, ...settings?.oscIn },
     midiIn: { ...defaults.midiIn, ...settings?.midiIn },
-    desk: { ...defaults.desk, ...settings?.desk },
+    desk: {
+      ...defaults.desk,
+      ...settings?.desk,
+      // A desk section written before a desk could be run from has no buttons, and one
+      // half-filled by hand gets the other half: a button nobody assigned is null.
+      buttons: { ...defaults.desk.buttons, ...settings?.desk?.buttons }
+    },
     rf: {
       plot: { ...defaults.rf.plot, ...rf?.plot },
       sources: rf?.sources ?? defaults.rf.sources,

@@ -4,8 +4,9 @@
 // `utils/cast.ts` (tested there); what is tested here is what a scene does with it — the
 // performers it names, the ensembles it applies, and the members it closes anyway.
 import { describe, it, expect } from 'vitest'
-import { midiNoteMessages, oscMessages } from './desk'
-import { defaultDeskSettings } from '../types/show'
+import { oscMessages } from './desk'
+import type { MidiDeskMessage } from './desk'
+import { ALL_CLOSED_SCENE_ID, defaultDeskSettings } from '../types/show'
 import {
   addScene,
   ensembleState,
@@ -15,6 +16,7 @@ import {
   removeScene,
   sceneChanges,
   sceneLiveIds,
+  sceneStep,
   setEnsembleApplied,
   setPerformerLive,
   updateScene
@@ -32,10 +34,29 @@ import type {
 } from '../types/show'
 import { defaultShowSettings } from '../types/show'
 
+/**
+ * What the show sends one DCA on the port and channel these fixtures drive: a note on to
+ * open and a note off to close — the arrangement a desk nobody has described is sent.
+ */
+function overPort(note: number): { mute: MidiDeskMessage; unmute: MidiDeskMessage } {
+  return {
+    unmute: {
+      kind: 'midi',
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOn', channel: 3, note, velocity: 127 }]
+    },
+    mute: {
+      kind: 'midi',
+      portName: 'Yamaha',
+      messages: [{ kind: 'noteOff', channel: 3, note, velocity: 0 }]
+    }
+  }
+}
+
 // What the desk is told about the first two DCAs: the note of their own number, since
 // neither carries an override.
-const first = midiNoteMessages('Yamaha', 3, 1)
-const second = midiNoteMessages('Yamaha', 3, 2)
+const first = overPort(1)
+const second = overPort(2)
 
 const DCAS: Dca[] = [
   { id: 'dca-1', label: 'DCA 1 — Principals', note: null, address: null },
@@ -244,6 +265,31 @@ describe('sceneChanges', () => {
       .toEqual([])
   })
 
+  it('carries the reason when the desk has no DCA to move', () => {
+    // An SQ has eight DCAs and a show may drive more. The ninth cannot be told to this
+    // desk at all — a different thing from a desk that did not answer — and the change
+    // says so rather than being dropped where nobody would read it.
+    const nine: CastSettings = {
+      channels: [...cast().channels, channel('ch-9', 'dca-9')],
+      performers: [...cast().performers, performer('perf-9', 'ch-9')],
+      ensembles: [],
+      dcas: Array.from({ length: 9 }, (_, index) => ({
+        id: `dca-${index + 1}`,
+        label: `DCA ${index + 1}`,
+        note: null,
+        address: null
+      }))
+    }
+    const sq: DeskSettings = { ...DESK, kind: 'midi-tcp', host: '10.0.0.5', profile: 'sq' }
+    const closed = Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [`dca-${index + 1}`, false])
+    )
+
+    expect(sceneChanges(show(nine, sq), scene(['perf-9']), closed)).toEqual([
+      { channelId: 'dca-9', label: 'DCA 9', live: true, message: null, error: 'an SQ has eight DCAs' }
+    ])
+  })
+
   it('sends what the connection and the DCA’s number make, for the desk in the show', () => {
     const osc = sceneChanges(show(plain, {
       ...DESK,
@@ -291,5 +337,46 @@ describe('sceneChanges', () => {
 
     expect(sceneChanges(show(withChorus), applied.list[0], {}).map(change => change.live))
       .toEqual([true, true])
+  })
+})
+
+describe('the walk a desk’s keys take through the scenes', () => {
+  const list = [
+    { id: 's-1', name: 'Wedding', live: [], ensembles: [], excluded: [], notes: '' },
+    { id: 's-2', name: 'Interval', live: [], ensembles: [], excluded: [], notes: '' },
+    { id: 's-3', name: 'Finale', live: [], ensembles: [], excluded: [], notes: '' }
+  ]
+
+  it('starts at the first scene when nothing has been recalled', () => {
+    expect(sceneStep(list, null, 1)?.id).toBe('s-1')
+  })
+
+  it('moves one scene at a time, either way', () => {
+    expect(sceneStep(list, 's-1', 1)?.id).toBe('s-2')
+    expect(sceneStep(list, 's-3', -1)?.id).toBe('s-2')
+  })
+
+  it('has nowhere to go at either end', () => {
+    expect(sceneStep(list, 's-3', 1)).toBeNull()
+    expect(sceneStep(list, 's-1', -1)).toBeNull()
+    expect(sceneStep(list, null, -1)).toBeNull()
+  })
+
+  it('starts the list again from the all-closed scene, which is before it rather than in it', () => {
+    // Every mic closed is where a desk sits between numbers: it is not a scene to move into or
+    // out of, so the walk treats it as the top of the list.
+    expect(sceneStep(list, ALL_CLOSED_SCENE_ID, 1)?.id).toBe('s-1')
+    expect(sceneStep(list, ALL_CLOSED_SCENE_ID, -1)).toBeNull()
+  })
+
+  it('starts the list again from a scene the show no longer has', () => {
+    // Deleting a scene leaves wherever the desk stood pointing at nothing; the next GO should
+    // begin the list rather than refuse with nothing to recall.
+    expect(sceneStep(list, 's-gone', 1)?.id).toBe('s-1')
+    expect(sceneStep(list, 's-gone', -1)).toBeNull()
+  })
+
+  it('has nowhere to go in a show with no scenes', () => {
+    expect(sceneStep([], null, 1)).toBeNull()
   })
 })

@@ -3,6 +3,7 @@ import { decodeMidiMessage } from './decode'
 import { encodeMidiMessage, type MidiMessage } from './encode'
 import { createMidiStream } from './stream'
 import type { MidiMessageKind } from '../../renderer/src/types/cue'
+import { deskLinkName } from '../../shared/deskLink'
 
 export interface MidiTcpResult {
   ok: boolean
@@ -53,11 +54,6 @@ interface Link {
   online: boolean | null
 }
 
-/** What a link is called in the app's own words, and in the log. */
-export function linkName(host: string, port: number): string {
-  return `${host}:${port}`
-}
-
 /**
  * MIDI to a desk over TCP — the way an SQ and an Avantis are driven, and the reason this
  * exists at all: their MIDI service is a socket on the desk, not a port on this machine.
@@ -100,11 +96,11 @@ export class MidiTcpEngine {
 
   /** Lets a desk go: the link is closed and not dialled again. */
   close(host: string, port: number): void {
-    const link = this.links.get(linkName(host, port))
+    const link = this.links.get(deskLinkName(host, port))
     if (!link) return
     link.wanted = false
     this.drop(link)
-    this.links.delete(linkName(host, port))
+    this.links.delete(deskLinkName(host, port))
   }
 
   closeAll(): void {
@@ -146,7 +142,7 @@ export class MidiTcpEngine {
         link.pending = []
         return {
           ok: false,
-          error: `The desk at ${linkName(host, port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
+          error: `The desk at ${deskLinkName(host, port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
         }
       }
     }
@@ -167,12 +163,12 @@ export class MidiTcpEngine {
       // and the next recall dials again.
       const reason = error instanceof Error ? error.message : String(error)
       this.drop(link)
-      return { ok: false, error: `Could not send to the desk at ${linkName(link.host, link.port)}: ${reason}` }
+      return { ok: false, error: `Could not send to the desk at ${deskLinkName(link.host, link.port)}: ${reason}` }
     }
   }
 
   private link(host: string, port: number): Link {
-    const name = linkName(host, port)
+    const name = deskLinkName(host, port)
     const existing = this.links.get(name)
     if (existing) return existing
     const link: Link = {
@@ -191,7 +187,7 @@ export class MidiTcpEngine {
   }
 
   private dial(link: Link): Promise<void> {
-    const name = linkName(link.host, link.port)
+    const name = deskLinkName(link.host, link.port)
     if (link.dialling) return link.dialling
 
     // A socket that failed but has not closed yet is no longer the link's socket. Letting

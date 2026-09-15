@@ -12,6 +12,7 @@ export type CueType =
   | 'script'
   | 'scene'
   | 'devamp'
+  | 'msc'
 
 /**
  * What a second firing does to a cue that is already running.
@@ -40,6 +41,23 @@ export type CueTrigger =
   | { id: string; kind: 'osc'; address: string }
   /** `device` is the MIDI input port name, as the service reports it. */
   | { id: string; kind: 'midi'; device: string; message: TriggerMidiMessage }
+  /**
+   * A console's own show control command. Every field is matched, because that is what
+   * makes it this cue's command and not another one's: the device it arrived from — a
+   * MIDI input port, or the desk's own socket reported as "host:port" — the device ID it
+   * is addressed to, what kind of equipment it is for, the command itself, and the cue it
+   * names.
+   */
+  | {
+      id: string
+      kind: 'msc'
+      device: string
+      deviceId: number
+      format: MscFormat
+      command: MscCommand
+      cueNumber: string
+      cueList: string
+    }
 
 export interface CueBase {
   id: string
@@ -232,6 +250,47 @@ export interface SceneCue extends CueBase {
   sceneId: string
 }
 
+/**
+ * The kind of equipment a MIDI Show Control command is addressed to. The bytes are the
+ * specification's command formats; `all` is the 7F that reaches whatever is listening.
+ */
+export type MscFormat = 'lighting' | 'sound' | 'machinery' | 'video' | 'projection' | 'all'
+
+/**
+ * What a console is told to do. This is the set the desks a show is driven against
+ * document: ETC's consoles take Go, Stop and Resume, and an Allen & Heath SQ's cue list
+ * takes Go, Load and Reset.
+ */
+export type MscCommand = 'go' | 'stop' | 'resume' | 'load' | 'reset'
+
+/**
+ * A cue that tells another console what to do — the lighting desk to GO cue 12, an
+ * automation system to reset. It is how sound talks to the rest of the building: the
+ * desk's own show control, not a message this app invented.
+ */
+export interface MscCue extends CueBase {
+  type: 'msc'
+  command: MscCommand
+  /** What kind of equipment it is for. Both this and the device ID have to match. */
+  format: MscFormat
+  /**
+   * The receiving console's MIDI Show Control device ID, 0–126, or 127 for the all-call
+   * every device has to answer. A show that has not been told otherwise broadcasts.
+   */
+  deviceId: number
+  /** The cue number on that console: "12", "5.4". Empty means its next cue. */
+  cueNumber: string
+  /** Its cue list. Empty means whatever it has open. */
+  cueList: string
+  /**
+   * Where the command goes: the show's desk connection, or a MIDI output port of this
+   * machine, which is how a console on a cable is reached.
+   */
+  destination: 'desk' | 'port'
+  /** The output port, when the destination is one. */
+  portName: string
+}
+
 export type Cue =
   | AudioCue
   | MidiCue
@@ -244,3 +303,4 @@ export type Cue =
   | ScriptCue
   | SceneCue
   | DevampCue
+  | MscCue

@@ -6,7 +6,7 @@ import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue, MscCue } from '../types/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../types/show'
 import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
@@ -88,6 +88,17 @@ function makeOsc(overrides: Partial<OscCue> = {}): OscCue {
     colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
     advance: 'none', isArmed: true, notes: '',
     host: '127.0.0.1', port: 53000, address: '/cue/1/start', args: [],
+    ...overrides
+  }
+}
+
+function makeMsc(overrides: Partial<MscCue> = {}): MscCue {
+  return {
+    id: 's1', number: '1', name: 'Show Control', type: 'msc',
+    colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: '',
+    command: 'go', format: 'all', deviceId: 127, cueNumber: '12', cueList: '',
+    destination: 'desk', portName: '',
     ...overrides
   }
 }
@@ -864,6 +875,78 @@ describe('CueRunner — midi cue', () => {
       portName: 'Stage Rack',
       messages: cue.messages
     })
+  })
+})
+
+describe('CueRunner — show control cue', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    // The store carries over between cases in this file, so a case that needs the show's
+    // own desk starts from a show that has one.
+    useStore.setState({
+      midiSettings: { outputPortName: 'default-midi-port' },
+      showSettings: defaultShowSettings()
+    })
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('sends the command as MIDI Show Control on the port the cue names', async () => {
+    const cue = makeMsc({ destination: 'port', portName: 'LX Rack' })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+      portName: 'LX Rack',
+      // Go cue 12, all-call and all-types: the command as a console's own document
+      // writes it, framed as the sysex the MIDI layer puts on the wire.
+      messages: [{ kind: 'sysex', data: [0x7f, 0x7f, 0x02, 0x7f, 0x01, 0x31, 0x32, 0x00] }]
+    })
+  })
+
+  it('uses the show’s output port when the cue does not name one', async () => {
+    const cue = makeMsc({ destination: 'port' })
+    const { runner } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(window.winslab.midi.send).toHaveBeenCalledWith(
+      expect.objectContaining({ portName: 'default-midi-port' })
+    )
+  })
+
+  it('goes out on the show’s desk socket when that is where it is pointed', async () => {
+    const desk = { ...defaultShowSettings().desk, kind: 'midi-tcp' as const, host: '10.0.0.5' }
+    useStore.setState({ showSettings: { ...defaultShowSettings(), desk } })
+    const { runner } = setup([makeMsc()])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(window.winslab.midi.sendTcp).toHaveBeenCalledWith({
+      host: '10.0.0.5',
+      port: 51325,
+      messages: [{ kind: 'sysex', data: [0x7f, 0x7f, 0x02, 0x7f, 0x01, 0x31, 0x32, 0x00] }]
+    })
+    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+  })
+
+  it('reports a cue with nowhere to send it, rather than completing as a success', async () => {
+    // The default desk is an OSC connection, and OSC is not a MIDI link: there is no
+    // honest way to put a show control message on it.
+    const cue = makeMsc({ id: 's1' })
+    const { runner, setLastRun, appendLog } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    const expected = 'the show’s desk is driven over OSC, which does not carry MIDI Show Control'
+    expect(setLastRun).toHaveBeenCalledWith('s1', expect.objectContaining({ outcome: 'error', error: expected }))
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: expected })])
+    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.winslab.midi.sendTcp).not.toHaveBeenCalled()
   })
 })
 

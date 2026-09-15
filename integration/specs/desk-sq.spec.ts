@@ -3,21 +3,40 @@
 //
 // The counterpart is `integration/peers/desk.ts`, written from "SQ MIDI Protocol" (Issue 5
 // and the V1.6 article). What is asserted is the wire and the desk's own state, never the
-// app's account of itself: the point of a peer is that it can disagree.
+// app's account of itself: the point of a peer is that it can disagree. The app names the
+// desk in Show Settings — the profile — and what arrives is what the document says an SQ
+// takes, so the desk's own mute state moving is the assertion that the profile is right.
+//
+// The cases run in order and each leaves DCA 1 somewhere, which the next one needs: a
+// recall that changes nothing sends nothing, and an assertion about the wire would then be
+// about the app's bookkeeping instead of about the desk. Leaving it at: 1 open, 2 closed,
+// 3 closed (the desk's own recall moves no DCA), 4 open again, 5 open as far as the app
+// knows — the close it attempts is refused by a desk that is not there, which is the point
+// of that case. An editor who adds a case in the middle has to say where it leaves the DCA.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
 import { writeDeskShow } from './deskFixture'
 
+/** The channel the desk is set to, and the one the show is told it is. */
+const CHANNEL = 1
+/** DCA 1 on an SQ: parameter 0 of NRPN page 02, which is where the reference table puts it. */
+const DCA_KEY = '02:00'
+
 let app: ElectronApplication
 let page: Page
 let userDataDir: string
 let peer: DeskPeer
 
+/** The desk's own record of DCA 1's mute. */
+function dcaMute(): { on: boolean; label: string } | undefined {
+  return peer.state.mutes[DCA_KEY]
+}
+
 test.beforeAll(async () => {
-  peer = await startDeskPeer({ profile: 'sq', midiChannel: 1 })
-  const show = writeDeskShow({ port: peer.port, channel: 1, dcaNote: 1 })
+  peer = await startDeskPeer({ profile: 'sq', midiChannel: CHANNEL })
+  const show = writeDeskShow({ port: peer.port, channel: CHANNEL, profile: 'sq' })
   ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
@@ -28,21 +47,24 @@ test.afterAll(async () => {
   await peer.close()
 })
 
-test('a scene recall reaches the desk over its own socket', async () => {
+test('a scene recall reaches the desk as the NRPN mute it takes, and the desk moves', async () => {
   await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
   await expect.poll(() => peer.received.length).toBeGreaterThan(0)
-  // The app's DCA model: DCA 1 is note 1 on the show's channel, and the scene that opens
-  // it sends that note down the socket at velocity.
-  expect(peer.received[0].bytes).toEqual([0x90, 0x01, 0x7f])
+  // The sequence is the one the document writes: select parameter 0 of page 02, then set
+  // it — `B0 63 02 B0 62 00 B0 06 00 B0 26 01` — not the note-on the app's own
+  // arrangement would have sent, which an SQ reads as soft-key traffic and ignores.
+  expect(peer.received[0].bytes).toEqual([0xb0, 0x63, 0x02, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x01])
+  await expect.poll(() => dcaMute()?.on).toBe(true)
+  expect(dcaMute()?.label).toBe('DCA1')
+})
 
-  // The bytes are the whole of what an SQ can make of them, and that is the finding: note 1
-  // is below the desk's soft-key range (which starts at C3), and a DCA's mute is NRPN —
-  // `B0 63 MB B0 62 LB B0 06 00 B0 26 01` — not a note. So the app's generic DCA model
-  // opens nothing on a real SQ, and this peer says so by recording the message as raw
-  // traffic rather than by quietly agreeing. A peer that agreed would have hidden it; the
-  // fix is a desk profile that speaks each desk's own semantics (roadmap B4), not a
-  // different transport. INTEGRATION-HARNESS.md §7 is where that is written down.
+test('the close is the same sequence with the fine byte at zero, and the desk comes back down', async () => {
+  await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
+
+  // The half that never worked before the profile: the app used to close with a note-off,
+  // which is not a mute to an SQ at all.
+  await expect.poll(() => dcaMute()?.on).toBe(false)
 })
 
 test('the desk’s own scene recall fires the cue that answers to it', async () => {
@@ -61,13 +83,14 @@ test('survives the burst an SQ sends the moment a client connects', async () => 
   peer.emitConnectBurst()
   const before = peer.received.length
 
-  await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
+  // The DCA was closed by the case above, so this recall is a change and has somewhere to
+  // go — which is what makes the assertion about the burst rather than about the app
+  // deciding there was nothing to send.
+  await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
   await expect.poll(() => peer.received.length).toBeGreaterThan(before)
-  // The last thing the desk heard is the close the all-closed scene sends — a note-off for
-  // DCA 1 — which arrived after the burst rather than being lost in its tail: the link is
-  // still in step with the app.
-  expect(peer.received[peer.received.length - 1].bytes).toEqual([0x80, 0x01, 0x00])
+  // What arrived after the burst is the whole open, not a fragment of it mistaken for one.
+  expect(peer.received[peer.received.length - 1]).toMatchObject({ kind: 'mute', on: true })
 })
 
 test('a desk that goes away is reported, and the next recall reaches it when it is back', async () => {
@@ -82,14 +105,17 @@ test('a desk that goes away is reported, and the next recall reaches it when it 
   await expect(page.locator('.log-panel')).toContainText('offline')
 
   // A recall at a desk that is not there is a failure the operator reads, not a cue that
-  // hangs: the show carries on.
-  await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
+  // hangs: the show carries on. The DCA is open from the case above, so this closes it.
+  await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
   await expect(page.locator('.log-panel')).toContainText('Could not reach the desk')
 
   // The desk comes back on the same address. Nothing is touched in the app: the link dials
-  // again on its own, which is what makes a desk that reboots mid-show survivable.
-  peer = await startDeskPeer({ profile: 'sq', midiChannel: 1, port: peer.port })
+  // again on its own, which is what makes a desk that reboots mid-show survivable. Both
+  // recalls are tried because the show's own state is whatever the failed one left it as,
+  // and one of the two is a change either way.
+  peer = await startDeskPeer({ profile: 'sq', midiChannel: CHANNEL, port: peer.port })
   await expect.poll(async () => {
+    await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     return peer.received.length
   }, { timeout: 15_000 }).toBeGreaterThan(0)

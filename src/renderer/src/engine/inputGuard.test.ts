@@ -4,6 +4,7 @@
 // a datagram sent twice — because that is the evidence the window is worth having.
 import { describe, it, expect } from 'vitest'
 import { HOLD_LIMIT_MS, InputGuard, firingIdentity, noteKey, refirePolicy } from './inputGuard'
+import { encodeMsc } from '../utils/msc'
 import type { Cue, MidiMessageKind } from '../types/cue'
 import type { ShowEvent } from '../types/show'
 
@@ -94,9 +95,22 @@ describe('InputGuard', () => {
     expect(fire(guard, noteOn, 1400)).toBe(true)
   })
 
-  it('does not fire on a note going up', () => {
+  it('does not fire on a note going up, nor on a sysex that is not show control', () => {
     expect(firingIdentity(midi({ kind: 'noteOff', channel: 1, note: 60, velocity: 0 }))).toBeNull()
-    expect(firingIdentity(midi({ kind: 'sysex', data: [1, 2, 3] }))).toBeNull()
+    expect(firingIdentity(midi({ kind: 'sysex', data: [0x00, 0x20, 0x33, 0x02] }))).toBeNull()
+  })
+
+  it('drops a console’s doubled command, and keeps two commands apart', () => {
+    const guard = guardAt(300)
+    const go12 = midi(encodeMsc({ deviceId: 127, format: 'all', command: 'go', cueNumber: '12', cueList: '' }))
+
+    expect(fire(guard, go12, 1000)).toBe(true)
+    // A console with two sends of the same GO is exactly the doubling the guard is for.
+    expect(fire(guard, go12, 1020)).toBe(false)
+    // The next cue is the next instruction, however soon it follows.
+    expect(fire(guard, midi(encodeMsc({
+      deviceId: 127, format: 'all', command: 'go', cueNumber: '13', cueList: ''
+    })), 1040)).toBe(true)
   })
 
   it('distinguishes the same note on two devices', () => {

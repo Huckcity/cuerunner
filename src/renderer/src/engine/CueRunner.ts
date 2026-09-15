@@ -1,5 +1,6 @@
 import type {
-  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue
+  Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue,
+  MscCue
 } from '../types/cue'
 import { audioEngine } from './audioEngineClient'
 import type {
@@ -13,6 +14,7 @@ import { InputGuard, refirePolicy } from './inputGuard'
 import type { FireSurface } from './inputGuard'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
+import { sendMsc } from './showControl'
 import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
@@ -509,6 +511,9 @@ export class CueRunner {
       case 'devamp':
         this.executeDevamp(cue as DevampCue, finish)
         break
+      case 'msc':
+        this.executeMsc(cue as MscCue, finish)
+        break
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
@@ -799,6 +804,20 @@ export class CueRunner {
     })
   }
 
+  private executeMsc(cue: MscCue, finish: Finish): void {
+    // The command goes out as it stands: a console's cue number is the console's, and
+    // this app has nothing to check it against. Where it goes is the cue's own choice,
+    // and a cue with nowhere to go says why rather than reporting a send.
+    void sendMsc(cue).then(result => {
+      const detail: Partial<CueRunResult> = {}
+      if (!result.ok) {
+        detail.outcome = 'error'
+        detail.error = result.error ?? 'the command did not go'
+      }
+      finish(this.now(), detail)
+    })
+  }
+
   private executeScene(cue: SceneCue, finish: Finish): void {
     const label = this.cueLabel(cue)
     if (!this.deps!.isPro()) {
@@ -923,7 +942,7 @@ export class CueRunner {
         // Fire-and-forget types have already happened — don't replay
         if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
             child.type === 'network' || child.type === 'script' || child.type === 'stop' ||
-            child.type === 'devamp') continue
+            child.type === 'devamp' || child.type === 'msc') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }
     }

@@ -196,13 +196,31 @@ export function setEnsembleApplied(
   }
 }
 
+/**
+ * Where a desk button moves the show's scenes to, or null when there is nowhere to go.
+ *
+ * The walk is the list as the Scenes view shows it. The all-closed scene is a place *before*
+ * the list rather than a scene in it — a desk wants it pressed between numbers, and it is not
+ * something to move into or out of — so a GO from there is the first scene and a BACK from
+ * there is nothing, exactly as if no scene had been recalled yet. A scene the show no longer
+ * has is the same: deleted scenes leave `deskSceneId` pointing at something that is gone, and
+ * the next GO should start the list again rather than refuse.
+ */
+export function sceneStep(list: MicScene[], current: string | null, step: 1 | -1): MicScene | null {
+  const index = current === null ? -1 : list.findIndex(scene => scene.id === current)
+  return list[(index < 0 ? -1 : index) + step] ?? null
+}
+
 /** One group the desk has to be told about, and what to tell it. */
 export interface DeskChange {
   channelId: string
   label: string
   /** True when the group is being opened, false when it is being closed. */
   live: boolean
-  message: DeskMessage
+  /** What to send, or null when this desk cannot be told about the DCA at all. */
+  message: DeskMessage | null
+  /** Why there is nothing to send, when that is the case. */
+  error?: string
 }
 
 /**
@@ -235,14 +253,27 @@ export function sceneChanges(
     const shouldBeLive = routed.some(performer => live.has(performer.id))
     if (deskState[dca.id] === shouldBeLive) return
 
-    const messages = deskMessages(dca, index, show.desk)
-    if (messages === null) return
+    const send = deskMessages(dca, index, show.desk)
+    if (send === null) return
+    if (!send.ok) {
+      // The desk is there and cannot be told about this DCA — past the end of its list,
+      // or on a channel it does not answer on. The reason travels with the change so the
+      // operator reads it instead of a fader that quietly never moves.
+      changes.push({
+        channelId: dca.id,
+        label: dca.label,
+        live: shouldBeLive,
+        message: null,
+        error: send.error
+      })
+      return
+    }
 
     changes.push({
       channelId: dca.id,
       label: dca.label,
       live: shouldBeLive,
-      message: shouldBeLive ? messages.unmute : messages.mute
+      message: shouldBeLive ? send.unmute : send.mute
     })
   })
 

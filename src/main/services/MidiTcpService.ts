@@ -1,4 +1,5 @@
-import { linkName, midiTcp } from '../midi/MidiTcpEngine'
+import { midiTcp } from '../midi/MidiTcpEngine'
+import { deskLinkName } from '../../shared/deskLink'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import type { MidiMessageKind } from '../../renderer/src/types/cue'
 import type { ShowSettings } from '../../renderer/src/types/show'
@@ -39,7 +40,7 @@ export class MidiTcpService implements ShowService {
       return
     }
 
-    const device = linkName(desk.host, desk.tcpPort)
+    const device = deskLinkName(desk.host, desk.tcpPort)
     this.engine.onMessage = (from, message) => {
       context.bus.publish({ kind: 'midi', at: Date.now(), device: from, message })
     }
