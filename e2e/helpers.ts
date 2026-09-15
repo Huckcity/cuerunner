@@ -1,5 +1,6 @@
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
+import type { ChildProcess } from 'child_process'
 import { createSocket } from 'dgram'
 import { generateKeyPairSync } from 'crypto'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
@@ -164,8 +165,18 @@ export async function launchApp(
 // Force-exits the Electron process, bypassing the beforeunload dirty-check dialog. A
 // crashed renderer can leave the app unable to answer, so a stuck exit is killed rather
 // than left to time the worker out.
+//
+// An app that is already gone is gone: several specs restart the app under test and close
+// their own instance along the way, and Playwright disposes the handle when the process is
+// out — reading it after that throws rather than answering. Nothing is left to close, so
+// that is not a failure of the teardown.
 export async function closeApp(app: ElectronApplication): Promise<void> {
-  const proc = app.process()
+  let proc: ChildProcess
+  try {
+    proc = app.process()
+  } catch {
+    return
+  }
   const exited = Promise.withResolvers<void>()
   if (proc.exitCode !== null || proc.signalCode !== null) exited.resolve()
   else proc.once('exit', () => exited.resolve())
