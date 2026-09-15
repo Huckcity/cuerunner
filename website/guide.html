@@ -1242,23 +1242,25 @@ console.log(r.stdout.trim())</code></pre>
       <section id="redundancy" class="panel reveal delay-4">
         <h2>Redundant playback<span class="pro">Pro</span></h2>
         <p>
-          Two machines can run the same show: one driving it, the other standing by to carry it on
-          if the first one stops. Both run WinsLab and both have the same workspace open, and what
-          passes between them is state rather than sound — which cue is running, how far into its
-          file the engine has reached, and what the operator has selected. A machine that is
-          standing by is therefore ready to <em>carry on</em> rather than ready to start again.
-        </p>
-        <h3>Setting a pair up</h3>
-        <p>
-          <a href="./redundancy.html"><strong>Redundant playback, step by step</strong></a> is the
-          same feature as a walkthrough, with the screens and a clip of a takeover — that is the
-          page to read before rigging a pair.
+          Two machines run the same show: one driving it, the other standing by to carry it on if
+          the first stops answering. Both run WinsLab with the same workspace open, and what passes
+          between them is state rather than sound — which cue is running, how far into its file the
+          engine has reached, what the operator has selected — so a machine that is standing by is
+          ready to <em>carry on</em> rather than ready to start again.
         </p>
         <p>
-          Everything is on the <strong>Redundancy</strong> tab of Settings, and it is this
-          machine's own half of the arrangement rather than the show's: both machines load the same
-          workspace file, so a role written into the show would be read as the same answer by both
-          of them. These settings are kept on the machine, beside the license key.
+          <strong><a href="./redundancy.html">Redundant playback, step by step</a></strong> is the
+          walkthrough: setting a pair up, the status while nothing is wrong, a takeover as it happens
+          on screen, what it carries and what it leaves behind, and a checklist for rigging it on the
+          night. Read that one before rigging a pair; what follows is the reference.
+        </p>
+        <h3>The settings, and where they live</h3>
+        <p>
+          Everything is on the <strong>Redundancy</strong> tab of Settings, and it is this machine's
+          own half of the arrangement rather than the show's: both machines load the same workspace
+          file, so a role written into the show would be read as the same answer by both of them.
+          These settings are kept on the machine, beside the license key — copying the show to the
+          other machine does not carry them.
         </p>
         <div class="table-wrap">
           <table>
@@ -1268,70 +1270,39 @@ console.log(r.stdout.trim())</code></pre>
             <tbody>
               <tr><td>Redundant playback</td><td>Whether this machine is half of a pair at all. Off, it runs the show on its own and nothing is opened.</td></tr>
               <tr><td>Role</td><td><strong>Live</strong> — this machine runs the show. <strong>Standby</strong> — this machine mirrors it and waits.</td></tr>
-              <tr><td>Name</td><td>What the other machine calls this one in its status and its log. Two desks are easier to tell apart than two IP addresses.</td></tr>
+              <tr><td>Name</td><td>What the other machine calls this one in its status and its log.</td></tr>
               <tr><td>Port here</td><td>The port this machine listens on for its partner. 53110 unless you change it.</td></tr>
-              <tr><td>Partner address and port</td><td>Where the other machine is. Left empty, this machine listens without dialling anything — which is what a machine waiting to be paired by its partner looks like.</td></tr>
-              <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed — and the machine that is refused stops dialling rather than asking again every two seconds. Left empty, the pair is open to whoever finds the port, and the tab says so under the field.</td></tr>
-              <tr><td>Silence before gone</td><td>How long the partner may say nothing before it is declared gone. Three seconds unless you change it — the same three seconds this app already gives a window that has stopped answering.</td></tr>
-              <tr><td>When the partner goes quiet</td><td><strong>Tell me</strong> — the standby says the live machine is not answering and waits for a hand. <strong>Take it over</strong> — the standby claims the show itself.</td></tr>
+              <tr><td>Partner address and port</td><td>Where the other machine is. Left empty, this machine listens without dialling anything — a machine waiting to be paired.</td></tr>
+              <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed, and the refused machine stops dialling. Left empty, the pair is open to whoever finds the port, and the tab says so.</td></tr>
+              <tr><td>Silence before gone</td><td>How long the partner may say nothing before it is declared gone. Three seconds unless you change it.</td></tr>
+              <tr><td>When the partner goes quiet</td><td><strong>Tell me</strong> — the standby reports it and waits for a hand. <strong>Take it over</strong> — the standby claims the show itself.</td></tr>
             </tbody>
           </table>
         </div>
-        <h3>What the two machines say to each other</h3>
-        <p>
-          Each machine dials the other, and the pair settles on one connection. After that they say
-          so five times a second, and each beat carries the state of the show that sent it. The
-          machine standing by keeps that mirror and, with nothing else to do before it is needed,
-          decodes the same media into its own audio engine: a cue it picks up starts rather than
-          decodes. Underneath the settings, the panel says what has been heard — which half is
-          running the show, when the partner was last heard from, whether the two have the same
-          show open, how many files the other machine has warmed, and what this machine last did
-          about it.
-        </p>
-        <h3>Taking the show over</h3>
+        <h3>What a takeover carries</h3>
         <p>
           A partner that has said nothing for the stated silence is declared gone, and the alarm is
-          raised once: in the Monitor panel, in the top-of-window alarm chip, and in the run log.
-          With <em>Take it over</em> the standby claims the show there and then; with <em>Tell
-          me</em> it waits for the operator, who can take the show from the same panel.
-        </p>
-        <p>
-          One thing silence cannot tell apart: a machine that has died and a network that has
-          stopped carrying its beats. If the link between the two goes while both machines are
-          running, the standby does what it is configured to do, and the live machine — still
-          playing — is told the show has moved and stands down. What the audience hears in that
-          second is both machines inside the same cue. A pair belongs on a switch that is not
-          also carrying somebody else's video.
-        </p>
-        <p>
-          A takeover picks the show up rather than restarting it. An audio cue the live machine was
-          playing is put back at the position it had reached, plus however long passed between the
-          last beat and the takeover — the position was true when the beat arrived, and the show
-          has been running since. The operator's place in the show comes across with it, so the
-          next GO fires what the live machine would have fired. Anything this machine was
-          running on its own is stopped first, so what is playing after a takeover is what the
-          mirror says and nothing else. Everything else is named rather than faked, in the run
-          log: a MIDI or OSC cue has already reached its desk and sending it
-          again would be a second note; a wait, a fade or a script was part-way through work that
-          lived on the machine that died; a cue in its post-wait had already finished and the next
-          GO belongs to the cue after it.
+          raised once: in the Monitor panel, in the alarm chip, and in the run log. The audio cue the
+          live machine was playing goes back on this machine's engine at the position it had reached,
+          plus the silence since the last beat, and the operator's place in the show comes across with
+          it — so the next GO fires what the live machine would have fired. Everything else is named in
+          the run log rather than repeated: a MIDI or OSC cue has already gone out, a wait, fade or
+          script was half-way through work that lived on the machine that died, and a cue in its
+          post-wait had already finished. <a href="./redundancy.html#carried">The walkthrough shows
+          each of those in the log.</a>
         </p>
         <h3>Who is driving</h3>
         <p>
-          A machine that comes back does not take the show back by being switched on: each claim to
-          the show carries a term, and the higher term is the one driving. The returning machine
-          hears a higher term than its own and stands down — it says so in its status and in its
-          log, and it stops playing, with the same short fade a panic cuts with. It is no longer
-          the sound: the machine that has the show is already inside the cue, and two machines
-          playing one cue is the thing a pair exists to prevent. A machine that took the show over
-          can hand it back from the same panel.
+          Each claim to the show carries a term, and the higher term is the one driving. A machine
+          that comes back after a takeover hears a higher term than its own, stands down, and stops
+          playing — it is no longer the sound, because the machine that took the show is already
+          inside the cue. A machine that took the show over can hand it back from the same panel.
         </p>
         <div class="note">
-          What a pair is not: the two machines must have the same show open, and the status says
-          plainly when they do not. Unsaved edits on the live machine are not mirrored — save, and
-          the other machine's copy is what the file says. And two machines both set to <em>Live</em>
-          both believe they are the one running the show: the status says that too, and leaves the
-          decision where it belongs, with the operator.
+          The honest edges are on <a href="./redundancy.html#limits">the walkthrough's own page</a>:
+          both machines must have the same show open, unsaved edits are not mirrored, two machines set
+          to <em>Live</em> both believe they are driving, and a silence cannot be told from a broken
+          link.
         </div>
       </section>
 

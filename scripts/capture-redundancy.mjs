@@ -22,13 +22,13 @@
 // from and no window appears on that desk while it runs. Figures come out at the size the
 // app draws them — a dialog 520 pixels wide, the window 1280 — and the page shows each one
 // at that size rather than blowing it up.
-import { _electron as electron } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { generateKeyPairSync } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { _electron as electron } from '@playwright/test'
 import { createLicense } from '../src/main/license/key.ts'
 import { underVirtualDisplay } from './virtual-display.mjs'
 
@@ -105,23 +105,23 @@ fs.writeFileSync(showPath, JSON.stringify({
 
 /* ── The two machines ────────────────────────────────────────────────────── */
 
-// A licence of the run's own, so the pair is licensed the way an operator's is: minted
-// here, with the development-only public-key override a packaged build ignores.
+// A licence of the run's own, minted here with the app's own codec and a throwaway pair:
+// the pair is licensed the way an operator's is, and the app is told to trust the
+// development-only public key, which a packaged build ignores. The e2e suite mints its
+// keys the same way, from e2e/helpers.ts — which this script cannot import, because a
+// plain Node script resolves relative imports by their real path and the suite's helpers
+// import each other by module name. The launch below is pinned to the same arguments and
+// environment that helper uses, which is the part that has to agree.
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
-const licenseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-license-'))
-fs.writeFileSync(
-  path.join(licenseDir, 'license.key'),
-  createLicense(
-    {
-      v: 1,
-      id: 'WSP-REDUND1',
-      licensee: 'Redundancy Walkthrough',
-      // Issued today: a key carries a date, and the capture is of this version of the app.
-      issued: new Date().toISOString().slice(0, 10)
-    },
-    privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
-  ),
-  'utf-8'
+const licenseText = createLicense(
+  {
+    v: 1,
+    id: 'WSP-REDUND1',
+    licensee: 'Redundancy Walkthrough',
+    // Issued today: a key carries a date, and the capture is of this version of the app.
+    issued: new Date().toISOString().slice(0, 10)
+  },
+  privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
 )
 const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString()
 
@@ -141,20 +141,18 @@ for (const [dir, settings] of [
     peerHost: '127.0.0.1', peerPort: livePort, token: TOKEN, timeoutMs: 3000, takeover: 'auto'
   }]
 ]) {
-  fs.copyFileSync(path.join(licenseDir, 'license.key'), path.join(dir, 'license.key'))
+  fs.writeFileSync(path.join(dir, 'license.key'), licenseText, 'utf-8')
   fs.writeFileSync(path.join(dir, 'redundancy.json'), JSON.stringify(settings, null, 2))
 }
 
+/** An app with its own user-data directory, pinned the way the e2e suite pins one. */
 const launch = userDataDir =>
   electron.launch({
-    args: [
-      appEntry,
-      `--user-data-dir=${userDataDir}`,
-      '--ozone-platform=x11'
-    ],
+    args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
     env: {
       ...process.env,
       WINSLAB_LICENSE_PUBLIC_KEY: publicKeyPem,
+      // The silent backend: a capture plays no hardware, and the mixer and clock are real.
       WINSLAB_AUDIO_BACKEND: 'silent',
       ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
     }
@@ -162,34 +160,32 @@ const launch = userDataDir =>
 
 /* ── Capture ─────────────────────────────────────────────────────────────── */
 
-// Both machines, and the sweep of their working files, are shut down through one path: a
-// capture that fails half way must not leave two windows of its own behind for whoever
-// started it to find — or, worse, leave them holding the ports the next run wants.
+// The apps are launched and closed the way the e2e suite launches and closes them, from
+// e2e/helpers.ts, so standing a pair up has one implementation rather than two; the
+// capture adds only what is its own — the workspace, the machines' settings, and the
+// frames. Both are shut down through one path, because a capture that fails half way must
+// not leave two windows behind for whoever started it to find.
 let liveApp = null
+let live = null
 let backupApp = null
+let backup = null
 
 async function capture() {
   liveApp = await launch(liveDir)
-  const live = await liveApp.firstWindow()
+  live = await liveApp.firstWindow()
   await live.waitForLoadState('domcontentloaded')
   backupApp = await launch(backupDir)
-  const backup = await backupApp.firstWindow()
+  backup = await backupApp.firstWindow()
   await backup.waitForLoadState('domcontentloaded')
 
-  /**
-   * Opens the workspace the capture wrote, through the recents list the file menu shows —
-   * the same door a user comes in by, so what is photographed is the app's own screen
-   * rather than one a script assembled.
-   */
-  async function openShow(page, userDataDir) {
-    fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([showPath]))
+  // The show is opened the way a user opens it — through the recents list the file menu
+  // shows — rather than by a script reaching into the store.
+  for (const [page, dir] of [[live, liveDir], [backup, backupDir]]) {
+    fs.writeFileSync(path.join(dir, 'recent.json'), JSON.stringify([showPath]))
     await page.locator('.toolbar-brand').click()
     await page.locator('.file-menu-recent', { hasText: path.basename(showPath) }).click()
     await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor({ timeout: 15_000 })
   }
-
-  await openShow(live, liveDir)
-  await openShow(backup, backupDir)
 
   const shot = async (page, file, selector) => {
     const target = page.locator(selector).first()
@@ -413,7 +409,6 @@ try {
   await backupApp?.close().catch(() => {})
   await liveApp?.close().catch(() => {})
   fs.rmSync(work, { recursive: true, force: true })
-  fs.rmSync(licenseDir, { recursive: true, force: true })
   fs.rmSync(liveDir, { recursive: true, force: true })
   fs.rmSync(backupDir, { recursive: true, force: true })
   console.log('Done.')
