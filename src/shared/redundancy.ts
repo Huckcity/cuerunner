@@ -605,17 +605,23 @@ export function takeoverPlan(
       continue
     }
 
-    const reached = entry.positionMs + quietMs
-    // A cue that had reached the end of its region before the takeover would have been
-    // silent here anyway; starting it would be a sound the live machine never made. The
-    // region is what is compared: a cue's `duration` is the length of its file, and a
-    // cue that plays the first twenty seconds of a three-minute track has finished after
-    // twenty.
     const end = cue.endTime ?? (cue.duration > 0 ? cue.duration : entry.durationMs ?? 0)
-    // A cue that loops is not finished by reaching the end of its region — it goes round —
-    // and the position the engine reports for it is folded back inside the region on every
-    // pass, so "it is near the end" means nothing for a vamp.
-    if (cue.loopCount === 0 && end > 0 && reached >= end) {
+    let reached = entry.positionMs + quietMs
+    if (cue.loopCount !== 0) {
+      // A cue that loops is not finished by reaching the end of its region — it goes round
+      // — and the position the engine reports for it is already folded inside the region.
+      // The silence is folded the same way, or a vamp two seconds long would be asked to
+      // start three seconds past the end of itself.
+      const span = end - cue.startTime
+      if (span > 0) {
+        reached = cue.startTime + (((reached - cue.startTime) % span) + span) % span
+      }
+    } else if (end > 0 && reached >= end) {
+      // A cue that had reached the end of its region before the takeover would have been
+      // silent here anyway; starting it would be a sound the live machine never made. The
+      // region is what is compared: a cue's `duration` is the length of its file, and a
+      // cue that plays the first twenty seconds of a three-minute track has finished after
+      // twenty.
       skipped.push({ cueId: cue.id, label, reason: 'it had reached its end before the takeover' })
       continue
     }

@@ -293,6 +293,19 @@ describe('what a takeover picks up', () => {
     expect(plan.note).toContain('4 not')
   })
 
+  it('folds the silence back into a cue that loops, rather than past the end of it', () => {
+    // A vamp two seconds long, mirrored a second and a half in, on a partner that has been
+    // quiet for three: the position to pick up is half a second into the loop, not three
+    // and a half seconds into a two-second region — which would be a start past its own
+    // end, and a run that completes without making a sound.
+    const plan = takeoverPlan(
+      [audioCue('v', 0, 60_000, 2000, -1)],
+      digest({ running: [run({ cueId: 'v', positionMs: 1500, durationMs: 60_000 })] }),
+      3000
+    )
+    expect(plan.adopt[0].seekMs).toBe(500)
+  })
+
   it('measures “already finished” against the cue’s region, not its file', () => {
     // A cue that plays twenty seconds of a three-minute track has finished after twenty:
     // starting it again would be a sound the live machine never made.

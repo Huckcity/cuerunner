@@ -185,6 +185,12 @@ export class RedundancyService implements ShowService {
    * answering, and `release` hands it back.
    */
   async command(action: string, payload?: unknown): Promise<unknown> {
+    // A stopped machine has no partner and no timer: a takeover taken here would be a
+    // decision nothing could act on, and it would surface later as a notice from another
+    // shift. The operator is told instead.
+    if (this.context === null && action !== 'publish') {
+      throw new Error('Redundant playback is not running on this machine')
+    }
     switch (action) {
       case 'publish': {
         if (!isDigest(payload)) throw new Error('That is not a show mirror')
