@@ -43,6 +43,13 @@ const CHUNK = 1 << 16
 /** Zip64 is refused rather than half-supported: a show that needs it is not a show. */
 const ZIP64_MARKER = 0xffffffff
 
+/**
+ * The largest archive this file can describe: every offset, size and count in a zip
+ * without zip64 is 32 bits. A show whose media comes to more than this is refused with a
+ * sentence rather than written as an archive whose own directory lies about it.
+ */
+const MAX_ARCHIVE_BYTES = ZIP64_MARKER - (1 << 16)
+
 /** A timestamp inside a zip is 16 bits of date and 16 of time. Fixed, so bundles repeat. */
 const FIXED_TIME = 0
 const FIXED_DATE = ((2001 - 1980) << 9) | (1 << 5) | 1
@@ -134,18 +141,53 @@ class Writer {
   }
 }
 
+/** What each entry will be, measured before anything is written. */
+interface Prepared {
+  name: string
+  data?: Buffer
+  file?: string
+  size: number
+}
+
+/**
+ * Measures the entries and refuses the archive before a byte of it is written: a write
+ * that fails half way through leaves a file that looks like a bundle and is not one, and
+ * the one thing this format must never do is lie about what it holds.
+ */
+async function prepare(sources: ZipSource[]): Promise<Prepared[]> {
+  const prepared: Prepared[] = []
+  let total = 0
+  for (const source of sources) {
+    const name = safeName(source.name)
+    let size: number
+    if (source.data !== undefined) size = source.data.length
+    else if (source.file !== undefined) size = (await stat(source.file)).size
+    else throw new Error(`"${source.name}" has nothing in it`)
+    total += size
+    if (total > MAX_ARCHIVE_BYTES) {
+      throw new Error(
+        `this show comes to more than ${Math.round(MAX_ARCHIVE_BYTES / 1e9)} GB, which is more `
+        + 'than a bundle this app writes can hold'
+      )
+    }
+    prepared.push({ name, data: source.data, file: source.file, size })
+  }
+  return prepared
+}
+
 /**
  * Writes a zip holding exactly these entries, in this order. The bytes are a function of
  * the entries and nothing else — not of when it was written, and not of the sizes the
  * filesystem happens to report.
  */
 export async function writeZip(filePath: string, sources: ZipSource[]): Promise<void> {
+  const entries = await prepare(sources)
   const handle = await open(filePath, 'w')
   const writer = new Writer(handle)
   const directory: Array<{ name: Buffer; crc: number; size: number; offset: number }> = []
   try {
-    for (const source of sources) {
-      const name = Buffer.from(safeName(source.name), 'utf8')
+    for (const source of entries) {
+      const name = Buffer.from(source.name, 'utf8')
       const headerOffset = writer.position
       const header = Buffer.alloc(30)
       header.writeUInt32LE(LOCAL_SIGNATURE, 0)

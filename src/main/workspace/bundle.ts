@@ -103,6 +103,10 @@ async function isThere(path: string): Promise<boolean> {
 async function gatherMedia(workspace: Workspace, workspacePath: string | null): Promise<Gathering> {
   const byCue = new Map<string, Entry>()
   const taken = new Map<string, string>()
+  // One file, one entry. On Windows two spellings of the same path are the same file, so
+  // the key is folded there — the same rule the relink planner uses, and the same reason:
+  // otherwise a show would carry the same audio twice under two names.
+  const key = (path: string): string => (process.platform === 'win32' ? path.toLowerCase() : path)
   const missing: string[] = []
   const folder = workspacePath === null ? null : dirname(workspacePath)
 
@@ -117,13 +121,13 @@ async function gatherMedia(workspace: Workspace, workspacePath: string | null): 
       missing.push(source ?? audio.filePath)
       continue
     }
-    const known = taken.get(source)
+    const known = taken.get(key(source))
     if (known !== undefined) {
       byCue.set(cue.id, { name: known, source })
       continue
     }
     const name = uniqueName(audio.filePath, taken)
-    taken.set(source, name)
+    taken.set(key(source), name)
     byCue.set(cue.id, { name, source })
   }
 

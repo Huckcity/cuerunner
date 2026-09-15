@@ -495,7 +495,9 @@ Two properties of this file are load-bearing, and both are held by tests
 An `.wlabx` bundle is a zip holding `show.wlab` and a `media/` folder, with the showfile's media
 paths relative to the archive root. Entries are stored uncompressed in name order with fixed
 timestamps, so two bundles of one show are byte-identical, and each entry's CRC is checked on
-the way out.
+the way out. A bundle carries up to about 4 GB of media — the format's limit without its 64-bit
+extension, which this app does not write — and a show bigger than that is refused with a
+sentence rather than written as an archive whose directory lies about its own offsets.
 
 `WorkspaceManager` (main process) handles I/O and auto-migrates legacy fields on load: old
 `childIds` arrays become `parentId` pointers, missing timing fields are filled with defaults,

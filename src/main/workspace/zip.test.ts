@@ -6,7 +6,15 @@
 // implementation (Python's `zipfile`), because a reader that only ever reads its own
 // writer proves nothing about the files an operator will actually hand this app.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { readFileSync, mkdtempSync, readdirSync, rmSync, writeFileSync, existsSync } from 'fs'
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  truncateSync,
+  writeFileSync
+} from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { entryDestination, extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
@@ -67,6 +75,20 @@ describe('writing a zip', () => {
     await writeZip(second, sources)
 
     expect(readFileSync(first).equals(readFileSync(second))).toBe(true)
+  })
+
+  it('refuses an archive too large to describe, before writing anything', async () => {
+    // A sparse file: five gigabytes by its own account, nothing on disk. Nothing may be
+    // written — an archive whose directory lies about its own offsets is worse than a
+    // refusal, and a half-written bundle looks like a bundle.
+    const huge = join(dir, 'huge.bin')
+    writeFileSync(huge, '')
+    truncateSync(huge, 5 * 1024 * 1024 * 1024)
+    const target = join(dir, 'too-big.wlabx')
+
+    await expect(writeZip(target, [{ name: 'media/huge.bin', file: huge }]))
+      .rejects.toThrow('more than a bundle this app writes can hold')
+    expect(existsSync(target)).toBe(false)
   })
 
   it('refuses a name that would leave the folder it is unpacked into', async () => {

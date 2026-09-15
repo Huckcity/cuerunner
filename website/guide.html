@@ -299,6 +299,13 @@
           them. A bundle whose contents do not match the checksums it carries is refused rather
           than half-unpacked.
         </p>
+        <p>
+          A bundle carries up to about 4 GB of media — the zip format's own limit without its
+          64-bit extension, which this app does not write. A show bigger than that says so
+          instead of being written as an archive that lies about its own contents; the
+          <code>.wlab</code> itself has no such limit, and a show that size can still be moved by
+          copying its folder.
+        </p>
 
         <h3>Moving a show between machines</h3>
         <p>
