@@ -66,6 +66,24 @@ jobs:
           Get-Process -Name ETC_LaunchOffline, Eos -ErrorAction SilentlyContinue |
             Select-Object Name, Id, SessionId | Format-Table -AutoSize | Out-String | Write-Host
 
+      # The test step builds the native engine first (pretest:integration → ensure-native.mjs),
+      # and on Windows the compiler is installed but not on PATH until the developer
+      # environment is imported: without this the step dies a second in with
+      # "native-audio: MSVC (cl.exe) is not on PATH". The same block is in ci.yml's e2e lane
+      # and in build.yml, done inline rather than with `ilammy/msvc-dev-cmd` so that nothing
+      # here targets Node 20.
+      - name: Set up MSVC
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
       - name: Integration (vendor)
         env:
           # The console is on this machine. A run against a console elsewhere sets these
@@ -78,7 +96,11 @@ jobs:
           EOS_CONSOLE_TX_PORT: ${{ vars.EOS_CONSOLE_TX_PORT || '8002' }}
           EOS_APP_PORT: ${{ vars.EOS_APP_PORT || '8001' }}
           EOS_RECORD: ${{ inputs.record && 'integration/fixtures/vendor/eos-ubox-win.json' || '' }}
-        run: npm run test:integration -- --grep @vendor
+        # The tag is quoted, and that is load bearing: under `shell: pwsh` — which is also
+        # the default shell on a Windows runner, so the line cannot dodge it — a bare
+        # `@vendor` is parsed as a splat, and the step dies a second in with "The variable
+        # '$vendor' cannot be retrieved because it has not been set" before any test runs.
+        run: npm run test:integration -- --grep "@vendor"
 
       - name: Upload results
         if: always()
