@@ -193,12 +193,13 @@ integration/
     harness-eos.spec.ts       the Eos peer held to ETC's own pages, no app running
     harness-desk.spec.ts      the desk peers held to the A&H documents, no app running
     eos.spec.ts               WinsLab ↔ the Eos peer: fire a cue, answer the console
+    eos-vendor.spec.ts        @vendor: the same chain against a real console — or against
+                              a recording of one — and it skips itself when neither is named
     desk-sq.spec.ts           WinsLab ↔ the SQ peer
     desk-avantis.spec.ts      WinsLab ↔ the Avantis peer
+    eosFixture.ts             the console show: three cues, one of which answers
     deskFixture.ts            the one-mic show the desk specs drive
-  fixtures/                   where captured traffic lands — the `--record`/`--replay`
-                              modes of §5, which are M2/M3 work: until then the peers are
-                              live models of the documents, held there by their own specs
+  fixtures/vendor/            recordings from the vendor lane, each carrying its provenance
 ```
 
 Scripts (the existing `scripts/run-e2e.js` already forwards stray arguments to
@@ -247,13 +248,22 @@ against the documents rather than only against WinsLab.
 
 ## 5. The Eos peer
 
-One implementation, live today: the peer models an Eos-shaped show — cue lists, cues with
-labels, a current and pending cue — and answers on the socket. The `--record` and `--replay`
-modes this section first planned are M2/M3 work: a recording run against real ETCnomad (or a
-real desk) writes captures into `integration/fixtures/` with their provenance, and the peer
-replays them. Until then what keeps the peer near the truth is its own spec against ETC's
-pages, and the vendor lane when it lands — which is also why the lane matters more than the
-peer does.
+Three modes, one implementation:
+
+- **the model** — an Eos-shaped show: cue lists, cues with labels, a current and pending
+  cue, answering on the socket.
+- **`--upstream HOST:PORT` + `--record FILE`** — a recorder in front of a real console:
+  every message is forwarded verbatim, everything the console sends back (to its configured
+  OSC TX, which is the recorder) is relayed to `tx`, and the whole session is written down
+  byte-exact with provenance. A recording names the console's own version, taken from its
+  answer to `/eos/get/version` when it gave one.
+- **`--replay FILE`** — a console that answered once, answering again: requests are matched
+  by address and the console's replies go out in order, as fast as the consumer reads them.
+  An address the recording never answered gets no answer, exactly as it did the first time.
+
+`EOS_RECORD` runs `eos-vendor.spec.ts` through the recorder; `EOS_REPLAY` runs the same
+spec against a recording with no console anywhere — which is how a nightly recording ends up
+asserted on a Linux pull request.
 
 What it must model, because the specs lean on it:
 
@@ -436,35 +446,47 @@ past that, the split is by device, not by file.
 
 ## 9. The vendor lane, concretely (Eos first)
 
-Provisioned once on the Windows guest, alongside the runner:
+Measured on the way in, so the next person does not have to find it out again:
 
-1. Install ETCnomad silently — the installer takes `/S`
-   ([Deploying Eos Family Software v3](https://support.etcconnect.com/ETC/Consoles/Eos_Family/Software_and_Programming/Deploying_Eos_Family_Software_v3_via_a_Corporate_Network)) —
-   pinned by version and hash, from ETC, into the guest image. **Never into the
-   repository**: it is ETC's software and it does not belong in a git history.
-2. Launch it the way ETC intends: `ETC_LaunchOffline.exe`, or the `.esf3d` show file by
-   association. There is no documented headless mode and no documented `--showfile`
-   switch, so the fixture showfile opens by association and the spec waits for the OSC
-   endpoint to answer `/eos/get/version` before it starts asserting. That wait is also the
-   harness's self-test: when it times out, the message names the setup step that is
-   missing.
-3. Machine-level settings, done once and checked by the spec: `{UDP Strings & OSC}` on the
-   interface in the ECU, and the Windows firewall permitting UDP in and out for Eos.
-4. Show-level settings, carried in the committed fixture showfile: `{OSC RX}`, `{OSC TX}`,
-   RX and TX ports, the TX IP address pointing at the harness, `OSC Cue Send String`, a
-   handful of cues, and a cue list. Built once by hand in the offline editor and committed
-   as a fixture with its provenance — Eos's Setup travels with its show file, so this is
-   configuration by artifact rather than by clicking.
+- **The installer is a direct download with no login.** v3.3.9's "Consoles and ETCnomad PC"
+  asset is `ETC_EosFamily_v3.3.9.25.exe` — 887 MB out of an 833 MB zip — behind ETC's
+  [All Eos Family Software Versions](https://support.etcconnect.com/ETC/Consoles/Eos_Family/Software_and_Programming/All_Eos_Family_Software_Versions)
+  article. It is fetched onto the runner and **never into the repository**: it is ETC's
+  software, and it does not belong in a git history.
+- **The guest is a small machine.** `ubox-win` is Windows Server 2025 Standard Evaluation,
+  1024×768, ~71 GB free. ETC's stated minimums are 1920×1080, DirectX 11, 2 GB RAM and
+  3.5 GB disk. Disk and RAM are fine; **the display and the 3D are the two things to watch**
+  (`-vga std` has no acceleration, and Windows falls back to software D3D).
+- **Server 2025 is not a supported OS for Eos** — ETC list Windows 7/8/10/11 — and that,
+  rather than the transport, is where this lane is currently stuck: the silent install
+  (`ETC_EosFamily_v3.3.9.25.exe /S`) has not completed on the guest. Either it wants a
+  desktop session, or the guest wants to be a supported Windows.
 
-The one thing to verify on the first run rather than assume: whether the OSC settings and
-the interface-protocol switch really do travel with the showfile across machines, or
-whether the interface setting has to be re-applied per machine. If the latter, it becomes
-part of the runner's provisioning script, which is where a machine-level setting belongs
-anyway.
+The provisioning, once it is past that:
 
-For A&H there is nothing to install for the peer lane. The vendor lane's A&H job exists
-only to exercise MIDI Control's bridge, so the app-side path users take is tested at least
-once somewhere.
+1. Install ETCnomad — `/S` if it takes, by hand over VNC if it does not (the guest runs
+   `-vnc 127.0.0.1:1` on `ubox`, so a tunnel and a viewer reach its desktop).
+2. Machine-level settings in the ECU: `{UDP Strings & OSC}` on the interface, and the
+   firewall permitting UDP in and out.
+3. Launch it the way ETC intends (`ETC_LaunchOffline.exe`, or a show file by association).
+   There is no documented headless mode and no documented `--showfile` switch, so the show
+   comes up through the shell and the spec waits for the console to answer.
+4. Show-level settings, carried in a fixture showfile built once by hand: `{OSC RX}`,
+   `{OSC TX}`, the RX port, the TX destination pointed at this machine, and a cue in cue
+   list 1. Setup travels with Eos's show file, which is what makes this configuration by
+   artifact rather than by clicking.
+
+The self-test is the spec's first test: fire the show's "are you there" cue and wait for
+`/eos/out/get/version` to come back. When it does not, the failure message *is* the
+checklist above — console settings cannot be set from a test, so the message has to be the
+walkthrough, and whoever reads it is standing in front of the desk.
+
+The workflow refuses to pretend: a run on a runner without the software fails in the step
+that checks for it, not in a spec twenty minutes later.
+
+For A&H there is nothing to install for the peer lane. The vendor lane's A&H job exists only
+to exercise MIDI Control's bridge, so the app-side path users take is tested at least once
+somewhere.
 
 ---
 
@@ -488,9 +510,13 @@ other, because without a MIDI-over-TCP output the app-side half of these specs c
 on Linux.
 
 **M2 — the vendor lane, and fixtures from the real thing.**
-`--record` against real Eos; the ETCnomad install and provisioning on `ubox-win`; the
-nightly workflow; the self-test that fails loudly with a checklist when the endpoint does
-not answer.
+Landed: the vendor spec (`eos-vendor.spec.ts`, tagged `@vendor`, skips itself without a
+console), the nightly and on-demand workflow, the recorder and the replay in the peer, and
+the mechanism proven in both directions *without* a console — a session recorded through
+the recorder against a stand-in, then replayed with no console anywhere — which is also
+what the fixture loop will do with the real thing.
+*Remaining*: the console itself on `ubox-win`. The installer has not completed there (§9),
+so the acceptance below is not met yet.
 *Acceptance*: a scheduled Windows run drives real Eos: WinsLab fires a cue in the console
 software, Eos's own `/eos/out/event/cue/...` comes back and fires the next WinsLab cue, and
 the run records a fixture that the Linux lane then replays.

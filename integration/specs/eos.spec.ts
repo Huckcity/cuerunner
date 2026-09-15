@@ -10,14 +10,14 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import dgram from 'node:dgram'
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { startEosPeer, type EosPeer } from '../peers/eos'
 import { closeApp, launchApp, mintLicense, openFromRecent, sendOsc } from '../../e2e/helpers'
+import { firedAddress, writeEosShow } from './eosFixture'
 
-const CUE_FIRED = '/eos/out/event/cue/1/12/fire'
-const CUE_FIRED_BY_KEY = '/eos/out/event/cue/1/13/fire'
+/** The cue the show fires in the console, and the one the console's own GO fires after it. */
+const CUE = 12
+const CUE_FIRED = firedAddress(CUE)
+const CUE_FIRED_BY_KEY = firedAddress(CUE + 1)
 
 let app: ElectronApplication
 let page: Page
@@ -34,82 +34,33 @@ async function freeUdpPort(): Promise<number> {
   return port
 }
 
-function writeEosShow(consolePort: number, oscInPort: number): string {
-  const root = mkdtempSync(join(tmpdir(), 'winslab-eos-'))
-  const path = join(root, 'Eos Show.wlab')
-  const base = {
-    colorLabel: 'none',
-    preWait: 0,
-    postWait: 0,
-    timelineOffset: 0,
-    advance: 'none',
-    isArmed: true,
-    refire: 'ignore',
-    parentId: null,
-    notes: ''
-  }
-
-  writeFileSync(path, `${JSON.stringify({
-    version: 1,
-    id: 'w-eos',
-    name: 'Eos Show',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    audioSettings: { outputDeviceId: 'default' },
-    midiSettings: { outputPortName: '' },
-    showSettings: {
-      oscIn: { enabled: true, port: oscInPort }
-    },
-    cues: [
-      {
-        ...base,
-        id: 'osc-1',
-        number: '1',
-        name: 'Blackout',
-        type: 'osc',
-        duration: 0,
-        host: '127.0.0.1',
-        port: consolePort,
-        address: '/eos/cue/1/12/fire',
-        args: []
-      },
-      {
-        ...base,
-        id: 'w-1',
-        number: '2',
-        name: 'After the console says so',
-        type: 'wait',
-        duration: 50,
-        // What the console says when a cue runs. Two of them: one for the cue this show
-        // fires, one for the cue the console's own GO fires in the second test.
-        triggers: [
-          { id: 't-1', kind: 'osc', address: CUE_FIRED },
-          { id: 't-2', kind: 'osc', address: CUE_FIRED_BY_KEY }
-        ]
-      }
-    ]
-  }, null, 2)}\n`)
-
-  return path
-}
-
 test.beforeAll(async () => {
   appPort = await freeUdpPort()
   peer = await startEosPeer({
     // Where a console's OSC TX is pointed: the app's oscillator input, which is where a
     // trigger can hear it.
     tx: { host: '127.0.0.1', port: appPort },
+    // A recording from the vendor lane, when there is one: the peer answers with what the
+    // real console answered rather than with its own model of the show — which is the whole
+    // point of a recording, and the only way a Linux pull request sees a real session.
+    replay: process.env.EOS_REPLAY,
     cues: [
       { list: 1, number: 1, label: 'Preshow', upTime: 3 },
       { list: 1, number: 12, label: 'Blackout', upTime: 2 },
       { list: 1, number: 13, label: 'Scene change', upTime: 2 }
     ]
   })
-  const show = writeEosShow(peer.port, appPort)
+  const show = writeEosShow({
+    consoleHost: '127.0.0.1',
+    consolePort: peer.port,
+    oscInPort: appPort,
+    cue: CUE
+  })
   ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
   await openFromRecent(page, userDataDir, show)
   // The show has to be *in* before anything else is fair: the cue rows are the app saying
   // so, and the services are configured from the workspace once it is loaded.
-  await expect(page.locator('.cue-row')).toHaveCount(2)
+  await expect(page.locator('.cue-row')).toHaveCount(3)
 
   // And the fixture's port is the show's: the panel says which port the service took, which
   // is the only place the operator can see it either.

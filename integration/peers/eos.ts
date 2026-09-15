@@ -14,9 +14,11 @@
 
 import { createSocket } from 'node:dgram'
 import type { RemoteInfo, Socket as UdpSocket } from 'node:dgram'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { Server as HttpServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { hostname } from 'node:os'
 
 // ── OSC 1.0 ─────────────────────────────────────────────────────────────────
 
@@ -165,6 +167,8 @@ export interface EosCueListBank {
 
 /** What the peer thinks, which is what the control endpoint serves as JSON. */
 export interface EosState {
+  /** Which lane the peer is in: its own model, a console it proxies, or a recording. */
+  mode: 'model' | 'upstream' | 'replay'
   version: string
   fixtureLibraryVersion: string
   cueSendString: string | null
@@ -182,12 +186,54 @@ export interface EosState {
 export interface EosInbound extends OscMessage {
   at: number
   from: { address: string; port: number }
+  /** The datagram exactly as it arrived, which is what a recording keeps. */
+  bytes: string
 }
 
 export interface EosOutbound extends OscMessage {
   at: number
   to: { address: string; port: number }
+  /** The datagram exactly as it went out, which is what a recording replays. */
+  bytes: string
 }
+
+/** Which end of the wire a recorded message belongs to. */
+export type EosDirection = 'to-console' | 'from-console'
+
+export interface EosExchange {
+  /** Milliseconds since the first message of the recording. */
+  at: number
+  direction: EosDirection
+  address: string
+  args: OscArg[]
+  /** The datagram as it was sent, so a replay is byte-exact rather than a re-encoding of
+   *  the parse. A hand-written fixture may leave it out and be re-encoded. */
+  bytes: string
+}
+
+/**
+ * A session with a console, in both directions, with enough provenance to judge before it
+ * is trusted: which console, which firmware, who recorded it and what they were doing.
+ */
+export interface EosRecording {
+  provenance: {
+    kind: 'eos'
+    /** The console this came from, as host:port, when the peer was proxying one. */
+    target: string | null
+    version: string
+    /** Whether `version` is the console's own answer or the string the peer was started with. */
+    versionSource: 'console' | 'option'
+    recordedAt: string
+    recordedBy: string
+    note: string
+    /** A recording is not a pacing file; see the replay lane. */
+    timing: string
+  }
+  exchanges: EosExchange[]
+}
+
+const RECORDING_TIMING =
+  'a replay sends each answer as fast as its consumer reads it; the offsets are for judging the fixture, not for pacing a reply'
 
 export interface EosPeerOptions {
   /** Default 127.0.0.1: a peer on the loopback is what a spec wants, and a device on the
@@ -207,6 +253,26 @@ export interface EosPeerOptions {
    * is talking to it, which is what makes it usable as a tool from a laptop.
    */
   tx?: { host: string; port: number }
+  /**
+   * A real console to sit in front of, as `host:port`. With one, the peer stops answering
+   * from its own model: what a client sends is forwarded to the console verbatim, and what
+   * the console sends back — to this peer, which is where its OSC TX has to point — is
+   * relayed to `tx`. The client on the other side cannot tell the difference.
+   */
+  upstream?: { host: string; port: number }
+  /** Write every datagram of the session, both directions, to this file as it happens. */
+  record?: string
+  /** Who is taking the recording, for its provenance. Defaults to this machine's name. */
+  recordedBy?: string
+  /** What the recording is of, for its provenance. */
+  recordNote?: string
+  /**
+   * Answer from a recording instead of from the model: the console-side messages that
+   * followed a request in the recording go to `tx`, in order and as fast as the consumer
+   * reads them. An address the recording has no answer for gets no answer, exactly like
+   * the console that was recorded.
+   */
+  replay?: string
   version?: string
   fixtureLibraryVersion?: string
   /** Every message either way, for a human watching the tool. */
@@ -254,6 +320,97 @@ function cueUid(list: number, cue: EosCue): string {
   return `00000000-0000-0000-0000-${tail}`
 }
 
+/**
+ * A fixture is a file someone copies between machines, so it is written through a rename —
+ * a reader never sees half of one — and it is rewritten whole on every exchange, so what
+ * is on disk is the session so far even if the process is killed. A session is hundreds of
+ * datagrams, not millions, which is what makes that affordable.
+ */
+function writeRecording(path: string, recording: EosRecording): void {
+  writeFileSync(`${path}.tmp`, `${JSON.stringify(recording, null, 2)}\n`)
+  renameSync(`${path}.tmp`, path)
+}
+
+/** The datagram to put back on the wire: the recording's own bytes when it has them, and
+ *  otherwise an encoding of what it parsed, so a hand-written fixture needs no hex. */
+function exchangeBytes(exchange: EosExchange): Buffer {
+  return /^([0-9a-f]{2})+$/i.test(exchange.bytes)
+    ? Buffer.from(exchange.bytes, 'hex')
+    : encodeOsc({ address: exchange.address, args: exchange.args })
+}
+
+/**
+ * What the recorded console said after each request, by request address. An answer belongs
+ * to the last request recorded before it, which is the order a console answers in; a
+ * console that spoke first, before any request, cannot be attributed to one and is left
+ * out of the answers.
+ */
+function groupAnswers(exchanges: EosExchange[]): Map<string, EosExchange[][]> {
+  const answers = new Map<string, EosExchange[][]>()
+  let current: EosExchange[] = []
+  for (const exchange of exchanges) {
+    if (exchange.direction === 'from-console') {
+      current.push(exchange)
+      continue
+    }
+    current = []
+    const groups = answers.get(exchange.address)
+    if (groups) groups.push(current)
+    else answers.set(exchange.address, [current])
+  }
+  return answers
+}
+
+/** Load a recording for replay. Every failure is a sentence a human can act on: the file
+ *  came off another machine, and "there is no file there" is the usual fault. */
+function loadRecording(path: string): Map<string, EosExchange[][]> {
+  const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch (error) {
+    throw new Error(`no recording at ${path}: ${describe(error)}`)
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    throw new Error(`${path} is not JSON: ${describe(error)}`)
+  }
+  if (typeof parsed !== 'object' || parsed === null || !('exchanges' in parsed) || !Array.isArray(parsed.exchanges)) {
+    throw new Error(`${path} is not an Eos recording: no list of exchanges`)
+  }
+
+  const exchanges = parsed.exchanges.map((entry: unknown, index: number): EosExchange => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      !('direction' in entry) ||
+      !('address' in entry) ||
+      !('args' in entry) ||
+      !('bytes' in entry) ||
+      !('at' in entry)
+    ) {
+      throw new Error(`${path}: exchange ${index} is not a recorded message`)
+    }
+    if (entry.direction !== 'to-console' && entry.direction !== 'from-console') {
+      throw new Error(`${path}: exchange ${index} is neither to nor from a console`)
+    }
+    if (typeof entry.address !== 'string' || typeof entry.bytes !== 'string' || typeof entry.at !== 'number' || !Array.isArray(entry.args)) {
+      throw new Error(`${path}: exchange ${index} has a field of the wrong type`)
+    }
+    const args: OscArg[] = []
+    for (const arg of entry.args) {
+      if (typeof arg === 'string' || typeof arg === 'number' || typeof arg === 'boolean') args.push(arg)
+      else throw new Error(`${path}: exchange ${index} has an argument that is not a number, string or bool`)
+    }
+    return { at: entry.at, direction: entry.direction, address: entry.address, args, bytes: entry.bytes }
+  })
+
+  return groupAnswers(exchanges)
+}
+
 interface CueList {
   label: string
   cues: EosCue[]
@@ -280,6 +437,38 @@ export async function startEosPeer(options: EosPeerOptions = {}): Promise<EosPee
   const host = options.host ?? '127.0.0.1'
   const cueSendString = options.cueSendString ?? null
   const log = options.log
+  const startedAt = Date.now()
+
+  const upstream: Target | null = options.upstream
+    ? { address: options.upstream.host, port: options.upstream.port, subscribed: false }
+    : null
+  if (upstream !== null && options.replay !== undefined) {
+    throw new Error('a peer cannot proxy a console and answer from a recording at once: set upstream or replay, not both')
+  }
+  const mode: EosState['mode'] = options.replay !== undefined ? 'replay' : upstream !== null ? 'upstream' : 'model'
+  const answers = options.replay === undefined ? null : loadRecording(options.replay)
+  const answerCursors = new Map<string, number>()
+
+  const recordPath = options.record ?? null
+  const recording: EosRecording | null = recordPath
+    ? {
+        provenance: {
+          kind: 'eos',
+          target: upstream === null ? null : `${upstream.address}:${upstream.port}`,
+          version: options.version ?? '3.3.6.0',
+          versionSource: 'option',
+          recordedAt: new Date(startedAt).toISOString(),
+          recordedBy: options.recordedBy ?? hostname(),
+          note: options.recordNote ?? '',
+          timing: RECORDING_TIMING
+        },
+        exchanges: []
+      }
+    : null
+  // Written before the socket opens, so a path that cannot be written is this call's
+  // error and not a surprise in the middle of a show.
+  if (recording && recordPath) writeRecording(recordPath, recording)
+  let consoleVersion: string | null = null
 
   const lists = new Map<number, CueList>()
   for (const cue of options.cues ?? DEFAULT_SHOW) {
@@ -295,6 +484,7 @@ export async function startEosPeer(options: EosPeerOptions = {}): Promise<EosPee
   const listNumbers = [...lists.keys()].sort((a, b) => a - b)
 
   const state: EosState = {
+    mode,
     version: options.version ?? '3.3.6.0',
     fixtureLibraryVersion: options.fixtureLibraryVersion ?? '3.3.6.1',
     cueSendString,
@@ -339,14 +529,69 @@ export async function startEosPeer(options: EosPeerOptions = {}): Promise<EosPee
     return subscribedOnly || !lastSender ? [] : [lastSender]
   }
 
-  function send(message: OscMessage, subscribedOnly = false): void {
-    for (const target of outputTargets(subscribedOnly)) {
-      // A client that stopped listening is not this peer's problem: the error a UDP send
-      // would report is the socket's, and nothing here can act on it.
-      socket.send(encodeOsc(message), target.port, target.address, () => {})
-      sent.push({ ...message, at: Date.now(), to: { address: target.address, port: target.port } })
+  /**
+   * Put a datagram on the wire, and keep it: `sent` is this peer's own record of the
+   * session, and a recording being written takes it as the console's voice only when the
+   * peer is the one speaking — a forward or a relay is a message from one of the two ends
+   * rather than from this peer.
+   */
+  function transmit(bytes: Buffer, message: OscMessage, target: Target, voice: boolean): void {
+    // A client that stopped listening is not this peer's problem: the error a UDP send
+    // would report is the socket's, and nothing here can act on it.
+    socket.send(bytes, target.port, target.address, () => {})
+    const outbound: EosOutbound = {
+      ...message,
+      at: Date.now(),
+      to: { address: target.address, port: target.port },
+      bytes: bytes.toString('hex')
     }
+    sent.push(outbound)
+    if (voice) record('from-console', outbound)
     log?.(`> ${describe(message)}`)
+  }
+
+  /** Output the peer voices itself: the model's answers, or a replayed console's. */
+  function send(message: OscMessage, subscribedOnly = false): void {
+    const bytes = encodeOsc(message)
+    for (const target of outputTargets(subscribedOnly)) transmit(bytes, message, target, true)
+  }
+
+  /** Output carried between the two ends: a client's words to a console, or vice versa. */
+  function relay(bytes: Buffer, message: OscMessage): void {
+    for (const target of outputTargets(false)) transmit(bytes, message, target, false)
+  }
+
+  /** Add an exchange and put the fixture back on disk, where it can be read at any moment. */
+  function record(direction: EosDirection, message: EosInbound | EosOutbound): void {
+    if (!recording || recordPath === null) return
+    recording.exchanges.push({
+      at: Math.max(0, message.at - startedAt),
+      direction,
+      address: message.address,
+      args: message.args,
+      bytes: message.bytes
+    })
+    // A fixture that says where its version came from is one a reader can judge, and the
+    // console's own answer beats the string this peer was started with.
+    if (consoleVersion !== null) {
+      recording.provenance.version = consoleVersion
+      recording.provenance.versionSource = 'console'
+    }
+    writeRecording(recordPath, recording)
+  }
+
+  /**
+   * What the recorded console said last time this address was asked. Assumption: a console
+   * is idempotent, so asking more often than the recording has answers repeats the last
+   * answer it has rather than falling silent — the alternative makes a spec's third fire
+   * of the same cue behave unlike the first two.
+   */
+  function replayAnswers(address: string): EosExchange[] {
+    const groups = answers?.get(address)
+    if (!groups || groups.length === 0) return []
+    const index = Math.min(answerCursors.get(address) ?? 0, groups.length - 1)
+    answerCursors.set(address, index + 1)
+    return groups[index]
   }
 
   function describe(message: OscMessage): string {
@@ -540,6 +785,16 @@ export async function startEosPeer(options: EosPeerOptions = {}): Promise<EosPee
   }
 
   function handle(message: OscMessage, from: Target): void {
+    // In the replay lane the recording is the console: whatever it said after this message
+    // goes out in order, and an address it never answered is left unanswered.
+    if (answers) {
+      for (const answer of replayAnswers(message.address)) {
+        const answerMessage: OscMessage = { address: answer.address, args: answer.args }
+        for (const target of outputTargets(false)) transmit(exchangeBytes(answer), answerMessage, target, true)
+      }
+      return
+    }
+
     const raw = message.address
     const equals = raw.indexOf('=')
     const segments = (equals === -1 ? raw : raw.slice(0, equals)).split('/')
@@ -650,20 +905,63 @@ export async function startEosPeer(options: EosPeerOptions = {}): Promise<EosPee
     // never heard of — is what a device does with it: nothing.
   }
 
-  socket.on('message', (packet: Buffer, rinfo: RemoteInfo) => {
+  /**
+   * The client behind an address. A console is not one: it must never become the address a
+   * peer with no configured OSC destination answers, or a proxy would talk to itself.
+   */
+  function clientFor(rinfo: RemoteInfo): Target {
     const key = `${rinfo.address}:${rinfo.port}`
-    let target = targets.get(key)
-    if (!target) {
-      target = { address: rinfo.address, port: rinfo.port, subscribed: false }
-      targets.set(key, target)
+    const existing = targets.get(key)
+    if (existing) {
+      lastSender = existing
+      return existing
     }
-    lastSender = target
+    const created: Target = { address: rinfo.address, port: rinfo.port, subscribed: false }
+    targets.set(key, created)
+    lastSender = created
+    return created
+  }
 
-    for (const message of decodeOscPacket(packet)) {
-      received.push({ ...message, at: Date.now(), from: { address: rinfo.address, port: rinfo.port } })
+  socket.on('message', (packet: Buffer, rinfo: RemoteInfo) => {
+    // The console answers from the address this peer sends to — an Eos does — so anything
+    // else on this socket is a client, whatever it claims to be.
+    const fromConsole = upstream !== null && rinfo.address === upstream.address && rinfo.port === upstream.port
+
+    const messages = decodeOscPacket(packet)
+    if (messages.length === 0) log?.(`< ${packet.length} bytes that are not OSC`)
+    for (const message of messages) {
+      const inbound: EosInbound = {
+        ...message,
+        at: Date.now(),
+        from: { address: rinfo.address, port: rinfo.port },
+        bytes: packet.toString('hex')
+      }
+      received.push(inbound)
       log?.(`< ${describe(message)}`)
+      if (fromConsole && message.address === '/eos/out/get/version' && typeof message.args[0] === 'string') {
+        consoleVersion = message.args[0]
+      }
+      record(fromConsole ? 'from-console' : 'to-console', inbound)
+    }
+
+    // Forwarding and relaying are byte-exact: a datagram that will not parse is passed on
+    // as it came in, and the far end is the one that gets to decide what it means.
+    const carrying: OscMessage = messages[0] ?? { address: '<undecoded>', args: [] }
+
+    if (fromConsole) {
+      relay(packet, carrying)
+      return
+    }
+
+    const client = clientFor(rinfo)
+    if (upstream) {
+      transmit(packet, carrying, upstream, false)
+      return
+    }
+
+    for (const message of messages) {
       try {
-        handle(message, target)
+        handle(message, client)
       } catch (error) {
         state.lastError = `${message.address}: ${error instanceof Error ? error.message : String(error)}`
         log?.(`! ${state.lastError}`)
@@ -737,6 +1035,7 @@ const USAGE = `An ETC Eos console on the wire.
 
   node integration/peers/eos.ts [--port N] [--host H] [--control N] [--cue-send-string S]
                                 [--tx-host H --tx-port N]
+                                [--upstream HOST:PORT] [--record FILE] [--replay FILE]
 
   --port N              UDP port for OSC; 0, the default, takes an ephemeral one
   --host H              address to bind; 127.0.0.1 by default
@@ -745,7 +1044,24 @@ const USAGE = `An ETC Eos console on the wire.
   --tx-host H           OSC UDP TX IP Address: where output goes, as a console with an
   --tx-port N           OSC destination configured sends it - Setup > System > Show
                         Control > OSC. Both are needed; without them the peer answers
-                        whoever is talking to it, which is what hand-driving wants.`
+                        whoever is talking to it, which is what hand-driving wants.
+  --upstream HOST:PORT  stand in front of a real console: what a client sends is forwarded
+                        to it as it came in, and what it sends back is relayed to --tx
+  --record FILE         write every datagram of the session, both directions, as JSON
+  --replay FILE         answer from a recording instead of from the model, as fast as the
+                        consumer reads it; the recorded offsets are not replayed
+  --recorded-by NAME    who is taking a recording, for its provenance (default: this host)
+  --record-note TEXT    what the recording is of, for its provenance`
+
+/** `HOST:PORT`, the spelling a console's address is written in. */
+function parseEndpoint(value: string, flag: string): { host: string; port: number } {
+  const separator = value.lastIndexOf(':')
+  const port = Number(value.slice(separator + 1))
+  if (separator <= 0 || !Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`${flag} wants HOST:PORT, not ${JSON.stringify(value)}`)
+  }
+  return { host: value.slice(0, separator), port }
+}
 
 function parseFlags(argv: string[]): Map<string, string> {
   const flags = new Map<string, string>()
@@ -771,6 +1087,7 @@ async function runCli(): Promise<void> {
   }
   const txHost = flags.get('tx-host')
   const txPort = numeric('tx-port')
+  const upstream = flags.get('upstream')
 
   const peer = await startEosPeer({
     host: flags.get('host'),
@@ -778,10 +1095,15 @@ async function runCli(): Promise<void> {
     controlPort: numeric('control'),
     cueSendString: flags.get('cue-send-string'),
     tx: txHost !== undefined && txPort !== undefined ? { host: txHost, port: txPort } : undefined,
+    upstream: upstream === undefined ? undefined : parseEndpoint(upstream, '--upstream'),
+    record: flags.get('record'),
+    replay: flags.get('replay'),
+    recordedBy: flags.get('recorded-by'),
+    recordNote: flags.get('record-note'),
     log: (line) => console.log(`${new Date().toISOString().slice(11, 23)} ${line}`)
   })
 
-  console.log(`eos peer: osc udp ${peer.host}:${peer.port}`)
+  console.log(`eos peer: osc udp ${peer.host}:${peer.port} (${peer.state.mode})`)
   if (peer.tx) console.log(`eos peer: output udp ${peer.tx.host}:${peer.tx.port}`)
   if (peer.controlPort !== null) console.log(`eos peer: state http://${peer.host}:${peer.controlPort}/state`)
 
@@ -793,10 +1115,10 @@ async function runCli(): Promise<void> {
 }
 
 // Running the file starts the peer; importing it — which is what a spec does — starts
-// nothing.
+// nothing. A failure here is a sentence about a file or a flag, not a stack trace.
 if (process.argv[1]?.endsWith('eos.ts')) {
   runCli().catch((error: unknown) => {
-    console.error(error)
+    console.error(`eos peer: ${error instanceof Error ? error.message : String(error)}`)
     process.exit(1)
   })
 }

@@ -9,8 +9,12 @@
 // (OSC Inputs and OSC Outputs) and the OSC Get page under Third-Party Integration.
 
 import { expect, test } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
 import { createSocket } from 'node:dgram'
 import type { Socket } from 'node:dgram'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { startEosPeer } from '../peers/eos.ts'
 import type { EosPeer, EosPeerOptions, OscArg } from '../peers/eos.ts'
 
@@ -194,6 +198,68 @@ async function otherWire(): Promise<Wire> {
   const opened = await openWire()
   extraWires.push(opened)
   return opened
+}
+
+interface RecordedSession {
+  provenance: { kind: unknown; target: unknown; version: unknown; versionSource: unknown; note: unknown }
+  exchanges: Array<{ at: unknown; direction: unknown; address: unknown; args: unknown; bytes: unknown }>
+}
+
+/**
+ * A recording as this spec reads it. A fixture is a file that could have come off another
+ * machine, so it is checked field by field — and a spec that blew up on a malformed fixture
+ * would say nothing about the peer that wrote it.
+ */
+function readRecording(path: string): RecordedSession {
+  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  if (typeof parsed !== 'object' || parsed === null || !('provenance' in parsed) || !('exchanges' in parsed)) {
+    throw new Error(`${path} is not a recording`)
+  }
+  const provenance = parsed.provenance
+  if (
+    typeof provenance !== 'object' ||
+    provenance === null ||
+    !('kind' in provenance) ||
+    !('target' in provenance) ||
+    !('version' in provenance) ||
+    !('versionSource' in provenance) ||
+    !('note' in provenance)
+  ) {
+    throw new Error(`${path} has no provenance`)
+  }
+  if (!Array.isArray(parsed.exchanges)) throw new Error(`${path} lists no exchanges`)
+
+  const exchanges = parsed.exchanges.map((entry: unknown, index: number) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      !('at' in entry) ||
+      !('direction' in entry) ||
+      !('address' in entry) ||
+      !('args' in entry) ||
+      !('bytes' in entry)
+    ) {
+      throw new Error(`${path}: exchange ${index} is not a recorded message`)
+    }
+    const { at, direction, address, args, bytes } = entry
+    return { at, direction, address, args, bytes }
+  })
+
+  return {
+    provenance: {
+      kind: provenance.kind,
+      target: provenance.target,
+      version: provenance.version,
+      versionSource: provenance.versionSource,
+      note: provenance.note
+    },
+    exchanges
+  }
+}
+
+/** A path of its own per test, so two runs of the suite cannot read each other's fixtures. */
+function recordingPath(name: string): string {
+  return join(tmpdir(), `eos-${name}-${randomUUID()}.json`)
 }
 
 /**
@@ -422,6 +488,96 @@ test('sends unsolicited output to the configured OSC TX destination', async () =
 
   await wire.settle()
   expect(wire.messages).toHaveLength(0)
+})
+
+// ── The vendor lane: a console, a recording of it, a replay of that ─────────
+
+test('proxies a console, records both directions, and replays the recording', async () => {
+  // The far end's show is nothing like the proxy's own default, so an answer that could
+  // only have come from the console is one that did.
+  const consolePeer = await peerWith({ cues: [{ list: 3, number: 5, label: 'Vendor Show' }] })
+  const listener = await otherWire()
+  const file = recordingPath('session')
+  const proxy = await peerWith({
+    upstream: { host: '127.0.0.1', port: consolePeer.port },
+    tx: { host: '127.0.0.1', port: listener.port },
+    record: file,
+    recordNote: 'the round trip the vendor lane takes'
+  })
+
+  // One cue list where the proxy's own model would answer two: the console is speaking.
+  wire.send('/eos/get/cuelist/count', [], proxy.port)
+  expect((await listener.waitForAddress('/eos/out/get/cuelist/count')).args).toEqual([1])
+
+  wire.send('/eos/cue/3/5/fire', [], proxy.port)
+  expect((await listener.waitForAddress('/eos/out/event/cue/3/5/fire')).args).toEqual(['Vendor Show'])
+  expect((await listener.waitForAddress('/eos/out/active/cue/text')).args).toEqual(['3/5 Vendor Show 0.0'])
+  await listener.settle()
+
+  const recording = readRecording(file)
+  expect(recording.provenance).toMatchObject({
+    kind: 'eos',
+    target: `127.0.0.1:${consolePeer.port}`,
+    note: 'the round trip the vendor lane takes',
+    versionSource: 'option'
+  })
+  // Five exchanges: the count and its answer, then the fire and the two the console makes
+  // of it — cue 5 is the only cue in that list, so nothing is pending.
+  expect(recording.exchanges.map((exchange) => exchange.direction)).toEqual([
+    'to-console',
+    'from-console',
+    'to-console',
+    'from-console',
+    'from-console'
+  ])
+  // The datagrams as they were, so a replay does not depend on this peer's encoder.
+  expect(recording.exchanges[2]).toMatchObject({ address: '/eos/cue/3/5/fire', args: [] })
+  expect(recording.exchanges[2].bytes).toBe(encode('/eos/cue/3/5/fire').toString('hex'))
+  expect(recording.exchanges[3]).toMatchObject({ address: '/eos/out/event/cue/3/5/fire', args: ['Vendor Show'] })
+  expect(recording.exchanges[3].bytes).toBe(encode('/eos/out/event/cue/3/5/fire', ['Vendor Show']).toString('hex'))
+
+  const timestamps = recording.exchanges.map((exchange) => Number(exchange.at))
+  expect(timestamps.every((at) => Number.isFinite(at) && at >= 0)).toBe(true)
+  expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
+
+  // The replay lane: the same fire, the same answer, with no console in the picture.
+  const replayed = await peerWith({ replay: file, tx: { host: '127.0.0.1', port: listener.port } })
+  wire.send('/eos/cue/3/5/fire', [], replayed.port)
+  const event = await listener.waitForAddress('/eos/out/event/cue/3/5/fire')
+  expect(event.args).toEqual(['Vendor Show'])
+  expect(event.bytes.toString('hex')).toBe(encode('/eos/out/event/cue/3/5/fire', ['Vendor Show']).toString('hex'))
+  expect((await listener.waitForAddress('/eos/out/active/cue/text')).args).toEqual(['3/5 Vendor Show 0.0'])
+
+  // An address the recording has no answer for gets no answer, exactly like the console
+  // that was recorded — and the replayed peer does not fall back on its own model.
+  const heard = listener.messages.length
+  wire.send('/eos/cue/1/1/fire', [], replayed.port)
+  await listener.settle()
+  expect(listener.messages).toHaveLength(heard)
+})
+
+test('records the console’s own version when it answers one', async () => {
+  const consolePeer = await peerWith({ version: '3.3.9.1', fixtureLibraryVersion: '3.3.9.2' })
+  const file = recordingPath('version')
+  // Started with a version of its own, so the file saying otherwise is the console talking.
+  const proxy = await peerWith({
+    upstream: { host: '127.0.0.1', port: consolePeer.port },
+    record: file,
+    version: '0.0.0.0'
+  })
+
+  wire.send('/eos/get/version', [], proxy.port)
+  expect((await wire.waitForAddress('/eos/out/get/version')).args).toEqual(['3.3.9.1', '3.3.9.2', 0])
+
+  expect(readRecording(file).provenance).toMatchObject({ version: '3.3.9.1', versionSource: 'console' })
+})
+
+test('refuses a recording it cannot read, in a sentence', async () => {
+  await expect(startEosPeer({ replay: recordingPath('missing') })).rejects.toThrow(/no recording at/)
+
+  const notARecording = recordingPath('not-a-recording')
+  writeFileSync(notARecording, '{"hello": true}\n')
+  await expect(startEosPeer({ replay: notARecording })).rejects.toThrow(/is not an Eos recording/)
 })
 
 // ── The cue send string ─────────────────────────────────────────────────────
