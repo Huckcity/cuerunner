@@ -143,6 +143,25 @@ export interface DeskSysExMessage {
   data: number[]
 }
 
+/**
+ * A MIDI Show Control command, which is what an SQ's cue list answers
+ * ("SQ MIDI Protocol", firmware V1.6). The bytes are the specification's:
+ * `F0 7F <device> 02 <format> <command> <data> F7`, with the cue number and cue list in
+ * ASCII and `00` between the fields.
+ */
+export interface DeskMscMessage {
+  kind: 'msc'
+  at: number
+  bytes: number[]
+  deviceId: number
+  /** The command format byte as it arrived: 7F is the specification's all-types. */
+  format: number
+  /** The specification's own name for the command, or `other` for one it does not define. */
+  command: string
+  cueNumber: string
+  cueList: string
+}
+
 /** Anything not decoded: unknown controllers, stray data bytes, unterminated SysEx. */
 export interface DeskRawMessage {
   kind: 'raw'
@@ -156,6 +175,7 @@ export type DeskReceived =
   | DeskFaderMessage
   | DeskAssignMessage
   | DeskSoftKeyMessage
+  | DeskMscMessage
   | DeskSysExMessage
   | DeskRawMessage
 
@@ -168,6 +188,12 @@ export type DeskReceived =
 export interface DeskState {
   /** 1-based scene, null until one is recalled. */
   scene: number | null
+  /**
+   * The cue the desk's own cue list is standing on, once MIDI Show Control has moved it
+   * (an SQ answers GO, GO with a cue, LOAD and RESET); null until then. A GO naming no cue
+   * moves on by one, which is what the specification says it means.
+   */
+  cue: string | null
   mutes: Record<string, { on: boolean; label: string }>
   faders: Record<string, { value: number; label: string }>
   /** SQ mix assignments (NRPN page 60); the desk toggles them like mutes. */
@@ -200,6 +226,13 @@ export interface DeskPeer {
   setMute(channel: number, note: number, on: boolean, page?: number): void
   /** Move a fader as the desk's own surface would: `note` is the addressed channel. */
   moveFader(channel: number, value: number, note?: number): void
+  /**
+   * The desk's own GO key: the cue list moves, and the desk transmits the command it just
+   * produced — which is what a show control trigger answers. The specification provides
+   * for a controlled device that transmits its own commands (2.6); no vendor document
+   * here says an SQ does, so a hardware lane is what would settle it.
+   */
+  pressGo(cue?: string): void
   /** Raw bytes on the wire, for drips, SysEx and hand-built running-status streams. */
   emit(bytes: number[] | Uint8Array): void
   /**
@@ -215,6 +248,76 @@ export interface DeskPeer {
 
 const hex = (value: number): string => value.toString(16).padStart(2, '0')
 const keyOf = (a: number, b: number): string => `${hex(a)}:${hex(b)}`
+
+/* --------------------------------------------------------- MIDI Show Control */
+
+/** The specification's command names, for the commands a desk's cue list answers. */
+const MSC_COMMANDS: Record<number, string> = {
+  0x01: 'go',
+  0x02: 'stop',
+  0x03: 'resume',
+  0x04: 'timedGo',
+  0x05: 'load',
+  0x0a: 'reset'
+}
+
+/** The universal system exclusive and the show control sub-ID every message carries. */
+const MSC_UNIVERSAL = 0x7f
+const MSC_SUB_ID = 0x02
+
+/** TIMED_GO carries a five-byte time before its cue data ("3.2, Standard Time Code"). */
+const MSC_TIME_BYTES = 5
+
+interface MscFields {
+  deviceId: number
+  format: number
+  command: string
+  cueNumber: string
+  cueList: string
+}
+
+/**
+ * A show control command read off a SysEx run, or null when the run is not one — which
+ * includes the extension-level forms (`00` in the command or format position), which no
+ * device here implements.
+ */
+function mscOf(data: number[]): MscFields | null {
+  const [universal, deviceId, subId, format, command] = data
+  if (universal !== MSC_UNIVERSAL || subId !== MSC_SUB_ID) return null
+  if (deviceId === undefined || format === undefined || command === undefined) return null
+  if (format === 0x00 || command === 0x00) return null
+
+  const body = command === 0x04 ? data.slice(5 + MSC_TIME_BYTES) : data.slice(5)
+  const fields: string[] = []
+  let field = ''
+  for (const byte of body) {
+    // `00` ends a field, and `F7` would have ended the run; the specification's fields
+    // are ASCII, and anything else in one is a byte this desk does not read.
+    if (byte === 0x00) {
+      fields.push(field)
+      field = ''
+      continue
+    }
+    if (byte >= 0x20 && byte <= 0x7e) field += String.fromCharCode(byte)
+  }
+  fields.push(field)
+
+  return {
+    deviceId,
+    format,
+    command: MSC_COMMANDS[command] ?? 'other',
+    cueNumber: fields[0] ?? '',
+    cueList: fields[1] ?? ''
+  }
+}
+
+/** The bytes the desk itself transmits when its own GO is pressed. */
+function mscBytes(cue: string): number[] {
+  const body = cue === ''
+    ? []
+    : [...[...cue].map(character => character.charCodeAt(0) & 0x7f), 0x00]
+  return [0xf0, MSC_UNIVERSAL, 0x7f, MSC_SUB_ID, 0x7f, 0x01, ...body, 0xf7]
+}
 
 /**
  * Join whole MIDI messages into one byte stream. With `runningStatus`, a status byte that
@@ -472,6 +575,7 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
   const receivedLimit = options.receivedLimit ?? 5000
   const state: DeskState = {
     scene: null,
+    cue: null,
     mutes: {},
     faders: {},
     assigns: {},
@@ -950,8 +1054,17 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
         // status byte interrupted never became a message, so it is raw.
         if (message.complete) {
           const run = [0xf0, ...message.data, 0xf7]
-          remember({ kind: 'sysex', at, bytes: run, data: run })
-          if (profile === 'avantis') handleAvantisSysex(message.data)
+          // An SQ's cue list answers MIDI Show Control (firmware V1.6), so a command is
+          // read as one and moves the list; the Avantis document this peer was written
+          // from gives it no MSC, so a run there is left as the SysEx it arrived as.
+          const msc = profile === 'sq' ? mscOf(message.data) : null
+          if (msc !== null) {
+            remember({ kind: 'msc', at, bytes: run, ...msc })
+            applyMsc(msc)
+          } else {
+            remember({ kind: 'sysex', at, bytes: run, data: run })
+            if (profile === 'avantis') handleAvantisSysex(message.data)
+          }
         } else {
           remember({ kind: 'raw', at, bytes: [0xf0, ...message.data] })
         }
@@ -973,6 +1086,27 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
       }
     })
   })
+
+  /**
+   * What the command does to the desk. Only the commands that move the cue list are
+   * modelled: a STOP or a RESUME holds or releases the cue that is running, which is a
+   * state this peer has no other reason to carry.
+   */
+  function applyMsc(msc: MscFields): void {
+    if (msc.command === 'go') {
+      // "If no Cue Number is specified, the next cue in numerical sequence GOes."
+      state.cue = msc.cueNumber !== ''
+        ? msc.cueNumber
+        : state.cue === null
+          ? '1'
+          : String(Number(state.cue) + 1)
+      return
+    }
+    // LOAD puts a cue in standby and RESET "returns to the first item in the Cue List":
+    // both leave the list standing somewhere, which is what this records.
+    if (msc.command === 'load' && msc.cueNumber !== '') state.cue = msc.cueNumber
+    if (msc.command === 'reset') state.cue = '1'
+  }
 
   function recallScene(scene: number): void {
     // Scenes that do not exist are simply not recalled, which is what the desk does with a
@@ -1000,6 +1134,24 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
     const label =
       profile === 'avantis' ? avantisLabel(channel, note, channelNibble) ?? '' : sqParameter(SQ_LEVEL_PAGE, note)?.label ?? ''
     state.faders[keyOf(profile === 'avantis' ? channel : SQ_LEVEL_PAGE, note)] = { value: level, label }
+  }
+
+  function pressGo(cue = ''): void {
+    // The Avantis document this peer was written from does not give it show control, so
+    // its GO key does not transmit one. Whether a real one does is a hardware-lane
+    // question, which is exactly what this peer must not answer for itself.
+    if (profile !== 'sq') return
+    // The command the desk's own GO produced: the all-call device ID and the all-types
+    // format, which is the shape the vendor document's own examples are written in.
+    const msc: MscFields = {
+      deviceId: 0x7f,
+      format: 0x7f,
+      command: 'go',
+      cueNumber: cue,
+      cueList: ''
+    }
+    send(mscBytes(cue))
+    applyMsc(msc)
   }
 
   function emitConnectBurst(): void {
@@ -1066,6 +1218,7 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
     recallScene,
     setMute,
     moveFader,
+    pressGo,
     emit(bytes) {
       send([...bytes])
     },
