@@ -565,18 +565,20 @@ Desk and console integration:
   rather than going quiet. The harness found the difference (`INTEGRATION-HARNESS.md` §7) and
   `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each
   desk does with the bytes rather than to what the app sent
-- **Show control, both directions.** A Show Control cue sends MIDI Show Control — Go, Stop,
-  Resume, Load, Reset — to a console or an automation system, with its own cue number and cue
-  list; a trigger on a cue answers the command a console sends, matched on every field it
-  carries. The codec is held to the vendors' worked examples, and an SQ's cue list answering
-  MSC over its own socket is driven by `integration/specs/msc.spec.ts`
-- **A show driven from the desk's own button.** Neither sound desk has a GO key and neither
-  transmits MSC — the SQ's document describes MSC only as something its cue list *accepts* —
-  so what a show listens to is a control somebody assigned at the desk: a soft key set to send
-  a MIDI note transmits on the press (`9N <note> 7F`), a scene recalled at the desk sends its
-  bank and program change, and either is a MIDI trigger on the desk's own connection. A **mute
-  key** transmits its mute, but that message is the NRPN sequence the desk's mutes are and no
-  trigger kind reads one yet — `INTEGRATION-HARNESS.md` G2 says what closing that would take
+- **A show run from the desk's own buttons.** A console reports a key press only when the key
+  has been assigned to a console function, so the buttons a show runs from are spare **mute
+  groups**: Show Settings → Channels says which group the operator's GO and BACK keys are,
+  those two groups are assigned to keys at the desk, and pressing them runs the show. No MIDI
+  note is set up anywhere. GO fires the cue the show is standing on and BACK stands it back one,
+  ready for the next GO; the desk's message is read by `utils/deskInput.ts`, and a DCA's own mute
+  deliberately is not read as a press, so a scene recall coming back off the desk cannot run the
+  show. `integration/specs/desk-buttons.spec.ts` drives all of it against the peer
+- **Or any control that sends something.** A soft key assigned to a MIDI note, a footswitch, a
+  scene recalled at the desk — whatever the desk transmits is a MIDI trigger on its own
+  connection, and `Learn` writes the trigger from what arrives. A lighting console's own show
+  control command is an `msc` trigger, matched on every field it carries, and the codes are held
+  to the vendors' worked examples; `integration/specs/msc.spec.ts` drives a Show Control cue into
+  an SQ's cue list and a key at the desk into a cue here
 
 The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
 these in the context of the feature it affects.

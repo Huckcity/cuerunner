@@ -994,15 +994,14 @@ console.log(r.stdout.trim())</code></pre>
           sends is how it expresses itself, not which cue it means, so it is not part of the match.
         </p>
         <p>
-          A sound desk has no GO key and does not send show control, so a show driven from the
-          desk listens to a control somebody assigned there: a soft key or footswitch set to send
-          <strong>a MIDI note</strong> transmits one on the press (soft keys are notes from C3
-          upward, one per key), and a scene recalled on the desk sends its bank and program
-          change. Pick the desk's own connection as the device — it is named as
-          <code>address:port</code>, and <strong>Learn</strong> fills it in for you — and the cue
-          fires when that key is pressed. A mute key is the exception: it transmits its mute,
-          which is a long NRPN message rather than a note, and no trigger reads one yet, so
-          assign the key to a MIDI note if it has to fire a cue.
+          A sound desk has no GO key and does not send show control, so a show driven from the desk
+          is run from a spare <strong>mute group</strong> assigned to a key at the desk — see
+          <a href="#scenes">Scenes, and the desk</a> — which the app reads as GO and BACK. Anything
+          else the desk transmits works too: a soft key or footswitch set to send a MIDI note
+          transmits one on the press (soft keys are notes from C3 upward, one per key), and a scene
+          recalled on the desk sends its bank and program change. Pick the desk's own connection as
+          the device — it is named as <code>address:port</code>, and <strong>Learn</strong> fills it
+          in for you — and the cue fires when that key is pressed.
         </p>
         <p>
           A show control trigger is a console's own MIDI Show Control command: the command, what it
@@ -1170,6 +1169,16 @@ console.log(r.stdout.trim())</code></pre>
           in <code>01</code>–<code>3F</code>, which is what its OFF is. The line under the row reads
           back what will be sent in those terms, and says so when the show drives more DCAs than the
           desk has — eight on an SQ, sixteen on an Avantis.
+        </p>
+        <p>
+          The desk's own buttons are the next row: <strong>GO button</strong> and
+          <strong>BACK button</strong>, each a mute group. A console reports a key press only when
+          the key has been given a console function, so a show's transport is a spare mute group
+          rather than a MIDI note: pick the group here, assign that group to a key on the desk, and
+          the key runs the show. GO fires the cue the show is standing on; BACK stands it back one
+          cue, ready for the next GO. A key press is a mute toggle, so either half moves the show —
+          and a <em>DCA's</em> mute is deliberately not read as a press, so a scene recall coming
+          back off the desk cannot fire the show.
         </p>
         <p>
           Below it are the strips on the console and the DCAs they ride. A new show opens with

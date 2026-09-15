@@ -197,6 +197,24 @@ export type DeskKind = 'none' | 'midi' | 'osc' | 'midi-tcp'
 export type DeskProfile = 'note' | 'sq' | 'avantis'
 
 /**
+ * The desk's own buttons, as the desk numbers its mute groups.
+ *
+ * A console reports a key press only when the key does something the console can name, so
+ * the buttons a show runs from are mute groups: one is assigned to a key at the desk, the
+ * key toggles it, and the desk transmits the mute the group would have sent anyway. A mute
+ * group is what a theatre show has spare — the muting is done with DCAs — so a show pays
+ * nothing for it, and the operator presses a button on the desk with no MIDI setup at all.
+ *
+ * Both are null on a desk nobody has set up, and on a show run from the window.
+ */
+export interface DeskButtons {
+  /** The mute group assigned to the desk's GO button. */
+  go: number | null
+  /** The mute group assigned to the desk's BACK button. */
+  back: number | null
+}
+
+/**
  * Where the desk is and how it is spoken to. The address of the desk itself is the one
  * thing the app cannot know, so it is a field rather than a guess; everything else has a
  * default that works.
@@ -232,6 +250,11 @@ export interface DeskSettings {
    * pattern with no `{n}` in it has the number appended.
    */
   address: string
+  /**
+   * The desk's own buttons. Optional on disk: a workspace saved before a desk could be run
+   * from has none, and the migration fills in a show with no buttons — which is what it had.
+   */
+  buttons: DeskButtons
 }
 
 /** A DCA on the desk: a number, what the show calls it, and how it is driven. */
@@ -564,7 +587,10 @@ export function defaultDeskSettings(): DeskSettings {
     host: '127.0.0.1',
     port: DEFAULT_DESK_PORT,
     tcpPort: DEFAULT_DESK_TCP_PORT,
-    address: DEFAULT_DESK_ADDRESS
+    address: DEFAULT_DESK_ADDRESS,
+    // A desk nobody has assigned a button on: the show runs from the window until the
+    // operator says which mute group their GO key is.
+    buttons: { go: null, back: null }
   }
 }
 
@@ -645,7 +671,13 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
   return {
     oscIn: { ...defaults.oscIn, ...settings?.oscIn },
     midiIn: { ...defaults.midiIn, ...settings?.midiIn },
-    desk: { ...defaults.desk, ...settings?.desk },
+    desk: {
+      ...defaults.desk,
+      ...settings?.desk,
+      // A desk section written before a desk could be run from has no buttons, and one
+      // half-filled by hand gets the other half: a button nobody assigned is null.
+      buttons: { ...defaults.desk.buttons, ...settings?.desk?.buttons }
+    },
     rf: {
       plot: { ...defaults.rf.plot, ...rf?.plot },
       sources: rf?.sources ?? defaults.rf.sources,

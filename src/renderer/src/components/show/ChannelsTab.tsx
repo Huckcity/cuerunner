@@ -9,6 +9,7 @@ import {
   updateDca
 } from '../../utils/cast'
 import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue, dcaValueRange, deskChannelGap } from '../../utils/desk'
+import { MUTE_GROUP_COUNT } from '../../utils/deskInput'
 import { DCA_LIMIT } from '../../types/show'
 import type { CastSettings, DeskProfile, DeskSettings } from '../../types/show'
 import { TextField, NumberField } from '../common/Field'
@@ -25,6 +26,33 @@ function deskGap(desk: DeskSettings): string | null {
     return 'An Avantis answers four channels above its own, so its MIDI channel is 12 or lower.'
   }
   return null
+}
+
+/** Whether this desk has the mute groups a button is assigned to. */
+function hasMuteGroups(desk: DeskSettings): boolean {
+  return (desk.kind === 'midi' || desk.kind === 'midi-tcp') && desk.profile !== 'note'
+}
+
+/** The group a select is standing on, or null for the option that assigns none. */
+function muteGroupOf(value: string): number | null {
+  return value === '' ? null : Number(value)
+}
+
+/** Whether one group has been given both buttons, which would run the show both ways. */
+function sameButton(desk: DeskSettings): boolean {
+  return desk.buttons.go !== null && desk.buttons.go === desk.buttons.back
+}
+
+/** Every mute group the desk has, and the option that assigns none. */
+function MuteGroupOptions({ none }: { none: string }) {
+  return (
+    <>
+      <option value="">— {none} —</option>
+      {Array.from({ length: MUTE_GROUP_COUNT }, (_, index) => (
+        <option key={index + 1} value={index + 1}>Mute group {index + 1}</option>
+      ))}
+    </>
+  )
 }
 
 /**
@@ -238,6 +266,45 @@ export function ChannelsTab() {
             <span className="desk-hint">Nothing is sent: the show is a roster and a set of cues.</span>
           )}
         </div>
+
+        {/* The desk's own buttons: a mute group assigned to a key at the desk is a button
+            that reports itself, which is the only kind a console offers. */}
+        {hasMuteGroups(desk) && !gap && (
+          <div className="desk-row desk-buttons">
+            <label className="desk-label" htmlFor="desk-button-go">GO button</label>
+            <select
+              id="desk-button-go"
+              className="desk-button-go"
+              aria-label="Desk GO button"
+              title="The mute group your GO key is assigned to at the desk"
+              value={desk.buttons.go ?? ''}
+              onChange={e => updateDeskSettings({
+                buttons: { ...desk.buttons, go: muteGroupOf(e.target.value) }
+              })}
+            >
+              <MuteGroupOptions none="no GO button" />
+            </select>
+
+            <label className="desk-label" htmlFor="desk-button-back">BACK button</label>
+            <select
+              id="desk-button-back"
+              className="desk-button-back"
+              aria-label="Desk BACK button"
+              title="The mute group your BACK key is assigned to at the desk"
+              value={desk.buttons.back ?? ''}
+              onChange={e => updateDeskSettings({
+                buttons: { ...desk.buttons, back: muteGroupOf(e.target.value) }
+              })}
+            >
+              <MuteGroupOptions none="no BACK button" />
+            </select>
+          </div>
+        )}
+        {sameButton(desk) && !gap && (
+          <div className="desk-preview desk-gap">
+            One mute group cannot be both buttons.
+          </div>
+        )}
 
         {/* What the show sends, read back from the connection: a pattern and a port are
             easier to check as addresses. This is the only place the convention lives, so a

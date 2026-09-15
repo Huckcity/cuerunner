@@ -147,7 +147,7 @@ unvalidated rather than as evidence.
 | Desk/scene messages | `utils/desk.ts` → a per-desk arrangement (a note pair, or an SQ's NRPN mute) | yes |
 | Show control out | `MscCue` → `midi:send` / `midi:sendTcp`, `utils/msc.ts` | yes — an SQ's cue list answers MSC |
 | Show control in | `engine/triggers.ts`, `msc` triggers | a console that transmits one (Eos does; the sound desks do not — G2) |
-| A desk's own button | a soft key assigned to a MIDI note → `midi` trigger | yes — a note from a key somebody assigned |
+| A desk's own buttons | a spare mute group assigned to a key → `utils/deskInput.ts` → GO / BACK | yes — the message a key press makes the desk send |
 
 Three gaps stood between that and the harness, in the order they bit. What became of each:
 
@@ -197,13 +197,14 @@ What a sound desk is heard through instead is its own controls, and how far that
   it, and `msc.spec.ts` holds that path: a key pressed at the desk fires the cue bound to it.
 - **A scene recalled on the desk** transmits its bank and program change, which is the desk-originated
   case the desk specs already drive.
-- **A mute key** transmits the mute — the SQ "sends and receives absolute On or Off mute
-  messages" — as the NRPN sequence `B0 63 MB B0 62 LB B0 06 00 B0 26 01`. **No trigger kind
-  reads that sequence today**: a MIDI trigger matches a note, a controller or a program change,
-  and the four controllers of an NRPN mute are none of those. A show that wants "the operator
-  muted DCA 4 at the desk" as a firing source needs a desk trigger that decodes the sequence
-  against the profile's own tables (page 02 for DCAs, page 04 for mute groups). That work is not
-  started; assigning the key to a MIDI note instead is what works today.
+- **A mute group key is the button a show runs from**, and it is read: a console reports a key
+  press only when the key does something the console can name — "these consoles do not provide a
+  method to detect UDK/Soft button presses without assigning them to console functions" is how
+  TheatreMix puts it — so a spare mute group is what the operator assigns to their key. The desk
+  transmits the group's mute (the SQ "sends and receives absolute On or Off mute messages") and
+  the show reads it in `utils/deskInput.ts`: page 04's groups on an SQ, the mute-group notes on
+  an Avantis, and a DCA's own mute is deliberately *not* one of them, or a show would run itself
+  when a scene moved the desk. `desk-buttons.spec.ts` drives it end to end.
 
 **G3 — triggers match OSC addresses literally.** `matchesTrigger` is an exact string
 compare, by an explicit decision ("patterns and wildcards belong to the sender", held by
@@ -359,7 +360,9 @@ issue number goes in the fixture's provenance):
   fixture records which one it was written from).
 - Mutes: NRPN select (`Bn 63 MB`, `Bn 62 LB`, `Bn 06 00`) then `Bn 26 01` on / `Bn 26 00`
   off; increment (`Bn 60 00`) toggles. Level and mute parameter numbers come from the
-  reference tables in issue 5.
+  reference tables in issue 5. Page 04's parameters 0–7 are the eight mute groups, which is
+  also what a show's transport buttons are: `setMute(channel, group - 1, on, 0x04)` is the
+  message a key assigned to that group makes the desk send.
 - MIDI Show Control: the cue list answers a command — `F0 7F <device> 02 <format> <command>
   <cue in ASCII> 00 <cue list> F7` — so a GO moves the peer's own cue list and `state.cue`
   says where it is standing. LOAD and RESET leave the list standing somewhere too, and
@@ -460,7 +463,18 @@ first slice, not the ceiling.
 9. Timing: a scene recall reaches the wire within the post-wait budget the cue claims.
    Assert the measured interval, not just the state.
 
-**Show control, and the desk's own button** (`msc.spec.ts`)
+**The desk's own buttons** (`desk-buttons.spec.ts`)
+
+1. A mute group the show assigned as its GO key fires the cue the show is standing on, and the
+   selection moves on: the assertion is both the cue that started and where the show now stands.
+2. The BACK key stands the show back one cue, and the GO key after it plays that cue again —
+   back is a position, not a re-fire.
+3. The same key twice inside the window steps once.
+4. A **DCA mute is not a button**: page 02 moved nothing, which is the case that keeps a show
+   from running itself when a scene recall comes back off the desk.
+5. A group nobody assigned does nothing.
+
+**Show control, and a key assigned to a MIDI note** (`msc.spec.ts`)
 
 1. A Show Control cue sends the command down the desk's own socket. The peer reads
    `F0 7F 7F 02 7F 01 31 32 00 F7` as Go cue 12 — its own list is standing there afterwards —
@@ -612,9 +626,10 @@ from the desk and replayed on Linux.
 **MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and fires a
 cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
 so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane.
-**The desk's mute keys are the piece still missing**: the desk transmits them, and no trigger
-kind reads the NRPN sequence they are. A desk trigger that decodes one against the profile's
-tables is what would close it.
+**The desk's own buttons are read as mute groups**, which is how a show is run from the surface
+without assigning anything as a MIDI note: `desk-buttons.spec.ts` holds GO, BACK, the window in
+front of them, and the DCA mute that must not be read as a press. What no lane here has is a
+desk to press the key on — the hardware lane is where the message a key really sends is checked.
 *Acceptance*: the same assertions that pass against the peer pass against the desk, with
 only the host changing; a recorded desk fixture is committed with its provenance and the
 Linux lane replays it.

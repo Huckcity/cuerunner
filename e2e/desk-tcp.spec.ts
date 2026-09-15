@@ -85,6 +85,37 @@ test('the desk row takes the desk’s own name, and reads back what that desk is
   await settings.locator('.show-settings-done').click()
 })
 
+test('the desk’s own buttons are assigned by mute group, and only on a desk that has them', async () => {
+  await openShowSettings(page)
+  const settings = page.locator('.show-settings-dialog')
+
+  // The desk this show drives takes a note on and a note off and has no mute groups, so
+  // there is nothing to assign a button to and the row is not drawn at all.
+  await expect(settings.locator('.desk-buttons')).toHaveCount(0)
+
+  // An SQ is told which of its mute groups the operator's keys are. Nothing else is set up
+  // anywhere: the group is assigned to a key at the desk, and the message the key makes the
+  // desk send is what the show listens to.
+  await settings.locator('.desk-profile').selectOption('sq')
+  await expect(settings.locator('.desk-button-go')).toHaveValue('')
+  await expect(settings.locator('.desk-button-back')).toHaveValue('')
+
+  await settings.locator('.desk-button-go').selectOption('5')
+  await settings.locator('.desk-button-back').selectOption('6')
+  await expect(settings.locator('.desk-button-go')).toHaveValue('5')
+  await expect(settings.locator('.desk-button-back')).toHaveValue('6')
+
+  // One group cannot be both: the row says so rather than leaving a show that steps forward
+  // and back on the same press.
+  await settings.locator('.desk-button-back').selectOption('5')
+  await expect(settings.locator('.desk-gap')).toHaveText('One mute group cannot be both buttons.')
+
+  await settings.locator('.desk-button-back').selectOption('6')
+  await settings.locator('.desk-profile').selectOption('note')
+  await expect(settings.locator('.desk-buttons')).toHaveCount(0)
+  await settings.locator('.show-settings-done').click()
+})
+
 test('a show written before the desk had a socket opens on the port the desks use', async () => {
   // The file is what an operator's workspace looks like after the upgrade: a desk pointed
   // over the network, and no MIDI-over-TCP port, because the field did not exist when it
