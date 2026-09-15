@@ -563,8 +563,13 @@ export class RedundancyService implements ShowService {
         : `${half} — ${where}, nothing answering at ${this.peerAddress()}`
     }
     if (!peer.alive) return `${half} — ${peer.name} has gone quiet`
-    const both = peer.role === 'live' && this.config.role === 'live'
-      ? ' — both machines are configured as the live one'
+    // Two machines set to the same half is a configuration mistake, and the one place it
+    // shows is here: both halves driving means two shows, and neither driving means the
+    // operator's next GO is the only thing that fires anything.
+    const both = peer.role === this.config.role
+      ? this.config.role === 'live'
+        ? ' — both machines are configured as the live one'
+        : ' — neither machine is configured to run the show'
       : ''
     return peer.inSync
       ? `${half} — ${peer.name} in sync${both}`

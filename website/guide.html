@@ -1294,8 +1294,10 @@ console.log(r.stdout.trim())</code></pre>
           playing is put back at the position it had reached, plus however long passed between the
           last beat and the takeover — the position was true when the beat arrived, and the show
           has been running since. The operator's place in the show comes across with it, so the
-          next GO fires what the live machine would have fired. Everything else is named rather
-          than faked, in the run log: a MIDI or OSC cue has already reached its desk and sending it
+          next GO fires what the live machine would have fired. Anything this machine was
+          running on its own is stopped first, so what is playing after a takeover is what the
+          mirror says and nothing else. Everything else is named rather than faked, in the run
+          log: a MIDI or OSC cue has already reached its desk and sending it
           again would be a second note; a wait, a fade or a script was part-way through work that
           lived on the machine that died; a cue in its post-wait had already finished and the next
           GO belongs to the cue after it.

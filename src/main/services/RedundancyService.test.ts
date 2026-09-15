@@ -404,6 +404,25 @@ describe('two machines in a pair', () => {
     expect(backup.latest()?.status.lastEvent).toContain('handed back')
   })
 
+  it('says when both machines are set to the same half', async () => {
+    // The one configuration mistake a pair has: two machines driving two shows, or two
+    // standing by while nothing drives at all. Neither is the app's to decide, and both
+    // are the operator's to see.
+    const live = await start('desk-a', 'id-a', { role: 'live' })
+    const other = await rawPeer((await awaiting(live)).port, hello('id-b', { role: 'live' }))
+    await until(() => live.latest()?.status.detail.includes('both machines are configured as the live one') === true,
+      'the clash to be said out loud')
+    other.close()
+
+    const standby = await start('desk-c', 'id-c', { role: 'standby' })
+    const peer = await rawPeer((await awaiting(standby)).port, hello('id-d', { role: 'standby', driving: false }))
+    await until(
+      () => standby.latest()?.status.detail.includes('neither machine is configured to run the show') === true,
+      'the idle pair to be said out loud'
+    )
+    peer.close()
+  })
+
   it('does not take a show it is already driving', async () => {
     const live = await start('desk-a', 'id-a', { role: 'live' })
     const result = await live.service.command('takeover') as { adopted: boolean; term: number }

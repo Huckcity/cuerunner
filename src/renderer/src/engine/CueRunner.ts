@@ -316,6 +316,19 @@ export class CueRunner {
    */
   adopt(plan: TakeoverPlan): { adopted: number; skipped: number } {
     if (!this.deps) return { adopted: 0, skipped: 0 }
+    // The mirror is the show now. A cue the operator fired here by hand would otherwise
+    // play underneath the show the live machine has just handed over, so anything this
+    // machine was running on its own is stopped first — and said, when there was any.
+    const stray = [...this.runs.keys()].filter(
+      cueId => !plan.adopt.some(entry => entry.cueId === cueId)
+    )
+    if (stray.length > 0) {
+      this.log({
+        level: 'info',
+        message: `stopped what this machine was running on its own (${stray.length})`
+      })
+      this.stop()
+    }
     this.log({ level: 'info', message: plan.note })
     for (const entry of plan.adopt) this.adoptCue(entry.cueId, entry.seekMs)
     for (const entry of plan.skipped) {

@@ -67,6 +67,7 @@ interface TestSetup {
   setRunning: Mock
   setSelected: Mock
   appendLog: Mock
+  clearAllRunning: Mock
 }
 
 function setup(initialCues: Cue[], selectedId?: string): TestSetup {
@@ -75,13 +76,14 @@ function setup(initialCues: Cue[], selectedId?: string): TestSetup {
   const setRunning = vi.fn()
   const setSelected = vi.fn((id: string | null) => { selected = id })
   const appendLog = vi.fn()
+  const clearAllRunning = vi.fn()
 
   runner.init({
     getCues: () => initialCues,
     getSelected: () => selected,
     setSelected,
     setRunning,
-    clearAllRunning: vi.fn(),
+    clearAllRunning,
     syncCueDuration: vi.fn(),
     setLastRun: vi.fn(),
     appendLog,
@@ -92,7 +94,7 @@ function setup(initialCues: Cue[], selectedId?: string): TestSetup {
   })
   runners.push(runner)
 
-  return { runner, cues: initialCues, setRunning, setSelected, appendLog }
+  return { runner, cues: initialCues, setRunning, setSelected, appendLog, clearAllRunning }
 }
 
 function plan(overrides: Partial<TakeoverPlan> = {}): TakeoverPlan {
@@ -181,6 +183,26 @@ describe('CueRunner — putting a show back on the engine', () => {
       message: 'not picked up: a midi cue that has already gone out cannot be picked up',
       label: '2 · Sting'
     })
+  })
+
+  it('stops what this machine was running on its own', async () => {
+    // A cue an operator fired on the standby by hand would otherwise play underneath the
+    // show the live machine hands over: after a takeover, what is running is the mirror.
+    const stray = makeWait({ id: 'w1', duration: 30_000 })
+    const overture = makeAudio({ id: 'a1' })
+    const { runner, setRunning, appendLog, clearAllRunning } = setup([stray, overture])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
+
+    runner.adopt(plan({ adopt: [{ cueId: 'a1', number: '1', name: 'Overture', seekMs: 5000 }] }))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(clearAllRunning).toHaveBeenCalled()
+    const messages = appendLog.mock.calls.flatMap(call => call[0] as Array<{ message: string }>)
+    expect(messages.map(entry => entry.message)).toContain('stopped what this machine was running on its own (1)')
+    expect(engine.start).toHaveBeenCalledTimes(1)
   })
 
   it('stands the operator where the live machine had them standing', () => {
