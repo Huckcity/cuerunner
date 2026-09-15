@@ -23,13 +23,11 @@
 // app draws them — a dialog 520 pixels wide, the window 1280 — and the page shows each one
 // at that size rather than blowing it up.
 import { execFileSync } from 'node:child_process'
-import { generateKeyPairSync } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { _electron as electron } from '@playwright/test'
-import { createLicense } from '../src/main/license/key.ts'
+import { closeApp, launchApp, mintLicense, openFromRecent } from '../e2e/helpers.ts'
 import { underVirtualDisplay } from './virtual-display.mjs'
 
 // Before anything is launched: on Linux this re-runs the script under Xvfb, so the windows
@@ -105,25 +103,10 @@ fs.writeFileSync(showPath, JSON.stringify({
 
 /* ── The two machines ────────────────────────────────────────────────────── */
 
-// A licence of the run's own, minted here with the app's own codec and a throwaway pair:
-// the pair is licensed the way an operator's is, and the app is told to trust the
-// development-only public key, which a packaged build ignores. The e2e suite mints its
-// keys the same way, from e2e/helpers.ts — which this script cannot import, because a
-// plain Node script resolves relative imports by their real path and the suite's helpers
-// import each other by module name. The launch below is pinned to the same arguments and
-// environment that helper uses, which is the part that has to agree.
-const { privateKey, publicKey } = generateKeyPairSync('ed25519')
-const licenseText = createLicense(
-  {
-    v: 1,
-    id: 'WSP-REDUND1',
-    licensee: 'Redundancy Walkthrough',
-    // Issued today: a key carries a date, and the capture is of this version of the app.
-    issued: new Date().toISOString().slice(0, 10)
-  },
-  privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
-)
-const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString()
+// A licence of the run's own, minted by the same helper the e2e suite uses: a capture and
+// a spec license the app identically, and the app is told to trust the development-only
+// public key, which a packaged build ignores.
+const license = mintLicense({ licensee: 'Redundancy Walkthrough' })
 
 const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-live-'))
 const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-backup-'))
@@ -141,22 +124,8 @@ for (const [dir, settings] of [
     peerHost: '127.0.0.1', peerPort: livePort, token: TOKEN, timeoutMs: 3000, takeover: 'auto'
   }]
 ]) {
-  fs.writeFileSync(path.join(dir, 'license.key'), licenseText, 'utf-8')
   fs.writeFileSync(path.join(dir, 'redundancy.json'), JSON.stringify(settings, null, 2))
 }
-
-/** An app with its own user-data directory, pinned the way the e2e suite pins one. */
-const launch = userDataDir =>
-  electron.launch({
-    args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
-    env: {
-      ...process.env,
-      WINSLAB_LICENSE_PUBLIC_KEY: publicKeyPem,
-      // The silent backend: a capture plays no hardware, and the mixer and clock are real.
-      WINSLAB_AUDIO_BACKEND: 'silent',
-      ELECTRON_DISABLE_SECURITY_WARNINGS: '1'
-    }
-  })
 
 /* ── Capture ─────────────────────────────────────────────────────────────── */
 
@@ -171,21 +140,19 @@ let backupApp = null
 let backup = null
 
 async function capture() {
-  liveApp = await launch(liveDir)
-  live = await liveApp.firstWindow()
-  await live.waitForLoadState('domcontentloaded')
-  backupApp = await launch(backupDir)
-  backup = await backupApp.firstWindow()
-  await backup.waitForLoadState('domcontentloaded')
+  // Both machines are stood up the way the e2e suite stands one up, from e2e/helpers.ts:
+  // the same arguments, the same ozone pin, the same silent backend, the same licence
+  // handling. A capture that launched its own app would be a second implementation of the
+  // thing the suite already owns, and the two would drift.
+  ;({ app: liveApp, page: live } = await launchApp({ userDataDir: liveDir, license }))
+  ;({ app: backupApp, page: backup } = await launchApp({ userDataDir: backupDir, license }))
 
-  // The show is opened the way a user opens it — through the recents list the file menu
-  // shows — rather than by a script reaching into the store.
-  for (const [page, dir] of [[live, liveDir], [backup, backupDir]]) {
-    fs.writeFileSync(path.join(dir, 'recent.json'), JSON.stringify([showPath]))
-    await page.locator('.toolbar-brand').click()
-    await page.locator('.file-menu-recent', { hasText: path.basename(showPath) }).click()
-    await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor({ timeout: 15_000 })
-  }
+  // And the show is opened the way a user opens it — through the recents list the file
+  // menu shows — rather than by a script reaching into the store.
+  await openFromRecent(live, liveDir, showPath)
+  await openFromRecent(backup, backupDir, showPath)
+  await live.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor({ timeout: 15_000 })
+  await backup.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor({ timeout: 15_000 })
 
   const shot = async (page, file, selector) => {
     const target = page.locator(selector).first()
@@ -406,8 +373,8 @@ async function capture() {
 try {
   await capture()
 } finally {
-  await backupApp?.close().catch(() => {})
-  await liveApp?.close().catch(() => {})
+  if (backupApp) await closeApp(backupApp)
+  if (liveApp) await closeApp(liveApp)
   fs.rmSync(work, { recursive: true, force: true })
   fs.rmSync(liveDir, { recursive: true, force: true })
   fs.rmSync(backupDir, { recursive: true, force: true })

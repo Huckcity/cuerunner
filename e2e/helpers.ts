@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import path from 'path'
 // The spec process mints keys with the same codec the app reads them with, so a test
 // cannot pass against a format the app does not actually accept.
-import { createLicense } from '../src/main/license/key'
+import { createLicense } from '../src/main/license/key.ts'
 
 /**
  * A license minted for a test run.

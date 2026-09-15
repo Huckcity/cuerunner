@@ -26,7 +26,7 @@ const CHECK_MS = 10
 const TIMEOUT_MS = 200
 /** How much of that clock a case may spend waiting for a condition before it fails. */
 const BUDGET_MS = 2000
-/** How much the partner's silence grows between two statuses while it is quiet. */
+/** A second, for the readings that are asked for rather than announced. */
 const SILENCE_STEP_MS = 1000
 
 interface Health {
@@ -364,35 +364,42 @@ describe('a machine on its own', () => {
     expect(alone.latest()?.status.driving).toBe(false)
   })
 
-  it('keeps the partner’s silence moving while it is quiet, and only then', async () => {
-    // The panel adds the time since the status was published to the silence that status
-    // reported, so a status that stopped coming while the partner was quiet would leave
-    // "last heard 12.5 s ago" on screen beside a partner answering five times a second.
-    // The status therefore goes out as the silence grows — a second at a time — and a
-    // partner that is answering never gets that far.
+  it('answers how long the partner has been quiet, without saying it every second', async () => {
+    // The age of a partner's silence is a reading, not an event: the panel asks for it on
+    // its own tick, and the event stream stays a record of what changed. A machine that
+    // announced it once a second would fill the run log with rows saying the same thing —
+    // which is what the first version of this did, and what a figure of the log caught.
     const { live, backup } = await pair()
     await until(() => backup.latest()?.status.peer?.alive === true, 'the pair to meet')
     await backup.service.command('publish', digest({ running: [] }))
     await live.service.command('publish', digest({ running: [] }))
     await until(() => backup.latest()?.status.peer?.inSync === true, 'the show to be mirrored')
 
-    const settled = backup.events.length
+    const quietWhileHealthy = backup.events.length
     await settle(HEARTBEAT_MS * 10)
-    expect(backup.events.length).toBe(settled)
+    expect(backup.events.length).toBe(quietWhileHealthy)
 
     live.close()
-    await until(
-      () => (backup.latest()?.status.peer?.silentMs ?? 0) >= 1000,
-      'the silence to be reported as it grows'
-    )
-    // And it goes on growing in the panel: a second later there is another status, and
-    // another after that, each with a larger silence than the one before.
-    await settle(SILENCE_STEP_MS * 2 + CHECK_MS * 2)
-    const reported = backup.events
-      .map(event => event.status.peer?.silentMs ?? -1)
-      .filter(silence => silence >= SILENCE_STEP_MS)
-    expect(reported.length).toBeGreaterThan(1)
-    expect(reported).toEqual([...reported].sort((a, b) => a - b))
+    await until(() => backup.latest()?.status.peer?.alive === false, 'the silence to be noticed')
+    const quietWhileGone = backup.events.length
+    await settle(SILENCE_STEP_MS * 3)
+    expect(backup.events.length).toBe(quietWhileGone)
+
+    // Asked, though, the machine answers with the silence as it stands now.
+    const first = await backup.service.command('status') as { peer: { silentMs: number } | null }
+    await settle(SILENCE_STEP_MS)
+    const later = await backup.service.command('status') as { peer: { silentMs: number } | null }
+    expect(first.peer?.silentMs).toBeGreaterThanOrEqual(TIMEOUT_MS)
+    expect(later.peer?.silentMs ?? 0).toBeGreaterThan((first.peer?.silentMs ?? 0) + 500)
+  })
+
+  it('answers a status even when the pair is not running', async () => {
+    // A window that opens onto a disabled machine still gets a true answer rather than an
+    // error about a service that is not running.
+    const machine = await start('desk-a', 'id-a', { enabled: false })
+    const status = await machine.service.command('status') as { enabled: boolean; peer: unknown }
+    expect(status.enabled).toBe(false)
+    expect(status.peer).toBeNull()
   })
 
   it('sets the monitor’s line on a change rather than on every look', async () => {
