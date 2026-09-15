@@ -79,15 +79,13 @@ export interface WaveformLayout {
   /** File fractions the grips sit at. */
   startFraction: number
   endFraction: number
-  /** The window the grips were placed in. */
-  view: WaveformView
 }
 
 /** The grip radius, in CSS pixels; the drawing scales it for the device pixel ratio. */
 export const HANDLE_RADIUS = 9
 
 export function waveformLayout(
-  width: number, height: number, region: WaveformRegion, view: WaveformView = FULL_VIEW
+  width: number, height: number, region: WaveformRegion, view: WaveformView
 ): WaveformLayout {
   const startFraction = Math.max(0, Math.min(1, region.start))
   const endFraction = Math.max(0, Math.min(1, region.end))
@@ -96,7 +94,6 @@ export function waveformLayout(
   return {
     startFraction,
     endFraction,
-    view,
     handles: {
       // Top and bottom rather than both at the top: the two grips are then always both
       // visible, even when the region is narrow enough for them to overlap in x.
