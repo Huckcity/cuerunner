@@ -40,10 +40,6 @@ test.beforeAll(async () => {
     // Where a console's OSC TX is pointed: the app's oscillator input, which is where a
     // trigger can hear it.
     tx: { host: '127.0.0.1', port: appPort },
-    // A recording from the vendor lane, when there is one: the peer answers with what the
-    // real console answered rather than with its own model of the show — which is the whole
-    // point of a recording, and the only way a Linux pull request sees a real session.
-    replay: process.env.EOS_REPLAY,
     cues: [
       { list: 1, number: 1, label: 'Preshow', upTime: 3 },
       { list: 1, number: 12, label: 'Blackout', upTime: 2 },

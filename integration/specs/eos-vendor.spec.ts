@@ -14,10 +14,14 @@ import { startEosPeer, type EosPeer } from '../peers/eos'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
 import { firedAddress, VERSION_ANSWER, writeEosShow } from './eosFixture'
 
-/** `host:port` of the console's OSC input. The vendor lane sets it; nothing else does. */
-const TARGET = process.env.EOS_TARGET
+/**
+ * The environment, as the environment actually is: a variable set to nothing is a variable
+ * nobody set. The workflow passes `EOS_RECORD: ''` for a run that is not recording, and an
+ * empty path would otherwise read as "record, to nowhere".
+ */
+const TARGET = process.env.EOS_TARGET || undefined
 /** The cue the show fires, in cue list 1. Any show with a cue in it will do the chain. */
-const CUE = Number(process.env.EOS_CUE ?? 12)
+const CUE = Number(process.env.EOS_CUE || 12)
 /**
  * Where the app listens for the console, and where the recorder listens when one is in the
  * way. Both are fixed, and not out of laziness: a console's OSC TX destination is a setting
@@ -33,14 +37,14 @@ const RELAY_PORT = Number(process.env.EOS_RELAY_PORT ?? 8002)
  * which is how a nightly run produces the fixture the Linux lane replays, without the app
  * or the console knowing anything about it.
  */
-const RECORD = process.env.EOS_RECORD
+const RECORD = process.env.EOS_RECORD || undefined
 /**
  * A recording to answer from instead of a console — the nightly lane's fixture, replayed.
  * With it set the spec needs no console at all, which is what makes a recording worth
  * keeping: the assertions below then run on every pull request, against what a real console
  * once said.
  */
-const REPLAY = process.env.EOS_REPLAY
+const REPLAY = process.env.EOS_REPLAY || undefined
 
 test.skip(
   TARGET === undefined && REPLAY === undefined,

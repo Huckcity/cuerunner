@@ -555,9 +555,12 @@ Linux lane replays it.
 2. **A desk to validate against.** The hardware lane is the only thing that keeps a peer
    honest over time, and it needs an SQ or Avantis reachable from a runner for a few
    hours, occasionally. Without one this is planned and untested.
-3. **Where the vendor lane runs.** `ubox-win` is the natural home (WinsLab ships Windows
-   first, and ETCnomad is its usual platform); the Mac mini is the fallback if the Windows
-   guest proves hostile to Eos, and it is currently unmeasured either way.
+3. **Where the vendor lane runs. — answered: `ubox-win`, with a fallback.** ETCnomad is
+   installed there (§9), and the guest is a Windows machine with a logged-in session, which
+   is what a GUI application needs. Two caveats stand: Server 2025 is outside ETC's
+   supported list, and the guest's display and 3D are below Eos's stated minimums. The
+   position is therefore "it runs until it does not" — if it will not come up, the Mac mini
+   is the fallback, and its macOS support is at least as good as the guest's Server 2025.
 
 **Risks**
 

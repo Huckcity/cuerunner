@@ -14,3 +14,9 @@ coverage/
 # Native engine: the downloaded FFmpeg source cache and the built decoder helper.
 # (The engine itself lands in native/audio/build/, already covered by build/ above.)
 native/audio/.cache/
+
+# A console session recorded by the vendor lane (INTEGRATION-HARNESS.md §9). These are
+# evidence rather than build output: one is added deliberately, with its provenance, because
+# a replay lane that treats this machine's stand-ins as ground truth is worse than no replay
+# lane at all.
+integration/fixtures/vendor/

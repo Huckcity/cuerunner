@@ -51,16 +51,20 @@ jobs:
       - name: Launch the console software
         shell: pwsh
         run: |
-          # The same launcher a person uses. The show it comes up on is whatever the
-          # provisioned session left as last-used, which is what the spec's checklist
-          # describes: a cue in cue list 1, and OSC RX/TX configured.
-          $launcher = 'C:\Program Files\Electronic Theatre Controls\Eos\ETC_LaunchOffline.exe'
+          # The launcher a person uses, where ETC's installer actually puts it (the install
+          # tree was read off the runner rather than guessed: Eos.exe is the marker, and the
+          # shell that starts it lives beside its own utilities). The show it comes up on is
+          # whatever the provisioned session left as last-used, which is what the spec's
+          # checklist describes: a cue in cue list 1, and OSC RX/TX configured.
+          $launcher = 'C:\Program Files\ETC\EosFamily\v3\ETC_Launch\ETC_LaunchOffline.exe'
           Start-Process -FilePath $launcher
-          # The shell takes a while — it loads the fixture library — and nothing here
-          # depends on being fast: the spec's first test waits for the console to answer
-          # and fails with the checklist if it never does.
+          # The shell takes a while — it loads the fixture library, and it may open on the
+          # shell rather than straight into a show. Nothing here depends on being fast or on
+          # what comes up: the spec's first test waits for the console to answer and fails
+          # with the checklist if it never does. This step says what is running, no more.
           Start-Sleep -Seconds 20
-          Get-Process -Name Eos -ErrorAction Stop | Select-Object -First 1 -Property Name, Id
+          Get-Process -Name ETC_LaunchOffline, Eos -ErrorAction SilentlyContinue |
+            Select-Object Name, Id, SessionId | Format-Table -AutoSize | Out-String | Write-Host
 
       - name: Integration (vendor)
         env:
