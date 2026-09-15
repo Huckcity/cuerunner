@@ -297,6 +297,21 @@ contextBridge.exposeInMainWorld('winslab', {
      * OS and is shown by the main process, so a cancel is `comparison: null` rather
      * than an error.
      */
+    /**
+     * A show and its media as one file, and back again. Both dialogs belong to the OS and
+     * are shown by the main process, so a cancel comes back as `null`.
+     */
+    exportBundle: (
+      workspace: Workspace,
+      workspacePath: string | null
+    ): Promise<
+      | { ok: false; error: string }
+      | { ok: true; exported: { path: string; missing: string[] } | null }
+    > => ipcRenderer.invoke('workspace:exportBundle', workspace, workspacePath),
+    importBundle: (): Promise<
+      | { ok: false; error: string }
+      | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
+    > => ipcRenderer.invoke('workspace:importBundle'),
     compare: (workspace: Workspace): Promise<
       | { ok: false; error: string }
       | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }

@@ -508,8 +508,19 @@ export function storedMediaPath(absolutePath: string, workspaceDir: string): str
 // is a format that will eventually churn for a reason nobody can find. Adding a key means
 // adding it here, in the place it is meant to sit.
 // Held by src/main/workspace/determinism.test.ts and e2e/showfile.spec.ts.
-export function serialiseWorkspace(workspace: Workspace, workspaceDir: string): string {
+//
+// `references` is for the one caller that stores a show somewhere other than the folder
+// its media lives in: a bundle records each cue's entry inside the bundle and the
+// absolute path the file had where it came from, neither of which can be derived from
+// the folder the bundle is written into.
+export function serialiseWorkspace(
+  workspace: Workspace,
+  workspaceDir: string,
+  references?: Map<string, MediaReference>
+): string {
   const cues = workspace.cues.map(cue => {
+    const recorded = references?.get(cue.id)
+    if (recorded) return { ...cue, media: recorded }
     if (cue.type !== 'audio' || cue.filePath === '') return cue
     const absolutePath = isAbsolute(cue.filePath) ? cue.filePath : resolve(workspaceDir, cue.filePath)
     return {

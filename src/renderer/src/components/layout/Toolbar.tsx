@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore, usePro } from '../../store'
-import { useWorkspace, openDemoWorkspace } from '../../hooks/useWorkspace'
+import {
+  useWorkspace,
+  openDemoWorkspace,
+  exportShowBundle,
+  importShowBundle
+} from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
 import { ProMark } from '../license/ProLock'
 import { CUE_ICON } from '../../utils/cueIcons'
@@ -23,7 +28,12 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
 
 /** The File menu entries that open a Pro surface. The file records its own history
  *  whether or not this machine is licensed; reading it back is what the key turns on. */
-const PRO_FILE_ACTIONS = new Set<FileMenuAction>(['history', 'compare'])
+const PRO_FILE_ACTIONS = new Set<FileMenuAction>([
+  'history',
+  'compare',
+  'export-bundle',
+  'import-bundle'
+])
 
 const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'midi',    label: 'MIDI'    },
@@ -130,6 +140,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     // from another file. The menu entry says which one the operator asked for.
     'history': () => openChanges('history'),
     'compare': () => openChanges('compare'),
+    'export-bundle': exportShowBundle,
+    'import-bundle': importShowBundle,
     'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings
   }

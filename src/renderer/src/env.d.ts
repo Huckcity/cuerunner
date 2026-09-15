@@ -99,6 +99,17 @@ interface WinslabBridge {
       existingPath: string | null
     ) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
     saveAs: (workspace: Workspace) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
+    exportBundle: (
+      workspace: Workspace,
+      workspacePath: string | null
+    ) => Promise<
+      | { ok: false; error: string }
+      | { ok: true; exported: { path: string; missing: string[] } | null }
+    >
+    importBundle: () => Promise<
+      | { ok: false; error: string }
+      | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
+    >
     compare: (workspace: Workspace) => Promise<
       | { ok: false; error: string }
       | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }

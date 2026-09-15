@@ -46,6 +46,7 @@ import {
   getRecentFiles
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
+import { exportBundle, importBundle } from '../workspace/bundle'
 import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
@@ -505,6 +506,23 @@ export function registerIpcHandlers(): void {
   // Reading a show's history — and comparing two of them — is the Pro half of the
   // showfile work. The file records its history either way: the data belongs to the show,
   // and a window that is not licensed still saves one.
+  // A bundle is a show and its media in one file, for handover. It is a Pro surface like
+  // the rest of the showfile work; the show it carries is the operator's either way.
+  ipcMain.handle(
+    'workspace:exportBundle',
+    async (event, workspace: Workspace, workspacePath: string | null) => {
+      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+      const exported = await exportBundle(getWin(event), workspace, workspacePath)
+      return { ok: true, exported }
+    }
+  )
+
+  ipcMain.handle('workspace:importBundle', async (event) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+    const imported = await importBundle(getWin(event))
+    return { ok: true, imported }
+  })
+
   ipcMain.handle('workspace:compare', async (event, workspace: Workspace) => {
     if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     const comparison = await compareWorkspace(getWin(event), workspace)

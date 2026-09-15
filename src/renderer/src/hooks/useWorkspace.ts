@@ -120,6 +120,69 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
   }
 }
 
+/**
+ * The show and the audio it plays, written to one file the operator names. Media the
+ * machine does not have is left out and reported rather than failing the export: the
+ * bundle is still worth having, and the operator is the one who knows where that file
+ * went.
+ */
+export async function exportShowBundle(): Promise<void> {
+  const {
+    workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
+    triggerGuard, workspaceId, workspaceCreatedAt, showHistory
+  } = useStore.getState()
+  // A show with unsaved edits is the show as it stands: what the bundle carries is what
+  // is on screen, not what was last written.
+  const workspace = buildWorkspace(
+    workspaceName,
+    cues,
+    audioSettings,
+    midiSettings,
+    showSettings,
+    { id: workspaceId, createdAt: workspaceCreatedAt },
+    triggerGuard,
+    showHistory
+  )
+  try {
+    const answer = await window.winslab.workspace.exportBundle(workspace, workspacePath)
+    if (!answer.ok) {
+      reportFailure(answer.error)
+      return
+    }
+    if (!answer.exported) return
+    const store = useStore.getState()
+    store.appendLog([{
+      level: 'info',
+      message: `Exported ${answer.exported.path}`
+    }])
+    if (answer.exported.missing.length > 0) {
+      const names = answer.exported.missing.map(path => path.split(/[\\/]/).pop()).join(', ')
+      store.setNotice(
+        `${answer.exported.missing.length} of the show's files were not on this machine and are `
+        + `not in the bundle: ${names}`
+      )
+    }
+  } catch (e) {
+    reportFailure(`Could not export the bundle: ${message(e)}`)
+  }
+}
+
+/** A bundle in: a show and its media unpacked where the operator says, then opened. */
+export async function importShowBundle(): Promise<void> {
+  if (!await guardDirty()) return
+  try {
+    const answer = await window.winslab.workspace.importBundle()
+    if (!answer.ok) {
+      reportFailure(answer.error)
+      return
+    }
+    if (!answer.imported) return
+    loadIntoStore(answer.imported.workspace, answer.imported.path, answer.imported.missingMedia)
+  } catch (e) {
+    reportFailure(`Could not open the bundle: ${message(e)}`)
+  }
+}
+
 export function useWorkspace() {
   const { workspaceName, workspacePath, isDirty, loadWorkspace, setWorkspaceName } = useStore()
 

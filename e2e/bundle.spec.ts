@@ -1,0 +1,174 @@
+// A show and its audio as one file, out of the app and back into it.
+//
+// The two dialogs belong to the OS and cannot be driven, so they are answered in the main
+// process — the bundle that gets written, the zip inside it, the unpacked folder and the
+// show the app then opens are all real. What this proves is the thing the feature exists
+// for: a show that plays on a machine that has never seen its media.
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
+
+let app: ElectronApplication | undefined
+let root: string
+let showPath: string
+let bundled: string
+let unpacked: string
+
+function audioCue(id: string, number: string, name: string, filePath: string): unknown {
+  return {
+    id,
+    number,
+    name,
+    colorLabel: 'none',
+    parentId: null,
+    preWait: 0,
+    postWait: 0,
+    timelineOffset: 0,
+    duration: 500,
+    advance: 'none',
+    isArmed: true,
+    notes: '',
+    type: 'audio',
+    filePath,
+    startTime: 0,
+    endTime: null,
+    fadeInDuration: 0,
+    volume: 1,
+    pan: 0,
+    outputs: null,
+    loopCount: 0,
+    playbackRate: 1,
+    trim: 0
+  }
+}
+
+function writeWav(filePath: string, tone: number): void {
+  const sampleRate = 48000
+  const frames = sampleRate / 2
+  const dataBytes = frames * 2
+  const buffer = Buffer.alloc(44 + dataBytes)
+  buffer.write('RIFF', 0); buffer.writeUInt32LE(36 + dataBytes, 4); buffer.write('WAVE', 8); buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22)
+  buffer.writeUInt32LE(sampleRate, 24); buffer.writeUInt32LE(sampleRate * 2, 28)
+  buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34); buffer.write('data', 36); buffer.writeUInt32LE(dataBytes, 40)
+  buffer.fill(tone, 44)
+  fs.writeFileSync(filePath, buffer)
+}
+
+async function start(options: { license?: TestLicense } = {}): Promise<Page> {
+  const userDataDir = path.join(root, `userdata-${options.license ? 'pro' : 'free'}`)
+  fs.mkdirSync(userDataDir, { recursive: true })
+  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([showPath]))
+  const launched = await launchApp({ ...options, userDataDir })
+  app = launched.app
+  return launched.page
+}
+
+test.beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-bundle-'))
+  fs.mkdirSync(path.join(root, 'music'))
+  writeWav(path.join(root, 'music', 'walk-in.wav'), 11)
+  writeWav(path.join(root, 'music', 'bows.wav'), 22)
+
+  showPath = path.join(root, 'Press Night.wlab')
+  fs.writeFileSync(
+    showPath,
+    `${JSON.stringify(
+      {
+        version: 1,
+        id: 'w-press-night',
+        name: 'Press Night',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        audioSettings: { outputDeviceId: 'default' },
+        midiSettings: { outputPortName: '' },
+        cues: [
+          audioCue('a1', '1', 'Walk-in Music', path.join(root, 'music', 'walk-in.wav')),
+          audioCue('a2', '2', 'Bows', path.join(root, 'music', 'bows.wav'))
+        ]
+      },
+      null,
+      2
+    )}\n`
+  )
+
+  bundled = path.join(root, 'Press Night.wlabx')
+  unpacked = path.join(root, 'handover')
+})
+
+test.afterEach(async () => {
+  if (app) await closeApp(app)
+  app = undefined
+  fs.rmSync(root, { recursive: true, force: true })
+})
+
+async function openShow(page: Page): Promise<void> {
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu-recent', { hasText: 'Press Night.wlab' }).click()
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
+}
+
+async function exportTo(page: Page, target: string): Promise<void> {
+  await app!.evaluate(async ({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath })
+  }, target)
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button[data-action="export-bundle"]').click()
+}
+
+test('a show and its audio leave as one file and come back playable', async () => {
+  test.setTimeout(120_000)
+  const page = await start({ license: mintLicense() })
+  await openShow(page)
+
+  await exportTo(page, bundled)
+  await expect.poll(() => fs.existsSync(bundled), { message: 'the bundle on disk' }).toBe(true)
+  // It is a zip, which is what an operator's laptop can open without this app.
+  expect(fs.readFileSync(bundled).subarray(0, 2).toString()).toBe('PK')
+
+  // The same show bundled twice is the same file: a bundle can be kept, compared, hashed.
+  const again = path.join(root, 'Press Night again.wlabx')
+  await exportTo(page, again)
+  await expect.poll(() => fs.existsSync(again)).toBe(true)
+  expect(fs.readFileSync(again).equals(fs.readFileSync(bundled))).toBe(true)
+
+  // Now the handover: unpack the bundle into a folder, and open what comes out.
+  fs.mkdirSync(unpacked, { recursive: true })
+  await app!.evaluate(async ({ dialog }, [bundlePath, folder]) => {
+    let call = 0
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [call++ === 0 ? bundlePath : folder]
+    })
+  }, [bundled, unpacked])
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button[data-action="import-bundle"]').click()
+
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
+  await expect(page.locator('.cue-row', { hasText: 'Bows' })).toBeVisible()
+  // Nothing is missing, so the app says nothing about missing media.
+  await expect(page.locator('.missing-media-bar')).toHaveCount(0)
+
+  // The show arrived with its audio, and the paths in it point at what was unpacked.
+  const unpackedShow = path.join(unpacked, 'Press Night.wlab')
+  expect(fs.existsSync(unpackedShow)).toBe(true)
+  expect(fs.existsSync(path.join(unpacked, 'media', 'walk-in.wav'))).toBe(true)
+  expect(fs.existsSync(path.join(unpacked, 'media', 'bows.wav'))).toBe(true)
+  const stored = JSON.parse(fs.readFileSync(unpackedShow, 'utf-8')) as {
+    cues: Array<{ media: { path: string } }>
+  }
+  expect(stored.cues.map(cue => cue.media.path)).toEqual(['media/walk-in.wav', 'media/bows.wav'])
+})
+
+test('a machine with no key is told what a bundle is for, and bundles nothing', async () => {
+  const page = await start()
+  await openShow(page)
+
+  await page.locator('.toolbar-brand').click()
+  await expect(page.locator('.file-menu button[data-action="export-bundle"] .pro-mark')).toHaveCount(1)
+  await page.locator('.file-menu button[data-action="export-bundle"]').click()
+
+  await expect(page.locator('.app-notice')).toContainText('WinsLab Pro is required')
+  expect(fs.existsSync(bundled)).toBe(false)
+})
