@@ -46,7 +46,9 @@ import {
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { openDemoWorkspace } from '../workspace/demo'
-import { createShowRuntime } from '../show/runtime'
+import { createShowRuntime, defaultServices } from '../show/runtime'
+import { createMachineRedundancy } from '../redundancy/machine'
+import type { RedundancySettings } from '../../shared/redundancy'
 import { drainMainErrors } from '../errors'
 import { loadScriptDocument } from '../script/document'
 import { createLicenseManager } from '../license/LicenseManager'
@@ -59,7 +61,16 @@ import type { Workspace } from '../../renderer/src/types/workspace'
 
 const midi = new MidiEngine(midiModuleLoader())
 const osc = new OscEngine()
-const show = createShowRuntime()
+
+// This machine's half of a redundant pair, read once at startup and written only when
+// the operator changes it. It lives beside `license.key` rather than in the workspace:
+// both machines of a pair run the same workspace file, so which one is the main and
+// where the other one is are facts about the machines.
+const machineRedundancy = createMachineRedundancy({
+  filePath: path.join(app.getPath('userData'), 'redundancy.json')
+})
+
+const show = createShowRuntime(defaultServices({ redundancy: () => machineRedundancy.current() }))
 
 // Network cues are HTTP clients, not page fetches: a console on the LAN has no reason to
 // send CORS headers, and the request has to survive the window being busy or reloaded.
@@ -347,6 +358,24 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('show:restart', async (_, service: string) => {
     if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     return show.restart(service)
+  })
+
+  // Redundant playback. Which half of a pair this machine is, and where its partner is,
+  // are the machine's own settings — the showfile travels between the two — so they are
+  // read and written through their own pair of channels rather than through the
+  // workspace's settings. Reading is open: a locked app should be able to say what it
+  // would be, and the gate is on the change.
+  ipcMain.handle('redundancy:settings', () => machineRedundancy.current())
+
+  ipcMain.handle('redundancy:configure', async (_, patch: Partial<RedundancySettings>) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED, settings: machineRedundancy.current() }
+    const settings = await machineRedundancy.update(patch)
+    // The service reads this machine's settings when it starts, so a change is a restart
+    // of that one service — a new port, a new partner, being switched off — rather than a
+    // reconfigure of the whole show, which would drop every other listener with it.
+    if (settingsReceived) await show.restart('redundancy')
+    else await show.configure(lastShowSettings)
+    return { ok: true, settings }
   })
 
   // License. The window reads the status, asks for a key to be checked, and is told

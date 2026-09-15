@@ -19,6 +19,7 @@ import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 import type { TriggerGuardSettings } from '../types/workspace'
+import type { TakeoverPlan } from '../../../shared/redundancy'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
 type ClearAllRunning = () => void
@@ -287,6 +288,58 @@ export class CueRunner {
     }, parent)
   }
 
+  /**
+   * Puts a cue that was already playing on another machine back on this one's engine:
+   * the same cue, beginning at the position the show had reached in its file, with no
+   * pre-wait to sit through and no fade-in over the sound already in flight. This is a
+   * takeover rather than a press, so the guard that stands in front of a hand, a desk or
+   * a cue light is not consulted — and the cue it replaces is the run that machine left.
+   */
+  adoptCue(cueId: string, seekMs: number): void {
+    if (!this.deps) return
+    const cues = this.deps.getCues()
+    const cue = cues.find(candidate => candidate.id === cueId)
+    if (!cue || !cue.isArmed) return
+    const nextCue = cues[cues.findIndex(candidate => candidate.id === cueId) + 1] ?? null
+    this.fireCue(cue, this.now(), (doneAt, run) => {
+      if (cue.advance === 'on-end' && nextCue) this.goById(nextCue.id, doneAt, run)
+    }, undefined, Math.max(0, seekMs), true)
+  }
+
+  /**
+   * Takes a show over from a machine that stopped answering. What the plan says can be
+   * picked up goes back on the engine at the position it had reached; the operator's
+   * place in the show comes with it, so the next GO fires what the live machine would
+   * have fired. Everything that could not be carried forward is written to the session
+   * log with its reason — a MIDI cue has already reached its desk, a wait was half
+   * counted — because the operator has to know what the show did without them.
+   */
+  adopt(plan: TakeoverPlan): { adopted: number; skipped: number } {
+    if (!this.deps) return { adopted: 0, skipped: 0 }
+    // The mirror is the show now. A cue the operator fired here by hand would otherwise
+    // play underneath the show the live machine has just handed over, so anything this
+    // machine was running on its own is stopped first — and said, when there was any.
+    const stray = [...this.runs.keys()].filter(
+      cueId => !plan.adopt.some(entry => entry.cueId === cueId)
+    )
+    if (stray.length > 0) {
+      this.log({
+        level: 'info',
+        message: `stopped what this machine was running on its own (${stray.length})`
+      })
+      this.stop()
+    }
+    this.log({ level: 'info', message: plan.note })
+    for (const entry of plan.adopt) this.adoptCue(entry.cueId, entry.seekMs)
+    for (const entry of plan.skipped) {
+      this.log({ level: 'error', message: `not picked up: ${entry.reason}`, label: entry.label })
+    }
+    if (plan.selectedId && this.deps.getCues().some(cue => cue.id === plan.selectedId)) {
+      this.deps.setSelected(plan.selectedId)
+    }
+    return { adopted: plan.adopt.length, skipped: plan.skipped.length }
+  }
+
   // Cue identity as it was when the entry was written, e.g. "3 · Network Cue".
   private cueLabel(cue: Cue): string {
     return `${cue.number} · ${cue.name}`
@@ -320,13 +373,18 @@ export class CueRunner {
    * Fires a cue so that its execution begins at `startMs` on the sample clock — not at
    * whatever moment this happens to be. `onDone` is called with the sample time the cue
    * hands over to, which is known in advance for anything with a predictable length.
+   *
+   * `adopted` is the one caller that is not a firing: the cue was already playing on
+   * another machine, so its execution begins now with no pre-wait to sit through — the
+   * wait happened on the machine this show came from.
    */
   private fireCue(
     cue: Cue,
     startMs: number,
     onDone: Handover,
     parent?: CueRun,
-    seekMs = 0
+    seekMs = 0,
+    adopted = false
   ): void {
     const generation = this.generation
 
@@ -337,7 +395,7 @@ export class CueRunner {
       cueId: cue.id,
       seq: ++this.runSeq,
       generation,
-      startAt: startMs + cue.preWait,
+      startAt: adopted ? startMs : startMs + cue.preWait,
       seekMs,
       postWait: cue.postWait,
       endAt: null,
@@ -384,7 +442,7 @@ export class CueRunner {
       this.execute(cue, run, executeAt, finish)
     }
 
-    if (cue.preWait > 0) {
+    if (!adopted && cue.preWait > 0) {
       this.track(run, this.scheduler!.schedule({
         at: startMs,
         due: () => {
@@ -1243,6 +1301,22 @@ export class CueRunner {
     // note-off never came is not a note anybody is holding, and leaving it held would
     // keep that trigger dead for the rest of the night.
     this.guard.reset()
+  }
+
+  /**
+   * The show has moved to the other machine of a pair: it claimed the show under a higher
+   * term, and it is playing what this machine was playing. This machine stops being the
+   * sound — with the same short fade a panic cuts with, because the machine that took the
+   * show over is already inside the same cue and a hard cut would be a click on top of
+   * the two of them. Nothing here advances the show: the cue the next GO would fire is
+   * the other machine's to fire now.
+   */
+  standDown(): void {
+    if (!this.deps) return
+    this.cancelAllWork()
+    scriptHost.cancelAll()
+    void audioEngine.stopAll(PANIC_FADE_MS).catch(() => {})
+    this.deps.clearAllRunning()
   }
 
   /**

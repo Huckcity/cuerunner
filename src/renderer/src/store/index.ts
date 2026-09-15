@@ -4,6 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
+import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
   CastSettings,
   CompanionSettings,
@@ -48,7 +49,7 @@ export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'license'
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -257,6 +258,19 @@ interface CueListState {
   dismissAlert: (id: number) => void
   clearShowEvents: () => void
 
+  /**
+   * Redundant playback, as the main process last reported it: which half of the pair
+   * this machine is, whether its partner is answering, and what it last did about it.
+   * Like the services above, it is a fact about the machines rather than the show.
+   */
+  redundancy: RedundancyStatus | null
+  /**
+   * This machine's own half of the arrangement — its role, its name and where its
+   * partner is. Kept with the machine rather than in the workspace, and read from the
+   * main process at startup; null until it has been read.
+   */
+  redundancySettings: RedundancySettings | null
+  setRedundancySettings: (settings: RedundancySettings) => void
   /** Operator-facing message shown in the notice bar: a failed save or open. */
   notice: string | null
   setNotice: (message: string | null) => void
@@ -517,6 +531,15 @@ function mergeServices(previous: ServiceStatus[], events: ShowEvent[]): ServiceS
   return [...byId.values()]
 }
 
+/** The newest redundancy status in a batch, or the one already held when it carries none. */
+function latestRedundancy(previous: RedundancyStatus | null, events: ShowEvent[]): RedundancyStatus | null {
+  let status = previous
+  for (const event of events) {
+    if (event.kind === 'redundancy') status = event.status
+  }
+  return status
+}
+
 // Coalesce rapid updateCue calls for the same cue into one history entry.
 let _coalesceId: string | null = null
 let _coalesceTime = 0
@@ -626,6 +649,8 @@ export const useStore = create<CueListState>((set) => ({
   showDevices: [],
   showAlerts: [],
   showEvents: [],
+  redundancy: null,
+  redundancySettings: null,
   deskState: {},
   deskSceneId: null,
   scenesEditing: false,
@@ -1093,6 +1118,7 @@ export const useStore = create<CueListState>((set) => ({
       showEvents: [...s.showEvents, ...events].slice(-SHOW_EVENT_LIMIT),
       showServices: mergeServices(s.showServices, events),
       showDevices: mergeDevices(s.showDevices, events),
+      redundancy: latestRedundancy(s.redundancy, events),
       showAlerts: alerts.length === 0
         ? s.showAlerts
         : [...s.showAlerts, ...alerts].slice(-SHOW_ALERT_LIMIT),
@@ -1112,8 +1138,15 @@ export const useStore = create<CueListState>((set) => ({
     showServices: snapshot.services,
     showDevices: snapshot.devices,
     showAlerts: snapshot.alerts,
-    showEvents: snapshot.events.slice(-SHOW_EVENT_LIMIT)
+    showEvents: snapshot.events.slice(-SHOW_EVENT_LIMIT),
+    // The status comes with whatever decision the machine last made, which is how a
+    // window that reloaded just after a takeover learns it has a show to put back on the
+    // engine. Acting on one twice is the window's own business, and it counts the
+    // sequence to know.
+    redundancy: latestRedundancy(null, snapshot.events)
   })),
+
+  setRedundancySettings: (settings) => set({ redundancySettings: settings }),
 
   dismissAlert: (id) => set(s => ({ showAlerts: s.showAlerts.filter(a => a.id !== id) })),
 

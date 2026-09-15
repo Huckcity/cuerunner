@@ -35,6 +35,13 @@ export function describeEvent(event: ShowEvent): string {
       return event.service.detail
         ? `${event.service.label} ${event.service.state}: ${event.service.detail}`
         : `${event.service.label} ${event.service.state}`
+    case 'redundancy':
+      // The status line already says what this machine is and what it has heard; the
+      // log adds what it last did about it, which is the part an operator reads back
+      // the next morning.
+      return event.status.lastEvent
+        ? `${event.status.detail}; ${event.status.lastEvent}`
+        : event.status.detail
   }
 }
 

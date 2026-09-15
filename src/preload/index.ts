@@ -6,6 +6,7 @@ import type { MidiAvailability } from '../renderer/src/types/midi'
 import type { MidiMessageKind } from '../renderer/src/types/cue'
 import type { NetworkRequest, NetworkResult } from '../renderer/src/types/network'
 import type { PlaybackPanic } from '../renderer/src/types/playback'
+import type { RedundancySettings } from '../shared/redundancy'
 import type { MissingMedia } from '../shared/media'
 import {
   AUDIO_CHANNELS,
@@ -224,6 +225,16 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.on('show:events', listener)
       return () => ipcRenderer.off('show:events', listener)
     }
+  },
+  redundancy: {
+    /** This machine's half of a pair. Reading is free; changing it is a Pro feature. */
+    settings: (): Promise<RedundancySettings> =>
+      ipcRenderer.invoke('redundancy:settings'),
+    configure: (patch: Partial<RedundancySettings>): Promise<{
+      ok: boolean
+      settings: RedundancySettings
+      error?: string
+    }> => ipcRenderer.invoke('redundancy:configure', patch)
   },
   license: {
     status: (): Promise<LicenseStatus> =>

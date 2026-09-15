@@ -84,6 +84,17 @@ test('a machine with no key runs the free half and locks the rest', async () => 
   await expect(dialog.locator('.license-hint')).toContainText('WinsLab Pro')
   await dialog.getByRole('button', { name: 'Enter a license key' }).click()
   await expect(dialog.locator('#license-key')).toBeVisible()
+
+  // The second machine: the tab explains what a pair is, and the process that would open
+  // the socket refuses to pair this machine on its own account. The dialog is already
+  // open on the license tab — a lock's own button is the way in.
+  await dialog.getByRole('button', { name: 'Redundancy', exact: true }).click()
+  await expect(dialog.locator('.pro-lock[data-feature="Redundant playback"]')).toBeVisible()
+  expect(await inRenderer("window.winslab.redundancy.configure({ enabled: true })"))
+    .toMatchObject({ ok: false, error: 'WinsLab Pro is required for the show services' })
+  expect(await inRenderer('window.winslab.redundancy.settings()'))
+    .toMatchObject({ enabled: false })
+
   await dialog.getByRole('button', { name: 'Close' }).click()
 })
 
