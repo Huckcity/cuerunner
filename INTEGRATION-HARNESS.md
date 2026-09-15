@@ -522,16 +522,27 @@ on Linux.
 **M2 — the vendor lane, and fixtures from the real thing.**
 Landed: the vendor spec (`eos-vendor.spec.ts`, tagged `@vendor`, skips itself without a
 console), the nightly and on-demand workflow, the recorder and the replay in the peer, and
-the mechanism proven in both directions *without* a console — a session recorded through
-the recorder against a stand-in, then replayed with no console anywhere — which is also
-what the fixture loop will do with the real thing.
-*Remaining*: two screens on the console itself. ETCnomad is installed on `ubox-win` (§9),
-but `{UDP Strings & OSC}` and the OSC RX/TX settings are console settings with no file to
-seed, so a person — or a viewer on the guest's VNC — has to do them once, and then a
-scheduled run against it.
-*Acceptance*: a scheduled Windows run drives real Eos: WinsLab fires a cue in the console
-software, Eos's own `/eos/out/event/cue/...` comes back and fires the next WinsLab cue, and
-the run records a fixture that the Linux lane then replays.
+the mechanism proven in both directions *without* a console — a session recorded through the
+recorder against a stand-in, then replayed with no console anywhere.
+
+**Driven against real hardware** (ETC Eos v3.3.9.25, on `ubox-win`): the lane passes — the
+app fires `/eos/cue/1/12/fire`, the console runs the cue, its own
+`/eos/out/event/cue/1/12/fire` comes back, and the cue that answers it fires. The console's
+`/eos/get/version` self-test answers `3.3.9.25` with fixture library `3.3.9.2`, which is the
+documented shape, so the peer's model of that packet was right about the real thing.
+
+The hardware also corrected the recorder, which is what the ladder is for: Eos sends *to* its
+configured OSC UDP TX destination but *from an ephemeral port*, and the recorder had assumed
+the console's answers would arrive from the console's own address — so it read them as client
+traffic and forwarded them upstream instead of relaying them to `tx`. Direction is now read
+from the address space ETC documents (`/eos/out/…` is the console speaking, everything else is
+a client instructing it) rather than from where a datagram came from.
+
+*Remaining*: a recorded session from the console, committed with its provenance, for the Linux
+lane to replay. The console's own settings are provisioned (§9); the recording is a
+`workflow_dispatch` run with `record: true` — which needs this branch on `main`, because
+`workflow_dispatch` only sees workflows that exist on the default branch.
+*Acceptance*: met, except for that fixture.
 
 **M3 — hardware, and MSC when the product has it.**
 `desk-hardware.spec.ts` pointed at a real SQ or Avantis by `desk_host`; fixtures recorded
