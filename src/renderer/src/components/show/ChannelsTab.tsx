@@ -8,7 +8,7 @@ import {
   updateChannel,
   updateDca
 } from '../../utils/cast'
-import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue, deskChannelGap } from '../../utils/desk'
+import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue, dcaValueRange, deskChannelGap } from '../../utils/desk'
 import { DCA_LIMIT } from '../../types/show'
 import type { CastSettings, DeskProfile, DeskSettings } from '../../types/show'
 import { TextField, NumberField } from '../common/Field'
@@ -316,6 +316,9 @@ export function ChannelsTab() {
             const carrying = cast.channels
               .filter(channel => channel.dcaId === dca.id)
               .map(channel => channelLabel(cast.channels, channel.id))
+            // What an override may be on this desk: the DCA block's own numbers, so the
+            // field refuses one that would address something else on the desk.
+            const range = dcaValueRange(desk.profile)
             return (
               <div className="dca-row" key={dca.id}>
                 <div className="dca-fields">
@@ -346,8 +349,8 @@ export function ChannelsTab() {
                     <NumberField
                       className="dca-override"
                       value={dca.note ?? dcaValue(index, desk.profile)}
-                      min={0}
-                      max={127}
+                      min={range.min}
+                      max={range.max}
                       aria-label={`DCA ${dcaNumber(index)} number`}
                       title={desk.profile === 'sq'
                         ? 'Sent instead of the NRPN parameter its place makes — 0 for DCA 1'

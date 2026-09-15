@@ -11,6 +11,7 @@ import {
   dcaGap,
   dcaNumber,
   dcaValue,
+  dcaValueRange,
   describeDeskMessage,
   deskMessages,
   oscMessages,
@@ -249,6 +250,14 @@ describe('the arrangements themselves', () => {
     ])
     expect(profileMessages('sq', 1, 0, false)).toHaveLength(4)
     expect(profileMessages('avantis', 16, 0x36, false)).toHaveLength(2)
+  })
+
+  it('offers an override only the numbers the desk’s own DCA block has', () => {
+    // A number outside the block addresses something else on the desk — an FX send, a
+    // mute group — so the field refuses it rather than sending it and saying nothing.
+    expect(dcaValueRange('note')).toEqual({ min: 0, max: 127 })
+    expect(dcaValueRange('sq')).toEqual({ min: 0, max: 7 })
+    expect(dcaValueRange('avantis')).toEqual({ min: AVANTIS_DCA_FIRST_NOTE, max: AVANTIS_DCA_FIRST_NOTE + 15 })
   })
 })
 

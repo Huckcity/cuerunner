@@ -19,7 +19,7 @@ interface Props { cue: MscCue }
 export function MscInspector({ cue }: Props) {
   const update = useStore(s => s.updateCue)
   const desk = useStore(s => s.showSettings.desk)
-  const set = (patch: Partial<MscCue>) => update(cue.id, patch as never)
+  const set = (patch: Partial<MscCue>) => update(cue.id, patch)
 
   const [ports, setPorts] = useState<string[]>([])
 

@@ -92,6 +92,17 @@ export function dcaLimit(profile: DeskProfile): number | null {
   return null
 }
 
+/**
+ * The numbers a DCA can be addressed by on this desk, which is what an override may be:
+ * the DCA block's own range, so the field refuses a number that would address something
+ * else entirely rather than sending it and saying nothing.
+ */
+export function dcaValueRange(profile: DeskProfile): { min: number; max: number } {
+  const limit = dcaLimit(profile)
+  if (limit === null) return { min: 0, max: 127 }
+  return { min: dcaValue(0, profile), max: dcaValue(limit - 1, profile) }
+}
+
 /** Whether this profile's DCAs can answer on this channel at all. */
 export function deskChannelGap(profile: DeskProfile, midiChannel: number): boolean {
   return profile === 'avantis' && dcaChannel(profile, midiChannel) > 16
