@@ -40,7 +40,9 @@ interface Harness {
   events: RedundancyEvent[]
   /** The newest status this machine published. */
   latest: () => RedundancyEvent | null
-  /** Every takeover this machine has announced. */
+  /** Every change in who is driving this machine has announced. */
+  notices: () => RedundancyEvent[]
+  /** The takeovers among them. */
   takeovers: () => RedundancyEvent[]
   close: () => void
 }
@@ -141,7 +143,8 @@ async function start(
     health,
     events,
     latest: () => events.at(-1) ?? null,
-    takeovers: () => events.filter(event => event.takeover !== undefined),
+    notices: () => events.filter(event => event.notice !== undefined),
+    takeovers: () => events.filter(event => event.notice?.kind === 'takeover'),
     close: () => {
       service.stop()
       bus.close()
@@ -214,7 +217,8 @@ interface RawPeer {
   close: () => void
 }
 
-async function rawPeer(port: number, greeting: Record<string, unknown>): Promise<RawPeer> {
+/** A peer that has only connected: it says nothing until the test tells it to. */
+async function unaddressed(port: number): Promise<RawPeer> {
   const socket = createConnection(port, '127.0.0.1')
   const ready = Promise.withResolvers<void>()
   socket.once('connect', () => ready.resolve())
@@ -232,14 +236,36 @@ async function rawPeer(port: number, greeting: Record<string, unknown>): Promise
       if (line !== '') peer.lines.push(line)
     }
   })
+  return peer
+}
+
+/** A peer that connects and says hello at once. */
+async function rawPeer(port: number, greeting: Record<string, unknown>): Promise<RawPeer> {
+  const peer = await unaddressed(port)
   peer.say(greeting)
   return peer
 }
 
-/** A stand-in for the other end of a dial: it accepts and says hello. */
-async function rawServer(greeting: Record<string, unknown>): Promise<{ port: number; lines: string[]; close: () => Promise<void> }> {
+/** A stand-in for the other end of a dial: it accepts, greets, and writes down the lines. */
+interface RawServer {
+  port: number
+  lines: string[]
+  /** How many sockets this server has accepted over its life, closed ones included. */
+  accepted: () => number
+  /** Says something down every socket it holds. */
+  sayAll: (message: unknown) => void
+  close: () => Promise<void>
+}
+
+async function rawServerOn(port: number, greeting: Record<string, unknown>): Promise<RawServer> {
   const lines: string[] = []
+  const sockets = new Set<Socket>()
+  let accepted = 0
   const server: Server = createServer(socket => {
+    accepted += 1
+    sockets.add(socket)
+    socket.on('close', () => sockets.delete(socket))
+    socket.on('error', () => sockets.delete(socket))
     socket.on('data', chunk => {
       for (const line of chunk.toString('utf8').split('\n')) {
         if (line !== '') lines.push(line)
@@ -248,17 +274,26 @@ async function rawServer(greeting: Record<string, unknown>): Promise<{ port: num
     socket.write(encodeMessage(greeting as never))
   })
   const listening = Promise.withResolvers<void>()
-  server.listen(0, '127.0.0.1', listening.resolve)
+  server.listen(port, '127.0.0.1', listening.resolve)
   await listening.promise
   return {
     port: (server.address() as AddressInfo).port,
     lines,
+    accepted: () => accepted,
+    sayAll: message => {
+      for (const socket of sockets) socket.write(encodeMessage(message as never))
+    },
     close: async () => {
+      for (const socket of sockets) socket.destroy()
       const closed = Promise.withResolvers<void>()
       server.close(() => closed.resolve())
       await closed.promise
     }
   }
+}
+
+function rawServer(greeting: Record<string, unknown>): Promise<RawServer> {
+  return rawServerOn(0, greeting)
 }
 
 describe('a machine on its own', () => {
@@ -363,7 +398,8 @@ describe('two machines in a pair', () => {
     live.close()
 
     await until(() => backup.takeovers().length === 1, 'the takeover')
-    const notice = backup.takeovers()[0].takeover!
+    const notice = backup.takeovers()[0].notice
+    if (notice?.kind !== 'takeover') throw new Error('expected a takeover')
     expect(notice.reason).toBe('the live machine stopped answering')
     expect(notice.term).toBe(1)
     expect(notice.digest?.show.name).toBe('Hamlet')
@@ -389,7 +425,7 @@ describe('two machines in a pair', () => {
     const result = await backup.service.command('takeover') as { adopted: boolean; term: number }
     expect(result.adopted).toBe(true)
     await until(() => backup.takeovers().length === 1, 'the takeover to be announced')
-    expect(backup.takeovers()[0].takeover?.reason).toBe('the operator took the show')
+    expect(backup.takeovers()[0].notice).toMatchObject({ kind: 'takeover', reason: 'the operator took the show' })
     expect(backup.latest()?.status.driving).toBe(true)
   })
 
@@ -501,6 +537,87 @@ describe('who is allowed in', () => {
     accepted.close()
     machine.close()
     await far.close()
+  })
+})
+
+describe('the handshake', () => {
+  it('says nothing about itself to a socket it did not open', async () => {
+    // The greeting carries the shared token, and the listener answers every address that
+    // reaches it. A stranger that opens the port must learn nothing it can use: it is
+    // answered — and greeted in kind — only once it has proved it knows the token.
+    const machine = await start('desk-a', 'id-a', { token: 'sekrit' })
+    const stranger = await unaddressed(machine.port)
+
+    await settle(CHECK_MS * 6)
+    expect(stranger.heard()).toEqual([])
+
+    stranger.say(hello('id-x', { token: 'guess' }))
+    await until(() => stranger.heard().some(line => line.t === 'refuse'), 'a refusal')
+    // A refusal, and still no token: the only line it ever sees is the one that says no.
+    expect(stranger.heard().map(line => line.t)).toEqual(['refuse'])
+    stranger.close()
+
+    // A machine that does know the token is greeted back on the socket it opened.
+    const partner = await unaddressed(machine.port)
+    partner.say(hello('id-b', { token: 'sekrit' }))
+    await until(() => partner.heard().some(line => line.t === 'hello'), 'the answer')
+    expect(partner.heard().find(line => line.t === 'hello')?.token).toBe('sekrit')
+    partner.close()
+  })
+
+  it('dials a partner that was not listening yet until it answers', async () => {
+    // A machine whose partner is still starting — or restarting, or not yet bound — must
+    // keep trying: the pair coming back is not something the operator should have to
+    // arrange by hand.
+    const port = await freePort()
+    const machine = await start('desk-b', 'id-b', {
+      role: 'standby',
+      peerHost: '127.0.0.1',
+      peerPort: port
+    })
+    await awaiting(machine)
+    await settle(TIMEOUT_MS + CHECK_MS * 4)
+    expect(machine.latest()?.status.peer).toBeNull()
+
+    const far = await rawServerOn(port, hello('id-a'))
+    await until(() => machine.latest()?.status.peer?.name === 'id-a', 'the partner to be reached')
+    await far.close()
+  })
+
+  it('dials again after the partner says goodbye', async () => {
+    const far = await rawServer(hello('id-a'))
+    const machine = await start('desk-b', 'id-b', {
+      role: 'standby',
+      peerHost: '127.0.0.1',
+      peerPort: far.port
+    })
+    await until(() => machine.latest()?.status.peer?.name === 'id-a', 'the pair to meet')
+
+    far.sayAll({ t: 'bye', reason: 'going away' })
+    await until(() => far.accepted() >= 2, 'a second dial')
+    await far.close()
+  })
+
+  it('tells the window when the show has moved to the other machine', async () => {
+    // The machine that stood down stops being the sound: the window is told, and it is
+    // told exactly once.
+    const live = await start('desk-a', 'id-a', { role: 'live' })
+    const other = await rawPeer((await awaiting(live)).port, hello('id-b', { term: 2, driving: true }))
+
+    await until(() => live.notices().length === 1, 'the stand-down')
+    expect(live.notices()[0].notice).toMatchObject({ kind: 'stand-down', term: 2 })
+    expect(live.latest()?.status.driving).toBe(false)
+    other.close()
+  })
+
+  it('tells the window that the pair is off when it is switched off', async () => {
+    // An unpaired machine must not leave the window holding the last thing it heard:
+    // the panel would show a partner that is not there and a button that cannot work.
+    const machine = await start('desk-a', 'id-a', { enabled: false })
+    await until(() => machine.latest() !== null, 'the status')
+    expect(machine.latest()?.status).toMatchObject({ enabled: false, peer: null, listening: false })
+    expect(machine.latest()?.status.detail).toContain('not paired')
+    expect(machine.health.at(-1)).toEqual({ state: 'stopped', detail: 'disabled' })
   })
 })
 

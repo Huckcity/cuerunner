@@ -4,7 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
-import type { RedundancySettings, RedundancyStatus, TakeoverNotice } from '../../../shared/redundancy'
+import type { RedundancySettings, RedundancyStatus, ShowNotice } from '../../../shared/redundancy'
 import type {
   CastSettings,
   CompanionSettings,
@@ -272,12 +272,13 @@ interface CueListState {
   redundancySettings: RedundancySettings | null
   setRedundancySettings: (settings: RedundancySettings) => void
   /**
-   * A takeover this machine has just decided on, waiting to be acted on. Whoever adopts
-   * it takes it off the store, so a second renderer render or a replayed batch cannot
-   * fire the show twice.
+   * A change in who is driving, waiting to be acted on: a show to put back on this
+   * machine's engine, or one to stop playing. Whoever acts on it takes it off the store,
+   * so a batch replayed twice cannot fire the show twice — and the window keeps the term
+   * it has already acted on, so a notice arriving by a second route is ignored.
    */
-  redundancyTakeover: TakeoverNotice | null
-  clearRedundancyTakeover: () => void
+  redundancyNotice: ShowNotice | null
+  clearRedundancyNotice: () => void
 
   /** Operator-facing message shown in the notice bar: a failed save or open. */
   notice: string | null
@@ -548,11 +549,15 @@ function latestRedundancy(previous: RedundancyStatus | null, events: ShowEvent[]
   return status
 }
 
-/** A takeover in a batch: the machine has just claimed a show and the window has to act. */
-function takeoverIn(events: ShowEvent[]): TakeoverNotice | null {
-  let notice: TakeoverNotice | null = null
+/**
+ * A change in who is driving, from a batch: either this machine has just claimed a show
+ * and the window has to put it back on the engine, or the show has moved to the other
+ * machine and this one has to stop playing it.
+ */
+function noticeIn(events: ShowEvent[]): ShowNotice | null {
+  let notice: ShowNotice | null = null
   for (const event of events) {
-    if (event.kind === 'redundancy' && event.takeover) notice = event.takeover
+    if (event.kind === 'redundancy' && event.notice) notice = event.notice
   }
   return notice
 }
@@ -668,7 +673,7 @@ export const useStore = create<CueListState>((set) => ({
   showEvents: [],
   redundancy: null,
   redundancySettings: null,
-  redundancyTakeover: null,
+  redundancyNotice: null,
   deskState: {},
   deskSceneId: null,
   scenesEditing: false,
@@ -1132,13 +1137,13 @@ export const useStore = create<CueListState>((set) => ({
     if (events.length === 0) return s
 
     const alerts = events.flatMap(event => event.kind === 'alert' ? [event.alert] : [])
-    const takeover = takeoverIn(events)
+    const notice = noticeIn(events)
     return {
       showEvents: [...s.showEvents, ...events].slice(-SHOW_EVENT_LIMIT),
       showServices: mergeServices(s.showServices, events),
       showDevices: mergeDevices(s.showDevices, events),
       redundancy: latestRedundancy(s.redundancy, events),
-      redundancyTakeover: takeover ?? s.redundancyTakeover,
+      redundancyNotice: notice ?? s.redundancyNotice,
       showAlerts: alerts.length === 0
         ? s.showAlerts
         : [...s.showAlerts, ...alerts].slice(-SHOW_ALERT_LIMIT),
@@ -1159,15 +1164,17 @@ export const useStore = create<CueListState>((set) => ({
     showDevices: snapshot.devices,
     showAlerts: snapshot.alerts,
     showEvents: snapshot.events.slice(-SHOW_EVENT_LIMIT),
-    // The status, not the takeover: a machine that took the show over while this window
-    // was reloading has already been adopted by the engine, and replaying the notice
-    // would fire the show a second time.
-    redundancy: latestRedundancy(null, snapshot.events)
+    redundancy: latestRedundancy(null, snapshot.events),
+    // The notice comes back with the rest of the history, and it is acted on again: a
+    // window that loads after a takeover has a cue list that was never told to build one,
+    // and the machine would otherwise claim a show it is not playing. Acting on a term
+    // twice is what the window's own record of the last one prevents.
+    redundancyNotice: noticeIn(snapshot.events)
   })),
 
   setRedundancySettings: (settings) => set({ redundancySettings: settings }),
 
-  clearRedundancyTakeover: () => set({ redundancyTakeover: null }),
+  clearRedundancyNotice: () => set({ redundancyNotice: null }),
 
   dismissAlert: (id) => set(s => ({ showAlerts: s.showAlerts.filter(a => a.id !== id) })),
 

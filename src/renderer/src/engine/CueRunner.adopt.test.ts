@@ -234,6 +234,28 @@ describe('CueRunner — putting a show back on the engine', () => {
     expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
   })
 
+  it('goes quiet when the show has moved to the other machine', async () => {
+    // Standing down is the mirror image of a takeover: the other machine is already
+    // playing this cue, so this one stops rather than the pair playing it twice.
+    const cue = makeAudio({ id: 'a1' })
+    const { runner, setRunning, clearAllRunning } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(setRunning).toHaveBeenCalledWith('a1', expect.objectContaining({ state: 'playing' }))
+
+    runner.standDown()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(clearAllRunning).toHaveBeenCalled()
+    // With the fade a panic cuts with, not a hard stop: the machine that took the show
+    // over is inside the same cue, and a cut would be a click on top of the two of them.
+    expect(engine.stopAll).toHaveBeenCalledWith(200)
+    // And nothing advances: the cue the next GO would fire belongs to the other machine.
+    await vi.advanceTimersByTimeAsync(cue.duration + 1000)
+    expect(setRunning).toHaveBeenCalledTimes(1)
+  })
+
   it('has nothing to do when there is no runner to adopt into', () => {
     const runner = new CueRunner()
     expect(runner.adopt(plan())).toEqual({ adopted: 0, skipped: 0 })

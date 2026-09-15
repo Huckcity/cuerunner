@@ -375,21 +375,33 @@ export interface RedundancyStatus {
 }
 
 /**
- * A takeover, as the machine that decided it tells the window. Carried by the status
- * event that announces it, once, and acted on there: the window has the cue list, so it
- * is the window that works out what can be picked up and puts it back on the engine.
+ * A change in who is running the show, as the machine that decided it tells the window.
+ * Carried by the status event that announces it, once, and acted on there: the window
+ * has the cue list, so it is the window that works out what can be picked up — and it is
+ * the window that has to stop playing when the show has moved elsewhere.
  */
-export interface TakeoverNotice {
-  at: number
-  /** How long the partner had been silent when the decision was made. */
-  silentMs: number
-  /** What the live machine last reported, or null if it never reported anything. */
-  digest: RedundancyDigest | null
-  /** 'the live machine stopped answering' or 'the operator took the show'. */
-  reason: string
-  /** The term this machine claimed. The renderer adopts once per term. */
-  term: number
-}
+export type ShowNotice =
+  /**
+   * This machine has claimed the show. What the live machine was running has to be put
+   * back on this machine's engine, at the position the mirror says it had reached.
+   */
+  | {
+      kind: 'takeover'
+      at: number
+      /** The term this machine claimed. A window picks up each term once and once only. */
+      term: number
+      /** 'the live machine stopped answering' or 'the operator took the show'. */
+      reason: string
+      /** How long the partner had been silent when the decision was made. */
+      silentMs: number
+      /** What the live machine last reported, or null if it never reported anything. */
+      digest: RedundancyDigest | null
+    }
+  /**
+   * The show has moved to the other machine — it claimed a higher term than this one.
+   * This machine is no longer the sound, and must stop being it.
+   */
+  | { kind: 'stand-down'; at: number; term: number; reason: string }
 
 /**
  * Whether the two machines have the same show. It is a comparison of the mirror the
@@ -477,6 +489,13 @@ export function shouldTakeOver(input: {
 export type PlanCue = Pick<Cue, 'id' | 'number' | 'name' | 'type' | 'duration'> & {
   /** Where the cue's own region begins in its file, ms. */
   startTime: number
+  /**
+   * Where the region ends, or null for the end of the file. A cue plays its region and
+   * not its file — its `duration` is the length of the media, which is a different
+   * number the moment a cue starts late or stops early — so this is what a takeover
+   * measures "it had already finished" against.
+   */
+  endTime: number | null
 }
 
 /** One cue the backup will put back on its own engine, at the position it had reached. */
@@ -560,10 +579,13 @@ export function takeoverPlan(
     }
 
     const reached = entry.positionMs + quietMs
-    // A cue that had reached its end before the takeover would have been silent here
-    // anyway; starting it would be a sound the live machine never made.
-    const length = cue.duration > 0 ? cue.duration : entry.durationMs
-    if (typeof length === 'number' && length > 0 && reached >= cue.startTime + length) {
+    // A cue that had reached the end of its region before the takeover would have been
+    // silent here anyway; starting it would be a sound the live machine never made. The
+    // region is what is compared: a cue's `duration` is the length of its file, and a
+    // cue that plays the first twenty seconds of a three-minute track has finished after
+    // twenty.
+    const end = cue.endTime ?? (cue.duration > 0 ? cue.duration : entry.durationMs ?? 0)
+    if (end > 0 && reached >= end) {
       skipped.push({ cueId: cue.id, label, reason: 'it had reached its end before the takeover' })
       continue
     }

@@ -25,8 +25,8 @@ import {
 } from './redundancy'
 
 
-function audioCue(id: string, startTime = 0, duration = 180_000): PlanCue {
-  return { id, number: id, name: `Cue ${id}`, type: 'audio', startTime, duration }
+function audioCue(id: string, startTime = 0, duration = 180_000, endTime: number | null = null): PlanCue {
+  return { id, number: id, name: `Cue ${id}`, type: 'audio', startTime, duration, endTime }
 }
 
 function run(entry: Partial<MirrorCue> & { cueId: string }): MirrorCue {
@@ -257,7 +257,7 @@ describe('what a takeover picks up', () => {
     // The mirror says what the live machine was running; this machine's own cue decides
     // what can be done with it, so the cue that cannot be picked up is a local one.
     const local: PlanCue[] = [
-      { id: 'a', number: '1', name: 'Sting', type: 'midi', startTime: 0, duration: 0 },
+      { id: 'a', number: '1', name: 'Sting', type: 'midi', startTime: 0, duration: 0, endTime: null },
       audioCue('b', 5000, 60_000),
       audioCue('c')
     ]
@@ -282,6 +282,26 @@ describe('what a takeover picks up', () => {
     ])
     expect(plan.note).toContain('nothing was picked up')
     expect(plan.note).toContain('4 not')
+  })
+
+  it('measures “already finished” against the cue’s region, not its file', () => {
+    // A cue that plays twenty seconds of a three-minute track has finished after twenty:
+    // starting it again would be a sound the live machine never made.
+    const plan = takeoverPlan(
+      [audioCue('a', 0, 180_000, 20_000)],
+      digest({ running: [run({ cueId: 'a', positionMs: 19_000, durationMs: 180_000 })] }),
+      3000
+    )
+    expect(plan.adopt).toEqual([])
+    expect(plan.skipped[0].reason).toBe('it had reached its end before the takeover')
+
+    // …and a cue still inside its region is picked up as usual.
+    const inside = takeoverPlan(
+      [audioCue('a', 0, 180_000, 20_000)],
+      digest({ running: [run({ cueId: 'a', positionMs: 15_000, durationMs: 180_000 })] }),
+      3000
+    )
+    expect(inside.adopt[0].seekMs).toBe(18_000)
   })
 
   it('will not start a cue that had already reached its end', () => {

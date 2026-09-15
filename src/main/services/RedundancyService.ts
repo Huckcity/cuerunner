@@ -17,7 +17,7 @@ import {
   type RedundancyDigest,
   type RedundancySettings,
   type RedundancyStatus,
-  type TakeoverNotice
+  type ShowNotice
 } from '../../shared/redundancy'
 import type { ShowSettings } from '../../renderer/src/types/show'
 
@@ -93,6 +93,8 @@ export class RedundancyService implements ShowService {
   /** True once this machine has claimed a show its partner was not driving any more. */
   private tookOver = false
   private lastEvent: string | null = null
+  /** The change in who is driving that the window has not been told yet. */
+  private pending: ShowNotice | null = null
   private silent = false
   private listening = false
   private beatSeq = 0
@@ -116,7 +118,11 @@ export class RedundancyService implements ShowService {
     this.driving = this.tookOver || config.role === 'live'
 
     if (!config.enabled) {
+      // The window is told the pair is off rather than left holding the last thing it
+      // heard: a machine that has been unpaired is not a machine with a partner it has
+      // gone quiet on.
       context.setState('stopped', 'disabled')
+      this.publish()
       return
     }
 
@@ -211,6 +217,15 @@ export class RedundancyService implements ShowService {
     socket.on('error', () => this.detach(connection))
     socket.on('close', () => this.detach(connection))
 
+    // Only the socket this machine dialled is greeted here. What this machine says
+    // about itself carries the token, and the listener answers every address that
+    // reaches it — so a socket somebody else opened is greeted back *after* it has
+    // proved it knows that token, never before. (See `onHello`.)
+    if (outgoing) this.greet(connection)
+  }
+
+  /** What this machine says about itself: who it is, which half, and the shared token. */
+  private greet(connection: PeerConnection): void {
     this.write(connection, {
       t: 'hello',
       protocol: REDUNDANCY_PROTOCOL,
@@ -226,20 +241,30 @@ export class RedundancyService implements ShowService {
   private detach(connection: PeerConnection): void {
     if (!this.connections.delete(connection)) return
     connection.socket.destroy()
-    if (this.peer.socket !== connection.socket) return
-    // The socket the partner was heard on has gone. It is dialled again until it answers:
-    // a machine that comes back from a restart is not a machine the operator should have
-    // to re-pair by hand — and which of the pair's two sockets was being used decides
-    // nothing about who may dial.
-    this.peer.socket = null
-    if (this.server !== null) this.scheduleRetry()
+    this.forget(connection)
+  }
+
+  /**
+   * A connection is gone — closed by the partner, refused, or dropped — and what follows
+   * is decided here rather than at each of the ways it can happen. A dial nobody answered
+   * and a partner that has gone are both dialled again: a machine that comes back is not
+   * something the operator should have to re-pair by hand, and which of the pair's two
+   * sockets was in use decides nothing about who may dial.
+   */
+  private forget(connection: PeerConnection): void {
+    const wasPeer = this.peer.socket === connection.socket
+    if (wasPeer) this.peer.socket = null
+    if (this.server === null) return
+    if (wasPeer || connection.outgoing) this.scheduleRetry()
   }
 
   private scheduleRetry(): void {
     if (this.retryTimer !== null) return
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null
-      this.dial()
+      // The partner may have come back on another socket in the meantime — a machine
+      // that has dialled this one is answered rather than dialled twice.
+      if (this.peer.socket === null) this.dial()
     }, this.options.retryMs ?? RETRY_MS)
     this.retryTimer.unref?.()
   }
@@ -253,7 +278,7 @@ export class RedundancyService implements ShowService {
     this.write(connection, { t: 'bye', reason })
     this.connections.delete(connection)
     connection.socket.end()
-    if (this.peer.socket === connection.socket) this.peer.socket = null
+    this.forget(connection)
   }
 
   private receive(connection: PeerConnection, chunk: Buffer): void {
@@ -330,6 +355,10 @@ export class RedundancyService implements ShowService {
       }
       for (const other of others) this.close(other, 'the other socket is the one in use')
     }
+
+    // The peer has proved it knows the token: it is answered in kind, on the socket it
+    // opened.
+    if (!connection.outgoing) this.greet(connection)
 
     const fresh = this.peer.hello?.id !== message.id
     connection.hello = message
@@ -439,13 +468,15 @@ export class RedundancyService implements ShowService {
       const quietFor = this.peer.everHeard ? now - this.peer.lastHeardAt : 0
       this.lastEvent = `took the show over at ${clockTime(now)} (${reason})`
       this.context?.bus.alert('warning', this.id, `Redundant playback: this machine has the show — ${reason}`)
-      this.publish({
+      this.pending = {
+        kind: 'takeover',
         at: now,
         silentMs: quietFor,
         digest: this.peer.digest,
         reason,
         term: this.term
-      })
+      }
+      this.publish()
     }
     return { driving: this.driving, term: this.term, adopted: !already }
   }
@@ -472,9 +503,18 @@ export class RedundancyService implements ShowService {
     const suppressed = peer !== null && peer.driving && peer.term > this.term
     if (suppressed && this.tookOver) this.tookOver = false
     const driving = this.tookOver || (this.config.role === 'live' && !suppressed)
-    // A machine that has just stopped driving says why: an operator watching this one
-    // is looking at a show that has moved to the other machine.
-    if (this.driving && !driving && peer) this.lastEvent = `${peer.name} is running the show`
+    // A machine that has just stopped driving says why — and the window is told, because
+    // a machine that is no longer the sound must stop making it. Two machines playing the
+    // same cue is the one outcome a pair exists to prevent.
+    if (this.driving && !driving && peer) {
+      this.lastEvent = `${peer.name} is running the show`
+      this.pending = {
+        kind: 'stand-down',
+        at: this.now(),
+        term: peer.term,
+        reason: `${peer.name} is running the show`
+      }
+    }
     this.driving = driving
   }
 
@@ -497,23 +537,29 @@ export class RedundancyService implements ShowService {
    * push the show's own events out of the history for nothing — and the window works out
    * how long ago the partner was heard from the stamp on the event.
    */
-  private publish(takeover?: TakeoverNotice): void {
+  private publish(): void {
     const context = this.context
     if (!context) return
     const status = this.status()
+    const notice = this.pending
+    this.pending = null
     const key = statusKey(status)
-    if (!takeover && key === this.lastPublished) return
+    if (!notice && key === this.lastPublished) return
     this.lastPublished = key
     context.bus.publish({
       kind: 'redundancy',
       at: status.at,
       status,
-      ...(takeover === undefined ? {} : { takeover })
+      ...(notice === null ? {} : { notice })
     })
 
     // The service's own row in the monitor says the same thing in one line. It is set
     // only when it changes, so the row is not rewritten four times a second with the
     // same sentence.
+    // An unpaired machine has no row to rewrite: `start` has already said it is stopped
+    // and disabled, and the status published above is what the settings tab reads.
+    if (!this.config.enabled) return
+
     const state = status.peer === null
       ? (this.config.peerHost === '' ? 'running' : 'degraded')
       : status.peer.alive
@@ -553,6 +599,7 @@ export class RedundancyService implements ShowService {
 
   /** The one line the monitor and the settings tab show. */
   private describe(peer: RedundancyStatus['peer']): string {
+    if (!this.config.enabled) return `${this.config.name}: not paired — this machine runs the show on its own`
     const half = this.driving ? 'running the show' : 'standing by'
     if (peer === null) {
       const where = this.listening

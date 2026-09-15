@@ -10,7 +10,7 @@ import { cueRunner } from '../engine/CueRunner'
 import { audioEngine } from '../engine/audioEngineClient'
 import { useStore } from '../store'
 import { TEST_LICENSE } from '../../../test/license'
-import { defaultRedundancySettings, type RedundancyDigest, type TakeoverNotice } from '../../../shared/redundancy'
+import { defaultRedundancySettings, type RedundancyDigest, type ShowNotice } from '../../../shared/redundancy'
 import type { AudioCue } from '../types/cue'
 import type { RedundancyEvent, ShowEvent } from '../types/show'
 
@@ -68,7 +68,7 @@ function digest(overrides: Partial<RedundancyDigest> = {}): RedundancyDigest {
   }
 }
 
-function statusEvent(overrides: Partial<RedundancyEvent['status']> = {}, takeover?: TakeoverNotice): ShowEvent {
+function statusEvent(overrides: Partial<RedundancyEvent['status']> = {}, notice?: ShowNotice): ShowEvent {
   return {
     kind: 'redundancy',
     at: 1000,
@@ -85,7 +85,7 @@ function statusEvent(overrides: Partial<RedundancyEvent['status']> = {}, takeove
       lastEvent: null,
       ...overrides
     },
-    ...(takeover === undefined ? {} : { takeover })
+    ...(notice === undefined ? {} : { notice })
   }
 }
 
@@ -101,6 +101,7 @@ describe('useRedundancy', () => {
   let container: HTMLDivElement
   let root: Root
   let adopt: Mock
+  let standDown: Mock
 
   beforeEach(() => {
     ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
@@ -108,6 +109,7 @@ describe('useRedundancy', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     adopt = vi.spyOn(cueRunner, 'adopt').mockImplementation(() => ({ adopted: 0, skipped: 0 }))
+    standDown = vi.spyOn(cueRunner, 'standDown').mockImplementation(() => {})
 
     // The machine's own file is the truth about whether this machine is paired: the
     // hook reads it at startup and the store follows it.
@@ -123,7 +125,7 @@ describe('useRedundancy', () => {
       running: new Map(),
       redundancy: null,
       redundancySettings: null,
-      redundancyTakeover: null,
+      redundancyNotice: null,
       log: []
     })
   })
@@ -132,6 +134,7 @@ describe('useRedundancy', () => {
     act(() => root.unmount())
     container.remove()
     adopt.mockRestore()
+    standDown.mockRestore()
     vi.clearAllMocks()
   })
 
@@ -208,7 +211,8 @@ describe('useRedundancy', () => {
     render()
     await flush()
 
-    const notice: TakeoverNotice = {
+    const notice: ShowNotice = {
+      kind: 'takeover',
       at: 2000,
       silentMs: 2000,
       digest: digest({
@@ -244,7 +248,8 @@ describe('useRedundancy', () => {
     render()
     await flush()
 
-    const notice: TakeoverNotice = {
+    const notice: ShowNotice = {
+      kind: 'takeover',
       at: 2000,
       silentMs: 0,
       digest: digest(),
@@ -253,12 +258,43 @@ describe('useRedundancy', () => {
     }
     act(() => { useStore.getState().applyShowEvents([statusEvent({ driving: true, term: 1 }, notice)]) })
     await flush()
-    expect(useStore.getState().redundancyTakeover).toBeNull()
+    expect(useStore.getState().redundancyNotice).toBeNull()
     expect(adopt).toHaveBeenCalledTimes(1)
 
-    // A second render of the same state has nothing left to act on.
-    act(() => { root.render(<Harness />) })
+    // A notice that arrives by a second route — the snapshot of a window that reloaded
+    // just after the takeover — is the same term, and the show is not fired twice.
+    act(() => {
+      useStore.getState().setShowSnapshot({
+        at: notice.at,
+        services: [],
+        devices: [],
+        alerts: [],
+        events: [statusEvent({ driving: true, term: 1 }, notice)]
+      })
+    })
     await flush()
     expect(adopt).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops playing when the show has moved to the other machine', async () => {
+    // A machine that is no longer driving is no longer the sound. Two machines holding
+    // the same cue is the one outcome a pair exists to prevent.
+    useStore.setState({ redundancySettings: paired() })
+    render()
+    await flush()
+
+    const notice: ShowNotice = {
+      kind: 'stand-down',
+      at: 3000,
+      term: 2,
+      reason: 'desk-a is running the show'
+    }
+    act(() => { useStore.getState().applyShowEvents([statusEvent({ driving: false, term: 2 }, notice)]) })
+    await flush()
+
+    expect(standDown).toHaveBeenCalledTimes(1)
+    expect(adopt).not.toHaveBeenCalled()
+    const messages = useStore.getState().log.map(entry => entry.message)
+    expect(messages.some(message => message.includes('Stood down'))).toBe(true)
   })
 })

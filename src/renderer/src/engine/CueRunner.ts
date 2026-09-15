@@ -1304,6 +1304,22 @@ export class CueRunner {
   }
 
   /**
+   * The show has moved to the other machine of a pair: it claimed the show under a higher
+   * term, and it is playing what this machine was playing. This machine stops being the
+   * sound — with the same short fade a panic cuts with, because the machine that took the
+   * show over is already inside the same cue and a hard cut would be a click on top of
+   * the two of them. Nothing here advances the show: the cue the next GO would fire is
+   * the other machine's to fire now.
+   */
+  standDown(): void {
+    if (!this.deps) return
+    this.cancelAllWork()
+    scriptHost.cancelAll()
+    void audioEngine.stopAll(PANIC_FADE_MS).catch(() => {})
+    this.deps.clearAllRunning()
+  }
+
+  /**
    * A panic that happened in the main process — the menu, OSC, a MIDI all-sound-off,
    * the heartbeat — has already silenced the engine. The renderer's half is to take
    * back everything it was still holding and to say so, without panicking again.

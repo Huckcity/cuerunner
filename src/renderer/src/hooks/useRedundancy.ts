@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePro, useStore } from '../store'
 import { cueRunner } from '../engine/CueRunner'
 import { audioEngine } from '../engine/audioEngineClient'
@@ -44,7 +44,11 @@ const MAX_PREPARED = 8
 export function useRedundancy(): void {
   const pro = usePro()
   const enabled = useStore(s => s.redundancySettings?.enabled ?? false)
-  const takeover = useStore(s => s.redundancyTakeover)
+  const notice = useStore(s => s.redundancyNotice)
+  // The term whose notice has already been acted on. A notice can reach the window twice
+  // — once live and once in the snapshot that follows a reload — and picking a show up
+  // twice would fire the cue a second time.
+  const actedOn = useRef(0)
 
   useEffect(() => {
     if (!pro) return
@@ -160,15 +164,27 @@ export function useRedundancy(): void {
   }, [pro, enabled])
 
   useEffect(() => {
-    if (!pro || !takeover) return
-    // The notice is consumed before the show is put back on the engine: it exists once,
-    // and a replayed batch must not fire the show a second time.
-    useStore.getState().clearRedundancyTakeover()
-    const plan = takeoverPlan(useStore.getState().cues.map(toPlanCue), takeover.digest, takeover.silentMs)
+    if (!pro || !notice) return
+    useStore.getState().clearRedundancyNotice()
+    if (notice.term <= actedOn.current) return
+    actedOn.current = notice.term
+
+    if (notice.kind === 'stand-down') {
+      // The show has moved to the other machine, which is already playing it. This one
+      // stops being the sound: the same short fade a panic cuts with, so two machines
+      // holding the same cue do not overlap.
+      cueRunner.standDown()
+      useStore.getState().appendLog([
+        { level: 'info', message: `Stood down: ${notice.reason}; stopped this machine's playback` }
+      ])
+      return
+    }
+
+    const plan = takeoverPlan(useStore.getState().cues.map(toPlanCue), notice.digest, notice.silentMs)
     // The runner writes the plan's own line to the session log — what was picked up,
     // what could not be, and how much of the show went by unheard.
     cueRunner.adopt(plan)
-  }, [pro, takeover])
+  }, [pro, notice])
 }
 
 /** One running cue as the partner has to know it: its phase and where in its file it is. */
@@ -186,7 +202,11 @@ function mirrorCue(cueId: string, state: RunState, cues: Cue[]): MirrorCue {
   }
 }
 
-/** The part of a cue a takeover works from: only an audio cue has a region to start in. */
+/**
+ * The part of a cue a takeover works from: only an audio cue has a region — where it
+ * starts in its file and where it stops — and a cue that plays twenty seconds of a
+ * three-minute track has finished after twenty.
+ */
 function toPlanCue(cue: Cue): PlanCue {
   return {
     id: cue.id,
@@ -194,6 +214,7 @@ function toPlanCue(cue: Cue): PlanCue {
     name: cue.name,
     type: cue.type,
     duration: cue.duration,
-    startTime: cue.type === 'audio' ? cue.startTime : 0
+    startTime: cue.type === 'audio' ? cue.startTime : 0,
+    endTime: cue.type === 'audio' ? cue.endTime : null
   }
 }
