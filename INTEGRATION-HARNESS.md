@@ -453,28 +453,37 @@ Measured on the way in, so the next person does not have to find it out again:
   [All Eos Family Software Versions](https://support.etcconnect.com/ETC/Consoles/Eos_Family/Software_and_Programming/All_Eos_Family_Software_Versions)
   article. It is fetched onto the runner and **never into the repository**: it is ETC's
   software, and it does not belong in a git history.
-- **The guest is a small machine.** `ubox-win` is Windows Server 2025 Standard Evaluation,
-  1024×768, ~71 GB free. ETC's stated minimums are 1920×1080, DirectX 11, 2 GB RAM and
-  3.5 GB disk. Disk and RAM are fine; **the display and the 3D are the two things to watch**
-  (`-vga std` has no acceleration, and Windows falls back to software D3D).
-- **Server 2025 is not a supported OS for Eos** — ETC list Windows 7/8/10/11 — and that,
-  rather than the transport, is where this lane is currently stuck: the silent install
-  (`ETC_EosFamily_v3.3.9.25.exe /S`) has not completed on the guest. Either it wants a
-  desktop session, or the guest wants to be a supported Windows.
+- **`/S` is the silent switch** — ETC's
+  [corporate deployment note](https://support.etcconnect.com/ETC/Consoles/Eos_Family/Software_and_Programming/Deploying_Eos_Family_Software_v3_via_a_Corporate_Network)
+  uses it and nothing else, and it names the install path the check should look at:
+  `%PROGRAMFILES%\ETC\EosFamily\v3\Eos\Eos.exe` (not `…\Electronic Theatre Controls\…`,
+  which is what a guess looks like).
+- **It has to run in the interactive session.** Started over SSH — Session 0 — the
+  installer sits on a dialog nobody can see and never finishes. Started in the logged-in
+  session (a scheduled task with `/IT`, the same trick the runner itself uses) it completes
+  unattended. That is now true of `ubox-win`: **Eos is installed there.**
+- **The guest is a small machine.** Windows Server 2025 Standard Evaluation, 1024×768,
+  ~71 GB free. ETC's stated minimums are 1920×1080, DirectX 11, 2 GB RAM and 3.5 GB disk.
+  Disk and RAM are fine; **the display and the 3D are the two things to watch** (`-vga std`
+  has no acceleration, and Windows falls back to software D3D). Server 2025 is also not a
+  supported OS for Eos — ETC list Windows 7/8/10/11 — so it is a "works until it does not"
+  arrangement rather than a supported one, and the Mac mini is the fallback if it stops.
+- **OSC cannot be switched on from outside the GUI.** ETC's own guidance is explicit that
+  the interface protocol (`Setup > Device Settings > Network > Interface Protocols > UDP
+  Strings and OSC UDP`) and the OSC settings (`Setup > Show Control > OSC`) are console
+  settings, and there is no settings file to seed: `C:\ProgramData\ETC\EosFamily\v3\` holds
+  only the manual, the docs and the fixture data. So the last step of provisioning is a
+  person — or a viewer on the guest's VNC — doing those two screens once.
 
-The provisioning, once it is past that:
+The provisioning, then:
 
-1. Install ETCnomad — `/S` if it takes, by hand over VNC if it does not (the guest runs
-   `-vnc 127.0.0.1:1` on `ubox`, so a tunnel and a viewer reach its desktop).
-2. Machine-level settings in the ECU: `{UDP Strings & OSC}` on the interface, and the
-   firewall permitting UDP in and out.
-3. Launch it the way ETC intends (`ETC_LaunchOffline.exe`, or a show file by association).
-   There is no documented headless mode and no documented `--showfile` switch, so the show
-   comes up through the shell and the spec waits for the console to answer.
-4. Show-level settings, carried in a fixture showfile built once by hand: `{OSC RX}`,
-   `{OSC TX}`, the RX port, the TX destination pointed at this machine, and a cue in cue
-   list 1. Setup travels with Eos's show file, which is what makes this configuration by
-   artifact rather than by clicking.
+1. Install ETCnomad: fetch the asset, extract it, and run
+   `ETC_EosFamily_v3.3.9.25.exe /S` **in the interactive session**.
+2. Open it once and set, by hand: `{UDP Strings & OSC}` for the interface, and `{OSC RX}`,
+   `{OSC TX}`, the RX port, and the TX destination pointed at this machine.
+3. Leave a show open with a cue in cue list 1. Setup travels with Eos's show file, which is
+   what makes *this* half configuration by artifact once it has been done once — but the
+   first time it is a person sitting at the desk.
 
 The self-test is the spec's first test: fire the show's "are you there" cue and wait for
 `/eos/out/get/version` to come back. When it does not, the failure message *is* the
@@ -482,7 +491,8 @@ checklist above — console settings cannot be set from a test, so the message h
 walkthrough, and whoever reads it is standing in front of the desk.
 
 The workflow refuses to pretend: a run on a runner without the software fails in the step
-that checks for it, not in a spec twenty minutes later.
+that checks for it (`C:\Program Files\ETC\EosFamily\v3\Eos\Eos.exe`), not in a spec twenty
+minutes later.
 
 For A&H there is nothing to install for the peer lane. The vendor lane's A&H job exists only
 to exercise MIDI Control's bridge, so the app-side path users take is tested at least once
@@ -515,8 +525,10 @@ console), the nightly and on-demand workflow, the recorder and the replay in the
 the mechanism proven in both directions *without* a console — a session recorded through
 the recorder against a stand-in, then replayed with no console anywhere — which is also
 what the fixture loop will do with the real thing.
-*Remaining*: the console itself on `ubox-win`. The installer has not completed there (§9),
-so the acceptance below is not met yet.
+*Remaining*: two screens on the console itself. ETCnomad is installed on `ubox-win` (§9),
+but `{UDP Strings & OSC}` and the OSC RX/TX settings are console settings with no file to
+seed, so a person — or a viewer on the guest's VNC — has to do them once, and then a
+scheduled run against it.
 *Acceptance*: a scheduled Windows run drives real Eos: WinsLab fires a cue in the console
 software, Eos's own `/eos/out/event/cue/...` comes back and fires the next WinsLab cue, and
 the run records a fixture that the Linux lane then replays.

@@ -39,11 +39,12 @@ jobs:
       - name: The console software is provisioned on this runner
         shell: pwsh
         run: |
-          $launcher = 'C:\Program Files\Electronic Theatre Controls\Eos\ETC_LaunchOffline.exe'
-          if (-not (Test-Path $launcher)) {
-            throw "ETCnomad is not installed on this runner — §9 of INTEGRATION-HARNESS.md has the walkthrough: download the 'Consoles and ETCnomad PC' package from ETC's All Eos Family Software Versions page, install it, open the ECU once to enable UDP Strings & OSC, and leave a show open with OSC RX/TX pointed at this machine."
+          # ETC's own deployment script looks for exactly this path (INTEGRATION-HARNESS.md §9).
+          $console = 'C:\Program Files\ETC\EosFamily\v3\Eos\Eos.exe'
+          if (-not (Test-Path $console)) {
+            throw "ETCnomad is not installed on this runner — §9 of INTEGRATION-HARNESS.md has the walkthrough: download the 'Consoles and ETCnomad PC' package from ETC's All Eos Family Software Versions page, install it with /S, then open it once and enable UDP Strings & OSC (Setup > Device Settings > Network) and OSC RX/TX (Setup > Show Control > OSC) — both of those are console settings, so they are done by hand."
           }
-          Write-Host "found $launcher"
+          Write-Host "found $console"
 
       - run: npm ci --legacy-peer-deps
 
