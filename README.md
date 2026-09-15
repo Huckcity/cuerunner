@@ -17,11 +17,11 @@ around them are **WinsLab Pro** — one license key, checked on the machine. See
 ### Free
 
 - **10 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, Script and Devamp cues (the eleventh, Scene, drives the desk from the stack and is part of Pro)
-- **Audio Playback**: per-cue level, pan, rate, and trim with fade-in, loop counts, and a waveform that is a region editor — drag either boundary, split a cue at the cursor, and the engine's note detection makes the attacks easy to land on
+- **Audio Playback**: per-cue level, pan, rate, and trim with fade-in, loop counts, and a waveform that is a region editor — drag either boundary, split a cue at the cursor, zoom from the whole file down to a second of it, and the engine's note detection makes the attacks easy to land on
 - **MIDI Control**: Send MIDI messages to external instruments and gear
 - **OSC Integration**: Send Open Sound Control messages for networked control
 - **Show Sequencing**: Group cues, set auto-advance, pre/post-wait delays, and arm/disarm
-- **Vamps and devamps**: a cue can loop a section until a Devamp cue releases it, and the release plays out of the loop on the sample
+- **Vamps and devamps**: a cue can loop a section until a Devamp cue releases it, and the release plays out of the loop on the sample. A section is a cue, so a track can carry as many as the show needs — a verse vamp and a chorus vamp are two cues, each with its own devamp
 - **No double triggers**: a firing window stands in front of the space bar, the OSC listener and every MIDI input, and a cue that is already running is left alone unless it asks to be restarted
 - **Session Log**: cue run results, script output, and failures in a bottom panel
 - **Workspace Management**: Save/load `.wlab` JSON workspaces with undo/redo
