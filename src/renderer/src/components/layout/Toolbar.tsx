@@ -21,6 +21,10 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
   { type: 'stop',  label: 'Stop'  },
 ]
 
+/** The File menu entries that open a Pro surface. The file records its own history
+ *  whether or not this machine is licensed; reading it back is what the key turns on. */
+const PRO_FILE_ACTIONS = new Set<FileMenuAction>(['history', 'compare'])
+
 const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'midi',    label: 'MIDI'    },
   { type: 'osc',     label: 'OSC'     },
@@ -49,6 +53,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const pro = usePro()
   const openSettings = useStore(s => s.openSettings)
   const openShowSettings = useStore(s => s.openShowSettings)
+  const openChanges = useStore(s => s.openChanges)
 
   const handleAddCue = (type: CueType) => {
     // A scene cue belongs to the scenes the license unlocks: without one there is
@@ -121,6 +126,10 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'open-demo': openDemoWorkspace,
     'save': save,
     'save-as': saveAs,
+    // Both open the same dialog: the show's own history of its saves, or how it differs
+    // from another file. The menu entry says which one the operator asked for.
+    'history': () => openChanges('history'),
+    'compare': () => openChanges('compare'),
     'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings
   }
@@ -135,6 +144,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const fileItem = (item: FileMenuItem) => (
     <button key={item.action} data-action={item.action} onClick={() => handleMenuAction(fileActions[item.action])}>
       <span>{item.label}</span>
+      {PRO_FILE_ACTIONS.has(item.action) && <ProMark />}
       {item.accelerator && <kbd>{shortcutLabel(item.accelerator)}</kbd>}
     </button>
   )

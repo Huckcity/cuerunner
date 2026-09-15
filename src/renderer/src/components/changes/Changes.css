@@ -1,0 +1,184 @@
+/* The Changes dialog: the show's own history of its saves, and how it differs from
+   another file. It borrows the settings dialog's frame — overlay, header, ✕ and tab strip
+   — because it is the same kind of surface; only the body is its own. */
+
+.changes-dialog {
+  /* Wider than the settings dialog: a history line is a sentence, and a diff line is a
+     cue name with the fields that changed beside it. */
+  width: min(92vw, 760px);
+}
+
+.changes-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.changes-intro {
+  font-size: var(--text-base);
+  color: var(--fg-tertiary);
+  line-height: 1.5;
+}
+
+.changes-empty {
+  font-size: var(--text-base);
+  color: var(--fg-muted);
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.changes-note {
+  font-size: var(--text-base);
+  color: var(--accent-amber);
+  background: var(--accent-amber-bg);
+  border: 1px solid rgba(224, 160, 32, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+
+.changes-error {
+  font-size: var(--text-base);
+  color: var(--state-panic-hover);
+  line-height: 1.5;
+}
+
+/* ─── History ────────────────────────────────────────────────────────────── */
+
+.changes-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.changes-entry {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  padding: 8px 10px;
+}
+
+.changes-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.changes-when {
+  font-size: var(--text-base);
+  color: var(--fg-primary);
+}
+
+.changes-who {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+.changes-summary {
+  font-size: var(--text-sm);
+  color: var(--fg-tertiary);
+  margin-top: 2px;
+}
+
+.changes-detail {
+  margin-top: 6px;
+}
+
+.changes-detail summary {
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.changes-detail summary:hover { color: var(--fg-tertiary); }
+
+.changes-lines {
+  list-style: none;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.changes-line {
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+  line-height: 1.4;
+}
+
+.changes-line-more,
+.changes-where {
+  color: var(--fg-dim);
+}
+
+/* A cue line is a name and the fields that changed under it, rather than one long
+   sentence: an operator scans for the cue, then reads what moved. */
+.changes-line-cue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+
+.changes-cue-name {
+  color: var(--fg-primary);
+}
+
+.changes-field {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+/* ─── Compare ────────────────────────────────────────────────────────────── */
+
+.changes-compare-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.changes-choose {
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.changes-choose:hover:not(:disabled) { background: var(--bg-hover); }
+.changes-choose:disabled { opacity: 0.6; cursor: default; }
+
+.changes-hint {
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+}
+
+.changes-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.changes-group-title {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+}
+
+.changes-group[data-group='added'] .changes-group-title { color: var(--state-running-fg); }
+.changes-group[data-group='removed'] .changes-group-title { color: var(--state-panic-hover); }
+
+.changes-foot {
+  font-size: var(--text-sm);
+  color: var(--fg-dim);
+}

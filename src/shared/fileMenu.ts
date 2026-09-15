@@ -8,6 +8,8 @@ export type FileMenuAction =
   | 'open-demo'
   | 'save'
   | 'save-as'
+  | 'history'
+  | 'compare'
   | 'show-settings'
   | 'settings'
 
@@ -30,6 +32,11 @@ export const FILE_MENU: FileMenuEntry[] = [
   'separator',
   { action: 'save', label: 'Save', accelerator: 'CmdOrCtrl+S' },
   { action: 'save-as', label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S' },
+  'separator',
+  // What the file has done, and what another version of it did differently. The file
+  // records its history whether or not this machine can read it: the data is the show's.
+  { action: 'history', label: 'Show History…' },
+  { action: 'compare', label: 'Compare Show…' },
   'separator',
   // The show's own setup, beside the app's: one travels with the workspace, the other
   // with the machine.

@@ -8,6 +8,7 @@ import type { MidiAvailability } from './types/midi'
 import type { NetworkRequest, NetworkResult } from './types/network'
 import type { PlaybackPanic } from './types/playback'
 import type { MissingMedia } from '../../shared/media'
+import type { WorkspaceDiff } from '../../shared/showfile'
 import type { RedundancySettings } from '../../shared/redundancy'
 import type { AudioEngineBridge } from '../../shared/audio'
 import type { MenuAction } from '../../shared/fileMenu'
@@ -98,6 +99,10 @@ interface WinslabBridge {
       existingPath: string | null
     ) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
     saveAs: (workspace: Workspace) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
+    compare: (workspace: Workspace) => Promise<
+      | { ok: false; error: string }
+      | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }
+    >
     recent: () => Promise<string[]>
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null) => Promise<void>
     recovery: () => Promise<{

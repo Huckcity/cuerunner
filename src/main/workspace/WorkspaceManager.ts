@@ -10,7 +10,8 @@ import {
   appendHistory,
   diffWorkspaces,
   historyEntry,
-  type ShowHistoryEntry
+  type ShowHistoryEntry,
+  type WorkspaceDiff
 } from '../../shared/showfile'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { AudioCue, Cue } from '../../renderer/src/types/cue'
@@ -854,6 +855,47 @@ export async function saveWorkspaceAs(
   workspace: Workspace
 ): Promise<SavedWorkspace | null> {
   return saveWorkspace(win, workspace, null)
+}
+
+/** What a comparison says: the file it was made against, and the differences. */
+export interface WorkspaceComparison {
+  /** The file the show was compared with, which is the "before" side of the diff. */
+  path: string
+  diff: WorkspaceDiff
+}
+
+/**
+ * How this show differs from a file the operator picks. The pick is the "before" side —
+ * what changed since that file was written is the question, and the chosen file is
+ * almost always the older one.
+ *
+ * The window's show has not been written yet, so it is put into the same stored form the
+ * file on disk is in before the two are compared: a comparison between a runtime
+ * workspace and a file would be comparing this machine's paths with a file's.
+ */
+export async function compareWorkspace(
+  win: BrowserWindow,
+  workspace: Workspace
+): Promise<WorkspaceComparison | null> {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Compare With',
+    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+    properties: ['openFile']
+  })
+  if (result.canceled || !result.filePaths[0]) return null
+  return compareWithFile(workspace, result.filePaths[0])
+}
+
+/** The comparison itself, for a file that is already known — a comparison with no dialog. */
+export async function compareWithFile(
+  workspace: Workspace,
+  otherPath: string
+): Promise<WorkspaceComparison> {
+  const other = await readWorkspaceFile(otherPath)
+  const mine = migrateWorkspace(
+    JSON.parse(serialiseWorkspace(workspace, dirname(otherPath))) as Workspace
+  )
+  return { path: otherPath, diff: diffWorkspaces(other, mine) }
 }
 
 export function blankWorkspace(name = 'Untitled'): Workspace {

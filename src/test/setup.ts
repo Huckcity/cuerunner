@@ -159,6 +159,7 @@ Object.defineProperty(window, 'winslab', {
       relink: vi.fn(),
       save: vi.fn(() => Promise.resolve(null)),
       saveAs: vi.fn(() => Promise.resolve(null)),
+      compare: vi.fn(() => Promise.resolve({ ok: true, comparison: null })),
       recent: vi.fn(() => Promise.resolve([])),
       autosave: vi.fn(() => Promise.resolve()),
       recovery: vi.fn(() => Promise.resolve(null)),

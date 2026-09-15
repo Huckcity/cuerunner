@@ -8,7 +8,7 @@ import type { NetworkRequest, NetworkResult } from '../renderer/src/types/networ
 import type { PlaybackPanic } from '../renderer/src/types/playback'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { MissingMedia } from '../shared/media'
-import type { ShowHistoryEntry } from '../shared/showfile'
+import type { ShowHistoryEntry, WorkspaceDiff } from '../shared/showfile'
 import {
   AUDIO_CHANNELS,
   AUDIO_SILENCE_THRESHOLD_DB,
@@ -292,6 +292,15 @@ contextBridge.exposeInMainWorld('winslab', {
       ipcRenderer.invoke('workspace:save', workspace, existingPath),
     saveAs: (workspace: Workspace): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
       ipcRenderer.invoke('workspace:saveAs', workspace),
+    /**
+     * How this show differs from a file the operator picks. The dialog belongs to the
+     * OS and is shown by the main process, so a cancel is `comparison: null` rather
+     * than an error.
+     */
+    compare: (workspace: Workspace): Promise<
+      | { ok: false; error: string }
+      | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }
+    > => ipcRenderer.invoke('workspace:compare', workspace),
     recent: (): Promise<string[]> =>
       ipcRenderer.invoke('workspace:recent'),
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null): Promise<void> =>

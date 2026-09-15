@@ -6,6 +6,7 @@ import { CueList } from './components/cue-list/CueList'
 import { Inspector } from './components/inspector/Inspector'
 import { SettingsDialog } from './components/layout/SettingsDialog'
 import { ShowSettings } from './components/show/ShowSettings'
+import { ChangesDialog } from './components/changes/ChangesDialog'
 import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
@@ -58,6 +59,8 @@ export function App() {
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)
+  const changesTab = useStore(s => s.changesTab)
+  const closeChanges = useStore(s => s.closeChanges)
   const showSettingsTab = useStore(s => s.showSettingsTab)
   const setLicense = useStore(s => s.setLicense)
   const pro = usePro()
@@ -169,6 +172,7 @@ export function App() {
       <TransportBar onShowStrip={setDockTab} />
       {settingsTab !== null && <SettingsDialog initialTab={settingsTab} onClose={closeSettings} />}
       {showSettingsTab !== null && <ShowSettings />}
+      {changesTab !== null && <ChangesDialog initialTab={changesTab} onClose={closeChanges} />}
     </div>
   )
 }

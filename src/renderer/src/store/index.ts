@@ -55,6 +55,9 @@ export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
 
+/** The two halves of the Changes dialog: what this file did, and how it differs. */
+export type ChangesTab = 'history' | 'compare'
+
 export interface RunningCue {
   cueId: string
   state: RunState
@@ -334,6 +337,16 @@ interface CueListState {
   showSettingsTab: ShowSettingsTab | null
   openShowSettings: (tab: ShowSettingsTab) => void
   closeShowSettings: () => void
+
+  /**
+   * Which half of the Changes dialog is up, or null when it is closed: the show's own
+   * history of its saves, or how it differs from another file. One dialog with two tabs
+   * rather than two panels, because the two questions are asked together — what happened
+   * to this show, and what did the other version do differently.
+   */
+  changesTab: ChangesTab | null
+  openChanges: (tab: ChangesTab) => void
+  closeChanges: () => void
 
   /** Marks the session as having unsaved changes, e.g. after recovering a snapshot. */
   markDirty: () => void
@@ -680,6 +693,7 @@ export const useStore = create<CueListState>((set) => ({
   license: { state: 'unlicensed' },
   settingsTab: null,
   showSettingsTab: null,
+  changesTab: null,
 
   addCue: (type, afterId) => set(s => {
     const cue = createCue(type)
@@ -1223,6 +1237,10 @@ export const useStore = create<CueListState>((set) => ({
   openShowSettings: (showSettingsTab) => set({ showSettingsTab }),
 
   closeShowSettings: () => set({ showSettingsTab: null }),
+
+  openChanges: (changesTab) => set({ changesTab }),
+
+  closeChanges: () => set({ changesTab: null }),
 
   markDirty: () => set({ isDirty: true }),
 

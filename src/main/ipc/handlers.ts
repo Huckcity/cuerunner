@@ -41,6 +41,7 @@ import {
   openRecovery,
   saveWorkspace,
   saveWorkspaceAs,
+  compareWorkspace,
   relinkWorkspaceMedia,
   getRecentFiles
 } from '../workspace/WorkspaceManager'
@@ -499,6 +500,15 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:saveAs', async (event, workspace: Workspace) => {
     return saveWorkspaceAs(getWin(event), workspace)
+  })
+
+  // Reading a show's history — and comparing two of them — is the Pro half of the
+  // showfile work. The file records its history either way: the data belongs to the show,
+  // and a window that is not licensed still saves one.
+  ipcMain.handle('workspace:compare', async (event, workspace: Workspace) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+    const comparison = await compareWorkspace(getWin(event), workspace)
+    return { ok: true, comparison }
   })
 
   ipcMain.handle('workspace:recent', async () => {
