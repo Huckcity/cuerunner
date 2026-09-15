@@ -6,16 +6,29 @@ import { MidiTcpService } from '../services/MidiTcpService'
 import { WirelessService } from '../services/WirelessService'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
+import { RedundancyService } from '../services/RedundancyService'
+import type { RedundancySettings } from '../../shared/redundancy'
 import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../renderer/src/types/show'
 
-export function defaultServices(): ShowService[] {
+/**
+ * What the services need from the rest of the app that is not the show. The redundancy
+ * pair's own settings are the one thing here: they are kept with the machine, because
+ * both machines of a pair run the same workspace file and a role written into the show
+ * would be read as the same answer by both of them.
+ */
+export interface ServiceOptions {
+  redundancy?: () => RedundancySettings
+}
+
+export function defaultServices(options: ServiceOptions = {}): ShowService[] {
   return [
     new OscInputService(),
     new MidiInputService(),
     new MidiTcpService(),
     new WirelessService(),
     new PresenceService(),
-    new CompanionService()
+    new CompanionService(),
+    new RedundancyService({ settings: options.redundancy })
   ]
 }
 

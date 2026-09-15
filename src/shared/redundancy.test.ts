@@ -20,11 +20,10 @@ import {
   takeoverPlan,
   type HelloMessage,
   type MirrorCue,
+  type PlanCue,
   type RedundancyDigest
 } from './redundancy'
-import type { Cue } from '../renderer/src/types/cue'
 
-type PlanCue = Pick<Cue, 'id' | 'number' | 'name' | 'type' | 'startTime' | 'duration'>
 
 function audioCue(id: string, startTime = 0, duration = 180_000): PlanCue {
   return { id, number: id, name: `Cue ${id}`, type: 'audio', startTime, duration }

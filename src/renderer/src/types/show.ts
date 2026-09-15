@@ -1,4 +1,5 @@
 import type { MidiMessageKind, OscArg } from './cue'
+import type { RedundancyStatus, TakeoverNotice } from '../../../shared/redundancy'
 
 // The show services are everything around the cue stack: the devices on stage, the
 // consoles they talk to, and the alarms when one of them stops answering. Everything
@@ -115,7 +116,32 @@ export interface ServiceEvent {
   service: ServiceStatus
 }
 
-export type ShowEvent = OscInEvent | MidiInEvent | DeviceEvent | AlertEvent | ServiceEvent
+// ── Redundant playback: the machine on the other side of the desk ────────────
+//
+// A second machine runs the same show and stands by to take it over when this one stops
+// answering. What it has heard and what it is doing arrives as an event like everything
+// else, so the monitor, the log and the settings tab read one object rather than three
+// half-answers.
+
+export interface RedundancyEvent {
+  kind: 'redundancy'
+  at: number
+  status: RedundancyStatus
+  /**
+   * Present once, on the event that announces a takeover. This machine has just claimed
+   * the show, and what the live machine was running has to be put back on this machine's
+   * engine — which only the window can do, because the cue list lives there.
+   */
+  takeover?: TakeoverNotice
+}
+
+export type ShowEvent =
+  | OscInEvent
+  | MidiInEvent
+  | DeviceEvent
+  | AlertEvent
+  | ServiceEvent
+  | RedundancyEvent
 export type ShowEventKind = ShowEvent['kind']
 
 /** What the renderer gets when it asks for the current world, not the history of it. */

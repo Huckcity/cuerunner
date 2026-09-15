@@ -8,6 +8,7 @@ import type { MidiAvailability } from './types/midi'
 import type { NetworkRequest, NetworkResult } from './types/network'
 import type { PlaybackPanic } from './types/playback'
 import type { MissingMedia } from '../../shared/media'
+import type { RedundancySettings } from '../../shared/redundancy'
 import type { AudioEngineBridge } from '../../shared/audio'
 import type { MenuAction } from '../../shared/fileMenu'
 
@@ -62,6 +63,13 @@ interface WinslabBridge {
     activate: (text: string) => Promise<ActivationResult>
     deactivate: () => Promise<LicenseStatus>
     onChanged: (callback: (status: LicenseStatus) => void) => () => void
+  }
+  /** Redundant playback: this machine's half of a pair, kept with the machine. */
+  redundancy: {
+    settings: () => Promise<RedundancySettings>
+    configure: (
+      patch: Partial<RedundancySettings>
+    ) => Promise<{ ok: boolean; settings: RedundancySettings; error?: string }>
   }
   script: {
     readFile: (

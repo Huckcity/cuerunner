@@ -115,6 +115,37 @@ Object.defineProperty(window, 'winslab', {
       deactivate: vi.fn(() => Promise.resolve({ state: 'unlicensed' })),
       onChanged: vi.fn(() => () => {})
     },
+    redundancy: {
+      // A machine that has never been paired: off, live, and alone.
+      settings: vi.fn(() => Promise.resolve({
+        enabled: false,
+        name: 'test-machine',
+        id: 'test-machine-id',
+        role: 'live',
+        port: 53110,
+        peerHost: '',
+        peerPort: 53110,
+        token: '',
+        timeoutMs: 3000,
+        takeover: 'manual'
+      })),
+      configure: vi.fn((patch: Record<string, unknown>) => Promise.resolve({
+        ok: true,
+        settings: {
+          enabled: false,
+          name: 'test-machine',
+          id: 'test-machine-id',
+          role: 'live',
+          port: 53110,
+          peerHost: '',
+          peerPort: 53110,
+          token: '',
+          timeoutMs: 3000,
+          takeover: 'manual',
+          ...patch
+        }
+      }))
+    },
     script: {
       readFile: vi.fn(() => Promise.resolve({ code: '', path: '' })),
       pickFile: vi.fn(() => Promise.resolve(null)),

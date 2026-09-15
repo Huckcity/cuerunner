@@ -295,7 +295,10 @@ function isBeat(message: Partial<BeatMessage>): message is BeatMessage {
   return isDigest(message.digest)
 }
 
-function isDigest(value: unknown): value is RedundancyDigest {
+/** A digest with every field a machine acts on accounted for. It crosses two boundaries
+ *  this module does not own — the socket, and the window's publish into main — so both
+ *  of them check the same shape here. */
+export function isDigest(value: unknown): value is RedundancyDigest {
   if (typeof value !== 'object' || value === null) return false
   const digest = value as Partial<RedundancyDigest>
   if (typeof digest.at !== 'number') return false
@@ -467,6 +470,15 @@ export function shouldTakeOver(input: {
 
 // ── Deterministic takeover ──────────────────────────────────────────────────
 
+/**
+ * The part of a cue a takeover works from. Only an audio cue has a region inside its
+ * file, so the caller says where that region begins; everything else is cue identity.
+ */
+export type PlanCue = Pick<Cue, 'id' | 'number' | 'name' | 'type' | 'duration'> & {
+  /** Where the cue's own region begins in its file, ms. */
+  startTime: number
+}
+
 /** One cue the backup will put back on its own engine, at the position it had reached. */
 export interface AdoptEntry {
   cueId: string
@@ -507,7 +519,7 @@ export interface TakeoverPlan {
  * failure of the takeover, and all of it is written down.
  */
 export function takeoverPlan(
-  cues: Array<Pick<Cue, 'id' | 'number' | 'name' | 'type' | 'startTime' | 'duration'>>,
+  cues: PlanCue[],
   digest: RedundancyDigest | null,
   silentMs: number
 ): TakeoverPlan {

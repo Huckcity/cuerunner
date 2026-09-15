@@ -4,6 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
+import type { RedundancyStatus, TakeoverNotice } from '../../../shared/redundancy'
 import type {
   CastSettings,
   CompanionSettings,
@@ -256,6 +257,20 @@ interface CueListState {
   setShowSnapshot: (snapshot: ShowSnapshot) => void
   dismissAlert: (id: number) => void
   clearShowEvents: () => void
+
+  /**
+   * Redundant playback, as the main process last reported it: which half of the pair
+   * this machine is, whether its partner is answering, and what it last did about it.
+   * Like the services above, it is a fact about the machines rather than the show.
+   */
+  redundancy: RedundancyStatus | null
+  /**
+   * A takeover this machine has just decided on, waiting to be acted on. Whoever adopts
+   * it takes it off the store, so a second renderer render or a replayed batch cannot
+   * fire the show twice.
+   */
+  redundancyTakeover: TakeoverNotice | null
+  clearRedundancyTakeover: () => void
 
   /** Operator-facing message shown in the notice bar: a failed save or open. */
   notice: string | null
@@ -517,6 +532,24 @@ function mergeServices(previous: ServiceStatus[], events: ShowEvent[]): ServiceS
   return [...byId.values()]
 }
 
+/** The newest redundancy status in a batch, or the one already held when it carries none. */
+function latestRedundancy(previous: RedundancyStatus | null, events: ShowEvent[]): RedundancyStatus | null {
+  let status = previous
+  for (const event of events) {
+    if (event.kind === 'redundancy') status = event.status
+  }
+  return status
+}
+
+/** A takeover in a batch: the machine has just claimed a show and the window has to act. */
+function takeoverIn(events: ShowEvent[]): TakeoverNotice | null {
+  let notice: TakeoverNotice | null = null
+  for (const event of events) {
+    if (event.kind === 'redundancy' && event.takeover) notice = event.takeover
+  }
+  return notice
+}
+
 // Coalesce rapid updateCue calls for the same cue into one history entry.
 let _coalesceId: string | null = null
 let _coalesceTime = 0
@@ -626,6 +659,8 @@ export const useStore = create<CueListState>((set) => ({
   showDevices: [],
   showAlerts: [],
   showEvents: [],
+  redundancy: null,
+  redundancyTakeover: null,
   deskState: {},
   deskSceneId: null,
   scenesEditing: false,
@@ -1089,10 +1124,13 @@ export const useStore = create<CueListState>((set) => ({
     if (events.length === 0) return s
 
     const alerts = events.flatMap(event => event.kind === 'alert' ? [event.alert] : [])
+    const takeover = takeoverIn(events)
     return {
       showEvents: [...s.showEvents, ...events].slice(-SHOW_EVENT_LIMIT),
       showServices: mergeServices(s.showServices, events),
       showDevices: mergeDevices(s.showDevices, events),
+      redundancy: latestRedundancy(s.redundancy, events),
+      redundancyTakeover: takeover ?? s.redundancyTakeover,
       showAlerts: alerts.length === 0
         ? s.showAlerts
         : [...s.showAlerts, ...alerts].slice(-SHOW_ALERT_LIMIT),
@@ -1112,8 +1150,14 @@ export const useStore = create<CueListState>((set) => ({
     showServices: snapshot.services,
     showDevices: snapshot.devices,
     showAlerts: snapshot.alerts,
-    showEvents: snapshot.events.slice(-SHOW_EVENT_LIMIT)
+    showEvents: snapshot.events.slice(-SHOW_EVENT_LIMIT),
+    // The status, not the takeover: a machine that took the show over while this window
+    // was reloading has already been adopted by the engine, and replaying the notice
+    // would fire the show a second time.
+    redundancy: latestRedundancy(null, snapshot.events)
   })),
+
+  clearRedundancyTakeover: () => set({ redundancyTakeover: null }),
 
   dismissAlert: (id) => set(s => ({ showAlerts: s.showAlerts.filter(a => a.id !== id) })),
 
