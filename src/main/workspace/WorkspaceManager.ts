@@ -1001,7 +1001,9 @@ export async function mergeShow(
     if (ancestor.canceled || !ancestor.filePaths[0]) return null
     files = { theirs: theirs.filePaths[0], ancestor: ancestor.filePaths[0] }
   }
-  return { ...(await mergeIntoNewFile(win, ours, oursPath, files.theirs, files.ancestor, policy))!, inputs: files }
+  const merged = await mergeIntoNewFile(win, ours, oursPath, files.theirs, files.ancestor, policy)
+  if (merged === null) return null
+  return { ...merged, inputs: files }
 }
 
 export function blankWorkspace(name = 'Untitled'): Workspace {

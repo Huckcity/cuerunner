@@ -130,7 +130,11 @@ struct AsioHost {
   long bufferFrames = 0;
   ASIOSampleRate sampleRate = 0.0;
   bool postOutput = false;
-  long outputLatencyFrames = 0;
+  // The driver's own output latency, in frames. Written on the driver's callback thread
+  // and read on the info verb's thread, hence atomic. The engine re-reads it on every
+  // info answer rather than trusting its open-time snapshot (see contextLatencyMs):
+  // kAsioLatenciesChanged can restate it mid-session.
+  std::atomic<long> outputLatencyFrames{0};
 
   ma_device* device = nullptr;
   ASIOBufferInfo infos[kChannelCap] = {};
@@ -524,7 +528,9 @@ void processBlock(long doubleBufferIndex) {
   if (host->latencyDirty.exchange(false, std::memory_order_acq_rel)) {
     long inputLatency = 0;
     long outputLatency = 0;
-    if (host->driver->getLatencies(&inputLatency, &outputLatency) == ASE_OK) host->outputLatencyFrames = outputLatency;
+    if (host->driver->getLatencies(&inputLatency, &outputLatency) == ASE_OK) {
+      host->outputLatencyFrames.store(outputLatency, std::memory_order_release);
+    }
   }
   renderBlock(*host, doubleBufferIndex);
   // Tells a driver that converts for the hardware that this block is finished, which can
@@ -570,7 +576,6 @@ long asioMessages(long selector, long value, void* message, double* opt) {
         case kAsioLatenciesChanged:
         case kAsioSupportsTimeInfo:
         case kAsioSupportsTimeCode:
-        case kAsioCanReportOverload:
         case kAsioOverload:
           return 1L;
         default:
@@ -601,8 +606,7 @@ long asioMessages(long selector, long value, void* message, double* opt) {
     case kAsioLatenciesChanged:
       if (host != nullptr) host->latencyDirty.store(true, std::memory_order_release);
       return 1L;
-    case kAsioCanReportOverload:
-      return static_cast<long>(ASE_SUCCESS);  // yes: tell us when a block is dropped
+    // The driver's own dropout report, negotiated with future() at open: an xrun.
     case kAsioOverload:
       if (host != nullptr) host->dropouts.fetch_add(1, std::memory_order_relaxed);
       return 1L;
@@ -665,6 +669,11 @@ ma_result getDeviceInfoOnDriverThread(ma_context* pContext, ma_device_type devic
       probe.channels = static_cast<int>(host->driverOutputs);
       probe.rates.push_back(static_cast<int>(host->sampleRate + 0.5));
       probe.format = ma_format_f32;
+    } else {
+      // Not the running driver, and a second one cannot be started while it streams —
+      // so there is nothing true to report. Falling through would publish the default
+      // below as a real 1-channel device.
+      return MA_NO_DEVICE;
     }
   } else {
     if (name.empty()) {
@@ -824,6 +833,12 @@ ma_result initDeviceOnDriverThread(ma_device* pDevice, const ma_device_config* p
   }
   host->buffersCreated = true;
 
+  // Overload reporting is negotiated host-to-driver, not through asioMessages: a driver
+  // that answers this query sends kAsioOverload when it drops a block, and that handler
+  // counts them as xruns. The answer itself is not kept — an unsupported query only
+  // means the driver stays silent.
+  host->driver->future(kAsioCanReportOverload, nullptr);
+
   // The word the driver wants each channel in, and the refusal if this build has no idea
   // what to do with one of them. Asked after the buffers exist, which is the order the
   // SDK's own host example uses.
@@ -863,7 +878,9 @@ ma_result initDeviceOnDriverThread(ma_device* pDevice, const ma_device_config* p
 
   long inputLatency = 0;
   long outputLatency = 0;
-  host->outputLatencyFrames = host->driver->getLatencies(&inputLatency, &outputLatency) == ASE_OK ? outputLatency : 0;
+  host->outputLatencyFrames.store(
+      host->driver->getLatencies(&inputLatency, &outputLatency) == ASE_OK ? outputLatency : 0,
+      std::memory_order_release);
   host->postOutput = host->driver->outputReady() == ASE_OK;
 
   pDescriptorPlayback->format = ma_format_f32;  // the engine renders f32; the driver's own
@@ -1009,8 +1026,10 @@ uint64_t takeDropouts(const ma_context& context) {
 
 double contextLatencyMs(const ma_context& context) {
   AsioHost* host = hostOf(context);
-  if (host == nullptr || host->outputLatencyFrames <= 0 || !(host->sampleRate > 0.0)) return -1.0;
-  return static_cast<double>(host->outputLatencyFrames) * 1000.0 / host->sampleRate;
+  if (host == nullptr || !(host->sampleRate > 0.0)) return -1.0;
+  const long latencyFrames = host->outputLatencyFrames.load(std::memory_order_acquire);
+  if (latencyFrames <= 0) return -1.0;
+  return static_cast<double>(latencyFrames) * 1000.0 / host->sampleRate;
 }
 
 std::string contextNote(const ma_context& context) {

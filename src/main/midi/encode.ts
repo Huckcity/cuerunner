@@ -26,7 +26,18 @@ export function encodeMidiMessage(message: MidiMessage): number[] {
   if (message.kind === 'noteOff') return [0x80 | ch, message.note!, message.velocity!]
   if (message.kind === 'cc') return [0xb0 | ch, message.controller!, message.value!]
   if (message.kind === 'programChange') return [0xc0 | ch, message.program!]
-  if (message.kind === 'sysex') return [0xf0, ...message.data!, 0xf7]
+  // The cue body is stored without its delimiters (see decodeMidiMessage: an incoming
+  // message is stripped the same way, and encodeMsc builds bodies, not frames), but the
+  // inspector's placeholder tells the operator to type `F0 … F7`, so a hand-typed body
+  // keeps them. Framing twice puts `F0 F0 … F7 F7` on the wire, which receivers discard
+  // as a nested message while midi.send reports ok — so the delimiters are stripped
+  // here, where learned and typed cues become the same bytes.
+  if (message.kind === 'sysex') {
+    const body = [...(message.data ?? [])]
+    if (body[0] === 0xf0) body.shift()
+    if (body[body.length - 1] === 0xf7) body.pop()
+    return [0xf0, ...body, 0xf7]
+  }
   // Anything else is a message this app does not send; nothing goes on the wire for it.
   return []
 }

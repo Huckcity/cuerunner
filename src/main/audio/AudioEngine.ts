@@ -219,6 +219,26 @@ export class NativeAudioEngine {
     return this.startPromise
   }
 
+  /**
+   * Quit teardown: runs in `will-quit`, past the point a quit can still be cancelled.
+   * Synchronous — Electron will not wait for async work that late — so the child is
+   * signalled rather than asked: SIGTERM drives the engine's own signal handler
+   * (`requestStop`/`serve`/`stop`), which is the graceful path, and the kill guarantees
+   * no orphan holds the device. Nothing runs in `before-quit`: even a graceful verb
+   * exits the engine (`stopping_` + client drop; `serve()` returns and `stop()` runs),
+   * so a cancelled unsaved-changes prompt would still stop the show.
+   */
+  forceShutdown(): void {
+    this.shuttingDown = true
+    if (this.restartTimer !== null) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
+    this.failPending(new AudioEngineError('engine', 'audio engine stopped'))
+    this.killChild()
+    this.teardown()
+  }
+
   async shutdown(): Promise<void> {
     this.shuttingDown = true
     if (this.restartTimer !== null) {

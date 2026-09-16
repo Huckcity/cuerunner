@@ -523,6 +523,92 @@ describe('store — batch edits', () => {
   })
 })
 
+describe('store — audit 2026-09', () => {
+  beforeEach(resetStore)
+
+  it('keeps an unrelated cue alone when a boundary moves on another file', () => {
+    useStore.getState().addAudioCuesFromFiles([{ filePath: '/a.wav', name: 'A' }])
+    useStore.getState().addAudioCuesFromFiles([{ filePath: '/b.wav', name: 'B' }])
+    const [a, b] = useStore.getState().cues as AudioCue[]
+    // The pair the boundary would otherwise find: B starts where A ends, but on another file.
+    useStore.getState().updateCue(a.id, { duration: 10000, endTime: 7000 } as never)
+    useStore.getState().updateCue(b.id, { duration: 10000, startTime: 7000 } as never)
+
+    useStore.getState().setRegionBoundary(a.id, 'end', 5000)
+
+    const after = useStore.getState().cues as AudioCue[]
+    expect(after[0].endTime).toBe(5000)
+    expect(after[1].startTime).toBe(7000)
+  })
+
+  it('moves a split pair together on the same file', () => {
+    useStore.getState().addAudioCuesFromFiles([{ filePath: '/a.wav', name: 'A' }])
+    const [a] = useStore.getState().cues as AudioCue[]
+    useStore.getState().updateCue(a.id, { duration: 10000, endTime: 7000 } as never)
+    useStore.getState().splitAudioCueAt(a.id, 5000)
+    const [, tail] = useStore.getState().cues as AudioCue[]
+
+    useStore.getState().setRegionBoundary(tail.id, 'start', 4000)
+
+    const after = useStore.getState().cues as AudioCue[]
+    expect(after[0].endTime).toBe(4000)
+    expect(after[1].startTime).toBe(4000)
+  })
+
+  it('inserts past a nested subtree, and duplicates a nested group whole', () => {
+    useStore.getState().addCue('group')
+    const outer = useStore.getState().cues[0].id
+    useStore.getState().addCue('group', outer)
+    const inner = useStore.getState().cues[1].id
+    useStore.getState().addCue('wait', inner)
+    const grandchild = useStore.getState().cues[2].id
+    useStore.getState().addCue('wait', outer)
+    const own = useStore.getState().cues[3].id
+
+    // Inserting after the outer header joins it as its last child — past the nested
+    // group and its own cue, not between the nested header and its child.
+    useStore.getState().addCue('wait', outer)
+    const cues = useStore.getState().cues
+    expect(cues.map(cue => cue.id)).toEqual([outer, inner, grandchild, own, cues[4].id])
+    expect(cues[4].parentId).toBe(outer)
+
+    useStore.getState().duplicateCues([inner])
+    const doubled = useStore.getState().cues
+    const copyHeader = doubled.find(cue => cue.parentId === outer && cue.number.endsWith('copy'))
+    expect(copyHeader?.type).toBe('group')
+    const copyChildren = doubled.filter(cue => cue.parentId === copyHeader!.id)
+    expect(copyChildren).toHaveLength(1)
+  })
+
+  it('keeps both copies when a group and its last child are duplicated together', () => {
+    useStore.getState().addCue('group')
+    const group = useStore.getState().cues[0].id
+    useStore.getState().addCue('wait', group)
+    const child = useStore.getState().cues[1].id
+
+    useStore.getState().duplicateCues([group, child])
+
+    const cues = useStore.getState().cues
+    const groupCopies = cues.filter(cue => cue.type === 'group' && cue.number.endsWith('copy'))
+    expect(groupCopies).toHaveLength(1)
+    const childCopies = cues.filter(cue => cue.parentId === groupCopies[0].id)
+    expect(childCopies).toHaveLength(1)
+  })
+
+  it('marks an undo after a save dirty again', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [])
+    expect(useStore.getState().isDirty).toBe(false)
+
+    useStore.getState().undo()
+    expect(useStore.getState().isDirty).toBe(true)
+
+    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [])
+    useStore.getState().redo()
+    expect(useStore.getState().isDirty).toBe(true)
+  })
+})
+
 describe('store — collapsed groups', () => {
   beforeEach(resetStore)
 

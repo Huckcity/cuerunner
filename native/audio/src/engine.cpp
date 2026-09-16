@@ -197,7 +197,9 @@ struct Engine::DeviceState {
   std::string internalFormat = "f32";
   // What only the backend can say: the latency its own driver states (in samples, measured
   // from the hardware rather than derived from the period size), and anything about this
-  // device the operator should be told in the engine's warnings.
+  // device the operator should be told in the engine's warnings. The latency is the
+  // open-time snapshot; info() re-reads ASIO's live figure, which kAsioLatenciesChanged
+  // can restate mid-session.
   double reportedLatencyMs = -1.0;
   std::string backendNote;
   std::map<std::string, ma_device_id> ids;
@@ -1232,8 +1234,18 @@ InfoDTO Engine::info() const {
     out.exclusive = device_->exclusive;
     out.bufferFrames = device_->bufferFrames;
     out.periodFrames = device_->periodFrames;
-    if (device_->reportedLatencyMs > 0.0) {
-      out.latencyMs = device_->reportedLatencyMs;
+#if defined(WINSLAB_ASIO)
+    // ASIO states its own latency and can restate it mid-session (kAsioLatenciesChanged),
+    // which the open-time snapshot would miss for the rest of the show: ask the live
+    // context on every readout, falling back to the snapshot when the driver will not say.
+    const double liveLatencyMs =
+        (device_->backend == ma_backend_custom) ? asio::contextLatencyMs(device_->context) : -1.0;
+    const double driverLatencyMs = liveLatencyMs > 0.0 ? liveLatencyMs : device_->reportedLatencyMs;
+#else
+    const double driverLatencyMs = device_->reportedLatencyMs;
+#endif
+    if (driverLatencyMs > 0.0) {
+      out.latencyMs = driverLatencyMs;
       out.latencySource = "driver";
     } else if (device_->periodFrames > 0 && device_->internalSampleRate > 0) {
       const double periods = device_->bufferFrames > 0 ? static_cast<double>(device_->bufferFrames) /
