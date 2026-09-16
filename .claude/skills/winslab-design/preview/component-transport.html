@@ -1,20 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><style>
-  body { margin: 0; background: #181818; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  body { margin: 0; background: #14171b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .bar {
     display: flex; align-items: center; justify-content: space-between;
-    height: 52px; padding: 0 16px; background: #1a1a1a; border-top: 1px solid #333;
+    height: 52px; padding: 0 16px; background: #171a1f; border-top: 1px solid #2b3038;
   }
   .left { flex: 1; }
-  .right { flex: 1; text-align: right; font-size: 12px; color: #888; }
-  .right strong { color: #ccc; }
+  .right { flex: 1; text-align: right; font-size: 12px; color: #a3adb8; }
+  .right strong { color: #cdd3da; }
   .center { display: flex; gap: 8px; align-items: center; }
   .btn { height: 36px; padding: 0 20px; border: none; border-radius: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.05em; cursor: default; min-width: 90px; }
-  .go { background: #2d7a2d; color: #fff; }
-  .stop { background: #444; color: #ccc; }
-  .panic { background: #7a2d2d; color: #fff; }
-  .badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; background: #1e4a1e; color: #5aaa5a; }
+  .go { background: #1c7a3c; color: #fff; }
+  .stop { background: #3b424c; color: #cdd3da; }
+  /* No panic button: it is ⇧Esc and the Playback menu. */
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; background: #1d3a26; color: #4cc36a; }
 </style></head>
 <body>
 <div class="bar">
@@ -22,7 +22,7 @@
   <div class="center">
     <button class="btn stop">■ STOP</button>
     <button class="btn go">▶ GO</button>
-    <button class="btn panic">✕ PANIC</button>
+
   </div>
   <div class="right"><strong>2</strong> Scene 1 Underscore</div>
 </div>
