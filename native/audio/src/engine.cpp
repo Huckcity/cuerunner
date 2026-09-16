@@ -306,12 +306,9 @@ bool initBackendContext(const std::string& backend, ma_context& context, ma_back
 #if defined(WINSLAB_ASIO)
     if (candidate == ma_backend_custom) {
       // The custom hook is how a backend with its own driver arrives: miniaudio knows the
-      // device model, the backend knows ASIO.
-      //
-      // Before ma_context_init and not after it: miniaudio asks for the multi-threaded COM
-      // apartment during context initialization, and an ASIO driver cannot be created from
-      // one (see prepareThreadForDriverCalls in asio_backend.h).
-      asio::prepareThreadForDriverCalls();
+      // device model, the backend knows ASIO — including which COM apartment a driver can be
+      // created in, which is not the one this thread is in (see DriverThread in
+      // asio_backend.cpp), so nothing here has to be done in any particular order.
       config.custom = asio::backendCallbacks();
     }
 #endif

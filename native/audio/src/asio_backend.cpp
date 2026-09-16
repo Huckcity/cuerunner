@@ -65,6 +65,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
+#include <functional>
+#include <future>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -72,7 +75,9 @@
 #include <map>
 #include <mutex>
 #include <new>
+#include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace ws {
@@ -215,38 +220,84 @@ std::string asioErrorText(ASIOError error) {
 }
 
 /**
- * The COM apartment this thread is in, claimed on first use.
+ * The thread the driver lives on.
  *
- * ASIO drivers are in-process COM servers registered with `ThreadingModel=Apartment` — the
- * SDK's own driver template does this, and Steinberg's built-in driver does — so the object
- * can only be created from a single-threaded apartment. From a multi-threaded one COM would
- * have to marshal the call, and an ASIO driver ships no proxy/stub: the failure is
- * `E_NOINTERFACE` from `CoCreateInstance`, which says nothing about the real problem.
+ * ASIO drivers are in-process COM servers registered as `ThreadingModel=Apartment`, so they
+ * can only be created, and called, from a single-threaded apartment. The engine's threads are
+ * not that and cannot be made to be: miniaudio asks for the *multi*-threaded apartment on any
+ * thread that initializes a context (`MA_COINIT_VALUE`), which on Windows happens for WASAPI
+ * long before a show asks for ASIO, and a thread cannot change its apartment afterwards.
+ * Making the engine's threads STA up front is not an option either: miniaudio's WASAPI device
+ * notifications depend on the apartment it chose.
  *
- * miniaudio asks for the *multi*-threaded apartment (`MA_COINIT_VALUE = 0`) on any thread
- * that initializes a context, inside `ma_context_init` and before any backend callback runs
- * — so this must be called before `ma_context_init`, and the apartment is never released:
- * the driver objects outlive the calls that made them. An apartment torn down under a live
- * driver unloads its DLL, and the next call through its vtable reads unmapped memory (a
- * crash this backend has already been through once).
+ * So the backend owns one thread of its own, in an STA, and every driver call that is not the
+ * driver's own callback runs there. Calls arrive as tasks through `run`, which blocks until
+ * the answer is ready, so the caller's view is synchronous while the driver sees one thread.
  *
- * `Multi` is recorded rather than corrected: a thread that is already multi-threaded cannot
- * be moved, and pretending otherwise would surface as that same unhelpful E_NOINTERFACE.
+ * The thread is detached and lives as long as the process: a driver outlives any device, and
+ * joining this thread at exit is a way to hang inside a driver's teardown.
+ *
+ * The one exception is the driver's callback thread, which is the driver's own: `outputReady`
+ * and `getLatencies` are called from inside `processBlock` below and stay there. That is what
+ * ASIO expects of a host — the interface has no proxy, and the driver is asking for those
+ * calls from inside its own callback.
  */
-enum class Apartment { Unknown, Single, Multi };
+class DriverThread {
+ public:
+  static DriverThread& instance() {
+    static DriverThread thread;
+    return thread;
+  }
 
-Apartment& threadApartment() {
-  static thread_local Apartment apartment = Apartment::Unknown;
-  return apartment;
-}
+  template <typename Fn>
+  auto run(Fn&& fn) -> decltype(fn()) {
+    // Re-entrant by construction: a task that ends up here again (a call from inside a task)
+    // would otherwise wait for itself.
+    if (std::this_thread::get_id() == id_) return fn();
 
-Apartment claimApartment() {
-  Apartment& apartment = threadApartment();
-  if (apartment != Apartment::Unknown) return apartment;
-  const HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-  apartment = (result == S_OK || result == S_FALSE) ? Apartment::Single : Apartment::Multi;
-  return apartment;
-}
+    using Result = decltype(fn());
+    auto task = std::make_shared<std::packaged_task<Result()>>(std::forward<Fn>(fn));
+    std::future<Result> answer = task->get_future();
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      queue_.emplace([task]() { (*task)(); });
+    }
+    wake_.notify_one();
+    return answer.get();
+  }
+
+ private:
+  DriverThread() {
+    worker_ = std::thread([this]() { loop(); });
+    worker_.detach();
+  }
+  DriverThread(const DriverThread&) = delete;
+  DriverThread& operator=(const DriverThread&) = delete;
+
+  void loop() {
+    // The apartment, held for the life of the thread and never released: the driver objects
+    // created here outlive the calls that made them, and an apartment torn down under one
+    // unloads its DLL — the fault this file has already been through once.
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    id_ = std::this_thread::get_id();
+    for (;;) {
+      std::function<void()> task;
+      {
+        std::unique_lock<std::mutex> lock(mutex_);
+        wake_.wait(lock, [this]() { return !queue_.empty(); });
+        task = std::move(queue_.front());
+        queue_.pop();
+      }
+      task();
+    }
+  }
+
+  std::thread worker_;
+  std::thread::id id_ = std::this_thread::get_id();
+  std::mutex mutex_;
+  std::condition_variable wake_;
+  std::queue<std::function<void()>> queue_;
+};
 
 /**
  * The machine's installed drivers, built once and kept for the life of the process.
@@ -276,7 +327,6 @@ AsioDriverList& driverList() {
  * a name read any longer would not match what the driver registered.
  */
 std::vector<std::string> driverNames() {
-  claimApartment();
   AsioDriverList& list = driverList();
   std::vector<std::string> names;
   const long count = list.asioGetNumDev();
@@ -297,10 +347,6 @@ std::vector<std::string> driverNames() {
  * `CoCreateInstance` as well.
  */
 IASIO* createDriver(const std::string& name, std::string& error) {
-  if (claimApartment() != Apartment::Single) {
-    error = "the audio engine's device thread is in a multi-threaded COM apartment, which is not one an ASIO driver can be created in";
-    return nullptr;
-  }
   AsioDriverList& list = driverList();
   const long count = list.asioGetNumDev();
   CLSID clsid = {};
@@ -559,14 +605,14 @@ ma_result onContextInit(ma_context* pContext, const ma_context_config* pConfig, 
 ma_result onContextUninit(ma_context* pContext) {
   AsioHost* host = hostOf(*pContext);
   if (host != nullptr) {
-    releaseDriver(*host);
+    DriverThread::instance().run([&]() { releaseDriver(*host); });
     delete host;
   }
   pContext->pUserData = nullptr;
   return MA_SUCCESS;
 }
 
-ma_result onContextEnumerateDevices(ma_context* pContext, ma_enum_devices_callback_proc callback, void* pUserData) {
+ma_result enumerateDevicesOnDriverThread(ma_context* pContext, ma_enum_devices_callback_proc callback, void* pUserData) {
   if (callback == nullptr) return MA_INVALID_ARGS;
   const std::vector<std::string> names = driverNames();
   for (const std::string& name : names) {
@@ -581,8 +627,8 @@ ma_result onContextEnumerateDevices(ma_context* pContext, ma_enum_devices_callba
   return MA_SUCCESS;
 }
 
-ma_result onContextGetDeviceInfo(ma_context* pContext, ma_device_type deviceType, const ma_device_id* pDeviceID,
-                                 ma_device_info* pDeviceInfo) {
+ma_result getDeviceInfoOnDriverThread(ma_context* pContext, ma_device_type deviceType, const ma_device_id* pDeviceID,
+                                      ma_device_info* pDeviceInfo) {
   if (deviceType != ma_device_type_playback) return MA_NOT_IMPLEMENTED;
   AsioHost* host = hostOf(*pContext);
   if (host == nullptr || pDeviceInfo == nullptr) return MA_INVALID_ARGS;
@@ -637,9 +683,7 @@ ma_result onContextGetDeviceInfo(ma_context* pContext, ma_device_type deviceType
   return MA_SUCCESS;
 }
 
-ma_result onDeviceInit(ma_device* pDevice, const ma_device_config* pConfig, ma_device_descriptor* pDescriptorPlayback,
-                       ma_device_descriptor* pDescriptorCapture) {
-  (void)pDescriptorCapture;
+ma_result initDeviceOnDriverThread(ma_device* pDevice, const ma_device_config* pConfig, ma_device_descriptor* pDescriptorPlayback) {
   AsioHost* host = hostOf(*pDevice->pContext);
   if (host == nullptr) return MA_INVALID_OPERATION;
   if (pConfig->deviceType != ma_device_type_playback) return MA_NOT_IMPLEMENTED;
@@ -819,13 +863,13 @@ ma_result onDeviceInit(ma_device* pDevice, const ma_device_config* pConfig, ma_d
   return MA_SUCCESS;
 }
 
-ma_result onDeviceUninit(ma_device* pDevice) {
+ma_result uninitDeviceOnDriverThread(ma_device* pDevice) {
   AsioHost* host = hostOf(*pDevice->pContext);
   if (host != nullptr) releaseDriver(*host);
   return MA_SUCCESS;
 }
 
-ma_result onDeviceStart(ma_device* pDevice) {
+ma_result startDeviceOnDriverThread(ma_device* pDevice) {
   AsioHost* host = hostOf(*pDevice->pContext);
   if (host == nullptr || host->driver == nullptr || !host->buffersCreated) return MA_DEVICE_NOT_INITIALIZED;
 
@@ -853,7 +897,7 @@ ma_result onDeviceStart(ma_device* pDevice) {
   return MA_SUCCESS;
 }
 
-ma_result onDeviceStop(ma_device* pDevice) {
+ma_result stopDeviceOnDriverThread(ma_device* pDevice) {
   AsioHost* host = hostOf(*pDevice->pContext);
   if (host == nullptr || host->driver == nullptr) return MA_SUCCESS;
   if (host->started) {
@@ -865,7 +909,38 @@ ma_result onDeviceStop(ma_device* pDevice) {
 
 }  // namespace
 
-void prepareThreadForDriverCalls() { claimApartment(); }
+/**
+ * Every driver call below that is not the driver's own callback is made on the driver
+ * thread (see DriverThread). These six functions are the whole of the engine's contact with
+ * the driver: enumeration, device details, open, start, stop and close, each one task.
+ */
+ma_result onContextEnumerateDevices(ma_context* pContext, ma_enum_devices_callback_proc callback, void* pUserData) {
+  return DriverThread::instance().run([&]() { return enumerateDevicesOnDriverThread(pContext, callback, pUserData); });
+}
+
+ma_result onContextGetDeviceInfo(ma_context* pContext, ma_device_type deviceType, const ma_device_id* pDeviceID,
+                                 ma_device_info* pDeviceInfo) {
+  return DriverThread::instance().run(
+      [&]() { return getDeviceInfoOnDriverThread(pContext, deviceType, pDeviceID, pDeviceInfo); });
+}
+
+ma_result onDeviceInit(ma_device* pDevice, const ma_device_config* pConfig, ma_device_descriptor* pDescriptorPlayback,
+                       ma_device_descriptor* pDescriptorCapture) {
+  (void)pDescriptorCapture;
+  return DriverThread::instance().run([&]() { return initDeviceOnDriverThread(pDevice, pConfig, pDescriptorPlayback); });
+}
+
+ma_result onDeviceStart(ma_device* pDevice) {
+  return DriverThread::instance().run([&]() { return startDeviceOnDriverThread(pDevice); });
+}
+
+ma_result onDeviceStop(ma_device* pDevice) {
+  return DriverThread::instance().run([&]() { return stopDeviceOnDriverThread(pDevice); });
+}
+
+ma_result onDeviceUninit(ma_device* pDevice) {
+  return DriverThread::instance().run([&]() { return uninitDeviceOnDriverThread(pDevice); });
+}
 
 ma_backend_callbacks backendCallbacks() {
   ma_backend_callbacks callbacks = {};
