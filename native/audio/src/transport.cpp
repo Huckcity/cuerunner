@@ -37,7 +37,6 @@ int socketSendFlags() {
 
 struct SocketServer::Client {
   std::mutex writeMutex;
-  std::thread thread;
   bool alive = true;
   /**
    * File work handed to the server's worker threads that has not been answered yet —
@@ -260,8 +259,7 @@ void SocketServer::acceptLoop() {
       std::lock_guard<std::mutex> lock(clientsMutex_);
       clients_.push_back(client);
     }
-    client->thread = std::thread([this, client] { handleClient(client); });
-    client->thread.detach();
+    std::thread([this, client] { handleClient(client); }).detach();
     noteClientCount();
   }
 #if defined(_WIN32)
