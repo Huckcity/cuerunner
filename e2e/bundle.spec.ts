@@ -202,9 +202,12 @@ test('a show and its audio leave as one file and come back playable', async () =
   await expect(page.locator('.missing-media-bar')).toHaveCount(0)
 
   // The show arrived with its audio, and the paths in it point at what was unpacked.
+  // Waited for, not checked: unpacking happens in the main process after the pick, and a
+  // check made the moment the UI is up asks whether the app has finished rather than
+  // whether it worked — the same mistake this spec made twice already, once with the
+  // export's file and once here.
   const unpackedShow = path.join(unpacked, 'Press Night.wlab')
-  expect(fs.readdirSync(unpacked), 'what the import wrote into the folder').toContain('Press Night.wlab')
-  expect(fs.existsSync(unpackedShow)).toBe(true)
+  await expect.poll(() => fs.existsSync(unpackedShow), { message: 'the unpacked show' }).toBe(true)
   expect(fs.existsSync(path.join(unpacked, 'media', 'walk-in.wav'))).toBe(true)
   expect(fs.existsSync(path.join(unpacked, 'media', 'bows.wav'))).toBe(true)
   const stored = JSON.parse(fs.readFileSync(unpackedShow, 'utf-8')) as {
