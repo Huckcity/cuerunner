@@ -131,11 +131,11 @@ test('the device section sets exclusive mode, and says what it costs', async () 
   await closeSettings(page)
 })
 
-test('MIDI tab offers a default output port select', async () => {
+test('MIDI tab offers the port cues send on', async () => {
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'MIDI', exact: true }).click()
-  const row = dialog.locator('.field-row', { hasText: 'Default output' })
+  const row = dialog.locator('.field-row', { hasText: 'Send on' })
   await expect(row.locator('select')).toBeVisible()
   await closeSettings(page)
 })
@@ -251,15 +251,15 @@ test('settings are grouped by what is being set up, and close one way', async ()
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
-  // Redundancy and License are the machine's own settings rather than the show's, and
-  // they sit last, together.
+  // The backup machine and the licence are this machine's own settings rather than the
+  // show's, so they sit last, under a heading that says so.
   await expect(dialog.locator('.settings-tab')).toHaveText([
-    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Redundancy', 'License'
+    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Backup machine', 'License'
   ])
 
   // MIDI out and MIDI in are one subject, on one tab.
   await dialog.getByRole('button', { name: 'MIDI', exact: true }).click()
-  await expect(dialog.locator('.field-row', { hasText: 'Default output' })).toBeVisible()
+  await expect(dialog.locator('.field-row', { hasText: 'Send on' })).toBeVisible()
   await expect(dialog.locator('#settings-midi-in')).toBeVisible()
 
   // What listens on the network, and what serves it, together.

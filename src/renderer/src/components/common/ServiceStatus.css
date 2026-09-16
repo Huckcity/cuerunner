@@ -1,0 +1,50 @@
+/* A service's state, beside the switch that turns it on. */
+
+.settings-service {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.service-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-medium);
+}
+
+.service-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.settings-service[data-state='running']  .service-pill { background: var(--ok-bg); color: var(--ok-fg); }
+.settings-service[data-state='starting'] .service-pill { background: var(--bg-input); color: var(--fg-body); }
+.settings-service[data-state='degraded'] .service-pill { background: var(--warn-bg); color: var(--warn-fg); }
+.settings-service[data-state='failed']   .service-pill { background: var(--danger-bg); color: var(--danger-fg); }
+
+/* The service's own words for what it is doing: an address, a port, a reason. */
+.service-detail {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-service[data-state='failed'] .service-detail { color: var(--danger-fg); }
+
+.service-status-absent {
+  font-size: var(--text-sm);
+  color: var(--fg-subtle);
+}

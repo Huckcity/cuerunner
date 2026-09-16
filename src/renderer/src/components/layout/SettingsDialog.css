@@ -9,79 +9,247 @@
 }
 
 .settings-dialog {
+  /* Header across the top, sections down the side, the pane beside them. */
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
+  width: min(94vw, 820px);
+  /* One box, whatever tab is on it. With no height of its own the dialog was as tall as
+     the tab's contents, so switching tabs re-centred the whole frame and the header and
+     the ✕ moved under the pointer. The pane scrolls instead. */
+  height: min(88vh, 620px);
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 520px;
-  display: flex;
-  flex-direction: column;
-  /* One box, whatever tab is on it. With no height of its own the dialog was as tall as
-     the tab's contents, so switching tabs re-centred the whole frame and the header, the
-     tab strip and the ✕ moved under the pointer. The body scrolls instead, which is also
-     what keeps the header, tabs and close where they were. */
-  height: min(88vh, 620px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-menu);
 }
 
 .settings-header {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 0;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
 }
 
 .settings-title {
-  font-size: var(--text-md);
-  font-weight: var(--fw-bold);
+  font-family: var(--font-cond);
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semi);
   color: var(--fg-primary);
 }
 
 .settings-close {
+  width: 28px;
+  height: 28px;
   background: transparent;
   border: none;
-  color: var(--fg-subtle);
-  font-size: 16px;
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--text-md);
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
   font-family: inherit;
 }
 
 .settings-close:hover { color: var(--fg-primary); background: var(--bg-hover); }
 
+/* The sections, down the side and grouped by where their settings are kept. */
 .settings-tabs {
   display: flex;
-  border-bottom: 1px solid var(--border);
-  padding: 0 8px;
-  margin-top: 12px;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--bg-base);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
 
+.settings-tab-group { display: flex; flex-direction: column; gap: 2px; }
+
+.settings-tab-group-title {
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  color: var(--fg-subtle);
+}
+
+.settings-tab-group:first-child .settings-tab-group-title { padding-top: var(--space-1); }
+
 .settings-tab {
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-3);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--fg-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--fg-body);
   font-size: var(--text-base);
+  font-weight: var(--fw-medium);
+  text-align: left;
   cursor: pointer;
   font-family: inherit;
   transition: var(--transition-std);
-  margin-bottom: -1px;
 }
 
-.settings-tab:hover { color: var(--fg-muted); }
+.settings-tab:hover { background: var(--bg-card); color: var(--fg-primary); }
 
 .settings-tab[data-active='true'] {
+  background: var(--accent-blue-glow);
   color: var(--fg-primary);
-  border-bottom-color: var(--accent-blue);
 }
 
+/* Whether that section's service is running, so the sidebar answers "is anything
+   listening?" without every tab having to be opened. */
+.settings-tab-dot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: inset 0 0 0 1.5px var(--fg-disabled);
+}
+
+.settings-tab-dot[data-state='running']  { background: var(--ok-fg); box-shadow: none; }
+.settings-tab-dot[data-state='starting'] { background: var(--fg-muted); box-shadow: none; }
+.settings-tab-dot[data-state='degraded'] { background: var(--warn-fg); box-shadow: none; }
+.settings-tab-dot[data-state='failed']   { background: var(--danger-fg); box-shadow: none; }
+
+/* A port is four digits and a device name is a phrase: neither wants a field the width
+   of the dialog, and a row of them that all stop in the same place reads as a column. */
+.settings-body .field-row input,
+.settings-body .field-row select,
+.settings-body .field-row textarea { max-width: 320px; }
+
+.settings-body .field-row input[type='checkbox'] { max-width: none; }
+
 .settings-body {
-  padding: 16px;
-  /* min-height 0 is what lets a flex child shrink enough to scroll at all. */
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  /* min-height 0 is what lets a grid child shrink enough to scroll at all. */
   min-height: 0;
   overflow-y: auto;
 }
+
+/* What this section is, before the first control in it. */
+.settings-pane-head { margin-bottom: var(--space-4); }
+
+.settings-pane-title {
+  font-family: var(--font-cond);
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semi);
+  color: var(--fg-primary);
+}
+
+.settings-pane-blurb {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+/* ─── A service: what it is, whether it is on, what it is doing ──────────────── */
+.settings-block {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-block-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.settings-block-text { min-width: 0; }
+
+.settings-block-title {
+  font-size: var(--text-md);
+  font-weight: var(--fw-semi);
+  color: var(--fg-primary);
+}
+
+.settings-block-blurb {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+/* The fields under a service that is off are still readable, and still editable — a
+   port is set before the thing that listens on it is switched on. */
+.settings-block[data-enabled='false'] .settings-block-title { color: var(--fg-body); }
+
+/* The switch itself: a checkbox, because that is what it is to the keyboard and to a
+   test, wearing the shape the rest of the window expects. */
+.settings-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  flex: none;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: var(--transition-std);
+}
+
+.settings-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  transition: left 0.12s ease, background 0.12s ease;
+}
+
+.settings-switch:checked {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.settings-switch:checked::after { left: 18px; background: #fff; }
+.settings-switch:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+/* Settings that are set once, if ever. */
+.settings-advanced { margin-top: var(--space-2); }
+
+.settings-advanced summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-advanced summary::-webkit-details-marker { display: none; }
+
+.settings-advanced summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.12s ease;
+}
+
+.settings-advanced[open] summary::before { transform: rotate(45deg) translate(1px, -1px); }
+.settings-advanced summary:hover { color: var(--fg-primary); }
+.settings-advanced-body { padding-top: var(--space-3); }
 
 .settings-info {
   font-size: var(--text-base);
@@ -95,7 +263,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin: 0 0 10px 90px;
+  margin: 0 0 var(--space-2) 0;
   max-height: 132px;
   overflow-y: auto;
 }
@@ -115,19 +283,6 @@
   flex: none;
   accent-color: var(--accent-blue);
 }
-
-/* What the service is doing right now, so the answer to "did that take effect?"
-   is on the screen the change was made on. */
-.settings-service {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--fg-subtle);
-  margin-bottom: var(--space-3);
-}
-
-.settings-service[data-state='running']  { color: var(--state-running-fg); }
-.settings-service[data-state='degraded'] { color: var(--accent-amber); }
-.settings-service[data-state='failed']   { color: var(--state-panic-hover); }
 
 /* One row per telemetry source: the name it is known by, where its document comes
    from, and nothing else — the poll interval and the timeouts are show defaults. */
