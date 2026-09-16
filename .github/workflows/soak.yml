@@ -183,7 +183,10 @@ jobs:
   # page cannot be older than the last night. The site itself is whatever is on main.
   publish:
     needs: [report]
-    if: github.ref == 'refs/heads/main'
+    # A red night is the one worth publishing, and `report` fails exactly then — so
+    # `success()` is what must not be asked for here. A cancelled run is still skipped:
+    # its report says only that no shard reported, and that would overwrite a real night.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
     runs-on: [self-hosted, linux, x64, ubox]
     permissions:
       contents: read
