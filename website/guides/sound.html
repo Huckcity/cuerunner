@@ -118,6 +118,21 @@
         The device itself, its sample rate, buffer and channel count are in
         Settings → Audio, with what the engine is actually doing underneath them.
       </p>
+      <p>
+        On Windows, <strong>Audio system</strong> above the device picks how the sound
+        leaves the machine: <strong>Windows audio</strong>, the platform's own mixer, or
+        <strong>ASIO</strong>, which drives an interface through its own driver instead.
+        Everywhere else the row is the platform's own stack and nothing more. ASIO is the
+        one for a rig whose interface has its own driver — a professional one, or a
+        virtual one like Dante Virtual Soundcard — and for setting the buffer on the
+        interface rather than letting Windows mix. While the show is open that driver is
+        held by WinsLab alone, and its own control panel owns the sample rate, the buffer
+        and the channel count; WinsLab reports what it was given, and the latency beside
+        it is the driver's own, marked (driver). One driver at a time, and the whole
+        interface's outputs, up to 32 channels. A machine with no ASIO driver says so
+        when you choose it, and a driver that asks for a reset reopens the device — the
+        show stops for that instant and the Audio tab says why.
+      </p>
     </section>
 
     <section class="panel reveal delay-3">
