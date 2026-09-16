@@ -309,8 +309,10 @@ milliseconds on the engine's own sample clock. `src/shared/audio.ts` is the cont
 processes and the engine speak.
 
 - **Device I/O**: miniaudio (MIT-0). Windows WASAPI shared **and** exclusive, macOS Core
-  Audio, Linux PulseAudio / ALSA / JACK. Exclusive access is requested, never assumed: if
-  the device or mode asked for cannot be honoured, `configure` fails and says why.
+  Audio, Linux PulseAudio / ALSA / JACK — and, on Windows, **ASIO** when Steinberg's SDK was
+  present at build time (see *Packaging prerequisites*): one interface, its own driver, its
+  own buffer sizes. Exclusive access is requested, never assumed: if the device or mode
+  asked for cannot be honoured, `configure` fails and says why.
 - **One device at a time**: one output device is opened, and devices are deliberately not
   aggregated into one. Clock discipline across devices belongs to the operating system (an
   aggregate device) or to a Dante/AES67 layer — not to the show software; a rig with more
@@ -334,8 +336,9 @@ processes and the engine speak.
   (`{inputChannel, outputChannel, gain}`, zero-based); `null` means automatic routing and
   `[]` is deliberate silence.
 - **Honest reporting**: `info()` reports the achieved backend, device, sample rate, channel
-  count, exclusive state, buffer/period frames and a latency marked measured, estimated or
-  unknown — plus cache and streaming pressure for the warnings the UI shows.
+  count, exclusive state, buffer/period frames and a latency marked driver, measured,
+  estimated or unknown — the driver's own figure where the driver states one (ASIO does) —
+  plus cache and streaming pressure for the warnings the UI shows.
 
 #### Packaging prerequisites
 
@@ -346,9 +349,28 @@ processes and the engine speak.
   `native/audio/build/decoders/ffmpeg`, packaged to `resources/audio/decoders`. Build it
   with `npm run build:ffmpeg`; without it, M4A files report a visible "decoder unavailable"
   error instead of failing silently. Windows and macOS need nothing extra.
-- **ASIO**: not shipped. Supporting it requires Steinberg's ASIO SDK present at build time
-  (dual-licensed GPLv3/proprietary) plus `MA_ENABLE_ASIO`; no ASIO device is listed and no
-  ASIO support is claimed until that SDK is available under a signed agreement.
+- **ASIO (Windows, opt-in at build time)**: the engine hosts ASIO drivers when Steinberg's
+  ASIO SDK is present when it is compiled, and does not mention ASIO when it is not. The SDK
+  is not vendored — its licence forbids redistributing it, which is also why nothing in this
+  repository contains it — so the path is supplied to the build:
+
+  ```bash
+  WINSLAB_ASIO_SDK=/path/to/ASIOSDK npm run build:native      # Windows only
+  ```
+
+  `scripts/asio-sdk.mjs` reads that one variable (`ASIOSDK` is the directory holding
+  `common/asio.h`); the engine then compiles `native/audio/src/asio_backend.cpp` and the
+  SDK's own `host/pc/asiolist.cpp`, and the driver list grows an entry per installed ASIO
+  driver. Without the variable, the build is exactly what it was: same sources, same
+  binary, no ASIO devices, and `--backend asio` refused with "this engine was built without
+  ASIO support". CI looks for the variable, then for `C:\asio-sdk\ASIOSDK`, and warns when
+  neither exists.
+
+  **Before shipping a build with ASIO in it**, the Steinberg ASIO License Agreement has to be
+  signed — the SDK's proprietary licence is the one a closed-source application needs, and
+  it is what permits publishing a binary built against the SDK. That is a release-checklist
+  item, not a build-time one: an unsigned build can be built, tested and used internally,
+  but not published.
 - Source pins and licences for everything vendored live in
   `native/audio/third_party/DEPENDENCIES.json`; the FFmpeg helper's notice and licence
   texts sit next to the binary.
@@ -368,21 +390,29 @@ npm run build:native        # force an engine build into native/audio/build/
 npm run build:ffmpeg        # force the packaged Linux M4A decoder (LGPL-only FFmpeg)
 npm run test:native         # deterministic offline-render acceptance on real samples
 npm run test:native:device  # live-device smoke (needs a real output device)
+npm run test:native:asio    # ASIO smoke: enumerates drivers, then runs the device smoke
+                            # against the first one (Windows, needs a driver installed)
 ```
 
 Clean-checkout entrypoints, exactly as CI runs them: `npm run typecheck`, `npm test`,
 `npm run test:native`, `npm run test:e2e`, `npm run dist:linux`. On Windows the compiler
-must be on `PATH` (`ilammy/msvc-dev-cmd@v1` does that in CI); on Linux and macOS `cc`/`c++`
-are enough. `dist:linux` and the `test:native` pre-step build the M4A helper on a machine
-that does not have it yet; CI caches `native/audio/build/decoders` under a key derived from
-the build script so an unchanged pin is never rebuilt.
+must be on `PATH`: CI imports the MSVC environment with `vcvars64.bat` before anything that
+builds the engine (`ci.yml`, `build.yml`); on Linux and macOS `cc`/`c++` are enough.
+`dist:linux` and the `test:native` pre-step build the M4A helper on a machine that does not
+have it yet; CI caches `native/audio/build/decoders` under a key derived from the build
+script so an unchanged pin is never rebuilt.
 
 `test:native` drives the real mixer, scheduler, decoders and cache with a caller-owned
 clock and asserts actual output samples: exact start/stop/fade frames, matrix routing,
 loops, the release that ends a loop and plays the tail out, seeks, streaming, cache
-bounds, note (onset) detection and M4A decoding. It is the acceptance proof for
-playback behaviour, and it needs no audio hardware. `npm run test:native:device` adds the
-live-device checks (real channel counts, exclusive refusal, capture tee, panic silence).
+bounds, note (onset) detection and M4A decoding. Its first check is a compiler-backed one
+with no engine in it — `native/audio/tests/asio-rules.mjs` compiles and runs
+`tests/asio-rules.cpp`, which asserts the exact bytes ASIO's sample types are written in
+and the buffer sizes a driver's min/max/granularity will accept, because every way of
+getting those wrong is silent. It is the acceptance proof for playback behaviour, and it
+needs no audio hardware. `npm run test:native:device` adds the live-device checks (real
+channel counts, exclusive refusal, capture tee, panic silence), and
+`npm run test:native:asio` is the same smoke against a real ASIO driver on Windows.
 
 
 ### State Management

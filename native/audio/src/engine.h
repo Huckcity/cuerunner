@@ -26,7 +26,7 @@
 namespace ws {
 
 struct EngineOptions {
-  std::string backend = "auto";  // auto|wasapi|coreaudio|alsa|pulseaudio|jack|silent|offline
+  std::string backend = "auto";  // auto|wasapi|coreaudio|alsa|pulseaudio|jack|asio|silent|offline
   std::string deviceId;
   int sampleRate = 48000;
   int channels = 0;  // 0 = device default
@@ -183,11 +183,23 @@ struct DeviceRequest {
   bool exclusive = false;
   bool hasBufferFrames = false;
   int bufferFrames = 0;
+  /** The audio system to run on, when the caller names one ("auto", "wasapi", "asio"...).
+   *  Changing it is a device change like any other: the device is reopened on the new
+   *  backend, and the old one is put back if the new one will not open. */
+  bool hasBackend = false;
+  std::string backend;
 };
 
 class Engine {
  public:
   Engine();
+  /**
+   * Constructed with the options it is about to be asked about. `--list-devices` opens
+   * nothing and never calls start() — which is the only other place options are taken in
+   * — so without this a listing would always be of the default backend's devices, and
+   * "which ASIO drivers are there" would be answered with WASAPI's device names.
+   */
+  explicit Engine(const EngineOptions& options);
   ~Engine();
 
   bool start(const EngineOptions& options, EngineError& error);
@@ -292,6 +304,22 @@ class Engine {
   bool startDevice(EngineError& error);
   bool startSilent(EngineError& error);
   void stopAudioThreads();
+
+  /**
+   * Tears the open device down and opens `updated` in its place, putting `previous` back
+   * if the new one will not open. The device mutex is the caller's to hold: this is the
+   * body shared by a settings change and by a backend that asked to be reopened.
+   */
+  bool reopenDeviceLocked(const EngineOptions& updated, const EngineOptions& previous, EngineError& error);
+  /** Reopens the device because the backend's own driver asked for it (its control panel
+   *  changed the buffer size, its clock changed), with the sentence it gave as the reason. */
+  void reopenAfterBackendRequest(const std::string& reason);
+  /**
+   * What the backend has to say about a device it has just failed to open, in its own
+   * words; empty for every backend that has nothing to add, where miniaudio's own result
+   * description is the best available answer.
+   */
+  static std::string backendDetail(const DeviceState& state);
 
   struct AckResult {
     bool ok = true;

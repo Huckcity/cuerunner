@@ -49,6 +49,7 @@ describe('usePlaybackBridge — device settings', () => {
 
     // The mount request is the workspace's settings; "default" is no device id at all.
     expect(audioEngine.configure).toHaveBeenLastCalledWith({
+      backend: 'auto',
       deviceId: undefined,
       sampleRate: undefined,
       channels: undefined,
@@ -65,6 +66,38 @@ describe('usePlaybackBridge — device settings', () => {
       exclusive: true,
       sampleRate: 48000
     }))
+  })
+
+  it('asks the engine for the show\'s audio system, and for the new one when the show changes it', async () => {
+    useStore.setState({ audioSettings: { outputDeviceId: 'default', backend: 'asio' } })
+
+    act(() => { root.render(<Harness />) })
+    await settle()
+
+    // The system travels with the show the way the device does: absent is the platform's
+    // own stack, and this show asked for ASIO.
+    expect(audioEngine.configure).toHaveBeenLastCalledWith(expect.objectContaining({ backend: 'asio' }))
+
+    await act(async () => {
+      useStore.getState().updateAudioSettings({ backend: 'auto' })
+      await Promise.resolve()
+    })
+
+    expect(audioEngine.configure).toHaveBeenLastCalledWith(expect.objectContaining({ backend: 'auto' }))
+  })
+
+  it('keeps the engine\'s reason when the system it was asked for is not there', async () => {
+    vi.mocked(audioEngine.configure).mockRejectedValue(new Error(
+      "Error invoking remote method 'audio:configure': AudioEngineError: no ASIO driver is installed on this machine"
+    ))
+    useStore.setState({ audioSettings: { outputDeviceId: 'default', backend: 'asio' } })
+
+    act(() => { root.render(<Harness />) })
+    await settle()
+
+    // What the operator can act on is the engine's own sentence — there is no driver —
+    // and not the plumbing that carried the refusal back.
+    expect(useStore.getState().audioDeviceError).toBe('no ASIO driver is installed on this machine')
   })
 
   it('keeps the engine\'s reason when it refuses a request, not the IPC sentence around it', async () => {

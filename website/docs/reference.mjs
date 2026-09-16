@@ -223,6 +223,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
+            <tr><td>Audio system</td><td>the platform's own</td><td>Which audio system drives the show: the platform's own, or ASIO on Windows, which drives an interface through its own driver rather than the system mixer.</td></tr>
             <tr><td>Output device</td><td>system default</td><td>Where the show plays.</td></tr>
             <tr><td>Sample rate</td><td>device default</td><td>What the engine runs at. Files at other rates are resampled.</td></tr>
             <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
@@ -730,6 +731,7 @@ await rig.blackout()</code></div>
       <ul class="tight-list">
         <li>No video or image cues. Video is driven by talking to something that plays it, through a network, OSC or MIDI cue.</li>
         <li>No cue-level audio effects beyond level, pan, rate and fades.</li>
+        <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
         <li>The tablet view is read-only by design.</li>
         <li>WinsLab is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>

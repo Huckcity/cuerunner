@@ -84,6 +84,22 @@ jobs:
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
 
+      # The native engine this lane builds has an optional ASIO backend, and the SDK
+      # behind it cannot be shipped with the repository (Steinberg's licence forbids
+      # redistributing it): a runner that has an SDK builds with ASIO, and one that does
+      # not builds without it — a warning here, not a failure. scripts/asio-sdk.mjs reads
+      # WINSLAB_ASIO_SDK and nothing else, so this step is the only place the path is
+      # decided: the variable a provisioned runner sets by hand, then the documented
+      # default location.
+      - name: Locate the ASIO SDK
+        shell: cmd
+        run: |
+          set "ASIO=%WINSLAB_ASIO_SDK%"
+          if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set WINSLAB_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo WINSLAB_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          echo Using the ASIO SDK at %ASIO%
+
       - name: Integration (vendor)
         env:
           # The console is on this machine. A run against a console elsewhere sets these

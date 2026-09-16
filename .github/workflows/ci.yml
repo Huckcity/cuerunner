@@ -205,10 +205,40 @@ jobs:
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
 
+      # Same reason as the step above: the suite builds the native engine, and ASIO is
+      # opt-in on the machine rather than in the repository (Steinberg's licence forbids
+      # redistributing the SDK). A runner with an SDK builds with ASIO; one without gets
+      # this warning and an honest build without it. scripts/asio-sdk.mjs reads
+      # WINSLAB_ASIO_SDK and nothing else, so this step is the only place the path is
+      # decided: the variable a provisioned runner sets by hand, then the documented
+      # default location.
+      - name: Locate the ASIO SDK
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          set "ASIO=%WINSLAB_ASIO_SDK%"
+          if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set WINSLAB_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo WINSLAB_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          echo Using the ASIO SDK at %ASIO%
+
       # Electron opens a real window; the wrapper gives it a private Xvfb display on
       # Linux, where a runner has none of its own (scripts/run-e2e.js).
       - name: E2E tests
         run: npm run test:e2e
+
+      # The one half of ASIO that no other lane can reach: hosting a real driver. It needs
+      # a build with the SDK (the step above) and a driver the machine has installed —
+      # an interface's own, or Steinberg's built-in ASIO driver, which drives whatever
+      # Windows endpoint the machine has. With no driver it says so and passes: that is
+      # the honest state of a runner with no interface attached, and nothing here claims
+      # ASIO works on such a machine.
+      - name: ASIO device smoke
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          if "%WINSLAB_ASIO_SDK%"=="" (echo ::notice::No ASIO SDK on this runner - the engine is built without ASIO, so there is nothing to smoke & exit /b 0)
+          npm run test:native:asio
 
       - name: Upload test results
         if: failure()

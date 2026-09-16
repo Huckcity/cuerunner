@@ -9,6 +9,7 @@ import { NumberField, TextField } from '../common/Field'
 import { ServiceStatus } from '../common/ServiceStatus'
 import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
+import { currentPlatform } from '../../utils/shortcuts'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../types/workspace'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
@@ -136,7 +137,10 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
       })
     window.winslab.midi.listPorts().then(setMidiPorts)
     window.winslab.midi.listInputPorts().then(setMidiInputPorts)
-  }, [])
+    // A device list belongs to the audio system that produced it, and the show can
+    // change systems while this dialog is open: the devices of the old one are no
+    // longer a list of anything.
+  }, [info?.backend])
 
   const toggleInputPort = (port: string, on: boolean): void => {
     const selected = showSettings.midiIn.portNames
@@ -179,6 +183,9 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   const midiService = showServices.find(service => service.id === 'midi-in')
   const presenceService = showServices.find(service => service.id === 'presence')
   const rfService = showServices.find(service => service.id === 'rf')
+  // ASIO is a Windows driver model, and a request for it is a request only a Windows
+  // build can honour: elsewhere it is not offered at all.
+  const asioOffered = currentPlatform() === 'win32'
   // The device the workspace picked, or the system default while the settings still
   // say "default": its channel count and sample rates are what the selects offer.
   const selectedDevice = devices.find(device => device.id === audioSettings.outputDeviceId)
@@ -268,6 +275,29 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
           )}
           {tab === 'audio' && (
             <>
+              {/* The device belongs to the system that lists it, so choosing a system
+                  forgets the device: an id from the other system is a request the new
+                  backend cannot honour, and the engine refuses rather than quietly
+                  substituting one. */}
+              <div className="field-row">
+                <label htmlFor="settings-audio-system">Audio system</label>
+                <select
+                  id="settings-audio-system"
+                  value={audioSettings.backend ?? 'auto'}
+                  onChange={e => updateAudioSettings({
+                    backend: e.target.value as 'auto' | 'asio',
+                    outputDeviceId: 'default'
+                  })}
+                >
+                  <option value="auto">
+                    {asioOffered ? 'Windows audio (default)' : 'System audio (default)'}
+                  </option>
+                  {/* An interface's own driver, past the system mixer. It exists on
+                      Windows and nowhere else. */}
+                  {asioOffered && <option value="asio">ASIO</option>}
+                </select>
+                <span className="settings-info">The audio stack the engine plays through</span>
+              </div>
               <div className="field-row">
                 <label>Output device</label>
                 <select
@@ -328,20 +358,29 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   ))}
                 </select>
               </div>
-              <div className="field-row">
-                <label htmlFor="settings-exclusive">Exclusive</label>
-                <input
-                  id="settings-exclusive"
-                  type="checkbox"
-                  checked={audioSettings.exclusive ?? false}
-                  onChange={e => updateAudioSettings({ exclusive: e.target.checked })}
-                />
-                <span className="settings-info">Keep other apps off this device</span>
-              </div>
-              <p className="inspector-hint">
-                Keeps other apps off the device, for every channel it has and steadier
-                timing. A driver that refuses says why here.
-              </p>
+              {/* A backend that holds the device for the engine by definition — ASIO
+                  does — leaves nothing here to choose, and the Device readout below
+                  says `exclusive` for it without the operator setting anything. The
+                  hint goes with the row: an explanation of a control that is not there
+                  is a line about nothing. */}
+              {!(info !== null && info.backend === 'asio') && (
+                <>
+                  <div className="field-row">
+                    <label htmlFor="settings-exclusive">Exclusive</label>
+                    <input
+                      id="settings-exclusive"
+                      type="checkbox"
+                      checked={audioSettings.exclusive ?? false}
+                      onChange={e => updateAudioSettings({ exclusive: e.target.checked })}
+                    />
+                    <span className="settings-info">Keep other apps off this device</span>
+                  </div>
+                  <p className="inspector-hint">
+                    Keeps other apps off the device, for every channel it has and steadier
+                    timing. A driver that refuses says why here.
+                  </p>
+                </>
+              )}
               {/* A backend with no device at all — the silent and offline ones a test or
                   a dev run uses — refuses every device request by definition, including
                   the one this window sends when it opens. That is not a fault anyone can

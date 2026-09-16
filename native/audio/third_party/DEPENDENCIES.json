@@ -70,8 +70,8 @@
   ],
   "notIncluded": [
     {
-      "name": "ASIO",
-      "reason": "Steinberg's ASIO SDK is dual-licensed (GPLv3 or a proprietary agreement) and is deliberately not vendored or linked. Enabling it later requires the SDK present at build time plus MA_ENABLE_ASIO; the engine would then report ASIO devices like any other backend. Until then no ASIO device appears anywhere and no ASIO support is claimed."
+      "name": "ASIO (Steinberg ASIO SDK)",
+      "reason": "Not vendored, and deliberately: the SDK is dual-licensed (proprietary agreement or GPLv3), and the proprietary half — the one a closed-source application must use — forbids redistributing it, so it cannot live in this repository. A Windows build compiles the backend (native/audio/src/asio_backend.cpp) and the SDK's own host/pc/asiolist.cpp only when WINSLAB_ASIO_SDK points at an unpacked SDK (scripts/asio-sdk.mjs reads that one variable, and no other file in the build does). Without it the engine compiles unchanged, lists no ASIO devices, and refuses --backend asio with the reason. Publishing a build that links the SDK additionally requires the Steinberg ASIO License Agreement signed by Steinberg, which is a release-checklist item rather than a build-time one."
     }
   ]
 }

@@ -573,6 +573,11 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
         request.hasBufferFrames = true;
         request.bufferFrames = integer(options, "bufferFrames", 0);
       }
+      const cJSON* backend = member(options, "backend");
+      if (backend != nullptr && cJSON_IsString(backend)) {
+        request.hasBackend = true;
+        request.backend = backend->valuestring;
+      }
     }
     EngineError error;
     if (engine.configureDevice(request, error)) {

@@ -3,6 +3,11 @@ import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 
 export interface AudioSettings {
+  /**
+   * The audio system the show asks the engine to use. Absent means the engine's own
+   * default, which is the platform's own audio stack.
+   */
+  backend?: 'auto' | 'asio'
   outputDeviceId: string
   /** Requested sample rate, Hz. Absent leaves the device's own rate. */
   sampleRate?: number

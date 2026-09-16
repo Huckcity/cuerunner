@@ -4,6 +4,7 @@
 #include "util.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 #if defined(_WIN32)
@@ -49,6 +50,15 @@ struct SocketServer::Client {
   int pendingFileWork = 0;
 #if defined(_WIN32)
   void* handle = nullptr;
+  /**
+   * One event per direction. The pipe is opened for overlapped I/O because without it the
+   * two directions serialize: a write from another thread — an event line the run just
+   * produced — then waits behind the connection thread's blocking read, and does not
+   * complete until the client happens to send its next request. Measured on the Windows
+   * runner: 3.5 s for one ended event, released by the next verb.
+   */
+  void* readEvent = nullptr;
+  void* writeEvent = nullptr;
 #else
   int fd = -1;
 #endif
@@ -57,20 +67,36 @@ struct SocketServer::Client {
   // terminated, so a reader can frame it without guessing at message boundaries.
   void send(const std::string& line) {
     if (line.empty()) return;
-    const bool needsTerminator = line.back() != '\n';
+    // Terminated in the same write: a second, one-byte write for the newline is a second
+    // chance to lose a line's framing for no gain.
+    std::string payload = line;
+    if (payload.back() != '\n') payload.push_back('\n');
     std::lock_guard<std::mutex> lock(writeMutex);
-    const char* data = line.data();
-    size_t remaining = line.size();
-    const char terminator = '\n';
+    const char* data = payload.data();
+    size_t remaining = payload.size();
 #if defined(_WIN32)
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = static_cast<HANDLE>(writeEvent);
     while (remaining > 0) {
+      ResetEvent(overlapped.hEvent);
       DWORD written = 0;
-      if (!WriteFile(static_cast<HANDLE>(handle), data, static_cast<DWORD>(remaining), &written, nullptr)) return;
+      if (!WriteFile(static_cast<HANDLE>(handle), data, static_cast<DWORD>(remaining), &written, &overlapped)) {
+        const DWORD error = GetLastError();
+        if (error != ERROR_IO_PENDING) {
+          std::fprintf(stderr, "[winslab-audio] event line dropped (write failed, error %lu)\n",
+                       static_cast<unsigned long>(error));
+          return;
+        }
+        if (!GetOverlappedResult(static_cast<HANDLE>(handle), &overlapped, &written, TRUE)) {
+          std::fprintf(stderr, "[winslab-audio] event line dropped (write did not complete, error %lu)\n",
+                       static_cast<unsigned long>(GetLastError()));
+          return;
+        }
+      }
       if (written == 0) return;
       data += written;
       remaining -= written;
     }
-    if (needsTerminator) WriteFile(static_cast<HANDLE>(handle), &terminator, 1, nullptr, nullptr);
 #else
     while (remaining > 0) {
       const ssize_t written = ::send(fd, data, remaining, socketSendFlags());
@@ -78,7 +104,6 @@ struct SocketServer::Client {
       data += written;
       remaining -= static_cast<size_t>(written);
     }
-    if (needsTerminator) ::send(fd, &terminator, 1, socketSendFlags());
 #endif
   }
 };
@@ -103,7 +128,7 @@ bool SocketServer::listen(const std::string& path, std::string& error) {
   // hands a connecting client the oldest waiting instance.
   const int bufferBytes = 1 << 20;
   HANDLE handle = CreateNamedPipeA(
-      path.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+      path.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
       PIPE_UNLIMITED_INSTANCES, static_cast<DWORD>(bufferBytes), static_cast<DWORD>(bufferBytes), 0, nullptr);
   if (handle == INVALID_HANDLE_VALUE) {
     error = "cannot create named pipe " + path + " (error " + std::to_string(GetLastError()) + ")";
@@ -165,7 +190,7 @@ void SocketServer::acceptLoop() {
       client->handle = pendingInstance;
       pendingInstance = nullptr;
     } else {
-      client->handle = CreateNamedPipeA(path_.c_str(), PIPE_ACCESS_DUPLEX,
+      client->handle = CreateNamedPipeA(path_.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
                                         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, PIPE_UNLIMITED_INSTANCES,
                                         1 << 20, 1 << 20, 0, nullptr);
     }
@@ -174,20 +199,50 @@ void SocketServer::acceptLoop() {
       Sleep(20);
       continue;
     }
+    client->readEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+    client->writeEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+    if (client->readEvent == nullptr || client->writeEvent == nullptr) {
+      if (client->readEvent != nullptr) CloseHandle(static_cast<HANDLE>(client->readEvent));
+      if (client->writeEvent != nullptr) CloseHandle(static_cast<HANDLE>(client->writeEvent));
+      CloseHandle(static_cast<HANDLE>(client->handle));
+      delete client;
+      Sleep(20);
+      continue;
+    }
     if (stopping_.load(std::memory_order_acquire)) {
       // Asked to stop while the instance was being created: let it go rather than block
       // in a ConnectNamedPipe nobody is left to wake.
+      CloseHandle(static_cast<HANDLE>(client->readEvent));
+      CloseHandle(static_cast<HANDLE>(client->writeEvent));
       CloseHandle(static_cast<HANDLE>(client->handle));
       delete client;
       continue;
     }
-    const BOOL connected = ConnectNamedPipe(static_cast<HANDLE>(client->handle), nullptr);
-    const DWORD connectError = GetLastError();
-    if ((!connected && connectError != ERROR_PIPE_CONNECTED) || stopping_.load()) {
+    // Overlapped like the instance it belongs to, and waited for here: a waiting connect
+    // is what a stop wakes, by connecting to this pipe itself (see `requestStop`).
+    OVERLAPPED connect{};
+    connect.hEvent = static_cast<HANDLE>(client->readEvent);
+    const BOOL connected = ConnectNamedPipe(static_cast<HANDLE>(client->handle), &connect);
+    bool clientReady = connected != FALSE;
+    if (!clientReady) {
+      const DWORD connectError = GetLastError();
+      if (connectError == ERROR_PIPE_CONNECTED) {
+        // A client was already waiting on this instance when the connect was issued.
+        clientReady = true;
+      } else if (connectError == ERROR_IO_PENDING) {
+        DWORD transferred = 0;
+        clientReady = GetOverlappedResult(static_cast<HANDLE>(client->handle), &connect, &transferred, TRUE) != FALSE;
+      }
+    }
+    if (!clientReady || stopping_.load(std::memory_order_acquire)) {
+      CloseHandle(static_cast<HANDLE>(client->readEvent));
+      CloseHandle(static_cast<HANDLE>(client->writeEvent));
       CloseHandle(static_cast<HANDLE>(client->handle));
       delete client;
       continue;
     }
+    // The connect signalled the event the reads will use; they want it clear.
+    ResetEvent(static_cast<HANDLE>(client->readEvent));
 #else
     const int fd = ::accept(listenFd_, nullptr, nullptr);
     if (fd < 0) {
@@ -222,10 +277,16 @@ void SocketServer::handleClient(Client* client) {
   for (;;) {
 #if defined(_WIN32)
     DWORD read = 0;
-    if (!ReadFile(static_cast<HANDLE>(client->handle), chunk.data(), static_cast<DWORD>(chunk.size()), &read, nullptr) ||
-        read == 0) {
-      break;
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = static_cast<HANDLE>(client->readEvent);
+    ResetEvent(overlapped.hEvent);
+    if (!ReadFile(static_cast<HANDLE>(client->handle), chunk.data(), static_cast<DWORD>(chunk.size()), &read,
+                  &overlapped)) {
+      const DWORD error = GetLastError();
+      if (error != ERROR_IO_PENDING) break;
+      if (!GetOverlappedResult(static_cast<HANDLE>(client->handle), &overlapped, &read, TRUE)) break;
     }
+    if (read == 0) break;
 #else
     const ssize_t read = ::recv(client->fd, chunk.data(), chunk.size(), 0);
     if (read <= 0) break;
@@ -283,9 +344,17 @@ void SocketServer::removeClient(Client* client) {
   }
 #if defined(_WIN32)
   if (client->handle != nullptr) {
+    // The reply to a client's last verb must be out of the pipe before it is closed:
+    // a disconnect discards whatever the client has not read yet, and a write only
+    // completes when the kernel has the bytes. The flush blocks until the client reads,
+    // which a client that is still there does — a client that has gone leaves a broken
+    // pipe, where the flush fails at once rather than waiting.
+    FlushFileBuffers(static_cast<HANDLE>(client->handle));
     DisconnectNamedPipe(static_cast<HANDLE>(client->handle));
     CloseHandle(static_cast<HANDLE>(client->handle));
   }
+  if (client->readEvent != nullptr) CloseHandle(static_cast<HANDLE>(client->readEvent));
+  if (client->writeEvent != nullptr) CloseHandle(static_cast<HANDLE>(client->writeEvent));
 #else
   if (client->fd >= 0) ::close(client->fd);
 #endif
