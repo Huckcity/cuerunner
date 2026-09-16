@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Working with sound — Winslab</title>
+  <meta name="description" content="Audio cues in practice: levels and pan, fades, trimming silence, loops and vamps, and routing channels to the device." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Working with sound — Winslab" />
+  <meta property="og:description" content="Audio cues in practice: levels and pan, fades, trimming silence, loops and vamps, and routing channels to the device." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Working with sound</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Working with sound</h1>
+      <p class="doc-lede">
+        Everything an audio cue can do, in the order you usually need it.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>The file, and what plays of it</h2>
+      <figure class="figure shot-narrow">
+        <a href="../assets/guide/03-inspector-audio.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/03-inspector-audio.png" alt="The Audio tab of the inspector: file, playback rate, trim, volume, pan and output routing." />
+        </a>
+        <figcaption>The Audio tab.</figcaption>
+      </figure>
+      <p>
+        <strong>Browse</strong> picks the file; the folder it sits in is written under the
+        name. WAV, AIFF, FLAC, MP3, M4A and OGG all play. A file at a different sample rate
+        to the device is resampled as it plays — pitch and tempo are unchanged.
+      </p>
+      <p>
+        <strong>Start time</strong> and <strong>End time</strong>, on the Time &amp; Loops
+        tab, are the part of the file this cue plays. Leave the end empty to play to the
+        end of the file. The waveform in the dock shows both, and you can drag them there.
+      </p>
+      <p>
+        <strong>Trim silence</strong> moves the start and end to the first and last sound
+        in the file, so a cue fires on the sound rather than on whatever the editor left in
+        front of it. It can be the default for new cues in Settings → Audio.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Level, pan and fades</h2>
+      <p>
+        <strong>Volume</strong> and <strong>Pan</strong> are the cue's own, applied as it
+        plays. <strong>Fade in</strong> ramps it up from silence over that many seconds
+        when it starts.
+      </p>
+      <p>
+        To change a level while a cue is already playing, use a <strong>fade cue</strong>
+        pointed at it: a target, a level to reach, and a time to take getting there. Tick
+        <strong>Stop when done</strong> and the fade becomes a fade-out — the usual way to
+        take music out under dialogue.
+      </p>
+      <p>
+        A <strong>stop cue</strong> stops a target at once, or fades it out first over a
+        time you set. <strong>Wait for fade</strong> holds the show until that fade has
+        finished, which matters when the next cue starts the moment this one is done.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Loops and vamps</h2>
+      <p>
+        <strong>Loop count</strong> on the Time &amp; Loops tab repeats the section between
+        the start and end times. <code>0</code> plays it once; a number plays it that many
+        extra times; <code>-1</code> loops for ever, which is a <strong>vamp</strong>.
+      </p>
+      <p>
+        A vamp holds until you let it go. <strong>Make this a vamp</strong> sets it up, and
+        a <strong>devamp cue</strong> aimed at that cue releases it: the loop finishes the
+        lap it is on and plays out to the end of the file. That is the underscore that
+        holds for a scene change of unknown length and then resolves properly.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Where the channels go</h2>
+      <p>
+        <strong>Output routing</strong> on the Audio tab has three modes:
+      </p>
+      <ul class="tight-list">
+        <li><strong>Automatic</strong> — the file's channels play in order on the device. Stereo file, stereo out.</li>
+        <li><strong>Matrix</strong> — you say which file channel feeds which device channel, and at what gain. One channel can feed several outputs, and several can meet on one. This is how a mono effect reaches four zones, or a stereo file lands on outputs 7 and 8.</li>
+        <li><strong>Silent</strong> — the cue runs and takes its time, and sends nothing. Useful as a placeholder that keeps a sequence's timing honest.</li>
+      </ul>
+      <p>
+        The device itself, its sample rate, buffer and channel count are in
+        Settings → Audio, with what the engine is actually doing underneath them.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Next</h2>
+      <p>
+        <a href="./running.html">Running the show</a>, or the
+        <a href="../reference/cue-types.html">field-by-field reference</a> for audio, fade,
+        stop and devamp cues.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

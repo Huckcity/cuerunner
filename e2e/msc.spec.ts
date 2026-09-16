@@ -165,7 +165,7 @@ test('a new Show Control cue is born addressed to whoever is listening', async (
   // cue is being set up rather than when GO is pressed. It is the first hint in the tab:
   // the Last Run section under it has a hint of its own, about a different thing.
   await expect(page.locator('.inspector-body .inspector-hint').first()).toHaveText(
-    'The show drives no desk that takes MIDI — set one up in Show Settings, or point this cue at a MIDI port.'
+    'This show has no desk that takes MIDI. Set one up in Show Settings, or send this cue to a MIDI port instead.'
   )
 })
 
@@ -204,7 +204,7 @@ test('a cue pointed at a MIDI port is offered the port it goes out on', async ()
   // The row is the choice made visible, and the read-back says where the command goes now
   // — the first hint in the tab, as the Last Run section below has one of its own.
   await expect(page.locator('.inspector-body .inspector-hint').first()).toHaveText(
-    'The command goes out on this machine’s MIDI, so a console on a cable is reached the way a MIDI cue reaches one.'
+    'Sent on this machine’s MIDI, like any other MIDI cue.'
   )
 
   await send.selectOption('desk')

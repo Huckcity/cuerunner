@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSC &amp; MIDI control — Winslab</title>
+  <meta name="description" content="What WinsLab listens for, what a cue trigger matches, and what WinsLab sends to a desk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="OSC &amp; MIDI control — Winslab" />
+  <meta property="og:description" content="What WinsLab listens for, what a cue trigger matches, and what WinsLab sends to a desk." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html">Guides</a>
+        <a href="../reference/index.html" aria-current="page">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../reference/index.html">Reference</a>
+        <span aria-hidden="true">/</span>
+        <span>OSC & MIDI control</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>OSC &amp; MIDI control<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        For setting it up, see <a href="../guides/console.html">firing cues from a
+        console</a>. This is the message-level detail.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="listening">
+      <h2>What WinsLab listens on</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Input</th><th>Default</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>OSC</td><td>UDP port 53000</td><td>Every message is published to the Monitor and the run log with its sender and arguments.</td></tr>
+            <tr><td>MIDI</td><td>the ports you tick</td><td>With none ticked, every input is opened. An interface that disappears mid-show is reported, because a cue sending down it would otherwise play nowhere in silence.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-1" id="panic">
+      <h2>Panic from anywhere</h2>
+      <p>Two messages stop the show whoever sends them, with no cue written for them:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Message</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>/winslab/panic</code> (any arguments)</td><td>Panic: everything stops with a 200 ms fade.</td></tr>
+            <tr><td>MIDI All Sound Off — controller 120, value 0, any channel, any listened port</td><td>The same.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Both are acted on where the engine is rather than in the window, so the fade starts
+        whether or not the interface is answering. The run log records the sender:
+        <code>[main] panic (osc): /winslab/panic from 192.168.1.24:8000</code>.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="triggers">
+      <h2>What a trigger matches</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Kind</th><th>Matched on</th><th>Ignored</th></tr></thead>
+          <tbody>
+            <tr><td>OSC</td><td>The address, exactly.</td><td>Arguments.</td></tr>
+            <tr><td>MIDI note</td><td>Port, channel and note number.</td><td>Velocity — a note fires whatever it was played at.</td></tr>
+            <tr><td>MIDI control change</td><td>Port, channel and controller number.</td><td>Value.</td></tr>
+            <tr><td>MIDI program change</td><td>Port, channel and program number.</td><td>—</td></tr>
+            <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        A trigger fires its cue exactly as GO would, pre-wait and advance included. A
+        disarmed cue ignores its triggers. The repeat guard (Settings → General) applies to
+        triggers as well as to the space bar.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="sending">
+      <h2>What WinsLab sends</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cue</th><th>What goes out</th></tr></thead>
+          <tbody>
+            <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
+            <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
+            <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
+            <tr><td>Scene cue<span class="pro">Pro</span></td><td>Only the DCA changes between where the desk stands and the scene: opens and closes, and nothing for a mic that is already right.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The desk a scene cue drives is set up once in Show Settings → Channels, where the
+        read-back line names the exact addresses or notes it will send.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

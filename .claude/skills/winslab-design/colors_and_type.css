@@ -2,202 +2,197 @@
  * Winslab Design System
  * Colors & Typography CSS Custom Properties
  *
- * Source: Huckcity/winslab (Electron + React app)
- * Surface: Desktop app (dark theme only)
+ * Source: Huckcity/winslab — src/renderer/src/App.css, which is the app's own token
+ * block. This file is a copy of it for prototyping outside the app; when the two differ,
+ * App.css is right, and scripts/theme.test.ts is what holds it to the contrast rule.
+ *
+ * Two things the values encode:
+ *   1. Four text tones, all readable. --fg-primary, --fg-body, --fg-muted and --fg-subtle
+ *      clear 4.5:1 on every surface they sit on. --fg-disabled is below that on purpose
+ *      and is for disabled controls only.
+ *   2. Neutrals with a slight blue-ink bias, so one panel steps off another without a
+ *      border doing the work.
  */
 
 :root {
+  /* Backgrounds */
+  --bg-well:          #0f1216;
+  --bg-base:          #14171b;
+  --bg-raised:        #171a1f;
+  --bg-surface:       #1a1d22;
+  --bg-card:          #20242a;
+  --bg-input:         #272c33;
+  --bg-hover:         #30363e;
+  --bg-selected:      #12243a;
 
-  /* ─── BACKGROUND RAMP ─────────────────────────────────────────────────── */
-  --bg-well:       #111111;   /* Waveform panel, deepest surface */
-  --bg-base:       #181818;   /* App root, body */
-  --bg-raised:     #1a1a1a;   /* Cue list header, transport bar */
-  --bg-surface:    #1e1e1e;   /* Toolbar, inspector panel */
-  --bg-card:       #252525;   /* MIDI message blocks, group child rows */
-  --bg-input:      #2a2a2a;   /* Form inputs, cue-type buttons */
-  --bg-hover:      #3a3a3a;   /* Button / menu item hover */
-  --bg-selected:   #0d1f33;   /* Name-edit input background (focused) */
+  /* Borders */
+  --border:           #2b3038;
+  --border-soft:      #22262c;
+  --border-input:     #3b424c;
+  --border-focus:     #5aa9ff;
 
-  /* ─── BORDER ──────────────────────────────────────────────────────────── */
-  --border:        #333333;   /* Primary panel dividers */
-  --border-soft:   #2a2a2a;   /* Subtle internal dividers */
-  --border-input:  #444444;   /* Input / button borders */
-  --border-focus:  #4a9eff;   /* Focused input / active tab underline */
+  /* State row backgrounds */
+  --bg-selected-row:  #1b2a3b;
+  --bg-playing-row:   #16281d;
+  --bg-prewait-row:   #2a2413;
 
-  /* ─── STATE BACKGROUNDS ───────────────────────────────────────────────── */
-  --bg-selected-row:  #1e2d3d;   /* Selected cue row */
-  --bg-playing-row:   #1a2a1a;   /* Playing cue row */
-  --bg-prewait-row:   #2a2a1a;   /* Pre-wait cue row */
+  /* Foreground — four readable tones, plus one for disabled controls */
+  --fg-primary:       #eef1f4;
+  --fg-body:          #cdd3da;
+  --fg-muted:         #a3adb8;
+  --fg-subtle:        #8e98a4;
+  --fg-disabled:      #6b7480;
 
-  /* ─── FOREGROUND / TEXT ───────────────────────────────────────────────── */
-  --fg-primary:   #dddddd;   /* Headings, strong text, selected row text */
-  --fg-body:      #cccccc;   /* Base body text */
-  --fg-secondary: #bbbbbb;   /* Cue row text */
-  --fg-tertiary:  #aaaaaa;   /* Secondary labels, workspace name */
-  --fg-muted:     #888888;   /* Form labels, cue numbers */
-  --fg-dim:       #666666;   /* Column headers, duration values */
-  --fg-ghost:     #555555;   /* Empty states, inspector placeholder */
+  /* Accent — amber. The brand, and the cue that is next. */
+  --accent-amber:         #f0b429;
+  --accent-amber-bg:      rgba(240, 180, 41, 0.12);
 
-  /* ─── ACCENT — AMBER (brand) ──────────────────────────────────────────── */
-  --accent-amber:         #e0a020;   /* WinsLab wordmark, dirty dot, start-time marker */
-  --accent-amber-bg:      rgba(224, 160, 32, 0.10);   /* Start-time tag background */
+  /* Accent — blue. Anything the operator can act on. */
+  --accent-blue:          #5aa9ff;
+  --accent-blue-dim:      #2e4f73;
+  --accent-blue-glow:     rgba(90, 169, 255, 0.16);
+  --accent-blue-overlay:  rgba(90, 169, 255, 0.60);
 
-  /* ─── ACCENT — BLUE (interactive) ────────────────────────────────────── */
-  --accent-blue:          #4a9eff;   /* Focus border, active tab, drop indicator, playhead */
-  --accent-blue-dim:      #2a6099;   /* Waveform fill (unplayed portion) */
-  --accent-blue-glow:     rgba(74, 158, 255, 0.15);  /* Progress bar track */
-  --accent-blue-overlay:  rgba(74, 158, 255, 0.60);  /* Drop indicator glow */
+  /* Transport / state. GO is the one saturated colour in the window. */
+  --state-go:           #1c7a3c;
+  --state-go-hover:     #22924a;
+  --state-go-active:    #165f2f;
+  --state-stop:         #272c33;
+  --state-stop-hover:   #30363e;
+  --state-stop-active:  #20242a;
+  --state-panic:        #8e2b28;
+  --state-panic-hover:  #a83430;
+  --state-panic-active: #6d211f;
+  --state-running-bg:   rgba(76, 195, 106, 0.14);
+  --state-running-fg:   #4cc36a;
 
-  /* ─── TRANSPORT / STATE COLORS ────────────────────────────────────────── */
-  --state-go:              #2d7a2d;
-  --state-go-hover:        #39a039;
-  --state-go-active:       #1e5a1e;
-  --state-stop:            #444444;
-  --state-stop-hover:      #555555;
-  --state-stop-active:     #333333;
-  --state-panic:           #7a2d2d;
-  --state-panic-hover:     #a03939;
-  --state-panic-active:    #5a1e1e;
-  --state-running-bg:      #1e4a1e;
-  --state-running-fg:      #5aaa5a;
+  /*
+   * Semantic states. A failure, a warning and a success look the same wherever they are
+   * said — a chip in the transport, a badge in the inspector, a service in settings — so
+   * they are named by what they mean rather than mixed by hand at each site.
+   */
+  --danger-bg:     rgba(224, 68, 58, 0.16);
+  --danger-border: rgba(224, 68, 58, 0.42);
+  --danger-fg:     #ff8b80;
+  --warn-bg:       rgba(240, 180, 41, 0.13);
+  --warn-border:   rgba(240, 180, 41, 0.38);
+  --warn-fg:       #f0b429;
+  --ok-bg:         rgba(76, 195, 106, 0.14);
+  --ok-border:     rgba(76, 195, 106, 0.38);
+  --ok-fg:         #4cc36a;
 
-  /* ─── CUE COLOR LABELS ────────────────────────────────────────────────── */
-  --cue-color-none:    transparent;
-  --cue-color-red:     #c0392b;
-  --cue-color-orange:  #e67e22;
-  --cue-color-yellow:  #f1c40f;
-  --cue-color-green:   #27ae60;
-  --cue-color-blue:    #2980b9;
-  --cue-color-purple:  #8e44ad;
-  --cue-color-pink:    #e91e8c;
+  /* Cue color labels */
+  --cue-color-none:   transparent;
+  --cue-color-red:    #e0443a;
+  --cue-color-orange: #f08c2a;
+  --cue-color-yellow: #f2c94c;
+  --cue-color-green:  #3bb66b;
+  --cue-color-blue:   #3d8fe0;
+  --cue-color-purple: #9b59d0;
+  --cue-color-pink:   #e8489b;
 
-  /* ─── TYPOGRAPHY ──────────────────────────────────────────────────────── */
+  /*
+   * Typography. IBM Plex ships inside the app (see main.tsx), so a show machine reads
+   * the same on Windows and macOS and needs no network to do it. Condensed carries the
+   * numbers and the small caps labels; mono carries times, ports and addresses, where
+   * tabular figures stop a running clock from jittering.
+   */
+  --font-ui:   'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --font-cond: 'IBM Plex Sans Condensed', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, 'SF Mono', monospace;
 
-  /* Font stacks */
-  --font-ui:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono:  'Segoe UI Mono', 'SF Mono', 'Consolas', monospace;
-
-  /* Base */
   --font-size-base:   13px;
-  --line-height-base: 1.4;
-  --font-smoothing:   antialiased;
+  --line-height-base: 1.45;
 
-  /* Scale */
-  --text-xs:    10px;   /* Section titles, column headers, kbd shortcuts, badges */
-  --text-sm:    11px;   /* Labels, timecodes, status pills, secondary values */
-  --text-base:  12px;   /* Cue row text, inspector field text */
-  --text-md:    13px;   /* Body, workspace name, menu items */
-  --text-lg:    14px;   /* Brand wordmark, transport buttons */
+  /*
+   * One scale, and each step has a job. Most of the window is --text-base: a field
+   * label, its value and a cue row are all the same size, which is what makes a column
+   * of them line up.
+   */
+  --text-xs:   11px;   /* small caps labels, badges */
+  --text-sm:   12px;   /* hints, meta, secondary readings */
+  --text-base: 13px;   /* labels, values, cue rows — the workhorse */
+  --text-md:   14px;   /* panel headings */
+  --text-lg:   16px;   /* dialog titles, the live cue */
+  --text-xl:   20px;   /* the next cue's name */
+  --text-2xl:  28px;   /* the next cue's number */
 
-  /* Weights */
-  --fw-normal:  400;
-  --fw-medium:  600;
-  --fw-bold:    700;
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semi:   600;
+  --fw-bold:   700;
 
-  /* Letter spacing */
-  --ls-caps:   0.06em;    /* Column headers, section titles */
-  --ls-wide:   0.08em;    /* Field section titles */
-  --ls-brand:  0.05em;    /* Brand wordmark, transport buttons */
+  --ls-caps:  0.08em;
+  --ls-wide:  0.12em;
+  --ls-brand: 0.06em;
 
-  /* ─── SEMANTIC TYPE TOKENS ────────────────────────────────────────────── */
+  /* State pill (running indicator in cue rows) */
+  --pill-bg:    rgba(76, 195, 106, 0.14);
+  --pill-fg:    #4cc36a;
 
-  /* Headings (section separators in inspector) */
-  --type-section-title-size:    var(--text-xs);
-  --type-section-title-weight:  var(--fw-bold);
-  --type-section-title-color:   var(--fg-ghost);
-  --type-section-title-ls:      var(--ls-wide);
-  --type-section-title-transform: uppercase;
+  /* Advance column in cue list */
+  --adv-fg:     #4cc36a;
 
-  /* Column headers (cue list) */
-  --type-col-header-size:    var(--text-xs);
-  --type-col-header-weight:  var(--fw-medium);
-  --type-col-header-color:   var(--fg-dim);
-  --type-col-header-ls:      var(--ls-caps);
-  --type-col-header-transform: uppercase;
-
-  /* Body row text */
-  --type-row-size:    var(--text-base);
-  --type-row-weight:  var(--fw-normal);
-  --type-row-color:   var(--fg-secondary);
-
-  /* Brand / wordmark */
-  --type-brand-size:    var(--text-lg);
-  --type-brand-weight:  var(--fw-bold);
-  --type-brand-color:   var(--accent-amber);
-  --type-brand-ls:      var(--ls-brand);
-  --type-brand-transform: uppercase;
-
-  /* Transport button labels */
-  --type-transport-size:   var(--text-lg);
-  --type-transport-weight: var(--fw-bold);
-  --type-transport-color:  #ffffff;
-  --type-transport-ls:     var(--ls-brand);
-  --type-transport-transform: uppercase;
-
-  /* Form labels */
-  --type-label-size:   var(--text-sm);
-  --type-label-color:  var(--fg-muted);
-  --type-label-weight: var(--fw-normal);
-
-  /* Timecode / tabular numbers */
-  --type-timecode-size:   var(--text-sm);
-  --type-timecode-color:  var(--accent-blue);
-  --type-timecode-family: var(--font-mono);
-  --type-timecode-variant: tabular-nums;
-
-  /* State pill */
-  --type-pill-size:   var(--text-xs);
-  --type-pill-color:  #7aaa5a;
-  --type-pill-bg:     #2a3a1a;
-
-  /* ─── SPACING & GEOMETRY ──────────────────────────────────────────────── */
-  --space-1:   4px;
-  --space-2:   8px;
-  --space-3:  12px;
-  --space-4:  16px;
-  --space-5:  20px;
-  --space-6:  24px;
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
 
   /* Component heights */
-  --h-toolbar:     44px;
-  --h-cue-row:     32px;
-  --h-col-header:  26px;
-  --h-transport:   52px;
-  --h-waveform:   110px;
-  --h-waveform-header: 24px;
-  --h-button-sm:   26px;
-  --h-button-md:   28px;
-  --h-button-lg:   36px;
-  --h-input:       26px;
+  --h-toolbar:          48px;
+  --h-context:          80px;
+  --h-cue-row:          34px;
+  --h-col-header:       30px;
+  --h-transport:        64px;
+  --h-waveform:        120px;
+  --h-waveform-header:  26px;
+  --h-log:             180px;
+  --h-monitor:         220px;
+  --h-rf:              220px;
+  --h-script:          260px;
+  --h-timeline:        200px;
+  --h-button-sm:        28px;
+  --h-button-md:        30px;
+  --h-button-lg:        40px;
+  --h-input:            30px;
 
   /* Layout */
-  --inspector-width: 320px;
+  --inspector-width: 340px;
+  /*
+   * Every label/control pair in the window is laid out on this one grid — inspector,
+   * settings, show settings, the dialogs. One column width is what makes a stack of
+   * fields read as a column instead of as a ragged edge.
+   */
+  --field-label-w: 112px;
+  --field-gap:     10px;
 
-  /* ─── BORDER RADIUS ───────────────────────────────────────────────────── */
-  --radius-sm:    2px;   /* Color label bar */
-  --radius-md:    3px;   /* Inputs, small buttons, cue-type buttons */
-  --radius-lg:    4px;   /* Transport buttons, cue blocks */
-  --radius-xl:    5px;   /* File-menu dropdown */
-  --radius-pill:  10px;  /* Running badge, state pills */
+  /* Radius */
+  --radius-sm:   3px;
+  --radius-md:   4px;
+  --radius-lg:   5px;
+  --radius-xl:   6px;
+  --radius-pill: 11px;
 
-  /* ─── SHADOW ──────────────────────────────────────────────────────────── */
-  --shadow-menu:   0 8px 24px rgba(0, 0, 0, 0.5);   /* Dropdown menus only */
+  /* Shadow */
+  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.55);
 
-  /* ─── TRANSITIONS ─────────────────────────────────────────────────────── */
-  --transition-fast:  background 0.05s ease, color 0.05s ease;
-  --transition-std:   background 0.10s ease, color 0.10s ease, border-color 0.10s ease;
+  /* Transitions */
+  --transition-fast: background 0.05s ease, color 0.05s ease;
+  --transition-std:  background 0.10s ease, color 0.10s ease, border-color 0.10s ease;
 
-  /* ─── SCROLLBAR ───────────────────────────────────────────────────────── */
-  --scrollbar-width:  6px;
-  --scrollbar-track:  #1a1a1a;
-  --scrollbar-thumb:  #444444;
-  --scrollbar-thumb-hover: #555555;
+  /* Scrollbar */
+  --scrollbar-width:       8px;
+  --scrollbar-track:       var(--bg-raised);
+  --scrollbar-thumb:       #3b424c;
+  --scrollbar-thumb-hover: #4c545f;
+
+  /* Base styles */
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  color: var(--fg-body);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
 }
-
-/* ── Scrollbar utility ──────────────────────────────────────────────────── */
-* { box-sizing: border-box; }
-
-::-webkit-scrollbar { width: var(--scrollbar-width); }
-::-webkit-scrollbar-track { background: var(--scrollbar-track); }
-::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--radius-md); }
-::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }

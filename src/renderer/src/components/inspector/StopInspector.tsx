@@ -51,9 +51,8 @@ export function StopInspector({ cue }: Props) {
           onReset={() => set({ waitForFade: STOP_DEFAULTS.waitForFade })} />
       </div>
       <p className="inspector-hint">
-        Stops the target right away, or ramps it to silence over the fade duration first. The cue
-        normally completes as soon as it has stopped the target — tick Wait for fade to hold it
-        open until the fade has finished.
+        Stops the target at once, or fades it out first. Tick Wait for fade to hold the
+        show until the fade has finished.
       </p>
       <LastRun cueId={cue.id} />
     </div>

@@ -407,11 +407,10 @@ export function CueList() {
     >
       <div className="cue-list-header">
         <span className="col-num">#</span>
-        <span className="col-color"></span>
         <span className="col-name">Name</span>
         <span className="col-dur">Duration</span>
-        <span className="col-pre">Pre-W</span>
-        <span className="col-post">Post-W</span>
+        <span className="col-pre">Pre</span>
+        <span className="col-post">Post</span>
         <span className="col-adv">Advance</span>
       </div>
       <div

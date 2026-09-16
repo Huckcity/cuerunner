@@ -106,8 +106,10 @@ describe('SceneInspector', () => {
     expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 performer open')
 
     show(cue(''))
+    // Still says what it will not do: a scene cue with nothing chosen does nothing,
+    // rather than closing every mic on the desk.
     expect(container.querySelector('.inspector-hint')?.textContent)
-      .toContain('close every mic on the desk')
+      .toContain('closing every mic')
     expect(container.querySelector<HTMLButtonElement>('.inspector-btn')?.disabled).toBe(true)
   })
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Toolbar } from './components/layout/Toolbar'
 import { TransportBar } from './components/layout/TransportBar'
-import { StandbyBar } from './components/layout/StandbyBar'
+import { ContextBar } from './components/layout/ContextBar'
 import { CueList } from './components/cue-list/CueList'
 import { Inspector } from './components/inspector/Inspector'
 import { SettingsDialog } from './components/layout/SettingsDialog'
@@ -146,7 +146,7 @@ export function App() {
         view={view}
         onSwitchView={setView}
       />
-      <StandbyBar />
+      <ContextBar />
       <div className="app-main" data-view={view}>
         {view === 'scenes' ? (
           pro ? (
@@ -155,7 +155,7 @@ export function App() {
             <ProLock
               variant="view"
               feature="Scenes"
-              blurb="Scenes drive the desk: who is open on stage, and only the messages that change it. Recall one and the mics move with the show."
+              blurb="Who is open on stage, scene by scene. Recall one and the desk moves with the show."
             />
           )
         ) : (

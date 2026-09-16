@@ -9,7 +9,7 @@ import {
 } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
 import { ProMark } from '../license/ProLock'
-import { CUE_ICON } from '../../utils/cueIcons'
+import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import './Toolbar.css'
@@ -184,7 +184,17 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       <div className="toolbar-left">
         <div className="file-menu-wrapper" ref={fileMenuRef}>
           <button className="toolbar-brand" onClick={() => setFileMenuOpen(v => !v)} title="File menu">
-            WinsLab ▾
+            {/* The mark is the app's own: five meter bars, the same drawing as the icon
+                the installers ship. */}
+            <svg className="toolbar-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+              <rect x="2.24" y="22.02" width="8.32" height="19.97" rx="2.08" fill="currentColor" opacity="0.55" />
+              <rect x="15.04" y="14.03" width="8.32" height="35.94" rx="2.08" fill="currentColor" opacity="0.8" />
+              <rect x="27.84" y="7.04" width="8.32" height="49.92" rx="2.08" fill="currentColor" />
+              <rect x="40.64" y="17.52" width="8.32" height="28.95" rx="2.08" fill="currentColor" opacity="0.75" />
+              <rect x="53.44" y="25.01" width="8.32" height="13.98" rx="2.08" fill="currentColor" opacity="0.55" />
+            </svg>
+            WinsLab
+            <span className="toolbar-brand-caret">▾</span>
           </button>
           {fileMenuOpen && (
             <div className="file-menu">
@@ -246,7 +256,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       <div className="toolbar-actions" hidden={view !== 'cues'}>
         {PRIMARY_CUES.map(({ type, label }) => (
           <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
-            {CUE_ICON[type]} {label}
+            <CueIcon type={type} className="toolbar-cue-icon" />
+            {label}
           </button>
         ))}
 
@@ -263,7 +274,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                   data-locked={type === 'scene' && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                 >
-                  <span className="toolbar-more-menu-icon">{CUE_ICON[type]}</span>
+                  <CueIcon type={type} className="toolbar-more-menu-icon" />
                   {label}
                   {type === 'scene' && !pro && <ProMark />}
                 </button>
@@ -272,10 +283,14 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           )}
         </div>
 
-        <div className="toolbar-divider" />
-        {/* What the list is showing, for a show long enough that folding it away is the
-            only way to see the shape of it. Expand opens the top level and leaves the
-            nested groups as they were; Collapse closes everything. */}
+      </div>
+
+      {/* What the list is showing, for a show long enough that folding it away is the
+          only way to see the shape of it. Its own tray, beside the one that adds cues:
+          these change the view of the list rather than what is in it. Expand opens the
+          top level and leaves the nested groups as they were; Collapse closes
+          everything. */}
+      <div className="toolbar-list-actions" hidden={view !== 'cues'}>
         <button
           className="toolbar-list-btn"
           onClick={() => useStore.getState().expandTopLevel()}

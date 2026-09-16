@@ -63,7 +63,10 @@ export class OscInputService implements ShowService {
     })
 
     server.on('listening', () => {
-      context.setState('running', `listening on 0.0.0.0:${server.port}`)
+      // The port, not the bind address: an operator reads this to check the desk is
+      // pointed at the right number, and 0.0.0.0 is the answer to a question nobody
+      // asked. What it binds to has not changed.
+      context.setState('running', `listening on port ${server.port}`)
     })
 
     server.on('message', (message, rinfo) => {

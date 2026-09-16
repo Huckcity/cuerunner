@@ -249,7 +249,7 @@ test('the standby takes the live machine’s show and warms the media before it 
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Redundancy', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
 
   await expect(dialog.locator('.redundancy-line[data-field="machine"]')).toContainText('desk-b — standing by')
   await expect(dialog.locator('.redundancy-line[data-field="partner"]')).toContainText('desk-a (live)')
@@ -289,7 +289,7 @@ test('the live machine going quiet is a takeover, and the cue comes back where i
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Redundancy', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
   await expect(dialog.locator('.redundancy-line[data-field="machine"]')).toContainText('desk-b — running the show')
   await expect(dialog.locator('.redundancy-line[data-field="partner"]')).toContainText('gone quiet')
   await dialog.getByRole('button', { name: 'Close' }).click()

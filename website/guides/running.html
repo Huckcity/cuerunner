@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Running the show — Winslab</title>
+  <meta name="description" content="GO, stop and panic, what the live and next bar is telling you, reading the run log, and a show-night checklist." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Running the show — Winslab" />
+  <meta property="og:description" content="GO, stop and panic, what the live and next bar is telling you, reading the run log, and a show-night checklist." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Running the show</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Running the show</h1>
+      <p class="doc-lede">
+        Three keys and one bar. This is what they do and what to check before the house
+        opens.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>The transport</h2>
+      <div class="cards three-col">
+        <article class="card state-go">
+          <h3>GO</h3>
+          <p><kbd>Space</kbd>, or the button. Fires the cue on the right of the bar, then moves on to the next armed one. A disarmed cue is skipped.</p>
+        </article>
+        <article class="card state-stop">
+          <h3>STOP</h3>
+          <p><kbd>Esc</kbd>, or the button. Stops everything that is running: sound, waits, sequences, scripts.</p>
+        </article>
+        <article class="card state-panic">
+          <h3>PANIC</h3>
+          <p><kbd>Shift</kbd> + <kbd>Esc</kbd>, or the Playback menu. Everything stops with a short fade instead of a hard cut, and anything stuck is released.</p>
+        </article>
+      </div>
+      <p>
+        Panic has no button on the transport on purpose: it is the one press you do not
+        want a sleeve to find at the wrong moment. It is on the keyboard, in the menu, and
+        it can be fired from the rig — see <a href="./console.html">firing cues from a
+        console</a>.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Live and next</h2>
+      <p>
+        The bar under the toolbar is the show at a glance. On the left is what is playing:
+        its number, name, the note you wrote on it, elapsed time against what is left, and
+        a progress line. On the right, larger, is what GO will fire next, with its own
+        note. With several cues running it names the one that has been going longest and
+        counts the rest.
+      </p>
+      <p>
+        The cue list says the same thing in more detail: a playing row counts its Duration
+        cell down, a cue in its pre-wait says so, and a vamping cue says it is vamping.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>When something is wrong</h2>
+      <figure class="figure">
+        <a href="../assets/guide/08-run-log.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/08-run-log.png" alt="The run log: timestamped lines with a level, showing a network cue that failed." />
+        </a>
+        <figcaption>The run log, with a failure in red.</figcaption>
+      </figure>
+      <p>
+        The <strong>Log</strong> tab in the dock is the session's history: every cue fired,
+        every message sent, and every failure with its reason. It holds the last 500 lines
+        and is not saved with the show. A line that repeats is said once with a count.
+      </p>
+      <p>
+        A cue that failed also says so in its own inspector, under <strong>Last run</strong>:
+        when it ran, how long it took, and what went wrong. If a cue "does nothing", that
+        is the first place to look, then the log.
+        <a href="../reference/troubleshooting.html">Troubleshooting</a> lists the usual
+        causes.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Before the house opens</h2>
+      <ol class="steps">
+        <li><strong>Open the show and press GO once</strong> on a cue you can afford to hear. It proves the file, the device and the routing in one press.</li>
+        <li><strong>Check the device</strong> in Settings → Audio: the right output, and the engine reporting no dropouts.</li>
+        <li><strong>Look for missing media.</strong> A cue whose file has moved says <em>missing</em> where its length should be, and a bar across the top offers to relink it.</li>
+        <li><strong>Arm what should run.</strong> Anything disarmed is skipped without warning — that is the point of it, so it is worth a look down the list.</li>
+        <li><strong>Save.</strong> The dot beside the show's name means there are unsaved changes.</li>
+        <li><strong>With a backup machine rigged</strong>, check the pair is in sync in Settings → Backup machine before the audience is in.</li>
+      </ol>
+      <div class="note">
+        Keep the run log open on a second monitor if you have one. It is the difference
+        between "the video did not fire" and "the video machine refused the request at
+        19:42".
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

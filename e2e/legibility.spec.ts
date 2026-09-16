@@ -41,6 +41,7 @@ test('every row keeps its type icon in one column, a group included', async () =
   await toolbarCueBtn(page, 'Group').click()
   await toolbarCueBtn(page, 'Wait').click()
 
+  // A group's icon is the chevron that opens it, so it is in the same slot as the rest.
   const icons = page.locator('.cue-row .col-num .cue-type-icon')
   await expect(icons).toHaveCount(2)
   await expect(page.locator('.cue-row .col-name .cue-type-icon')).toHaveCount(0)
@@ -53,11 +54,16 @@ test('every row keeps its type icon in one column, a group included', async () =
   expect(Math.round(child)).toBe(Math.round(group))
 })
 
-test('a scene cue has a glyph of its own, not a group’s', async () => {
+test('a scene cue has a drawing of its own, not a group’s', async () => {
   await addCueFromMoreMenu(page, 'Scene')
-  await expect(page.locator('.cue-row .cue-type-icon').first()).toHaveText('◇')
+  const scene = page.locator('.cue-row .cue-type-icon').first()
+  await expect(scene).toHaveAttribute('data-type', 'scene')
   await toolbarCueBtn(page, 'Group').click()
-  await expect(page.locator('.cue-row .cue-type-icon').nth(1)).toHaveText('▤')
+  // The group row's slot holds the chevron, which says group as well as opening it.
+  const group = page.locator('.cue-row .cue-type-icon').nth(1)
+  await expect(group).toHaveAttribute('data-type', 'group')
+  await expect(group).toHaveClass(/group-chevron/)
+  await expect(scene).not.toHaveClass(/group-chevron/)
 })
 
 test('the list header is dim words with room between them', async () => {
@@ -80,4 +86,61 @@ test('an empty list says so in the middle of the list', async () => {
   const hint = await page.locator('.cue-list-empty div').first().boundingBox()
   const middle = list!.y + list!.height / 2
   expect(Math.abs(hint!.y + hint!.height / 2 - middle)).toBeLessThan(60)
+})
+
+test('every tone the window writes in is readable on the panel behind it', async () => {
+  // scripts/theme.test.ts holds the tokens to 4.5:1. This holds the window itself to it:
+  // a token is only readable if the element that uses it is drawn on the surface the
+  // token was measured against, and a hardcoded colour or an unexpected parent is how
+  // that stops being true.
+  await toolbarCueBtn(page, 'Audio').click()
+  await toolbarCueBtn(page, 'Group').click()
+
+  const failures = await page.evaluate(() => {
+    const luminance = (rgb: number[]): number => {
+      const [r, g, b] = rgb.map(v => {
+        const channel = v / 255
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const parse = (colour: string): number[] | null => {
+      const parts = colour.match(/[\d.]+/g)
+      if (parts === null) return null
+      // Anything see-through is not this element's ground: keep looking upwards.
+      if (parts.length > 3 && Number(parts[3]) < 1) return null
+      return parts.slice(0, 3).map(Number)
+    }
+    /** The colour actually behind an element, which is the first opaque one above it. */
+    const ground = (node: Element): number[] => {
+      for (let at: Element | null = node; at !== null; at = at.parentElement) {
+        const found = parse(getComputedStyle(at).backgroundColor)
+        if (found !== null) return found
+      }
+      return [0, 0, 0]
+    }
+
+    const bad: string[] = []
+    for (const node of document.querySelectorAll<HTMLElement>('body *')) {
+      const text = [...node.childNodes]
+        .filter(child => child.nodeType === Node.TEXT_NODE)
+        .map(child => child.textContent ?? '')
+        .join('')
+        .trim()
+      if (text === '') continue
+      const style = getComputedStyle(node)
+      if (style.visibility === 'hidden' || style.display === 'none') continue
+      if (node.matches(':disabled, :disabled *')) continue
+      const colour = parse(style.color)
+      if (colour === null) continue
+      const [a, b] = [luminance(colour), luminance(ground(node))]
+      const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+      if (ratio < 4.5) {
+        bad.push(`${node.className || node.tagName} "${text.slice(0, 24)}" at ${ratio.toFixed(2)}:1`)
+      }
+    }
+    return bad
+  })
+
+  expect(failures, failures.join('\n')).toEqual([])
 })

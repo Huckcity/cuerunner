@@ -26,8 +26,8 @@
         <span>WINSLAB</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
-        <a href="./guide.html">User Guide</a>
-        <a href="./redundancy.html">Redundancy</a>
+        <a href="./guide.html">Guides</a>
+        <a href="./reference/index.html">Reference</a>
         <a href="./reliability.html">Reliability</a>
         <a href="./index.html#download">Download</a>
       </nav>
@@ -53,9 +53,9 @@
         outright mid-cue, by the same script that regenerates these images.
       </p>
       <div class="note">
-        The interface side of this feature is described in the <a href="./guide.html#redundancy">user
-        guide</a>. What follows is the same thing as an operator meets it: in order, with the
-        screens.
+        The settings themselves are listed in the
+        <a href="./reference/settings.html#backup">reference</a>. What follows is the same
+        thing as an operator meets it: in order, with the screens.
       </div>
     </section>
 
@@ -103,7 +103,7 @@
       <div class="cards two-col">
         <figure class="figure">
           <a href="./assets/redundancy/01-settings-live.png" target="_blank" rel="noreferrer">
-            <img src="./assets/redundancy/01-settings-live.png" alt="The Redundancy tab on the machine running the show: redundant playback switched on, the role set to live, the name desk-live, the listener on port 53110 and the partner's address and port, a shared token, and a silence timeout of 3000 ms." />
+            <img src="./assets/redundancy/01-settings-live.png" alt="The Backup machine tab on the machine running the show: redundant playback switched on, this computer set to live, called desk-live, and the pair reporting that desk-backup is answering and in sync." />
           </a>
           <figcaption>The machine that runs the show: <em>Live</em>, listening on its own port, dialling the other one.</figcaption>
         </figure>
@@ -126,16 +126,16 @@
             <tr><td>Role</td><td><strong>Live</strong> runs the show. <strong>Standby</strong> mirrors it and waits. Both machines dial each other, so either role may be started first.</td></tr>
             <tr><td>Name</td><td>What the other machine calls this one. Two desks are easier to tell apart than two addresses; the host name is the default.</td></tr>
             <tr><td>Port here</td><td>The port this machine listens on for its partner.</td></tr>
-            <tr><td>Partner address and port</td><td>Where the other machine is. Left empty, this machine only listens — which is what a half-configured pair looks like, and the status says so instead of pretending.</td></tr>
-            <tr><td>Token</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed, and it stops dialling rather than asking every two seconds. Left empty, the pair is open to whoever finds the port, and the tab says so.</td></tr>
-            <tr><td>Silence before gone</td><td>How long the partner may say nothing before it is declared gone — three seconds unless you change it, the same three seconds this app already gives a window that has stopped answering.</td></tr>
+            <tr><td>Other computer, and its port</td><td>Where the other machine is. Left empty, this machine only listens — which is what a half-configured pair looks like, and the status says so instead of pretending.</td></tr>
+            <tr><td>Access code</td><td>A shared secret, the same on both machines. A machine that arrives with a different one is refused before anything else it says is believed, and it stops dialling rather than asking every two seconds. Left empty, the pair is open to whoever finds the port, and the panel says so.</td></tr>
+            <tr><td>Gone after</td><td>How long the partner may say nothing before it is declared gone — three seconds unless you change it, the same three seconds this app already gives a window that has stopped answering.</td></tr>
             <tr><td>When the partner goes quiet</td><td><strong>Tell me</strong>: the standby reports it and waits for a hand. <strong>Take it over</strong>: the standby claims the show itself.</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="note">
-        Set the same token on both machines, and the same partner address from the other side
+        Set the same access code on both machines, and the same partner address from the other side
         — each machine names the other. The pair finds each other without a restart: the dial is
         retried while the partner is not answering, and a machine that comes back is picked up
         again by itself.
@@ -215,13 +215,13 @@
       <div class="cards two-col">
         <figure class="figure shot-native">
           <a href="./assets/redundancy/06-settings-mirror.png" target="_blank" rel="noreferrer">
-            <img src="./assets/redundancy/06-settings-mirror.png" alt="The Redundancy tab before the takeover: this machine desk-backup standing by, partner desk-live answering and running one cue, show in sync with two files warmed, and a Take the show over now button." />
+            <img src="./assets/redundancy/06-settings-mirror.png" alt="The Backup machine tab before the takeover: this machine desk-backup standing by, partner desk-live answering and running one cue, show in sync with two files warmed, and a Take the show over now button." />
           </a>
           <figcaption>Before: standing by, mirroring a running cue, with the button that takes the show by hand.</figcaption>
         </figure>
         <figure class="figure shot-native">
           <a href="./assets/redundancy/08-took-over.png" target="_blank" rel="noreferrer">
-            <img src="./assets/redundancy/08-took-over.png" alt="The Redundancy tab after the takeover: this machine desk-backup running the show, partner desk-live gone quiet, and the last line reading took the show over at a time, the live machine stopped answering." />
+            <img src="./assets/redundancy/08-took-over.png" alt="The Backup machine tab after the takeover: this machine desk-backup running the show, partner desk-live gone quiet, and the last line reading took the show over at a time, the live machine stopped answering." />
           </a>
           <figcaption>After: the same tab, with the machine running the show and the reason written under it.</figcaption>
         </figure>
@@ -321,7 +321,7 @@
         <li>Install the same version of Winslab on both machines and open the same workspace file on each.</li>
         <li>On the machine that will drive: <em>Settings → Redundancy</em>, switch it on, set the role to <em>Live</em>, name it, give it a port, and put in the other machine's address and port.</li>
         <li>On the machine that will stand by: the same, with the role set to <em>Standby</em>, its own port, and this machine's address as its partner.</li>
-        <li>Set the same token on both, and decide what should happen when the partner goes quiet.</li>
+        <li>Set the same access code on both, and decide what should happen when the partner goes quiet.</li>
         <li>Check the status on both: each one should name the other and say <em>In sync</em>. If it says the cue lists differ, save the show on the machine that has the edits.</li>
         <li>Fire a cue on the live machine and watch the standby's panel: it should say the partner is answering and running a cue, and that files are warmed.</li>
         <li>Sound-check the takeover itself: stop the live machine, watch the standby take the show and pick the cue up, then hand it back — <em>Give the show back</em> — and start the live machine again.</li>

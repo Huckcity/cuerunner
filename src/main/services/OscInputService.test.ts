@@ -98,7 +98,7 @@ describe('OscInputService', () => {
     servers[0].port = 51234
     servers[0].emit('listening')
 
-    expect(setState).toHaveBeenCalledWith('running', 'listening on 0.0.0.0:51234')
+    expect(setState).toHaveBeenCalledWith('running', 'listening on port 51234')
   })
 
   it('publishes a message with its sender and typed arguments', () => {

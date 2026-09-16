@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cue types — Winslab</title>
+  <meta name="description" content="Every WinsLab cue type and every field it carries, with defaults." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Cue types — Winslab" />
+  <meta property="og:description" content="Every WinsLab cue type and every field it carries, with defaults." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html">Guides</a>
+        <a href="../reference/index.html" aria-current="page">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../reference/index.html">Reference</a>
+        <span aria-hidden="true">/</span>
+        <span>Cue types</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Cue types</h1>
+      <p class="doc-lede">
+        Twelve types. Every one of them carries the common fields below, and then its own.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="common">
+      <h2>Every cue</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Number</td><td>next free</td><td>Text, not a position. <code>12.5</code> and <code>LX 12</code> are both valid, and inserting a cue renumbers nothing.</td></tr>
+            <tr><td>Name</td><td>the type</td><td>What you read at speed.</td></tr>
+            <tr><td>Colour</td><td>none</td><td>A stripe down the row's edge. Eight colours.</td></tr>
+            <tr><td>Notes</td><td>empty</td><td>The first line shows in the live/next bar when the cue is playing or next.</td></tr>
+            <tr><td>Pre-wait</td><td>0 s</td><td>Waits this long after GO before the cue acts.</td></tr>
+            <tr><td>Post-wait</td><td>0 s</td><td>Waits this long after the cue finishes before handing over.</td></tr>
+            <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
+            <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
+            <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
+            <tr><td>Triggers<span class="pro">Pro</span></td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-1" id="audio">
+      <h2>Audio</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>File</td><td>—</td><td>WAV, AIFF, FLAC, MP3, M4A, OGG. A file at another sample rate is resampled as it plays; pitch and tempo are unchanged.</td></tr>
+            <tr><td>Start time / End time</td><td>0 / end of file</td><td>The part of the file this cue plays. Draggable on the waveform.</td></tr>
+            <tr><td>Trim silence</td><td>off</td><td>Starts at the first sound in the file and ends at the last, where silence is anything below −60 dBFS. Never rewrites the region you set: turning it off plays the whole region again.</td></tr>
+            <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts.</td></tr>
+            <tr><td>Volume</td><td>100%</td><td>The cue's own level, applied to every output.</td></tr>
+            <tr><td>Pan</td><td>centre</td><td>−1 to 1. Automatic routing spreads it across the pair.</td></tr>
+            <tr><td>Rate</td><td>1.00×</td><td>Playback speed, 0.25× to 4×.</td></tr>
+            <tr><td>Loop count</td><td>0</td><td><code>0</code> plays once, <code>n</code> repeats n more times, <code>-1</code> loops for ever — a vamp, released by a devamp cue.</td></tr>
+            <tr><td>Routing</td><td>Automatic</td><td><strong>Automatic</strong> (channels in order), <strong>Matrix</strong> (crosspoints with gains) or <strong>Silent</strong> (runs, sends nothing).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="timing">
+      <h2>Wait, Fade, Stop and Devamp</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Fields</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Wait</strong></td>
+              <td><strong>Duration</strong>. Holds for that long. Set Advance to On end to fire the next cue afterwards.</td>
+            </tr>
+            <tr>
+              <td><strong>Fade</strong></td>
+              <td><strong>Target</strong> (a cue), <strong>Property</strong> (volume or pan), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
+            </tr>
+            <tr>
+              <td><strong>Stop</strong></td>
+              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop.</td>
+            </tr>
+            <tr>
+              <td><strong>Devamp</strong></td>
+              <td><strong>Target</strong> — a looping audio cue. It finishes the lap it is on and plays out to the end of its file.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="group">
+      <h2>Group</h2>
+      <p>Cues inside a cue. <strong>Mode</strong> decides what GO does with them:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mode</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>Sequence</td><td>Children in order, each after the one before.</td></tr>
+            <tr><td>All at once</td><td>Every child together.</td></tr>
+            <tr><td>Random</td><td>One child, chosen at random.</td></tr>
+            <tr><td>Timeline</td><td>Each child at its own offset, edited by dragging in the dock.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        A group's duration is worked out from its children. Stopping a group stops them
+        too.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="messages">
+      <h2>MIDI, OSC, Network and Show Control</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Fields</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>MIDI</strong></td>
+              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes.</td>
+            </tr>
+            <tr>
+              <td><strong>OSC</strong></td>
+              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false.</td>
+            </tr>
+            <tr>
+              <td><strong>Network</strong></td>
+              <td><strong>Method</strong> (GET, POST, PUT), <strong>URL</strong>, <strong>Headers</strong>, <strong>Body</strong> and <strong>Timeout</strong> (5000 ms). The cue finishes when the server answers or the timeout runs out; the result is on its Last run.</td>
+            </tr>
+            <tr>
+              <td><strong>Show Control</strong></td>
+              <td>MSC. <strong>Send on</strong> the show's desk connection or a MIDI port, a <strong>command</strong> (Go, Stop, Resume, Load…), the equipment <strong>format</strong>, a <strong>device ID</strong> (127 reaches everything), and a <strong>cue</strong> and <strong>list</strong> where the command carries them.</td>
+            </tr>
+            <tr>
+              <td><strong>Script</strong></td>
+              <td><strong>Script</strong> and <strong>Timeout</strong> (60000 ms; 0 waits for ever). See the <a href="./script-api.html">script API</a>.</td>
+            </tr>
+            <tr>
+              <td><strong>Scene</strong><span class="pro">Pro</span></td>
+              <td><strong>Scene</strong> — the one to recall. A recall sends only the DCA changes between where the desk stands and where the scene says it should be. With no scene chosen the cue does nothing.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

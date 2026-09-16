@@ -79,7 +79,7 @@ export function RoutingMatrix({ cue, fileChannels, deviceChannels, onChange }: P
       )}
       {mode === 'silent' && (
         <p className="inspector-hint">
-          Deliberately silent: the cue runs and takes its time, and sends nothing to the device.
+          Silent on purpose: the cue takes its time as usual and sends nothing to the device.
         </p>
       )}
 
@@ -136,9 +136,9 @@ export function RoutingMatrix({ cue, fileChannels, deviceChannels, onChange }: P
             }])}
           >+ Add crosspoint</button>
           <p className="inspector-hint">
-            File channels 1–{Math.max(fileChannels, 2)}, device channels 1–{Math.max(deviceChannels, 2)}.
-            Add as many crosspoints as the routing needs: one file channel can feed several
-            outputs, and several file channels can meet on one.
+            File channels 1–{Math.max(fileChannels, 2)} to device channels
+            1–{Math.max(deviceChannels, 2)}. A file channel can feed several outputs, and
+            several can meet on one.
           </p>
         </>
       )}

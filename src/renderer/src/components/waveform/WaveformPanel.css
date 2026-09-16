@@ -42,11 +42,11 @@
 }
 
 .waveform-hover {
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
 }
 
 .waveform-total {
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
 }
 
 /* The region and the cursor: what the cue plays and where a split would be made. Both
@@ -70,14 +70,14 @@
 /* A sampled envelope is a reading of the file, not the whole of it: said quietly, in the
    panel's own voice, because the operator should be able to tell the two apart. */
 .waveform-sampled-tag {
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
   background: var(--bg-card);
   text-transform: none;
   cursor: help;
 }
 
 .waveform-cursor {
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
   background: var(--bg-card);
 }
 
@@ -122,7 +122,7 @@
   align-items: center;
   justify-content: center;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   /* A statement about the panel, not a thing over it: a press meant for the waveform
      while it is still being measured is the operator placing a boundary, and the panel
      knows where a boundary goes as soon as it knows the file's length. */
@@ -153,7 +153,7 @@
 .waveform-zoom-btn {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   cursor: pointer;
   width: 20px;
   height: 20px;

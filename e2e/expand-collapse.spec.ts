@@ -37,10 +37,10 @@ function groups() {
   return page.locator('.cue-row:has(.group-toggle)')
 }
 
-/** A group's chevron: ▼ open, ▶ folded. Read through a retrying assertion, because a
- *  one-shot read of a re-rendering list is a race the runners will lose. */
+/** Whether each group is open, by its chevron. Read through a retrying assertion, because
+ *  a one-shot read of a re-rendering list is a race the runners will lose. */
 function chevrons() {
-  return groups().locator('.group-toggle')
+  return groups().locator('.group-chevron')
 }
 
 function expand() {
@@ -62,7 +62,8 @@ test('Expand opens the top level and leaves the nested group as it was', async (
 
   // The outer group is open again — 3 rows of its 4 — and the inner one is still folded.
   await expect(rows()).toHaveCount(3)
-  await expect(chevrons()).toHaveText(['▼', '▶'])
+  await expect(chevrons().nth(0)).toHaveAttribute('data-open', 'true')
+  await expect(chevrons().nth(1)).toHaveAttribute('data-open', 'false')
 })
 
 test('Collapse closes every group, and Expand opens the top level again', async () => {
@@ -75,7 +76,8 @@ test('Collapse closes every group, and Expand opens the top level again', async 
   // still hidden.
   await expand().click()
   await expect(rows()).toHaveCount(3)
-  await expect(chevrons()).toHaveText(['▼', '▶'])
+  await expect(chevrons().nth(0)).toHaveAttribute('data-open', 'true')
+  await expect(chevrons().nth(1)).toHaveAttribute('data-open', 'false')
 })
 
 test('Expand leaves a nested group the operator opened by hand open', async () => {
@@ -89,5 +91,6 @@ test('Expand leaves a nested group the operator opened by hand open', async () =
   await expand().click()
 
   await expect(rows()).toHaveCount(4)
-  await expect(chevrons()).toHaveText(['▼', '▼'])
+  await expect(chevrons().nth(0)).toHaveAttribute('data-open', 'true')
+  await expect(chevrons().nth(1)).toHaveAttribute('data-open', 'true')
 })

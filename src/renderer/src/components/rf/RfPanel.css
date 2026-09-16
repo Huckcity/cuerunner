@@ -23,7 +23,7 @@
 .rf-title {
   font-size: var(--text-xs);
   font-weight: var(--fw-bold);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   text-transform: uppercase;
   letter-spacing: var(--ls-wide);
 }
@@ -31,7 +31,7 @@
 .rf-count {
   flex: 1;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 .rf-actions {
@@ -71,7 +71,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 2px var(--space-3);
-  border-left: 2px solid var(--fg-dim);
+  border-left: 2px solid var(--fg-subtle);
   font-size: var(--text-base);
 }
 
@@ -98,7 +98,7 @@
   background: transparent;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-size: var(--text-xs);
   font-family: inherit;
   line-height: 1;
@@ -121,7 +121,7 @@
   gap: var(--space-3);
   padding: var(--space-3);
   font-size: var(--text-base);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 .rf-demo-btn {
@@ -170,7 +170,7 @@
 
 .rf-report-label { color: var(--fg-primary); font-weight: var(--fw-medium); }
 .rf-report-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rf-report-role { color: var(--fg-dim); }
+.rf-report-role { color: var(--fg-subtle); }
 .rf-report-battery,
 .rf-report-dropouts,
 .rf-report-swaps { font-family: var(--font-mono); }
@@ -191,14 +191,14 @@
 .rf-row:hover { background: var(--bg-card); }
 
 .rf-row[data-state='critical']  { border-left-color: var(--cue-color-red); }
-.rf-row[data-state='offline']   { border-left-color: var(--fg-dim); }
+.rf-row[data-state='offline']   { border-left-color: var(--fg-subtle); }
 .rf-row[data-state='silent']    { border-left-color: var(--border-input); }
 .rf-row[data-state='low']       { border-left-color: var(--accent-amber); }
 .rf-row[data-state='ok']        { border-left-color: var(--state-running-fg); }
 .rf-row[data-state='unpatched'] { border-left-color: var(--border-soft); }
 
 .rf-name {
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -207,7 +207,7 @@
 /* The pack in trouble wears the colour; the rest stay quiet. */
 .rf-row[data-state='critical'] .rf-name { color: var(--cue-color-red); font-weight: var(--fw-medium); }
 .rf-row[data-state='low'] .rf-name      { color: var(--fg-primary); }
-.rf-row[data-state='unpatched'] .rf-name { color: var(--fg-dim); }
+.rf-row[data-state='unpatched'] .rf-name { color: var(--fg-subtle); }
 
 .rf-performer {
   min-width: 0;
@@ -217,14 +217,14 @@
   color: var(--fg-body);
 }
 
-.rf-row[data-state='unpatched'] .rf-performer { color: var(--fg-dim); }
+.rf-row[data-state='unpatched'] .rf-performer { color: var(--fg-subtle); }
 
 .rf-role {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 /* Battery and RF read the same way: a small bar with its number beside it. A pack
@@ -257,7 +257,7 @@
 .rf-row[data-state='critical'] .rf-bar  { background: var(--cue-color-red); }
 .rf-row[data-state='offline'] .rf-bar,
 .rf-row[data-state='silent'] .rf-bar,
-.rf-row[data-state='unpatched'] .rf-bar { background: var(--fg-dim); }
+.rf-row[data-state='unpatched'] .rf-bar { background: var(--fg-subtle); }
 
 .rf-bar-value {
   flex-shrink: 0;
@@ -266,7 +266,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
 }
 
 .rf-readout {
@@ -277,7 +277,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
 }
 
 .rf-notes {
@@ -286,5 +286,5 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }

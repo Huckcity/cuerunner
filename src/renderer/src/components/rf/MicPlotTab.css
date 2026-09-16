@@ -44,7 +44,7 @@
   background: transparent;
   border: 1px solid var(--border-input);
   border-radius: var(--radius-md);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;
@@ -73,15 +73,15 @@
 }
 
 .plot-swap-time {
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
 .plot-swap-text {
-  color: var(--fg-secondary);
+  color: var(--fg-body);
 }
 
 .plot-swaps-empty {
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }

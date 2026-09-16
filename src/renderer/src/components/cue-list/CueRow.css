@@ -2,21 +2,34 @@
   position: relative;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   height: var(--h-cue-row);
-  padding: 0 var(--space-2);
-  border-bottom: 1px solid #222;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
   cursor: pointer;
   font-size: var(--text-base);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   user-select: none;
   transition: var(--transition-fast);
 }
 
 /* Child rows */
 .cue-row[data-depth='1'] {
-  padding-left: 28px;
+  padding-left: 26px;
   background: var(--bg-raised);
-  border-left: 2px solid var(--border);
+}
+
+/* The line that says these rows belong to the group above them, drawn where a tree draws
+   it: down the indent, not as a border on the row's own edge, which is the colour
+   label's. */
+.cue-row[data-depth='1']::after {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-input);
 }
 
 .cue-row:hover { background: var(--bg-card); }
@@ -24,52 +37,52 @@
 .cue-row[data-state='playing']  { background: var(--bg-playing-row); animation: pulse 2s ease-in-out infinite; }
 .cue-row[data-state='pre-wait'] { background: var(--bg-prewait-row); }
 
-/* Where GO points, drawn on its own edge rather than in the background. The row's fill is
-   taken by what the cue is doing — running, pre-wait — and a selected cue that is also
-   playing used to be painted over by the running colour, so the one thing the operator
-   has to know before pressing GO was invisible exactly when the show was running. */
-.cue-row[data-selected='true']::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--accent-blue);
+/* Where GO points, drawn as a ring around the row rather than in the background. The
+   row's fill is taken by what the cue is doing — running, pre-wait — and a selected cue
+   that is also playing used to be painted over by the running colour, so the one thing
+   the operator has to know before pressing GO was invisible exactly when the show was
+   running. A ring holds over any fill, and it leaves the row's left edge free for the
+   colour label, which is the other thing drawn there. */
+.cue-row[data-selected='true'] {
+  box-shadow: inset 0 0 0 1px rgba(90, 169, 255, 0.5);
 }
+
+.cue-row[data-selected='true'] .cue-number { color: var(--accent-blue); }
 
 /* Disarmed rows: a disarmed cue is skipped by GO, so it must read as inactive at a glance */
 .cue-row[data-armed='false'] .name-text,
-.cue-row[data-armed='false'] .cue-type-icon { color: var(--fg-ghost); }
+.cue-row[data-armed='false'] .cue-type-icon { color: var(--fg-subtle); }
 
 @keyframes pulse {
   0%, 100% { background: var(--bg-playing-row); }
-  50%       { background: #1e3a1e; }
+  50%       { background: #1c3222; }
 }
 
-.cue-type-icon {
-  display: inline-block;
-  width: 18px;
-  font-size: var(--text-lg);
-  color: var(--fg-muted);
-  margin-right: var(--space-1);
-  text-align: center;
-  line-height: 1;
-  flex-shrink: 0;
-}
+/* The shape of every icon is set once in App.css; a row only says what colour it is. */
+.cue-type-icon { color: var(--fg-muted); }
 
 .col-num {
-  width: 72px;
+  width: 52px;
   flex-shrink: 0;
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
-.cue-chevron {
+.cue-number {
+  flex: 1;
+  text-align: right;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cue-icon-slot {
   width: 16px;
-  flex-shrink: 0;
+  height: 16px;
+  flex: none;
   display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .group-toggle {
@@ -78,25 +91,28 @@
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--fg-muted);
-  font-size: 9px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  color: var(--fg-primary);
   border-radius: var(--radius-sm);
   transition: var(--transition-fast);
 }
 
-.group-toggle:hover { color: var(--fg-primary); background: var(--bg-card); }
+.group-toggle:hover .cue-type-icon { color: var(--fg-primary); }
 
+/* Shut, the chevron points at the row it would open. */
+.group-chevron[data-open='false'] { transform: rotate(-90deg); }
+
+/* The colour label: the row's own edge, full height, so it reads down a list. */
 .col-color {
-  width: 6px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  margin-right: 10px;
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .col-name {
@@ -111,7 +127,7 @@
 }
 
 .name-text em {
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   font-style: normal;
 }
 
@@ -128,35 +144,50 @@
   font-family: inherit;
 }
 
-.state-pill {
-  font-size: var(--text-xs);
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--pill-bg);
-  color: var(--pill-fg);
+/* One pill shape, whatever it says: what the cue is doing now, or that it is out of the
+   running order. */
+.state-pill,
+.disarmed-pill {
   flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  line-height: 1.3;
 }
 
-/* Same pill family as pre-wait/post-wait, but greyed out — this one is permanent */
+.state-pill { background: var(--pill-bg); color: var(--pill-fg); }
+
 .disarmed-pill {
-  font-size: var(--text-xs);
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
   background: var(--bg-card);
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: var(--ls-caps);
-  flex-shrink: 0;
 }
 
-.col-dur, .col-pre, .col-post {
-  color: var(--fg-dim);
+/* A group carries its children's names as well as its own, so it leads them. */
+.cue-row[data-type='group'] .name-text {
+  font-weight: var(--fw-semi);
+  color: var(--fg-primary);
+}
+
+/* Times are mono with tabular figures: a column of them lines up on the decimal, and a
+   running clock does not jitter as the digits change. Scoped to a row: the same column
+   classes are on the list header, which is words rather than times. */
+.cue-row .col-dur,
+.cue-row .col-pre,
+.cue-row .col-post {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-body);
   font-variant-numeric: tabular-nums;
 }
 
+/* A time nobody set reads as absent rather than as a value. */
+.cue-row .col-pre, .cue-row .col-post { color: var(--fg-subtle); }
+
 .cue-row .col-adv {
   color: var(--adv-fg);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .cue-progress-bar {
@@ -188,5 +219,5 @@
   letter-spacing: var(--ls-caps);
 }
 
-.col-dur-media[data-media='measuring'] { color: var(--fg-ghost); }
+.col-dur-media[data-media='measuring'] { color: var(--fg-subtle); }
 .col-dur-media[data-media='missing'] { color: var(--accent-amber); }

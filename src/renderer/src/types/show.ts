@@ -104,7 +104,7 @@ export interface ServiceStatus {
   id: string
   label: string
   state: ServiceState
-  /** Operator-facing, e.g. "listening on 0.0.0.0:53000" or "Shure API unreachable". */
+  /** Operator-facing, e.g. "listening on port 53000" or "Shure API unreachable". */
   detail: string
   since: number
   error?: string

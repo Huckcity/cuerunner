@@ -20,7 +20,7 @@
 .log-title {
   font-size: var(--text-xs);
   font-weight: var(--fw-bold);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   text-transform: uppercase;
   letter-spacing: var(--ls-wide);
 }
@@ -28,7 +28,7 @@
 .log-count {
   flex: 1;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 .log-actions {
@@ -48,7 +48,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;
@@ -87,7 +87,7 @@
 .log-empty {
   padding: var(--space-3);
   font-size: var(--text-base);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 .log-row {
@@ -102,7 +102,7 @@
 .log-row:hover { background: var(--bg-card); }
 
 .log-time {
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
@@ -110,7 +110,7 @@
 .log-label {
   width: 150px;
   flex-shrink: 0;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -125,7 +125,7 @@
 /* Script output is program output — monospace, and dimmer than cue lifecycle lines. */
 .log-row[data-level='output'] .log-message {
   font-family: var(--font-mono);
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
 }
 
 .log-row[data-level='error'] .log-message { color: var(--cue-color-red); }
@@ -135,13 +135,13 @@
 .log-event .log-event-kind {
   font-size: var(--text-xs);
   letter-spacing: var(--ls-caps);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 .log-event .log-message {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
 }
 
 .log-event[data-kind='osc'] .log-event-kind     { color: var(--accent-blue); }
@@ -153,6 +153,6 @@
   flex: 0 0 auto;
   margin-left: auto;
   padding-left: 8px;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-variant-numeric: tabular-nums;
 }

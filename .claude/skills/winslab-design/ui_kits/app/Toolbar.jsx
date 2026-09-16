@@ -86,7 +86,7 @@ function Toolbar({ store }) {
           <span onDoubleClick={() => setEditingName(true)} title="Double-click to rename"
             style={tbStyles.nameText}>
             {workspaceName}
-            {isDirty && <span style={{ color: '#e0a020' }}> ●</span>}
+            {isDirty && <span style={{ color: '#f0b429' }}> ●</span>}
           </span>
         )}
       </div>
@@ -99,8 +99,8 @@ function Toolbar({ store }) {
         {PRIMARY_CUES.map(({ type, icon, label }) => (
           <button key={type} style={tbStyles.cueBtn}
             onClick={() => handleAddCue(type)}
-            onMouseEnter={e => { e.currentTarget.style.background = '#333'; e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.color = '#e0e0e0'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#272727'; e.currentTarget.style.borderColor = '#3a3a3a'; e.currentTarget.style.color = '#b0b0b0'; }}>
+            onMouseEnter={e => { e.currentTarget.style.background = '#2b3038'; e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.color = '#e0e0e0'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#272727'; e.currentTarget.style.borderColor = '#30363e'; e.currentTarget.style.color = '#b0b0b0'; }}>
             {icon} {label}
           </button>
         ))}
@@ -108,7 +108,7 @@ function Toolbar({ store }) {
         <div ref={moreMenuRef} style={{ position: 'relative' }}>
           <button style={tbStyles.moreBtn}
             onClick={() => setMoreMenuOpen(v => !v)}
-            onMouseEnter={e => { e.currentTarget.style.background = '#333'; e.currentTarget.style.color = '#bbb'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#2b3038'; e.currentTarget.style.color = '#cdd3da'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#272727'; e.currentTarget.style.color = '#777'; }}>
             More ▾
           </button>
@@ -118,8 +118,8 @@ function Toolbar({ store }) {
                 <button key={type} style={tbStyles.moreItem}
                   onClick={() => handleAddCue(type)}
                   onMouseEnter={e => { e.currentTarget.style.background = '#383838'; e.currentTarget.style.color = '#eee'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#bbb'; }}>
-                  <span style={{ fontSize: 13, color: '#666', width: 16, textAlign: 'center' }}>{icon}</span>
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cdd3da'; }}>
+                  <span style={{ fontSize: 13, color: '#8e98a4', width: 16, textAlign: 'center' }}>{icon}</span>
                   {label}
                 </button>
               ))}
@@ -134,48 +134,48 @@ function Toolbar({ store }) {
 const tbStyles = {
   root: {
     display: 'flex', alignItems: 'center', height: 44, padding: '0 12px',
-    background: '#1e1e1e', borderBottom: '1px solid #333', gap: 12, flexShrink: 0,
+    background: '#1a1d22', borderBottom: '1px solid #2b3038', gap: 12, flexShrink: 0,
   },
   left: { display: 'flex', alignItems: 'center', gap: 8 },
   brand: {
-    fontSize: 14, fontWeight: 700, color: '#e0a020', letterSpacing: '0.05em',
+    fontSize: 14, fontWeight: 700, color: '#f0b429', letterSpacing: '0.05em',
     textTransform: 'uppercase', background: 'transparent', border: 'none',
     cursor: 'pointer', padding: '4px 8px', borderRadius: 3, fontFamily: 'inherit',
   },
   menu: {
     position: 'absolute', top: 'calc(100% + 4px)', left: 0, minWidth: 200,
-    background: '#2a2a2a', border: '1px solid #444', borderRadius: 5,
+    background: '#272c33', border: '1px solid #3b424c', borderRadius: 5,
     boxShadow: '0 8px 24px rgba(0,0,0,0.5)', padding: '4px 0', zIndex: 1000,
   },
   menuItem: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     width: '100%', padding: '6px 14px', background: 'transparent', border: 'none',
-    color: '#ccc', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+    color: '#cdd3da', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
   },
   kbd: { fontSize: 10, color: '#777', fontFamily: 'inherit' },
-  sep: { height: 1, background: '#3a3a3a', margin: '4px 0' },
-  nameText: { fontSize: 13, color: '#aaa', cursor: 'default', padding: '2px 4px', borderRadius: 3 },
+  sep: { height: 1, background: '#30363e', margin: '4px 0' },
+  nameText: { fontSize: 13, color: '#a3adb8', cursor: 'default', padding: '2px 4px', borderRadius: 3 },
   nameInput: {
-    fontSize: 13, background: '#111', border: '1px solid #4a9eff', borderRadius: 3,
-    color: '#ddd', padding: '2px 6px', outline: 'none', width: 180, fontFamily: 'inherit',
+    fontSize: 13, background: '#0f1216', border: '1px solid #5aa9ff', borderRadius: 3,
+    color: '#eef1f4', padding: '2px 6px', outline: 'none', width: 180, fontFamily: 'inherit',
   },
-  divider: { width: 1, height: 20, background: '#333', flexShrink: 0 },
+  divider: { width: 1, height: 20, background: '#2b3038', flexShrink: 0 },
   cueGroup: { display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' },
   cueBtn: {
     height: 28, padding: '0 11px', fontSize: 12,
-    border: '1px solid #3a3a3a', borderRadius: 4,
+    border: '1px solid #30363e', borderRadius: 4,
     background: '#272727', color: '#b0b0b0',
     cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.08s',
   },
   moreBtn: {
     height: 28, padding: '0 10px', fontSize: 12,
-    border: '1px solid #3a3a3a', borderRadius: 4,
+    border: '1px solid #30363e', borderRadius: 4,
     background: '#272727', color: '#777',
     cursor: 'pointer', fontFamily: 'inherit',
   },
   moreMenu: {
     position: 'absolute', top: 'calc(100% + 5px)', right: 0,
-    background: '#2a2a2a', border: '1px solid #444', borderRadius: 5,
+    background: '#272c33', border: '1px solid #3b424c', borderRadius: 5,
     boxShadow: '0 8px 24px rgba(0,0,0,0.55)', padding: '4px 0',
     minWidth: 130, zIndex: 100,
   },
@@ -183,7 +183,7 @@ const tbStyles = {
     display: 'flex', alignItems: 'center', gap: 8,
     width: '100%', padding: '6px 14px',
     background: 'transparent', border: 'none',
-    color: '#bbb', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+    color: '#cdd3da', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
   },
 };
 

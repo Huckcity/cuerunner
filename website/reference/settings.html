@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — Winslab</title>
+  <meta name="description" content="Every setting in WinsLab, what it does, and whether it is saved with the show or with the computer." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Settings — Winslab" />
+  <meta property="og:description" content="Every setting in WinsLab, what it does, and whether it is saved with the show or with the computer." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html">Guides</a>
+        <a href="../reference/index.html" aria-current="page">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../reference/index.html">Reference</a>
+        <span aria-hidden="true">/</span>
+        <span>Settings</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Settings</h1>
+      <p class="doc-lede">
+        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or WinsLab ▾ → Settings. The sidebar
+        splits them by where they are kept: <strong>this show</strong> travels in the
+        <code>.wlab</code> file, <strong>this computer</strong> stays on the machine.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="general">
+      <h2>General</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Repeat guard</td><td>300 ms</td><td>Ignores a second GO arriving this soon after the first, from the space bar, a trigger or a console. 0 turns it off.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-1" id="audio">
+      <h2>Audio</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Output device</td><td>system default</td><td>Where the show plays.</td></tr>
+            <tr><td>Sample rate</td><td>device default</td><td>What the engine runs at. Files at other rates are resampled.</td></tr>
+            <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
+            <tr><td>Channels</td><td>device default</td><td>How many outputs the device offers the routing matrix.</td></tr>
+            <tr><td>Exclusive</td><td>off</td><td>Keeps other apps off the device, for every channel it has and steadier timing. A driver that refuses says why.</td></tr>
+            <tr><td>Trim silence<span class="pro">Pro</span></td><td>off</td><td>A default for new audio cues, not a switch over the show. Cues already in the list keep the trim they were made with.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Under them, what the engine is actually doing: backend, rate, device, latency,
+        voices playing, media memory, and any dropouts. That block is a reading, not a
+        setting.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="midi">
+      <h2>MIDI</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Send on</td><td>none</td><td>The port MIDI cues use unless they name their own.</td></tr>
+            <tr><td>Listen to MIDI<span class="pro">Pro</span></td><td>off</td><td>Opens the input ports you tick — all of them if you tick none — so cues can fire from notes and controllers.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="network">
+      <h2>Network<span class="pro">Pro</span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>Find devices</td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
+            <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
+            <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
+            <tr><td>Tablet view</td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="wireless">
+      <h2>Wireless<span class="pro">Pro</span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Sources</td><td>none</td><td>Where readings come from: an HTTP address, a file on disk, or the demo rack. <a href="./formats.html#telemetry">The document format</a>.</td></tr>
+            <tr><td>Battery below</td><td>25%</td><td>Warns at this level.</td></tr>
+            <tr><td>Battery urgent</td><td>10%</td><td>Raises an alarm at this level.</td></tr>
+            <tr><td>Signal below</td><td>−75 dBm</td><td>Warns when RF is weaker than this.</td></tr>
+            <tr><td>Pack silent for</td><td>6 s</td><td>How long a pack that has reported can go quiet before it counts as offline.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="backup">
+      <h2>Backup machine</h2>
+      <p>Kept on the computer, not in the show. The <a href="../redundancy.html">walkthrough</a> has the whole thing.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Redundant playback</td><td>off</td><td>Pairs this computer with another running the same show.</td></tr>
+            <tr><td>This computer is</td><td>Live</td><td><strong>Live</strong> runs the show; <strong>Standby</strong> follows it.</td></tr>
+            <tr><td>Called</td><td>machine name</td><td>What the pair calls this computer in its status and log lines.</td></tr>
+            <tr><td>If the other one stops</td><td>Tell me</td><td>Or take the show over by itself.</td></tr>
+            <tr><td>↳ Ports, address, access code</td><td>53110</td><td>Under Advanced. The access code must match on both computers; without one, any machine that finds the port can claim the pair.</td></tr>
+            <tr><td>↳ Gone after</td><td>3000 ms</td><td>Under Advanced. Silence before the partner counts as gone.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="show">
+      <h2>Show Settings</h2>
+      <p>
+        WinsLab ▾ → Show Settings. These are the show's own, and travel in the file.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tab</th><th>What is on it</th></tr></thead>
+          <tbody>
+            <tr><td>Channels</td><td>The desk connection — OSC, MIDI or MIDI over TCP, with its address — the channel strips, and the DCA each rides. The line under the connection reads back exactly what will be sent.</td></tr>
+            <tr><td>Cast</td><td>Performers, their parts, the channel each is on, and ensembles for opening a section at once.</td></tr>
+            <tr><td>Mic plot</td><td>Packs, the channel each is patched to, and who is wearing it. Changing a performer on a pack records a swap.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

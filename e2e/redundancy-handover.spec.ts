@@ -121,7 +121,7 @@ test('the operator hands the show over, and the machine that lost it goes quiet'
   await backup.locator('.toolbar-brand').click()
   await backup.locator('.file-menu [data-action="settings"]').click()
   const dialog = backup.getByRole('dialog', { name: 'Settings' })
-  await dialog.getByRole('button', { name: 'Redundancy', exact: true }).click()
+  await dialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
   await expect(dialog.locator('.redundancy-line[data-field="partner"]'))
     .toContainText('desk-live (live)', { timeout: 15_000 })
   await dialog.getByRole('button', { name: 'Take the show over now' }).click()
@@ -137,7 +137,7 @@ test('the operator hands the show over, and the machine that lost it goes quiet'
   await live.locator('.toolbar-brand').click()
   await live.locator('.file-menu [data-action="settings"]').click()
   const liveDialog = live.getByRole('dialog', { name: 'Settings' })
-  await liveDialog.getByRole('button', { name: 'Redundancy', exact: true }).click()
+  await liveDialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
   await expect(liveDialog.locator('.redundancy-line[data-field="machine"]')).toContainText('standing by')
 
   // The mirror still runs: the machine that hands a show over keeps following the one that

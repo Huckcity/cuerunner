@@ -61,7 +61,7 @@
   right: var(--space-2);
   background: transparent;
   border: none;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-family: inherit;
   font-size: 14px;
   padding: 2px 6px;
@@ -153,7 +153,7 @@
    do about it. */
 .pro-mark {
   margin-left: var(--space-1);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   font-size: var(--text-xs);
   font-weight: var(--fw-medium);
   letter-spacing: var(--ls-caps);
@@ -198,7 +198,7 @@
 .license-note {
   margin: var(--space-2) 0 0 90px;
   font-size: var(--text-sm);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
 }
 
 /* A link inside a sentence: the license tab, from the tab that needs one. */

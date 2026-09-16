@@ -53,57 +53,63 @@
 
 .transport-center {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-3);
   align-items: center;
 }
 
+/* Two presses, and they are not the same size: GO is what the show is run on, so it is
+   the widest thing in the window and the only saturated colour in it. */
 .btn-go,
-.btn-stop,
-.btn-panic {
+.btn-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   height: var(--h-button-lg);
-  padding: 0 var(--space-5);
-  border: none;
-  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xl);
+  font-family: var(--font-cond);
   font-size: var(--text-lg);
   font-weight: var(--fw-bold);
-  letter-spacing: var(--ls-brand);
+  letter-spacing: var(--ls-caps);
   cursor: pointer;
-  font-family: inherit;
   transition: var(--transition-std);
 }
 
 .btn-go {
+  width: 168px;
   background: var(--state-go);
+  border-color: var(--state-go-hover);
   color: #fff;
-  min-width: 90px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .btn-go:hover  { background: var(--state-go-hover); }
-.btn-go:active { background: var(--state-go-active); }
+.btn-go:active { background: var(--state-go-active); box-shadow: none; }
+
+.btn-go-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
 
 .btn-stop {
+  width: 108px;
   background: var(--state-stop);
-  color: var(--fg-body);
+  border-color: var(--border-input);
+  color: var(--fg-primary);
 }
 
 .btn-stop:hover  { background: var(--state-stop-hover); }
 .btn-stop:active { background: var(--state-stop-active); }
 
-.btn-panic {
-  background: var(--state-panic);
-  color: #fff;
-}
-
-.btn-panic:hover  { background: var(--state-panic-hover); }
-.btn-panic:active { background: var(--state-panic-active); }
-
 .running-badge {
   flex-shrink: 0;
   font-size: var(--text-sm);
-  padding: 3px var(--space-2);
+  padding: 3px var(--space-3);
   border-radius: var(--radius-pill);
   background: var(--bg-input);
-  color: var(--fg-dim);
+  color: var(--fg-muted);
 }
 
 .running-badge[data-active='true'] {
@@ -113,12 +119,18 @@
 
 .transport-keys {
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-muted);
   white-space: nowrap;
 }
 
+/* The keys read as keys: a cap, not a word in a different colour. */
 .transport-keys kbd {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--fg-dim);
+  font-size: var(--text-xs);
+  color: var(--fg-body);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
 }

@@ -38,13 +38,11 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
 
       {scenes.length === 0 ? (
         <p className="inspector-hint">
-          No scenes yet. Make them in the Scenes view; which DCA a mic opens is set up in
-          Show Settings.
+          No scenes yet. Build them in the Scenes view.
         </p>
       ) : scene === null ? (
         <p className="inspector-hint">
-          This cue is not pointed at a scene, so firing it will refuse rather than close
-          every mic on the desk.
+          Pick a scene. Until then this cue does nothing, rather than closing every mic.
         </p>
       ) : (
         <p className="inspector-hint">

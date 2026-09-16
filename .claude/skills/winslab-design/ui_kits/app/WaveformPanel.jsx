@@ -44,9 +44,9 @@ function WaveformPanel({ store }) {
     canvas.style.height = height + 'px';
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#0f1216';
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#1e1e1e';
+    ctx.strokeStyle = '#1a1d22';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
 
@@ -61,7 +61,7 @@ function WaveformPanel({ store }) {
         Math.sin(t * (7 + seed % 10) + 2.5) * 0.25;
       const yMid = h / 2;
       const barH = Math.max(2, Math.abs(amp) * yMid * 0.85);
-      ctx.fillStyle = x <= playedX ? '#4a9eff' : '#2a6099';
+      ctx.fillStyle = x <= playedX ? '#5aa9ff' : '#2e4f73';
       ctx.fillRect(x, yMid - barH / 2, 1, barH);
     }
 
@@ -94,9 +94,9 @@ function WaveformPanel({ store }) {
           {audioCue.filePath ? audioCue.filePath.split(/[\\/]/).pop() : 'No file selected'}
         </span>
         <div style={waveStyles.times}>
-          {isPlaying && <span style={{ color: '#4a9eff', fontWeight: 600 }}>{formatTime(playTime)}</span>}
-          {hoverTime != null && !isPlaying && <span style={{ color: '#aaa' }}>{formatTime(hoverTime)}</span>}
-          <span style={{ color: '#666' }}>{formatTime(totalDuration)}</span>
+          {isPlaying && <span style={{ color: '#5aa9ff', fontWeight: 600 }}>{formatTime(playTime)}</span>}
+          {hoverTime != null && !isPlaying && <span style={{ color: '#a3adb8' }}>{formatTime(hoverTime)}</span>}
+          <span style={{ color: '#8e98a4' }}>{formatTime(totalDuration)}</span>
         </div>
       </div>
       <div ref={containerRef} style={waveStyles.canvasWrap}>
@@ -112,9 +112,9 @@ function WaveformPanel({ store }) {
 }
 
 const waveStyles = {
-  panel: { flexShrink: 0, display: 'flex', flexDirection: 'column', height: 110, background: '#111', borderTop: '1px solid #2a2a2a' },
-  header: { display: 'flex', alignItems: 'center', gap: 12, padding: '4px 12px', height: 24, borderBottom: '1px solid #1e1e1e' },
-  filename: { fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 },
+  panel: { flexShrink: 0, display: 'flex', flexDirection: 'column', height: 110, background: '#0f1216', borderTop: '1px solid #272c33' },
+  header: { display: 'flex', alignItems: 'center', gap: 12, padding: '4px 12px', height: 24, borderBottom: '1px solid #1a1d22' },
+  filename: { fontSize: 11, color: '#a3adb8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 },
   times: { marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, fontVariantNumeric: 'tabular-nums' },
   canvasWrap: { flex: 1, position: 'relative', overflow: 'hidden' },
 };

@@ -162,7 +162,7 @@ async function capture() {
     console.log(`  ${file}`)
   }
 
-  /** Settings on the Redundancy tab: the machine's own half of the pair, and the status. */
+  /** Settings on the Backup machine tab: this machine's half of the pair, and the status. */
   async function openRedundancyTab(page, { tall = 1180 } = {}) {
     // Through the menu rather than the accelerator: this is the door a user comes in by,
     // and it is the one the e2e suite uses for the same reason.
@@ -170,7 +170,7 @@ async function capture() {
     await page.locator('.file-menu [data-action="settings"]').click()
     const dialog = page.locator('.settings-dialog')
     await dialog.waitFor()
-    await dialog.getByRole('button', { name: 'Redundancy', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
     // The tab is taller than the box a window of this size gives a dialog, and a figure
     // that scrolls would leave either the settings or the status below the fold.
     await page.setViewportSize({ width: 1280, height: tall })

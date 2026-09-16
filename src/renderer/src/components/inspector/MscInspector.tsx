@@ -126,9 +126,9 @@ export function MscInspector({ cue }: Props) {
       <p className="inspector-hint">
         {cue.destination === 'desk'
           ? desk.kind === 'midi' || desk.kind === 'midi-tcp'
-            ? 'The command goes out on the show’s desk connection, the one the DCAs use.'
-            : 'The show drives no desk that takes MIDI — set one up in Show Settings, or point this cue at a MIDI port.'
-          : 'The command goes out on this machine’s MIDI, so a console on a cable is reached the way a MIDI cue reaches one.'}
+            ? 'Sent on the show’s desk connection, the one the DCAs use.'
+            : 'This show has no desk that takes MIDI. Set one up in Show Settings, or send this cue to a MIDI port instead.'
+          : 'Sent on this machine’s MIDI, like any other MIDI cue.'}
       </p>
 
       <LastRun cueId={cue.id} />

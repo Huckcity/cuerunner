@@ -7,7 +7,7 @@ import type { MediaLengthState } from '../../utils/mediaLength'
 import { CUE_COLOR_VAR } from '../../utils/cueColors'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { audioEngine } from '../../engine/audioEngineClient'
-import { CUE_ICON } from '../../utils/cueIcons'
+import { CueIcon, GroupChevron } from '../../utils/cueIcons'
 import './CueRow.css'
 
 interface Props {
@@ -105,6 +105,7 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
     <div
       className="cue-row"
       data-selected={isSelected}
+      data-type={cue.type}
       data-running={isRunning}
       data-state={runState?.state}
       data-depth={depth}
@@ -113,27 +114,33 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
       onDoubleClick={startEdit}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, cue.id) }}
     >
-      {/* Chevron, icon, number: the same three slots on every row, so the icons line up
-          as a column whatever the type. */}
-      <span className="col-num">
-        <span className="cue-chevron">
-          {isGroup && (
-            <button
-              className="group-toggle"
-              onClick={e => { e.stopPropagation(); onToggleCollapse?.() }}
-              title={collapsed ? 'Expand group' : 'Collapse group'}
-            >
-              {collapsed ? '▶' : '▼'}
-            </button>
-          )}
-        </span>
-        <span className="cue-type-icon" title={cue.type}>{CUE_ICON[cue.type]}</span>
-        {cue.number}
-      </span>
+      {/* The colour label is the row's own edge rather than a block in the middle of it:
+          it marks the whole row at a glance and leaves the icon column to the icons. */}
       <span
         className="col-color"
         style={{ background: CUE_COLOR_VAR[cue.colorLabel] }}
       />
+      {/* Number, then one icon slot. A group's icon is the chevron that opens it, so
+          every row has the same two slots and the icons line up as a column — the
+          disclosure column the list used to keep for groups alone is name width now. */}
+      <span className="col-num">
+        <span className="cue-number">{cue.number}</span>
+        <span className="cue-icon-slot">
+          {isGroup ? (
+            <button
+              className="group-toggle"
+              onClick={e => { e.stopPropagation(); onToggleCollapse?.() }}
+              title={collapsed ? 'Expand group' : 'Collapse group'}
+              aria-label={collapsed ? 'Expand group' : 'Collapse group'}
+              aria-expanded={!collapsed}
+            >
+              <GroupChevron open={collapsed !== true} className="cue-type-icon" />
+            </button>
+          ) : (
+            <CueIcon type={cue.type} className="cue-type-icon" />
+          )}
+        </span>
+      </span>
       <span className="col-name">
         {editing ? (
           <input

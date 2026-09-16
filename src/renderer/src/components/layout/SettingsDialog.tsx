@@ -6,6 +6,8 @@ import type { AudioDeviceInfo } from '../../engine/audioEngineClient'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { PlaybackWarnings } from './PlaybackWarnings'
 import { NumberField, TextField } from '../common/Field'
+import { ServiceStatus } from '../common/ServiceStatus'
+import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../types/show'
 import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../types/workspace'
@@ -58,20 +60,42 @@ function NumberRow({ id, label, value, min, max, disabled, onValue }: NumberRowP
   )
 }
 
-/** The tabs, by what the operator is setting up rather than by which service does it. */
-const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+/**
+ * The tabs, by what the operator is setting up rather than by which service does it, and
+ * grouped by where the setting is kept. "Where is this saved?" was a paragraph on the
+ * redundancy tab explaining that its settings belong to the machine; it is a heading now,
+ * and it answers for every tab at once.
+ */
+const SETTINGS_TABS: { id: SettingsTab; label: string; scope: 'show' | 'machine' }[] = [
   // First, because it is about the show as a whole rather than about any one of the
   // things the other tabs are the settings for.
-  { id: 'general', label: 'General' },
-  { id: 'audio', label: 'Audio' },
-  { id: 'midi', label: 'MIDI' },
-  { id: 'network', label: 'Network' },
-  { id: 'wireless', label: 'Wireless' },
-  // Next to the licence for the same reason: these are this machine's own settings
-  // rather than the show's, so the two tabs the workspace does not carry sit together.
-  { id: 'redundancy', label: 'Redundancy' },
-  { id: 'license', label: 'License' }
+  { id: 'general', label: 'General', scope: 'show' },
+  { id: 'audio', label: 'Audio', scope: 'show' },
+  { id: 'midi', label: 'MIDI', scope: 'show' },
+  { id: 'network', label: 'Network', scope: 'show' },
+  { id: 'wireless', label: 'Wireless', scope: 'show' },
+  { id: 'redundancy', label: 'Backup machine', scope: 'machine' },
+  { id: 'license', label: 'License', scope: 'machine' }
 ]
+
+/** What each tab is for, in one line, under its heading. */
+const TAB_BLURB: Record<SettingsTab, string> = {
+  general: 'How the app behaves while a show is running.',
+  audio: 'Which device the show plays on, and how it is driven.',
+  midi: 'The ports cues send on, and what the app listens to.',
+  network: 'How consoles, tablets and other gear reach this show.',
+  wireless: 'Where pack readings come from, and when to warn about them.',
+  redundancy: 'A second computer, ready to take the show over.',
+  license: 'WinsLab Pro on this machine.'
+}
+
+/** Which service reports for a tab, so the sidebar can show whether it is on. */
+const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
+  midi: 'midi-in',
+  network: 'osc-in',
+  wireless: 'rf',
+  redundancy: 'redundancy'
+}
 
 /**
  * Why a Pro service's settings are here but not running. The settings travel with the
@@ -80,7 +104,8 @@ const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
 function ProHint({ onUnlock }: { onUnlock: () => void }) {
   return (
     <p className="inspector-hint license-hint">
-      WinsLab Pro: these travel with the show, and start once this machine is licensed.{' '}
+      Part of WinsLab Pro. These settings are saved with the show, and start working once
+      this machine is licensed.{' '}
       <button className="license-link" onClick={onUnlock}>Enter a license key</button>
     </p>
   )
@@ -185,22 +210,46 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
           <button className="settings-close" onClick={onClose} aria-label="Close settings" title="Close (Esc)">✕</button>
         </div>
 
-        <div className="settings-tabs">
-          {SETTINGS_TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              className="settings-tab"
-              data-active={tab === id}
-              onClick={() => setTab(id)}
-            >{label}</button>
+        {/* Down the side rather than across the top: seven tabs in a row were squeezed
+            to the point that the last one was clipped, and the two groups say where
+            each tab's settings are kept without a paragraph having to. */}
+        <nav className="settings-tabs" aria-label="Settings sections">
+          {(['show', 'machine'] as const).map(scope => (
+            <div key={scope} className="settings-tab-group">
+              <div className="settings-tab-group-title">
+                {scope === 'show' ? 'This show' : 'This computer'}
+              </div>
+              {SETTINGS_TABS.filter(entry => entry.scope === scope).map(({ id, label }) => {
+                const service = showServices.find(candidate => candidate.id === TAB_SERVICE[id])
+                return (
+                  <button
+                    key={id}
+                    className="settings-tab"
+                    data-active={tab === id}
+                    onClick={() => setTab(id)}
+                  >
+                    {label}
+                    {service && (
+                      <i className="settings-tab-dot" data-state={service.state} aria-hidden="true" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           ))}
-        </div>
+        </nav>
 
         <div className="settings-body">
+          <header className="settings-pane-head">
+            <h2 className="settings-pane-title">
+              {SETTINGS_TABS.find(entry => entry.id === tab)?.label}
+            </h2>
+            <p className="settings-pane-blurb">{TAB_BLURB[tab]}</p>
+          </header>
           {tab === 'general' && (
             <>
               <div className="field-row">
-                <label htmlFor="settings-guard-window">Trigger guard</label>
+                <label htmlFor="settings-guard-window">Repeat guard</label>
                 <NumberField
                   id="settings-guard-window"
                   value={triggerGuard.windowMs}
@@ -212,9 +261,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <span className="settings-info">ms</span>
               </div>
               <p className="inspector-hint">
-                How long the space bar, the OSC listener and the MIDI inputs each stay deaf
-                after they fire a cue. A footswitch that bounces, a desk that sends twice and
-                a key held down are one firing each, not two. Zero turns the window off.
+                Ignores a second GO that arrives this soon after the first — a footswitch
+                that bounces, a desk that sends twice, a key held down. 0 turns it off.
               </p>
             </>
           )}
@@ -288,11 +336,11 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   checked={audioSettings.exclusive ?? false}
                   onChange={e => updateAudioSettings({ exclusive: e.target.checked })}
                 />
-                <span className="settings-info">Take the device for WinsLab alone</span>
+                <span className="settings-info">Keep other apps off this device</span>
               </div>
               <p className="inspector-hint">
-                Exclusive locks system sounds and conferencing apps out of the device, for its
-                real channel count and steady latency. A driver that refuses says why, here.
+                Keeps other apps off the device, for every channel it has and steadier
+                timing. A driver that refuses says why here.
               </p>
               {/* A backend with no device at all — the silent and offline ones a test or
                   a dev run uses — refuses every device request by definition, including
@@ -307,8 +355,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               <div className="field-section-title">New audio cues</div>
               {!pro && (
                 <p className="inspector-hint license-hint">
-                  WinsLab Pro: the silence in a cue's file is measured and trimmed on a
-                  licensed machine. The setting travels with the show either way.{' '}
+                  Trimming happens on a licensed machine. The setting is saved with the
+                  show either way.{' '}
                   <button className="license-link" onClick={() => setTab('license')}>
                     Enter a license key
                   </button>
@@ -323,17 +371,15 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   disabled={!pro}
                   onChange={e => updateAudioSettings({ autoTrimSilence: e.target.checked })}
                 />
-                <span className="settings-info">Trim every new audio cue</span>
+                <span className="settings-info">Skip silence at the start and end</span>
               </div>
               <p className="inspector-hint">
-                A new audio cue starts at the first audible sample of its file and ends at
-                the last, where silence is anything below {AUDIO_SILENCE_THRESHOLD_DB} dBFS.
-                It is a default for the cues being added, not a switch over the show: the
-                cues already in the list keep the trim they were made with, and one can be
-                turned on its own in the cue's panel.
+                A new audio cue starts at the first sound in its file and ends at the last,
+                where silence is anything below {AUDIO_SILENCE_THRESHOLD_DB} dBFS. Cues
+                already in the list keep the trim they were made with.
               </p>
 
-              <div className="field-section-title">Engine</div>
+              <div className="field-section-title">What the engine is doing</div>
               {info ? (
                 <>
                   <div className="field-row">
@@ -389,7 +435,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               ) : (
                 <p className="inspector-hint">
                   {available === false
-                    ? 'The audio engine is not available in this build.'
+                    ? 'This build has no audio engine.'
                     : 'Reading the engine…'}
                 </p>
               )}
@@ -399,8 +445,9 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
           {tab === 'midi' && (
             <>
               <div className="field-row">
-                <label>Default output</label>
+                <label htmlFor="settings-midi-out">Send on</label>
                 <select
+                  id="settings-midi-out"
                   value={midiSettings.outputPortName}
                   onChange={e => updateMidiSettings({ outputPortName: e.target.value })}
                 >
@@ -410,174 +457,151 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   ))}
                 </select>
               </div>
-              <p className="inspector-hint">MIDI cues without a port of their own send here.</p>
+              <p className="inspector-hint">The port MIDI cues use unless they name their own.</p>
 
-              <div className="field-section-title">MIDI input</div>
               {!pro && <ProHint onUnlock={() => setTab('license')} />}
-              <div className="field-row">
-                <label htmlFor="settings-midi-in">Listen</label>
-                <input
-                  id="settings-midi-in"
-                  type="checkbox"
-                  checked={showSettings.midiIn.enabled}
-                  onChange={e => updateMidiInSettings({ enabled: e.target.checked })}
-                />
-                <span className="settings-info">Read what the show sends back</span>
-              </div>
-              {midiInputPorts.length === 0 ? (
-                <p className="inspector-hint">No MIDI input ports were found.</p>
-              ) : (
-                <div className="settings-port-list">
-                  {midiInputPorts.map(port => (
-                    <label key={port} className="settings-port-row">
-                      <input
-                        type="checkbox"
-                        checked={showSettings.midiIn.portNames.includes(port)}
-                        disabled={!showSettings.midiIn.enabled}
-                        onChange={e => toggleInputPort(port, e.target.checked)}
-                      />
-                      {port}
-                    </label>
-                  ))}
-                </div>
-              )}
-              <p className="inspector-hint">With none ticked, every input is opened.</p>
-              {midiService && (
-                <div className="settings-service" data-service={midiService.id} data-state={midiService.state}>
-                  {midiService.state} — {midiService.detail}
-                </div>
-              )}
-
+              <ServiceBlock
+                title="Listen to MIDI"
+                blurb="Fire cues from notes and controllers, and see what arrives in the Monitor."
+                id="settings-midi-in"
+                enabled={showSettings.midiIn.enabled}
+                onEnabled={enabled => updateMidiInSettings({ enabled })}
+                service={midiService}
+              >
+                {midiInputPorts.length === 0 ? (
+                  <p className="inspector-hint" data-scope="panel">No MIDI inputs on this machine.</p>
+                ) : (
+                  <>
+                    <p className="inspector-hint" data-scope="panel">
+                      Tick the ports to listen to, or leave them all clear to listen to every one.
+                    </p>
+                    <div className="settings-port-list">
+                      {midiInputPorts.map(port => (
+                        <label key={port} className="settings-port-row">
+                          <input
+                            type="checkbox"
+                            checked={showSettings.midiIn.portNames.includes(port)}
+                            disabled={!showSettings.midiIn.enabled}
+                            onChange={e => toggleInputPort(port, e.target.checked)}
+                          />
+                          {port}
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </ServiceBlock>
             </>
           )}
 
           {tab === 'network' && (
             <>
               {!pro && <ProHint onUnlock={() => setTab('license')} />}
-              <div className="field-section-title">OSC input</div>
-              <div className="field-row">
-                <label htmlFor="settings-osc-in">Listen</label>
-                <input
-                  id="settings-osc-in"
-                  type="checkbox"
-                  checked={showSettings.oscIn.enabled}
-                  onChange={e => updateOscInSettings({ enabled: e.target.checked })}
-                />
-                <span className="settings-info">Listen for OSC from consoles and tablets</span>
-              </div>
-              <NumberRow
-                id="settings-osc-port"
-                label="Port"
-                value={showSettings.oscIn.port}
-                min={1}
-                max={65535}
-                disabled={!showSettings.oscIn.enabled}
-                onValue={port => updateOscInSettings({ port })}
-              />
-              {oscService && (
-                <div className="settings-service" data-service={oscService.id} data-state={oscService.state}>
-                  {oscService.state} — {oscService.detail}
-                </div>
-              )}
 
-              <div className="field-section-title">Network presence</div>
-              <div className="field-row">
-                <label htmlFor="settings-presence">Browse</label>
-                <input
-                  id="settings-presence"
-                  type="checkbox"
-                  checked={showSettings.presence.enabled}
-                  onChange={e => updatePresenceSettings({ enabled: e.target.checked })}
+              <ServiceBlock
+                title="OSC control"
+                blurb="Take cues and commands from lighting consoles, sound desks and tablets."
+                id="settings-osc-in"
+                enabled={showSettings.oscIn.enabled}
+                onEnabled={enabled => updateOscInSettings({ enabled })}
+                service={oscService}
+              >
+                <NumberRow
+                  id="settings-osc-port"
+                  label="Port"
+                  value={showSettings.oscIn.port}
+                  min={1}
+                  max={65535}
+                  disabled={!showSettings.oscIn.enabled}
+                  onValue={port => updateOscInSettings({ port })}
                 />
-                <span className="settings-info">Watch the show network for devices</span>
-              </div>
-              <div className="field-row">
-                <label htmlFor="settings-presence-services">Services</label>
-                <TextField
-                  id="settings-presence-services"
-                  value={showSettings.presence.services.join(', ')}
-                  disabled={!showSettings.presence.enabled}
-                  // A list the operator types, so it is written when the field is left: a
-                  // comma or a space on the way to the next entry is not an edit.
-                  onValue={text => {
-                    const services = text.split(',').map(entry => entry.trim()).filter(Boolean)
-                    if (services.length > 0) updatePresenceSettings({ services })
-                  }}
-                />
-              </div>
-              <NumberRow
-                id="settings-presence-gone"
-                label="Gone after (s)"
-                value={showSettings.presence.goneAfterSeconds}
-                min={5}
-                max={3600}
-                disabled={!showSettings.presence.enabled}
-                onValue={goneAfterSeconds => updatePresenceSettings({ goneAfterSeconds })}
-              />
-              <p className="inspector-hint">
-                Dante endpoints, interfaces and amps on the network appear in the monitor,
-                and raise an alarm when they leave.
-              </p>
-              {presenceService && (
-                <div className="settings-service" data-service={presenceService.id} data-state={presenceService.state}>
-                  {presenceService.state} — {presenceService.detail}
-                </div>
-              )}
+              </ServiceBlock>
 
-              <div className="field-section-title">Tablet companion</div>
-              <div className="field-row">
-                <label htmlFor="settings-companion">Serve</label>
-                <input
-                  id="settings-companion"
-                  type="checkbox"
-                  checked={showSettings.companion.enabled}
-                  onChange={e => updateCompanionSettings({ enabled: e.target.checked })}
-                />
-                <span className="settings-info">A read-only view of the show on the local network</span>
-              </div>
-              <NumberRow
-                id="settings-companion-port"
-                label="Port"
-                value={showSettings.companion.port}
-                min={1}
-                max={65535}
-                disabled={!showSettings.companion.enabled}
-                onValue={port => updateCompanionSettings({ port })}
-              />
-              <div className="field-row">
-                <label htmlFor="settings-companion-token">Token</label>
-                <TextField
-                  id="settings-companion-token"
-                  when="typed"
-                  value={showSettings.companion.token}
-                  placeholder="required — anyone without it is refused"
-                  onValue={token => updateCompanionSettings({ token })}
-                />
-                <button
-                  className="inspector-btn"
-                  onClick={() => updateCompanionSettings({ token: crypto.randomUUID().slice(0, 8) })}
-                >
-                  New
-                </button>
-              </div>
-              <p className="inspector-hint">
-                Read-only: the tablet watches, it cannot change the show. Its address appears
-                below once running.
-              </p>
-              {companionService && (
-                <div className="settings-service" data-service={companionService.id} data-state={companionService.state}>
-                  {companionService.state} — {companionService.detail}
+              <ServiceBlock
+                title="Find devices"
+                blurb="List the gear on the show network in the Monitor, and warn when one drops off."
+                id="settings-presence"
+                enabled={showSettings.presence.enabled}
+                onEnabled={enabled => updatePresenceSettings({ enabled })}
+                service={presenceService}
+              >
+                <p className="inspector-hint" data-scope="panel">
+                  Dante endpoints, interfaces and amps that announce themselves are found
+                  automatically.
+                </p>
+                <Advanced summary="Advanced: what to look for, and when to give up on it">
+                  <div className="field-row">
+                    <label htmlFor="settings-presence-services">Service types</label>
+                    <TextField
+                      id="settings-presence-services"
+                      value={showSettings.presence.services.join(', ')}
+                      disabled={!showSettings.presence.enabled}
+                      // A list the operator types, so it is written when the field is left: a
+                      // comma or a space on the way to the next entry is not an edit.
+                      onValue={text => {
+                        const services = text.split(',').map(entry => entry.trim()).filter(Boolean)
+                        if (services.length > 0) updatePresenceSettings({ services })
+                      }}
+                    />
+                  </div>
+                  <NumberRow
+                    id="settings-presence-gone"
+                    label="Gone after (s)"
+                    value={showSettings.presence.goneAfterSeconds}
+                    min={5}
+                    max={3600}
+                    disabled={!showSettings.presence.enabled}
+                    onValue={goneAfterSeconds => updatePresenceSettings({ goneAfterSeconds })}
+                  />
+                </Advanced>
+              </ServiceBlock>
+
+              <ServiceBlock
+                title="Tablet view"
+                blurb="Follow the cue list on a tablet or phone. It watches only; it cannot fire cues."
+                id="settings-companion"
+                enabled={showSettings.companion.enabled}
+                onEnabled={enabled => updateCompanionSettings({ enabled })}
+                service={companionService}
+              >
+                <div className="field-row">
+                  <label htmlFor="settings-companion-token">Access code</label>
+                  <TextField
+                    id="settings-companion-token"
+                    when="typed"
+                    value={showSettings.companion.token}
+                    placeholder="Needed to connect"
+                    onValue={token => updateCompanionSettings({ token })}
+                  />
+                  <button
+                    className="inspector-btn"
+                    onClick={() => updateCompanionSettings({ token: crypto.randomUUID().slice(0, 8) })}
+                  >
+                    New code
+                  </button>
                 </div>
-              )}
+                <NumberRow
+                  id="settings-companion-port"
+                  label="Port"
+                  value={showSettings.companion.port}
+                  min={1}
+                  max={65535}
+                  disabled={!showSettings.companion.enabled}
+                  onValue={port => updateCompanionSettings({ port })}
+                />
+              </ServiceBlock>
             </>
           )}
 
           {tab === 'wireless' && (
             <>
               {!pro && <ProHint onUnlock={() => setTab('license')} />}
-              <div className="field-section-title">Sources</div>
+              <div className="field-section-title">Where the readings come from</div>
               {showSettings.rf.sources.length === 0 ? (
-                <p className="inspector-hint">Nothing is feeding the mic plot yet.</p>
+                <p className="inspector-hint" data-scope="panel">
+                  Nothing is feeding the mic plot yet. Add a receiver rack, or a demo rack to
+                  see what the panel does.
+                </p>
               ) : (
                 <div className="settings-source-list">
                   {showSettings.rf.sources.map(source => (
@@ -622,13 +646,12 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <label />
                 <button className="add-row" onClick={addSource}>+ Add source</button>
               </div>
-              <p className="inspector-hint">
-                Each source reports battery and RF per channel; the format is in the user guide.
-              </p>
-              <div className="field-section-title">Alarms</div>
+              <ServiceStatus service={rfService} />
+
+              <div className="field-section-title">Warn me when</div>
               <NumberRow
                 id="settings-rf-battery-warning"
-                label="Battery low (%)"
+                label="Battery below"
                 value={showSettings.rf.thresholds.batteryWarning}
                 min={1}
                 max={99}
@@ -636,7 +659,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               />
               <NumberRow
                 id="settings-rf-battery-critical"
-                label="Battery critical (%)"
+                label="Battery urgent"
                 value={showSettings.rf.thresholds.batteryCritical}
                 min={1}
                 max={99}
@@ -644,7 +667,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               />
               <NumberRow
                 id="settings-rf-rf-warning"
-                label="RF weak (dBm)"
+                label="Signal below"
                 value={showSettings.rf.thresholds.rfWarningDbm}
                 min={-120}
                 max={-20}
@@ -652,21 +675,16 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               />
               <NumberRow
                 id="settings-rf-gone"
-                label="Quiet after (s)"
+                label="Pack silent for"
                 value={showSettings.rf.thresholds.offlineAfterSeconds}
                 min={2}
                 max={600}
                 onValue={offlineAfterSeconds => setThresholds({ offlineAfterSeconds })}
               />
               <p className="inspector-hint">
-                How long a pack can go unheard before it is warned about.
+                Battery figures are percentages, signal is dBm, and silence is counted in
+                seconds.
               </p>
-              {rfService && (
-                <div className="settings-service" data-service={rfService.id} data-state={rfService.state}>
-                  {rfService.state} — {rfService.detail}
-                </div>
-              )}
-
             </>
           )}
 
