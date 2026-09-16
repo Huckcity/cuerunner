@@ -319,6 +319,12 @@ export class NativeAudioEngine {
   }
 
   async configure(options: DeviceOptions): Promise<AudioEngineInfo> {
+    // A configure verb is an operator's explicit action (or a show load asking for its
+    // device); it is also the one lever that can revive an engine whose launch failed
+    // and whose restart budget is spent — scheduleRestart gives up and nothing else
+    // re-enters ensureStarted. So start the engine first if it is not running, and let
+    // the configure itself refuse with the real reason if the launch fails again.
+    await this.ensureStarted()
     const result = (await this.request('configure', { options }, SLOW_VERBS.configure)) as AudioEngineInfo
     this.lastInfo = result
     return result

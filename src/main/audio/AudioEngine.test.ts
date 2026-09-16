@@ -409,4 +409,26 @@ describe('audioEngine client (against the real engine)', () => {
     expect(instance.snapshot()).toBeNull()
     process.env.WINSLAB_AUDIO_BIN = previous
   })
+  it('revives a dead engine from configure, and still refuses honestly when it cannot', async () => {
+    // A restart budget spent at boot (or after three crashes) leaves no engine to talk
+    // to; configure is the operator's lever, so it must be the one verb that re-enters
+    // ensureStarted. First the refusal: with no engine binary, configure fails at the
+    // start, not with a not-running shrug. Then the revival: with the real binary, the
+    // same verb reaches a live engine — which, in this suite's silent backend, answers
+    // the device request with its honest refusal, proof the connection exists.
+    const revived = new NativeAudioEngine()
+    try {
+      process.env.WINSLAB_AUDIO_BIN = engineMissing
+      await expect(revived.configure({})).rejects.toMatchObject({ code: 'engine' })
+      expect(revived.status().connected).toBe(false)
+      process.env.WINSLAB_AUDIO_BIN = binaryPath
+      await expect(revived.configure({})).rejects.toMatchObject({ code: 'device' })
+      expect(revived.status().connected).toBe(true)
+      const info = await revived.info()
+      expect(info.protocol).toBe(2)
+    } finally {
+      process.env.WINSLAB_AUDIO_BIN = binaryPath
+      await revived.shutdown()
+    }
+  })
 })

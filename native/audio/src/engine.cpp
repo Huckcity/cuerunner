@@ -1386,9 +1386,16 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   if (request.hasExclusive) updated.exclusive = request.exclusive;
   if (request.hasBufferFrames) updated.bufferFrames = request.bufferFrames;
 
-  // Asking for what is already running is a no-op: bouncing the device would interrupt
-  // audio and produce a stop/start cycle nobody asked for (the window re-sends its
-  // settings on every launch and every settings change).
+  // Asking for what is already running is normally a no-op: bouncing the device would
+  // interrupt audio and produce a stop/start cycle nobody asked for (the window re-sends
+  // its settings on every launch and every settings change). The exception is a device
+  // that has latched off — the health check saw the stream die and nothing has reopened
+  // it since. Identical settings are then exactly the request the device needs, so the
+  // same options become a reopen rather than a shrug; the window re-sends them on every
+  // mount and settings change, which is how a returned interface comes back.
+  if (!deviceRunning_.load(std::memory_order_acquire)) {
+    return reopenDeviceLocked(updated, previous, error);
+  }
   if (updated.backend == options_.backend && updated.deviceId == options_.deviceId &&
       updated.sampleRate == options_.sampleRate && updated.channels == options_.channels &&
       updated.exclusive == options_.exclusive && updated.bufferFrames == options_.bufferFrames) {
