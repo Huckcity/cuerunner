@@ -25,11 +25,7 @@ import type { FileHandle } from 'fs/promises'
 import { dirname, resolve, sep } from 'path'
 import { Transform } from 'stream'
 import { pipeline } from 'stream/promises'
-import { promisify } from 'util'
-import { crc32, createInflateRaw, inflateRaw as inflateRawCallback } from 'zlib'
-
-/** The callback form, as a promise: the small entries are read whole. */
-const inflateRaw = promisify(inflateRawCallback)
+import { crc32, createInflateRaw } from 'zlib'
 
 const LOCAL_SIGNATURE = 0x04034b50
 const CENTRAL_SIGNATURE = 0x02014b50
@@ -368,8 +364,14 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
   return entries
 }
 
-/** One entry's bytes, for the small things — a showfile rather than a media file. */
-export async function readZipEntry(filePath: string, entry: ZipEntry): Promise<Buffer> {
+/**
+ * One entry's bytes, for the small things — a showfile rather than a media file.
+ *
+ * `outputLimit` caps the inflated bytes: a deflated entry with small declared sizes
+ * but a huge output would otherwise OOM main before `checked()` runs. Media never
+ * comes through here — it streams via `extractZipEntry`.
+ */
+export async function readZipEntry(filePath: string, entry: ZipEntry, outputLimit = MAX_ARCHIVE_BYTES): Promise<Buffer> {
   // The entry's sizes are the archive's claims: bound them against the file before
   // allocating or inflating on their word.
   const { size } = await stat(filePath)
@@ -377,7 +379,7 @@ export async function readZipEntry(filePath: string, entry: ZipEntry): Promise<B
     throw new Error(`"${entry.name}" claims a size this app will not read`)
   }
   const raw = await read(filePath, entry.offset, entry.compressedSize)
-  const data = entry.method === DEFLATED ? await inflate(raw) : raw
+  const data = entry.method === DEFLATED ? await inflate(raw, outputLimit) : raw
   checked(entry, crc32(data), data.length)
   return data
 }
@@ -435,10 +437,27 @@ async function read(filePath: string, start: number, length: number): Promise<Bu
   }
 }
 
-async function inflate(raw: Buffer): Promise<Buffer> {
-  try {
-    return (await inflateRaw(raw)) as Buffer
-  } catch {
-    throw new Error('that archive entry could not be unpacked')
-  }
+async function inflate(raw: Buffer, outputLimit: number): Promise<Buffer> {
+  // Streamed rather than one-shot: a one-shot inflate has no output bound, so a small
+  // deflated entry with a huge output OOMs main before the size check can run.
+  return new Promise<Buffer>((resolve, reject) => {
+    const pieces: Buffer[] = []
+    let total = 0
+    let capped = false
+    const stream = createInflateRaw()
+    stream.on('data', (chunk: Buffer) => {
+      total += chunk.length
+      if (total > outputLimit) {
+        capped = true
+        stream.destroy(new Error('that archive entry unpacks to more than this app will read'))
+        return
+      }
+      pieces.push(chunk)
+    })
+    stream.on('end', () => resolve(Buffer.concat(pieces, total)))
+    stream.on('error', (error: Error) => {
+      reject(capped ? error : new Error('that archive entry could not be unpacked'))
+    })
+    stream.end(raw)
+  })
 }

@@ -150,7 +150,18 @@ describe('a hostile archive', () => {
     const entries = await readZip(file)
     const greedy = { ...entries[0], size: 4 * 1024 * 1024 * 1024, compressedSize: 4 * 1024 * 1024 * 1024 }
 
-    await expect(readZipEntry(file, greedy)).rejects.toThrow()
+    await expect(readZipEntry(file, greedy)).rejects.toThrow('claims a size')
+  })
+
+  it('refuses a small deflated entry that unpacks past the cap', async () => {
+    const { deflateRawSync } = await import('node:zlib')
+    const file = join(dir, 'bomb.zip')
+    const raw = deflateRawSync(Buffer.from('{}'))
+    writeFileSync(file, raw)
+    const entry = { name: 'show.wlab', offset: 0, compressedSize: raw.length, size: 2, crc: 0, method: 8 }
+    // Two inflated bytes against a one-byte cap: the cap fires on the output, which is
+    // the path a bomb with small declared sizes takes.
+    await expect(readZipEntry(file, entry, 1)).rejects.toThrow('unpacks to more')
   })
 })
 
