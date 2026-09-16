@@ -215,34 +215,70 @@ std::string asioErrorText(ASIOError error) {
 }
 
 /**
- * COM, for the length of one driver operation. The SDK's own enumerator does the same
- * thing in its constructor; doing it here keeps the initialize/uninitialize pairing on
- * one thread per call instead of on whichever thread happens to drop the object.
+ * The COM apartment this thread is in, claimed on first use.
+ *
+ * ASIO drivers are in-process COM servers registered with `ThreadingModel=Apartment` — the
+ * SDK's own driver template does this, and Steinberg's built-in driver does — so the object
+ * can only be created from a single-threaded apartment. From a multi-threaded one COM would
+ * have to marshal the call, and an ASIO driver ships no proxy/stub: the failure is
+ * `E_NOINTERFACE` from `CoCreateInstance`, which says nothing about the real problem.
+ *
+ * miniaudio asks for the *multi*-threaded apartment (`MA_COINIT_VALUE = 0`) on any thread
+ * that initializes a context, inside `ma_context_init` and before any backend callback runs
+ * — so this must be called before `ma_context_init`, and the apartment is never released:
+ * the driver objects outlive the calls that made them. An apartment torn down under a live
+ * driver unloads its DLL, and the next call through its vtable reads unmapped memory (a
+ * crash this backend has already been through once).
+ *
+ * `Multi` is recorded rather than corrected: a thread that is already multi-threaded cannot
+ * be moved, and pretending otherwise would surface as that same unhelpful E_NOINTERFACE.
  */
-struct ComApartment {
-  bool owned = false;
-  ComApartment() {
-    const HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    owned = result == S_OK || result == S_FALSE;
-  }
-  ~ComApartment() {
-    if (owned) CoUninitialize();
-  }
-  ComApartment(const ComApartment&) = delete;
-  ComApartment& operator=(const ComApartment&) = delete;
-};
+enum class Apartment { Unknown, Single, Multi };
+
+Apartment& threadApartment() {
+  static thread_local Apartment apartment = Apartment::Unknown;
+  return apartment;
+}
+
+Apartment claimApartment() {
+  Apartment& apartment = threadApartment();
+  if (apartment != Apartment::Unknown) return apartment;
+  const HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  apartment = (result == S_OK || result == S_FALSE) ? Apartment::Single : Apartment::Multi;
+  return apartment;
+}
+
+/**
+ * The machine's installed drivers, built once and kept for the life of the process.
+ *
+ * Not an optimization: the SDK's `AsioDriverList` destructor calls `CoUninitialize`, and
+ * `CoUninitialize` unloads the in-process DLLs loaded on that thread. A driver instance
+ * created while a list is alive therefore dies with the list — the next call through its
+ * vtable reads memory inside the driver DLL's *preferred* base, which is unmapped once the
+ * DLL is gone, and that is an access violation (found exactly this way on the Windows
+ * runner: `CoCreateInstance` returned an object, `createDriver`'s local list went out of
+ * scope, and the first `init` faulted at `0x18002ab00`). The SDK's own loader keeps its list
+ * for the same reason. Enumeration and CLSID lookups only read it, so sharing it across
+ * threads is safe; construction is once, under a call_once.
+ */
+AsioDriverList& driverList() {
+  static AsioDriverList* list = nullptr;
+  static std::once_flag once;
+  std::call_once(once, []() { list = new AsioDriverList(); });
+  return *list;
+}
 
 /**
  * The machine's installed ASIO drivers, by the name the driver list gives.
  *
  * The name is read into a 32-byte buffer because that is ASIO's own convention for driver
- * names — the SDK's host example, its loader and its enumerator all spell it that way —
- * and a name read any longer would not match what the driver registered.
+ * names — the SDK's host example, its loader and its enumerator all spell it that way — and
+ * a name read any longer would not match what the driver registered.
  */
 std::vector<std::string> driverNames() {
-  ComApartment com;
+  claimApartment();
+  AsioDriverList& list = driverList();
   std::vector<std::string> names;
-  AsioDriverList list;
   const long count = list.asioGetNumDev();
   for (long index = 0; index < count; index++) {
     char name[32] = {};
@@ -261,8 +297,11 @@ std::vector<std::string> driverNames() {
  * `CoCreateInstance` as well.
  */
 IASIO* createDriver(const std::string& name, std::string& error) {
-  ComApartment com;
-  AsioDriverList list;
+  if (claimApartment() != Apartment::Single) {
+    error = "the audio engine's device thread is in a multi-threaded COM apartment, which is not one an ASIO driver can be created in";
+    return nullptr;
+  }
+  AsioDriverList& list = driverList();
   const long count = list.asioGetNumDev();
   CLSID clsid = {};
   bool found = false;
@@ -825,6 +864,8 @@ ma_result onDeviceStop(ma_device* pDevice) {
 }
 
 }  // namespace
+
+void prepareThreadForDriverCalls() { claimApartment(); }
 
 ma_backend_callbacks backendCallbacks() {
   ma_backend_callbacks callbacks = {};

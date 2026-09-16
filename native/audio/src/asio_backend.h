@@ -28,6 +28,22 @@ namespace asio {
 ma_backend_callbacks backendCallbacks();
 
 /**
+ * Claims this thread's COM apartment for the driver, and must be called **before**
+ * `ma_context_init` on any thread that will open an ASIO device or enumerate drivers.
+ *
+ * miniaudio asks for the multi-threaded apartment on any thread that initializes a context,
+ * and ASIO drivers are in-process servers registered as `ThreadingModel=Apartment`: created
+ * from a multi-threaded apartment, COM would have to marshal the call, an ASIO driver ships
+ * no proxy/stub, and the result is `E_NOINTERFACE` — an error that names the interface
+ * rather than the problem. So the single-threaded apartment is claimed first, and
+ * miniaudio's later request fails harmlessly (it records the result and does not undo ours).
+ *
+ * Idempotent per thread, and never released: the driver objects outlive the calls that made
+ * them.
+ */
+void prepareThreadForDriverCalls();
+
+/**
  * Whether the driver has stopped calling back.
  *
  * ASIO has no "the device went away" notification: a driver whose hardware is unplugged

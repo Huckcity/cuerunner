@@ -77,9 +77,29 @@ if (device === undefined) {
   process.exit(1)
 }
 
+// A driver with no outputs has nothing to play through, and that is the machine's state
+// rather than the backend's: an ASIO driver drives hardware, so a runner with no working
+// endpoint (no interface plugged in, no display audio) offers it nothing. The engine still
+// enumerated it and read its channel list — that path is exercised — but the smoke cannot
+// play a tone into a device that has no outputs, so it says so and stops. `--require` turns
+// the note into a failure for a machine that is supposed to have an output.
+if (!(device.channels > 0)) {
+  const note = `the ASIO driver "${device.id}" is listed with no channels on this machine`
+  if (required) {
+    console.error(`asio smoke — ${note}, and --require was asked for`)
+    process.exit(1)
+  }
+  console.log(`asio smoke — ${note}; skipped. An ASIO driver plays through the machine's own`)
+  console.log('             endpoints: with none attached (an interface, a working display-audio')
+  console.log('             output) the driver has no outputs and there is nothing to smoke.')
+  console.log('             The driver was still enumerated and instantiated by the engine.')
+  process.exit(0)
+}
+
 // The smoke plays to eight channels on its acceptance sink; an interface has however many
-// outputs it has, and the engine's channel setting is what it will activate.
-const channels = Math.max(1, Math.min(8, device.channels > 0 ? device.channels : 8))
+// outputs it has, and the engine's channel setting is what it will activate. A driver with
+// no outputs never gets this far.
+const channels = Math.min(8, device.channels)
 
 console.log(`asio smoke — driver "${device.id}" (${device.channels} outputs), playing to ${channels}`)
 const smoke = spawnSync(
