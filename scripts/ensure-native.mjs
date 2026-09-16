@@ -4,19 +4,23 @@
  * decoder) exist before a command that needs them runs.
  *
  * It is deliberately idempotent: the engine is rebuilt only when a source, a vendored
- * header or the build script is newer than the binary, and the FFmpeg helper — a pinned
- * release whose inputs never change — is never rebuilt once it is present. Every
- * developer command that needs the engine routes through here (npm pre-hooks), so a
- * fresh checkout needs no manual build step and a warm checkout pays only a stat().
+ * header or the build script is newer than the binary, or when the ASIO state differs
+ * from the one the last build stamped (a change no mtime in this tree can show), and the
+ * FFmpeg helper — a pinned release whose inputs never change — is never rebuilt once it
+ * is present. Every developer command that needs the engine routes through here (npm
+ * pre-hooks), so a fresh checkout needs no manual build step and a warm checkout pays
+ * only a stat().
  *
  *   node scripts/ensure-native.mjs                 # engine only
  *   node scripts/ensure-native.mjs --with-decoders # engine + Linux M4A helper
  *   node scripts/ensure-native.mjs --force         # rebuild regardless
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { describeAsioState } from './asio-sdk.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const audioRoot = join(repoRoot, 'native', 'audio')
@@ -24,6 +28,7 @@ const buildScript = join(repoRoot, 'scripts', 'build-native-audio.mjs')
 const ffmpegScript = join(repoRoot, 'scripts', 'build-ffmpeg-linux.mjs')
 const binaryName = process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio'
 const enginePath = join(audioRoot, 'build', binaryName)
+const asioStamp = join(audioRoot, 'build', 'asio.stamp')
 const decoderPath = join(audioRoot, 'build', 'decoders', 'ffmpeg')
 
 const withDecoders = process.argv.includes('--with-decoders')
@@ -52,7 +57,15 @@ function engineIsStale() {
     newestSourceMtime(join(audioRoot, 'third_party')),
     statSync(buildScript).mtimeMs
   )
-  return newestInput > built
+  if (newestInput > built) return true
+
+  // The ASIO SDK is not in this tree, so an SDK that appeared, moved or went away since
+  // the last build is invisible to the scan above; the build script stamps the state it
+  // built with, and these two strings are the comparison. A missing stamp reads as
+  // changed — as does one a misconfigured variable would now produce, which is a rebuild
+  // that the build script then fails with its own explanation.
+  if (!existsSync(asioStamp)) return true
+  return readFileSync(asioStamp, 'utf8').trim() !== describeAsioState()
 }
 
 function run(script) {
