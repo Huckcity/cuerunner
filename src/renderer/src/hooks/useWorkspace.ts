@@ -23,6 +23,8 @@ async function guardDirty(): Promise<boolean> {
   const response = await window.winslab.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
+    const sentCues = useStore.getState().cues
+    const sentEdits = useStore.getState().past.length
     let saved: { path: string; history: ShowHistoryEntry[] } | null
     try {
       saved = await window.winslab.workspace.save(buildWorkspace(
@@ -36,6 +38,10 @@ async function guardDirty(): Promise<boolean> {
     }
     if (!saved) return false     // User cancelled save dialog
     saveSucceeded(saved.path, workspaceName, saved.history)
+    // An edit that landed while the save was in flight is not on disk: the close must
+    // still ask. The undo depth is the cheap witness — every edit pushes exactly one.
+    const after = useStore.getState()
+    if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
     await window.winslab.workspace.clearRecovery().catch(() => {})
   } else {
     // "Don't Save" discards the session, including its recovery snapshot.
@@ -289,6 +295,11 @@ export function useWorkspace() {
   const save = useCallback(async (): Promise<boolean> => {
     const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
+    // Snapshot the references, not the contents: the store replaces cues and the undo
+    // stack wholesale on every edit, so identity is the revision witness. Marking saved
+    // unconditionally would clear edits that landed while the disk was being written.
+    const sentCues = cues
+    const sentEdits = useStore.getState().past.length
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
       id: workspaceId,
       createdAt: workspaceCreatedAt
@@ -297,6 +308,10 @@ export function useWorkspace() {
       const saved = await window.winslab.workspace.save(ws, workspacePath)
       if (!saved) return false
       saveSucceeded(saved.path, workspaceName, saved.history)
+      // Anything that moved while the save was in flight is still unsaved, even though
+      // the round trip answered: compare against what went out.
+      const after = useStore.getState()
+      if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
       // The session is on disk now, so there is nothing left to recover.
       await window.winslab.workspace.clearRecovery().catch(() => {})
       return true
@@ -309,6 +324,9 @@ export function useWorkspace() {
   const saveAs = useCallback(async (): Promise<boolean> => {
     const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
+    // Same round-trip witness as save: an edit landing mid-write stays dirty.
+    const sentCues = cues
+    const sentEdits = useStore.getState().past.length
     // Saving under another name is the same show in another file: the identity travels
     // with it, so both copies stay recognisably the same show.
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
@@ -319,6 +337,8 @@ export function useWorkspace() {
       const saved = await window.winslab.workspace.saveAs(ws)
       if (!saved) return false
       saveSucceeded(saved.path, workspaceName, saved.history)
+      const after = useStore.getState()
+      if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
       await window.winslab.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {

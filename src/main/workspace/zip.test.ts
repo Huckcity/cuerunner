@@ -106,6 +106,21 @@ describe('writing a zip', () => {
     expect(existsSync(target)).toBe(false)
   })
 
+  it('keeps the previous bundle when a write fails half way', async () => {
+    const target = join(dir, 'previous.wlabx')
+    await writeZip(target, [{ name: 'show.wlab', data: Buffer.from('{"a":1}', 'utf8') }])
+    const before = readFileSync(target)
+    // A directory where the entry should be a file: it measures like a file and then
+    // cannot be read, which is what a write failing part way through looks like.
+    mkdirSync(join(dir, 'media'))
+    await expect(writeZip(target, [
+      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'media/folder', file: join(dir, 'media') }
+    ])).rejects.toThrow()
+    // The old bundle survives: a failed export replaces nothing.
+    expect(readFileSync(target).equals(before)).toBe(true)
+  })
+
   it('refuses a name that would leave the folder it is unpacked into', async () => {
     await expect(
       writeZip(join(dir, 'bad.zip'), [{ name: '../escape.txt', data: Buffer.from('x') }])

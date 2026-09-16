@@ -20,7 +20,7 @@
 // bundle that somebody re-zipped by hand still opens.
 
 import { createReadStream, createWriteStream } from 'fs'
-import { mkdir, open, rm, stat } from 'fs/promises'
+import { mkdir, open, rename, rm, stat } from 'fs/promises'
 import type { FileHandle } from 'fs/promises'
 import { dirname, resolve, sep } from 'path'
 import { Transform } from 'stream'
@@ -182,12 +182,17 @@ async function prepare(sources: ZipSource[]): Promise<Prepared[]> {
  */
 export async function writeZip(filePath: string, sources: ZipSource[]): Promise<void> {
   const entries = await prepare(sources)
+  // A failed export must not destroy the operator's previous bundle: the bytes land in
+  // a temp file first and the replace is a rename, so "nothing is better" means the old
+  // file survives. The failed temp is removed; a pre-existing target is never touched
+  // on failure.
+  const tempPath = `${filePath}.tmp`
   try {
-    await writeEntries(filePath, entries)
+    await mkdir(dirname(tempPath), { recursive: true })
+    await writeEntries(tempPath, entries)
+    await rename(tempPath, filePath)
   } catch (error) {
-    // A write that failed half way leaves a file that looks like a bundle and is not one,
-    // at a path the operator chose and may hand to somebody. Nothing is better.
-    await rm(filePath, { force: true }).catch(() => {})
+    await rm(tempPath, { force: true }).catch(() => {})
     throw error
   }
 }

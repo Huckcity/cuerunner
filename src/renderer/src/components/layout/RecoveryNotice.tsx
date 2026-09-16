@@ -37,9 +37,40 @@ export function RecoveryNotice() {
     ? snapshot.workspace.cues.find(candidate => candidate.id === snapshot.selectedCueId) ?? null
     : null
 
-  const recover = (): void => {
+  const recover = async (): Promise<void> => {
     const store = useStore.getState()
-    store.loadWorkspace(
+    // The only session-replacing flow without a dirty guard: recovering over unsaved
+    // work would throw that work away behind the operator's back. Reuse the close
+    // prompt — Save writes this session first, Don't Save discards it for the snapshot.
+    if (store.isDirty) {
+      const response = await window.winslab.workspace.confirmClose(store.workspaceName)
+      if (response === 2) return
+      if (response === 0) {
+        try {
+          const saved = await window.winslab.workspace.save(
+            {
+              version: 1,
+              id: store.workspaceId,
+              name: store.workspaceName,
+              createdAt: store.workspaceCreatedAt,
+              history: store.showHistory.length > 0 ? store.showHistory : undefined,
+              audioSettings: store.audioSettings,
+              midiSettings: store.midiSettings,
+              showSettings: store.showSettings,
+              triggerGuard: store.triggerGuard,
+              cues: store.cues
+            },
+            store.workspacePath
+          )
+          if (!saved) return
+          store.saveSucceeded(saved.path, store.workspaceName, saved.history)
+        } catch {
+          return
+        }
+      }
+    }
+    const live = useStore.getState()
+    live.loadWorkspace(
       snapshot.workspace.cues,
       name,
       snapshot.sourcePath,
@@ -51,17 +82,23 @@ export function RecoveryNotice() {
       snapshot.workspace.showSettings,
       // The snapshot is this show as it was, so it keeps the show's identity: recovering
       // and saving must write the file it came from, not a file with a new id.
-      { id: snapshot.workspace.id, createdAt: snapshot.workspace.createdAt }
+      { id: snapshot.workspace.id, createdAt: snapshot.workspace.createdAt },
+      // The snapshot's own guard, not the default: without it the next save writes the
+      // default into the operator's file.
+      snapshot.workspace.triggerGuard,
+      // The file's own record of its saves travels with the snapshot, for the same
+      // reason: a recovered session is the same show, not a new one.
+      snapshot.workspace.history ?? []
     )
     // The place, not just the cues: standing where the session stood means the next GO
     // fires what it would have fired.
-    if (standingOn !== null) store.select(standingOn.id)
+    if (standingOn !== null) live.select(standingOn.id)
     // The files the snapshot names may have moved since it was taken, so the same
     // missing-media report a normal open gives is shown here too.
-    store.setMissingMedia(snapshot.missingMedia)
+    live.setMissingMedia(snapshot.missingMedia)
     // Recovered work is unsaved by definition: the file on disk is older than this. The
     // title bar's dot is the app's usual signal for that.
-    store.markDirty()
+    live.markDirty()
     window.winslab.workspace.clearRecovery().catch(() => {})
     setSnapshot(null)
   }
