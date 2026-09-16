@@ -312,4 +312,7 @@
   flex-shrink: 0;
 }
 
-.toolbar-actions[hidden] { display: none; }
+/* `hidden` is a UA `display: none`, and a class that sets `display: flex` beats it — so
+   every tray that can be hidden says so itself. */
+.toolbar-actions[hidden],
+.toolbar-list-actions[hidden] { display: none; }
