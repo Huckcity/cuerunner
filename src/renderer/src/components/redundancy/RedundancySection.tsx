@@ -34,8 +34,24 @@ export function RedundancySection(): React.JSX.Element {
 
   useEffect(() => {
     const timer = setInterval(() => setTick(tick => tick + 1), 500)
+    // The store only learns redundancy from change events, so a quiet pair plus a
+    // renderer reload leaves this panel on "waiting" with no takeover button. Ask for
+    // the service's current reading on mount: the command exists for exactly this.
+    if (pro) {
+      window.winslab.show.command('redundancy', 'status')
+        .then(result => {
+          if (result.ok && result.result && typeof result.result === 'object') {
+            useStore.getState().applyShowEvents([{
+              kind: 'redundancy',
+              at: Date.now(),
+              status: result.result as RedundancyStatus
+            }])
+          }
+        })
+        .catch(() => {})
+    }
     return () => clearInterval(timer)
-  }, [])
+  }, [pro])
 
   // A locked machine is told what the feature is rather than shown a dead panel: the
   // settings it would have are machine settings, and reading them is not the gate.

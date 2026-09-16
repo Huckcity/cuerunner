@@ -294,7 +294,14 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   </option>
                   {/* An interface's own driver, past the system mixer. It exists on
                       Windows and nowhere else. */}
-                  {asioOffered && <option value="asio">ASIO</option>}
+                  {(asioOffered || audioSettings.backend === 'asio') && <option value="asio">ASIO</option>}
+                  {/* A show saved with ASIO and opened where it is not offered: the stored
+                      value is shown as unavailable rather than a blank select, and picking
+                      anything else writes that choice. The workspace value is preserved
+                      until then. */}
+                  {!asioOffered && audioSettings.backend === 'asio' && (
+                    <option value="asio" disabled>ASIO (unavailable on this computer)</option>
+                  )}
                 </select>
                 <span className="settings-info">The audio stack the engine plays through</span>
               </div>

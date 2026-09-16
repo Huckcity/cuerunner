@@ -320,6 +320,12 @@ export function CueList() {
     // the panel's Escape closes the panel, and this list must not eat it on the way
     // past — nor act on arrows and Delete that were meant for the panel.
     if (useStore.getState().modals > 0) return
+    // The inline rename owns its keystrokes: without this Delete deletes the cue being
+    // renamed, arrows move the selection under the caret, and Mod+D fires. Same
+    // text-input guard the transport bindings use.
+    const el = e.target as HTMLElement | null
+    const tag = el?.tagName
+    if ((tag === 'INPUT' && (el as HTMLInputElement).type !== 'range') || tag === 'TEXTAREA' || tag === 'SELECT') return
 
     // Windows and Linux have no Cmd key, so accept either modifier. The key is
     // lower-cased because Shift makes e.key upper-case.
