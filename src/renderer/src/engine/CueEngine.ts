@@ -250,7 +250,10 @@ export class CueEngine {
 
     // Firing a cue that is already in flight replaces it rather than stacking a second
     // copy of it on the same cue id — which is what a cue set to restart is asking for.
-    if (this.hasActiveRun(cue.id)) this.stop(cue.id)
+    // A group's children go with it, and no step is settled along the way: re-firing a
+    // child is not taking it away, so its parent's counting must not move (the same rule
+    // fireCue's own replacement obeys).
+    if (this.hasActiveRun(cue.id)) this.stop(cue.id, false)
 
     const startMs = this.now()
     this.fireCue(cue, startMs, (doneAt, run) => {
@@ -1081,8 +1084,7 @@ export class CueEngine {
   private stopCue(cueId: string, fadeMs: number, settles = true): void {
     const run = this.runs.get(cueId)
     if (run) this.cancelRun(cueId, run)
-    for (const task of this.timelineTasks.get(cueId) ?? []) this.scheduler!.cancel(task)
-    this.timelineTasks.delete(cueId)
+    this.cancelTimelineTasks(cueId)
     scriptHost.cancel(cueId)
     void audioEngine.stop(cueId, fadeMs).catch(() => {
       // A cue the engine never knew about has nothing to stop.
@@ -1102,6 +1104,21 @@ export class CueEngine {
   /** Whether this cue is a child of a group, so its handover settles a parent. */
   private isGroupChild(cueId: string): boolean {
     return (this.deps!.getCues().find(c => c.id === cueId)?.parentId ?? null) !== null
+  }
+
+  /** Takes every start this cue has waiting in a timeline out of the scheduler. */
+  private cancelTimelineTasks(cueId: string): void {
+    for (const task of this.timelineTasks.get(cueId) ?? []) this.scheduler!.cancel(task)
+    this.timelineTasks.delete(cueId)
+  }
+
+  /**
+   * Every start a timeline is still holding, whoever put it there. A cue that has not
+   * fired yet is a task and no run, so a walk that only looks at `runs` — "stop
+   * everything" and the restart path — would leave those starts to arrive after it.
+   */
+  private cancelTimelineStarts(): void {
+    for (const cueId of [...this.timelineTasks.keys()]) this.cancelTimelineTasks(cueId)
   }
 
   /** Cancels a run's tasks and takes back a not-yet-begun handover it released. */
@@ -1152,6 +1169,11 @@ export class CueEngine {
       for (const [cueId, other] of others) {
         if (this.deps!.getCues().find(c => c.id === cueId)?.type !== 'group') this.cancelRun(cueId, other)
       }
+      // A timeline child that has not fired yet is not a run at all: it is a start
+      // waiting in the scheduler, and "everything" has to take those too or a stopped
+      // group's children begin arriving after the stop — and each of them would hold its
+      // cue against a later GO as though it were already on.
+      this.cancelTimelineStarts()
       // A script runs in a worker of its own, so stopping the audio cannot reach it:
       // "everything" has to take the scripts the way STOP does.
       scriptHost.cancelAll()
@@ -1165,7 +1187,19 @@ export class CueEngine {
         // sound does. Everything else is taken away here, because nothing else will
         // report: a wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp,
         // an MSC command and a script hold no engine voice to answer for them.
-        void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
+        //
+        // A cue that has not begun is the one case where there is no voice to fade: a
+        // pre-wait run would otherwise begin after the stop that named it, so it is
+        // taken away here with its planned start. A start a timeline is still holding
+        // for this cue — a child that has not fired yet — goes the same way, whatever
+        // the run beside it is doing: it is a firing that has not happened.
+        const pending = this.runs.get(cue.targetCueId)
+        this.cancelTimelineTasks(cue.targetCueId)
+        if (pending && pending.phase === 'pending') {
+          this.stopCue(cue.targetCueId, fadeMs)
+        } else {
+          void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
+        }
       } else if (target === undefined) {
         // No such cue: still tell the engine, which refuses what it never knew.
         void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
@@ -1305,14 +1339,15 @@ export class CueEngine {
     this.playlistCursors.clear()
   }
 
-  stop(cueId?: string): void {
+  stop(cueId?: string, settles = true): void {
     const { clearAllRunning } = this.deps!
     if (cueId) {
       // A group is stopped with its children: leaving them running would be a name that
       // does nothing, and a sequence would keep firing them. The group's own run goes
-      // first, so its children settling cannot carry it on.
+      // first, so its children settling cannot carry it on. `settles` is the caller's
+      // answer to whether this is a cue being taken away or a cue about to run again.
       const cue = this.deps!.getCues().find(c => c.id === cueId)
-      this.stopCue(cueId, 0)
+      this.stopCue(cueId, 0, settles)
       if (cue?.type === 'group') this.stopGroup(cue as GroupCue, 0)
     } else {
       // Every run's cue is stopped individually as well: a start that has already been
