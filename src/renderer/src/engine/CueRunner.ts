@@ -281,9 +281,18 @@ export class CueRunner {
     if (!cue || !cue.isArmed) return
     if (atMs === undefined && this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
     const idx = cues.findIndex(c => c.id === id)
-    const nextCue = cues[idx + 1] ?? null
+    // The cue after a group is the one past its children — handing a group's completion
+    // to its own first child would start the group over instead of moving the show on.
+    const nextCue = (() => {
+      if (cue.type !== 'group') return cues[idx + 1] ?? null
+      let i = idx + 1
+      while (i < cues.length && cues[i].parentId === cue.id) i++
+      return cues[i] ?? null
+    })()
     this.fireCue(cue, atMs ?? this.now(), (doneAt, run) => {
-      if (cue.advance === 'on-end' && nextCue) {
+      // A playlist pass that is not complete holds the show, the same interlock go()
+      // applies: this entry point is how a trigger or a cue's own advance fires a group.
+      if (cue.advance === 'on-end' && nextCue && !this.isMidPlaylist(cue.id)) {
         this.goById(nextCue.id, doneAt, run)
       }
     }, parent)
@@ -394,7 +403,7 @@ export class CueRunner {
     // batched 16 ms, can arrive after this firing, and must not close the new run
     // before its own start is acknowledged.
     const supersededEngineRunId = this.runs.get(cue.id)?.engineRunId ?? null
-    if (this.runs.has(cue.id)) this.stopCue(cue.id, 0)
+    if (this.runs.has(cue.id)) this.stopCue(cue.id, 0, false)
 
     const seq = ++this.runSeq
     const run: CueRun = {
@@ -532,6 +541,18 @@ export class CueRunner {
     const releaseAt = Math.max(this.now(), doneAt - SCHEDULER_LOOKAHEAD_MS)
     run.releaseTask = this.scheduler!.schedule({ at: releaseAt, due: () => this.release(run, doneAt) })
     this.track(run, run.releaseTask)
+  }
+
+  /**
+   * Fires a taken-away group child's handover once, so the group's counting settles the
+   * way it would have when the child ended. Separate from `release` because that one
+   * refuses a cancelled run — which is right for a scheduled handover, and wrong here:
+   * the run was taken away on purpose, and the group is still owed its step.
+   */
+  private settleParent(run: CueRun): void {
+    if (run.released || !run.handover) return
+    run.released = true
+    run.handover(this.now(), run)
   }
 
   private track(run: CueRun, taskId: number): void {
@@ -1014,15 +1035,11 @@ export class CueRunner {
 
     if (items.length === 0) { finish(at); return }
     let remaining = items.length
-    const childDone: Handover = (endMs, childRun) => {
+    const childDone: Handover = (endMs, _childRun) => {
       if (!stillRunning()) return
-      if (childRun.cancelled) {
-        // A stop cue or an engine-reported stop took this child away mid-group: count
-        // it as settled so the row does not stay lit and the handover is not lost —
-        // but do not finish the group from a stop, which would hand the show on.
-        if (--remaining === 0) this.cancelRun(cue.id, run)
-        return
-      }
+      // A child that was stopped counts down like one that ended: the timeline is not
+      // waiting for it any more, and the group settles when its last child has. Nothing
+      // is recorded for the stopped child — finishRun refuses a cancelled run.
       remaining--
       if (remaining === 0) finish(endMs)
     }
@@ -1070,14 +1087,10 @@ export class CueRunner {
     if (index >= cues.length) { onDone(at, parent); return }
     this.fireCue(cues[index], at, (doneAt, childRun) => {
       if (!stillRunning()) return
-      if (childRun.cancelled) {
-        // STOP took this child away: advance past it without firing the next sibling,
-        // so the sequence does not stall with the row lit — but the show does not move
-        // on from a stop either.
-        this.runSequence(cues, index + 1, doneAt, () => {}, stillRunning, childRun)
-        return
-      }
-      // The child that just ended is the one a STOP must take the next child back from.
+      // A child that was stopped settles the step the same way one that ended does:
+      // the sequence moves on, and only the last child's handover finishes the group.
+      // The stopped child records nothing — finishRun refuses a cancelled run — and
+      // STOP at the group makes this a no-op, because the group's own run went first.
       this.runSequence(cues, index + 1, doneAt, onDone, stillRunning, childRun)
     }, parent)
   }
@@ -1087,7 +1100,7 @@ export class CueRunner {
    * state. A handover that was released but has not begun is taken back too, so a
    * stopped cue never moves the show on.
    */
-  private stopCue(cueId: string, fadeMs: number): void {
+  private stopCue(cueId: string, fadeMs: number, settles = true): void {
     const run = this.runs.get(cueId)
     if (run) this.cancelRun(cueId, run)
     for (const task of this.timelineTasks.get(cueId) ?? []) this.scheduler!.cancel(task)
@@ -1097,6 +1110,20 @@ export class CueRunner {
       // A cue the engine never knew about has nothing to stop.
     })
     this.deps!.setRunning(cueId, null)
+    // A cue taken away mid-group settles its parent's counting the way its own end
+    // would have: a sequence steps on to the next child, a timeline counts this one
+    // down. Without it the group stays lit with nothing coming and a later GO is
+    // refused as a re-fire. A group that was stopped first (STOP, panic, a stop cue
+    // aimed at the group) makes each of those a no-op, and a top-level run settles
+    // nowhere here: its handover is the go() that moves the show to the next cue, and
+    // stopping a cue must not start that one. Re-firing a child is not taking it away —
+    // the child is about to run again — so that caller asks for no settling.
+    if (settles && run && this.isGroupChild(cueId)) this.settleParent(run)
+  }
+
+  /** Whether this cue is a child of a group, so its handover settles a parent. */
+  private isGroupChild(cueId: string): boolean {
+    return (this.deps!.getCues().find(c => c.id === cueId)?.parentId ?? null) !== null
   }
 
   /** Cancels a run's tasks and takes back a not-yet-begun handover it released. */
@@ -1137,9 +1164,15 @@ export class CueRunner {
   private executeStop(cue: StopCue, run: CueRun, at: number, finish: Finish): void {
     const fadeMs = cue.fadeOut ? cue.fadeOutDuration : 0
     if (cue.targetCueId === 'all') {
-      for (const [cueId, other] of [...this.runs]) {
-        if (other === run) continue
-        this.cancelRun(cueId, other)
+      // Groups first: each run is taken away, and a run that is a group's child settles
+      // its parent, so the parent has to be gone before its children are walked or a
+      // live group would fire its next step into a stop that was meant to take all.
+      const others = [...this.runs].filter(([, other]) => other !== run)
+      for (const [cueId, other] of others) {
+        if (this.deps!.getCues().find(c => c.id === cueId)?.type === 'group') this.cancelRun(cueId, other)
+      }
+      for (const [cueId, other] of others) {
+        if (this.deps!.getCues().find(c => c.id === cueId)?.type !== 'group') this.cancelRun(cueId, other)
       }
       // A script runs in a worker of its own, so stopping the audio cannot reach it:
       // "everything" has to take the scripts the way STOP does.
@@ -1148,25 +1181,21 @@ export class CueRunner {
       this.deps!.clearAllRunning()
     } else {
       const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
-      if (target?.type === 'group') {
-        this.stopGroup(target as GroupCue, fadeMs)
-        this.stopCue(target.id, fadeMs)
-      } else if (target?.type === 'audio') {
+      if (target?.type === 'audio') {
         // A stop aimed at one cue takes the sound away; the cue's own run ends as the
         // engine reports it stopped, so a fade is heard and the row goes dark when the
-        // sound does. A script has no such report, so it is taken away here.
+        // sound does. Everything else is taken away here, because nothing else will
+        // report: a wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp,
+        // an MSC command and a script hold no engine voice to answer for them.
         void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
       } else if (target === undefined) {
         // No such cue: still tell the engine, which refuses what it never knew.
         void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
-      } else if (target.type === 'script') {
-        scriptHost.cancel(target.id)
-        this.deps!.setRunning(target.id, null)
+      } else if (target.type === 'group') {
+        // The group's own run goes first, so its children settling cannot carry it on.
+        this.stopCue(target.id, fadeMs)
+        this.stopGroup(target as GroupCue, fadeMs)
       } else {
-        // A wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp, an MSC
-        // command: none of them holds an engine voice, so no `ended` report will ever
-        // close the wait the old path kept open. Take the run the way the script case
-        // does — the group stops advancing as if the stop had happened, because it has.
         this.stopCue(target.id, fadeMs)
       }
     }
@@ -1302,10 +1331,11 @@ export class CueRunner {
     const { clearAllRunning } = this.deps!
     if (cueId) {
       // A group is stopped with its children: leaving them running would be a name that
-      // does nothing, and a sequence would keep firing them.
+      // does nothing, and a sequence would keep firing them. The group's own run goes
+      // first, so its children settling cannot carry it on.
       const cue = this.deps!.getCues().find(c => c.id === cueId)
-      if (cue?.type === 'group') this.stopGroup(cue as GroupCue, 0)
       this.stopCue(cueId, 0)
+      if (cue?.type === 'group') this.stopGroup(cue as GroupCue, 0)
     } else {
       // Every run's cue is stopped individually as well: a start that has already been
       // handed to the engine must be taken back, not just forgotten by the renderer.
@@ -1517,16 +1547,12 @@ export class CueRunner {
     }
 
     if (event.reason === 'stopped' || event.reason === 'cancelled' || event.reason === 'replaced') {
-      // The engine took this voice away. A group child hands over the way its own end
-      // would have, so a sequence advances past it and a timeline counts it down; a
-      // top-level run hands over nowhere (its handover would start the next cue after
-      // STOP). finishRun would refuse a cancelled run — and must, so a stopped child
-      // records no completion — so cancel first, then fire the handover directly.
-      const handover = run.handover
-      const groupChild = this.deps!.getCues().find(c => c.id === cueId)?.parentId != null
+      // The engine took this voice away: the run goes, and if it was a group's child its
+      // stopping settles the group the way its own end would have. finishRun would refuse
+      // a cancelled run — and must, so a stopped cue records no completion.
       this.cancelRun(cueId, run)
       this.deps!.setRunning(cueId, null)
-      if (groupChild && handover) handover(this.now(), run)
+      if (this.isGroupChild(cueId)) this.settleParent(run)
       return
     }
     if (event.reason === 'error' || event.reason === 'device-lost') {

@@ -268,6 +268,7 @@ export const GUIDES = [
         <li><strong>All at once</strong> — everything together: a bang, a blackout, three sends in one press.</li>
         <li><strong>Random</strong> — one child, picked at random. Good for a stinger you do not want to be identical every night.</li>
         <li><strong>Timeline</strong> — each child at an offset you set by dragging it. The dock draws the timeline for a group in this mode.</li>
+        <li><strong>Playlist</strong> — one child per GO. The group holds the show until a full pass is done, so a walk-in playlist of thirty cues is thirty presses.</li>
       </ul>
       <figure class="figure">
         <a href="../assets/guide/07-timeline.png" target="_blank" rel="noreferrer">
@@ -275,6 +276,12 @@ export const GUIDES = [
         </a>
         <figcaption>A timeline group: drag a cue to change when it fires.</figcaption>
       </figure>
+      <p>
+        Stopping a cue inside a group is not the same as stopping the group: the group moves
+        on from it. A sequence steps to the next child, a timeline stops waiting for the
+        one you took away, and a playlist's pass is left where it was, so the next GO fires
+        the child after it.
+      </p>
       <p>
         Open a group with the chevron on its row. A group's duration is worked out from
         what is inside it.

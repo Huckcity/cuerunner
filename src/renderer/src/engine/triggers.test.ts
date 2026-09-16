@@ -86,6 +86,23 @@ describe('matchesTrigger', () => {
     expect(matchesTrigger(program, midiEvent({ kind: 'programChange', channel: 2, program: 12 }))).toBe(true)
     expect(matchesTrigger(program, midiEvent({ kind: 'programChange', channel: 2, program: 13 }))).toBe(false)
   })
+
+  it('leaves a release trigger from an older show inert, and answers false rather than nothing', () => {
+    // Shows saved while the picker still offered note-offs can carry one. Firing one
+    // would be a cue that fires on the release of a key somebody is holding down, so it
+    // matches nothing — and says so, rather than falling off the end of the switch.
+    const legacy = {
+      id: 't-legacy',
+      kind: 'midi',
+      device: 'IAC Bus 1',
+      message: { kind: 'noteOff', channel: 1, note: 60 }
+    } as unknown as CueTrigger
+    const cues = [cue('1', [legacy])]
+
+    expect(matchesTrigger(legacy, midiEvent({ kind: 'noteOff', channel: 1, note: 60, velocity: 0 }))).toBe(false)
+    expect(matchesTrigger(legacy, midiEvent({ kind: 'noteOn', channel: 1, note: 60, velocity: 100 }))).toBe(false)
+    expect(triggeredCues(cues, midiEvent({ kind: 'noteOff', channel: 1, note: 60, velocity: 0 }))).toEqual([])
+  })
 })
 
 describe('a show control trigger', () => {
