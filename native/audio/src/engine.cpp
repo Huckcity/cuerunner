@@ -1386,6 +1386,26 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   if (request.hasExclusive) updated.exclusive = request.exclusive;
   if (request.hasBufferFrames) updated.bufferFrames = request.bufferFrames;
 
+  // Refuse what can be refused before anything is torn down. An unknown backend, or one
+  // this build cannot open (ASIO without the SDK) is a refusal that costs nothing;
+  // computing it after the teardown would stop every voice and close the device to
+  // answer a request it could have refused. The window re-sends its settings on every
+  // show load, so a workspace naming an unavailable backend must not interrupt playback
+  // to say no.
+  if (request.hasBackend && request.backend != "auto" && request.backend != options_.backend) {
+#if !defined(WINSLAB_ASIO)
+    if (request.backend == "asio") {
+      error = {"device", "this engine was built without ASIO support (the Steinberg ASIO SDK was not present at build time)"};
+      return false;
+    }
+#endif
+    ma_backend probe;
+    if (!parseBackendName(request.backend, probe)) {
+      error = {"device", "unknown audio backend '" + request.backend + "'"};
+      return false;
+    }
+  }
+
   // Asking for what is already running is normally a no-op: bouncing the device would
   // interrupt audio and produce a stop/start cycle nobody asked for (the window re-sends
   // its settings on every launch and every settings change). The exception is a device
