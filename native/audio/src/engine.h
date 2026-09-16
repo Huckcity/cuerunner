@@ -330,9 +330,29 @@ class Engine {
     double positionMs = 0.0;
     std::string code;
     std::string message;
+    /** The render thread has answered this entry. A waiter that gives up first erases its
+     *  entry, so an answer that arrives afterwards is addressed to nobody and dropped. */
+    bool resolved = false;
   };
 
   bool submitCommand(Command& command, AckResult& ack, EngineError& error);
+  /**
+   * Queues a command the engine issued to itself: no acknowledgement, no wait. Both
+   * callers are threads that must not wait for one — the failure panic runs on the
+   * service thread, which is the only thread that resolves acks, and a reconfigure
+   * holds deviceMutex_ while it stops the voices (a driver-request reopen is on that
+   * same service thread). The render thread applies it in queue order like any other
+   * command, or the caller drains the queue itself with applyQueuedCommands().
+   */
+  void submitInternalCommand(Command& command);
+  /**
+   * Applies everything queued, on the calling thread. Valid only where the render thread
+   * is not running: applying a command is the render thread's job and this is a
+   * single-consumer queue. A reopen stops the old device first, so this is where the stop
+   * it owes the old voices lands — in the old frame domain, before startDevice() changes
+   * the format — and nothing queued for the old device is left for the new one.
+   */
+  void applyQueuedCommands();
   void releaseCommandResources(Command& command);
   void backgroundLoop();
   void silentLoop();
