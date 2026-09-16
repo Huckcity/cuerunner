@@ -1,9 +1,10 @@
-// The standby line answers one question for the booth: what does GO do next? It has to
-// answer by the runner's rule, whichever view is on screen.
+// The context bar answers the booth's two questions: what is playing, and what does GO
+// do next? Each half names its cue and carries the note written on it, and the next half
+// answers by the runner's rule, whichever view is on screen.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { StandbyBar, outermostRuns, standbyCue } from './StandbyBar'
+import { ContextBar, outermostRuns, standbyCue } from './ContextBar'
 import { useStore, type RunningCue } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
 import { defaultShowSettings } from '../../types/show'
@@ -47,7 +48,7 @@ describe('outermostRuns', () => {
   })
 })
 
-describe('StandbyBar', () => {
+describe('ContextBar', () => {
   let container: HTMLDivElement
   let root: Root
 
@@ -66,14 +67,20 @@ describe('StandbyBar', () => {
   })
 
   function render(): void {
-    act(() => { root.render(<StandbyBar />) })
+    act(() => { root.render(<ContextBar />) })
   }
 
   const text = (selector: string): string | null | undefined => container.querySelector(selector)?.textContent
 
   it('says there is nothing to fire in an empty show', () => {
     render()
-    expect(text('.standby-none')).toBe('no cues')
+    expect(text('.ctx-none')).toBe('No cues yet')
+  })
+
+  it('says nothing is playing until something is', () => {
+    useStore.setState({ cues: [cue('wait', '1', 'Hold')] })
+    render()
+    expect(text('.ctx-live .ctx-tag')).toBe('Nothing playing')
   })
 
   it('names the cue GO fires, with the first line of its notes', () => {
@@ -81,17 +88,17 @@ describe('StandbyBar', () => {
     useStore.setState({ cues: [cue('audio', '1', 'Walk-in'), next], selectedId: next.id })
     render()
 
-    expect(text('.standby-number')).toBe('2')
-    expect(text('.standby-name')).toBe('Act 1')
-    expect(text('.standby-note')).toBe('A sequence group: GO fires its children.')
+    expect(text('.ctx-next .ctx-number')).toBe('2')
+    expect(text('.ctx-next .ctx-name')).toBe('Act 1')
+    expect(text('.ctx-next .ctx-note')).toBe('A sequence group: GO fires its children.')
   })
 
-  it('warns when the cue on standby is disarmed, because GO will do nothing', () => {
+  it('warns when the cue on standby is disarmed, because GO will pass over it', () => {
     const off = cue('wait', '4', 'Hold', { isArmed: false })
     useStore.setState({ cues: [off], selectedId: off.id })
     render()
 
-    expect(text('.standby-disarmed')).toContain('GO does nothing')
+    expect(text('.ctx-disarmed')).toContain('GO skips it')
   })
 
   it('says which scene a scene cue recalls', () => {
@@ -101,21 +108,46 @@ describe('StandbyBar', () => {
     useStore.setState({ cues: [sceneCue], selectedId: sceneCue.id, showSettings: settings })
     render()
 
-    expect(text('.standby-recalls')).toBe('recalls Wedding')
+    expect(text('.ctx-recalls')).toBe('Recalls Wedding')
   })
 
-  it('counts a running cue down to its end', () => {
+  it('counts a running cue down to its end, and carries its note too', () => {
     vi.useFakeTimers()
     vi.setSystemTime(10_000)
-    const wait = cue('wait', '3', 'Count 8', { duration: 8000 })
+    const wait = cue('wait', '3', 'Count 8', { duration: 8000, notes: 'Conductor counts the band in.' })
     useStore.setState({ cues: [wait], running: running([[wait.id, 'playing', 7000]]) })
     render()
 
-    expect(text('.standby-run-name')).toContain('Count 8')
-    expect(text('.standby-run-elapsed')).toBe('0:03.0')
-    expect(text('.standby-run-remaining')).toBe('−0:05.0')
+    expect(text('.ctx-live .ctx-name')).toBe('Count 8')
+    expect(text('.ctx-live .ctx-note')).toBe('Conductor counts the band in.')
+    expect(text('.ctx-clock')).toBe('0:03.0 / −0:05.0')
 
     act(() => { vi.advanceTimersByTime(1000) })
-    expect(text('.standby-run-remaining')).toBe('−0:04.0')
+    expect(text('.ctx-clock')).toBe('0:04.0 / −0:04.0')
+  })
+
+  it('shows the cue that has been running longest, and counts the rest', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(10_000)
+    const first = cue('audio', '1', 'Walk-in', { duration: 20_000 })
+    const second = cue('audio', '7', 'Scene Change', { duration: 4000 })
+    useStore.setState({
+      cues: [first, second],
+      running: running([[second.id, 'playing', 9000], [first.id, 'playing', 5000]])
+    })
+    render()
+
+    expect(text('.ctx-live .ctx-name')).toBe('Walk-in')
+    expect(text('.ctx-more')).toBe('+1 more')
+  })
+
+  it('says what a cue that has not started yet is waiting on', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(10_000)
+    const wait = cue('audio', '2', 'Sting', { duration: 3000, preWait: 5000 })
+    useStore.setState({ cues: [wait], running: running([[wait.id, 'pre-wait', 9000]]) })
+    render()
+
+    expect(text('.ctx-phase')).toBe('pre-wait')
   })
 })

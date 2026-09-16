@@ -21,6 +21,11 @@
 }
 
 .toolbar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--h-button-md);
+  font-family: var(--font-cond);
   font-size: var(--text-lg);
   font-weight: var(--fw-bold);
   color: var(--accent-amber);
@@ -29,10 +34,15 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-md);
   transition: var(--transition-fast);
 }
+
+/* The app's own mark: the same meter bars the logo is drawn from. */
+.toolbar-mark { width: 18px; height: 18px; flex: none; }
+
+.toolbar-brand-caret { color: var(--fg-muted); font-size: var(--text-xs); }
 
 .toolbar-brand:hover { background: var(--bg-input); }
 
@@ -100,8 +110,8 @@
 }
 
 .workspace-name-text {
-  font-size: var(--text-md);
-  color: var(--fg-muted);
+  font-size: var(--text-base);
+  color: var(--fg-body);
   cursor: default;
   padding: 2px var(--space-1);
   border-radius: var(--radius-md);
@@ -127,10 +137,27 @@
   width: 180px;
 }
 
+/* The list's own controls, in a tray beside the cues': same shape, different job. */
+.toolbar-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+/* The presses that add a cue, kept together in one tray so they read as one control
+   with parts rather than as eight separate buttons across the top of the window. */
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
 }
 
 /* The view switch sits at the far right: it changes what fills the window, which is a
@@ -139,9 +166,11 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   flex-shrink: 0;
 }
 
@@ -150,34 +179,37 @@
   padding: 0 var(--space-3);
   background: transparent;
   border: none;
+  border-radius: var(--radius-lg);
   color: var(--fg-muted);
   font-family: inherit;
-  font-size: var(--text-sm);
-  letter-spacing: 0.04em;
+  font-size: var(--text-base);
+  font-weight: var(--fw-medium);
   cursor: pointer;
   transition: var(--transition-fast);
 }
 
 .toolbar-view-btn:hover { color: var(--fg-primary); background: var(--bg-hover); }
 
+/* The view the window is showing reads as pressed in, not as coloured. */
 .toolbar-view-btn[data-active='true'] {
-  background: var(--accent-blue-glow);
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 1px var(--border-input);
   color: var(--fg-primary);
 }
 
 .toolbar-label {
   font-size: var(--text-sm);
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   margin-right: var(--space-1);
 }
 
 .toolbar-cue-btn {
-  height: var(--h-button-md);
-  padding: 0 11px;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
   font-size: var(--text-base);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--bg-input);
+  background: transparent;
   color: var(--fg-body);
   cursor: pointer;
   font-family: inherit;
@@ -186,17 +218,16 @@
 
 .toolbar-cue-btn:hover {
   background: var(--bg-hover);
-  border-color: var(--border-input);
   color: var(--fg-primary);
 }
 
 .toolbar-more-btn {
-  height: var(--h-button-md);
-  padding: 0 10px;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
   font-size: var(--text-base);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--bg-input);
+  background: transparent;
   color: var(--fg-subtle);
   cursor: pointer;
   font-family: inherit;
@@ -211,13 +242,13 @@
 /* Expand / Collapse: the same shape as More, because they are the same kind of thing —
    a press about the list rather than a cue being added to it. */
 .toolbar-list-btn {
-  height: var(--h-button-md);
-  padding: 0 10px;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
   font-size: var(--text-base);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--bg-input);
-  color: var(--fg-subtle);
+  background: transparent;
+  color: var(--fg-muted);
   cursor: pointer;
   font-family: inherit;
   transition: var(--transition-fast);

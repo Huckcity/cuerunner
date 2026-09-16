@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Toolbar } from './components/layout/Toolbar'
 import { TransportBar } from './components/layout/TransportBar'
-import { StandbyBar } from './components/layout/StandbyBar'
+import { ContextBar } from './components/layout/ContextBar'
 import { CueList } from './components/cue-list/CueList'
 import { Inspector } from './components/inspector/Inspector'
 import { SettingsDialog } from './components/layout/SettingsDialog'
@@ -146,7 +146,7 @@ export function App() {
         view={view}
         onSwitchView={setView}
       />
-      <StandbyBar />
+      <ContextBar />
       <div className="app-main" data-view={view}>
         {view === 'scenes' ? (
           pro ? (

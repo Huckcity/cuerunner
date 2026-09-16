@@ -314,6 +314,107 @@ html, body, #root {
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--radius-md); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
+/* ─── The form ──────────────────────────────────────────────────────────────
+ * Every label-and-control pair in the window is one of these: the inspector, settings,
+ * show settings, the dialogs — nineteen components' worth. They were styled from
+ * Inspector.css, which only reached them because Vite bundles the stylesheets together,
+ * and a label was a size smaller than the value beside it, so a stack of fields read as
+ * two ragged columns. One label width, one control height, one size for both.
+ */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--field-gap);
+  margin-bottom: var(--space-2);
+}
+
+.field-row label {
+  width: var(--field-label-w);
+  flex-shrink: 0;
+  font-size: var(--text-base);
+  color: var(--fg-muted);
+  text-align: left;
+}
+
+.field-row input,
+.field-row select,
+.field-row textarea {
+  flex: 1;
+  min-width: 0;
+  height: var(--h-input);
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
+  color: var(--fg-primary);
+  font-family: inherit;
+  font-size: var(--text-base);
+  outline: none;
+  transition: var(--transition-std);
+}
+
+.field-row input::placeholder,
+.field-row textarea::placeholder { color: var(--fg-subtle); }
+
+.field-row input:focus,
+.field-row select:focus,
+.field-row textarea:focus {
+  border-color: var(--border-focus);
+}
+
+.field-row input:disabled,
+.field-row select:disabled,
+.field-row textarea:disabled { color: var(--fg-disabled); }
+
+.field-row textarea {
+  height: auto;
+  min-height: 66px;
+  padding: var(--space-2);
+  line-height: var(--line-height-base);
+  resize: vertical;
+}
+
+.field-row input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  accent-color: var(--accent-blue);
+}
+
+.field-row input[type='range'] {
+  padding: 0;
+  border: none;
+  background: transparent;
+  height: auto;
+  border-radius: 0;
+  accent-color: var(--accent-blue);
+}
+
+/* The heading over a run of fields. Condensed small caps: it reads as a label for the
+   block rather than as another field in it. */
+.field-section-title {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+/* What a field means, under the field it means it for — indented to the control column,
+   so it reads as belonging to that control rather than to the whole panel. One line is
+   the target; anything longer than two belongs in the guide. */
+.inspector-hint {
+  margin: calc(var(--space-1) * -1) 0 var(--space-3) calc(var(--field-label-w) + var(--field-gap));
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  line-height: var(--line-height-base);
+}
+
+/* A hint about the panel rather than about a field starts at its edge. */
+.inspector-hint[data-scope='panel'] { margin-left: 0; }
+
 /* Cue type icons, wherever they are drawn: the list, the toolbar, the menus, the dock.
    One box and one stroke weight, set here, so a row of them is a column and a type looks
    the same on every surface. See utils/cueIcons.tsx. */

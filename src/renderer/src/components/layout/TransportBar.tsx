@@ -16,8 +16,13 @@ export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script'
 
 /**
  * What runs the show and what needs the operator: the running count and the standing
- * alarms, the three presses, and the keys for them. Nothing else, so none of it is ever
+ * alarms, the two presses, and the keys for them. Nothing else, so none of it is ever
  * pushed aside.
+ *
+ * PANIC is not among the presses. It is a hard stop of everything, and a button for it
+ * sat a thumb's width from GO for the length of every show; it lives on ⇧Esc and in the
+ * Playback menu instead, which is where the rest of the app keeps the things that are
+ * meant rather than reached for. That leaves GO as the only saturated colour on screen.
  */
 export function TransportBar({ onShowStrip }: Props) {
   const { go, stop, panic } = useCueRunner()
@@ -44,21 +49,18 @@ export function TransportBar({ onShowStrip }: Props) {
         </div>
       </div>
       <div className="transport-center">
-        <button className="btn-stop" onClick={stop} title="Stop all (Esc)">
-          ■ STOP
+        <button className="btn-stop" onClick={stop} title="Stop everything that is running (Esc)">
+          STOP
         </button>
-        <button className="btn-go" onClick={go} title="Go (Space)">
-          ▶ GO
-        </button>
-        <button
-          className="btn-panic"
-          onClick={panic}
-          title={`Panic (${formatShortcut('Shift+Esc')}, or ${formatShortcut('Mod+Shift+P')} from the Playback menu even when the window is busy)`}
-        >
-          ✕ PANIC
+        <button className="btn-go" onClick={go} title="Fire the next cue (Space)">
+          <svg className="btn-go-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M5 3.4v9.2L12.2 8z" />
+          </svg>
+          GO
         </button>
       </div>
-      {/* The three keys the show is run with, written for this keyboard. */}
+      {/* The keys the show is run with, written for this keyboard. Panic is among them
+          because it has no button: this line is where an operator finds it. */}
       <div className="transport-right">
         <span className="transport-keys">
           <kbd>Space</kbd> go · <kbd>Esc</kbd> stop · <kbd>{formatShortcut('Shift+Esc')}</kbd> panic
