@@ -55,7 +55,7 @@ function snapshot(): {
       cues: [cue, secondCue],
     },
     savedAt: Date.parse('2026-01-01T20:00:00Z'),
-    sourcePath: '/shows/demo.wlab',
+    sourcePath: '/shows/demo.cuerunner',
     // The session was standing on the second cue when it ended, which is the cue GO
     // would have fired next.
     selectedCueId: 'c2',
@@ -102,7 +102,7 @@ describe('RecoveryNotice', () => {
 
     const state = useStore.getState()
     expect(state.cues.map(c => c.name)).toEqual(['Walk-in Music', 'Sting'])
-    expect(state.workspacePath).toBe('/shows/demo.wlab')
+    expect(state.workspacePath).toBe('/shows/demo.cuerunner')
     // The desk, the plot and the script are part of that show, not decoration.
     expect(state.showSettings.desk.midiPort).toBe('Yamaha')
     expect(state.showSettings.scenes.list.map(scene => scene.name)).toEqual(['Wedding'])

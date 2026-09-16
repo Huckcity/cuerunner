@@ -160,7 +160,7 @@ export const GUIDES = [
         <li><strong>Drag your audio files onto the cue list.</strong> One cue per file, named after the file, in the order you dropped them. Or press <strong>Audio</strong> in the toolbar and pick a file with Browse.</li>
         <li><strong>Select a cue</strong> and look at the inspector. On <strong>Basics</strong>, give it a number you will recognise in a running order and write a note to yourself — the note shows up in the bar at the top when the cue is next, which is where you will actually read it.</li>
         <li><strong>Press GO</strong> to hear it. <strong>STOP</strong> stops everything.</li>
-        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. WinsLab writes a <code>.wlab</code> file, which holds the cues and the show's setup but not the audio itself.</li>
+        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. WinsLab writes a <code>.cuerunner</code> file, which holds the cues and the show's setup but not the audio itself.</li>
       </ol>
       <div class="note">
         The show file points at your audio where it sits on disk. Moving a show to another
@@ -905,7 +905,7 @@ export const GUIDES = [
         oldest fall off.
       </p>
       <div class="note">
-        The history lives in the <code>.wlab</code>, so it survives being copied, emailed
+        The history lives in the <code>.cuerunner</code>, so it survives being copied, emailed
         or handed over. It is written whether or not this machine is licensed — it is the
         show's own record of itself — and reading it back is free. What the key turns on is
         comparing this file with another and merging two people's work.
@@ -963,8 +963,8 @@ export const GUIDES = [
       <h2>4. Handing a show over as one file</h2>
       <p>
         <strong>WinsLab &#9662; &rarr; Export Bundle&hellip;</strong> writes the show and
-        every audio file it plays into one <code>.wlabx</code>: a zip holding
-        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        every audio file it plays into one <code>.cuerunnerx</code>: a zip holding
+        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
         inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file. A file the show names that is
         not on this machine is reported rather than failing the export.
@@ -980,7 +980,7 @@ export const GUIDES = [
         A bundle carries up to about 4 GB of media — the zip format's own limit without its
         64-bit extension, which this app does not write. A show bigger than that says so
         instead of being written as an archive that lies about its own contents; the
-        <code>.wlab</code> itself has no such limit, and a show that size can still be
+        <code>.cuerunner</code> itself has no such limit, and a show that size can still be
         moved by <a href="../reference/formats.html#workspace">copying its folder</a>.
       </p>
     </section>

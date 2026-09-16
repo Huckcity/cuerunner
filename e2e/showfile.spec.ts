@@ -63,7 +63,7 @@ test.beforeAll(async () => {
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
 
-  showPath = path.join(root, 'Press Night.wlab')
+  showPath = path.join(root, 'Press Night.cuerunner')
   fs.writeFileSync(
     showPath,
     `${JSON.stringify(
@@ -108,7 +108,7 @@ test('saving an unedited show writes the same bytes, and an edit writes differen
   test.setTimeout(120_000)
 
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Press Night.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Press Night.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 
   // A real edit, so the save certainly runs (renaming a cue to the name it already has

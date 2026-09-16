@@ -48,7 +48,7 @@ test.beforeEach(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-split-'))
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
-  const showPath = path.join(root, 'Split.wlab')
+  const showPath = path.join(root, 'Split.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-split',
@@ -64,7 +64,7 @@ test.beforeEach(async () => {
   ;({ app, page } = await launchApp({ userDataDir }))
 
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Split.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Split.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 })
 

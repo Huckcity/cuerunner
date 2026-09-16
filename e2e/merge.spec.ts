@@ -86,7 +86,7 @@ async function start(options: { license?: TestLicense } = {}): Promise<Page> {
 test.beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-merge-'))
 
-  ancestor = path.join(root, 'Hamlet — base.wlab')
+  ancestor = path.join(root, 'Hamlet — base.cuerunner')
   writeShow(ancestor, [
     audioCue('a', '1', 'Walk-in'),
     audioCue('b', '2', 'Interval'),
@@ -94,7 +94,7 @@ test.beforeEach(() => {
   ])
 
   // This show: the walk-in turned down.
-  ours = path.join(root, 'Hamlet.wlab')
+  ours = path.join(root, 'Hamlet.cuerunner')
   writeShow(ours, [
     audioCue('a', '1', 'Walk-in', { volume: 0.6 }),
     audioCue('b', '2', 'Interval'),
@@ -102,7 +102,7 @@ test.beforeEach(() => {
   ])
 
   // The associate's: the interval renamed, and a curtain call added.
-  theirs = path.join(root, 'Hamlet — associate.wlab')
+  theirs = path.join(root, 'Hamlet — associate.cuerunner')
   writeShow(theirs, [
     audioCue('a', '1', 'Walk-in'),
     audioCue('b', '2', 'Interval (20 min)'),
@@ -110,7 +110,7 @@ test.beforeEach(() => {
     audioCue('z', '4', 'Curtain call')
   ])
 
-  merged = path.join(root, 'Hamlet (merged).wlab')
+  merged = path.join(root, 'Hamlet (merged).cuerunner')
 })
 
 test.afterEach(async () => {
@@ -121,7 +121,7 @@ test.afterEach(async () => {
 
 async function openShow(page: Page): Promise<void> {
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Hamlet.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Hamlet.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in' })).toBeVisible()
 }
 
@@ -148,7 +148,7 @@ test('two people changing different things merge into a third file', async () =>
 
   const report = page.getByRole('dialog', { name: 'Merge' })
   await expect(report).toBeVisible()
-  await expect(report.locator('.changes-intro')).toContainText('Hamlet (merged).wlab')
+  await expect(report.locator('.changes-intro')).toContainText('Hamlet (merged).cuerunner')
   await expect(report.locator('.changes-intro')).toContainText('1 from this show')
   await expect(report.locator('.changes-intro')).toContainText('2 from the other show')
   // Nobody disagreed about anything, and the report says so rather than listing decisions.

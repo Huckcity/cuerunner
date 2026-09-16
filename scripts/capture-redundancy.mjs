@@ -49,7 +49,7 @@ fs.mkdirSync(outDir, { recursive: true })
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-shots-'))
 const track = path.join(work, 'overture.wav')
-const showPath = path.join(work, 'Redundancy Demo.wlab')
+const showPath = path.join(work, 'Redundancy Demo.cuerunner')
 const SHOW_ID = 'w-redundancy-demo'
 
 /** A WAV of an exact length: what the cue plays, written here rather than shipped. */

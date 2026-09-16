@@ -124,7 +124,7 @@ test('a second message in the same breath is a second instruction', async () => 
 // it is written in the file rather than kept as this machine's preference.
 test('the guard travels with the show and comes back with it', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-guard-'))
-  const showPath = path.join(root, 'Guard.wlab')
+  const showPath = path.join(root, 'Guard.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-guard',

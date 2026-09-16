@@ -115,7 +115,7 @@ let file: string
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'cuerunner-history-'))
-  file = join(dir, 'Hamlet.wlab')
+  file = join(dir, 'Hamlet.cuerunner')
 })
 
 afterEach(() => {
@@ -192,7 +192,7 @@ describe('a save writes what it changed into the file', () => {
   })
 
   it('carries the show’s own history into a file it is saved as', async () => {
-    const other = join(dir, 'Hamlet — press.wlab')
+    const other = join(dir, 'Hamlet — press.cuerunner')
     const entry = { at: '2026-02-01T00:00:00.000Z', by: 'associate', cues: [], settings: ['name'] }
 
     await saveWorkspace({} as never, workspace([cue('a', 'Walk-in')], { history: [entry] }), other)

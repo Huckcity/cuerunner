@@ -12,7 +12,7 @@ import { defaultShowSettings } from '../../types/show'
 import type { Cue } from '../../types/cue'
 
 const SCRIPT = 'First line\nSecond line\nThird line'
-const WORKSPACE = '/shows/My Show.wlab'
+const WORKSPACE = '/shows/My Show.cuerunner'
 
 function cue(overrides: Partial<Cue> = {}): Cue {
   return {

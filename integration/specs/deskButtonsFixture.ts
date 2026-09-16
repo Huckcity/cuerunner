@@ -26,7 +26,7 @@ export const DESK_BUTTONS_SHOW_NAME = 'Desk Buttons Show'
 export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
   const { port } = options
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-desk-buttons-'))
-  const path = join(root, `${DESK_BUTTONS_SHOW_NAME}.wlab`)
+  const path = join(root, `${DESK_BUTTONS_SHOW_NAME}.cuerunner`)
 
   writeFileSync(path, `${JSON.stringify({
     version: 1,

@@ -119,7 +119,7 @@ describe('comparing with another file', () => {
     compare.mockResolvedValue({
       ok: true,
       comparison: {
-        path: '/shows/Hamlet — press.wlab',
+        path: '/shows/Hamlet — press.cuerunner',
         diff: diff({
           empty: false,
           added: [{ id: 'n', label: '4 Bows', type: 'wait', place: { parent: null, after: null } }],
@@ -166,7 +166,7 @@ describe('comparing with another file', () => {
     compare.mockResolvedValue({
       ok: true,
       comparison: {
-        path: '/shows/Macbeth.wlab',
+        path: '/shows/Macbeth.cuerunner',
         diff: diff({ sameShow: false, empty: false, to: { ...SHOW, id: 'w2', name: 'Macbeth', cues: 3 } })
       }
     })
@@ -181,7 +181,7 @@ describe('comparing with another file', () => {
   it('stops showing an answer that belongs to the show it was made against', async () => {
     compare.mockResolvedValue({
       ok: true,
-      comparison: { path: '/shows/other.wlab', diff: diff({ empty: false, unchanged: 0 }) }
+      comparison: { path: '/shows/other.cuerunner', diff: diff({ empty: false, unchanged: 0 }) }
     })
     await show('compare')
     await act(async () => {

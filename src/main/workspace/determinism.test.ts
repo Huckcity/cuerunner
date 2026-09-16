@@ -140,7 +140,7 @@ let file: string
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'cuerunner-determinism-'))
-  file = join(dir, 'Press Night.wlab')
+  file = join(dir, 'Press Night.cuerunner')
   // A real file where the show says its media is, so the load resolves it rather than
   // reporting it missing.
   writeFileSync(join(dir, 'walk-in.wav'), Buffer.alloc(44))

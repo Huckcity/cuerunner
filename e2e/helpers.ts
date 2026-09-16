@@ -205,10 +205,10 @@ export async function addCueFromMoreMenu(page: Page, label: string): Promise<voi
 // in its own recent list is written where it reads it from, rather than a file dialog
 // being driven. The list is read when the menu opens, so the write may happen at any
 // point before the click.
-export async function openFromRecent(page: Page, userDataDir: string, wlab: string): Promise<void> {
-  writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([wlab]))
+export async function openFromRecent(page: Page, userDataDir: string, cuerunner: string): Promise<void> {
+  writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([cuerunner]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: path.basename(wlab) }).click()
+  await page.locator('.file-menu-recent', { hasText: path.basename(cuerunner) }).click()
 }
 
 export interface RequestHit {

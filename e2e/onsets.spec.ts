@@ -43,7 +43,7 @@ test.beforeEach(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-onsets-'))
   const media = path.join(root, 'bursts.wav')
   writeBursts(media)
-  const showPath = path.join(root, 'Bursts.wlab')
+  const showPath = path.join(root, 'Bursts.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-bursts',
@@ -66,7 +66,7 @@ test.beforeEach(async () => {
   ;({ app, page } = await launchApp({ userDataDir }))
 
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Bursts.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Bursts.cuerunner' }).click()
   await page.locator('.cue-row', { hasText: 'Four hits' }).click()
   await expect(page.locator('.waveform-total')).toHaveText('0:03.0')
   // Four bursts, so four attacks: the panel says so once it has them, which is the

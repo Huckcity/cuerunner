@@ -176,7 +176,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   }
 
   const baseName = workspacePath
-    ? workspacePath.split(/[\\/]/).pop()?.replace('.wlab', '') ?? workspaceName
+    ? workspacePath.split(/[\\/]/).pop()?.replace('.cuerunner', '') ?? workspaceName
     : workspaceName
 
   return (

@@ -475,7 +475,7 @@ function resolveCueMedia(
 /**
  * Resolves every audio cue in a workspace. The workspace is not modified: the caller
  * gets a copy whose cues carry playable paths, plus the cues nothing could be found for.
- * `workspacePath` is the .wlab file — relative references resolve against the folder
+ * `workspacePath` is the .cuerunner file — relative references resolve against the folder
  * that holds it. A workspace with no path of its own (a demo, an unsaved show) can still
  * resolve absolute references.
  */
@@ -567,7 +567,7 @@ export function serialiseWorkspace(
  * compare this machine's paths with this machine's paths.
  */
 export async function readWorkspaceFile(filePath: string): Promise<Workspace> {
-  // A hostile .wlab is a zip bomb of the plain kind: cap the read before the parse,
+  // A hostile .cuerunner is a zip bomb of the plain kind: cap the read before the parse,
   // rather than inflating attacker-declared JSON into main-process memory.
   const { size } = await stat(filePath)
   if (size > MAX_WORKSPACE_BYTES) {
@@ -792,7 +792,7 @@ export async function openWorkspace(
 ): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null> {
   const result = await dialog.showOpenDialog(win, {
     title: 'Open Workspace',
-    filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
+    filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }],
     properties: ['openFile']
   })
   if (result.canceled || !result.filePaths[0]) return null
@@ -848,8 +848,8 @@ export async function saveWorkspace(
   if (!filePath) {
     const result = await dialog.showSaveDialog(win, {
       title: 'Save Workspace',
-      defaultPath: `${workspace.name || 'Untitled'}.wlab`,
-      filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }]
+      defaultPath: `${workspace.name || 'Untitled'}.cuerunner`,
+      filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }]
     })
     if (result.canceled || !result.filePath) return null
     filePath = result.filePath
@@ -908,7 +908,7 @@ export async function compareWorkspace(
 ): Promise<WorkspaceComparison | null> {
   const result = await dialog.showOpenDialog(win, {
     title: 'Compare With',
-    filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
+    filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }],
     properties: ['openFile']
   })
   if (result.canceled || !result.filePaths[0]) return null
@@ -966,9 +966,9 @@ export async function mergeIntoNewFile(
   const where = await dialog.showSaveDialog(win, {
     title: 'Save the Merged Show',
     defaultPath: oursPath === null
-      ? `${suggested}.wlab`
-      : join(dirname(oursPath), `${suggested}.wlab`),
-    filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }]
+      ? `${suggested}.cuerunner`
+      : join(dirname(oursPath), `${suggested}.cuerunner`),
+    filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }]
   })
   if (where.canceled || !where.filePath) return null
   await writeFileAtomically(where.filePath, serialiseWorkspace(merged, dirname(where.filePath)))
@@ -1000,14 +1000,14 @@ export async function mergeShow(
     const theirs = await dialog.showOpenDialog(win, {
       title: 'Merge which show in?',
       message: 'The other person’s copy of the show',
-      filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
+      filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }],
       properties: ['openFile']
     })
     if (theirs.canceled || !theirs.filePaths[0]) return null
     const ancestor = await dialog.showOpenDialog(win, {
       title: 'Which version did the two of you start from?',
       message: 'The copy both of you saved before working apart',
-      filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
+      filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }],
       properties: ['openFile']
     })
     if (ancestor.canceled || !ancestor.filePaths[0]) return null

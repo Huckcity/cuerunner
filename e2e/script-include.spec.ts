@@ -29,7 +29,7 @@ async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
     fs.writeFileSync(full, content)
   }
 
-  const workspace = path.join(dir, 'Include Show.wlab')
+  const workspace = path.join(dir, 'Include Show.cuerunner')
   fs.writeFileSync(workspace, JSON.stringify({
     version: 1,
     id: 'w1',
@@ -42,7 +42,7 @@ async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
 
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([workspace]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Show.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Show.cuerunner' }).click()
   await expect(page.locator('.workspace-name')).toContainText('Include Show')
 }
 

@@ -69,7 +69,7 @@ test.beforeAll(async () => {
   const overture = path.join(root, 'overture.wav')
   writeWav(overture, TRACK_SECONDS)
 
-  const showPath = path.join(root, 'Handover.wlab')
+  const showPath = path.join(root, 'Handover.cuerunner')
   fs.writeFileSync(showPath, JSON.stringify({
     version: 1,
     id: SHOW_ID,

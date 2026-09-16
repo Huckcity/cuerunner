@@ -109,7 +109,7 @@ test.beforeEach(() => {
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
 
-  showPath = path.join(root, 'Press Night.wlab')
+  showPath = path.join(root, 'Press Night.cuerunner')
   writeShow(showPath, [
     audioCue('a1', '1', 'Walk-in Music', media),
     waitCue('w1', '3', 'Bows', 4000)
@@ -117,7 +117,7 @@ test.beforeEach(() => {
 
   // The version this one is compared against: one cue renamed since, one dropped, one
   // added — a change of each kind, so the comparison has all three to report.
-  previewPath = path.join(root, 'Press Night — preview.wlab')
+  previewPath = path.join(root, 'Press Night — preview.cuerunner')
   writeShow(previewPath, [
     audioCue('a1', '1', 'Walk-in', media),
     audioCue('a2', '2', 'Interval', media)
@@ -132,7 +132,7 @@ test.afterEach(async () => {
 
 async function openShow(page: Page): Promise<void> {
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Press Night.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Press Night.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 }
 
@@ -214,7 +214,7 @@ test('the comparison says how this show differs from another file', async () => 
   const dialog = page.getByRole('dialog', { name: 'Changes' })
   await dialog.locator('.changes-choose').click()
 
-  await expect(dialog.locator('.changes-intro')).toContainText('Press Night — preview.wlab')
+  await expect(dialog.locator('.changes-intro')).toContainText('Press Night — preview.cuerunner')
   // The preview had cue 2 and this show does not; this show has a cue 3 and the preview
   // did not; and cue 1 has been renamed since.
   await expect(dialog.locator('[data-group="added"] .changes-line')).toHaveText(['3 Bows'])

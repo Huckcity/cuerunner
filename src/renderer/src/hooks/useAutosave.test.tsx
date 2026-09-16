@@ -48,7 +48,7 @@ describe('useAutosave', () => {
 
   it('snapshots unsaved work, with the path it belongs to and the cue it stands on', () => {
     useStore.getState().addCue('wait')
-    useStore.setState({ workspaceName: 'My Show', workspacePath: '/shows/My Show.wlab' })
+    useStore.setState({ workspaceName: 'My Show', workspacePath: '/shows/My Show.cuerunner' })
     const standingOn = useStore.getState().cues[0].id
 
     act(() => { vi.advanceTimersByTime(INTERVAL_MS) })
@@ -58,7 +58,7 @@ describe('useAutosave', () => {
     expect(snapshot.name).toBe('My Show')
     expect(snapshot.cues).toHaveLength(1)
     expect(snapshot.cues[0].type).toBe('wait')
-    expect(sourcePath).toBe('/shows/My Show.wlab')
+    expect(sourcePath).toBe('/shows/My Show.cuerunner')
     // Where the session was, so a crash mid-show hands back the place as well as the cues.
     expect(selectedCueId).toBe(standingOn)
   })

@@ -61,7 +61,7 @@ async function openTab(name: string): Promise<void> {
  * back rather than the setting being made.
  */
 function writeTriggerShow(): string {
-  const showPath = path.join(root, 'Show Control Triggers.wlab')
+  const showPath = path.join(root, 'Show Control Triggers.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-msc-e2e',

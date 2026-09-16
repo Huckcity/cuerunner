@@ -54,12 +54,12 @@ describe('writing a zip', () => {
     writeFileSync(large, bytes(300_000))
 
     await writeZip(file, [
-      { name: 'show.wlab', data: Buffer.from('{"a":1}', 'utf8') },
+      { name: 'show.cuerunner', data: Buffer.from('{"a":1}', 'utf8') },
       { name: 'media/large.bin', file: large }
     ])
 
     const entries = await readZip(file)
-    expect(entries.map(entry => entry.name)).toEqual(['show.wlab', 'media/large.bin'])
+    expect(entries.map(entry => entry.name)).toEqual(['show.cuerunner', 'media/large.bin'])
     expect(entries[1].size).toBe(300_000)
     expect((await readZipEntry(file, entries[0])).toString('utf8')).toBe('{"a":1}')
     expect((await readZipEntry(file, entries[1])).equals(bytes(300_000))).toBe(true)
@@ -71,7 +71,7 @@ describe('writing a zip', () => {
     const first = join(dir, 'first.zip')
     const second = join(dir, 'second.zip')
 
-    const sources = [{ name: 'show.wlab', data: Buffer.from('{}') }, { name: 'media/walk-in.wav', file: media }]
+    const sources = [{ name: 'show.cuerunner', data: Buffer.from('{}') }, { name: 'media/walk-in.wav', file: media }]
     await writeZip(first, sources)
     await writeZip(second, sources)
 
@@ -85,7 +85,7 @@ describe('writing a zip', () => {
     const huge = join(dir, 'huge.bin')
     writeFileSync(huge, '')
     truncateSync(huge, 5 * 1024 * 1024 * 1024)
-    const target = join(dir, 'too-big.wlabx')
+    const target = join(dir, 'too-big.cuerunnerx')
 
     await expect(writeZip(target, [{ name: 'media/huge.bin', file: huge }]))
       .rejects.toThrow('more than a bundle this app writes can hold')
@@ -96,9 +96,9 @@ describe('writing a zip', () => {
     // A directory where the entry should be a file: it measures like a file and then
     // cannot be read, which is what a write failing part way through looks like.
     mkdirSync(join(dir, 'media'))
-    const target = join(dir, 'half-written.wlabx')
+    const target = join(dir, 'half-written.cuerunnerx')
     await expect(writeZip(target, [
-      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'show.cuerunner', data: Buffer.from('{}') },
       { name: 'media/folder', file: join(dir, 'media') }
     ])).rejects.toThrow()
     // The show entry was already written when the second one failed: the file is gone
@@ -107,14 +107,14 @@ describe('writing a zip', () => {
   })
 
   it('keeps the previous bundle when a write fails half way', async () => {
-    const target = join(dir, 'previous.wlabx')
-    await writeZip(target, [{ name: 'show.wlab', data: Buffer.from('{"a":1}', 'utf8') }])
+    const target = join(dir, 'previous.cuerunnerx')
+    await writeZip(target, [{ name: 'show.cuerunner', data: Buffer.from('{"a":1}', 'utf8') }])
     const before = readFileSync(target)
     // A directory where the entry should be a file: it measures like a file and then
     // cannot be read, which is what a write failing part way through looks like.
     mkdirSync(join(dir, 'media'))
     await expect(writeZip(target, [
-      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'show.cuerunner', data: Buffer.from('{}') },
       { name: 'media/folder', file: join(dir, 'media') }
     ])).rejects.toThrow()
     // The old bundle survives: a failed export replaces nothing.
@@ -134,7 +134,7 @@ describe('writing a zip', () => {
 describe('a hostile archive', () => {
   it('refuses a directory that runs past the end of the file', async () => {
     const file = join(dir, 'lying.zip')
-    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    await writeZip(file, [{ name: 'show.cuerunner', data: Buffer.from('{}') }])
     const bytes = readFileSync(file)
     // The end record's directory-size field (22-byte record at the tail): claim 4 GiB
     // in a 100-byte file.
@@ -146,7 +146,7 @@ describe('a hostile archive', () => {
 
   it('refuses an entry that claims more than the file holds', async () => {
     const file = join(dir, 'greedy.zip')
-    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    await writeZip(file, [{ name: 'show.cuerunner', data: Buffer.from('{}') }])
     const entries = await readZip(file)
     const greedy = { ...entries[0], size: 4 * 1024 * 1024 * 1024, compressedSize: 4 * 1024 * 1024 * 1024 }
 
@@ -158,7 +158,7 @@ describe('a hostile archive', () => {
     const file = join(dir, 'bomb.zip')
     const raw = deflateRawSync(Buffer.from('{}'))
     writeFileSync(file, raw)
-    const entry = { name: 'show.wlab', offset: 0, compressedSize: raw.length, size: 2, crc: 0, method: 8 }
+    const entry = { name: 'show.cuerunner', offset: 0, compressedSize: raw.length, size: 2, crc: 0, method: 8 }
     // Two inflated bytes against a one-byte cap: the cap fires on the output, which is
     // the path a bomb with small declared sizes takes.
     await expect(readZipEntry(file, entry, 1)).rejects.toThrow('unpacks to more')
@@ -183,7 +183,7 @@ describe('reading an archive this app did not write', () => {
   })
 
   it('refuses what is not an archive at all', async () => {
-    const file = join(dir, 'show.wlab')
+    const file = join(dir, 'show.cuerunner')
     writeFileSync(file, '{"version":1}')
     await expect(readZip(file)).rejects.toThrow('not a zip archive')
   })
@@ -194,7 +194,7 @@ describe('an archive that is damaged', () => {
     const file = join(dir, 'bundle.zip')
     writeFileSync(join(dir, 'media.wav'), bytes(8192))
     await writeZip(file, [
-      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'show.cuerunner', data: Buffer.from('{}') },
       { name: 'media/media.wav', file: join(dir, 'media.wav') }
     ])
 
@@ -212,7 +212,7 @@ describe('an archive that is damaged', () => {
 
   it('is refused when the directory itself is damaged', async () => {
     const file = join(dir, 'bundle.zip')
-    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    await writeZip(file, [{ name: 'show.cuerunner', data: Buffer.from('{}') }])
     const damaged = readFileSync(file)
     damaged.writeUInt32LE(0, damaged.length - 10)
     writeFileSync(file, damaged)

@@ -65,15 +65,15 @@ function longShow(): string {
     }]
   }
 
-  const wlab = path.join(root, 'Long Show.wlab')
-  fs.writeFileSync(wlab, JSON.stringify(workspace, null, 2))
-  return wlab
+  const cuerunner = path.join(root, 'Long Show.cuerunner')
+  fs.writeFileSync(cuerunner, JSON.stringify(workspace, null, 2))
+  return cuerunner
 }
 
-async function openShow(page: Page, userDataDir: string, wlab: string): Promise<void> {
-  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([wlab]))
+async function openShow(page: Page, userDataDir: string, cuerunner: string): Promise<void> {
+  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([cuerunner]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: path.basename(wlab) }).click()
+  await page.locator('.file-menu-recent', { hasText: path.basename(cuerunner) }).click()
   await expect(page.locator('.cue-row', { hasText: 'Overture' })).toBeVisible()
 }
 
@@ -89,10 +89,10 @@ async function openSettingsAudio(page: Page) {
 }
 
 test('a workspace the engine will stream is announced, and measuring it decodes nothing', async () => {
-  const wlab = longShow()
+  const cuerunner = longShow()
   const { app, page, userDataDir } = await launchApp()
   try {
-    await openShow(page, userDataDir, wlab)
+    await openShow(page, userDataDir, cuerunner)
     const dialog = await openSettingsAudio(page)
 
     // The estimate is the engine's, and it says what will happen to the file.

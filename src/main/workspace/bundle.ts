@@ -1,7 +1,7 @@
 // A show and its media as one file.
 //
 // A show is a workspace plus a folder of audio, and the two travel together badly: send
-// the .wlab and the other end gets a cue list full of files it does not have. Hand over a
+// the .cuerunner and the other end gets a cue list full of files it does not have. Hand over a
 // folder and there is always one file left behind — the walk-in that lives on the
 // desktop, the sting somebody dropped in from a render folder. A bundle is the answer:
 // one artifact, the showfile and every file it plays, which is also the artifact that
@@ -10,7 +10,7 @@
 // Inside it the layout is fixed, and the showfile is written with its media pointing at
 // it, so unpacking the bundle anywhere gives a show that plays:
 //
-//     show.wlab        the show, with its media paths relative to the bundle root
+//     show.cuerunner        the show, with its media paths relative to the bundle root
 //     media/<name>     one entry per distinct file the show plays, in name order
 //
 // The bytes are a function of the show and of nothing else — the same entries in the same
@@ -27,10 +27,10 @@ import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../renderer/src/types/cue'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
-export const BUNDLE_EXTENSION = 'wlabx'
+export const BUNDLE_EXTENSION = 'cuerunnerx'
 
 /** The showfile inside a bundle. Fixed, so a reader knows what it is looking for. */
-const SHOW_ENTRY = 'show.wlab'
+const SHOW_ENTRY = 'show.cuerunner'
 
 /** Where a bundle's media goes, and what the showfile inside it points at. */
 const MEDIA_DIR = 'media'
@@ -72,7 +72,7 @@ function portable(name: string): string {
 
 /** The file a bundle is unpacked as: the show's own name, made safe for a folder. */
 export function bundleFileName(showName: string): string {
-  return `${portable(showName)}.wlab`
+  return `${portable(showName)}.cuerunner`
 }
 
 /** One media file as the bundle holds it: the entry it was given, and where it came from. */

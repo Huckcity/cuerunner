@@ -597,13 +597,13 @@ describe('store — audit 2026-09', () => {
 
   it('marks an undo after a save dirty again', () => {
     useStore.getState().addCue('wait')
-    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [])
+    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', 'Hamlet', [])
     expect(useStore.getState().isDirty).toBe(false)
 
     useStore.getState().undo()
     expect(useStore.getState().isDirty).toBe(true)
 
-    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [])
+    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', 'Hamlet', [])
     useStore.getState().redo()
     expect(useStore.getState().isDirty).toBe(true)
   })

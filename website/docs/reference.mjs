@@ -41,7 +41,7 @@ export const REFERENCE = [
         </a>
         <a class="card doc-card" href="./formats.html">
           <h3>File formats</h3>
-          <p>The <code>.wlab</code> workspace, media paths, and the wireless telemetry document.</p>
+          <p>The <code>.cuerunner</code> workspace, media paths, and the wireless telemetry document.</p>
         </a>
         <a class="card doc-card" href="./troubleshooting.html">
           <h3>Troubleshooting</h3>
@@ -201,7 +201,7 @@ export const REFERENCE = [
       <p class="doc-lede">
         <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or WinsLab ▾ → Settings. The sidebar
         splits them by where they are kept: <strong>this show</strong> travels in the
-        <code>.wlab</code> file, <strong>this computer</strong> stays on the machine.
+        <code>.cuerunner</code> file, <strong>this computer</strong> stays on the machine.
       </p>
     </section>
 
@@ -513,7 +513,7 @@ export const REFERENCE = [
         A workspace file is executable code and network-triggerable: a script cue runs a
         system command as you when it fires, and a network trigger (OSC, MIDI or show
         control) lets one packet on the show network fire any cue, scripts included. Only
-        open <code>.wlab</code> files you trust, and only on a network you trust — the
+        open <code>.cuerunner</code> files you trust, and only on a network you trust — the
         composition is the risk, not either half alone. OSC input listens on all interfaces
         by default.
       </p>
@@ -565,7 +565,7 @@ await rig.blackout()</code></div>
     path: 'reference/formats.html',
     section: 'Reference',
     title: 'File formats',
-    blurb: 'The .wlab workspace file, the .wlabx bundle, how media is referenced, and the wireless telemetry document WinsLab reads.',
+    blurb: 'The .cuerunner workspace file, the .cuerunnerx bundle, how media is referenced, and the wireless telemetry document WinsLab reads.',
     body: `
     <section class="panel reveal">
       <h1>File formats</h1>
@@ -574,14 +574,14 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="workspace">
       <h2>The workspace file</h2>
       <p>
-        A show is one <code>.wlab</code> file: JSON, holding the cues in order, the show's
+        A show is one <code>.cuerunner</code> file: JSON, holding the cues in order, the show's
         setup — the desk, the cast, the scenes, the mic plot, the triggers — and the
         window's own state such as which cue was selected.
       </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping
-        the paths valid: the simplest arrangement is a folder with the <code>.wlab</code>
+        the paths valid: the simplest arrangement is a folder with the <code>.cuerunner</code>
         file and the audio beside it, copied whole.
       </p>
       <p>
@@ -600,8 +600,8 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="bundle">
       <h2>The bundle file<span class="pro">Pro</span></h2>
       <p>
-        A <code>.wlabx</code> is the show <em>and</em> its audio as one file: a zip holding
-        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        A <code>.cuerunnerx</code> is the show <em>and</em> its audio as one file: a zip holding
+        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
         inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file.
       </p>

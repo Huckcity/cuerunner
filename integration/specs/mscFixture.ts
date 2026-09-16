@@ -29,7 +29,7 @@ export const MSC_SHOW_NAME = 'Show Control Show'
 export function writeMscShow(options: MscShowOptions): string {
   const { port, cue } = options
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-msc-'))
-  const path = join(root, `${MSC_SHOW_NAME}.wlab`)
+  const path = join(root, `${MSC_SHOW_NAME}.cuerunner`)
 
   writeFileSync(path, `${JSON.stringify({
     version: 1,

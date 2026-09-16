@@ -32,7 +32,7 @@ test('recovers from a renderer crash with an explanation', async () => {
   // has already booted, so this is its snapshot as the next window will find it — and the
   // crash bar has to explain the crash without telling the operator this is gone.
   fs.writeFileSync(
-    path.join(userDataDir, 'recovery.wlab'),
+    path.join(userDataDir, 'recovery.cuerunner'),
     JSON.stringify({
       savedAt: Date.now(),
       sourcePath: null,

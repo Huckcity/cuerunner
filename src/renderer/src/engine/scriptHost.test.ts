@@ -73,7 +73,7 @@ describe('scriptHost', () => {
     scriptHost.run({
       cueId: 'sc1',
       code: 'console.log(1)',
-      workspacePath: '/shows/My Show.wlab',
+      workspacePath: '/shows/My Show.cuerunner',
       timeoutMs: 60000,
       onLog,
       ...overrides
@@ -141,7 +141,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'shell', id: 4, command: 'echo hello' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'shellResult')).toBe(true))
 
-    expect(shell).toHaveBeenCalledWith('echo hello', { cwd: '/shows/My Show.wlab' })
+    expect(shell).toHaveBeenCalledWith('echo hello', { cwd: '/shows/My Show.cuerunner' })
     expect(worker.posted).toContainEqual({
       type: 'shellResult',
       id: 4,
@@ -162,7 +162,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'shell', id: 5, command: 'nope', options: { timeout: 2000 } })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'shellResult')).toBe(true))
 
-    expect(shell).toHaveBeenCalledWith('nope', { cwd: '/shows/My Show.wlab', timeout: 2000 })
+    expect(shell).toHaveBeenCalledWith('nope', { cwd: '/shows/My Show.cuerunner', timeout: 2000 })
     expect(worker.posted).toContainEqual(expect.objectContaining({
       type: 'shellResult',
       result: expect.objectContaining({ code: 127 })
@@ -197,7 +197,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'readFile', id: 9, path: './lib.js' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
 
-    expect(readFile).toHaveBeenCalledWith('./lib.js', '/shows/My Show.wlab', undefined)
+    expect(readFile).toHaveBeenCalledWith('./lib.js', '/shows/My Show.cuerunner', undefined)
     expect(worker.posted).toContainEqual({
       type: 'readFileResult',
       id: 9,
@@ -218,7 +218,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'readFile', id: 10, path: './lamp.js', base: '/shows/cues/kit.js' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
 
-    expect(readFile).toHaveBeenCalledWith('./lamp.js', '/shows/My Show.wlab', '/shows/cues/kit.js')
+    expect(readFile).toHaveBeenCalledWith('./lamp.js', '/shows/My Show.cuerunner', '/shows/cues/kit.js')
 
     worker.emit({ type: 'settled', error: null })
     await settled

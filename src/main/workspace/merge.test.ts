@@ -53,8 +53,8 @@ beforeEach(() => {
 describe('mergeShow', () => {
   it('answers null when the save dialog is cancelled, merging nothing', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cuerunner-merge-'))
-    const theirs = writeShow(dir, 'theirs.wlab')
-    const ancestor = writeShow(dir, 'ancestor.wlab')
+    const theirs = writeShow(dir, 'theirs.cuerunner')
+    const ancestor = writeShow(dir, 'ancestor.cuerunner')
     showSaveDialog.mockResolvedValue({ canceled: true, filePath: '' })
 
     const merged = await mergeShow({} as never, {
