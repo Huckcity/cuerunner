@@ -161,6 +161,25 @@ describe('OscInputService', () => {
     ])
   })
 
+  it('ignores a datagram that is not OSC instead of latching the service degraded', () => {
+    // Anyone on the show network may send junk to this port. The listener is fine, so the
+    // row stays running and the messages that do arrive keep firing cues; one line says it
+    // happened, and a flood of junk is not a flood of alarms.
+    const { service, servers, context, setState, bus } = harness()
+    service.start(context, settings(true, 53000))
+    servers[0].emit('listening')
+
+    const junk = new Error("can't decode incoming message: Malformed Packet")
+    servers[0].emit('error', junk, { address: '10.0.0.9', port: 9000 })
+    servers[0].emit('error', junk, { address: '10.0.0.9', port: 9000 })
+    servers[0].emit('message', ['/go'], { address: '10.0.0.9', port: 9000 })
+
+    expect(setState).not.toHaveBeenCalledWith('degraded', expect.anything())
+    expect(setState).toHaveBeenLastCalledWith('running', 'listening on port 53000')
+    expect(bus.snapshot().alerts.filter(alert => alert.level === 'info')).toHaveLength(1)
+    expect(oscEvents(bus)).toHaveLength(1)
+  })
+
   it('closes the socket on stop, once', () => {
     const { service, servers, context } = harness()
     service.start(context, settings(true, 53000))

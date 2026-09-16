@@ -34,6 +34,17 @@ function defaultConnect(host: string, port: number): Socket {
   return createConnection({ host, port })
 }
 
+/**
+ * One recall's bytes while they wait for a socket, and whether they have gone out. The
+ * flag is what lets a recall answer for *its own* bytes: a failure on the link takes the
+ * queue with it, and a recall whose bytes are in that queue has to be told it was not
+ * delivered rather than reading an empty queue as a successful send.
+ */
+interface QueuedRecall {
+  bytes: number[]
+  written: boolean
+}
+
 interface Link {
   host: string
   port: number
@@ -41,8 +52,8 @@ interface Link {
   connected: boolean
   /** The connection being attempted, so concurrent recalls share one dial. */
   dialling: Promise<void> | null
-  /** Bytes waiting for the socket to open. Only ever one recall's worth in flight. */
-  pending: number[][]
+  /** Recalls waiting for the socket to open, in the order their cues produced them. */
+  pending: QueuedRecall[]
   retry: NodeJS.Timeout | null
   /** Set while the show still names this desk: what the retry timer checks. */
   wanted: boolean
@@ -124,7 +135,8 @@ export class MidiTcpEngine {
 
     const bytes = messages.flatMap(message => encodeMidiMessage(message))
     if (bytes.length === 0) return { ok: true }
-    link.pending.push(bytes)
+    const queued: QueuedRecall = { bytes, written: false }
+    link.pending.push(queued)
 
     if (!link.connected) {
       const dialled = link.dialling ?? this.dial(link)
@@ -137,9 +149,14 @@ export class MidiTcpEngine {
       // the check below read.
       const arrived = await Promise.race([dialled.then(() => true), deadline])
       if (!arrived || !link.connected) {
-        // Nothing is delivered later: a message reported as failed and delivered anyway
-        // is a desk that moves twice for one scene.
-        link.pending = []
+        // Only this recall's bytes leave the queue: another recall may have queued behind
+        // them while the dial was running, and its own deadline decides its fate. Taking
+        // the whole queue here used to take that recall's bytes with it — which then
+        // reached the flush below with an empty queue and was reported as sent.
+        //
+        // Nothing is delivered later, either: a message reported as failed and delivered
+        // anyway is a desk that moves twice for one scene.
+        link.pending = link.pending.filter(entry => entry !== queued)
         return {
           ok: false,
           error: `The desk at ${deskLinkName(host, port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
@@ -148,14 +165,25 @@ export class MidiTcpEngine {
     }
 
     const sent = this.flush(link)
-    return sent.ok ? { ok: true } : sent
+    // The answer is about this recall's own bytes, not about the queue: a link that failed
+    // for another recall takes the queue with it, and these bytes are then not on the wire
+    // however empty the queue looks.
+    if (queued.written) return { ok: true }
+    if (!sent.ok) return sent
+    return {
+      ok: false,
+      error: `Could not send to the desk at ${deskLinkName(host, port)}: the connection dropped before the recall went out`
+    }
   }
 
   /** The messages waiting for a socket, written in the order the cues produced them. */
   private flush(link: Link): MidiTcpResult {
     if (!link.socket || link.pending.length === 0) return { ok: true }
     try {
-      for (const bytes of link.pending) link.socket.write(Buffer.from(bytes))
+      for (const queued of link.pending) {
+        link.socket.write(Buffer.from(queued.bytes))
+        queued.written = true
+      }
       link.pending = []
       return { ok: true }
     } catch (error) {

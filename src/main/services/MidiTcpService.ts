@@ -28,10 +28,17 @@ export class MidiTcpService implements ShowService {
   readonly label = 'Desk (MIDI over TCP)'
   readonly pro = true
 
+  /** The context to publish through, so the desk's row can be taken offline on stop. */
+  private context: ServiceContext | null = null
+  /** The row this service published, so stopping can take that same row offline. */
+  private device: string | null = null
+
   constructor(private readonly engine: DeskLink = midiTcp) {}
 
   start(context: ServiceContext, settings: ShowSettings): void {
     const { desk } = settings
+    this.context = context
+    this.device = null
     if (desk.kind !== 'midi-tcp') {
       context.setState('stopped', 'the show drives no desk over the network')
       return
@@ -46,8 +53,9 @@ export class MidiTcpService implements ShowService {
       context.bus.publish({ kind: 'midi', at: Date.now(), device: from, message })
     }
     this.engine.onStatus = (from, online, detail) => {
+      this.device = `midi-tcp:${from}`
       context.bus.device({
-        id: `midi-tcp:${from}`,
+        id: this.device,
         service: this.id,
         name: from,
         model: 'Desk (MIDI over TCP)',
@@ -69,6 +77,21 @@ export class MidiTcpService implements ShowService {
   }
 
   stop(): void {
+    // The desk's row is taken offline before the engine lets go of the link, the way the
+    // MIDI input's rows are: a desk that is not being talked to is not connected, and the
+    // panel would otherwise read "online" for the rest of the session.
+    if (this.context !== null && this.device !== null) {
+      this.context.bus.device({
+        id: this.device,
+        service: this.id,
+        name: this.device.slice('midi-tcp:'.length),
+        model: 'Desk (MIDI over TCP)',
+        online: false,
+        lastSeen: Date.now()
+      })
+    }
+    this.context = null
+    this.device = null
     this.engine.onMessage = null
     this.engine.onStatus = null
     this.engine.closeAll()

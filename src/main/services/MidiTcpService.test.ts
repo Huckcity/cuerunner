@@ -127,4 +127,19 @@ describe('MidiTcpService', () => {
     expect(link.onMessage).toBeNull()
     expect(link.onStatus).toBeNull()
   })
+
+  it('takes the desk’s row offline when the service stops', () => {
+    // The engine's close path cannot report: the handlers are dropped before the link is
+    // let go. A row left reading "online" for a desk nobody is talking to is the panel
+    // lying about the one thing it shows, in the state where it matters most.
+    const { service, link, context, bus } = harness()
+    service.start(context, settings())
+    if (!link.onStatus) throw new Error('the service did not take the link’s status')
+    link.onStatus('10.0.0.5:51325', true)
+
+    service.stop()
+
+    expect(bus.snapshot().devices.find(device => device.id === 'midi-tcp:10.0.0.5:51325'))
+      .toMatchObject({ service: 'midi-tcp', online: false })
+  })
 })

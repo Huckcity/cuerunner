@@ -283,13 +283,13 @@ export function isHello(message: Partial<HelloMessage>): message is HelloMessage
     typeof message.name === 'string' &&
     (message.role === 'live' || message.role === 'standby') &&
     typeof message.driving === 'boolean' &&
-    typeof message.term === 'number' &&
+    isTerm(message.term) &&
     typeof message.token === 'string'
   )
 }
 
 function isBeat(message: Partial<BeatMessage>): message is BeatMessage {
-  if (typeof message.seq !== 'number' || typeof message.term !== 'number') return false
+  if (typeof message.seq !== 'number' || !isTerm(message.term)) return false
   if (typeof message.driving !== 'boolean') return false
   if (message.digest === null) return true
   return isDigest(message.digest)
@@ -332,6 +332,17 @@ function isMirrorCue(value: unknown): value is MirrorCue {
  */
 export function prefersOutgoing(localId: string, remoteId: string): boolean {
   return localId < remoteId
+}
+
+/**
+ * A term is a whole count of takeovers, and the pair compares them to decide who drives.
+ * A `number` check is not enough: a NaN from anywhere but the arithmetic below compares
+ * false against everything, so it would wedge the arbitration — a machine that can never
+ * be demoted — and an infinity would suppress every term under it for ever. Every field a
+ * machine acts on crosses a socket, and this one is checked like the rest.
+ */
+export function isTerm(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
 // ── What the machine knows about its partner ────────────────────────────────
