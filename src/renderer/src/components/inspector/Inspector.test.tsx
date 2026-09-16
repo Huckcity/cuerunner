@@ -145,4 +145,30 @@ describe('Inspector', () => {
     const stored = useStore.getState().cues[0] as { args: Array<{ type: string; value: unknown }> }
     expect(stored.args[0]).toEqual({ type: 's', value: '' })
   })
+
+  it('refuses a header rename that would take another header’s value with it', () => {
+    // Headers are one plain object, so two rows with the same name are one entry: the
+    // rename would delete the other row — and its value — while the operator is still
+    // typing, and typing on would not bring it back.
+    const network = cue('network', {
+      headers: { Accept: 'application/json', 'Content-Type': 'text/plain' }
+    } as Partial<Cue>)
+    show([network], network)
+    openTab('Network')
+
+    const rows = [...container.querySelectorAll('.field-row')]
+      .filter(row => row.querySelector('label')?.textContent?.startsWith('Header'))
+    const secondKey = rows[1].querySelector<HTMLInputElement>('input')!
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(secondKey, 'Accept')
+      secondKey.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    const stored = useStore.getState().cues[0] as { headers: Record<string, string> }
+    expect(stored.headers).toEqual({
+      Accept: 'application/json',
+      'Content-Type': 'text/plain'
+    })
+  })
 })

@@ -760,6 +760,9 @@ export const useStore = create<CueListState>((set) => ({
   }),
 
   addAudioCuesFromFiles: (files, afterId) => set(s => {
+    // A drop of nothing is nothing: the selection helper below needs a cue to point at,
+    // and an empty list has none.
+    if (files.length === 0) return s
     const cues = [...s.cues]
     let insertIdx: number
     let parentId: string | null = null

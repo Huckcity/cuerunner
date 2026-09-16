@@ -1,8 +1,11 @@
 import { app } from 'electron'
 import { randomUUID } from 'crypto'
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'fs/promises'
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import type { Workspace } from '../../renderer/src/types/workspace'
+
+/** The largest snapshot this app reads back: the same ceiling a workspace file gets. */
+const MAX_RECOVERY_BYTES = 64 * 1024 * 1024
 
 export interface RecoverySnapshot {
   workspace: Workspace
@@ -39,7 +42,13 @@ export async function writeRecovery(
 
 export async function readRecovery(): Promise<RecoverySnapshot | null> {
   try {
-    const snapshot = JSON.parse(await readFile(recoveryFilePath(), 'utf-8')) as RecoverySnapshot
+    const filePath = recoveryFilePath()
+    // The same cap the app's other load paths use: a snapshot this app wrote is a show,
+    // and one far past this is not something to read into main's memory on the strength
+    // of a filename.
+    const { size } = await stat(filePath)
+    if (size > MAX_RECOVERY_BYTES) return null
+    const snapshot = JSON.parse(await readFile(filePath, 'utf-8')) as RecoverySnapshot
     return snapshot?.workspace ? snapshot : null
   } catch {
     // No snapshot, or one that was truncated by a dying process: either way there is

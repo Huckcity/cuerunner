@@ -945,6 +945,17 @@ describe('store — undo/redo', () => {
 describe('store — addAudioCuesFromFiles', () => {
   beforeEach(() => useStore.setState({ cues: [], selectedId: null, past: [], future: [] }))
 
+  it('leaves the show alone when a drop brings no files', () => {
+    useStore.getState().addCue('wait')
+    const before = useStore.getState()
+
+    // A drop of nothing is nothing: the selection helper needs a cue to point at, and
+    // an empty list has none — this used to throw inside the store.
+    expect(() => useStore.getState().addAudioCuesFromFiles([])).not.toThrow()
+    expect(useStore.getState().cues).toBe(before.cues)
+    expect(useStore.getState().isDirty).toBe(before.isDirty)
+  })
+
   it('appends audio cues from file list at the end when no afterId', () => {
     useStore.getState().addAudioCuesFromFiles([
       { filePath: '/a.wav', name: 'Sound A' },
