@@ -39,9 +39,13 @@ const workDir = mkdtempSync(join(tmpdir(), 'winslab-asio-rules-'))
 const isMsvc = compiler().command.endsWith('cl') || compiler().command.endsWith('cl.exe')
 const binary = join(workDir, isMsvc ? 'asio-rules.exe' : 'asio-rules')
 const { command, args } = compiler()
+// `cl` has no GNU `-o`: the executable switch is `/Fe` (and `/Fo` for objects).
+const outputArgs = isMsvc
+  ? [`/Fe${binary}`]
+  : ['-o', binary]
 
 try {
-  const compile = spawnSync(command, [...args, `-I${srcDir}`, join(here, 'asio-rules.cpp'), '-o', binary], {
+  const compile = spawnSync(command, [...args, `-I${srcDir}`, join(here, 'asio-rules.cpp'), ...outputArgs], {
     stdio: 'inherit'
   })
   if (compile.error) {
