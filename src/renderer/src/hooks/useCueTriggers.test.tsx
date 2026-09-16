@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useCueTriggers } from './useCueTriggers'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
 import { TEST_LICENSE } from '../../../test/license'
 import type { Cue, CueTrigger } from '../types/cue'
@@ -69,11 +69,11 @@ describe('useCueTriggers', () => {
         if (emit === callback) emit = null
       }
     })
-    goById = vi.spyOn(cueRunner, 'goById').mockImplementation(() => {})
+    goById = vi.spyOn(cueEngine, 'goById').mockImplementation(() => {})
     // The guard is real here on purpose — a hook that asked it in the wrong order looked
     // fine against a stub and blocked every MIDI note in the app. What the tests control
     // is where the guard starts from.
-    cueRunner.resetGuards()
+    cueEngine.resetGuards()
 
     useStore.setState({ license: { state: 'active', license: TEST_LICENSE }, cues: [], log: [] })
     act(() => { root.render(<Harness />) })

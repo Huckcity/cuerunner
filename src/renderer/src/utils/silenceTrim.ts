@@ -19,7 +19,7 @@ export interface PlayRegion {
 /**
  * What a cue plays, with the silence trim folded in when the trim is on and this machine
  * is licensed to apply it. `trim` is the caller's answer to both of those questions
- * (`CueRunner` reads them per firing), because a utility has no business knowing what a
+ * (`CueEngine` reads them per firing), because a utility has no business knowing what a
  * licence is.
  *
  * A cue with the trim on and no measurement yet plays its whole region: the scan is a

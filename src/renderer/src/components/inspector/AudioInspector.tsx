@@ -6,7 +6,7 @@ import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { RoutingMatrix } from './RoutingMatrix'
 import { audioEngine } from '../../engine/audioEngineClient'
-import { cueRunner } from '../../engine/CueRunner'
+import { cueEngine } from '../../engine/CueEngine'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { resampleNotice } from '../../utils/sampleRate'
 import { AUDIO_DEFAULTS } from '../../utils/cueDefaults'
@@ -105,23 +105,23 @@ export function AudioInspector({ cue, tab }: Props) {
   // so a reset has to go through the engine too.
   const applyPlaybackRate = (rate: number) => {
     set({ playbackRate: rate })
-    cueRunner.setLiveParameter(cue.id, 'rate', rate)
+    cueEngine.setLiveParameter(cue.id, 'rate', rate)
   }
   const applyTrim = (trim: number) => {
     set({ trim })
-    cueRunner.setLiveParameter(cue.id, 'trim', trim)
+    cueEngine.setLiveParameter(cue.id, 'trim', trim)
   }
   const applyVolume = (volume: number) => {
     set({ volume })
-    cueRunner.setLiveParameter(cue.id, 'volume', volume)
+    cueEngine.setLiveParameter(cue.id, 'volume', volume)
   }
   const applyPan = (pan: number) => {
     set({ pan })
-    cueRunner.setLiveParameter(cue.id, 'pan', pan)
+    cueEngine.setLiveParameter(cue.id, 'pan', pan)
   }
   const applyRouting = (outputs: AudioCrosspoint[] | null) => {
     set({ outputs })
-    cueRunner.setLiveRouting(cue.id)
+    cueEngine.setLiveRouting(cue.id)
   }
 
   // The file's channel count and rate, from the engine's metadata — the media stays there.

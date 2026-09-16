@@ -4,7 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { Workspace, WorkspaceIdentity } from '../types/workspace'
 import { buildWorkspace } from '../utils/workspace'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
 function reportFailure(message: string): void {
@@ -75,7 +75,7 @@ function loadIntoStore(
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
   // one from the show that was open before.
-  cueRunner.resetGuards()
+  cueEngine.resetGuards()
   store.setMissingMedia(missingMedia)
 }
 

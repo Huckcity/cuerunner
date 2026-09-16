@@ -7,7 +7,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { AudioInspector } from './AudioInspector'
 import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
-import { cueRunner } from '../../engine/CueRunner'
+import { cueEngine } from '../../engine/CueEngine'
 import { TEST_LICENSE } from '../../../../test/license'
 import type { AudioCue } from '../../types/cue'
 
@@ -146,7 +146,7 @@ describe('AudioInspector', () => {
   it('restores rate and trim to 1x through the runner, not just the store', async () => {
     const cue = audioCue({ playbackRate: 2, trim: 0.4 })
     await show(cue)
-    const setLiveParameter = vi.spyOn(cueRunner, 'setLiveParameter')
+    const setLiveParameter = vi.spyOn(cueEngine, 'setLiveParameter')
 
     await act(async () => { resetButton('Rate').click() })
     await act(async () => { resetButton('Trim').click() })
@@ -158,7 +158,7 @@ describe('AudioInspector', () => {
 
   it('restores master volume and pan through the runner', async () => {
     await show(audioCue({ volume: 0.2, pan: -0.7 }))
-    const setLiveParameter = vi.spyOn(cueRunner, 'setLiveParameter')
+    const setLiveParameter = vi.spyOn(cueEngine, 'setLiveParameter')
 
     await act(async () => { resetButton('Volume').click() })
     // The panel re-renders from the store after each edit, so feed the updated cue back in.
@@ -382,7 +382,7 @@ describe('AudioInspector', () => {
 
   it('tells the runner when the routing of a playing cue changes', async () => {
     await show(audioCue({ filePath: '/shows/walk-in.wav' }))
-    const setLiveRouting = vi.spyOn(cueRunner, 'setLiveRouting')
+    const setLiveRouting = vi.spyOn(cueEngine, 'setLiveRouting')
 
     await act(async () => { setRouting('matrix') })
 

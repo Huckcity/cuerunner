@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { describeTriggerSource, triggeredCues } from '../engine/triggers'
 import { firingIdentity, noteKey } from '../engine/inputGuard'
 import { useStore, usePro } from '../store'
@@ -32,17 +32,17 @@ export function useCueTriggers(): void {
         // the next press of that note a press rather than a repeat.
         const note = noteKey(event)
         if (note !== null && event.kind === 'midi' && event.message.kind === 'noteOff') {
-          cueRunner.releaseNote(note)
+          cueEngine.releaseNote(note)
           // A note-off is not a trigger in any case: nothing below can match it.
           continue
         }
 
         const firing = firingIdentity(event)
-        if (!firing || !cueRunner.acceptsFire(firing.surface, firing.key)) continue
+        if (!firing || !cueEngine.acceptsFire(firing.surface, firing.key)) continue
 
         // The press is remembered only once it has been allowed: a note that was refused
         // never started anything, so nothing should be waiting for it to come up.
-        if (note !== null) cueRunner.pressNote(note)
+        if (note !== null) cueEngine.pressNote(note)
 
         // Read the cue list per event rather than per batch: a trigger that fires a cue
         // which is itself edited by that run should be matched against what is there.
@@ -55,7 +55,7 @@ export function useCueTriggers(): void {
             label: `${cue.number} · ${cue.name}`,
             message: `Triggered by ${describeTriggerSource(event)}`
           }])
-          cueRunner.goById(cue.id)
+          cueEngine.goById(cue.id)
         }
       }
     })

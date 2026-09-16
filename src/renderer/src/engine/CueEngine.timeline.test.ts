@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { CueRunner } from './CueRunner'
+import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import type { Cue, WaitCue, AudioCue, GroupCue } from '../types/cue'
 import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
@@ -43,13 +43,13 @@ function makeAudio(id: string, parentId: string, overrides: Partial<AudioCue> = 
 
 // Runners left behind by a test still hold scheduled work; disposing them keeps a
 // later test's clock from firing an earlier test's cues.
-const runners: CueRunner[] = []
+const runners: CueEngine[] = []
 afterEach(() => {
   for (const runner of runners.splice(0)) runner.dispose()
 })
 
 function setup(cues: Cue[]) {
-  const runner = new CueRunner()
+  const runner = new CueEngine()
   const setRunning = vi.fn()
   runner.init({
     getCues: () => cues,
@@ -69,7 +69,7 @@ function setup(cues: Cue[]) {
   return { runner, setRunning }
 }
 
-describe('CueRunner — timeline group mode', () => {
+describe('CueEngine — timeline group mode', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 

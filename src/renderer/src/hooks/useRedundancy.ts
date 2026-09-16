@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { usePro, useStore } from '../store'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { audioEngine } from '../engine/audioEngineClient'
 import {
   NOTICE_FRESH_MS,
@@ -182,7 +182,7 @@ export function useRedundancy(): void {
       // The show has moved to the other machine, which is already playing it. This one
       // stops being the sound: the same short fade a panic cuts with, so two machines
       // holding the same cue do not overlap.
-      cueRunner.standDown()
+      cueEngine.standDown()
       useStore.getState().appendLog([
         { level: 'info', message: `Stood down: ${notice.reason}; stopped this machine's playback` }
       ])
@@ -192,7 +192,7 @@ export function useRedundancy(): void {
     const plan = takeoverPlan(useStore.getState().cues.map(toPlanCue), notice.digest, notice.silentMs)
     // The runner writes the plan's own line to the session log — what was picked up,
     // what could not be, and how much of the show went by unheard.
-    cueRunner.adopt(plan)
+    cueEngine.adopt(plan)
   }, [pro, notice])
 }
 

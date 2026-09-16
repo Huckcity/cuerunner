@@ -146,7 +146,7 @@ interface RunnerDeps {
   getTriggerGuard: () => TriggerGuardSettings
 }
 
-export class CueRunner {
+export class CueEngine {
   private deps: RunnerDeps | null = null
   private scheduler: SampleScheduler | null = null
   private unsubscribeEvents: (() => void) | null = null
@@ -1545,4 +1545,4 @@ export class CueRunner {
   }
 }
 
-export const cueRunner = new CueRunner()
+export const cueEngine = new CueEngine()

@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useRedundancy } from './useRedundancy'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { audioEngine } from '../engine/audioEngineClient'
 import { useStore } from '../store'
 import { TEST_LICENSE } from '../../../test/license'
@@ -114,8 +114,8 @@ describe('useRedundancy', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    adopt = vi.spyOn(cueRunner, 'adopt').mockImplementation(() => ({ adopted: 0, skipped: 0 }))
-    standDown = vi.spyOn(cueRunner, 'standDown').mockImplementation(() => {})
+    adopt = vi.spyOn(cueEngine, 'adopt').mockImplementation(() => ({ adopted: 0, skipped: 0 }))
+    standDown = vi.spyOn(cueEngine, 'standDown').mockImplementation(() => {})
 
     // The machine's own file is the truth about whether this machine is paired: the
     // hook reads it at startup and the store follows it.

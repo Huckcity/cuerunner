@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useStore, useSelectedCue } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
-import { cueRunner } from '../../engine/CueRunner'
+import { cueEngine } from '../../engine/CueEngine'
 import { PlaybackWarnings } from '../layout/PlaybackWarnings'
 import {
   DPR, drawWaveform, PEAK_BUCKETS, FULL_VIEW,
@@ -110,7 +110,7 @@ export function WaveformPanel() {
   const audioCue = selectedCue?.type === 'audio' ? selectedCue as AudioCue : null
   /**
    * Whether the trim applies to this cue here: the cue asks for it and this machine is
-   * licensed to apply it. The same two questions `CueRunner` asks before a firing, so
+   * licensed to apply it. The same two questions `CueEngine` asks before a firing, so
    * what the panel shades is what the engine will sound.
    */
   const trim = audioCue?.trimSilence === true
@@ -480,7 +480,7 @@ export function WaveformPanel() {
     const timeMs = fraction * total
     setWaveformCursor(cue.id, timeMs)
     setPlayFraction(fraction)
-    if (isPlaying) cueRunner.seekCue(cue.id, timeMs)
+    if (isPlaying) cueEngine.seekCue(cue.id, timeMs)
     dragRef.current = { mode: 'cursor', grab: fraction }
     setDragging('cursor')
   }
@@ -497,7 +497,7 @@ export function WaveformPanel() {
     if (drag.mode === 'cursor') {
       if (audioCue) setWaveformCursor(audioCue.id, timeMs)
       setPlayFraction(fraction)
-      if (isPlaying && audioCue) cueRunner.seekCue(audioCue.id, timeMs)
+      if (isPlaying && audioCue) cueEngine.seekCue(audioCue.id, timeMs)
     } else {
       moveBoundary(fraction, drag.mode)
     }

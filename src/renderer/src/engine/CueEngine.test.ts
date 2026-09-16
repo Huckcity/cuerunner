@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { CueRunner } from './CueRunner'
+import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
@@ -43,7 +43,7 @@ function emitEngineEvent(event: AudioEngineEvent): void {
 
 // Runners left behind by a test still hold scheduled work; disposing them keeps a
 // later test's clock from firing an earlier test's cues.
-const runners: CueRunner[] = []
+const runners: CueEngine[] = []
 afterEach(() => {
   for (const runner of runners.splice(0)) runner.dispose()
 })
@@ -114,7 +114,7 @@ function makeNetwork(overrides: Partial<NetworkCue> = {}): NetworkCue {
 }
 
 interface TestSetup {
-  runner: CueRunner
+  runner: CueEngine
   cues: Cue[]
   setRunning: Mock
   setSelected: Mock
@@ -124,7 +124,7 @@ interface TestSetup {
 }
 
 function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true): TestSetup {
-  const runner = new CueRunner()
+  const runner = new CueEngine()
   let selected: string | null = initialSelectedId ?? initialCues[0]?.id ?? null
   const setRunning = vi.fn()
   const setSelected = vi.fn((id: string | null) => { selected = id })
@@ -152,7 +152,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true):
   return { runner, cues, setRunning, setSelected, setLastRun, appendLog, clearAllRunning }
 }
 
-describe('CueRunner — basic execution', () => {
+describe('CueEngine — basic execution', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -256,7 +256,7 @@ describe('CueRunner — basic execution', () => {
 
 })
 
-describe('CueRunner — pre-wait and post-wait', () => {
+describe('CueEngine — pre-wait and post-wait', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -310,7 +310,7 @@ describe('CueRunner — pre-wait and post-wait', () => {
   })
 })
 
-describe('CueRunner — auto-continue and auto-follow', () => {
+describe('CueEngine — auto-continue and auto-follow', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -372,7 +372,7 @@ describe('CueRunner — auto-continue and auto-follow', () => {
   })
 })
 
-describe('CueRunner — stop and panic', () => {
+describe('CueEngine — stop and panic', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -422,7 +422,7 @@ describe('CueRunner — stop and panic', () => {
 // What a second firing does to a cue that is already running. The guard's window has
 // passed in each of these — an operator who waits and presses again is a second press,
 // and that is the one the policy is about.
-describe('CueRunner — re-firing a running cue', () => {
+describe('CueEngine — re-firing a running cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -511,7 +511,7 @@ describe('CueRunner — re-firing a running cue', () => {
 })
 
 // A cue that is in flight when STOP lands must not resume the show when it settles.
-describe('CueRunner — STOP abandons in-flight work', () => {
+describe('CueEngine — STOP abandons in-flight work', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -591,7 +591,7 @@ describe('CueRunner — STOP abandons in-flight work', () => {
   })
 })
 
-describe('CueRunner — sample-clock scheduling', () => {
+describe('CueEngine — sample-clock scheduling', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -723,7 +723,7 @@ describe('CueRunner — sample-clock scheduling', () => {
   })
 })
 
-describe('CueRunner — fade cue', () => {
+describe('CueEngine — fade cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -775,7 +775,7 @@ describe('CueRunner — fade cue', () => {
   })
 })
 
-describe('CueRunner — stop cue', () => {
+describe('CueEngine — stop cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -955,7 +955,7 @@ describe('CueRunner — stop cue', () => {
   })
 })
 
-describe('CueRunner — midi cue', () => {
+describe('CueEngine — midi cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -980,7 +980,7 @@ describe('CueRunner — midi cue', () => {
   })
 })
 
-describe('CueRunner — show control cue', () => {
+describe('CueEngine — show control cue', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     // The store carries over between cases in this file, so a case that needs the show's
@@ -1054,7 +1054,7 @@ describe('CueRunner — show control cue', () => {
 
 // A cue that could not do what it says must say so: these paths used to complete as
 // successes with nothing sent, played, or answered.
-describe('CueRunner — engine failures are reported', () => {
+describe('CueEngine — engine failures are reported', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     console.error = vi.fn()
@@ -1223,7 +1223,7 @@ describe('CueRunner — engine failures are reported', () => {
 
 // A scene cue puts the desk where the scene says it should be, at the moment GO reaches
 // it — which is the whole point of having it in the stack rather than on a panel.
-describe('CueRunner — scene cues', () => {
+describe('CueEngine — scene cues', () => {
   function withDesk(sceneId = 's-1'): SceneCue {
     const defaults = defaultShowSettings()
     useStore.setState({
@@ -1329,7 +1329,7 @@ describe('CueRunner — scene cues', () => {
 // A devamp releases a vamping cue: the music leaves its loop and plays out to the end of
 // the file. The cue itself is finished the moment it has asked, which is what lets a
 // group's next cue start over the tail.
-describe('CueRunner — devamp cues', () => {
+describe('CueEngine — devamp cues', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1401,7 +1401,7 @@ describe('CueRunner — devamp cues', () => {
   })
 })
 
-describe('CueRunner — silence trim', () => {
+describe('CueEngine — silence trim', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1454,7 +1454,7 @@ describe('CueRunner — silence trim', () => {
   })
 })
 
-describe('CueRunner — network cues', () => {
+describe('CueEngine — network cues', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     requestMock.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', body: '', error: null })
@@ -1621,7 +1621,7 @@ describe('CueRunner — network cues', () => {
   })
 })
 
-describe('CueRunner — script cue', () => {
+describe('CueEngine — script cue', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     console.error = vi.fn()
@@ -1797,7 +1797,7 @@ describe('CueRunner — script cue', () => {
   })
 })
 
-describe('CueRunner — panic details', () => {
+describe('CueEngine — panic details', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1820,7 +1820,7 @@ describe('CueRunner — panic details', () => {
   })
 })
 
-describe('CueRunner — clearGroupStartOffset', () => {
+describe('CueEngine — clearGroupStartOffset', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1839,7 +1839,7 @@ describe('CueRunner — clearGroupStartOffset', () => {
   })
 })
 
-describe('CueRunner — timeline seek skips what already happened', () => {
+describe('CueEngine — timeline seek skips what already happened', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1862,7 +1862,7 @@ describe('CueRunner — timeline seek skips what already happened', () => {
   })
 })
 
-describe('CueRunner — stopping a group', () => {
+describe('CueEngine — stopping a group', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     console.error = vi.fn()

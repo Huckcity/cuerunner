@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { useKeyboard } from './useCueRunner'
+import { useKeyboard } from './useCueEngine'
 import { useModal } from './useModal'
 import { useStore } from '../store'
 

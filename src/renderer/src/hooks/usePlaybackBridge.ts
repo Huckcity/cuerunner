@@ -4,7 +4,7 @@
 
 import { useEffect } from 'react'
 import { audioEngine } from '../engine/audioEngineClient'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
 
 /** How often the window says it is alive. Main acts only while the engine is playing. */
@@ -38,7 +38,7 @@ export function usePlaybackBridge(): void {
   // already silenced the engine. The window's half is to drop the cues and scripts it
   // is still holding, and to do it without panicking a second time.
   useEffect(() => {
-    return window.winslab.playback.onPanic(() => cueRunner.handleExternalPanic())
+    return window.winslab.playback.onPanic(() => cueEngine.handleExternalPanic())
   }, [])
 
   // Device settings travel with the show, so they are applied when the window opens and
