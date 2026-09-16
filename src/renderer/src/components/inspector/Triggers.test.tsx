@@ -227,6 +227,25 @@ describe('Triggers', () => {
     pushEvents(oscEvent('/eos/cue/12/fire'), midiEvent('IAC Bus 1', NOTE_ON))
     expect(triggers()).toHaveLength(0)
   })
+
+  it('learns from a river that is already at its cap', async () => {
+    // The store trims the river from the front at 300 events, so a full river stays 300
+    // long: a read head kept as a count would sit at 300 of 300 and Learn would wait for
+    // ever, on every message, until the log was cleared.
+    const full = Array.from({ length: 300 }, (_, i) => oscEvent(`/filler/${i}`))
+    act(() => { useStore.getState().applyShowEvents(full) })
+    expect(useStore.getState().showEvents).toHaveLength(300)
+    await mount()
+
+    click($('.trigger-section[data-kind="osc"] .trigger-learn'))
+    act(() => { useStore.getState().applyShowEvents([oscEvent('/eos/cue/12/fire')]) })
+    expect(useStore.getState().showEvents).toHaveLength(300)
+
+    expect(triggers()).toEqual([
+      { id: expect.any(String), kind: 'osc', address: '/eos/cue/12/fire' }
+    ])
+    expect(container.querySelector('.trigger-learning')).toBeNull()
+  })
 })
 
 describe('describeTrigger', () => {

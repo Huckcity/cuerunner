@@ -5,6 +5,16 @@ import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'
 import { OSC_DEFAULTS } from '../../utils/cueDefaults'
 
+/**
+ * What a new argument's value starts at, in the type the panel says it is. node-osc reads
+ * the type tag off the JavaScript value, so the neutral value has to be one of that type:
+ * a 0 left under a `string` argument reaches the desk as an integer, which is not what
+ * the row says it is sending.
+ */
+function neutralValue(type: OscArgType): number | string {
+  return type === 's' ? '' : 0
+}
+
 interface Props { cue: OscCue }
 
 export function OscInspector({ cue }: Props) {
@@ -49,7 +59,10 @@ export function OscInspector({ cue }: Props) {
         <div key={i} className="field-row">
           <label>Arg {i + 1}</label>
           <select value={arg.type}
-            onChange={e => updateArg(i, { type: e.target.value as OscArgType, value: arg.type !== e.target.value ? 0 : arg.value })}
+            onChange={e => updateArg(i, {
+              type: e.target.value as OscArgType,
+              value: arg.type !== e.target.value ? neutralValue(e.target.value as OscArgType) : arg.value
+            })}
             style={{ width: 50, flex: 'none' }}>
             <option value="i">int</option>
             <option value="f">float</option>
