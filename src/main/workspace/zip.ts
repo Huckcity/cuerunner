@@ -20,7 +20,7 @@
 // bundle that somebody re-zipped by hand still opens.
 
 import { createReadStream, createWriteStream } from 'fs'
-import { mkdir, open, rename, rm, stat } from 'fs/promises'
+import { mkdir, open, rename, rm, stat, writeFile } from 'fs/promises'
 import type { FileHandle } from 'fs/promises'
 import { dirname, resolve, sep } from 'path'
 import { Transform } from 'stream'
@@ -205,8 +205,11 @@ async function writeEntries(filePath: string, entries: Prepared[]): Promise<void
       header.writeUInt32LE(LOCAL_SIGNATURE, 0)
       header.writeUInt16LE(20, 4)
       // No data descriptor: the header is patched once the bytes have gone past, which
-      // keeps the entry readable by tools that only look at the local header.
-      header.writeUInt16LE(0, 6)
+      // keeps the entry readable by tools that only look at the local header. Bit 11
+      // says the names are UTF-8, which is what they are written as: without it a
+      // reader that follows the spec decodes them as CP437 and extracts a media file
+      // under a name the showfile inside does not point at.
+      header.writeUInt16LE(0x0800, 6)
       header.writeUInt16LE(STORED, 8)
       header.writeUInt16LE(FIXED_TIME, 10)
       header.writeUInt16LE(FIXED_DATE, 12)
@@ -251,7 +254,7 @@ async function writeEntries(filePath: string, entries: Prepared[]): Promise<void
       // ordinary file, so an extracted bundle comes out rw-r--r-- rather than guessed at.
       header.writeUInt16LE(0x031e, 4)
       header.writeUInt16LE(20, 6)
-      header.writeUInt16LE(0, 8)
+      header.writeUInt16LE(0x0800, 8)
       header.writeUInt16LE(STORED, 10)
       header.writeUInt16LE(FIXED_TIME, 12)
       header.writeUInt16LE(FIXED_DATE, 14)
@@ -352,7 +355,7 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
     // The local header is the one that says where the data really starts: its name and
     // extra field may be a different length from the directory's copy.
     const local = await read(filePath, offset, 30)
-    if (local.readUInt32LE(0) !== LOCAL_SIGNATURE) {
+    if (local.length < 30 || local.readUInt32LE(0) !== LOCAL_SIGNATURE) {
       throw new Error(`"${name}" does not start where the archive says it does`)
     }
     const dataOffset = offset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28)
@@ -392,15 +395,38 @@ export async function readZipEntry(filePath: string, entry: ZipEntry, outputLimi
 export async function extractZipEntry(filePath: string, entry: ZipEntry, into: string): Promise<string> {
   const destination = entryDestination(into, entry.name)
   await mkdir(dirname(destination), { recursive: true })
+  // An empty entry is one a show really can hold — a cue pointed at a zero-byte file
+  // exports one, and a hand-rezipped bundle can hold one — and there is nothing to read
+  // for it: a range from `offset` to `offset - 1` is one a read stream refuses outright.
+  if (entry.compressedSize === 0) {
+    await writeFile(destination, Buffer.alloc(0))
+    checked(entry, 0, 0)
+    return destination
+  }
   const source = createReadStream(filePath, {
     start: entry.offset,
     end: entry.offset + entry.compressedSize - 1,
     highWaterMark: CHUNK
   })
   const checksum = new Checksum()
+  // What the archive *claims* the entry holds is the bound the write is given: deflate
+  // reaches a thousand to one, so a small entry that lied about its size would otherwise
+  // fill the disk before `checked` could refuse it — on a machine that is mid-show.
+  let written = 0
+  const bounded = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      written += chunk.length
+      if (written > entry.size) {
+        callback(new Error(`"${entry.name}" unpacks to more than the archive says`))
+        return
+      }
+      callback(null, chunk)
+    }
+  })
   try {
     await pipeline(
       entry.method === DEFLATED ? source.pipe(createInflateRaw()) : source,
+      bounded,
       checksum,
       createWriteStream(destination)
     )

@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { randomUUID } from 'crypto'
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import type { Workspace } from '../../renderer/src/types/workspace'
@@ -58,7 +59,10 @@ export async function clearRecovery(): Promise<void> {
  * wrong still leaves the operator a file to open.
  */
 export async function writeFileAtomically(filePath: string, contents: string): Promise<void> {
-  const tempPath = join(dirname(filePath), `.${basename(filePath)}.tmp`)
+  // The temp is named for this write, not for the path: two saves of one file can be in
+  // the air together — a Ctrl+S and a close-prompt save — and a shared temp would have
+  // both of them writing at their own offsets into the same file.
+  const tempPath = join(dirname(filePath), `.${basename(filePath)}.${randomUUID()}.tmp`)
   await writeFile(tempPath, contents, 'utf-8')
   try {
     // Keep the previous version aside before replacing it. copyFile leaves the

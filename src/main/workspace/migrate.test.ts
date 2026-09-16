@@ -22,6 +22,24 @@ function workspaceWith(cues: unknown[]): Workspace {
 }
 
 describe('migrateWorkspace', () => {
+  it('refuses a cue type this build does not know rather than losing the window to it', () => {
+    // A file from a newer build, or a hand edit: the row renders its icon from the type,
+    // and an unknown one takes the whole window down. Dropping the cue quietly would be
+    // worse — a show saved back without it is a show with a cue missing.
+    expect(() => migrateWorkspace(workspaceWith([
+      { id: 'w1', type: 'wait', duration: 1000 },
+      { id: 'v1', type: 'video', filePath: 'clip.mp4' }
+    ]))).toThrow('does not know (video)')
+  })
+
+  it('accepts every cue type this build does know', () => {
+    expect(() => migrateWorkspace(workspaceWith([
+      { id: 'w1', type: 'wait', duration: 1000 },
+      { id: 'a1', type: 'audio', filePath: '' },
+      { id: 'g1', type: 'group', mode: 'sequence' }
+    ]))).not.toThrow()
+  })
+
   it('gives a stop cue the wait-for-fade default it predates', () => {
     const stop = migrateWorkspace(workspaceWith([
       { id: 's1', type: 'stop', targetCueId: 'all', fadeOut: true, fadeOutDuration: 500 }

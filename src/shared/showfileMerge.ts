@@ -467,18 +467,36 @@ function reportOrderConflicts(
 }
 
 /**
- * A cue whose group is not in the merged show — its group was deleted on one side while
- * the cue itself was changed on the other — comes back at the top level rather than
- * pointing at a group that is not there.
+ * A cue whose group cannot hold it comes back at the top level: the group was deleted on
+ * one side while the cue itself was changed on the other, or — two moves that each put
+ * one group inside the other — the group above it leads back to the cue. A cycle is
+ * unreachable from the top level, and the walk that orders the show starts there, so
+ * every cue in one would be left out of the merged file without a word.
  */
 function repairParents(merged: Map<string, Cue>, notes: MergeNote[]): void {
   for (const [id, cue] of merged) {
-    if (cue.parentId === null || merged.has(cue.parentId)) continue
+    if (cue.parentId === null) continue
+    const missing = !merged.has(cue.parentId)
+    if (!missing && !leadsBackTo(id, merged)) continue
     merged.set(id, { ...cue, parentId: null })
     notes.push({
       subject: cueLabel(cue),
-      detail: 'its group is not in the merged show: placed at the top level',
+      detail: missing
+        ? 'its group is not in the merged show: placed at the top level'
+        : 'its group ends up inside it in the merged show: placed at the top level',
       conflict: false
     })
   }
+}
+
+/** Whether the chain of groups above this cue comes back to it — or to itself. */
+function leadsBackTo(id: string, merged: Map<string, Cue>): boolean {
+  const seen = new Set<string>([id])
+  let at = merged.get(id)?.parentId ?? null
+  while (at !== null) {
+    if (seen.has(at)) return true
+    seen.add(at)
+    at = merged.get(at)?.parentId ?? null
+  }
+  return false
 }
