@@ -104,8 +104,8 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
 function ProHint({ onUnlock }: { onUnlock: () => void }) {
   return (
     <p className="inspector-hint license-hint">
-      These settings are saved with the show. They start working once this machine is
-      licensed.{' '}
+      Part of WinsLab Pro. These settings are saved with the show, and start working once
+      this machine is licensed.{' '}
       <button className="license-link" onClick={onUnlock}>Enter a license key</button>
     </p>
   )

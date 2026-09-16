@@ -171,8 +171,11 @@
 }
 
 /* Times are mono with tabular figures: a column of them lines up on the decimal, and a
-   running clock does not jitter as the digits change. */
-.col-dur, .col-pre, .col-post {
+   running clock does not jitter as the digits change. Scoped to a row: the same column
+   classes are on the list header, which is words rather than times. */
+.cue-row .col-dur,
+.cue-row .col-pre,
+.cue-row .col-post {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--fg-body);

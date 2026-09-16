@@ -77,9 +77,9 @@ test('silent is a mode of its own, and switching back to automatic really is aut
 
   await page.locator('#routing-mode').selectOption('silent')
   await expect(page.locator('.routing-row')).toHaveCount(0)
-  await expect(page.locator('.inspector')).toContainText('Deliberately silent')
+  await expect(page.locator('.inspector')).toContainText('Silent on purpose')
 
   await page.locator('#routing-mode').selectOption('automatic')
   await expect(page.locator('.inspector')).toContainText('play in order')
-  await expect(page.locator('.inspector')).not.toContainText('Deliberately silent')
+  await expect(page.locator('.inspector')).not.toContainText('Silent on purpose')
 })

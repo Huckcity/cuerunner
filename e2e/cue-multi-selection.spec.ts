@@ -14,7 +14,7 @@ let app: ElectronApplication
 let page: Page
 
 /** `--cue-color-blue`, as the browser computes it. */
-const BLUE = 'rgb(41, 128, 185)'
+const BLUE = 'rgb(61, 143, 224)'
 /** No label at all: a transparent bar. */
 const NONE = 'rgba(0, 0, 0, 0)'
 

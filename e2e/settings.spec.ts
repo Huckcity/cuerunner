@@ -113,11 +113,10 @@ test('the device section sets exclusive mode, and says what it costs', async () 
   await expect(exclusive).toBeVisible()
 
   // The trade-off is stated where the choice is made, in the operator's terms: it takes
-  // the device away from everything else on the machine.
-  const tradeOff = dialog.locator('.inspector-hint', { hasText: 'Exclusive locks' })
-  await expect(tradeOff).toContainText('system sounds')
-  await expect(tradeOff).toContainText('conferencing')
-  await expect(tradeOff).toContainText('real channel count')
+  // the device away from everything else on the machine, and says what that buys.
+  const tradeOff = dialog.locator('.inspector-hint', { hasText: 'other apps' })
+  await expect(tradeOff).toContainText('every channel')
+  await expect(tradeOff).toContainText('steadier timing')
 
   const wasOn = await exclusive.isChecked()
   await exclusive.setChecked(!wasOn)

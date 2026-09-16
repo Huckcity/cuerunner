@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { usePro, useStore } from '../../store'
 import { NumberField, TextField } from '../common/Field'
 import { Advanced, ServiceBlock } from '../common/SettingsBlock'
-import { ServiceStatus } from '../common/ServiceStatus'
 import { ProLock } from '../license/ProLock'
 import {
   MAX_TIMEOUT_MS,
@@ -256,7 +255,6 @@ export function RedundancySection(): React.JSX.Element {
           </div>
         </div>
       )}
-      <ServiceStatus service={service} />
     </>
   )
 }
