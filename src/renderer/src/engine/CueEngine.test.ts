@@ -370,6 +370,20 @@ describe('CueEngine — auto-continue and auto-follow', () => {
     await vi.advanceTimersByTimeAsync(100)
     expect(setRunning.mock.calls.map(c => c[0])).toContain('a2')
   })
+
+  it('fires the next cue on start when a trigger fires the cue, not only when GO does', () => {
+    // The guide promises a trigger fires a cue exactly as GO would, advance included —
+    // and a trigger, a desk button and a cue's own chain all reach the runner here.
+    const cue1 = makeWait({ id: 'w1', number: '1', duration: 5000, advance: 'on-start' })
+    const cue2 = makeWait({ id: 'w2', number: '2', duration: 500 })
+    const { runner, setRunning } = setup([cue1, cue2])
+
+    runner.goById('w1')
+
+    const started = setRunning.mock.calls.map(c => c[0])
+    expect(started).toContain('w1')
+    expect(started).toContain('w2')
+  })
 })
 
 describe('CueEngine — stop and panic', () => {
@@ -548,6 +562,40 @@ describe('CueRunner — restarting a group child', () => {
 
     expect(fired(setRunning)).not.toContain('c2')
     expect(fired(setRunning).filter(id => id === 'c1')).toHaveLength(2)
+  })
+
+  it('drops the replaced run’s stop line when GO is the hand that restarted it', async () => {
+    // A GO restart stops the old run before the new firing, so the identity of the run
+    // it replaced has to be read first. The engine's own line about that stop arrives
+    // while the new run has no identity yet — there is a prepare and a start between the
+    // two — and read as the new run's it would darken a cue that is playing.
+    const started = Promise.withResolvers<Awaited<ReturnType<typeof audioEngine.start>>>()
+    engine.start
+      .mockResolvedValueOnce({ cueId: 'a1', runId: 'old-run', state: 'playing', startAtMs: 0 })
+      .mockImplementationOnce(() => started.promise)
+    const cue = makeAudio({ id: 'a1', refire: 'restart', duration: 5000 })
+    const { runner, setRunning, setSelected } = setup([cue], 'a1')
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    setSelected('a1')
+    runner.resetGuards()
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    setRunning.mockClear()
+
+    emitEngineEvent({
+      type: 'ended', cueId: 'a1', runId: 'old-run', at: 0, reason: 'stopped',
+      loopsCompleted: 0, sessionId: 'test-session'
+    })
+
+    expect(setRunning).not.toHaveBeenCalledWith('a1', null)
+    expect(setRunning).not.toHaveBeenCalledWith('a1', expect.objectContaining({ state: 'post-wait' }))
+
+    started.resolve({ cueId: 'a1', runId: 'new-run', state: 'playing', startAtMs: 0 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(setRunning).not.toHaveBeenCalledWith('a1', null)
   })
 })
 
@@ -732,20 +780,20 @@ describe('CueEngine — sample-clock scheduling', () => {
     expect(engine.start).toHaveBeenCalledTimes(1)
   })
 
-  it('re-applies routing at the position a playing cue had reached', () => {
-    const cue = makeAudio({ id: 'a1', duration: 4000, outputs: [{ inputChannel: 0, outputChannel: 2, gain: 0.5 }] })
+  it('sends the new matrix to the voice that is already playing', () => {
+    // The engine replaces a running voice's routing where it stands, so the change is
+    // heard without the cue being restarted or moved: a seek here would be a lie about
+    // the matrix having arrived, and the operator's edit would be inaudible.
+    const outputs = [{ inputChannel: 0, outputChannel: 2, gain: 0.5 }]
+    const cue = makeAudio({ id: 'a1', duration: 4000, outputs })
     const { runner } = setup([cue])
 
     runner.go()
     vi.advanceTimersByTime(1000)
-    engine.getProgress.mockReturnValue({
-      cueId: 'a1', runId: 'run-a1', state: 'playing', playing: true,
-      elapsedMs: 1000, durationMs: 4000, fraction: 0.25, runFraction: 0.25,
-      loopsCompleted: 0, startedAtMs: 0
-    })
     runner.setLiveRouting('a1')
 
-    expect(engine.seek).toHaveBeenCalledWith('a1', 1000)
+    expect(engine.routing).toHaveBeenCalledWith('a1', outputs)
+    expect(engine.seek).not.toHaveBeenCalled()
     expect(engine.stop).not.toHaveBeenCalledWith('a1', 0)
   })
 

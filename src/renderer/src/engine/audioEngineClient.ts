@@ -22,6 +22,7 @@ import type {
   AudioCancelResult,
   AudioClockReading,
   AudioCommandResult,
+  AudioCrosspoint,
   AudioDeviceInfo,
   AudioEngineBridge,
   AudioEngineEvent,
@@ -420,6 +421,16 @@ export class AudioEngineClient {
   async seek(cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> {
     const result = await bridge().seek(cueId, positionMs, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
     // `positionMs` is a place in the file, not a time on the clock.
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /**
+   * Replaces a running voice's routing matrix where it stands — from the engine's next
+   * rendered sample, with no restart, no re-seek and no envelope of its own. `null` is
+   * automatic routing, `[]` is silent, a list is the new matrix.
+   */
+  async routing(cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> {
+    const result = await bridge().routing(cueId, outputs)
     return { ...result, at: this.toShowMs(result.at) }
   }
 

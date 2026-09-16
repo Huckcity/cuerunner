@@ -59,6 +59,7 @@ export const audioEngine = {
     state: 'playing' as const
   })),
   cancel: vi.fn(async (at: number) => ({ ok: true as const, at, canceled: 0 })),
+  routing: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   fade: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   progress: vi.fn(async () => null),
   panic: vi.fn(async (at: number) => ({ ok: true as const, at, stoppedVoices: 0 })),
