@@ -851,6 +851,78 @@ describe('CueRunner — stop cue', () => {
     vi.advanceTimersByTime(5000)
     expect(setRunning.mock.calls.map(c => c[0])).not.toContain('w2')
   })
+
+  it('takes a wait target away at once, instead of waiting for an engine report', () => {
+    const target = makeWait({ id: 'w1', duration: 5000 })
+    const stop = makeStop({ id: 's1', number: '2', targetCueId: 'w1' })
+    const { runner, setRunning } = setup([target, stop])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    runner.goById('s1')
+
+    expect(setRunning).toHaveBeenCalledWith('w1', null)
+    vi.advanceTimersByTime(10000)
+    expect(setRunning).toHaveBeenCalledWith('s1', expect.objectContaining({ state: 'post-wait' }))
+  })
+
+  it('counts a timeline child stopped mid-group down without finishing the group', () => {
+    const group: GroupCue = {
+      id: 'g1', number: '1', name: 'Group', type: 'group',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      mode: 'timeline'
+    }
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', timelineOffset: 0, duration: 5000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', timelineOffset: 10000, duration: 1000 })
+    const { runner, setRunning } = setup([group, c1, c2])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    runner.stop('c1')
+    vi.advanceTimersByTime(20000)
+
+    expect(setRunning).toHaveBeenCalledWith('c1', null)
+    expect(setRunning).not.toHaveBeenCalledWith('g1', null)
+  })
+
+  it('advances a sequence past an engine-stopped child', () => {
+    const group: GroupCue = {
+      id: 'g1', number: '1', name: 'Group', type: 'group',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      mode: 'sequence'
+    }
+    const audio = makeAudio({ id: 'a1', parentId: 'g1' })
+    const tail = makeWait({ id: 'w2', parentId: 'g1', duration: 500 })
+    const { runner, setRunning } = setup([group, audio, tail])
+
+    runner.go()
+    emitEngineEvent({ type: 'ended', cueId: 'a1', runId: 'r1', at: 100, reason: 'stopped', loopsCompleted: 0, sessionId: '' })
+    vi.advanceTimersByTime(1000)
+
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
+  })
+
+  it('drops a replaced run’s late ended line instead of closing the new run', async () => {
+    engine.start
+      .mockResolvedValueOnce({ cueId: 'a1', runId: 'old-run', state: 'playing', startAtMs: 0 })
+      .mockResolvedValueOnce({ cueId: 'a1', runId: 'new-run', state: 'playing', startAtMs: 0 })
+    const audio = makeAudio({ id: 'a1', duration: 5000, refire: 'restart' })
+    const { runner, setRunning } = setup([audio])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    // The second firing replaces the first: the old run's engine identity is captured
+    // as superseded, so its late `ended` line must not close the new run.
+    runner.goById('a1')
+    await vi.advanceTimersByTimeAsync(0)
+    emitEngineEvent({ type: 'ended', cueId: 'a1', runId: 'old-run', at: 50, reason: 'complete', loopsCompleted: 0, sessionId: '' })
+    // The new run survives a line naming the run it replaced: still playing, never
+    // post-wait, never dark.
+    expect(setRunning).toHaveBeenLastCalledWith('a1', expect.objectContaining({ state: 'playing' }))
+    expect(setRunning).not.toHaveBeenCalledWith('a1', expect.objectContaining({ state: 'post-wait' }))
+  })
 })
 
 describe('CueRunner — midi cue', () => {

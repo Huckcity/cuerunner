@@ -32,7 +32,6 @@ export type RefirePolicy = 'ignore' | 'restart'
  */
 export type TriggerMidiMessage =
   | { kind: 'noteOn'; channel: number; note: number }
-  | { kind: 'noteOff'; channel: number; note: number }
   | { kind: 'cc'; channel: number; controller: number }
   | { kind: 'programChange'; channel: number; program: number }
 

@@ -46,8 +46,6 @@ export function matchesTrigger(trigger: CueTrigger, event: ShowEvent): boolean {
   switch (wanted.kind) {
     case 'noteOn':
       return incoming.kind === 'noteOn' && incoming.note === wanted.note
-    case 'noteOff':
-      return incoming.kind === 'noteOff' && incoming.note === wanted.note
     case 'cc':
       return incoming.kind === 'cc' && incoming.controller === wanted.controller
     case 'programChange':

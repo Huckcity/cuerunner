@@ -26,7 +26,6 @@ function midiEvent(device: string, message: MidiMessageKind): MidiInEvent {
 /** Each MIDI message kind with the value field's name and how the row should read. */
 const MIDI_CASES = [
   { kind: 'noteOn', label: 'Note', detail: 'note', message: { kind: 'noteOn', channel: 1, note: 60 } },
-  { kind: 'noteOff', label: 'Note', detail: 'note', message: { kind: 'noteOff', channel: 1, note: 60 } },
   { kind: 'cc', label: 'Controller', detail: 'controller', message: { kind: 'cc', channel: 1, controller: 60 } },
   { kind: 'programChange', label: 'Program', detail: 'program', message: { kind: 'programChange', channel: 1, program: 60 } }
 ] as const
@@ -236,18 +235,12 @@ describe('describeTrigger', () => {
       .toBe('OSC /eos/cue/12/fire')
   })
 
-  it('names the note for note on and note off', () => {
+  it('names the note for a note on', () => {
     expect(describeTrigger({
       id: 'a', kind: 'midi', device: 'IAC Bus 1',
       message: { kind: 'noteOn', channel: 1, note: 60 }
     })).toBe('MIDI noteOn ch1 note 60 on "IAC Bus 1"')
-
-    expect(describeTrigger({
-      id: 'b', kind: 'midi', device: 'IAC Bus 1',
-      message: { kind: 'noteOff', channel: 16, note: 127 }
-    })).toBe('MIDI noteOff ch16 note 127 on "IAC Bus 1"')
   })
-
   it('names the controller for cc and the program for a program change', () => {
     expect(describeTrigger({
       id: 'a', kind: 'midi', device: 'Launchpad',
