@@ -1,7 +1,7 @@
-// Winslab UI Kit — Toolbar component (updated)
+// Cuerunner UI Kit — Toolbar component (updated)
 // Primary cues: Audio, Group, Fade, Wait, Stop
 // Secondary (More ▾): MIDI, OSC, Network, Script
-// Exported to window.WinslabToolbar
+// Exported to window.CuerunnerToolbar
 
 const { useState, useEffect, useRef } = React;
 
@@ -56,7 +56,7 @@ function Toolbar({ store }) {
       <div style={tbStyles.left}>
         <div ref={fileMenuRef} style={{ position: 'relative' }}>
           <button style={tbStyles.brand} onClick={() => setFileMenuOpen(v => !v)}>
-            WinsLab ▾
+            Cuerunner ▾
           </button>
           {fileMenuOpen && (
             <div style={tbStyles.menu}>
@@ -187,4 +187,4 @@ const tbStyles = {
   },
 };
 
-Object.assign(window, { WinslabToolbar: Toolbar });
+Object.assign(window, { CuerunnerToolbar: Toolbar });

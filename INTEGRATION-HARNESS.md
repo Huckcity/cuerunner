@@ -1,6 +1,6 @@
 # The integration harness
 
-A plan for testing WinsLab against the systems it has to talk to in a real venue —
+A plan for testing Cuerunner against the systems it has to talk to in a real venue —
 ETC Eos first, then the Allen & Heath SQ and Avantis desks — without a lighting rig or
 a mixer on the bench, and without a human clicking in either app.
 
@@ -60,16 +60,16 @@ gate for incoming MIDI/UDP/OSC and is on by default
 
 Two consequences worth their own line:
 
-- **`/eos/out/event/cue/…` is the assertion.** A test does not have to believe WinsLab's
+- **`/eos/out/event/cue/…` is the assertion.** A test does not have to believe Cuerunner's
   log to know the cue fired; Eos says so, with the cue's label, on a socket.
-- **`OSC Cue Send String` lets the desk be taught WinsLab-shaped addresses.** It is a
+- **`OSC Cue Send String` lets the desk be taught Cuerunner-shaped addresses.** It is a
   format string with `%1` cue number, `%2` cue list, `%3` whole number, `%4` point,
   `%5` label — so an operator can make Eos say `/go/12` instead of
   `/eos/out/event/cue/1/12/fire`. That matters because triggers match OSC addresses
   literally (§3, G3).
 
 Eos also speaks MIDI Show Control in and out (`MSC Receive`, `MSC Transmit`, Rx/Tx
-device IDs, a cue-list filter) — B4 in `ENGINE-REVIEW-2-AND-ROADMAP.md`, which WinsLab now
+device IDs, a cue-list filter) — B4 in `ENGINE-REVIEW-2-AND-ROADMAP.md`, which Cuerunner now
 has: the Show Control cue goes out and an `msc` trigger comes in. Eos's own MSC is not driven
 by any lane here, because the Eos peer is an OSC console on a socket and MSC reaches a console
 over MIDI.
@@ -117,7 +117,7 @@ Nothing is "covered" by one lane; the honesty is in saying which lane claims wha
 
 | Lane | Where | Counterpart | Proves |
 |---|---|---|---|
-| **peers** | every PR, Linux (`ubox`) | `integration/peers/*` — an Eos OSC peer and an SQ/Avantis MIDI-TCP peer, both written from the vendor documents | WinsLab still emits the bytes and still reacts correctly to the bytes; the fixture contract has not moved |
+| **peers** | every PR, Linux (`ubox`) | `integration/peers/*` — an Eos OSC peer and an SQ/Avantis MIDI-TCP peer, both written from the vendor documents | Cuerunner still emits the bytes and still reacts correctly to the bytes; the fixture contract has not moved |
 | **vendor** | nightly + on demand, `win-ci` (and the Mac mini if it earns a slot) | real ETCnomad, real A&H MIDI Control | the fixtures are still what the real software does; Eos is not just a peer we invented |
 | **hardware** | on demand only, wherever a desk is | a real SQ or Avantis on the LAN | the peer is a fair model of the desk, and the vendor lane's assumption (MIDI bytes are MIDI bytes) holds |
 
@@ -134,7 +134,7 @@ unvalidated rather than as evidence.
 
 ---
 
-## 3. What WinsLab speaks today
+## 3. What Cuerunner speaks today
 
 | Path | Implementation | Reachable by a desk today |
 |---|---|---|
@@ -143,7 +143,7 @@ unvalidated rather than as evidence.
 | MIDI out | `MidiCue` / Scenes → `src/main/midi/MidiEngine.ts` (RtMidi ports) | via A&H MIDI Control only |
 | MIDI in | `src/main/services/MidiInputService.ts`, port names polled every 2 s | via a virtual port |
 | HTTP out | `NetworkCue` → `src/main/network/NetworkClient.ts` | not a desk protocol |
-| Panic | OSC `/winslab/panic`, MIDI CC 120 = 0 | yes |
+| Panic | OSC `/cuerunner/panic`, MIDI CC 120 = 0 | yes |
 | Desk/scene messages | `utils/desk.ts` → a per-desk arrangement (a note pair, or an SQ's NRPN mute) | yes |
 | Show control out | `MscCue` → `midi:send` / `midi:sendTcp`, `utils/msc.ts` | yes — an SQ's cue list answers MSC |
 | Show control in | `engine/triggers.ts`, `msc` triggers | a console that transmits one (Eos does; the sound desks do not — G2) |
@@ -176,7 +176,7 @@ A&H MIDI Control stays supported and stays exercised on the vendor lane, because
 still how anyone with a virtual port is driving their desk today.
 
 **G2 — no MSC. Built.** The SQ's cue list answers MSC `GO`/`LOAD`/`RESET`, and Eos transmits
-and receives it; WinsLab now does both directions — a Show Control cue out, an `msc` trigger
+and receives it; Cuerunner now does both directions — a Show Control cue out, an `msc` trigger
 in — with the codec (`utils/msc.ts`) held to the vendors' worked examples rather than to its own
 opinion. `msc.spec.ts` drives the command into the peer's SQ and holds what the desk does with
 it.
@@ -230,11 +230,11 @@ integration/
   specs/
     harness-eos.spec.ts       the Eos peer held to ETC's own pages, no app running
     harness-desk.spec.ts      the desk peers held to the A&H documents, no app running
-    eos.spec.ts               WinsLab ↔ the Eos peer: fire a cue, answer the console
+    eos.spec.ts               Cuerunner ↔ the Eos peer: fire a cue, answer the console
     eos-vendor.spec.ts        @vendor: the same chain against a real console — or against
                               a recording of one — and it skips itself when neither is named
-    desk-sq.spec.ts           WinsLab ↔ the SQ peer
-    desk-avantis.spec.ts      WinsLab ↔ the Avantis peer
+    desk-sq.spec.ts           Cuerunner ↔ the SQ peer
+    desk-avantis.spec.ts      Cuerunner ↔ the Avantis peer
     eosFixture.ts             the console show: three cues, one of which answers
     deskFixture.ts            the one-mic show the desk specs drive
   fixtures/vendor/            recordings from the vendor lane, each carrying its provenance
@@ -263,7 +263,7 @@ Specs import the helpers that already exist, from `../e2e/helpers`:
   TCP case wants the sibling (`pointDeskAtTcp`) rather than a second convention.
 
 The MIDI side has one equivalent to build: a receive-side listener for a virtual port, so
-WinsLab's MIDI input can be driven the way `listenOsc` drives its OSC input. On the Linux
+Cuerunner's MIDI input can be driven the way `listenOsc` drives its OSC input. On the Linux
 runner that port is **`Midi Through Port-0`** — the ALSA sequencer's own loopback pair
 (client 14, `RWe-`, in and out on one port), present on a stock kernel with no module and
 no privileges; `snd-virmidi` would need a `modprobe` that the runner's sudoers rule does
@@ -280,7 +280,7 @@ desk on a socket that any client can point at (QLab over MIDI Control, Bitfocus
 Companion, `protokol`, a colleague's script). That is the "as independent as possible"
 part: the harness's device side is a tool, not a test fixture, and a piece of it can be
 handed to someone integrating for real. `harness.spec.ts` exists so the peers are tested
-against the documents rather than only against WinsLab.
+against the documents rather than only against Cuerunner.
 
 ---
 
@@ -319,8 +319,8 @@ What it must model, because the specs lean on it:
 6. The `OSC Cue Send String` format string, so the fixture proving `/go/%1` lands as
    `/go/12` is a test and not a comment.
 7. The two transports, eventually: UDP first (simplest to troubleshoot, and what the
-   current WinsLab OSC engine speaks), TCP 3032 with both framings when there is a reason
-   to care — WinsLab has no OSC-over-TCP client today, so this is another gap, written
+   current Cuerunner OSC engine speaks), TCP 3032 with both framings when there is a reason
+   to care — Cuerunner has no OSC-over-TCP client today, so this is another gap, written
    down here so it is a decision rather than a surprise.
 
 `harness.spec.ts` drives this peer with the raw OSC encoder from `e2e/helpers` and asserts
@@ -334,13 +334,13 @@ fails its own spec, which is the closest thing to a test of a fixture.
 One TCP server, two profiles, and the profiles are the whole point: SQ and Avantis share a
 port and a byte-level format and differ in every table above it.
 
-**Framing rules it must obey, and WinsLab must survive:**
+**Framing rules it must obey, and Cuerunner must survive:**
 
 - MIDI over a byte stream. One TCP segment is not one message; a message may be split
   across segments, several may arrive together, and SysEx is a length-unknown run
   terminated by `F7`. A section of the reads deliberately re-split on odd boundaries.
 - **Running status**, which Avantis uses by default and SQ permits: a status byte is
-  omitted when the previous message had the same one. The peer tests it; WinsLab's
+  omitted when the previous message had the same one. The peer tests it; Cuerunner's
   decoder has to be right about it.
 - A connect-time burst: SQ units are reported to send traffic the moment a connection is
   accepted, so the client has to drain before it sends and must not treat unsolicited
@@ -380,7 +380,7 @@ issue number goes in the fixture's provenance):
   (`Bn 63 MB`, `Bn 62 LB`) and finish with `Bn 60 7F` — the increment message carrying
   `7F` instead of `00` — and the desk answers with the parameter's current value. Every
   mute, level, pan/balance and assignment parameter in the document can be read back this
-  way, which is what lets a spec assert on what the desk holds rather than on what WinsLab
+  way, which is what lets a spec assert on what the desk holds rather than on what Cuerunner
   believes it sent.
 
 **Avantis profile** (V2.0+, hex throughout):
@@ -416,34 +416,34 @@ first slice, not the ceiling.
 
 **Eos — the round trip in one spec**
 
-1. WinsLab OSC cue `/eos/cue/1/12/fire` → the peer reports cue 12 current, and emits
-   `/eos/out/event/cue/1/12/fire`. WinsLab's trigger on that literal address fires the
-   next cue. Assert: the peer's cue state, and WinsLab's log naming the trigger's source.
+1. Cuerunner OSC cue `/eos/cue/1/12/fire` → the peer reports cue 12 current, and emits
+   `/eos/out/event/cue/1/12/fire`. Cuerunner's trigger on that literal address fires the
+   next cue. Assert: the peer's cue state, and Cuerunner's log naming the trigger's source.
 2. Eos, configured with `OSC Cue Send String = /go/%1`, recalls cue 13 → the peer sends
    `/go/13` → the trigger fires. Assert the format string is what produced it.
 3. A cue that does not exist: send `/eos/cue/1/999/fire`, peer answers with Eos's
-   empty-target packet. Assert WinsLab stays up, logs it, and the next GO still fires.
+   empty-target packet. Assert Cuerunner stays up, logs it, and the next GO still fires.
 4. `/eos/get/version` and `/eos/get/show/path` answered, and the answers surfaced where an
    operator would look. Assert the app is reading the console, not guessing.
-5. Panic from the desk: peer sends WinsLab's `/winslab/panic` → assert silence
+5. Panic from the desk: peer sends Cuerunner's `/cuerunner/panic` → assert silence
    (`capturedOutputPeak` from `e2e/helpers`, already built for this).
 6. The desk goes away mid-show: the peer stops answering and stops emitting. Assert
-   WinsLab reports the fault and does not stall the cue stack.
+   Cuerunner reports the fault and does not stall the cue stack.
 7. A doubled `/eos/out/event/cue/1/12/fire`, milliseconds apart — a console with two
    sends. Assert one firing, one log line, no double GO (the trigger guard, the way
    `e2e/trigger-guard.spec.ts` already holds it).
 
 **SQ and Avantis**
 
-1. Scene recall: a WinsLab scene sends `Bn 00 <bank>` + `Cn <prog>` for bank 1, 2 and 3
+1. Scene recall: a Cuerunner scene sends `Bn 00 <bank>` + `Cn <prog>` for bank 1, 2 and 3
    boundaries (scene 1, 128, 129, 300 / 384 — the off-by-one is exactly where a hand-rolled
    encoder is wrong). Assert the bytes, and the peer's scene state.
-2. Desk-originated scene: the peer recalls scene 7 on its own → WinsLab's MIDI trigger
+2. Desk-originated scene: the peer recalls scene 7 on its own → Cuerunner's MIDI trigger
    fires the bound cue. Assert the trigger fired and the log names the device.
 3. DCAs: a scene sends the arrangement the profile names for each DCA, and only those, over
    the desk's socket. What is asserted is the wire and the desk's own mute state — because
    **the desks and the app disagreed about the close half, and that disagreement was the
-   harness doing its job**: WinsLab used to close a DCA with a note-off (velocity 0), which an
+   harness doing its job**: Cuerunner used to close a DCA with a note-off (velocity 0), which an
    Avantis ignores outright (its OFF is a note-on at `01`–`3F`) and which an SQ does not read
    as a mute at all (its DCAs are NRPN parameters on page 02). The fix is the desk profile
    this document called B4's "console control profiles": the show names its desk and the
@@ -453,9 +453,9 @@ first slice, not the ceiling.
    `01`–`3F` off. Assert all three, because that is where a "sensible" implementation is
    wrong.
 5. Framing: the peer splits a SysEx across three writes, coalesces four messages into one,
-   and uses running status for a three-mute burst. Assert WinsLab decodes identically to
+   and uses running status for a three-mute burst. Assert Cuerunner decodes identically to
    the unsplit form.
-6. Connect-time burst: the peer sends unsolicited bytes on accept. Assert WinsLab drains
+6. Connect-time burst: the peer sends unsolicited bytes on accept. Assert Cuerunner drains
    and its first message after that is still correct.
 7. Connection loss and reconnect: dead socket at show open, and dropped mid-show. Assert a
    reported fault, no crash, and that the next scene recalls when the desk comes back.
@@ -594,7 +594,7 @@ uploaded.
 **M1 — the desks, in the fast lane.**
 `desk.ts` with both profiles, the framing and timing cases, the desk specs.
 *Acceptance*: SQ and Avantis scene/DCA/mute cases green on Linux with no vendor software
-installed. This is the point at which WinsLab's desk behaviour is covered by CI on every
+installed. This is the point at which Cuerunner's desk behaviour is covered by CI on every
 PR — and the point at which §11's product decision has to have been made one way or the
 other, because without a MIDI-over-TCP output the app-side half of these specs cannot run
 on Linux.
@@ -629,7 +629,7 @@ a client instructing it) rather than from where a datagram came from.
 eos-ubox-win.json`, 2.8 KB, its provenance naming Eos `3.3.9.25` read from the console's own
 `/eos/get/version` — and the Linux lane replays it with no console anywhere. The workflow is on
 `main` since the merge, so `workflow_dispatch` can see it and the nightly schedule is live.
-*Acceptance*: met — WinsLab fired a cue in the console software, the console's own
+*Acceptance*: met — Cuerunner fired a cue in the console software, the console's own
 `/eos/out/event/cue/1/12/fire` came back, the cue that answers it fired, and the recorded
 session replays on Linux.
 
@@ -654,7 +654,7 @@ Linux lane replays it.
 
 **Decisions**
 
-1. **MIDI-over-TCP output in WinsLab (G1). — taken: yes.** It is in the tree (§3): the
+1. **MIDI-over-TCP output in Cuerunner (G1). — taken: yes.** It is in the tree (§3): the
    desk kind, the engine, the service, the bridge, the row, and the specs that hold them.
    The alternative — the A&H lane living only behind MIDI Control on the Windows and macOS
    runners — was not taken because it would have left the desk path untested on the lane
@@ -680,7 +680,7 @@ Linux lane replays it.
 - **Firmware drift.** SQ and SQ+ have separate protocol documents, the Avantis document
   covers V2.0 and later, and Eos is on 3.3.x. Every fixture records the version it came
   from, and a vendor-lane run reports the version it tested, so a failure can be attributed
-  to a build instead of to WinsLab.
+  to a build instead of to Cuerunner.
 - **A peer is not a desk.** The Eos peer is a model of a console we wrote from a manual;
   its value is regression detection, not truth. The fixtures are what keep it near the
   truth, and the hardware lane is what the fixtures are checked against.
@@ -691,6 +691,6 @@ Linux lane replays it.
   covered by hand; the peer lane is unaffected either way.
 - **Vendor-software licensing.** Installers are downloaded onto runners and never
   committed; the harness's own code is ours. The fixture showfiles are cue data we wrote.
-- **The test that looks like a test.** A spec that asserts WinsLab sent what WinsLab's own
+- **The test that looks like a test.** A spec that asserts Cuerunner sent what Cuerunner's own
   encoder produced is circular. Every assertion in §7 is written against the peer's view
   of the wire or the desk's own reply, never against the app's report of itself.

@@ -7,7 +7,7 @@ export const GUIDES = [
   {
     path: 'guide.html',
     title: 'Guides',
-    blurb: 'Walkthroughs for running a show with WinsLab: your first show, building a cue list, running it, and the Pro features around it.',
+    blurb: 'Walkthroughs for running a show with Cuerunner: your first show, building a cue list, running it, and the Pro features around it.',
     body: `
     <section class="panel reveal">
       <h1>Guides</h1>
@@ -89,7 +89,7 @@ export const GUIDES = [
       <h2>Looking something up?</h2>
       <p>
         The <a href="./reference/index.html">reference</a> has every cue type and field,
-        every setting, the keyboard table, the OSC and MIDI messages WinsLab answers to,
+        every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers to,
         the script helpers, the file formats, and what to do when something is wrong.
       </p>
     </section>
@@ -100,7 +100,7 @@ export const GUIDES = [
     path: 'guides/first-show.html',
     section: 'Guides',
     title: 'Your first show',
-    blurb: 'Install WinsLab, open the demo show, build a cue list of your own, and save it.',
+    blurb: 'Install Cuerunner, open the demo show, build a cue list of your own, and save it.',
     body: `
     <section class="panel reveal">
       <h1>Your first show</h1>
@@ -123,8 +123,8 @@ export const GUIDES = [
         </article>
       </div>
       <p>
-        WinsLab is not signed for the app stores, so the first launch warns about an
-        unidentified developer. Downloads come from <code>pub.winslabapp.com</code>. A
+        Cuerunner is not signed for the app stores, so the first launch warns about an
+        unidentified developer. Downloads come from <code>pub.cuerunnerapp.com</code>. A
         Linux AppImage is published too, and is experimental.
       </p>
     </section>
@@ -132,14 +132,14 @@ export const GUIDES = [
     <section class="panel reveal delay-1">
       <h2>2. Open the demo</h2>
       <p>
-        <strong>WinsLab ▾ → Open Demo Workspace</strong>. It is a real show: audio, a
+        <strong>Cuerunner ▾ → Open Demo Workspace</strong>. It is a real show: audio, a
         group with a count-in, MIDI and OSC cues, a network cue, a script cue and a fade,
         with its own sound files. Nothing you do to it touches a file of yours — it opens
         unsaved, so Save As makes it yours if you want to keep it.
       </p>
       <figure class="figure">
         <a href="../assets/guide/01-window.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/01-window.png" alt="The WinsLab window with the demo show loaded: the cue list on the left, the inspector on the right, the waveform below and the transport at the bottom." />
+          <img src="../assets/guide/01-window.png" alt="The Cuerunner window with the demo show loaded: the cue list on the left, the inspector on the right, the waveform below and the transport at the bottom." />
         </a>
         <figcaption>The demo show, ready to run.</figcaption>
       </figure>
@@ -156,11 +156,11 @@ export const GUIDES = [
     <section class="panel reveal delay-2">
       <h2>3. Make one of your own</h2>
       <ol class="steps">
-        <li><strong>WinsLab ▾ → New</strong>, then double-click the name in the toolbar and call it something.</li>
+        <li><strong>Cuerunner ▾ → New</strong>, then double-click the name in the toolbar and call it something.</li>
         <li><strong>Drag your audio files onto the cue list.</strong> One cue per file, named after the file, in the order you dropped them. Or press <strong>Audio</strong> in the toolbar and pick a file with Browse.</li>
         <li><strong>Select a cue</strong> and look at the inspector. On <strong>Basics</strong>, give it a number you will recognise in a running order and write a note to yourself — the note shows up in the bar at the top when the cue is next, which is where you will actually read it.</li>
         <li><strong>Press GO</strong> to hear it. <strong>STOP</strong> stops everything.</li>
-        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. WinsLab writes a <code>.cuerunner</code> file, which holds the cues and the show's setup but not the audio itself.</li>
+        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. Cuerunner writes a <code>.cuerunner</code> file, which holds the cues and the show's setup but not the audio itself.</li>
       </ol>
       <div class="note">
         The show file points at your audio where it sits on disk. Moving a show to another
@@ -418,8 +418,8 @@ export const GUIDES = [
         one for a rig whose interface has its own driver — a professional one, or a
         virtual one like Dante Virtual Soundcard — and for setting the buffer on the
         interface rather than letting Windows mix. While the show is open that driver is
-        held by WinsLab alone, and its own control panel owns the sample rate, the buffer
-        and the channel count; WinsLab reports what it was given, and the latency beside
+        held by Cuerunner alone, and its own control panel owns the sample rate, the buffer
+        and the channel count; Cuerunner reports what it was given, and the latency beside
         it is the driver's own, marked (driver). One driver at a time, and the whole
         interface's outputs, up to 32 channels. A machine with no ASIO driver says so
         when you choose it, and a driver that asks for a reset reopens the device — the
@@ -536,14 +536,14 @@ export const GUIDES = [
     path: 'guides/console.html',
     section: 'Guides',
     title: 'Firing cues from a console',
-    blurb: 'Let a lighting desk, sound desk, tablet or footswitch fire WinsLab cues over OSC and MIDI, and see what arrives.',
+    blurb: 'Let a lighting desk, sound desk, tablet or footswitch fire Cuerunner cues over OSC and MIDI, and see what arrives.',
     pro: true,
     body: `
     <section class="panel reveal">
       <h1>Firing cues from a console<span class="pro">Pro</span></h1>
       <p class="doc-lede">
         Somebody else presses GO: the lighting desk, a footswitch, a tablet, the stage
-        manager's cue light panel. WinsLab listens, and a cue can carry its own trigger.
+        manager's cue light panel. Cuerunner listens, and a cue can carry its own trigger.
       </p>
     </section>
 
@@ -557,7 +557,7 @@ export const GUIDES = [
       </p>
       <p>
         The <strong>Monitor</strong> tab in the dock shows what is listening and what has
-        arrived, so you can point the desk at WinsLab and watch the messages land before
+        arrived, so you can point the desk at Cuerunner and watch the messages land before
         writing a single trigger.
       </p>
       <figure class="figure">
@@ -601,7 +601,7 @@ export const GUIDES = [
       <h2>3. Panic from the rig</h2>
       <p>
         Two messages panic the show whoever sends them, with no cue written for them: OSC
-        <code>/winslab/panic</code>, and MIDI <strong>All Sound Off</strong> — controller
+        <code>/cuerunner/panic</code>, and MIDI <strong>All Sound Off</strong> — controller
         120 at value 0, on any channel of any port being listened to. A desk with a spare
         key, a footswitch, another program on the network: all of them can stop the sound.
       </p>
@@ -624,7 +624,7 @@ export const GUIDES = [
       <h2>Next</h2>
       <p>
         The <a href="../reference/control.html">control reference</a> lists every message
-        WinsLab answers to and every field a trigger can match.
+        Cuerunner answers to and every field a trigger can match.
       </p>
     </section>
 `
@@ -634,7 +634,7 @@ export const GUIDES = [
     path: 'guides/desk.html',
     section: 'Guides',
     title: 'Scenes and the desk',
-    blurb: 'Build a scene grid of who is open on stage, recall it from a cue, and let WinsLab send only the DCA changes.',
+    blurb: 'Build a scene grid of who is open on stage, recall it from a cue, and let Cuerunner send only the DCA changes.',
     pro: true,
     body: `
     <section class="panel reveal">
@@ -646,11 +646,11 @@ export const GUIDES = [
     </section>
 
     <section class="panel reveal delay-1">
-      <h2>1. Tell WinsLab about the desk</h2>
+      <h2>1. Tell Cuerunner about the desk</h2>
       <p>
-        <strong>WinsLab ▾ → Show Settings → Channels</strong>. Pick how the desk is
+        <strong>Cuerunner ▾ → Show Settings → Channels</strong>. Pick how the desk is
         reached — OSC, MIDI, or MIDI over TCP — and the address or port it answers on. The
-        line under it reads back exactly what WinsLab will send, so you can check it
+        line under it reads back exactly what Cuerunner will send, so you can check it
         against the console's own documentation before anything is live.
       </p>
       <figure class="figure">
@@ -720,7 +720,7 @@ export const GUIDES = [
     path: 'guides/wireless.html',
     section: 'Guides',
     title: 'Watching the radio mics',
-    blurb: 'Feed receiver telemetry into WinsLab, keep a mic plot, and get an alarm before a battery dies mid-line.',
+    blurb: 'Feed receiver telemetry into Cuerunner, keep a mic plot, and get an alarm before a battery dies mid-line.',
     pro: true,
     body: `
     <section class="panel reveal">
@@ -735,7 +735,7 @@ export const GUIDES = [
       <p>
         Settings → <strong>Wireless</strong> → <strong>Add source</strong>. A source is
         either an <strong>HTTP</strong> address that returns the readings, or a
-        <strong>file</strong> on disk that something else keeps up to date. WinsLab does
+        <strong>file</strong> on disk that something else keeps up to date. Cuerunner does
         not speak any receiver's own protocol — it reads one simple JSON document, and
         anything that can produce it will do.
         <a href="../reference/formats.html#telemetry">The format is here</a>; it is about
@@ -826,7 +826,7 @@ export const GUIDES = [
       <p>
         The <strong>Script</strong> tab in the dock, then <strong>Choose file…</strong>.
         A plain text file is what it wants; the lines are numbered as they are read, and
-        the file is left alone — WinsLab keeps the pins, not the script.
+        the file is left alone — Cuerunner keeps the pins, not the script.
       </p>
       <figure class="figure">
         <a href="../assets/guide/15-script.png" target="_blank" rel="noreferrer">
@@ -893,7 +893,7 @@ export const GUIDES = [
       <p>
         Every save that changes the show writes a line into the file: who saved it, when,
         and what moved — the cues added, removed, edited and moved, and the settings that
-        changed. <strong>WinsLab &#9662; &rarr; Show History&hellip;</strong> reads those
+        changed. <strong>Cuerunner &#9662; &rarr; Show History&hellip;</strong> reads those
         lines back, newest first, with the detail of each entry behind a disclosure.
       </p>
       <p>
@@ -915,7 +915,7 @@ export const GUIDES = [
     <section class="panel reveal delay-1" id="compare">
       <h2>2. Comparing two versions</h2>
       <p>
-        <strong>WinsLab &#9662; &rarr; Compare Show&hellip;</strong> takes another saved
+        <strong>Cuerunner &#9662; &rarr; Compare Show&hellip;</strong> takes another saved
         show and says what changed from it to the show on screen: the cues added, the cues
         removed, the cues edited with the fields that changed, the cues that moved, and the
         settings that moved with them. The file you pick is the older side, so read the
@@ -932,7 +932,7 @@ export const GUIDES = [
     <section class="panel reveal delay-2" id="merge">
       <h2>3. Merging two people's work</h2>
       <p>
-        <strong>WinsLab &#9662; &rarr; Merge Show&hellip;</strong> merges another person's
+        <strong>Cuerunner &#9662; &rarr; Merge Show&hellip;</strong> merges another person's
         copy of the show into yours, and asks for the version the two of you started from.
         That third file is not bookkeeping: with two files alone, "I changed this" and "you
         changed it" look the same, and a merge that cannot tell them apart throws one
@@ -962,7 +962,7 @@ export const GUIDES = [
     <section class="panel reveal delay-2" id="bundle">
       <h2>4. Handing a show over as one file</h2>
       <p>
-        <strong>WinsLab &#9662; &rarr; Export Bundle&hellip;</strong> writes the show and
+        <strong>Cuerunner &#9662; &rarr; Export Bundle&hellip;</strong> writes the show and
         every audio file it plays into one <code>.cuerunnerx</code>: a zip holding
         <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
         inside it. It opens in any file manager, and its bytes are a function of the show,

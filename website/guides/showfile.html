@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Versions and handover — Winslab</title>
+  <title>Versions and handover — Cuerunner</title>
   <meta name="description" content="What each save changed, comparing two versions of a show, merging two people's work, and handing the whole thing over as one file." />
   <meta property="og:type" content="article" />
-  <meta property="og:title" content="Versions and handover — Winslab" />
+  <meta property="og:title" content="Versions and handover — Cuerunner" />
   <meta property="og:description" content="What each save changed, comparing two versions of a show, merging two people's work, and handing the whole thing over as one file." />
   <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../styles.css" />
@@ -16,9 +16,9 @@
 
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="../index.html" aria-label="Winslab home">
-        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
-        <span>WINSLAB</span>
+      <a class="brand" href="../index.html" aria-label="Cuerunner home">
+        <img src="../assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../guide.html" aria-current="page">Guides</a>
@@ -51,7 +51,7 @@
       <p>
         Every save that changes the show writes a line into the file: who saved it, when,
         and what moved — the cues added, removed, edited and moved, and the settings that
-        changed. <strong>WinsLab &#9662; &rarr; Show History&hellip;</strong> reads those
+        changed. <strong>Cuerunner &#9662; &rarr; Show History&hellip;</strong> reads those
         lines back, newest first, with the detail of each entry behind a disclosure.
       </p>
       <p>
@@ -63,7 +63,7 @@
         oldest fall off.
       </p>
       <div class="note">
-        The history lives in the <code>.wlab</code>, so it survives being copied, emailed
+        The history lives in the <code>.cuerunner</code>, so it survives being copied, emailed
         or handed over. It is written whether or not this machine is licensed — it is the
         show's own record of itself — and reading it back is free. What the key turns on is
         comparing this file with another and merging two people's work.
@@ -73,7 +73,7 @@
     <section class="panel reveal delay-1" id="compare">
       <h2>2. Comparing two versions</h2>
       <p>
-        <strong>WinsLab &#9662; &rarr; Compare Show&hellip;</strong> takes another saved
+        <strong>Cuerunner &#9662; &rarr; Compare Show&hellip;</strong> takes another saved
         show and says what changed from it to the show on screen: the cues added, the cues
         removed, the cues edited with the fields that changed, the cues that moved, and the
         settings that moved with them. The file you pick is the older side, so read the
@@ -90,7 +90,7 @@
     <section class="panel reveal delay-2" id="merge">
       <h2>3. Merging two people's work</h2>
       <p>
-        <strong>WinsLab &#9662; &rarr; Merge Show&hellip;</strong> merges another person's
+        <strong>Cuerunner &#9662; &rarr; Merge Show&hellip;</strong> merges another person's
         copy of the show into yours, and asks for the version the two of you started from.
         That third file is not bookkeeping: with two files alone, "I changed this" and "you
         changed it" look the same, and a merge that cannot tell them apart throws one
@@ -120,9 +120,9 @@
     <section class="panel reveal delay-2" id="bundle">
       <h2>4. Handing a show over as one file</h2>
       <p>
-        <strong>WinsLab &#9662; &rarr; Export Bundle&hellip;</strong> writes the show and
-        every audio file it plays into one <code>.wlabx</code>: a zip holding
-        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        <strong>Cuerunner &#9662; &rarr; Export Bundle&hellip;</strong> writes the show and
+        every audio file it plays into one <code>.cuerunnerx</code>: a zip holding
+        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
         inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file. A file the show names that is
         not on this machine is reported rather than failing the export.
@@ -138,14 +138,14 @@
         A bundle carries up to about 4 GB of media — the zip format's own limit without its
         64-bit extension, which this app does not write. A show bigger than that says so
         instead of being written as an archive that lies about its own contents; the
-        <code>.wlab</code> itself has no such limit, and a show that size can still be
+        <code>.cuerunner</code> itself has no such limit, and a show that size can still be
         moved by <a href="../reference/formats.html#workspace">copying its folder</a>.
       </p>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
   </footer>
 </body>
 </html>

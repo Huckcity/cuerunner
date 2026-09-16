@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>File formats — Winslab</title>
-  <meta name="description" content="The .wlab workspace file, the .wlabx bundle, how media is referenced, and the wireless telemetry document WinsLab reads." />
+  <title>File formats — Cuerunner</title>
+  <meta name="description" content="The .cuerunner workspace file, the .cuerunnerx bundle, how media is referenced, and the wireless telemetry document Cuerunner reads." />
   <meta property="og:type" content="article" />
-  <meta property="og:title" content="File formats — Winslab" />
-  <meta property="og:description" content="The .wlab workspace file, the .wlabx bundle, how media is referenced, and the wireless telemetry document WinsLab reads." />
+  <meta property="og:title" content="File formats — Cuerunner" />
+  <meta property="og:description" content="The .cuerunner workspace file, the .cuerunnerx bundle, how media is referenced, and the wireless telemetry document Cuerunner reads." />
   <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../styles.css" />
 </head>
@@ -16,9 +16,9 @@
 
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="../index.html" aria-label="Winslab home">
-        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
-        <span>WINSLAB</span>
+      <a class="brand" href="../index.html" aria-label="Cuerunner home">
+        <img src="../assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../guide.html">Guides</a>
@@ -44,14 +44,14 @@
     <section class="panel reveal delay-1" id="workspace">
       <h2>The workspace file</h2>
       <p>
-        A show is one <code>.wlab</code> file: JSON, holding the cues in order, the show's
+        A show is one <code>.cuerunner</code> file: JSON, holding the cues in order, the show's
         setup — the desk, the cast, the scenes, the mic plot, the triggers — and the
         window's own state such as which cue was selected.
       </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping
-        the paths valid: the simplest arrangement is a folder with the <code>.wlab</code>
+        the paths valid: the simplest arrangement is a folder with the <code>.cuerunner</code>
         file and the audio beside it, copied whole.
       </p>
       <p>
@@ -70,14 +70,14 @@
     <section class="panel reveal delay-1" id="bundle">
       <h2>The bundle file<span class="pro">Pro</span></h2>
       <p>
-        A <code>.wlabx</code> is the show <em>and</em> its audio as one file: a zip holding
-        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        A <code>.cuerunnerx</code> is the show <em>and</em> its audio as one file: a zip holding
+        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
         inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file.
       </p>
       <p>
         It carries up to about 4 GB of media — the zip format's own limit without its
-        64-bit extension, which WinsLab does not write. A larger show is refused rather
+        64-bit extension, which Cuerunner does not write. A larger show is refused rather
         than written as an archive that misreports its own contents.
       </p>
       <p>
@@ -90,7 +90,7 @@
     <section class="panel reveal delay-1" id="telemetry">
       <h2>Wireless telemetry</h2>
       <p>
-        WinsLab does not speak any receiver's own protocol. A source — an HTTP address or a
+        Cuerunner does not speak any receiver's own protocol. A source — an HTTP address or a
         file on disk — returns this document:
       </p>
       <div class="code"><code>{
@@ -124,7 +124,7 @@
   </main>
 
   <footer class="site-footer">
-    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
   </footer>
 </body>
 </html>

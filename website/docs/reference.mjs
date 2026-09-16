@@ -7,7 +7,7 @@ export const REFERENCE = [
   {
     path: 'reference/index.html',
     title: 'Reference',
-    blurb: 'Every cue type and field, every setting, the keyboard table, the OSC and MIDI messages WinsLab answers to, the script helpers and the file formats.',
+    blurb: 'Every cue type and field, every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers to, the script helpers and the file formats.',
     body: `
     <section class="panel reveal">
       <h1>Reference</h1>
@@ -33,7 +33,7 @@ export const REFERENCE = [
         </a>
         <a class="card doc-card" href="./control.html">
           <h3>OSC &amp; MIDI control</h3>
-          <p>What WinsLab listens for, what a trigger matches, and what a cue sends.</p>
+          <p>What Cuerunner listens for, what a trigger matches, and what a cue sends.</p>
         </a>
         <a class="card doc-card" href="./script-api.html">
           <h3>Script cue API</h3>
@@ -56,7 +56,7 @@ export const REFERENCE = [
     path: 'reference/cue-types.html',
     section: 'Reference',
     title: 'Cue types',
-    blurb: 'Every WinsLab cue type and every field it carries, with defaults.',
+    blurb: 'Every Cuerunner cue type and every field it carries, with defaults.',
     body: `
     <section class="panel reveal">
       <h1>Cue types</h1>
@@ -194,12 +194,12 @@ export const REFERENCE = [
     path: 'reference/settings.html',
     section: 'Reference',
     title: 'Settings',
-    blurb: 'Every setting in WinsLab, what it does, and whether it is saved with the show or with the computer.',
+    blurb: 'Every setting in Cuerunner, what it does, and whether it is saved with the show or with the computer.',
     body: `
     <section class="panel reveal">
       <h1>Settings</h1>
       <p class="doc-lede">
-        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or WinsLab ▾ → Settings. The sidebar
+        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or Cuerunner ▾ → Settings. The sidebar
         splits them by where they are kept: <strong>this show</strong> travels in the
         <code>.cuerunner</code> file, <strong>this computer</strong> stays on the machine.
       </p>
@@ -306,7 +306,7 @@ export const REFERENCE = [
     <section class="panel reveal delay-3" id="show">
       <h2>Show Settings</h2>
       <p>
-        WinsLab ▾ → Show Settings. These are the show's own, and travel in the file.
+        Cuerunner ▾ → Show Settings. These are the show's own, and travel in the file.
       </p>
       <div class="table-wrap">
         <table>
@@ -326,7 +326,7 @@ export const REFERENCE = [
     path: 'reference/keyboard.html',
     section: 'Reference',
     title: 'Keyboard',
-    blurb: 'Every WinsLab keyboard shortcut and where it works.',
+    blurb: 'Every Cuerunner keyboard shortcut and where it works.',
     body: `
     <section class="panel reveal">
       <h1>Keyboard</h1>
@@ -397,7 +397,7 @@ export const REFERENCE = [
     path: 'reference/control.html',
     section: 'Reference',
     title: 'OSC & MIDI control',
-    blurb: 'What WinsLab listens for, what a cue trigger matches, and what WinsLab sends to a desk.',
+    blurb: 'What Cuerunner listens for, what a cue trigger matches, and what Cuerunner sends to a desk.',
     body: `
     <section class="panel reveal">
       <h1>OSC &amp; MIDI control<span class="pro">Pro</span></h1>
@@ -408,7 +408,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-1" id="listening">
-      <h2>What WinsLab listens on</h2>
+      <h2>What Cuerunner listens on</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Input</th><th>Default</th><th>Notes</th></tr></thead>
@@ -427,7 +427,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Message</th><th>Effect</th></tr></thead>
           <tbody>
-            <tr><td><code>/winslab/panic</code> (any arguments)</td><td>Panic: everything stops with a 200 ms fade.</td></tr>
+            <tr><td><code>/cuerunner/panic</code> (any arguments)</td><td>Panic: everything stops with a 200 ms fade.</td></tr>
             <tr><td>MIDI All Sound Off — controller 120, value 0, any channel, any listened port</td><td>The same.</td></tr>
           </tbody>
         </table>
@@ -435,7 +435,7 @@ export const REFERENCE = [
       <p>
         Both are acted on where the engine is rather than in the window, so the fade starts
         whether or not the interface is answering. The run log records the sender:
-        <code>[main] panic (osc): /winslab/panic from 192.168.1.24:8000</code>.
+        <code>[main] panic (osc): /cuerunner/panic from 192.168.1.24:8000</code>.
       </p>
     </section>
 
@@ -461,7 +461,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="sending">
-      <h2>What WinsLab sends</h2>
+      <h2>What Cuerunner sends</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Cue</th><th>What goes out</th></tr></thead>
@@ -485,7 +485,7 @@ export const REFERENCE = [
     path: 'reference/script-api.html',
     section: 'Reference',
     title: 'Script cue API',
-    blurb: 'What a WinsLab script cue can call: shell, include, timeouts, logging and the limits.',
+    blurb: 'What a Cuerunner script cue can call: shell, include, timeouts, logging and the limits.',
     body: `
     <section class="panel reveal">
       <h1>Script cue API</h1>
@@ -565,7 +565,7 @@ await rig.blackout()</code></div>
     path: 'reference/formats.html',
     section: 'Reference',
     title: 'File formats',
-    blurb: 'The .cuerunner workspace file, the .cuerunnerx bundle, how media is referenced, and the wireless telemetry document WinsLab reads.',
+    blurb: 'The .cuerunner workspace file, the .cuerunnerx bundle, how media is referenced, and the wireless telemetry document Cuerunner reads.',
     body: `
     <section class="panel reveal">
       <h1>File formats</h1>
@@ -607,7 +607,7 @@ await rig.blackout()</code></div>
       </p>
       <p>
         It carries up to about 4 GB of media — the zip format's own limit without its
-        64-bit extension, which WinsLab does not write. A larger show is refused rather
+        64-bit extension, which Cuerunner does not write. A larger show is refused rather
         than written as an archive that misreports its own contents.
       </p>
       <p>
@@ -620,7 +620,7 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="telemetry">
       <h2>Wireless telemetry</h2>
       <p>
-        WinsLab does not speak any receiver's own protocol. A source — an HTTP address or a
+        Cuerunner does not speak any receiver's own protocol. A source — an HTTP address or a
         file on disk — returns this document:
       </p>
       <div class="code"><code>{
@@ -658,7 +658,7 @@ await rig.blackout()</code></div>
     path: 'reference/troubleshooting.html',
     section: 'Reference',
     title: 'Troubleshooting',
-    blurb: 'Symptoms, causes and fixes for WinsLab, and the known limitations.',
+    blurb: 'Symptoms, causes and fixes for Cuerunner, and the known limitations.',
     body: `
     <section class="panel reveal">
       <h1>Troubleshooting</h1>
@@ -746,7 +746,7 @@ await rig.blackout()</code></div>
         <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
         <li>The tablet view is read-only by design.</li>
-        <li>WinsLab is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>
+        <li>Cuerunner is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>
         <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>
       </ul>
     </section>

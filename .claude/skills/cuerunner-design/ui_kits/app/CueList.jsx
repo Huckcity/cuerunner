@@ -1,5 +1,5 @@
-// Winslab UI Kit — CueList + CueRow components
-// Exported to window.WinslabCueList
+// Cuerunner UI Kit — CueList + CueRow components
+// Exported to window.CuerunnerCueList
 
 const { useState, useRef, useCallback } = React;
 
@@ -214,4 +214,4 @@ const cueListStyles = {
   dropHint: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#5aa9ff', pointerEvents: 'none' },
 };
 
-Object.assign(window, { WinslabCueList: CueList, WinslabCueRow: CueRow, formatDuration });
+Object.assign(window, { CuerunnerCueList: CueList, CuerunnerCueRow: CueRow, formatDuration });

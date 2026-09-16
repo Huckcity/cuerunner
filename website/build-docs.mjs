@@ -44,10 +44,10 @@ function shell(page) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${esc(page.title)} — Winslab</title>
+  <title>${esc(page.title)} — Cuerunner</title>
   <meta name="description" content="${esc(page.blurb)}" />
   <meta property="og:type" content="article" />
-  <meta property="og:title" content="${esc(page.title)} — Winslab" />
+  <meta property="og:title" content="${esc(page.title)} — Cuerunner" />
   <meta property="og:description" content="${esc(page.blurb)}" />
   <link rel="icon" href="${up}assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="${up}styles.css" />
@@ -57,9 +57,9 @@ function shell(page) {
 
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="${up}index.html" aria-label="Winslab home">
-        <img src="${up}assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
-        <span>WINSLAB</span>
+      <a class="brand" href="${up}index.html" aria-label="Cuerunner home">
+        <img src="${up}assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
 ${nav}
@@ -73,7 +73,7 @@ ${crumb}${page.body.trimEnd()}
   </main>
 
   <footer class="site-footer">
-    <p>WinsLab — show control for Windows and macOS. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows and macOS. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a></p>
   </footer>
 </body>
 </html>

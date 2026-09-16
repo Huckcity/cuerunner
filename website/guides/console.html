@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Firing cues from a console — Winslab</title>
-  <meta name="description" content="Let a lighting desk, sound desk, tablet or footswitch fire WinsLab cues over OSC and MIDI, and see what arrives." />
+  <title>Firing cues from a console — Cuerunner</title>
+  <meta name="description" content="Let a lighting desk, sound desk, tablet or footswitch fire Cuerunner cues over OSC and MIDI, and see what arrives." />
   <meta property="og:type" content="article" />
-  <meta property="og:title" content="Firing cues from a console — Winslab" />
-  <meta property="og:description" content="Let a lighting desk, sound desk, tablet or footswitch fire WinsLab cues over OSC and MIDI, and see what arrives." />
+  <meta property="og:title" content="Firing cues from a console — Cuerunner" />
+  <meta property="og:description" content="Let a lighting desk, sound desk, tablet or footswitch fire Cuerunner cues over OSC and MIDI, and see what arrives." />
   <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../styles.css" />
 </head>
@@ -16,9 +16,9 @@
 
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="../index.html" aria-label="Winslab home">
-        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
-        <span>WINSLAB</span>
+      <a class="brand" href="../index.html" aria-label="Cuerunner home">
+        <img src="../assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
       </a>
       <nav class="top-nav" aria-label="Primary">
         <a href="../guide.html" aria-current="page">Guides</a>
@@ -41,7 +41,7 @@
       <h1>Firing cues from a console<span class="pro">Pro</span></h1>
       <p class="doc-lede">
         Somebody else presses GO: the lighting desk, a footswitch, a tablet, the stage
-        manager's cue light panel. WinsLab listens, and a cue can carry its own trigger.
+        manager's cue light panel. Cuerunner listens, and a cue can carry its own trigger.
       </p>
     </section>
 
@@ -55,7 +55,7 @@
       </p>
       <p>
         The <strong>Monitor</strong> tab in the dock shows what is listening and what has
-        arrived, so you can point the desk at WinsLab and watch the messages land before
+        arrived, so you can point the desk at Cuerunner and watch the messages land before
         writing a single trigger.
       </p>
       <figure class="figure">
@@ -99,7 +99,7 @@
       <h2>3. Panic from the rig</h2>
       <p>
         Two messages panic the show whoever sends them, with no cue written for them: OSC
-        <code>/winslab/panic</code>, and MIDI <strong>All Sound Off</strong> — controller
+        <code>/cuerunner/panic</code>, and MIDI <strong>All Sound Off</strong> — controller
         120 at value 0, on any channel of any port being listened to. A desk with a spare
         key, a footswitch, another program on the network: all of them can stop the sound.
       </p>
@@ -122,13 +122,13 @@
       <h2>Next</h2>
       <p>
         The <a href="../reference/control.html">control reference</a> lists every message
-        WinsLab answers to and every field a trigger can match.
+        Cuerunner answers to and every field a trigger can match.
       </p>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
   </footer>
 </body>
 </html>
