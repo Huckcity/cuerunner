@@ -791,13 +791,17 @@ ma_result onDeviceStart(ma_device* pDevice) {
   if (host == nullptr || host->driver == nullptr || !host->buffersCreated) return MA_DEVICE_NOT_INITIALIZED;
 
   // The ASIO contract is that the second half of the double buffer holds the audio the
-  // hardware will play while the host fills the first, because the driver has nothing
-  // else to send until the first callback. It is primed with silence: the engine has not
-  // rendered a block yet, and it renders its first block from the first callback.
+  // hardware will play while the host fills the first, because the driver has nothing else
+  // to send until the first callback. It is primed with silence: the engine has not
+  // rendered a block yet, and it renders its first block from the first callback. Both
+  // halves are cleared rather than only the one the contract names, because which half the
+  // driver plays first is the driver's business and a garbage block at start is a click.
   for (int channel = 0; channel < host->activeChannels; channel++) {
     const size_t bytes = static_cast<size_t>(bytesPerSample(host->types[channel])) *
                          static_cast<size_t>(host->bufferFrames);
-    if (host->infos[channel].buffers[1] != nullptr) std::memset(host->infos[channel].buffers[1], 0, bytes);
+    for (int half = 0; half < 2; half++) {
+      if (host->infos[channel].buffers[half] != nullptr) std::memset(host->infos[channel].buffers[half], 0, bytes);
+    }
   }
 
   const ASIOError result = host->driver->start();
