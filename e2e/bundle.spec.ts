@@ -190,6 +190,12 @@ test('a show and its audio leave as one file and come back playable', async () =
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button[data-action="import-bundle"]').click()
 
+  // What the app said about the import, before anything else: the cues below are the ones
+  // the open show already had, so they would pass an import that did nothing, and a
+  // failure here has to carry the app's own words or there is nothing to act on — this is
+  // the assertion that ran on a Windows runner nobody can log into.
+  expect(await page.locator('.app-notice').allTextContents(), 'the app reported an error')
+    .toEqual([])
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
   await expect(page.locator('.cue-row', { hasText: 'Bows' })).toBeVisible()
   // Nothing is missing, so the app says nothing about missing media.
@@ -197,6 +203,7 @@ test('a show and its audio leave as one file and come back playable', async () =
 
   // The show arrived with its audio, and the paths in it point at what was unpacked.
   const unpackedShow = path.join(unpacked, 'Press Night.wlab')
+  expect(fs.readdirSync(unpacked), 'what the import wrote into the folder').toContain('Press Night.wlab')
   expect(fs.existsSync(unpackedShow)).toBe(true)
   expect(fs.existsSync(path.join(unpacked, 'media', 'walk-in.wav'))).toBe(true)
   expect(fs.existsSync(path.join(unpacked, 'media', 'bows.wav'))).toBe(true)
