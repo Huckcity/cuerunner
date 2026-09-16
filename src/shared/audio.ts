@@ -367,6 +367,12 @@ export interface AudioDeviceInfo {
 
 /** What `configure()` accepts. Null/absent means "leave as it is"; a request never silently falls back. */
 export interface DeviceOptions {
+  /**
+   * The audio system to run the show through, e.g. `'auto'` for the platform's own
+   * stack or `'asio'`. Absent leaves the engine as it is; a system neither the build
+   * nor the machine can provide is an error, like every other field here.
+   */
+  backend?: string
   deviceId?: string | null
   sampleRate?: number | null
   channels?: number | null
@@ -417,6 +423,7 @@ export interface AudioMediaStats {
 
 export type AudioBackend =
   | 'wasapi'
+  | 'asio'
   | 'coreaudio'
   | 'alsa'
   | 'pulseaudio'

@@ -106,6 +106,45 @@ test('Audio tab reports exactly what the engine says it is running', async () =>
   await closeSettings(page)
 })
 
+test('the audio system row names this platform\'s stack, and offers ASIO only on Windows', async () => {
+  await openSettingsOn(page, 'Audio')
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  const system = dialog.locator('.field-row', { hasText: 'Audio system' }).locator('select')
+
+  // The show plays through the platform's own stack unless it was told otherwise.
+  await expect(system).toBeVisible()
+  await expect(system).toHaveValue('auto')
+
+  // ASIO is a Windows driver model, and only a Windows build has anywhere to run it —
+  // elsewhere the request is not offered at all, rather than offered and refused.
+  const options = process.platform === 'win32'
+    ? ['Windows audio (default)', 'ASIO']
+    : ['System audio (default)']
+  expect(await system.locator('option').allTextContents()).toEqual(options)
+
+  await closeSettings(page)
+})
+
+test('a Windows show can ask for ASIO, and the ask is still there next time', async () => {
+  test.skip(process.platform !== 'win32', 'ASIO is a Windows backend')
+
+  await openSettingsOn(page, 'Audio')
+  const system = page.getByRole('dialog', { name: 'Settings' })
+    .locator('.field-row', { hasText: 'Audio system' }).locator('select')
+  await system.selectOption('asio')
+
+  // The system belongs to the workspace, so it is still there next time, whatever this
+  // machine's engine made of the request: the control holds the show's setting, and
+  // the readout further down is the engine's answer.
+  await closeSettings(page)
+  await openSettingsOn(page, 'Audio')
+  await expect(system).toHaveValue('asio')
+
+  // Back to where the platform started, for whatever runs after this.
+  await system.selectOption('auto')
+  await closeSettings(page)
+})
+
 test('the device section sets exclusive mode, and says what it costs', async () => {
   await openSettingsOn(page, 'Audio')
   const dialog = page.getByRole('dialog', { name: 'Settings' })

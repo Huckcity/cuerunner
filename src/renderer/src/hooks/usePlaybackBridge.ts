@@ -46,6 +46,7 @@ export function usePlaybackBridge(): void {
   // its own words: the engine never downgrades a setting quietly, and neither does this.
   useEffect(() => {
     audioEngine.configure({
+      backend: audioSettings.backend ?? 'auto',
       deviceId: audioSettings.outputDeviceId === 'default' ? undefined : audioSettings.outputDeviceId,
       sampleRate: audioSettings.sampleRate,
       channels: audioSettings.channels,
