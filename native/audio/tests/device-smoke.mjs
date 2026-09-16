@@ -239,6 +239,31 @@ try {
   check('an identical configure is a no-op', sameAgain.periodFrames === reconfigured.periodFrames && sameAgain.bufferFrames === reconfigured.bufferFrames, JSON.stringify({ before: reconfigured.bufferFrames, after: sameAgain.bufferFrames }))
   check('an identical configure raises no device error', client.events.filter((event) => event.type === 'error').length === 0, JSON.stringify(client.events.filter((event) => event.type === 'error')))
 
+  // A request for a backend this engine cannot switch to must be refused before the
+  // device is touched: the show keeps playing while the refusal is computed. Both of
+  // these were, before the prevalidation existed, answered by tearing the live device
+  // down first.
+  let unknownRefused = false
+  try {
+    await client.request('configure', { options: { backend: 'no-such-backend' } })
+  } catch (error) {
+    unknownRefused = /unknown audio backend/.test(error.message)
+  }
+  check('an unknown backend is refused by name', unknownRefused)
+  let asioRefused = false
+  try {
+    await client.request('configure', { options: { backend: 'asio' } })
+  } catch (error) {
+    asioRefused = /ASIO/.test(error.message)
+  }
+  if (info.backend === 'asio') {
+    check('the lane itself is an ASIO build', true)
+  } else {
+    check('an ASIO request on a non-ASIO build is refused up front', asioRefused, JSON.stringify({ events: client.events.filter((event) => event.type === 'error') }))
+  }
+  const stillHealthy = await client.request('info')
+  check('the refused configure left the device alone', stillHealthy.active === false && stillHealthy.lastError === null, JSON.stringify({ active: stillHealthy.active, lastError: stillHealthy.lastError }))
+
   const prepared = await client.request('prepare', { cueId: 'tone', filePath: fixture })
   check('prepare reports the file metadata', prepared.sampleRate === 48000 && prepared.channels === 2 && prepared.frames === 96000, JSON.stringify(prepared))
 

@@ -6,9 +6,9 @@
  * conversion and the buffer-size rules are proven everywhere by asio-rules.mjs, and the
  * hosting itself (instantiating the driver, creating its buffers, rendering into them on
  * its thread, handling its reset requests) needs something that answers ASIO's interface.
- * This finds the drivers the machine has and runs the full device smoke against the first
- * one, which plays a tone, checks the engine's readout against what the driver says,
- * reconfigures it, pans it, plays it, and silences it.
+ * This finds the drivers the machine has and runs the full device smoke against the
+ * first one with outputs, which plays a tone, checks the engine's readout against
+ * what the driver says, reconfigures it, pans it, plays it, and silences it.
  *
  *   node native/audio/tests/asio-smoke.mjs [--device <driver name>] [--require]
  *
@@ -70,11 +70,24 @@ if (devices.length === 0) {
   process.exit(0)
 }
 
-const device = wanted !== null ? devices.find((entry) => entry.id === wanted) : devices[0]
-if (device === undefined) {
+const device = wanted !== null
+  ? devices.find((entry) => entry.id === wanted)
+  // The lane exists to prove driver hosting: the first driver *with outputs*, so a
+  // zero-channel first driver cannot pass the lane without hosting anything.
+  : devices.find((entry) => entry.channels > 0)
+if (wanted !== null && device === undefined) {
   console.error(`asio smoke — no such ASIO driver: ${wanted}`)
   console.error(`installed: ${devices.map((entry) => entry.id).join(', ')}`)
   process.exit(1)
+}
+if (device === undefined) {
+  const note = 'no ASIO driver with outputs is installed on this machine'
+  if (required) {
+    console.error(`asio smoke — ${note}, and --require was asked for`)
+    process.exit(1)
+  }
+  console.log(`asio smoke — ${note}; skipped (install an interface's driver, or Steinberg's built-in one, to run this)`)
+  process.exit(0)
 }
 
 // A driver with no outputs has nothing to play through, and that is the machine's state

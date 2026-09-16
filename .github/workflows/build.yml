@@ -272,11 +272,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           EXE=$(find artifacts -name "*.exe" | head -1)
+          # One universal dmg now: every Mac takes the same file, and the stapler
+          # validates the file that ships rather than one architecture of two.
           DMG=$(find artifacts -name "*.dmg" | head -1)
           APPI=$(find artifacts -name "*.AppImage" | head -1)
-          aws s3 cp "$EXE" "s3://$R2_BUCKET/versions/$TAG/WinsLab-Setup.exe" --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$DMG" "s3://$R2_BUCKET/versions/$TAG/WinsLab.dmg"       --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$APPI" "s3://$R2_BUCKET/versions/$TAG/WinsLab.AppImage"  --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$EXE" "s3://$R2_BUCKET/latest/WinsLab-Setup.exe"        --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$DMG" "s3://$R2_BUCKET/latest/WinsLab.dmg"              --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$APPI" "s3://$R2_BUCKET/latest/WinsLab.AppImage"        --endpoint-url "$R2_ENDPOINT"

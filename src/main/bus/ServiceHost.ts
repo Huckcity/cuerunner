@@ -69,6 +69,21 @@ export class ServiceHost {
     }
   }
 
+  /**
+   * Restarts only the services whose slice of the settings changed: every settings
+   * edit otherwise drops every listener. A service declares its slice by id; an
+   * unknown id restarts everywhere, because a setting nobody reads is not a reason
+   * to keep a stale listener.
+   */
+  async startChanged(settings: ShowSettings): Promise<void> {
+    const before = this.settings
+    this.settings = settings
+    for (const entry of this.entries.values()) {
+      if (before !== null && !serviceSettingsChanged(entry.service.id, before, settings)) continue
+      await this.bringUp(entry, settings)
+    }
+  }
+
   async stopAll(): Promise<void> {
     for (const entry of this.entries.values()) {
       const stopped = await this.guard(entry, 'stop', () => entry.service.stop())
@@ -176,6 +191,35 @@ export class ServiceHost {
       ...(error === undefined ? {} : { error })
     }
     this.bus.publish({ kind: 'service', at: entry.status.since, service: entry.status })
+  }
+}
+
+/**
+ * Whether this service reads anything that changed between two settings. The slices
+ * are the sections each service's start() reads; desk-adjacent services also read the
+ * desk section they send through.
+ */
+function serviceSettingsChanged(id: string, before: ShowSettings, after: ShowSettings): boolean {
+  switch (id) {
+    case 'osc-in':
+      return JSON.stringify(before.oscIn) !== JSON.stringify(after.oscIn)
+    case 'midi-in':
+      return JSON.stringify(before.midiIn) !== JSON.stringify(after.midiIn)
+    case 'midi-tcp':
+      return JSON.stringify(before.desk) !== JSON.stringify(after.desk)
+    case 'rf':
+      return JSON.stringify(before.rf) !== JSON.stringify(after.rf) ||
+        JSON.stringify(before.cast) !== JSON.stringify(after.cast)
+    case 'presence':
+      return JSON.stringify(before.presence) !== JSON.stringify(after.presence)
+    case 'companion':
+      return JSON.stringify(before.companion) !== JSON.stringify(after.companion) ||
+        JSON.stringify(before.script) !== JSON.stringify(after.script)
+    case 'redundancy':
+      // Machine settings, not show settings: the service reads its own file.
+      return false
+    default:
+      return JSON.stringify(before) !== JSON.stringify(after)
   }
 }
 

@@ -103,6 +103,22 @@ describe('createShowRuntime', () => {
     runtime.close()
   })
 
+  it('restarts only the service whose settings changed', async () => {
+    vi.useFakeTimers()
+    const osc = new FakeService('osc-in', 'OSC input')
+    const midi = new FakeService('midi-in', 'MIDI input')
+    const runtime = createShowRuntime([osc, midi])
+
+    await runtime.configure(defaultShowSettings())
+    await runtime.configure(movedPort(53001))
+
+    expect(osc.starts).toBe(2)
+    expect(osc.stops).toBe(1)
+    expect(midi.starts).toBe(1)
+    expect(midi.stops).toBe(0)
+    runtime.close()
+  })
+
   it('announces an OSC port move rather than moving the listener silently', async () => {
     vi.useFakeTimers()
     const runtime = createShowRuntime([new FakeService()])

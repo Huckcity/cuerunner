@@ -1,5 +1,5 @@
 import { app, dialog, BrowserWindow } from 'electron'
-import { readFile, mkdir, writeFile } from 'fs/promises'
+import { readFile, mkdir, stat, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
 import { hostname, userInfo } from 'os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
@@ -30,6 +30,12 @@ import {
   DEFAULT_TRIGGER_GUARD,
   normalizeTriggerGuard
 } from '../../renderer/src/types/workspace'
+
+/**
+ * The largest workspace file this app opens: 64 MiB of JSON is already far past a
+ * readable show.
+ */
+const MAX_WORKSPACE_BYTES = 64 * 1024 * 1024
 
 // Cues come out of a JSON file, so they can still carry fields a previous version
 // wrote and this one no longer knows about. Read and delete those through here.
@@ -561,6 +567,12 @@ export function serialiseWorkspace(
  * compare this machine's paths with this machine's paths.
  */
 export async function readWorkspaceFile(filePath: string): Promise<Workspace> {
+  // A hostile .wlab is a zip bomb of the plain kind: cap the read before the parse,
+  // rather than inflating attacker-declared JSON into main-process memory.
+  const { size } = await stat(filePath)
+  if (size > MAX_WORKSPACE_BYTES) {
+    throw new Error('that workspace file is larger than this app will open')
+  }
   return migrateWorkspace(JSON.parse(await readFile(filePath, 'utf-8')) as Workspace)
 }
 
@@ -1001,7 +1013,9 @@ export async function mergeShow(
     if (ancestor.canceled || !ancestor.filePaths[0]) return null
     files = { theirs: theirs.filePaths[0], ancestor: ancestor.filePaths[0] }
   }
-  return { ...(await mergeIntoNewFile(win, ours, oursPath, files.theirs, files.ancestor, policy))!, inputs: files }
+  const merged = await mergeIntoNewFile(win, ours, oursPath, files.theirs, files.ancestor, policy)
+  if (merged === null) return null
+  return { ...merged, inputs: files }
 }
 
 export function blankWorkspace(name = 'Untitled'): Workspace {

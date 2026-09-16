@@ -74,7 +74,7 @@ export function createShowRuntime(services: ShowService[] = defaultServices()): 
         announceChange(bus, before, settings)
       }
       current = serialized
-      await host.startAll(settings)
+      await host.startChanged(settings)
     },
 
     async suspend(): Promise<void> {

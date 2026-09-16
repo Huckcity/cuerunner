@@ -20,16 +20,12 @@
 // bundle that somebody re-zipped by hand still opens.
 
 import { createReadStream, createWriteStream } from 'fs'
-import { mkdir, open, rm, stat } from 'fs/promises'
+import { mkdir, open, rename, rm, stat } from 'fs/promises'
 import type { FileHandle } from 'fs/promises'
 import { dirname, resolve, sep } from 'path'
 import { Transform } from 'stream'
 import { pipeline } from 'stream/promises'
-import { promisify } from 'util'
-import { crc32, createInflateRaw, inflateRaw as inflateRawCallback } from 'zlib'
-
-/** The callback form, as a promise: the small entries are read whole. */
-const inflateRaw = promisify(inflateRawCallback)
+import { crc32, createInflateRaw } from 'zlib'
 
 const LOCAL_SIGNATURE = 0x04034b50
 const CENTRAL_SIGNATURE = 0x02014b50
@@ -182,12 +178,17 @@ async function prepare(sources: ZipSource[]): Promise<Prepared[]> {
  */
 export async function writeZip(filePath: string, sources: ZipSource[]): Promise<void> {
   const entries = await prepare(sources)
+  // A failed export must not destroy the operator's previous bundle: the bytes land in
+  // a temp file first and the replace is a rename, so "nothing is better" means the old
+  // file survives. The failed temp is removed; a pre-existing target is never touched
+  // on failure.
+  const tempPath = `${filePath}.tmp`
   try {
-    await writeEntries(filePath, entries)
+    await mkdir(dirname(tempPath), { recursive: true })
+    await writeEntries(tempPath, entries)
+    await rename(tempPath, filePath)
   } catch (error) {
-    // A write that failed half way leaves a file that looks like a bundle and is not one,
-    // at a path the operator chose and may hand to somebody. Nothing is better.
-    await rm(filePath, { force: true }).catch(() => {})
+    await rm(tempPath, { force: true }).catch(() => {})
     throw error
   }
 }
@@ -311,6 +312,11 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
   if (count === 0xffff || directorySize === ZIP64_MARKER || directoryOffset === ZIP64_MARKER) {
     throw new Error('that archive is too large to open here')
   }
+  // Declared sizes are the archive's claim about itself, and a hostile one lies: bound
+  // them against the file before allocating or reading on their word.
+  if (directorySize > size || directoryOffset > size || directoryOffset + directorySize > size) {
+    throw new Error('that archive’s directory runs past the end of the file')
+  }
 
   const directory = await read(filePath, directoryOffset, directorySize)
   const entries: ZipEntry[] = []
@@ -335,8 +341,10 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
     if (method !== STORED && method !== DEFLATED) {
       throw new Error(`that archive holds an entry packed in a way this app does not read (${method})`)
     }
-    if (compressedSize === ZIP64_MARKER || size_ === ZIP64_MARKER) {
-      throw new Error('that archive is too large to open here')
+    // The entry's own sizes are claims too: refuse an absurd declared size before it
+    // is acted on (the showfile is read whole; media is streamed entry by entry).
+    if (size_ > MAX_ARCHIVE_BYTES || compressedSize > size) {
+      throw new Error(`"${name}" claims a size this app will not read`)
     }
     if (name.endsWith('/')) continue      // A directory entry: nothing to extract.
     safeName(name)
@@ -356,10 +364,22 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
   return entries
 }
 
-/** One entry's bytes, for the small things — a showfile rather than a media file. */
-export async function readZipEntry(filePath: string, entry: ZipEntry): Promise<Buffer> {
+/**
+ * One entry's bytes, for the small things — a showfile rather than a media file.
+ *
+ * `outputLimit` caps the inflated bytes: a deflated entry with small declared sizes
+ * but a huge output would otherwise OOM main before `checked()` runs. Media never
+ * comes through here — it streams via `extractZipEntry`.
+ */
+export async function readZipEntry(filePath: string, entry: ZipEntry, outputLimit = MAX_ARCHIVE_BYTES): Promise<Buffer> {
+  // The entry's sizes are the archive's claims: bound them against the file before
+  // allocating or inflating on their word.
+  const { size } = await stat(filePath)
+  if (entry.compressedSize > size || entry.size > MAX_ARCHIVE_BYTES) {
+    throw new Error(`"${entry.name}" claims a size this app will not read`)
+  }
   const raw = await read(filePath, entry.offset, entry.compressedSize)
-  const data = entry.method === DEFLATED ? await inflate(raw) : raw
+  const data = entry.method === DEFLATED ? await inflate(raw, outputLimit) : raw
   checked(entry, crc32(data), data.length)
   return data
 }
@@ -417,10 +437,27 @@ async function read(filePath: string, start: number, length: number): Promise<Bu
   }
 }
 
-async function inflate(raw: Buffer): Promise<Buffer> {
-  try {
-    return (await inflateRaw(raw)) as Buffer
-  } catch {
-    throw new Error('that archive entry could not be unpacked')
-  }
+async function inflate(raw: Buffer, outputLimit: number): Promise<Buffer> {
+  // Streamed rather than one-shot: a one-shot inflate has no output bound, so a small
+  // deflated entry with a huge output OOMs main before the size check can run.
+  return new Promise<Buffer>((resolve, reject) => {
+    const pieces: Buffer[] = []
+    let total = 0
+    let capped = false
+    const stream = createInflateRaw()
+    stream.on('data', (chunk: Buffer) => {
+      total += chunk.length
+      if (total > outputLimit) {
+        capped = true
+        stream.destroy(new Error('that archive entry unpacks to more than this app will read'))
+        return
+      }
+      pieces.push(chunk)
+    })
+    stream.on('end', () => resolve(Buffer.concat(pieces, total)))
+    stream.on('error', (error: Error) => {
+      reject(capped ? error : new Error('that archive entry could not be unpacked'))
+    })
+    stream.end(raw)
+  })
 }

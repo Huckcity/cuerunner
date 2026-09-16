@@ -107,7 +107,8 @@ interface CueRun {
   endTask: number | null
   /** The engine's identity for this run, so a replaced run's stale events are dropped. */
   engineRunId: string | null
-  /** The task that releases the handover, kept so a seek can re-time it. */
+  /** The engine identity of the run this firing replaced, if it had been acknowledged. */
+  supersededEngineRunId: string | null
   releaseTask: number | null
   /** Closes the run's execution at a given sample time. */
   finish: Finish | null
@@ -388,12 +389,17 @@ export class CueRunner {
   ): void {
     const generation = this.generation
 
-    // A cue fired while it is already in flight replaces its previous run.
+    // A cue fired while it is already in flight replaces its previous run. Capture the
+    // old run's engine identity before taking it away: an `ended` line from that run,
+    // batched 16 ms, can arrive after this firing, and must not close the new run
+    // before its own start is acknowledged.
+    const supersededEngineRunId = this.runs.get(cue.id)?.engineRunId ?? null
     if (this.runs.has(cue.id)) this.stopCue(cue.id, 0)
 
+    const seq = ++this.runSeq
     const run: CueRun = {
       cueId: cue.id,
-      seq: ++this.runSeq,
+      seq,
       generation,
       startAt: adopted ? startMs : startMs + cue.preWait,
       seekMs,
@@ -403,6 +409,7 @@ export class CueRunner {
       rate: cue.type === 'audio' ? (cue as AudioCue).playbackRate : 1,
       endTask: null,
       engineRunId: null,
+      supersededEngineRunId,
       releaseTask: null,
       finish: null,
       handover: onDone,
@@ -1007,8 +1014,15 @@ export class CueRunner {
 
     if (items.length === 0) { finish(at); return }
     let remaining = items.length
-    const childDone: Handover = (endMs) => {
+    const childDone: Handover = (endMs, childRun) => {
       if (!stillRunning()) return
+      if (childRun.cancelled) {
+        // A stop cue or an engine-reported stop took this child away mid-group: count
+        // it as settled so the row does not stay lit and the handover is not lost —
+        // but do not finish the group from a stop, which would hand the show on.
+        if (--remaining === 0) this.cancelRun(cue.id, run)
+        return
+      }
       remaining--
       if (remaining === 0) finish(endMs)
     }
@@ -1056,6 +1070,13 @@ export class CueRunner {
     if (index >= cues.length) { onDone(at, parent); return }
     this.fireCue(cues[index], at, (doneAt, childRun) => {
       if (!stillRunning()) return
+      if (childRun.cancelled) {
+        // STOP took this child away: advance past it without firing the next sibling,
+        // so the sequence does not stall with the row lit — but the show does not move
+        // on from a stop either.
+        this.runSequence(cues, index + 1, doneAt, () => {}, stillRunning, childRun)
+        return
+      }
       // The child that just ended is the one a STOP must take the next child back from.
       this.runSequence(cues, index + 1, doneAt, onDone, stillRunning, childRun)
     }, parent)
@@ -1130,15 +1151,23 @@ export class CueRunner {
       if (target?.type === 'group') {
         this.stopGroup(target as GroupCue, fadeMs)
         this.stopCue(target.id, fadeMs)
-      } else {
+      } else if (target?.type === 'audio') {
         // A stop aimed at one cue takes the sound away; the cue's own run ends as the
         // engine reports it stopped, so a fade is heard and the row goes dark when the
         // sound does. A script has no such report, so it is taken away here.
         void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
-        if (target?.type === 'script') {
-          scriptHost.cancel(target.id)
-          this.deps!.setRunning(target.id, null)
-        }
+      } else if (target === undefined) {
+        // No such cue: still tell the engine, which refuses what it never knew.
+        void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
+      } else if (target.type === 'script') {
+        scriptHost.cancel(target.id)
+        this.deps!.setRunning(target.id, null)
+      } else {
+        // A wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp, an MSC
+        // command: none of them holds an engine voice, so no `ended` report will ever
+        // close the wait the old path kept open. Take the run the way the script case
+        // does — the group stops advancing as if the stop had happened, because it has.
+        this.stopCue(target.id, fadeMs)
       }
     }
     // A wait-for-fade stop keeps the run open until the fade has finished sounding,
@@ -1185,6 +1214,7 @@ export class CueRunner {
       rate: 1,
       endTask: null,
       engineRunId: null,
+      supersededEngineRunId: null,
       releaseTask: null,
       finish: null,
       handover: null,
@@ -1475,8 +1505,11 @@ export class CueRunner {
     const run = this.runs.get(cueId)
     if (!run || run.cancelled || run.phase !== 'running' || !run.finish) return
     // A run that was replaced has a new engine identity; its old events are not ours.
+    // A line that names neither is not about any run in particular and is left alone.
+    // A replaced run's `ended`, batched 16 ms, can arrive after the new firing: it
+    // names the superseded identity and must not close the run that replaced it.
     if (event.runId && run.engineRunId && event.runId !== run.engineRunId) return
-
+    if (event.runId && run.supersededEngineRunId && event.runId === run.supersededEngineRunId) return
     if (event.type === 'error') {
       console.error('Audio playback failed:', event.message)
       run.finish(this.now(), { outcome: 'error', error: event.message })
@@ -1484,8 +1517,16 @@ export class CueRunner {
     }
 
     if (event.reason === 'stopped' || event.reason === 'cancelled' || event.reason === 'replaced') {
+      // The engine took this voice away. A group child hands over the way its own end
+      // would have, so a sequence advances past it and a timeline counts it down; a
+      // top-level run hands over nowhere (its handover would start the next cue after
+      // STOP). finishRun would refuse a cancelled run — and must, so a stopped child
+      // records no completion — so cancel first, then fire the handover directly.
+      const handover = run.handover
+      const groupChild = this.deps!.getCues().find(c => c.id === cueId)?.parentId != null
       this.cancelRun(cueId, run)
       this.deps!.setRunning(cueId, null)
+      if (groupChild && handover) handover(this.now(), run)
       return
     }
     if (event.reason === 'error' || event.reason === 'device-lost') {
@@ -1494,7 +1535,6 @@ export class CueRunner {
       run.finish(this.now(), { outcome: 'error', error: failure })
       return
     }
-
     const now = this.now()
     if (run.endAt !== null && now >= run.endAt - PLANNED_END_TOLERANCE_MS) return
     run.finish(now)

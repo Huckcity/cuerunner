@@ -28,10 +28,12 @@ jobs:
 
       - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: website
+      # The reliability page reads ./soak-latest.json, which only the soak workflow
+      # publishes — a website-only deploy would otherwise blank its figures until the
+      # next nightly. Restore the live file first; a first-ever deploy simply has none.
+      - name: Restore the published soak figures
+        run: |
+          curl -fsSL -o website/soak-latest.json https://huckcity.github.io/winslab/soak-latest.json \
+            || echo 'no published soak figures yet; the reliability page shows its empty state'
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - uses: actions/upload-pages-artifact@v5

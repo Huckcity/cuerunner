@@ -35,6 +35,11 @@ const SHOW_ENTRY = 'show.wlab'
 /** Where a bundle's media goes, and what the showfile inside it points at. */
 const MEDIA_DIR = 'media'
 
+/**
+ * The largest showfile a bundle may carry: 64 MiB of JSON is already far past a
+ * readable show, and the entry is inflated whole into main-process memory.
+ */
+const MAX_BUNDLE_SHOW_BYTES = 64 * 1024 * 1024
 export interface ExportedBundle {
   path: string
   /** Files the show names that were not on this machine to be bundled. */
@@ -200,7 +205,13 @@ export async function readBundle(bundlePath: string): Promise<ReadBundle> {
   const entries = await readZip(bundlePath)
   const show = entries.find(entry => entry.name === SHOW_ENTRY)
   if (!show) throw new Error('that file is not a WinsLab bundle: it carries no show')
-  const bytes = await readZipEntry(bundlePath, show)
+  // The showfile is read whole into memory: refuse an absurd declared size before
+  // the allocation, and cap the inflated bytes — a small deflated entry with a huge
+  // output would otherwise OOM main before the size check runs.
+  if (show.size > MAX_BUNDLE_SHOW_BYTES) {
+    throw new Error('that bundle’s show is larger than this app will read')
+  }
+  const bytes = await readZipEntry(bundlePath, show, MAX_BUNDLE_SHOW_BYTES)
   return {
     workspace: migrateWorkspace(JSON.parse(bytes.toString('utf8')) as Workspace),
     show: bytes,

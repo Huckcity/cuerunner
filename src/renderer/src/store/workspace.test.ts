@@ -117,6 +117,7 @@ describe('store — loadWorkspace', () => {
   })
 })
 
+
 describe('store — saveSucceeded', () => {
   beforeEach(resetStore)
 
@@ -124,6 +125,20 @@ describe('store — saveSucceeded', () => {
     useStore.getState().addCue('wait')
     useStore.getState().saveSucceeded('/shows/my-show.wlab', 'My Show', [])
     expect(useStore.getState().isDirty).toBe(false)
+  })
+
+  it('stays dirty when an edit landed after the save went out', () => {
+    // The witness useWorkspace keeps: what the save sent, against what is live when the
+    // round trip answers. Both moved here — cues and undo depth — so the session is
+    // still unsaved.
+    useStore.getState().addCue('wait')
+    const sentCues = useStore.getState().cues
+    const sentEdits = useStore.getState().past.length
+    useStore.getState().addCue('wait')
+    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [])
+    const after = useStore.getState()
+    if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
+    expect(useStore.getState().isDirty).toBe(true)
   })
 
   it('updates path and name', () => {

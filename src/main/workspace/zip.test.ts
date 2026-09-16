@@ -106,6 +106,21 @@ describe('writing a zip', () => {
     expect(existsSync(target)).toBe(false)
   })
 
+  it('keeps the previous bundle when a write fails half way', async () => {
+    const target = join(dir, 'previous.wlabx')
+    await writeZip(target, [{ name: 'show.wlab', data: Buffer.from('{"a":1}', 'utf8') }])
+    const before = readFileSync(target)
+    // A directory where the entry should be a file: it measures like a file and then
+    // cannot be read, which is what a write failing part way through looks like.
+    mkdirSync(join(dir, 'media'))
+    await expect(writeZip(target, [
+      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'media/folder', file: join(dir, 'media') }
+    ])).rejects.toThrow()
+    // The old bundle survives: a failed export replaces nothing.
+    expect(readFileSync(target).equals(before)).toBe(true)
+  })
+
   it('refuses a name that would leave the folder it is unpacked into', async () => {
     await expect(
       writeZip(join(dir, 'bad.zip'), [{ name: '../escape.txt', data: Buffer.from('x') }])
@@ -113,6 +128,40 @@ describe('writing a zip', () => {
     await expect(
       writeZip(join(dir, 'bad.zip'), [{ name: 'C:\\windows\\evil.txt', data: Buffer.from('x') }])
     ).rejects.toThrow('not a path an archive may hold')
+  })
+})
+
+describe('a hostile archive', () => {
+  it('refuses a directory that runs past the end of the file', async () => {
+    const file = join(dir, 'lying.zip')
+    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    const bytes = readFileSync(file)
+    // The end record's directory-size field (22-byte record at the tail): claim 4 GiB
+    // in a 100-byte file.
+    bytes.writeUInt32LE(0xffffffff - 1, bytes.length - 22 + 12)
+    writeFileSync(file, bytes)
+
+    await expect(readZip(file)).rejects.toThrow()
+  })
+
+  it('refuses an entry that claims more than the file holds', async () => {
+    const file = join(dir, 'greedy.zip')
+    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    const entries = await readZip(file)
+    const greedy = { ...entries[0], size: 4 * 1024 * 1024 * 1024, compressedSize: 4 * 1024 * 1024 * 1024 }
+
+    await expect(readZipEntry(file, greedy)).rejects.toThrow('claims a size')
+  })
+
+  it('refuses a small deflated entry that unpacks past the cap', async () => {
+    const { deflateRawSync } = await import('node:zlib')
+    const file = join(dir, 'bomb.zip')
+    const raw = deflateRawSync(Buffer.from('{}'))
+    writeFileSync(file, raw)
+    const entry = { name: 'show.wlab', offset: 0, compressedSize: raw.length, size: 2, crc: 0, method: 8 }
+    // Two inflated bytes against a one-byte cap: the cap fires on the output, which is
+    // the path a bomb with small declared sizes takes.
+    await expect(readZipEntry(file, entry, 1)).rejects.toThrow('unpacks to more')
   })
 })
 

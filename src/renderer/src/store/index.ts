@@ -627,14 +627,6 @@ function shouldRecordUpdate(cueId: string): boolean {
   return record
 }
 
-// Returns the flat index of the last child belonging to groupId,
-// or the group's own index if it has no children.
-function lastChildIndex(cues: Cue[], groupId: string): number {
-  const groupIdx = cues.findIndex(c => c.id === groupId)
-  let last = groupIdx
-  while (last + 1 < cues.length && cues[last + 1].parentId === groupId) last++
-  return last
-}
 
 // Returns the flat index of the last cue in the subtree rooted at startIndex.
 // Children are stored contiguously behind their parent, so the subtree is a range —
@@ -725,15 +717,18 @@ export const useStore = create<CueListState>((set) => ({
     if (!afterId) {
       insertIdx = cues.length
     } else {
-      const afterCue = cues.find(c => c.id === afterId)
+      const afterIdx = cues.findIndex(c => c.id === afterId)
+      const afterCue = afterIdx >= 0 ? cues[afterIdx] : undefined
       if (afterCue?.type === 'group') {
         // Inserting after a group header → becomes its last child
         cue.parentId = afterId
-        insertIdx = lastChildIndex(cues, afterId) + 1
+        insertIdx = subtreeEndIndex(cues, afterIdx) + 1
       } else {
-        // Inserting after a regular cue or group child → inherit context
+        // Inserting after a regular cue or group child → inherit context. After a nested
+        // group header that means past its whole subtree, or the new sibling would split
+        // the header from its children.
         cue.parentId = afterCue?.parentId ?? null
-        insertIdx = cues.findIndex(c => c.id === afterId) + 1
+        insertIdx = afterIdx < 0 ? 0 : subtreeEndIndex(cues, afterIdx) + 1
       }
     }
 
@@ -749,13 +744,14 @@ export const useStore = create<CueListState>((set) => ({
     if (!afterId) {
       insertIdx = cues.length
     } else {
-      const afterCue = cues.find(c => c.id === afterId)
+      const afterIdx = cues.findIndex(c => c.id === afterId)
+      const afterCue = afterIdx >= 0 ? cues[afterIdx] : undefined
       if (afterCue?.type === 'group') {
         parentId = afterId
-        insertIdx = lastChildIndex(cues, afterId) + 1
+        insertIdx = subtreeEndIndex(cues, afterIdx) + 1
       } else {
         parentId = afterCue?.parentId ?? null
-        insertIdx = cues.findIndex(c => c.id === afterId) + 1
+        insertIdx = afterIdx < 0 ? 0 : subtreeEndIndex(cues, afterIdx) + 1
       }
     }
 
@@ -903,10 +899,11 @@ export const useStore = create<CueListState>((set) => ({
           copies.push({ ...child, id: copyId, parentId: parentCopy })
         }
       }
-      insertAfter.set(
-        src.type === 'group' ? subtreeEndIndex(s.cues, srcIdx) : srcIdx,
-        copies
-      )
+      // A group's copies land after its subtree, and that index can coincide with a
+      // descendant's own: accumulate rather than overwrite, or selecting a group and
+      // its last child duplicates only the child.
+      const at = src.type === 'group' ? subtreeEndIndex(s.cues, srcIdx) : srcIdx
+      insertAfter.set(at, [...(insertAfter.get(at) ?? []), ...copies])
     }
     if (insertAfter.size === 0) return s
 
@@ -942,10 +939,12 @@ export const useStore = create<CueListState>((set) => ({
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
       past,
-      future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)]
+      future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
+      // An undo after a save moves the cues away from the file's bytes: the session is
+      // dirty again, or the close prompt and autosave stand down over unsaved work.
+      isDirty: true
     }
   }),
-
   redo: () => set(s => {
     if (s.future.length === 0) return s
     const future = [...s.future]
@@ -955,7 +954,9 @@ export const useStore = create<CueListState>((set) => ({
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
       future,
-      past: pushPast(s.past, snapshotOf(s))
+      past: pushPast(s.past, snapshotOf(s)),
+      // A redo after a save is an edit like any other: it leaves the file behind.
+      isDirty: true
     }
   }),
 
@@ -1028,7 +1029,7 @@ export const useStore = create<CueListState>((set) => ({
     else cuePatch.startTime = target
 
     const partner: AudioCue | undefined = s.cues.find((c): c is AudioCue =>
-      c.id !== id && c.type === 'audio' && (edge === 'end'
+      c.id !== id && c.type === 'audio' && c.filePath === cue.filePath && (edge === 'end'
         ? c.startTime === cue.endTime
         : regionEndMs(c) === cue.startTime))
     const partnerPatch: Partial<AudioCue> | null = partner === undefined

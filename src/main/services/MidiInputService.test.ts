@@ -246,4 +246,17 @@ describe('MidiInputService', () => {
     expect(a.closed).toBe(true)
     expect(b.closed).toBe(true)
   })
+
+  it('publishes the offline rows before the context is gone', () => {
+    const { service, os, context, bus } = harness()
+    os.ports = ['A']
+    service.start(context, settings(true, []))
+    if (!os.openInput('A')) throw new Error('port did not open')
+
+    service.stop()
+
+    const rows = bus.snapshot().devices.filter(d => d.id === 'midi-in:A')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].online).toBe(false)
+  })
 })

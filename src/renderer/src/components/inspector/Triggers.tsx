@@ -6,14 +6,13 @@ import type { Cue, CueTrigger, MidiMessageKind, MscCommand, MscFormat, TriggerMi
 import type { ShowEvent } from '../../types/show'
 import './Triggers.css'
 
-/** The four MIDI messages a cue can answer to, in the order the picker offers them. */
-const MIDI_KINDS = ['noteOn', 'noteOff', 'cc', 'programChange'] as const
+/** The three MIDI messages a cue can answer to, in the order the picker offers them. */
+const MIDI_KINDS = ['noteOn', 'cc', 'programChange'] as const
 type TriggerMidiKind = (typeof MIDI_KINDS)[number]
 
 /** The one number each kind carries, named the way the operator thinks of it. */
 const VALUE_LABEL: Record<TriggerMidiKind, string> = {
   noteOn: 'Note',
-  noteOff: 'Note',
   cc: 'Controller',
   programChange: 'Program'
 }
@@ -25,12 +24,13 @@ function toTriggerMessage(message: TriggerableMidi): TriggerMidiMessage {
   switch (message.kind) {
     case 'noteOn':
       return { kind: 'noteOn', channel: message.channel, note: message.note }
-    case 'noteOff':
-      return { kind: 'noteOff', channel: message.channel, note: message.note }
     case 'cc':
       return { kind: 'cc', channel: message.channel, controller: message.controller }
     case 'programChange':
       return { kind: 'programChange', channel: message.channel, program: message.program }
+    // A release is not a firing: learning while one arrives leaves the session open.
+    default:
+      throw new Error('a note-off cannot answer a trigger')
   }
 }
 
@@ -82,10 +82,10 @@ function triggerFromEvent(learning: 'osc' | 'midi' | 'msc', event: ShowEvent): C
       cueList: msc.cueList
     }
   }
-
-  // Sysex has no channel and no note, so it can never become a plain MIDI trigger;
-  // learning stays open and the next real message is the one that counts.
-  if (message.kind === 'sysex') return null
+  // Sysex has no channel and no note, and a release is not a firing, so neither can
+  // become a plain MIDI trigger; learning stays open and the next real message is the
+  // one that counts.
+  if (message.kind === 'sysex' || message.kind === 'noteOff') return null
   return {
     id: crypto.randomUUID(),
     kind: 'midi',

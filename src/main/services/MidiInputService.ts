@@ -89,7 +89,8 @@ export class MidiInputService implements ShowService {
   stop(): void {
     clearInterval(this.poll ?? undefined)
     this.poll = null
-    this.context = null
+    // Publish the offline rows before dropping the context they publish through —
+    // otherwise they are silently dropped and the panel reads "online" forever.
     for (const [name, input] of this.inputs) {
       try {
         input.closePort()
@@ -99,6 +100,7 @@ export class MidiInputService implements ShowService {
       this.publishPort(name, false)
     }
     this.inputs.clear()
+    this.context = null
   }
 
   /** Rescan on demand: the operator patched something in and does not want to wait. */

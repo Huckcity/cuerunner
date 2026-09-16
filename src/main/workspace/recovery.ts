@@ -31,7 +31,9 @@ export async function writeRecovery(
   const filePath = recoveryFilePath()
   const snapshot: RecoverySnapshot = { workspace, savedAt: Date.now(), sourcePath, selectedCueId }
   await mkdir(dirname(filePath), { recursive: true })
-  await writeFile(filePath, JSON.stringify(snapshot), 'utf-8')
+  // A death mid-write must not cost the previous good snapshot too: same atomic path
+  // as every other write in this module.
+  await writeFileAtomically(filePath, JSON.stringify(snapshot))
 }
 
 export async function readRecovery(): Promise<RecoverySnapshot | null> {

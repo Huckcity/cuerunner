@@ -219,6 +219,26 @@ export class NativeAudioEngine {
     return this.startPromise
   }
 
+  /**
+   * Quit teardown: runs in `will-quit`, past the point a quit can still be cancelled.
+   * Synchronous — Electron will not wait for async work that late — so the child is
+   * signalled rather than asked: SIGTERM drives the engine's own signal handler
+   * (`requestStop`/`serve`/`stop`), which is the graceful path, and the kill guarantees
+   * no orphan holds the device. Nothing runs in `before-quit`: even a graceful verb
+   * exits the engine (`stopping_` + client drop; `serve()` returns and `stop()` runs),
+   * so a cancelled unsaved-changes prompt would still stop the show.
+   */
+  forceShutdown(): void {
+    this.shuttingDown = true
+    if (this.restartTimer !== null) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
+    this.failPending(new AudioEngineError('engine', 'audio engine stopped'))
+    this.killChild()
+    this.teardown()
+  }
+
   async shutdown(): Promise<void> {
     this.shuttingDown = true
     if (this.restartTimer !== null) {
@@ -319,6 +339,12 @@ export class NativeAudioEngine {
   }
 
   async configure(options: DeviceOptions): Promise<AudioEngineInfo> {
+    // A configure verb is an operator's explicit action (or a show load asking for its
+    // device); it is also the one lever that can revive an engine whose launch failed
+    // and whose restart budget is spent — scheduleRestart gives up and nothing else
+    // re-enters ensureStarted. So start the engine first if it is not running, and let
+    // the configure itself refuse with the real reason if the launch fails again.
+    await this.ensureStarted()
     const result = (await this.request('configure', { options }, SLOW_VERBS.configure)) as AudioEngineInfo
     this.lastInfo = result
     return result

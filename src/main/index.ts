@@ -286,13 +286,17 @@ app.whenReady().then(() => {
       simulateDeviceLoss: () => audioEngine.simulateDeviceLossForTest()
     }
   })
-  app.on('before-quit', () => playbackSafety.close())
-  // The engine owns a child process; quitting without asking it to go leaves that child
-  // behind, which in a test run means an orphan holding the audio device.
-  app.on('before-quit', () => {
-    void audioEngine.shutdown().catch((error: unknown) => {
-      reportMainError(`[main] audio engine did not shut down cleanly: ${String(error)}`)
-    })
+  // A quit the renderer cancels must keep its audio: File→Exit on a dirty workspace
+  // runs the unsaved-changes prompt after `before-quit`, so no engine teardown runs
+  // there at all — even the graceful verb exits the engine (`stopping_` + client drop;
+  // `serve()` returns and `stop()` runs), and a cancelled quit would still stop the
+  // show. `will-quit` runs past the point a quit can still be cancelled, and teardown
+  // is synchronous there because Electron will not wait for async work that late:
+  // SIGTERM drives the engine's own signal handler through the graceful path, and the
+  // kill guarantees no orphan holds the device.
+  app.on('will-quit', () => {
+    playbackSafety.close()
+    audioEngine.forceShutdown()
   })
   createWindow()
   app.on('activate', () => {

@@ -197,7 +197,9 @@ struct Engine::DeviceState {
   std::string internalFormat = "f32";
   // What only the backend can say: the latency its own driver states (in samples, measured
   // from the hardware rather than derived from the period size), and anything about this
-  // device the operator should be told in the engine's warnings.
+  // device the operator should be told in the engine's warnings. The latency is the
+  // open-time snapshot; info() re-reads ASIO's live figure, which kAsioLatenciesChanged
+  // can restate mid-session.
   double reportedLatencyMs = -1.0;
   std::string backendNote;
   std::map<std::string, ma_device_id> ids;
@@ -585,12 +587,14 @@ void Engine::handleBackgroundWork() {
       message = lastError_.empty() ? std::string("audio device failed") : lastError_;
     }
     failDevice(message);
+    // Ack-free on purpose: this is the service thread, and it is the only thread that
+    // resolves acknowledgements. submitCommand here would wait the full ack timeout for
+    // an answer queued unread behind it in the event loop below, stalling every other
+    // command's acknowledgement with it. The render thread applies this in queue order.
     Command command;
     command.kind = Command::Panic;
     command.fadeMs = 0.0;
-    AckResult ack;
-    EngineError ignored;
-    submitCommand(command, ack, ignored);
+    submitInternalCommand(command);
   }
 
   // Acks first, then the file work. A command's acknowledgement is a promise to the
@@ -621,7 +625,13 @@ void Engine::handleBackgroundWork() {
 
 void Engine::resolveAck(const Event& event) {
   std::lock_guard<std::mutex> lock(ackMutex_);
-  AckResult& slot = acks_[event.ackId];
+  const auto waiting = acks_.find(event.ackId);
+  // The sender erased its entry when it gave up (a timeout, or the engine stopping under
+  // it). An answer is only ever owed to a waiter that is still there; keeping this one
+  // would put an entry in the map that nothing will ever take out again.
+  if (waiting == acks_.end()) return;
+  AckResult& slot = waiting->second;
+  slot.resolved = true;
   slot.applied = event.ackApplied;
   slot.canceled = event.ackCanceled;
   slot.voices = event.ackVoices;
@@ -639,10 +649,19 @@ bool Engine::submitCommand(Command& command, AckResult& ack, EngineError& error)
   const uint64_t ackId = nextAckId_.fetch_add(1, std::memory_order_relaxed) + 1;
   command.ackId = ackId;
   {
+    // The entry is reserved before the command is queued, not created by the answer: the
+    // render thread can apply a command and post its ack before this thread gets to wait,
+    // and an ack that arrives first has to find the entry it belongs to.
+    std::lock_guard<std::mutex> lock(ackMutex_);
+    acks_[ackId] = AckResult{};
+  }
+  {
     std::lock_guard<std::mutex> lock(commandMutex_);
     if (!commands_.push(command)) {
       error = {"limit", "audio engine command queue is full"};
       releaseCommandResources(command);
+      std::lock_guard<std::mutex> release(ackMutex_);
+      acks_.erase(ackId);
       return false;
     }
   }
@@ -650,23 +669,50 @@ bool Engine::submitCommand(Command& command, AckResult& ack, EngineError& error)
   if (options_.backend == "offline") {
     // Single-threaded mode: the caller owns the clock, so the queued command is applied
     // here and the service work runs here rather than on a background thread.
-    Command queued;
-    while (commands_.pop(queued)) mixer_.apply(queued);
+    applyQueuedCommands();
     handleBackgroundWork();
   }
 
   std::unique_lock<std::mutex> lock(ackMutex_);
   const bool arrived = ackCv_.wait_for(lock, std::chrono::milliseconds(kAckTimeoutMs), [&] {
-    return acks_.find(ackId) != acks_.end() || !running_.load(std::memory_order_acquire);
+    const auto waiting = acks_.find(ackId);
+    return (waiting != acks_.end() && waiting->second.resolved) || !running_.load(std::memory_order_acquire);
   });
   const auto it = acks_.find(ackId);
-  if (!arrived || it == acks_.end()) {
+  if (!arrived || it == acks_.end() || !it->second.resolved) {
+    // The wait is over either way, so the entry goes with it: an answer that arrives
+    // after this leaves no trace in the map, which is what keeps the acks a command
+    // never received from accumulating for the life of the engine.
+    if (it != acks_.end()) acks_.erase(it);
     error = {"engine", "audio engine did not acknowledge the command"};
     return false;
   }
   ack = it->second;
   acks_.erase(it);
   return true;
+}
+
+void Engine::submitInternalCommand(Command& command) {
+  // ackId 0 is a command the render thread applies without answering (see Mixer::apply):
+  // there is no waiter to wake and no entry for an answer to land in.
+  command.ackId = 0;
+  {
+    std::lock_guard<std::mutex> lock(commandMutex_);
+    if (!commands_.push(command)) {
+      releaseCommandResources(command);
+      logError("internal audio command dropped: the command queue is full");
+      return;
+    }
+  }
+  // Offline mode has neither a render thread nor a service thread: the caller's pump is
+  // the only thing that applies commands, so this one is applied here, exactly as a
+  // client command is in submitCommand.
+  if (options_.backend == "offline") applyQueuedCommands();
+}
+
+void Engine::applyQueuedCommands() {
+  Command command;
+  while (commands_.pop(command)) mixer_.apply(command);
 }
 
 void Engine::releaseCommandResources(Command& command) {
@@ -1188,8 +1234,18 @@ InfoDTO Engine::info() const {
     out.exclusive = device_->exclusive;
     out.bufferFrames = device_->bufferFrames;
     out.periodFrames = device_->periodFrames;
-    if (device_->reportedLatencyMs > 0.0) {
-      out.latencyMs = device_->reportedLatencyMs;
+#if defined(WINSLAB_ASIO)
+    // ASIO states its own latency and can restate it mid-session (kAsioLatenciesChanged),
+    // which the open-time snapshot would miss for the rest of the show: ask the live
+    // context on every readout, falling back to the snapshot when the driver will not say.
+    const double liveLatencyMs =
+        (device_->backend == ma_backend_custom) ? asio::contextLatencyMs(device_->context) : -1.0;
+    const double driverLatencyMs = liveLatencyMs > 0.0 ? liveLatencyMs : device_->reportedLatencyMs;
+#else
+    const double driverLatencyMs = device_->reportedLatencyMs;
+#endif
+    if (driverLatencyMs > 0.0) {
+      out.latencyMs = driverLatencyMs;
       out.latencySource = "driver";
     } else if (device_->periodFrames > 0 && device_->internalSampleRate > 0) {
       const double periods = device_->bufferFrames > 0 ? static_cast<double>(device_->bufferFrames) /
@@ -1342,9 +1398,36 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   if (request.hasExclusive) updated.exclusive = request.exclusive;
   if (request.hasBufferFrames) updated.bufferFrames = request.bufferFrames;
 
-  // Asking for what is already running is a no-op: bouncing the device would interrupt
-  // audio and produce a stop/start cycle nobody asked for (the window re-sends its
-  // settings on every launch and every settings change).
+  // Refuse what can be refused before anything is torn down. An unknown backend, or one
+  // this build cannot open (ASIO without the SDK) is a refusal that costs nothing;
+  // computing it after the teardown would stop every voice and close the device to
+  // answer a request it could have refused. The window re-sends its settings on every
+  // show load, so a workspace naming an unavailable backend must not interrupt playback
+  // to say no.
+  if (request.hasBackend && request.backend != "auto" && request.backend != options_.backend) {
+#if !defined(WINSLAB_ASIO)
+    if (request.backend == "asio") {
+      error = {"device", "this engine was built without ASIO support (the Steinberg ASIO SDK was not present at build time)"};
+      return false;
+    }
+#endif
+    ma_backend probe;
+    if (!parseBackendName(request.backend, probe)) {
+      error = {"device", "unknown audio backend '" + request.backend + "'"};
+      return false;
+    }
+  }
+
+  // Asking for what is already running is normally a no-op: bouncing the device would
+  // interrupt audio and produce a stop/start cycle nobody asked for (the window re-sends
+  // its settings on every launch and every settings change). The exception is a device
+  // that has latched off — the health check saw the stream die and nothing has reopened
+  // it since. Identical settings are then exactly the request the device needs, so the
+  // same options become a reopen rather than a shrug; the window re-sends them on every
+  // mount and settings change, which is how a returned interface comes back.
+  if (!deviceRunning_.load(std::memory_order_acquire)) {
+    return reopenDeviceLocked(updated, previous, error);
+  }
   if (updated.backend == options_.backend && updated.deviceId == options_.deviceId &&
       updated.sampleRate == options_.sampleRate && updated.channels == options_.channels &&
       updated.exclusive == options_.exclusive && updated.bufferFrames == options_.bufferFrames) {
@@ -1354,10 +1437,15 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
 }
 
 bool Engine::reopenDeviceLocked(const EngineOptions& updated, const EngineOptions& previous, EngineError& error) {
-  // Changing the device is a restart: every voice belongs to the old stream format.
-  CommandResultDTO ignored;
-  EngineError ignoredError;
-  stopAll(0.0, ignored, ignoredError);
+  // Changing the device is a restart: every voice belongs to the old stream format. The
+  // stop is queued ack-free — a driver-request reopen is on the service thread, which is
+  // the only thread that resolves acks, so waiting for one here burns the whole ack
+  // timeout with deviceMutex_ held — and it is applied below, once the old device has
+  // stopped rendering, so the voices are really stopped before the new format arrives.
+  Command stopEverything;
+  stopEverything.kind = Command::StopAll;
+  stopEverything.fadeMs = 0.0;
+  submitInternalCommand(stopEverything);
   capture_.stop();
   deviceRunning_.store(false, std::memory_order_release);
   noteDeliberateStop(true);
@@ -1370,6 +1458,11 @@ bool Engine::reopenDeviceLocked(const EngineOptions& updated, const EngineOption
     ma_context_uninit(&device_->context);
     device_->contextReady = false;
   }
+  // Nothing is rendering the mixer now, so this thread may: the stop lands here, in the
+  // mixer's old frame domain and before startDevice() reconfigures it for the new device.
+  // The queue is empty afterwards, so nothing queued for the old device can reach the new
+  // one, and a start that arrives during the reopen is applied after this stop, as asked.
+  applyQueuedCommands();
   device_.reset();
   noteDeliberateStop(false);
   options_ = updated;
@@ -1377,9 +1470,10 @@ bool Engine::reopenDeviceLocked(const EngineOptions& updated, const EngineOption
     options_ = previous;
     EngineError restoreError;
     if (!startDevice(restoreError)) {
-      std::lock_guard<std::mutex> errorLock(errorMutex_);
-      lastError_ = "cannot reopen the previous audio device: " + restoreError.message;
-      failDevice(lastError_);
+      // failDevice takes errorMutex_ itself: holding it across the call would be the
+      // same thread locking a non-recursive mutex twice and would hang right here, with
+      // deviceMutex_ held, on the one path that exists to report the failure.
+      failDevice("cannot reopen the previous audio device: " + restoreError.message);
     }
     restartCapture();
     return false;
@@ -1400,9 +1494,10 @@ void Engine::reopenAfterBackendRequest(const std::string& reason) {
   const EngineOptions current = options_;
   EngineError error;
   if (!reopenDeviceLocked(current, current, error)) {
-    std::lock_guard<std::mutex> errorLock(errorMutex_);
-    lastError_ = "cannot reopen the audio device after a driver request: " + error.message;
-    failDevice(lastError_);
+    // The message is built before failDevice is called, never under errorMutex_: the
+    // lock is taken inside failDevice, on this thread, and a second lock of it here
+    // would deadlock the service thread — Engine::stop()'s join would then never return.
+    failDevice("cannot reopen the audio device after a driver request: " + error.message);
     return;
   }
   std::lock_guard<std::mutex> errorLock(errorMutex_);

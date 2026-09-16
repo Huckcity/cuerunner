@@ -50,7 +50,9 @@ function snapshot(): {
       audioSettings: { outputDeviceId: 'default' },
       midiSettings: { outputPortName: 'Yamaha' },
       showSettings,
-      cues: [cue, secondCue]
+      triggerGuard: { windowMs: 800 },
+      history: [{ at: '2026-01-01T19:00:00.000Z', by: 'adam', cues: [], settings: [] }],
+      cues: [cue, secondCue],
     },
     savedAt: Date.parse('2026-01-01T20:00:00Z'),
     sourcePath: '/shows/demo.wlab',
@@ -74,7 +76,7 @@ describe('RecoveryNotice', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useStore.setState({ cues: [], showSettings: defaultShowSettings(), log: [], notice: null, missingMedia: [] })
+    useStore.setState({ cues: [], showSettings: defaultShowSettings(), log: [], notice: null, missingMedia: [], selectedId: null, selectedIds: [], selectionAnchorId: null, isDirty: false })
   })
 
   afterEach(() => {
@@ -111,8 +113,12 @@ describe('RecoveryNotice', () => {
     expect(state.missingMedia).toEqual([
       { cueId: 'c1', path: 'media/walk-in.wav', originalPath: '/shows/media/walk-in.wav' }
     ])
+    // The snapshot's own guard and history travel with it: the next save must not write
+    // the default guard or an empty history over the operator's file.
+    expect(state.showHistory).toEqual([
+      { at: '2026-01-01T19:00:00.000Z', by: 'adam', cues: [], settings: [] }
+    ])
   })
-
   it('hands back the place the session was standing on', async () => {
     await offer(snapshot())
 
@@ -152,5 +158,18 @@ describe('RecoveryNotice', () => {
 
     expect(window.winslab.workspace.clearRecovery).toHaveBeenCalled()
     expect(container.querySelector('.app-notice')).toBeNull()
+  })
+
+  it('asks before replacing a session with unsaved work', async () => {
+    useStore.setState({ workspaceName: 'Live Show', isDirty: true })
+    const confirmClose = window.winslab.workspace.confirmClose as unknown as Mock
+    confirmClose.mockResolvedValue(2)
+    await offer(snapshot())
+
+    await recover()
+
+    // Cancel keeps the live session: no load, no clear, no selection change.
+    expect(useStore.getState().workspaceName).toBe('Live Show')
+    expect(window.winslab.workspace.clearRecovery).not.toHaveBeenCalled()
   })
 })
