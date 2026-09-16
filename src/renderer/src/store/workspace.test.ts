@@ -7,6 +7,8 @@ function resetStore() {
     cues: [],
     workspaceName: 'Untitled',
     workspacePath: null,
+    // The file's own history: a case that sets one must not leak into the next.
+    showHistory: [],
     isDirty: false,
     selectedId: null,
     running: new Map()
@@ -120,14 +122,48 @@ describe('store — saveSucceeded', () => {
 
   it('clears dirty flag', () => {
     useStore.getState().addCue('wait')
-    useStore.getState().saveSucceeded('/shows/my-show.wlab', 'My Show')
+    useStore.getState().saveSucceeded('/shows/my-show.wlab', 'My Show', [])
     expect(useStore.getState().isDirty).toBe(false)
   })
 
   it('updates path and name', () => {
-    useStore.getState().saveSucceeded('/new/path.wlab', 'Renamed')
+    useStore.getState().saveSucceeded('/new/path.wlab', 'Renamed', [])
     expect(useStore.getState().workspacePath).toBe('/new/path.wlab')
     expect(useStore.getState().workspaceName).toBe('Renamed')
+  })
+
+  it('carries the history the file was written with, so the next save appends to it', () => {
+    const entry = { at: '2026-09-16T10:00:00.000Z', by: 'adam', cues: [], settings: [] }
+    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [entry])
+
+    expect(useStore.getState().showHistory).toEqual([entry])
+  })
+})
+
+describe('store — the showfile’s own history', () => {
+  beforeEach(resetStore)
+
+  it('adopts the history of the file it loads', () => {
+    const entry = { at: '2026-09-14T18:00:00.000Z', by: 'associate', cues: [], settings: ['name'] }
+    useStore.getState().loadWorkspace(
+      [], 'Hamlet', '/shows/hamlet.wlab', undefined, undefined, undefined, undefined, undefined,
+      [entry]
+    )
+
+    expect(useStore.getState().showHistory).toEqual([entry])
+  })
+
+  it('starts a show with an empty history, and adopts one when a file has it', () => {
+    expect(useStore.getState().showHistory).toEqual([])
+
+    // A file written before the history existed has none, and a load says so rather than
+    // carrying the last show's.
+    useStore.getState().saveSucceeded('/shows/other.wlab', 'Other', [
+      { at: '2026-09-15T00:00:00.000Z', by: 'adam', cues: [], settings: [] }
+    ])
+    useStore.getState().loadWorkspace([], 'Untitled', null)
+
+    expect(useStore.getState().showHistory).toEqual([])
   })
 })
 

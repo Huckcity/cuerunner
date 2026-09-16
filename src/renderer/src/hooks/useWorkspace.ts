@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useStore } from '../store'
 import type { MissingMedia } from '../../../shared/media'
+import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { Workspace, WorkspaceIdentity } from '../types/workspace'
 import { buildWorkspace } from '../utils/workspace'
 import { cueRunner } from '../engine/CueRunner'
@@ -15,26 +16,26 @@ function reportFailure(message: string): void {
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 async function guardDirty(): Promise<boolean> {
-  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, saveSucceeded } =
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
 
   const response = await window.winslab.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
-    let savedPath: string | null
+    let saved: { path: string; history: ShowHistoryEntry[] } | null
     try {
-      savedPath = await window.winslab.workspace.save(buildWorkspace(
+      saved = await window.winslab.workspace.save(buildWorkspace(
         workspaceName, cues, audioSettings, midiSettings, showSettings,
-        { id: workspaceId, createdAt: workspaceCreatedAt }, triggerGuard
+        { id: workspaceId, createdAt: workspaceCreatedAt }, triggerGuard, showHistory
       ), workspacePath)
     } catch (e) {
       // Closing without a save would lose the show, so the close stops here and says why.
       reportFailure(`Could not save before closing: ${message(e)}`)
       return false
     }
-    if (!savedPath) return false     // User cancelled save dialog
-    saveSucceeded(savedPath, workspaceName)
+    if (!saved) return false     // User cancelled save dialog
+    saveSucceeded(saved.path, workspaceName, saved.history)
     await window.winslab.workspace.clearRecovery().catch(() => {})
   } else {
     // "Don't Save" discards the session, including its recovery snapshot.
@@ -62,7 +63,8 @@ function loadIntoStore(
     workspace.midiSettings,
     workspace.showSettings,
     identity ?? { id: workspace.id, createdAt: workspace.createdAt },
-    workspace.triggerGuard
+    workspace.triggerGuard,
+    workspace.history ?? []
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
@@ -118,6 +120,125 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
   }
 }
 
+/**
+ * The show and the audio it plays, written to one file the operator names. Media the
+ * machine does not have is left out and reported rather than failing the export: the
+ * bundle is still worth having, and the operator is the one who knows where that file
+ * went.
+ */
+export async function exportShowBundle(): Promise<void> {
+  const {
+    workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
+    triggerGuard, workspaceId, workspaceCreatedAt, showHistory
+  } = useStore.getState()
+  // A show with unsaved edits is the show as it stands: what the bundle carries is what
+  // is on screen, not what was last written.
+  const workspace = buildWorkspace(
+    workspaceName,
+    cues,
+    audioSettings,
+    midiSettings,
+    showSettings,
+    { id: workspaceId, createdAt: workspaceCreatedAt },
+    triggerGuard,
+    showHistory
+  )
+  try {
+    const answer = await window.winslab.workspace.exportBundle(workspace, workspacePath)
+    if (!answer.ok) {
+      reportFailure(answer.error)
+      return
+    }
+    if (!answer.exported) return
+    const store = useStore.getState()
+    store.appendLog([{
+      level: 'info',
+      message: `Exported ${answer.exported.path}`
+    }])
+    if (answer.exported.missing.length > 0) {
+      const names = answer.exported.missing.map(path => path.split(/[\\/]/).pop()).join(', ')
+      store.setNotice(
+        `${answer.exported.missing.length} of the show's files were not on this machine and are `
+        + `not in the bundle: ${names}`
+      )
+    }
+  } catch (e) {
+    reportFailure(`Could not export the bundle: ${message(e)}`)
+  }
+}
+
+/**
+ * Two files merged into a third: the other person's copy of the show, and the version the
+ * two of you started from. The result is written where the operator says and this show is
+ * left exactly as it is — a merge is something to look at before trusting it, and the
+ * show being merged into is still being worked on.
+ */
+export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again = false): Promise<void> {
+  const {
+    workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
+    triggerGuard, workspaceId, workspaceCreatedAt, showHistory, setMergeReport
+  } = useStore.getState()
+  // The show as it stands, unsaved edits included: merging in a version of a show that is
+  // not what is on screen is merging the wrong thing.
+  const workspace = buildWorkspace(
+    workspaceName,
+    cues,
+    audioSettings,
+    midiSettings,
+    showSettings,
+    { id: workspaceId, createdAt: workspaceCreatedAt },
+    triggerGuard,
+    showHistory
+  )
+  try {
+    const answer = await window.winslab.workspace.merge(workspace, workspacePath, {
+      policy,
+      ...(again ? { again: true } : {})
+    })
+    if (!answer.ok) {
+      reportFailure(answer.error)
+      return
+    }
+    if (!answer.merged) return
+    setMergeReport({
+      path: answer.merged.path,
+      notes: answer.merged.notes,
+      tally: answer.merged.tally,
+      policy
+    })
+  } catch (e) {
+    reportFailure(`Could not merge the show: ${message(e)}`)
+  }
+}
+
+/** Opens the show a merge wrote, over the one that is open. */
+export async function openMergedShow(filePath: string): Promise<void> {
+  if (!await guardDirty()) return
+  try {
+    const opened = await window.winslab.workspace.openPath(filePath)
+    loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
+    useStore.getState().setMergeReport(null)
+  } catch (e) {
+    reportFailure(`Could not open ${filePath}: ${message(e)}`)
+  }
+}
+
+/** A bundle in: a show and its media unpacked where the operator says, then opened. */
+export async function importShowBundle(): Promise<void> {
+  if (!await guardDirty()) return
+  try {
+    const answer = await window.winslab.workspace.importBundle()
+    if (!answer.ok) {
+      reportFailure(answer.error)
+      return
+    }
+    if (!answer.imported) return
+    loadIntoStore(answer.imported.workspace, answer.imported.path, answer.imported.missingMedia)
+  } catch (e) {
+    reportFailure(`Could not open the bundle: ${message(e)}`)
+  }
+}
+
 export function useWorkspace() {
   const { workspaceName, workspacePath, isDirty, loadWorkspace, setWorkspaceName } = useStore()
 
@@ -166,16 +287,16 @@ export function useWorkspace() {
   }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, saveSucceeded } =
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
       id: workspaceId,
       createdAt: workspaceCreatedAt
-    }, triggerGuard)
+    }, triggerGuard, showHistory)
     try {
-      const savedPath = await window.winslab.workspace.save(ws, workspacePath)
-      if (!savedPath) return false
-      saveSucceeded(savedPath, workspaceName)
+      const saved = await window.winslab.workspace.save(ws, workspacePath)
+      if (!saved) return false
+      saveSucceeded(saved.path, workspaceName, saved.history)
       // The session is on disk now, so there is nothing left to recover.
       await window.winslab.workspace.clearRecovery().catch(() => {})
       return true
@@ -186,18 +307,18 @@ export function useWorkspace() {
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, saveSucceeded } =
+    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
     // Saving under another name is the same show in another file: the identity travels
     // with it, so both copies stay recognisably the same show.
     const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
       id: workspaceId,
       createdAt: workspaceCreatedAt
-    }, triggerGuard)
+    }, triggerGuard, showHistory)
     try {
-      const savedPath = await window.winslab.workspace.saveAs(ws)
-      if (!savedPath) return false
-      saveSucceeded(savedPath, workspaceName)
+      const saved = await window.winslab.workspace.saveAs(ws)
+      if (!saved) return false
+      saveSucceeded(saved.path, workspaceName, saved.history)
       await window.winslab.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {

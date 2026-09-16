@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../types/cue'
 import type { MissingMedia } from '../../../shared/media'
+import type { ShowHistoryEntry } from '../../../shared/showfile'
+import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
 import { defaultShowSettings } from '../types/show'
@@ -53,6 +55,18 @@ export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' 
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
+
+/** The two halves of the Changes dialog: what this file did, and how it differs. */
+export type ChangesTab = 'history' | 'compare'
+
+/** What a merge did, as the window shows it: where the result is, and what to read. */
+export interface MergeReport {
+  path: string
+  notes: MergeNote[]
+  tally: MergeTally
+  /** The conflict policy this attempt used. */
+  policy: 'ours' | 'theirs'
+}
 
 export interface RunningCue {
   cueId: string
@@ -126,6 +140,13 @@ interface CueListState {
   workspacePath: string | null
   workspaceId: string
   workspaceCreatedAt: string
+  /**
+   * The showfile's own history: what each of its saves changed, as the file records it.
+   * Not the undo stack above — that is this session's edits, and it is gone when the app
+   * closes. This one travels in the file, is written by the main process at save time,
+   * and is what the History tab reads. The file calls it `history`.
+   */
+  showHistory: ShowHistoryEntry[]
   isDirty: boolean
 
   // Settings
@@ -327,6 +348,23 @@ interface CueListState {
   openShowSettings: (tab: ShowSettingsTab) => void
   closeShowSettings: () => void
 
+  /**
+   * Which half of the Changes dialog is up, or null when it is closed: the show's own
+   * history of its saves, or how it differs from another file. One dialog with two tabs
+   * rather than two panels, because the two questions are asked together — what happened
+   * to this show, and what did the other version do differently.
+   */
+  changesTab: ChangesTab | null
+  openChanges: (tab: ChangesTab) => void
+  closeChanges: () => void
+
+  /**
+   * The last merge's report, or null when there is none to show. Not workspace content:
+   * it describes two other files and what the merge between them did.
+   */
+  mergeReport: MergeReport | null
+  setMergeReport: (report: MergeReport | null) => void
+
   /** Marks the session as having unsaved changes, e.g. after recovering a snapshot. */
   markDirty: () => void
 
@@ -409,9 +447,11 @@ interface CueListState {
     midiSettings?: MidiSettings,
     showSettings?: ShowSettings,
     identity?: WorkspaceIdentity,
-    triggerGuard?: TriggerGuardSettings
+    triggerGuard?: TriggerGuardSettings,
+    history?: ShowHistoryEntry[]
   ) => void
-  saveSucceeded: (path: string, name: string) => void
+  /** A save that reached the disk: its path, and the history it wrote into the file. */
+  saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
   setWorkspaceName: (name: string) => void
 }
 
@@ -629,6 +669,8 @@ export const useStore = create<CueListState>((set) => ({
   // its own — minted once here, not once per save.
   workspaceId: crypto.randomUUID(),
   workspaceCreatedAt: new Date().toISOString(),
+  // Nothing has been saved yet, so the file has no history to show.
+  showHistory: [],
   isDirty: false,
 
   audioSettings: { ...defaultAudioSettings },
@@ -668,6 +710,8 @@ export const useStore = create<CueListState>((set) => ({
   license: { state: 'unlicensed' },
   settingsTab: null,
   showSettingsTab: null,
+  changesTab: null,
+  mergeReport: null,
 
   addCue: (type, afterId) => set(s => {
     const cue = createCue(type)
@@ -1212,9 +1256,15 @@ export const useStore = create<CueListState>((set) => ({
 
   closeShowSettings: () => set({ showSettingsTab: null }),
 
+  openChanges: (changesTab) => set({ changesTab }),
+
+  closeChanges: () => set({ changesTab: null }),
+
+  setMergeReport: (mergeReport) => set({ mergeReport }),
+
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1245,6 +1295,8 @@ export const useStore = create<CueListState>((set) => ({
       // A file written before the guard existed has none: the normalizer both fills it in
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // The file's own record of its saves. A file that has never been saved has none.
+      showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
       waveformCursor: null,
       // Nothing has been told to this show's desk yet.
@@ -1256,9 +1308,12 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  saveSucceeded: (path, name) => set({
+  saveSucceeded: (path, name, history) => set({
     workspacePath: path,
     workspaceName: name,
+    // The history the file was just written with, including the entry this save added.
+    // Carrying it means the next save appends to a history instead of replacing one.
+    showHistory: history,
     isDirty: false
   }),
 

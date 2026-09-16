@@ -36,7 +36,9 @@ test('the WinsLab button and the File menu offer the same things', async () => {
   const { file } = await menu()
 
   await page.locator('.toolbar-brand').click()
-  const inWindow = await page.locator('.file-menu button[data-action] span').allTextContents()
+  // The label specifically: a Pro entry carries a chip of its own inside the same button,
+  // and the application menu has no equivalent of it.
+  const inWindow = await page.locator('.file-menu button[data-action] .file-menu-label').allTextContents()
 
   // Settings sits under the app's name on a Mac, and Exit is the menu bar's own.
   const shared = (labels: string[]) => labels.filter(label => label !== 'Settings…' && label !== 'Exit')

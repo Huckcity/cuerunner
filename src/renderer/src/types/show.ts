@@ -623,7 +623,12 @@ export function defaultDeskSettings(): DeskSettings {
 /** The DCAs a new show drives: twelve of them, labelled by number. */
 export function startingDcas(): Dca[] {
   return Array.from({ length: DCA_LIMIT }, (_, index) => ({
-    id: crypto.randomUUID(),
+    // A strip is a position on the desk rather than an identity: the third DCA of a show
+    // is its third DCA in every copy of that show. Minting a random id here was the one
+    // thing that made two files of the same show differ — a show opened on two machines
+    // and saved grew a diff over nothing — and nothing is keyed by these ids across
+    // files: a show's cast, its scenes and its plot all travel in the same file.
+    id: `dca-${index + 1}`,
     label: `DCA ${index + 1}`,
     note: null,
     address: null
@@ -637,7 +642,7 @@ export function startingDcas(): Dca[] {
  */
 export function startingChannels(dcas: Dca[]): ShowChannel[] {
   return Array.from({ length: CHANNEL_START_COUNT }, (_, index) => ({
-    id: crypto.randomUUID(),
+    id: `channel-${index + 1}`,
     name: '',
     dcaId: dcas[index]?.id ?? null
   }))

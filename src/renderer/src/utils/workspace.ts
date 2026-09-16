@@ -7,6 +7,11 @@ import type { Workspace, WorkspaceIdentity } from '../types/workspace'
 // here meant every save rewrote the file's id and createdAt, which is churn in the
 // direction that costs the most — a showfile in version control changed on every save
 // without a single edit. The store holds the identity; see `loadWorkspace`.
+//
+// The history is the file's, not this function's, for the same reason and in the same
+// direction: the main process compares the file about to be replaced with what is about
+// to replace it and writes the entry itself. The store carries the result back, so a save
+// appends to the file's history rather than replacing it with this session's.
 export function buildWorkspace(
   name: string,
   cues: Workspace['cues'],
@@ -14,13 +19,17 @@ export function buildWorkspace(
   midiSettings: Workspace['midiSettings'],
   showSettings: Workspace['showSettings'],
   identity: WorkspaceIdentity,
-  triggerGuard: Workspace['triggerGuard']
+  triggerGuard: Workspace['triggerGuard'],
+  history: Workspace['history'] = []
 ): Workspace {
   return {
     version: 1,
     id: identity.id,
     name,
     createdAt: identity.createdAt,
+    // A file with nothing to say about its past says nothing: an empty array here would
+    // be the key every save of every show carries for no reason.
+    history: history && history.length > 0 ? history : undefined,
     audioSettings,
     midiSettings,
     showSettings,

@@ -1,10 +1,24 @@
 import { app, dialog, BrowserWindow } from 'electron'
 import { readFile, mkdir, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
+import { hostname, userInfo } from 'os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
+import {
+  mergeWorkspaces,
+  type ConflictPolicy,
+  type MergeNote,
+  type MergeTally
+} from '../../shared/showfileMerge'
 import { readRecovery, writeFileAtomically } from './recovery'
 import { migrateLegacyAudioRouting } from '../../shared/audioRouting'
 import type { MediaReference, MissingMedia } from '../../shared/media'
+import {
+  appendHistory,
+  diffWorkspaces,
+  historyEntry,
+  type ShowHistoryEntry,
+  type WorkspaceDiff
+} from '../../shared/showfile'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { AudioCue, Cue } from '../../renderer/src/types/cue'
 import {
@@ -185,7 +199,10 @@ function migrateChannelRouting(showSettings: Record<string, unknown>): void {
   const migrated = performers.map(performer => {
     const dcaId = performer.deskChannelId
       ?? (performer.ensembleId ? ensembleDca.get(performer.ensembleId) ?? null : null)
-    const channelId = dcaId === null ? null : crypto.randomUUID()
+    // The strip's id is its position, not a fresh one: migrating the same file twice —
+    // on two machines, or twice on one — has to give the same bytes, or the same old
+    // show becomes two different files the moment both copies are saved.
+    const channelId = dcaId === null ? null : `channel-${channels.length + 1}`
     if (channelId !== null) {
       channels.push({ id: channelId, name: performer.name ?? '', dcaId })
     }
@@ -202,7 +219,7 @@ function migrateChannelRouting(showSettings: Record<string, unknown>): void {
   // as "not set up yet", and the defaults give it the twelve a new show starts with.
   if (channels.length > 0) {
     while (channels.length < CHANNEL_START_COUNT) {
-      channels.push({ id: crypto.randomUUID(), name: '', dcaId: null })
+      channels.push({ id: `channel-${channels.length + 1}`, name: '', dcaId: null })
     }
     cast.channels = channels
   } else {
@@ -491,9 +508,25 @@ export function storedMediaPath(absolutePath: string, workspaceDir: string): str
 // workspace object and are written back as they came; the renderer owns them
 // (`buildWorkspace`) and only mints them for a new show. That is what makes a showfile
 // diffable: saving a show that has not changed puts the same bytes back.
+//
+// The key order is written here rather than left to whichever object the caller built,
+// because a format whose bytes depend on the order somebody happened to assign fields in
+// is a format that will eventually churn for a reason nobody can find. Adding a key means
+// adding it here, in the place it is meant to sit.
 // Held by src/main/workspace/determinism.test.ts and e2e/showfile.spec.ts.
-function serialiseWorkspace(workspace: Workspace, workspaceDir: string): string {
+//
+// `references` is for the one caller that stores a show somewhere other than the folder
+// its media lives in: a bundle records each cue's entry inside the bundle and the
+// absolute path the file had where it came from, neither of which can be derived from
+// the folder the bundle is written into.
+export function serialiseWorkspace(
+  workspace: Workspace,
+  workspaceDir: string,
+  references?: Map<string, MediaReference>
+): string {
   const cues = workspace.cues.map(cue => {
+    const recorded = references?.get(cue.id)
+    if (recorded) return { ...cue, media: recorded }
     if (cue.type !== 'audio' || cue.filePath === '') return cue
     const absolutePath = isAbsolute(cue.filePath) ? cue.filePath : resolve(workspaceDir, cue.filePath)
     return {
@@ -504,7 +537,87 @@ function serialiseWorkspace(workspace: Workspace, workspaceDir: string): string 
       } satisfies MediaReference
     }
   })
-  return JSON.stringify({ ...workspace, cues }, null, 2)
+  return JSON.stringify(
+    {
+      version: workspace.version,
+      id: workspace.id,
+      name: workspace.name,
+      createdAt: workspace.createdAt,
+      history: workspace.history,
+      audioSettings: workspace.audioSettings,
+      midiSettings: workspace.midiSettings,
+      showSettings: workspace.showSettings,
+      triggerGuard: workspace.triggerGuard,
+      cues
+    },
+    null,
+    2
+  )
+}
+
+/**
+ * A showfile as it is on disk, migrated but not resolved: the stored form, which is what
+ * a comparison between two files has to look at — a diff of resolved workspaces would
+ * compare this machine's paths with this machine's paths.
+ */
+export async function readWorkspaceFile(filePath: string): Promise<Workspace> {
+  return migrateWorkspace(JSON.parse(await readFile(filePath, 'utf-8')) as Workspace)
+}
+
+/** Who a save is attributed to: the operating system's own answer, not the app's. */
+function whoSaved(): { by: string; machine?: string } {
+  let by: string
+  try {
+    by = userInfo().username
+  } catch {
+    // A machine with no user record can still save a show; the entry says so.
+    by = 'unknown'
+  }
+  let machine: string | undefined
+  try {
+    machine = hostname() || undefined
+  } catch {
+    machine = undefined
+  }
+  return machine ? { by, machine } : { by }
+}
+
+/**
+ * The file's history as this save leaves it: what the file already had, plus one entry
+ * describing what this save changed — or the show's own history when there is no file to
+ * compare against, which is what a first save, a Save As and a recovered session are.
+ *
+ * The file is what history is carried in, for the same reason a save compares itself
+ * with the file rather than with the window's memory of it: a caller that never asked
+ * what was written must not be able to drop it by saving again.
+ *
+ * The comparison is against the file that is about to be replaced, migrated the way a
+ * load migrates it, so an upgrade of the format is not reported as an edit. A file that
+ * cannot be read is not an error here: there is simply nothing to compare against, and a
+ * history entry is not worth failing a save for.
+ */
+async function historyForSave(
+  filePath: string,
+  workspace: Workspace,
+  contents: string
+): Promise<ShowHistoryEntry[]> {
+  const carried = workspace.history ?? []
+  let previous: Workspace
+  try {
+    previous = await readWorkspaceFile(filePath)
+  } catch {
+    return carried
+  }
+  // Saving over another show's file — Save As onto a name that is taken — replaces a
+  // document rather than editing one: the difference between two different shows is not
+  // a change to either, and this show's own history travels with it.
+  if (previous.id !== workspace.id) return carried
+
+  const base = previous.history ?? []
+  const diff = diffWorkspaces(previous, migrateWorkspace(JSON.parse(contents) as Workspace))
+  const { by, machine } = whoSaved()
+  const entry = historyEntry(diff, new Date().toISOString(), by, machine)
+  return entry ? appendHistory(base, entry) : base
 }
 
 // ─── Relink ───────────────────────────────────────────────────────────────────
@@ -682,8 +795,7 @@ export async function openWorkspace(
 export async function openWorkspaceFromPath(
   filePath: string
 ): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] }> {
-  const raw = await readFile(filePath, 'utf-8')
-  const workspace: Workspace = migrateWorkspace(JSON.parse(raw))
+  const workspace = await readWorkspaceFile(filePath)
   await addToRecent(filePath)
   return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath) }
 }
@@ -704,11 +816,21 @@ export async function openRecovery(): Promise<{
   return { ...snapshot, ...resolveWorkspaceMedia(snapshot.workspace, snapshot.sourcePath) }
 }
 
+export interface SavedWorkspace {
+  path: string
+  /**
+   * The file's own history as it was written, including the entry this save added. The
+   * window carries it from then on, so the next save appends to a history rather than
+   * replacing one.
+   */
+  history: ShowHistoryEntry[]
+}
+
 export async function saveWorkspace(
   win: BrowserWindow,
   workspace: Workspace,
   existingPath: string | null
-): Promise<string | null> {
+): Promise<SavedWorkspace | null> {
   let filePath = existingPath
 
   if (!filePath) {
@@ -726,19 +848,160 @@ export async function saveWorkspace(
   // locations are written against the folder the file is going into, which is what
   // makes a show folder portable — and what keeps an outside file pointing at itself
   // instead of at a relative path that would not exist.
-  const contents = serialiseWorkspace(workspace, dirname(filePath))
-  await writeFileAtomically(filePath, contents)
+  const workspaceDir = dirname(filePath)
+  const contents = serialiseWorkspace(workspace, workspaceDir)
+  // What this save changed, written into the file as the file's own history. An
+  // unchanged save adds no entry and writes the same bytes back.
+  const history = await historyForSave(filePath, workspace, contents)
+  const written =
+    history === workspace.history
+      ? contents
+      : serialiseWorkspace(
+          { ...workspace, history: history.length > 0 ? history : undefined },
+          workspaceDir
+        )
+  await writeFileAtomically(filePath, written)
   // The recent list is a convenience. The workspace is on disk at this point, and
   // reporting a failure here would tell the operator their show was not saved.
   await addToRecent(filePath).catch(() => {})
-  return filePath
+  return { path: filePath, history }
 }
 
 export async function saveWorkspaceAs(
   win: BrowserWindow,
   workspace: Workspace
-): Promise<string | null> {
+): Promise<SavedWorkspace | null> {
   return saveWorkspace(win, workspace, null)
+}
+
+/** What a comparison says: the file it was made against, and the differences. */
+export interface WorkspaceComparison {
+  /** The file the show was compared with, which is the "before" side of the diff. */
+  path: string
+  diff: WorkspaceDiff
+}
+
+/**
+ * How this show differs from a file the operator picks. The pick is the "before" side —
+ * what changed since that file was written is the question, and the chosen file is
+ * almost always the older one.
+ *
+ * The window's show has not been written yet, so it is put into the same stored form the
+ * file on disk is in before the two are compared: a comparison between a runtime
+ * workspace and a file would be comparing this machine's paths with a file's.
+ */
+export async function compareWorkspace(
+  win: BrowserWindow,
+  workspace: Workspace
+): Promise<WorkspaceComparison | null> {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Compare With',
+    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+    properties: ['openFile']
+  })
+  if (result.canceled || !result.filePaths[0]) return null
+  return compareWithFile(workspace, result.filePaths[0])
+}
+
+/** The comparison itself, for a file that is already known — a comparison with no dialog. */
+export async function compareWithFile(
+  workspace: Workspace,
+  otherPath: string
+): Promise<WorkspaceComparison> {
+  const other = await readWorkspaceFile(otherPath)
+  const mine = migrateWorkspace(
+    JSON.parse(serialiseWorkspace(workspace, dirname(otherPath))) as Workspace
+  )
+  return { path: otherPath, diff: diffWorkspaces(other, mine) }
+}
+
+/**
+ * The merge itself, as the window asks for it: two files — the one to merge in, and the
+ * version the two sides started from — merged into this show, written to a file the
+ * operator names.
+ *
+ * A file rather than the open show, deliberately. A merge is a thing to look at before
+ * trusting it, the show being merged into is a document somebody is still working on, and
+ * writing the result somewhere new leaves every input exactly as it was — which is what
+ * makes a merge safe to try twice.
+ */
+export interface MergedShow {
+  path: string
+  notes: MergeNote[]
+  tally: MergeTally
+  /** The two files this merge read, for a second attempt with the other policy. */
+  inputs: MergeInputs
+}
+
+export async function mergeIntoNewFile(
+  win: BrowserWindow,
+  ours: Workspace,
+  oursPath: string | null,
+  theirsPath: string,
+  ancestorPath: string,
+  policy: ConflictPolicy = 'ours'
+): Promise<MergedShow | null> {
+  const [theirs, ancestor] = await Promise.all([
+    readWorkspaceFile(theirsPath),
+    readWorkspaceFile(ancestorPath)
+  ])
+  const result = mergeWorkspaces(ancestor, ours, theirs, { onConflict: policy })
+  // The history of the file being merged into is the one that continues: the other two
+  // are other files, and their entries belong to them.
+  const merged = { ...result.workspace, history: ours.history }
+
+  const suggested = `${ours.name || 'Untitled'} (merged)`
+  const where = await dialog.showSaveDialog(win, {
+    title: 'Save the Merged Show',
+    defaultPath: oursPath === null
+      ? `${suggested}.wlab`
+      : join(dirname(oursPath), `${suggested}.wlab`),
+    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }]
+  })
+  if (where.canceled || !where.filePath) return null
+  await writeFileAtomically(where.filePath, serialiseWorkspace(merged, dirname(where.filePath)))
+  await addToRecent(where.filePath).catch(() => {})
+  return {
+    path: where.filePath,
+    notes: result.notes,
+    tally: result.tally,
+    inputs: { theirs: theirsPath, ancestor: ancestorPath }
+  }
+}
+
+/** What a merge read, so a second attempt can start from the same two files. */
+export interface MergeInputs {
+  theirs: string
+  ancestor: string
+}
+
+/** Asks for the two files a merge needs, then merges them. */
+export async function mergeShow(
+  win: BrowserWindow,
+  ours: Workspace,
+  oursPath: string | null,
+  policy: ConflictPolicy = 'ours',
+  inputs?: MergeInputs
+): Promise<MergedShow | null> {
+  let files = inputs
+  if (!files) {
+    const theirs = await dialog.showOpenDialog(win, {
+      title: 'Merge which show in?',
+      message: 'The other person’s copy of the show',
+      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+      properties: ['openFile']
+    })
+    if (theirs.canceled || !theirs.filePaths[0]) return null
+    const ancestor = await dialog.showOpenDialog(win, {
+      title: 'Which version did the two of you start from?',
+      message: 'The copy both of you saved before working apart',
+      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+      properties: ['openFile']
+    })
+    if (ancestor.canceled || !ancestor.filePaths[0]) return null
+    files = { theirs: theirs.filePaths[0], ancestor: ancestor.filePaths[0] }
+  }
+  return { ...(await mergeIntoNewFile(win, ours, oursPath, files.theirs, files.ancestor, policy))!, inputs: files }
 }
 
 export function blankWorkspace(name = 'Untitled'): Workspace {

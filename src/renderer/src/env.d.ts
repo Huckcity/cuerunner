@@ -8,6 +8,8 @@ import type { MidiAvailability } from './types/midi'
 import type { NetworkRequest, NetworkResult } from './types/network'
 import type { PlaybackPanic } from './types/playback'
 import type { MissingMedia } from '../../shared/media'
+import type { WorkspaceDiff } from '../../shared/showfile'
+import type { MergeNote, MergeTally } from '../../shared/showfileMerge'
 import type { RedundancySettings } from '../../shared/redundancy'
 import type { AudioEngineBridge } from '../../shared/audio'
 import type { MenuAction } from '../../shared/fileMenu'
@@ -93,8 +95,42 @@ interface WinslabBridge {
       workspacePath: string | null,
       cueId: string
     ) => Promise<{ workspace: Workspace; missingMedia: MissingMedia[] }>
-    save: (workspace: Workspace, existingPath: string | null) => Promise<string | null>
-    saveAs: (workspace: Workspace) => Promise<string | null>
+    save: (
+      workspace: Workspace,
+      existingPath: string | null
+    ) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
+    saveAs: (workspace: Workspace) => Promise<{ path: string; history: ShowHistoryEntry[] } | null>
+    exportBundle: (
+      workspace: Workspace,
+      workspacePath: string | null
+    ) => Promise<
+      | { ok: false; error: string }
+      | { ok: true; exported: { path: string; missing: string[] } | null }
+    >
+    importBundle: () => Promise<
+      | { ok: false; error: string }
+      | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
+    >
+    merge: (
+      workspace: Workspace,
+      workspacePath: string | null,
+      options?: { policy?: 'ours' | 'theirs'; again?: boolean }
+    ) => Promise<
+      | { ok: false; error: string }
+      | {
+          ok: true
+          merged: {
+            path: string
+            notes: MergeNote[]
+            tally: MergeTally
+            inputs: { theirs: string; ancestor: string }
+          } | null
+        }
+    >
+    compare: (workspace: Workspace) => Promise<
+      | { ok: false; error: string }
+      | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }
+    >
     recent: () => Promise<string[]>
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null) => Promise<void>
     recovery: () => Promise<{

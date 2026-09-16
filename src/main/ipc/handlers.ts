@@ -41,10 +41,15 @@ import {
   openRecovery,
   saveWorkspace,
   saveWorkspaceAs,
+  compareWorkspace,
+  mergeShow,
   relinkWorkspaceMedia,
   getRecentFiles
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
+import { exportBundle, importBundle } from '../workspace/bundle'
+import type { ConflictPolicy } from '../../shared/showfileMerge'
+import type { MergeInputs } from '../workspace/WorkspaceManager'
 import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
@@ -499,6 +504,62 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('workspace:saveAs', async (event, workspace: Workspace) => {
     return saveWorkspaceAs(getWin(event), workspace)
+  })
+
+  // Reading a show's history — and comparing two of them — is the Pro half of the
+  // showfile work. The file records its history either way: the data belongs to the show,
+  // and a window that is not licensed still saves one.
+  // A bundle is a show and its media in one file, for handover. It is a Pro surface like
+  // the rest of the showfile work; the show it carries is the operator's either way.
+  ipcMain.handle(
+    'workspace:exportBundle',
+    async (event, workspace: Workspace, workspacePath: string | null) => {
+      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+      const exported = await exportBundle(getWin(event), workspace, workspacePath)
+      return { ok: true, exported }
+    }
+  )
+
+  ipcMain.handle('workspace:importBundle', async (event) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+    const imported = await importBundle(getWin(event))
+    return { ok: true, imported }
+  })
+
+  // Two files merge into a third, written where the operator says. The files the last
+  // merge read are kept for a second attempt with the other side's choices: the report is
+  // where an operator learns there was a conflict, and re-running it should not mean
+  // finding the same two files again.
+  let lastMerge: { theirs: string; ancestor: string } | null = null
+  ipcMain.handle(
+    'workspace:merge',
+    async (
+      event,
+      workspace: Workspace,
+      workspacePath: string | null,
+      options: { policy?: ConflictPolicy; again?: boolean } = {}
+    ) => {
+      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+      const policy: ConflictPolicy = options.policy ?? 'ours'
+      if (options.again === true && !lastMerge) {
+        return { ok: false, error: 'there is no merge to try again' }
+      }
+      const merged = await mergeShow(
+        getWin(event),
+        workspace,
+        workspacePath,
+        policy,
+        options.again === true ? (lastMerge as MergeInputs) : undefined
+      )
+      if (merged) lastMerge = merged.inputs
+      return { ok: true, merged }
+    }
+  )
+
+  ipcMain.handle('workspace:compare', async (event, workspace: Workspace) => {
+    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+    const comparison = await compareWorkspace(getWin(event), workspace)
+    return { ok: true, comparison }
   })
 
   ipcMain.handle('workspace:recent', async () => {

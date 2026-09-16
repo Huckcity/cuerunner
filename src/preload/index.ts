@@ -8,6 +8,8 @@ import type { NetworkRequest, NetworkResult } from '../renderer/src/types/networ
 import type { PlaybackPanic } from '../renderer/src/types/playback'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { MissingMedia } from '../shared/media'
+import type { ShowHistoryEntry, WorkspaceDiff } from '../shared/showfile'
+import type { MergeNote, MergeTally } from '../shared/showfileMerge'
 import {
   AUDIO_CHANNELS,
   AUDIO_SILENCE_THRESHOLD_DB,
@@ -283,10 +285,58 @@ contextBridge.exposeInMainWorld('winslab', {
       cueId: string
     ): Promise<{ workspace: Workspace; missingMedia: MissingMedia[] }> =>
       ipcRenderer.invoke('workspace:relink', workspace, workspacePath, cueId),
-    save: (workspace: Workspace, existingPath: string | null): Promise<string | null> =>
+    /** A save writes the file and returns, with the path, the history it wrote into it. */
+    save: (
+      workspace: Workspace,
+      existingPath: string | null
+    ): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
       ipcRenderer.invoke('workspace:save', workspace, existingPath),
-    saveAs: (workspace: Workspace): Promise<string | null> =>
+    saveAs: (workspace: Workspace): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
       ipcRenderer.invoke('workspace:saveAs', workspace),
+    /**
+     * How this show differs from a file the operator picks. The dialog belongs to the
+     * OS and is shown by the main process, so a cancel is `comparison: null` rather
+     * than an error.
+     */
+    /**
+     * A show and its media as one file, and back again. Both dialogs belong to the OS and
+     * are shown by the main process, so a cancel comes back as `null`.
+     */
+    exportBundle: (
+      workspace: Workspace,
+      workspacePath: string | null
+    ): Promise<
+      | { ok: false; error: string }
+      | { ok: true; exported: { path: string; missing: string[] } | null }
+    > => ipcRenderer.invoke('workspace:exportBundle', workspace, workspacePath),
+    importBundle: (): Promise<
+      | { ok: false; error: string }
+      | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
+    > => ipcRenderer.invoke('workspace:importBundle'),
+    /**
+     * Two files merged into a third, written where the operator says. `again` runs the
+     * same merge over the files it read last time, with the other side's choices.
+     */
+    merge: (
+      workspace: Workspace,
+      workspacePath: string | null,
+      options?: { policy?: 'ours' | 'theirs'; again?: boolean }
+    ): Promise<
+      | { ok: false; error: string }
+      | {
+          ok: true
+          merged: {
+            path: string
+            notes: MergeNote[]
+            tally: MergeTally
+            inputs: { theirs: string; ancestor: string }
+          } | null
+        }
+    > => ipcRenderer.invoke('workspace:merge', workspace, workspacePath, options ?? {}),
+    compare: (workspace: Workspace): Promise<
+      | { ok: false; error: string }
+      | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }
+    > => ipcRenderer.invoke('workspace:compare', workspace),
     recent: (): Promise<string[]> =>
       ipcRenderer.invoke('workspace:recent'),
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null): Promise<void> =>
