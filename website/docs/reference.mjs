@@ -508,6 +508,18 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-1">
+      <h2>Trust</h2>
+      <p>
+        A workspace file is executable code and network-triggerable: a script cue runs a
+        system command as you when it fires, and a network trigger (OSC, MIDI or show
+        control) lets one packet on the show network fire any cue, scripts included. Only
+        open <code>.wlab</code> files you trust, and only on a network you trust — the
+        composition is the risk, not either half alone. OSC input listens on all interfaces
+        by default.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
       <h2><code>shell(command, options?)</code></h2>
       <p>Runs a system command and resolves with its result.</p>
       <div class="code"><code>const r = await shell('echo dimmer 80%')

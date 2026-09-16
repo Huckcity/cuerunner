@@ -316,6 +316,11 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
   if (count === 0xffff || directorySize === ZIP64_MARKER || directoryOffset === ZIP64_MARKER) {
     throw new Error('that archive is too large to open here')
   }
+  // Declared sizes are the archive's claim about itself, and a hostile one lies: bound
+  // them against the file before allocating or reading on their word.
+  if (directorySize > size || directoryOffset > size || directoryOffset + directorySize > size) {
+    throw new Error('that archive’s directory runs past the end of the file')
+  }
 
   const directory = await read(filePath, directoryOffset, directorySize)
   const entries: ZipEntry[] = []
@@ -340,8 +345,10 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
     if (method !== STORED && method !== DEFLATED) {
       throw new Error(`that archive holds an entry packed in a way this app does not read (${method})`)
     }
-    if (compressedSize === ZIP64_MARKER || size_ === ZIP64_MARKER) {
-      throw new Error('that archive is too large to open here')
+    // The entry's own sizes are claims too: refuse an absurd declared size before it
+    // is acted on (the showfile is read whole; media is streamed entry by entry).
+    if (size_ > MAX_ARCHIVE_BYTES || compressedSize > size) {
+      throw new Error(`"${name}" claims a size this app will not read`)
     }
     if (name.endsWith('/')) continue      // A directory entry: nothing to extract.
     safeName(name)
@@ -363,6 +370,12 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
 
 /** One entry's bytes, for the small things — a showfile rather than a media file. */
 export async function readZipEntry(filePath: string, entry: ZipEntry): Promise<Buffer> {
+  // The entry's sizes are the archive's claims: bound them against the file before
+  // allocating or inflating on their word.
+  const { size } = await stat(filePath)
+  if (entry.compressedSize > size || entry.size > MAX_ARCHIVE_BYTES) {
+    throw new Error(`"${entry.name}" claims a size this app will not read`)
+  }
   const raw = await read(filePath, entry.offset, entry.compressedSize)
   const data = entry.method === DEFLATED ? await inflate(raw) : raw
   checked(entry, crc32(data), data.length)

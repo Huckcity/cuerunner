@@ -131,6 +131,29 @@ describe('writing a zip', () => {
   })
 })
 
+describe('a hostile archive', () => {
+  it('refuses a directory that runs past the end of the file', async () => {
+    const file = join(dir, 'lying.zip')
+    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    const bytes = readFileSync(file)
+    // The end record's directory-size field (22-byte record at the tail): claim 4 GiB
+    // in a 100-byte file.
+    bytes.writeUInt32LE(0xffffffff - 1, bytes.length - 22 + 12)
+    writeFileSync(file, bytes)
+
+    await expect(readZip(file)).rejects.toThrow()
+  })
+
+  it('refuses an entry that claims more than the file holds', async () => {
+    const file = join(dir, 'greedy.zip')
+    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    const entries = await readZip(file)
+    const greedy = { ...entries[0], size: 4 * 1024 * 1024 * 1024, compressedSize: 4 * 1024 * 1024 * 1024 }
+
+    await expect(readZipEntry(file, greedy)).rejects.toThrow()
+  })
+})
+
 describe('reading an archive this app did not write', () => {
   it('reads a deflated entry, a nested one and a directory entry', async () => {
     const entries = await readZip(FOREIGN)
