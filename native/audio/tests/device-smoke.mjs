@@ -266,8 +266,13 @@ try {
   check('the capture tail is silent after panic', capturedAfter.peak < 1e-4, `peak ${capturedAfter.peak}`)
   const panicEvents = client.events.filter((event) => event.type === 'panic')
   check('a panic event was broadcast', panicEvents.length >= 1, JSON.stringify(client.events.slice(-4)))
+  // The engine emits the ended event within its next block after the fade; a window this
+  // wide is there to absorb scheduling, not to allow a write to wait for the next verb —
+  // the Windows pipe used to do exactly that, and this check caught it.
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 400))
   const endedEvents = client.events.filter((event) => event.type === 'ended')
-  check('the run ended with a reason and its identity', endedEvents.length >= 1 && endedEvents[0].runId === handle.runId, JSON.stringify(endedEvents.slice(0, 2)))
+  const endedArrived = endedEvents.length >= 1 && endedEvents[0].runId === handle.runId
+  check('the run ended with a reason and its identity', endedArrived, JSON.stringify(endedEvents.slice(0, 2)))
 
   const afterInfo = await client.request('info')
   check('the active indicator clears after panic', afterInfo.active === false, JSON.stringify({ active: afterInfo.active }))
