@@ -134,9 +134,9 @@ function appIsPackaged(): boolean {
 }
 
 function resolveBinaryPath(): string | null {
-  const override = readEnv('WINSLAB_AUDIO_BIN')
+  const override = readEnv('CUERUNNER_AUDIO_BIN')
   if (override) return existsSync(override) ? override : null
-  const name = process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio'
+  const name = process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio'
   const candidates = appIsPackaged()
     ? [join(process.resourcesPath, 'audio', name)]
     : [join(process.cwd(), 'native', 'audio', 'build', name)]
@@ -147,12 +147,12 @@ function resolveBinaryPath(): string | null {
 }
 
 function socketPath(): string {
-  const override = readEnv('WINSLAB_AUDIO_SOCKET')
+  const override = readEnv('CUERUNNER_AUDIO_SOCKET')
   if (override) return override
   const suffix = `${process.pid}-${Date.now().toString(36)}`
   return process.platform === 'win32'
-    ? `\\\\.\\pipe\\winslab-audio-${suffix}`
-    : join(tmpdir(), `winslab-audio-${suffix}.sock`)
+    ? `\\\\.\\pipe\\cuerunner-audio-${suffix}`
+    : join(tmpdir(), `cuerunner-audio-${suffix}.sock`)
 }
 
 export class NativeAudioEngine {
@@ -379,8 +379,8 @@ export class NativeAudioEngine {
     const binaryPath = resolveBinaryPath()
     this.lastStatus.binaryPath = binaryPath
     if (binaryPath === null) {
-      const message = readEnv('WINSLAB_AUDIO_BIN')
-        ? `audio engine not found at ${readEnv('WINSLAB_AUDIO_BIN')} (build it with: npm run build:native)`
+      const message = readEnv('CUERUNNER_AUDIO_BIN')
+        ? `audio engine not found at ${readEnv('CUERUNNER_AUDIO_BIN')} (build it with: npm run build:native)`
         : 'audio engine executable is missing (build it with: npm run build:native)'
       this.lastStatus.lastError = message
       throw new AudioEngineError('engine', message)
@@ -393,14 +393,14 @@ export class NativeAudioEngine {
     }
 
     const path = socketPath()
-    const args = ['--socket', path, '--backend', readEnv('WINSLAB_AUDIO_BACKEND') ?? 'auto']
-    const capture = readEnv('WINSLAB_TEST_AUDIO_CAPTURE')
+    const args = ['--socket', path, '--backend', readEnv('CUERUNNER_AUDIO_BACKEND') ?? 'auto']
+    const capture = readEnv('CUERUNNER_TEST_AUDIO_CAPTURE')
     if (capture !== undefined && !appIsPackaged()) args.push('--capture', capture)
-    const deviceId = readEnv('WINSLAB_AUDIO_DEVICE')
+    const deviceId = readEnv('CUERUNNER_AUDIO_DEVICE')
     if (deviceId !== undefined) args.push('--device', deviceId)
-    const exclusive = readEnv('WINSLAB_AUDIO_EXCLUSIVE')
+    const exclusive = readEnv('CUERUNNER_AUDIO_EXCLUSIVE')
     if (exclusive !== undefined) args.push('--exclusive', exclusive)
-    const sampleRate = readEnv('WINSLAB_AUDIO_SAMPLE_RATE')
+    const sampleRate = readEnv('CUERUNNER_AUDIO_SAMPLE_RATE')
     if (sampleRate !== undefined) args.push('--sample-rate', sampleRate)
 
     const child = spawn(binaryPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -414,7 +414,7 @@ export class NativeAudioEngine {
         this.stderrTail.splice(0, this.stderrTail.length - STDERR_TAIL_LINES)
       }
       // The engine already prefixes its own diagnostics; do not stack a second tag.
-      process.stderr.write(text.startsWith('[winslab-audio]') ? `${text}\n` : `[winslab-audio] ${text}\n`)
+      process.stderr.write(text.startsWith('[cuerunner-audio]') ? `${text}\n` : `[cuerunner-audio] ${text}\n`)
     })
     child.on('exit', (code, signal) => this.handleExit(code, signal))
 

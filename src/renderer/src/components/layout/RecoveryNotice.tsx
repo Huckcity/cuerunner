@@ -20,7 +20,7 @@ export function RecoveryNotice() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
 
   useEffect(() => {
-    window.winslab.workspace
+    window.cuerunner.workspace
       .recovery()
       .then(found => { if (found) setSnapshot(found) })
       .catch(() => { /* no snapshot, nothing to offer */ })
@@ -43,11 +43,11 @@ export function RecoveryNotice() {
     // work would throw that work away behind the operator's back. Reuse the close
     // prompt — Save writes this session first, Don't Save discards it for the snapshot.
     if (store.isDirty) {
-      const response = await window.winslab.workspace.confirmClose(store.workspaceName)
+      const response = await window.cuerunner.workspace.confirmClose(store.workspaceName)
       if (response === 2) return
       if (response === 0) {
         try {
-          const saved = await window.winslab.workspace.save(
+          const saved = await window.cuerunner.workspace.save(
             {
               version: 1,
               id: store.workspaceId,
@@ -99,12 +99,12 @@ export function RecoveryNotice() {
     // Recovered work is unsaved by definition: the file on disk is older than this. The
     // title bar's dot is the app's usual signal for that.
     live.markDirty()
-    window.winslab.workspace.clearRecovery().catch(() => {})
+    window.cuerunner.workspace.clearRecovery().catch(() => {})
     setSnapshot(null)
   }
 
   const discard = (): void => {
-    window.winslab.workspace.clearRecovery().catch(() => {})
+    window.cuerunner.workspace.clearRecovery().catch(() => {})
     setSnapshot(null)
   }
 

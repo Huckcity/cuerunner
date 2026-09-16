@@ -1,9 +1,9 @@
-// WinsLab's ASIO backend.
+// Cuerunner's ASIO backend.
 //
 // Steinberg's ASIO SDK is the one dependency this engine cannot vendor: it is
 // dual-licensed, and the proprietary half — the half a closed-source application has to
 // use — forbids redistributing the SDK with anything that links it. A build therefore
-// compiles this file only when the SDK is supplied out of band (WINSLAB_ASIO_SDK; see
+// compiles this file only when the SDK is supplied out of band (CUERUNNER_ASIO_SDK; see
 // scripts/asio-sdk.mjs), and a build without it is unchanged: no ASIO device is listed,
 // and `--backend asio` is refused with that reason rather than with silence.
 //
@@ -39,7 +39,7 @@
 // nothing more.
 #include "asio_backend.h"
 
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
 
 #if defined(_WIN32) && !defined(NOMINMAX)
 // windows.h defines `min` and `max` as function-like macros, and the SDK's headers pull
@@ -1049,4 +1049,4 @@ std::string contextMessage(const ma_context& context) {
 }  // namespace asio
 }  // namespace ws
 
-#endif  // WINSLAB_ASIO
+#endif  // CUERUNNER_ASIO

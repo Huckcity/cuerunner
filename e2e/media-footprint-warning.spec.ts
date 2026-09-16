@@ -44,7 +44,7 @@ function writeSparseWav(file: string, dataBytes = 80 * MB): void {
 }
 
 function longShow(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-footprint-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-footprint-'))
   tempDirs.push(root)
   const media = path.join(root, 'overture.wav')
   writeSparseWav(media)
@@ -107,7 +107,7 @@ test('a workspace the engine will stream is announced, and measuring it decodes 
     await expect(memory).toContainText('0 B resident')
 
     const info = await app.evaluate(async () => {
-      const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+      const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
       return harness ? harness.engineInfo() : null
     })
     expect(info).not.toBeNull()

@@ -101,7 +101,7 @@ function sessionWarning(change: AudioEngineSessionChange): string {
 
 const bridge = (): AudioEngineBridge => {
   // The engine lives on the existing `audio` namespace, beside the file dialog.
-  const engine = window.winslab.audio
+  const engine = window.cuerunner.audio
   if (!engine) throw new Error('The audio engine bridge is not available.')
   return engine
 }

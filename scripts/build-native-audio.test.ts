@@ -12,12 +12,12 @@ import { findOnPath, objectName } from './build-native-audio.mjs'
 
 describe('objectName', () => {
   it('names a Windows source by its file, not by its path', () => {
-    const source = 'D:\\a\\winslab\\winslab\\native\\audio\\third_party\\stb_vorbis.c'
+    const source = 'D:\\a\\cuerunner\\cuerunner\\native\\audio\\third_party\\stb_vorbis.c'
     expect(objectName(source, '.obj')).toBe('stb_vorbis.obj')
   })
 
   it('names a POSIX source the same way', () => {
-    expect(objectName('/home/adam/dev/winslab/native/audio/third_party/cJSON.c', '.o')).toBe('cJSON.o')
+    expect(objectName('/home/adam/dev/cuerunner/native/audio/third_party/cJSON.c', '.o')).toBe('cJSON.o')
     expect(objectName('native/audio/src/engine.cpp', '.o')).toBe('engine.o')
   })
 

@@ -15,7 +15,7 @@ vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')
   const { tmpdir } = await import('os')
   const { join } = await import('path')
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-bundle-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-bundle-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: {},
@@ -72,7 +72,7 @@ let dir: string
 let bundled: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-bundle-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-bundle-'))
   mkdirSync(join(dir, 'music'))
   writeFileSync(join(dir, 'music', 'walk-in.wav'), Buffer.alloc(2048, 3))
   writeFileSync(join(dir, 'music', 'bows.wav'), Buffer.alloc(512, 9))

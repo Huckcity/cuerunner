@@ -24,7 +24,7 @@ export function MscInspector({ cue }: Props) {
   const [ports, setPorts] = useState<string[]>([])
 
   useEffect(() => {
-    window.winslab.midi.listPorts().then(setPorts)
+    window.cuerunner.midi.listPorts().then(setPorts)
   }, [])
 
   // A cue number and a cue list mean nothing to a RESET: the specification gives that
@@ -116,7 +116,7 @@ export function MscInspector({ cue }: Props) {
             />
           )}
           <button
-            onClick={() => window.winslab.midi.listPorts().then(setPorts)}
+            onClick={() => window.cuerunner.midi.listPorts().then(setPorts)}
             title="Refresh ports"
             className="inspector-btn"
           >↻</button>

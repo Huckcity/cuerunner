@@ -101,7 +101,7 @@ class ScriptHost {
     const options: ShellOptions = { cwd: run.workspacePath ?? undefined, ...message.options }
     let reply: HostMessage
     try {
-      const result = await window.winslab.script.shell(message.command, options)
+      const result = await window.cuerunner.script.shell(message.command, options)
       logShellOutput(run.onLog, message.command, result)
       reply = { type: 'shellResult', id: message.id, result }
     } catch (error) {
@@ -117,7 +117,7 @@ class ScriptHost {
   ): Promise<void> {
     let reply: HostMessage
     try {
-      const source = await window.winslab.script.readFile(
+      const source = await window.cuerunner.script.readFile(
         message.path,
         run.workspacePath,
         message.base

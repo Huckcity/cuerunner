@@ -33,7 +33,7 @@ export function useAutosave(): void {
       }, triggerGuard, showHistory)
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when
       // "where was I" is the first question.
-      window.winslab.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {
+      window.cuerunner.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {
         // A snapshot that cannot be written must never interrupt the show. The next
         // tick tries again.
       })

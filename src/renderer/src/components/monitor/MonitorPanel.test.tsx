@@ -52,7 +52,7 @@ describe('MonitorPanel', () => {
 
   beforeEach(() => {
     ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-    ;(window.winslab.show.restart as unknown as Mock).mockResolvedValue({ ok: true })
+    ;(window.cuerunner.show.restart as unknown as Mock).mockResolvedValue({ ok: true })
 
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -139,12 +139,12 @@ describe('MonitorPanel', () => {
 
     // A refused restart reports through the service's next state event, so the
     // rejection from the call itself is swallowed rather than left dangling.
-    ;(window.winslab.show.restart as unknown as Mock).mockRejectedValue(new Error('no such service'))
+    ;(window.cuerunner.show.restart as unknown as Mock).mockRejectedValue(new Error('no such service'))
     const restart = rows[1].querySelector<HTMLButtonElement>('.monitor-service-restart')!
     await act(async () => { restart.click() })
 
-    expect(window.winslab.show.restart).toHaveBeenCalledTimes(1)
-    expect(window.winslab.show.restart).toHaveBeenCalledWith('shure')
+    expect(window.cuerunner.show.restart).toHaveBeenCalledTimes(1)
+    expect(window.cuerunner.show.restart).toHaveBeenCalledWith('shure')
   })
 
   it('renders only the measurements a device reports', async () => {

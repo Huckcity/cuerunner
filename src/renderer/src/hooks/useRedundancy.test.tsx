@@ -97,7 +97,7 @@ function statusEvent(overrides: Partial<RedundancyEvent['status']> = {}, notice?
 
 /** The publish calls the hook has made, in order, with their payloads. */
 function published(): Array<Record<string, unknown>> {
-  const command = vi.mocked(window.winslab.show.command)
+  const command = vi.mocked(window.cuerunner.show.command)
   return command.mock.calls
     .filter(call => call[0] === 'redundancy' && call[1] === 'publish')
     .map(call => call[2] as Record<string, unknown>)
@@ -119,7 +119,7 @@ describe('useRedundancy', () => {
 
     // The machine's own file is the truth about whether this machine is paired: the
     // hook reads it at startup and the store follows it.
-    vi.mocked(window.winslab.redundancy.settings).mockResolvedValue(
+    vi.mocked(window.cuerunner.redundancy.settings).mockResolvedValue(
       paired()
     )
     useStore.setState({
@@ -180,7 +180,7 @@ describe('useRedundancy', () => {
 
   it('says nothing at all while the machine is not paired', async () => {
     // Off is the default: a machine nobody has paired has no show to offer.
-    vi.mocked(window.winslab.redundancy.settings).mockResolvedValue(defaultRedundancySettings('desk-b', 'id-b'))
+    vi.mocked(window.cuerunner.redundancy.settings).mockResolvedValue(defaultRedundancySettings('desk-b', 'id-b'))
     useStore.setState({ redundancySettings: defaultRedundancySettings('desk-b', 'id-b') })
     render()
     await flush()
@@ -199,7 +199,7 @@ describe('useRedundancy', () => {
     await flush()
     await flush()
     expect(useStore.getState().redundancySettings?.name).toBe('desk-b')
-    expect(vi.mocked(window.winslab.redundancy.settings)).toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.redundancy.settings)).toHaveBeenCalled()
   })
 
   it('warms the media a takeover would need, so picking the show up costs no wait', async () => {

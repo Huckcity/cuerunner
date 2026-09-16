@@ -12,7 +12,7 @@ import {
   looksBinary
 } from './document'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-document-'))
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-document-'))
 
 function write(name: string, contents: string | Buffer): string {
   const file = path.join(dir, name)

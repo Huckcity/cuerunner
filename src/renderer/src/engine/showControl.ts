@@ -34,7 +34,7 @@ export async function sendMsc(cue: MscCue): Promise<MscSendResult> {
     // reads it: the machine's own choice is not worth making twice.
     const portName = cue.portName || state.midiSettings.outputPortName
     if (portName === '') return { ok: false, error: 'no MIDI port chosen to send it on' }
-    return report(() => window.winslab.midi.send({ portName, messages }))
+    return report(() => window.cuerunner.midi.send({ portName, messages }))
   }
 
   const desk = state.showSettings.desk
@@ -46,8 +46,8 @@ export async function sendMsc(cue: MscCue): Promise<MscSendResult> {
   if (addressed === null) return { ok: false, error: 'the show’s desk has no address yet' }
 
   return report(() => addressed.kind === 'midi'
-    ? window.winslab.midi.send({ portName: addressed.portName, messages: addressed.messages })
-    : window.winslab.midi.sendTcp({
+    ? window.cuerunner.midi.send({ portName: addressed.portName, messages: addressed.messages })
+    : window.cuerunner.midi.sendTcp({
         host: addressed.host,
         port: addressed.port,
         messages: addressed.messages

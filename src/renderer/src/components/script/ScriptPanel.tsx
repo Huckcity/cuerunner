@@ -58,7 +58,7 @@ export function ScriptPanel({ onClose }: Props) {
     if (path === '') return
 
     let cancelled = false
-    window.winslab.script
+    window.cuerunner.script
       .readDocument(path, useStore.getState().workspacePath)
       .then(document => {
         if (cancelled) return
@@ -121,7 +121,7 @@ export function ScriptPanel({ onClose }: Props) {
   }
 
   const chooseFile = async (): Promise<void> => {
-    const picked = await window.winslab.script.pickFile()
+    const picked = await window.cuerunner.script.pickFile()
     if (!picked) return
     updateScriptSettings({ path: picked })
   }

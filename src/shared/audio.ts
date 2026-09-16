@@ -556,7 +556,7 @@ export interface AudioRegion {
 }
 
 /**
- * The renderer-facing bridge (`window.winslab.audio`). Main implements it in
+ * The renderer-facing bridge (`window.cuerunner.audio`). Main implements it in
  * src/main/audio/AudioEngine.ts + the IPC handlers; preload is a thin forwarder.
  */
 export interface AudioEngineBridge {

@@ -1,5 +1,5 @@
-// Global window.winslab mock — mirrors the preload bridge shape
-Object.defineProperty(window, 'winslab', {
+// Global window.cuerunner mock — mirrors the preload bridge shape
+Object.defineProperty(window, 'cuerunner', {
   value: {
     platform: 'win32',
     app: {

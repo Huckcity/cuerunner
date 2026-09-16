@@ -133,7 +133,7 @@ test('an open menu does not eat the press', async () => {
 test('the missing-media dialog stands the transport down', async () => {
   // A show whose one audio file is not on this machine: it opens with the bar, and the
   // list behind the bar is a dialog nobody asked for, over a show that is already running.
-  const showDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-go-press-'))
+  const showDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-go-press-'))
   const wlab = path.join(showDir, 'Go Press.wlab')
   fs.writeFileSync(
     wlab,

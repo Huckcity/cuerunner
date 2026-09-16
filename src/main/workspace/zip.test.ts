@@ -26,7 +26,7 @@ const FOREIGN_ESCAPE = join(__dirname, '../../test/fixtures/foreign-escape.zip')
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-zip-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-zip-'))
 })
 
 afterEach(() => {

@@ -67,7 +67,7 @@ import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
 const invokeAudio = async <T>(channel: string, payload?: unknown): Promise<T> =>
   unwrapAudioResult((await ipcRenderer.invoke(channel, payload)) as AudioResult<T>)
 
-contextBridge.exposeInMainWorld('winslab', {
+contextBridge.exposeInMainWorld('cuerunner', {
   // Which keyboard the labels should be written for: ⌘ on a Mac, Ctrl everywhere else.
   platform: process.platform,
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),

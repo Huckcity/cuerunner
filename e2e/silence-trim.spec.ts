@@ -84,7 +84,7 @@ async function openShow(options: {
   cues?: unknown[]
   audioSettings?: Record<string, unknown>
 } = {}): Promise<void> {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-trim-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-trim-'))
   media = path.join(root, 'shaped.wav')
   writeShapedWav(media)
   showPath = path.join(root, 'Trim.wlab')

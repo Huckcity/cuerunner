@@ -40,7 +40,7 @@ const cue = (filePath: string): unknown => ({
 })
 
 test.beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-vamp-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-vamp-'))
   const media = path.join(root, 'playoff.wav')
   writeWav(media)
   const showPath = path.join(root, 'Vamp.wlab')

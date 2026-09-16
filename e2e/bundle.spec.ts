@@ -71,7 +71,7 @@ async function start(options: { license?: TestLicense } = {}): Promise<Page> {
 }
 
 test.beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-bundle-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-bundle-'))
   fs.mkdirSync(path.join(root, 'music'))
   writeWav(path.join(root, 'music', 'walk-in.wav'), 11)
   writeWav(path.join(root, 'music', 'bows.wav'), 22)
@@ -224,6 +224,6 @@ test('a machine with no key is told what a bundle is for, and bundles nothing', 
   await expect(page.locator('.file-menu button[data-action="export-bundle"] .pro-mark')).toHaveCount(1)
   await page.locator('.file-menu button[data-action="export-bundle"]').click()
 
-  await expect(page.locator('.app-notice')).toContainText('WinsLab Pro is required')
+  await expect(page.locator('.app-notice')).toContainText('Cuerunner Pro is required')
   expect(fs.existsSync(bundled)).toBe(false)
 })

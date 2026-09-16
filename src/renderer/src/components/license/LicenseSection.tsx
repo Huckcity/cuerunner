@@ -18,7 +18,7 @@ export function LicenseSection() {
 
   const activate = async (): Promise<void> => {
     setBusy(true)
-    const result = await window.winslab.license.activate(draft)
+    const result = await window.cuerunner.license.activate(draft)
     setBusy(false)
     setLicense(result.status)
     setError(result.ok ? null : result.error ?? 'That key was refused.')
@@ -26,7 +26,7 @@ export function LicenseSection() {
   }
 
   const deactivate = async (): Promise<void> => {
-    setLicense(await window.winslab.license.deactivate())
+    setLicense(await window.cuerunner.license.deactivate())
     setError(null)
   }
 

@@ -4,7 +4,7 @@
  *
  * The SDK's licence allows neither redistribution nor a second copy in a checkout, so
  * it is never vendored here (native/audio/third_party/DEPENDENCIES.json): a machine
- * opts into ASIO by pointing WINSLAB_ASIO_SDK at an SDK root, and every machine that
+ * opts into ASIO by pointing CUERUNNER_ASIO_SDK at an SDK root, and every machine that
  * does not gets the plain build it had before. The resolution lives in one module
  * because more than one script asks the question — the build compiles against the SDK,
  * ensure-native decides from the SDK's state whether a rebuild is due — and they must
@@ -21,7 +21,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** The one way in. Nothing else names an SDK location. */
-export const ASIO_SDK_ENV = 'WINSLAB_ASIO_SDK'
+export const ASIO_SDK_ENV = 'CUERUNNER_ASIO_SDK'
 
 /**
  * The reason that means "nobody asked for ASIO" — the ordinary case, and not an error.

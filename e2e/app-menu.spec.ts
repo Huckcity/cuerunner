@@ -1,5 +1,5 @@
 // One File menu. The application menu (a bar in the window on Windows and Linux) and the
-// WinsLab ▾ button draw the same items from one definition, and either one runs them.
+// Cuerunner ▾ button draw the same items from one definition, and either one runs them.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { closeApp, launchApp } from './helpers'
 
@@ -27,12 +27,12 @@ async function menu(): Promise<{ top: string[]; file: string[] }> {
   })
 }
 
-test('the menu bar is the conventional one for this platform, with no second WinsLab', async () => {
+test('the menu bar is the conventional one for this platform, with no second Cuerunner', async () => {
   const { top } = await menu()
-  expect(top).toEqual(mac ? ['WinsLab', 'File', 'Edit', 'Playback'] : ['File', 'Edit', 'Playback', 'Help'])
+  expect(top).toEqual(mac ? ['Cuerunner', 'File', 'Edit', 'Playback'] : ['File', 'Edit', 'Playback', 'Help'])
 })
 
-test('the WinsLab button and the File menu offer the same things', async () => {
+test('the Cuerunner button and the File menu offer the same things', async () => {
   const { file } = await menu()
 
   await page.locator('.toolbar-brand').click()

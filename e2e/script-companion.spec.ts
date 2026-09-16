@@ -26,7 +26,7 @@ test.afterAll(() => {
 })
 
 function scriptFile(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-script-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-script-'))
   tempDirs.push(dir)
   const file = path.join(dir, 'act1.txt')
   fs.writeFileSync(file, 'ACT ONE\n\nALDonza enters downstage.\nSANCHO: I am Sancho.\n')
@@ -85,7 +85,7 @@ test('a document that is not a script is refused without taking the window down'
   // This is the crash: a PDF opened as a script became a million-line document, the
   // panel rendered every line, and the window's process reached 3 GB and stopped
   // answering. Both guards are exercised here, because both were reachable.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-not-a-script-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-not-a-script-'))
   tempDirs.push(dir)
 
   const binary = path.join(dir, 'libretto.pdf')
@@ -139,7 +139,7 @@ test('the companion serves the show to a tablet, and only with the token', async
   // The page a tablet opens, and the state it renders from.
   const home = await fetch(`http://127.0.0.1:${port}/?token=${token}`)
   expect(home.status).toBe(200)
-  expect(await home.text()).toContain('WinsLab')
+  expect(await home.text()).toContain('Cuerunner')
 
   const state = await fetch(`http://127.0.0.1:${port}/state?token=${token}`)
   expect(state.status).toBe(200)

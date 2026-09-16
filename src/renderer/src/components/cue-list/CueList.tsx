@@ -220,7 +220,7 @@ export function CueList() {
     const audioFiles = Array.from(e.dataTransfer.files)
       .filter(f => isAudioFile(f.name))
       .map(f => {
-        const filePath = window.winslab.getPathForFile(f)
+        const filePath = window.cuerunner.getPathForFile(f)
         return { filePath, name: nameFromPath(filePath) }
       })
 

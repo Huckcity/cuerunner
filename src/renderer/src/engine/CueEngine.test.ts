@@ -963,7 +963,7 @@ describe('CueEngine — midi cue', () => {
     const cue = makeMidi()
     const { runner } = setup([cue])
     runner.go()
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'default-midi-port',
       messages: cue.messages
     })
@@ -973,7 +973,7 @@ describe('CueEngine — midi cue', () => {
     const cue = makeMidi({ portName: 'Stage Rack' })
     const { runner } = setup([cue])
     runner.go()
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Stage Rack',
       messages: cue.messages
     })
@@ -999,7 +999,7 @@ describe('CueEngine — show control cue', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'LX Rack',
       // Go cue 12, all-call and all-types: the command as a console's own document
       // writes it, framed as the sysex the MIDI layer puts on the wire.
@@ -1014,7 +1014,7 @@ describe('CueEngine — show control cue', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith(
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith(
       expect.objectContaining({ portName: 'default-midi-port' })
     )
   })
@@ -1027,12 +1027,12 @@ describe('CueEngine — show control cue', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(window.winslab.midi.sendTcp).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.sendTcp).toHaveBeenCalledWith({
       host: '10.0.0.5',
       port: 51325,
       messages: [{ kind: 'sysex', data: [0x7f, 0x7f, 0x02, 0x7f, 0x01, 0x31, 0x32, 0x00] }]
     })
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
   })
 
   it('reports a cue with nowhere to send it, rather than completing as a success', async () => {
@@ -1047,8 +1047,8 @@ describe('CueEngine — show control cue', () => {
     const expected = 'the show’s desk is driven over OSC, which does not carry MIDI Show Control'
     expect(setLastRun).toHaveBeenCalledWith('s1', expect.objectContaining({ outcome: 'error', error: expected }))
     expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: expected })])
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
-    expect(window.winslab.midi.sendTcp).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.sendTcp).not.toHaveBeenCalled()
   })
 })
 
@@ -1060,14 +1060,14 @@ describe('CueEngine — engine failures are reported', () => {
     console.error = vi.fn()
     // Each test starts from engines that did what they were asked. `clearAllMocks`
     // in afterEach keeps implementations, so they are set here.
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({ ok: true })
     engine.start.mockResolvedValue({ cueId: 'a1', runId: 'run-a1', state: 'playing', startAtMs: 0 })
   })
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
   it('reports a MIDI cue that reached no port', async () => {
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({
       ok: false,
       error: 'No MIDI output port named "Stage Rack"'
     })
@@ -1087,7 +1087,7 @@ describe('CueEngine — engine failures are reported', () => {
   })
 
   it('reports an OSC cue whose send failed', async () => {
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({
       ok: false,
       error: 'getaddrinfo ENOTFOUND stage-lights.local'
     })
@@ -1265,8 +1265,8 @@ describe('CueEngine — scene cues', () => {
     // The bridge mocks are shared with every other case in this file, so their call
     // history has to go before each one.
     vi.clearAllMocks()
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({ ok: true })
   })
 
   it('recalls the scene the cue names, and says so under the cue', async () => {
@@ -1277,7 +1277,7 @@ describe('CueEngine — scene cues', () => {
     // the remembered desk state come after the sends.
     await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Yamaha',
       messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
     })
@@ -1300,7 +1300,7 @@ describe('CueEngine — scene cues', () => {
       expect.objectContaining({ level: 'error', message: 'no scene chosen' })
     ]))
 
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskState).toEqual({})
     expect(useStore.getState().deskSceneId).toBeNull()
   })
@@ -1315,13 +1315,13 @@ describe('CueEngine — scene cues', () => {
     await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
 
     expect(appendLog).toHaveBeenCalledWith([
-      expect.objectContaining({ level: 'error', message: 'scene cues need WinsLab Pro' })
+      expect.objectContaining({ level: 'error', message: 'scene cues need Cuerunner Pro' })
     ])
     expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
       outcome: 'error',
-      error: 'WinsLab Pro is required'
+      error: 'Cuerunner Pro is required'
     }))
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBeNull()
   })
 })
@@ -1858,7 +1858,7 @@ describe('CueEngine — timeline seek skips what already happened', () => {
     vi.advanceTimersByTime(1000)
 
     expect(setRunning.mock.calls.filter(c => c[0] === 'oc1')).toHaveLength(0)
-    expect(window.winslab.osc.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.osc.send).not.toHaveBeenCalled()
   })
 })
 

@@ -34,7 +34,7 @@ function workspaceFile(cues: unknown[] = []): string {
 test('a save that cannot be written is reported and leaves the file untouched', async () => {
   test.skip(process.platform === 'win32', 'needs POSIX directory permissions to make a save fail')
 
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-readonly-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-readonly-'))
   const file = path.join(dir, 'Read Only Show.wlab')
   const original = workspaceFile()
   fs.writeFileSync(file, original)

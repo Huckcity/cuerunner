@@ -39,7 +39,7 @@ export interface MachineRedundancyOptions {
 
 export function createMachineRedundancy(options: MachineRedundancyOptions): MachineRedundancy {
   const read = options.readFile ?? ((path: string) => readFileSync(path, 'utf8'))
-  const machineName = options.name ?? hostname() ?? 'winslab'
+  const machineName = options.name ?? hostname() ?? 'cuerunner'
   const mintedId = options.id ?? randomUUID()
 
   const stored = ((): Partial<RedundancySettings> | null => {

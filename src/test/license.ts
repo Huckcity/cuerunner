@@ -9,7 +9,7 @@ import type { LicensePayload } from '../renderer/src/types/license'
  */
 export const TEST_LICENSE: LicensePayload = {
   v: 1,
-  id: 'WSP-TEST01',
+  id: 'CRN-TEST01',
   licensee: 'Test Machine',
   issued: '2026-01-01'
 }

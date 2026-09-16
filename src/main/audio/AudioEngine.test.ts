@@ -16,7 +16,7 @@ import { AudioEngineError, NativeAudioEngine, audioEngine } from './AudioEngine'
 import type { AudioEndedEvent, AudioEngineEvent, AudioStartOptions } from '../../shared/audio'
 
 const repoRoot = resolve(__dirname, '..', '..', '..')
-const binaryName = process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio'
+const binaryName = process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio'
 const binaryPath = join(repoRoot, 'native', 'audio', 'build', binaryName)
 const engineMissing = join(repoRoot, 'native', 'audio', 'build', 'not-an-engine')
 
@@ -106,13 +106,13 @@ function loopOptions(): AudioStartOptions {
   }
 }
 
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-engine-client-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-engine-client-'))
 const workFilePath = join(workDir, 'one-second.wav')
 const events: AudioEngineEvent[] = []
 
 beforeAll(async () => {
-  process.env.WINSLAB_AUDIO_BIN = ensureBinary()
-  process.env.WINSLAB_AUDIO_BACKEND = 'silent'
+  process.env.CUERUNNER_AUDIO_BIN = ensureBinary()
+  process.env.CUERUNNER_AUDIO_BACKEND = 'silent'
   writeFloatWav(workFilePath, 2, 48000, 48000, 0.5)
   audioEngine.subscribe((event) => events.push(event))
   await audioEngine.ensureStarted()
@@ -401,13 +401,13 @@ describe('audioEngine client (against the real engine)', () => {
   })
 
   it('fails loudly, and leaks no child, when the engine executable is missing', async () => {
-    const previous = process.env.WINSLAB_AUDIO_BIN
-    process.env.WINSLAB_AUDIO_BIN = engineMissing
+    const previous = process.env.CUERUNNER_AUDIO_BIN
+    process.env.CUERUNNER_AUDIO_BIN = engineMissing
     const instance = new NativeAudioEngine()
     await expect(instance.ensureStarted()).rejects.toMatchObject({ code: 'engine' })
     expect(instance.status().connected).toBe(false)
     expect(instance.snapshot()).toBeNull()
-    process.env.WINSLAB_AUDIO_BIN = previous
+    process.env.CUERUNNER_AUDIO_BIN = previous
   })
   it('revives a dead engine from configure, and still refuses honestly when it cannot', async () => {
     // A restart budget spent at boot (or after three crashes) leaves no engine to talk
@@ -418,16 +418,16 @@ describe('audioEngine client (against the real engine)', () => {
     // the device request with its honest refusal, proof the connection exists.
     const revived = new NativeAudioEngine()
     try {
-      process.env.WINSLAB_AUDIO_BIN = engineMissing
+      process.env.CUERUNNER_AUDIO_BIN = engineMissing
       await expect(revived.configure({})).rejects.toMatchObject({ code: 'engine' })
       expect(revived.status().connected).toBe(false)
-      process.env.WINSLAB_AUDIO_BIN = binaryPath
+      process.env.CUERUNNER_AUDIO_BIN = binaryPath
       await expect(revived.configure({})).rejects.toMatchObject({ code: 'device' })
       expect(revived.status().connected).toBe(true)
       const info = await revived.info()
       expect(info.protocol).toBe(2)
     } finally {
-      process.env.WINSLAB_AUDIO_BIN = binaryPath
+      process.env.CUERUNNER_AUDIO_BIN = binaryPath
       await revived.shutdown()
     }
   })

@@ -87,7 +87,7 @@ const TAB_BLURB: Record<SettingsTab, string> = {
   network: 'How consoles, tablets and other gear reach this show.',
   wireless: 'Where pack readings come from, and when to warn about them.',
   redundancy: 'A second computer, ready to take the show over.',
-  license: 'WinsLab Pro on this machine.'
+  license: 'Cuerunner Pro on this machine.'
 }
 
 /** Which service reports for a tab, so the sidebar can show whether it is on. */
@@ -105,7 +105,7 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
 function ProHint({ onUnlock }: { onUnlock: () => void }) {
   return (
     <p className="inspector-hint license-hint">
-      Part of WinsLab Pro. These settings are saved with the show, and start working once
+      Part of Cuerunner Pro. These settings are saved with the show, and start working once
       this machine is licensed.{' '}
       <button className="license-link" onClick={onUnlock}>Enter a license key</button>
     </p>
@@ -135,8 +135,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
       .catch(() => {
         // No device list: the engine section says so rather than inventing devices.
       })
-    window.winslab.midi.listPorts().then(setMidiPorts)
-    window.winslab.midi.listInputPorts().then(setMidiInputPorts)
+    window.cuerunner.midi.listPorts().then(setMidiPorts)
+    window.cuerunner.midi.listInputPorts().then(setMidiInputPorts)
     // A device list belongs to the audio system that produced it, and the show can
     // change systems while this dialog is open: the devices of the old one are no
     // longer a list of anything.

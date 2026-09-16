@@ -481,7 +481,7 @@ test('sends unsolicited output to the configured OSC TX destination', async () =
   const configured = await peerWith({ tx: { host: '127.0.0.1', port: destination.port } })
 
   // The instruction comes from a client that is not the destination, which is the shape
-  // of the app-side round trip: WinsLab sends from an ephemeral socket and listens for
+  // of the app-side round trip: Cuerunner sends from an ephemeral socket and listens for
   // OSC on its own input port, so output that went back to the sender would never arrive.
   wire.send('/eos/cue/1/12/fire', [], configured.port)
   await expectFire(destination, 1, 12, 'Blackout', '2.0', null)

@@ -40,7 +40,7 @@ function writeBursts(filePath: string): void {
 }
 
 test.beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-onsets-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-onsets-'))
   const media = path.join(root, 'bursts.wav')
   writeBursts(media)
   const showPath = path.join(root, 'Bursts.wlab')

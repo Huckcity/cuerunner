@@ -1,4 +1,4 @@
-// winslab-audio — the WinsLab native playback engine.
+// cuerunner-audio — the Cuerunner native playback engine.
 //
 // Two modes:
 //   serve      listen on a local socket and execute playback verbs (the app's path)
@@ -37,11 +37,11 @@ void onSignal(int) {
 
 void usage() {
   std::fprintf(stderr,
-               "winslab-audio %s\n"
+               "cuerunner-audio %s\n"
                "usage:\n"
-               "  winslab-audio --socket <path> [options]\n"
-               "  winslab-audio --offline-render <script.json> --out <out.wav> [--events <events.jsonl>] [options]\n"
-               "  winslab-audio --list-devices [options]\n"
+               "  cuerunner-audio --socket <path> [options]\n"
+               "  cuerunner-audio --offline-render <script.json> --out <out.wav> [--events <events.jsonl>] [options]\n"
+               "  cuerunner-audio --list-devices [options]\n"
                "options:\n"
                "  --backend <auto|wasapi|coreaudio|alsa|pulseaudio|jack|asio|silent|offline>\n"
                "  --device <id>              device id from --list-devices\n"
@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     return 2;
   }
   if (version) {
-    std::printf("{\"name\":\"winslab-audio\",\"version\":\"%s\",\"protocol\":2}\n", ws::kEngineVersion);
+    std::printf("{\"name\":\"cuerunner-audio\",\"version\":\"%s\",\"protocol\":2}\n", ws::kEngineVersion);
     return 0;
   }
   if (!scriptPath.empty()) {
@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
   server.setClientCountCallback([](int count) {
     g_clientCount.store(count);
     if (count == 0) return;  // handled by the watchdog below
-    std::fprintf(stderr, "[winslab-audio] client connected (%d)\n", count);
+    std::fprintf(stderr, "[cuerunner-audio] client connected (%d)\n", count);
   });
 
   std::string listenError;
@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
       }
       if (std::chrono::steady_clock::now() < deadline) continue;
       if (!silenced) {
-        std::fprintf(stderr, "[winslab-audio] no client connected; silencing and exiting\n");
+        std::fprintf(stderr, "[cuerunner-audio] no client connected; silencing and exiting\n");
         ws::CommandResultDTO ignored;
         ws::EngineError ignoredError;
         engine->stopAll(0.0, ignored, ignoredError);

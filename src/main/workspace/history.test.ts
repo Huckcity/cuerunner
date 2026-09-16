@@ -15,7 +15,7 @@ vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')
   const { tmpdir } = await import('os')
   const { join } = await import('path')
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-history-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-history-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: {},
@@ -114,7 +114,7 @@ let dir: string
 let file: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-history-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-history-'))
   file = join(dir, 'Hamlet.wlab')
 })
 

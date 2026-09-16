@@ -20,9 +20,9 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `winslab-audio${process.platform === 'win32' ? '.exe' : ''}`)
+const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `cuerunner-audio${process.platform === 'win32' ? '.exe' : ''}`)
 const binaryIndex = process.argv.indexOf('--binary')
-const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.WINSLAB_AUDIO_BIN ?? defaultBinary
+const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.CUERUNNER_AUDIO_BIN ?? defaultBinary
 
 /** What Windows gives a thread, and what the engine has to fit in. */
 const STACK_KB = 1024
@@ -112,7 +112,7 @@ if (process.platform === 'win32') {
   process.exit(0)
 }
 
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-stack-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-stack-'))
 const socketPath = join(workDir, 'engine.sock')
 console.log(`stack — silent backend on a ${STACK_KB} KiB stack`)
 

@@ -52,7 +52,7 @@ describe('scriptHost', () => {
     FakeWorker.instances = []
     vi.stubGlobal('Worker', FakeWorker)
     onLog = vi.fn()
-    Object.defineProperty(window, 'winslab', {
+    Object.defineProperty(window, 'cuerunner', {
       value: {
         script: {
           shell: vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0, signal: null }),
@@ -133,7 +133,7 @@ describe('scriptHost', () => {
   })
 
   it('runs shell() through the main process in the workspace folder, and logs it', async () => {
-    const shell = window.winslab.script.shell as ReturnType<typeof vi.fn>
+    const shell = window.cuerunner.script.shell as ReturnType<typeof vi.fn>
     shell.mockResolvedValue({ stdout: 'hello\n', stderr: '', code: 0, signal: null })
 
     const settled = run()
@@ -154,7 +154,7 @@ describe('scriptHost', () => {
   })
 
   it('lets the script see a failing shell command rather than rejecting the run', async () => {
-    const shell = window.winslab.script.shell as ReturnType<typeof vi.fn>
+    const shell = window.cuerunner.script.shell as ReturnType<typeof vi.fn>
     shell.mockResolvedValue({ stdout: '', stderr: 'nope\n', code: 127, signal: null })
 
     const settled = run()
@@ -174,7 +174,7 @@ describe('scriptHost', () => {
   })
 
   it('hands a failing shell call back to the script as an error', async () => {
-    const shell = window.winslab.script.shell as ReturnType<typeof vi.fn>
+    const shell = window.cuerunner.script.shell as ReturnType<typeof vi.fn>
     shell.mockRejectedValue(new Error('no such command'))
 
     const settled = run()
@@ -189,7 +189,7 @@ describe('scriptHost', () => {
   })
 
   it('resolves include() paths against the workspace', async () => {
-    const readFile = window.winslab.script.readFile as ReturnType<typeof vi.fn>
+    const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
     readFile.mockResolvedValue({ code: 'return 1', path: '/shows/lib.js' })
 
     const settled = run()
@@ -210,7 +210,7 @@ describe('scriptHost', () => {
   })
 
   it('names the including file, so an include inside it resolves against that file', async () => {
-    const readFile = window.winslab.script.readFile as ReturnType<typeof vi.fn>
+    const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
     readFile.mockResolvedValue({ code: 'return 2', path: '/shows/cues/lamp.js' })
 
     const settled = run()

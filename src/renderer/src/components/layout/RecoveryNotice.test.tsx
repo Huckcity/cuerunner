@@ -86,7 +86,7 @@ describe('RecoveryNotice', () => {
   })
 
   async function offer(found: ReturnType<typeof snapshot> | null): Promise<void> {
-    ;(window.winslab.workspace.recovery as unknown as Mock).mockResolvedValue(found)
+    ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue(found)
     await act(async () => { root.render(<RecoveryNotice />) })
   }
 
@@ -156,13 +156,13 @@ describe('RecoveryNotice', () => {
     const discard = [...container.querySelectorAll('button')].find(b => b.textContent === 'Discard')
     await act(async () => { discard?.click() })
 
-    expect(window.winslab.workspace.clearRecovery).toHaveBeenCalled()
+    expect(window.cuerunner.workspace.clearRecovery).toHaveBeenCalled()
     expect(container.querySelector('.app-notice')).toBeNull()
   })
 
   it('asks before replacing a session with unsaved work', async () => {
     useStore.setState({ workspaceName: 'Live Show', isDirty: true })
-    const confirmClose = window.winslab.workspace.confirmClose as unknown as Mock
+    const confirmClose = window.cuerunner.workspace.confirmClose as unknown as Mock
     confirmClose.mockResolvedValue(2)
     await offer(snapshot())
 
@@ -170,6 +170,6 @@ describe('RecoveryNotice', () => {
 
     // Cancel keeps the live session: no load, no clear, no selection change.
     expect(useStore.getState().workspaceName).toBe('Live Show')
-    expect(window.winslab.workspace.clearRecovery).not.toHaveBeenCalled()
+    expect(window.cuerunner.workspace.clearRecovery).not.toHaveBeenCalled()
   })
 })

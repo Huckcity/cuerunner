@@ -1,4 +1,4 @@
-// WinsLab and an SQ: the app drives the desk's DCAs over the desk's own MIDI socket, and
+// Cuerunner and an SQ: the app drives the desk's DCAs over the desk's own MIDI socket, and
 // the desk's own scene recall comes back to the app as a trigger.
 //
 // The counterpart is `integration/peers/desk.ts`, written from "SQ MIDI Protocol" (Issue 5

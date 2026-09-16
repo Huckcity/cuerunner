@@ -25,7 +25,7 @@ describe('useAutosave', () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    autosave = window.winslab.workspace.autosave as unknown as Mock
+    autosave = window.cuerunner.workspace.autosave as unknown as Mock
     autosave.mockReset()
     autosave.mockResolvedValue(undefined)
     useStore.setState({

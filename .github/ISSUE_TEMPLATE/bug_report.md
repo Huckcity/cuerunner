@@ -17,5 +17,5 @@ labels: ["bug"]
 
 **Environment**
 - OS: [e.g. Windows 11]
-- Winslab version: [e.g. 0.5.0]
+- Cuerunner version: [e.g. 0.5.0]
 - Audio device(s): [e.g. MOTU M4, onboard]

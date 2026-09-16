@@ -3,7 +3,7 @@
 namespace ws {
 
 void logLine(const char* fmt, ...) {
-  std::fprintf(stderr, "[winslab-audio] ");
+  std::fprintf(stderr, "[cuerunner-audio] ");
   va_list args;
   va_start(args, fmt);
   std::vfprintf(stderr, fmt, args);
@@ -13,7 +13,7 @@ void logLine(const char* fmt, ...) {
 }
 
 void logError(const char* fmt, ...) {
-  std::fprintf(stderr, "[winslab-audio][error] ");
+  std::fprintf(stderr, "[cuerunner-audio][error] ");
   va_list args;
   va_start(args, fmt);
   std::vfprintf(stderr, fmt, args);

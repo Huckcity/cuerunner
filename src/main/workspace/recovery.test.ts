@@ -15,7 +15,7 @@ vi.mock('electron', async () => {
   const { join } = await import('path')
   // One directory for the whole file: getPath must be stable, or a write and the read
   // after it would look at different places.
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: {},
@@ -45,7 +45,7 @@ function workspaceWith(cues: Workspace['cues']): Workspace {
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-save-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-save-'))
 })
 
 afterEach(() => {

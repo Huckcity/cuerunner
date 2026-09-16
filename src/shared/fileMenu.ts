@@ -1,5 +1,5 @@
 // The File menu, defined once. The application menu (the menu bar on Windows and Linux,
-// the top of the screen on a Mac) and the WinsLab ▾ button in the window both draw from
+// the top of the screen on a Mac) and the Cuerunner ▾ button in the window both draw from
 // this list, so they cannot come to disagree about what is in it or what it is called.
 
 export type FileMenuAction =

@@ -7,7 +7,7 @@
  * that verified last week has to keep verifying.
  *
  * The pair this key came from was minted with `npm run license:keygen`; the private half
- * is at `~/.winslab/license-private.pem` on the issuer's machine, and nothing about it is
+ * is at `~/.cuerunner/license-private.pem` on the issuer's machine, and nothing about it is
  * recoverable from this file.
  */
 export const PRODUCT_PUBLIC_KEYS: string[] = [

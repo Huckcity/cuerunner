@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for Winslab
+about: Suggest an idea for Cuerunner
 labels: ["enhancement"]
 ---
 
@@ -16,4 +16,4 @@ labels: ["enhancement"]
 
 **Environment**
 - OS: [e.g. Windows 11]
-- Winslab version: [e.g. 0.5.0]
+- Cuerunner version: [e.g. 0.5.0]

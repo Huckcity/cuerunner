@@ -224,7 +224,7 @@ function CompareTab() {
     setBusy(true)
     setError(null)
     try {
-      const answer = await window.winslab.workspace.compare(workspace)
+      const answer = await window.cuerunner.workspace.compare(workspace)
       if (!answer.ok) {
         setError(answer.error)
         setComparison(null)

@@ -14,18 +14,18 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const binary = process.env.WINSLAB_AUDIO_BIN ?? join(repoRoot, 'native', 'audio', 'build', process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio')
+const binary = process.env.CUERUNNER_AUDIO_BIN ?? join(repoRoot, 'native', 'audio', 'build', process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio')
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name)
   return index >= 0 ? process.argv[index + 1] : fallback
 }
 
-const device = argValue('--device', process.env.WINSLAB_AUDIO_TEST_DEVICE ?? 'winslab_acceptance')
-const backend = argValue('--backend', process.env.WINSLAB_AUDIO_TEST_BACKEND ?? 'pulseaudio')
+const device = argValue('--device', process.env.CUERUNNER_AUDIO_TEST_DEVICE ?? 'cuerunner_acceptance')
+const backend = argValue('--backend', process.env.CUERUNNER_AUDIO_TEST_BACKEND ?? 'pulseaudio')
 // Eight is the acceptance sink's channel count. An interface reached through ASIO has
 // whatever it has, so the caller passes the driver's own count (asio-smoke.mjs does).
-const requestedChannels = Number(argValue('--channels', process.env.WINSLAB_AUDIO_TEST_CHANNELS ?? '8'))
+const requestedChannels = Number(argValue('--channels', process.env.CUERUNNER_AUDIO_TEST_CHANNELS ?? '8'))
 
 let failures = 0
 let checks = 0
@@ -144,7 +144,7 @@ class EngineClient {
   }
 }
 
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-device-smoke-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-device-smoke-'))
 const fixture = join(workDir, 'tone.wav')
 const capture = join(workDir, 'capture.wav')
 // The engine addresses its endpoint the way the platform does: a named pipe on Windows, a
@@ -152,8 +152,8 @@ const capture = join(workDir, 'capture.wav')
 // with ERROR_INVALID_NAME (123) before the engine has done anything at all.
 const socketPath =
   process.platform === 'win32'
-    ? `\\\\.\\pipe\\winslab-audio-smoke-${process.pid}`
-    : join(tmpdir(), `winslab-audio-smoke-${process.pid}.sock`)
+    ? `\\\\.\\pipe\\cuerunner-audio-smoke-${process.pid}`
+    : join(tmpdir(), `cuerunner-audio-smoke-${process.pid}.sock`)
 
 writeFloatWav(fixture, 2, 48000, 48000 * 2, (channel) => (channel === 0 ? 0.4 : 0.4))
 

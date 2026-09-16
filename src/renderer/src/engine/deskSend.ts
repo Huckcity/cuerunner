@@ -18,19 +18,19 @@ export interface DeskSendResult {
 export async function sendDeskMessage(message: DeskMessage): Promise<DeskSendResult> {
   try {
     if (message.kind === 'midi') {
-      return await window.winslab.midi.send({
+      return await window.cuerunner.midi.send({
         portName: message.portName,
         messages: message.messages
       })
     }
     if (message.kind === 'midi-tcp') {
-      return await window.winslab.midi.sendTcp({
+      return await window.cuerunner.midi.sendTcp({
         host: message.host,
         port: message.port,
         messages: message.messages
       })
     }
-    return await window.winslab.osc.send({
+    return await window.cuerunner.osc.send({
       host: message.host,
       port: message.port,
       address: message.address,

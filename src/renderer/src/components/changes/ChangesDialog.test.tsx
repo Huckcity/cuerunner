@@ -35,7 +35,7 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  compare = window.winslab.workspace.compare as unknown as Mock
+  compare = window.cuerunner.workspace.compare as unknown as Mock
   compare.mockReset().mockResolvedValue({ ok: true, comparison: null })
   useStore.setState({
     license: { state: 'active', license: TEST_LICENSE },
@@ -197,13 +197,13 @@ describe('comparing with another file', () => {
   })
 
   it('shows what the main process said instead of an empty list', async () => {
-    compare.mockResolvedValue({ ok: false, error: 'WinsLab Pro is required for the show services' })
+    compare.mockResolvedValue({ ok: false, error: 'Cuerunner Pro is required for the show services' })
     await show('compare')
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.changes-choose')?.click()
     })
 
-    expect(container.querySelector('.changes-error')?.textContent).toContain('WinsLab Pro is required')
+    expect(container.querySelector('.changes-error')?.textContent).toContain('Cuerunner Pro is required')
   })
 })
 

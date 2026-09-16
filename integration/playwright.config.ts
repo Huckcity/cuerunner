@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 /**
- * The integration suite: WinsLab talking to the systems it meets in a venue, with a peer
+ * The integration suite: Cuerunner talking to the systems it meets in a venue, with a peer
  * standing in for the console or the desk.
  *
  * Separate from `playwright.config.ts` because the two suites answer different questions

@@ -84,7 +84,7 @@ async function start(options: { license?: TestLicense } = {}): Promise<Page> {
 }
 
 test.beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-merge-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-merge-'))
 
   ancestor = path.join(root, 'Hamlet — base.wlab')
   writeShow(ancestor, [
@@ -208,7 +208,7 @@ test('a machine with no key is told what merging is for, and merges nothing', as
   await expect(page.locator('.file-menu button[data-action="merge"] .pro-mark')).toHaveCount(1)
   await page.locator('.file-menu button[data-action="merge"]').click()
 
-  await expect(page.locator('.app-notice')).toContainText('WinsLab Pro is required')
+  await expect(page.locator('.app-notice')).toContainText('Cuerunner Pro is required')
   expect(fs.existsSync(merged)).toBe(false)
 })
 

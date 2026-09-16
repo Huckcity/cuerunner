@@ -10,7 +10,7 @@ import type { PanicSource } from '../../renderer/src/types/playback'
 // a MIDI interface, and the IPC layer only has to apply the answer.
 
 /** The address a console sends to silence the show. */
-export const PANIC_OSC_ADDRESS = '/winslab/panic'
+export const PANIC_OSC_ADDRESS = '/cuerunner/panic'
 
 /** CC 120 is All Sound Off. It is only meaningful at zero. */
 export const MIDI_ALL_SOUND_OFF = 120

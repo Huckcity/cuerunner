@@ -53,7 +53,7 @@ describe('useShowBridge', () => {
     resolveSnapshot = pending.resolve
     off = vi.fn()
 
-    const bridge = window.winslab.show
+    const bridge = window.cuerunner.show
     vi.mocked(bridge.onEvents).mockImplementation(callback => {
       emit = callback
       return off
@@ -121,12 +121,12 @@ describe('useShowBridge', () => {
 
   it('sends the settings on mount, and again when the operator changes them', async () => {
     await settle()
-    expect(vi.mocked(window.winslab.show.configure)).toHaveBeenCalledWith(settings)
+    expect(vi.mocked(window.cuerunner.show.configure)).toHaveBeenCalledWith(settings)
 
     act(() => { useStore.getState().updateOscInSettings({ port: 53010 }) })
     await settle()
 
-    expect(vi.mocked(window.winslab.show.configure)).toHaveBeenLastCalledWith(
+    expect(vi.mocked(window.cuerunner.show.configure)).toHaveBeenLastCalledWith(
       expect.objectContaining({ oscIn: { enabled: true, port: 53010 } })
     )
   })
@@ -147,8 +147,8 @@ describe('useShowBridge', () => {
     act(() => { root.render(<Harness />) })
     await settle()
 
-    expect(vi.mocked(window.winslab.show.onEvents)).not.toHaveBeenCalled()
-    expect(vi.mocked(window.winslab.show.snapshot)).not.toHaveBeenCalled()
-    expect(vi.mocked(window.winslab.show.configure)).not.toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.show.onEvents)).not.toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.show.snapshot)).not.toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.show.configure)).not.toHaveBeenCalled()
   })
 })

@@ -38,7 +38,7 @@ export function RedundancySection(): React.JSX.Element {
     // renderer reload leaves this panel on "waiting" with no takeover button. Ask for
     // the service's current reading on mount: the command exists for exactly this.
     if (pro) {
-      window.winslab.show.command('redundancy', 'status')
+      window.cuerunner.show.command('redundancy', 'status')
         .then(result => {
           if (result.ok && result.result && typeof result.result === 'object') {
             useStore.getState().applyShowEvents([{
@@ -71,7 +71,7 @@ export function RedundancySection(): React.JSX.Element {
 
   const update = (patch: Partial<RedundancySettings>): void => {
     setFailed(null)
-    void window.winslab.redundancy.configure(patch).then(
+    void window.cuerunner.redundancy.configure(patch).then(
       result => {
         // What the main process accepted is what stands: a port out of range comes back
         // as the port the machine has, not as the one that was typed.
@@ -88,14 +88,14 @@ export function RedundancySection(): React.JSX.Element {
   }
 
   const takeover = (): void => {
-    void window.winslab.show.command('redundancy', 'takeover').catch(() => {
+    void window.cuerunner.show.command('redundancy', 'takeover').catch(() => {
       // A service that is not running cannot be told to take a show; the status line
       // above says what this machine is.
     })
   }
 
   const release = (): void => {
-    void window.winslab.show.command('redundancy', 'release').catch(() => {})
+    void window.cuerunner.show.command('redundancy', 'release').catch(() => {})
   }
 
   return (

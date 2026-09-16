@@ -45,7 +45,7 @@ function audioCue(filePath: string): unknown {
 }
 
 test.beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-split-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-split-'))
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
   const showPath = path.join(root, 'Split.wlab')

@@ -13,7 +13,7 @@ export function MidiInspector({ cue }: Props) {
   const [ports, setPorts] = useState<string[]>([])
 
   useEffect(() => {
-    window.winslab.midi.listPorts().then(setPorts)
+    window.cuerunner.midi.listPorts().then(setPorts)
   }, [])
 
   const addMsg = () => {
@@ -50,7 +50,7 @@ export function MidiInspector({ cue }: Props) {
           />
         )}
         <button
-          onClick={() => window.winslab.midi.listPorts().then(setPorts)}
+          onClick={() => window.cuerunner.midi.listPorts().then(setPorts)}
           title="Refresh ports"
           className="inspector-btn"
         >↻</button>

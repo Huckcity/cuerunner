@@ -4,7 +4,7 @@
 // 5,400,000") refused with "beyond the engine horizon", while the app reported itself
 // perfectly healthy and nothing would fire for the rest of the night.
 //
-// The engine runs its real mixer on the silent backend, and `__winslabDevHarness` —
+// The engine runs its real mixer on the silent backend, and `__cuerunnerDevHarness` —
 // installed only by a build running from the source tree — kills the child outright, the
 // way a crash would. What is asserted is the show after it: the engine comes back under
 // a new session, the cue chain keeps its time across the change, the next cue's audio
@@ -28,7 +28,7 @@ test.afterAll(async () => {
 // rather than a failure — the poll is what waits for the replacement to answer.
 async function engineSession(): Promise<string | null> {
   return app.evaluate(async () => {
-    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
     if (!harness) return null
     try {
       return (await harness.engineInfo()).sessionId
@@ -40,7 +40,7 @@ async function engineSession(): Promise<string | null> {
 
 async function engineVoices(): Promise<number | null> {
   return app.evaluate(async () => {
-    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
     if (!harness) return null
     try {
       return (await harness.engineInfo()).activeVoices
@@ -73,7 +73,7 @@ test('a cue fires after the engine is killed mid-sequence, and the show says so'
   await page.locator('.btn-go').click()
   // Mid-count: the engine is killed outright, as a crash would.
   await page.waitForTimeout(1000)
-  await app.evaluate(() => globalThis.__winslabDevHarness?.killEngine())
+  await app.evaluate(() => globalThis.__cuerunnerDevHarness?.killEngine())
 
   // The replacement is a different engine, and the app reconnects to it on its own.
   await expect.poll(async () => {

@@ -67,9 +67,9 @@ function fakeBridge(overrides: Partial<AudioEngineBridge> = {}): Fake {
     ...overrides
   } as unknown as AudioEngineBridge
 
-  // The global test setup owns window.winslab; the engine goes on its `audio` namespace
+  // The global test setup owns window.cuerunner; the engine goes on its `audio` namespace
   // in place.
-  window.winslab.audio = bridge
+  window.cuerunner.audio = bridge
 
   return { bridge, emit: events => emit(events) }
 }
@@ -222,7 +222,7 @@ describe('AudioEngineClient', () => {
     // Ninety minutes in, the engine dies and is respawned after the backoff. The
     // replacement's clock starts near zero — which must not become the show's clock.
     perf = 5_400_000
-    vi.mocked(window.winslab.audio.clock).mockResolvedValue(reading(40, 'session-b'))
+    vi.mocked(window.cuerunner.audio.clock).mockResolvedValue(reading(40, 'session-b'))
     await vi.advanceTimersByTimeAsync(TICK_MS)
 
     expect(client.nowMs()).toBe(5_405_000)
@@ -238,7 +238,7 @@ describe('AudioEngineClient', () => {
     // A second engine, with the epoch already nonzero: continuity must hold again, and
     // the arithmetic must accumulate rather than reset to the raw engine clock.
     perf = 5_400_600
-    vi.mocked(window.winslab.audio.clock).mockResolvedValue(reading(15, 'session-c'))
+    vi.mocked(window.cuerunner.audio.clock).mockResolvedValue(reading(15, 'session-c'))
     await vi.advanceTimersByTimeAsync(TICK_MS)
 
     expect(client.nowMs()).toBe(5_405_600)
@@ -249,7 +249,7 @@ describe('AudioEngineClient', () => {
     expect(client.sessionWarnings()).toHaveLength(2)
 
     const started = await client.start('a2', 5_406_000, START_OPTIONS)
-    expect(window.winslab.audio.start).toHaveBeenCalledWith('a2', 415, START_OPTIONS)
+    expect(window.cuerunner.audio.start).toHaveBeenCalledWith('a2', 415, START_OPTIONS)
     expect(started.startAtMs).toBe(5_406_000)
 
     off()

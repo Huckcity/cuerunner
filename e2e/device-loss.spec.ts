@@ -25,14 +25,14 @@ test.afterAll(async () => {
 
 async function engineVoices(): Promise<number | null> {
   return app.evaluate(async () => {
-    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
     if (!harness) return null
     return (await harness.engineInfo()).activeVoices
   })
 }
 
 async function engineEvents(): Promise<AudioEngineEvent[]> {
-  return app.evaluate(() => globalThis.__winslabDevHarness?.engineEvents() ?? [])
+  return app.evaluate(() => globalThis.__cuerunnerDevHarness?.engineEvents() ?? [])
 }
 
 async function openDemo(): Promise<void> {
@@ -57,7 +57,7 @@ test('a device that goes away mid-show silences the show, says why, and the show
 
   // The device is gone.
   await app.evaluate(async () => {
-    await globalThis.__winslabDevHarness?.simulateDeviceLoss()
+    await globalThis.__cuerunnerDevHarness?.simulateDeviceLoss()
   })
 
   // The engine stops what it was playing rather than playing into a dead device.
@@ -101,14 +101,14 @@ test('a device that goes away mid-show silences the show, says why, and the show
     // Saying only "it did not play" costs a CI round trip; say what the engine and the
     // session log had to say about it.
     const info = await app.evaluate(async () => {
-      const harness = globalThis.__winslabDevHarness
+      const harness = globalThis.__cuerunnerDevHarness
       return harness ? await harness.engineInfo() : null
     })
     const log = await page.locator('.log-panel').innerText().catch(() => '')
     // What the engine actually did with the second start, which is the difference between
     // "the cue never reached it" and "it played and ended on its own".
     const events = await app.evaluate(() => {
-      const harness = globalThis.__winslabDevHarness
+      const harness = globalThis.__cuerunnerDevHarness
       return (harness?.engineEvents() ?? []).slice(-12).map(event => {
         if (event.type === 'ended') return `ended ${event.cueId} ${event.reason} loops=${event.loopsCompleted}`
         if (event.type === 'error') return `error ${event.code}: ${event.message}`

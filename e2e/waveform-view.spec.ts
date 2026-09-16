@@ -40,7 +40,7 @@ const cue = (id: string, number: string, name: string, filePath: string): unknow
 })
 
 test.beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-view-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-view-'))
   const media = path.join(root, 'reel.wav')
   writeWav(media)
   const showPath = path.join(root, 'View.wlab')

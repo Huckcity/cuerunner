@@ -67,7 +67,7 @@ function readDemo(): Promise<string> {
 let workDir: string
 
 beforeEach(async () => {
-  workDir = await mkdtemp(join(tmpdir(), 'winslab-demo-'))
+  workDir = await mkdtemp(join(tmpdir(), 'cuerunner-demo-'))
 })
 
 afterEach(async () => {

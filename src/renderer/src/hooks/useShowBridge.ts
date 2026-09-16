@@ -11,7 +11,7 @@ import type { ShowEvent, ShowSnapshot } from '../types/show'
  * the batches that arrived in between are replayed on top, minus anything the snapshot
  * already contains, which is why the snapshot carries the time it was taken.
  *
- * The services are part of WinsLab Pro, so this does nothing until the machine is
+ * The services are part of Cuerunner Pro, so this does nothing until the machine is
  * licensed. A key entered while the window is open turns the effect back on, which is
  * what starts the listeners the operator had configured.
  */
@@ -25,7 +25,7 @@ export function useShowBridge(): void {
     const pending: ShowEvent[][] = []
     let ready = false
 
-    const off = window.winslab.show.onEvents(events => {
+    const off = window.cuerunner.show.onEvents(events => {
       if (!ready) {
         pending.push(events)
         return
@@ -43,7 +43,7 @@ export function useShowBridge(): void {
       pending.length = 0
     }
 
-    window.winslab.show.snapshot()
+    window.cuerunner.show.snapshot()
       .then(snapshot => {
         if (live) apply(snapshot)
       })
@@ -67,7 +67,7 @@ export function useShowBridge(): void {
     // input, or the service being turned off. The main process compares what it has
     // and only restarts what actually changed.
     if (!pro) return
-    window.winslab.show.configure(settings).catch(error => {
+    window.cuerunner.show.configure(settings).catch(error => {
       useStore.getState().appendLog([
         { level: 'error', message: `Could not apply the show settings: ${describe(error)}` }
       ])

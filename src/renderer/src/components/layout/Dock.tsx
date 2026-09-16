@@ -32,8 +32,8 @@ export const DOCK_DEFAULT_HEIGHT = 180
 const DOCK_MIN_HEIGHT = 110
 // Never more than this share of the window: the cue list is still the window's job.
 const DOCK_MAX_SHARE = 0.6
-const HEIGHT_KEY = 'winslab.dock.height'
-const COLLAPSED_KEY = 'winslab.dock.collapsed'
+const HEIGHT_KEY = 'cuerunner.dock.height'
+const COLLAPSED_KEY = 'cuerunner.dock.collapsed'
 
 // The dock's size is this operator's taste on this machine, not the show's: it lives in
 // the window's own storage, and a storage that will not answer costs nothing but the

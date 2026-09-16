@@ -17,7 +17,7 @@ vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')
   const { tmpdir } = await import('os')
   const { join } = await import('path')
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-determinism-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-determinism-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: { showOpenDialog: vi.fn() },
@@ -139,7 +139,7 @@ let dir: string
 let file: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-determinism-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-determinism-'))
   file = join(dir, 'Press Night.wlab')
   // A real file where the show says its media is, so the load resolves it rather than
   // reporting it missing.

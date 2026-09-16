@@ -31,17 +31,17 @@ fs.mkdirSync(outDir, { recursive: true })
 
 const licensed = process.env.AUDIT_UNLICENSED !== '1'
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-audit-'))
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-audit-'))
 if (licensed) {
   fs.writeFileSync(path.join(userDataDir, 'license.key'), createLicense(
-    { v: 1, id: 'WSP-AUDIT1', licensee: 'Audit', issued: new Date().toISOString().slice(0, 10) },
+    { v: 1, id: 'CRN-AUDIT1', licensee: 'Audit', issued: new Date().toISOString().slice(0, 10) },
     privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
   ))
 }
 
 const app = await electron.launch({
   args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
-  env: { ...process.env, WINSLAB_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString() }
+  env: { ...process.env, CUERUNNER_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString() }
 })
 const page = await app.firstWindow()
 await page.waitForLoadState('domcontentloaded')

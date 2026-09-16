@@ -63,7 +63,7 @@ describe('useCueTriggers', () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    vi.mocked(window.winslab.show.onEvents).mockImplementation(callback => {
+    vi.mocked(window.cuerunner.show.onEvents).mockImplementation(callback => {
       emit = callback
       return () => {
         if (emit === callback) emit = null

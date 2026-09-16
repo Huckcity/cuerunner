@@ -5,7 +5,7 @@
     "version": "3.3.9.25",
     "versionSource": "console",
     "recordedAt": "2026-09-15T15:25:33.297Z",
-    "recordedBy": "winslab-win",
+    "recordedBy": "cuerunner-win",
     "note": "",
     "timing": "a replay sends each answer as fast as its consumer reads it; the offsets are for judging the fixture, not for pacing a reply"
   },

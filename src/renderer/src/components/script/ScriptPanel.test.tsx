@@ -79,8 +79,8 @@ describe('ScriptPanel', () => {
     root = createRoot(container)
     onClose = vi.fn()
 
-    readDocument = window.winslab.script.readDocument as unknown as Mock
-    pickFile = window.winslab.script.pickFile as unknown as Mock
+    readDocument = window.cuerunner.script.readDocument as unknown as Mock
+    pickFile = window.cuerunner.script.pickFile as unknown as Mock
     readDocument.mockReset()
     pickFile.mockReset()
     readDocument.mockResolvedValue({ ok: true, lines: SCRIPT.split('\n') })

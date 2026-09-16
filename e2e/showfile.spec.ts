@@ -59,7 +59,7 @@ function writeWav(filePath: string): void {
 }
 
 test.beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-showfile-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-showfile-'))
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
 

@@ -289,7 +289,7 @@ bool initBackendContext(const std::string& backend, ma_context& context, ma_back
     // cannot be shipped with this source, so a build without it refuses by name and says
     // why, rather than reporting that no backend could be initialised.
     if (backend == "asio") {
-#if !defined(WINSLAB_ASIO)
+#if !defined(CUERUNNER_ASIO)
       reason = "this engine was built without ASIO support (the Steinberg ASIO SDK was not present at build time)";
       return false;
 #endif
@@ -305,7 +305,7 @@ bool initBackendContext(const std::string& backend, ma_context& context, ma_back
   for (ma_backend candidate : candidates) {
     ma_backend list[1] = {candidate};
     ma_context_config config = ma_context_config_init();
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
     if (candidate == ma_backend_custom) {
       // The custom hook is how a backend with its own driver arrives: miniaudio knows the
       // device model, the backend knows ASIO — including which COM apartment a driver can be
@@ -411,7 +411,7 @@ bool Engine::startDevice(EngineError& error) {
     if (actual > 0) state->bufferFrames = static_cast<int>(actual);
   }
 #endif
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
   if (state->backend == ma_backend_custom) {
     // ASIO is exclusive by construction: the driver is held for as long as the stream
     // runs, and no other application can open it meanwhile. The request that means
@@ -555,7 +555,7 @@ void Engine::checkDeviceHealth() {
       failDeviceFromCallback("audio device stopped unexpectedly");
       return;
     }
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
     if (device_->backend == ma_backend_custom) {
       // An ASIO driver whose hardware went away stops calling back without saying so, so
       // silence is the only evidence there is — and it is enough: this backend is either
@@ -1234,7 +1234,7 @@ InfoDTO Engine::info() const {
     out.exclusive = device_->exclusive;
     out.bufferFrames = device_->bufferFrames;
     out.periodFrames = device_->periodFrames;
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
     // ASIO states its own latency and can restate it mid-session (kAsioLatenciesChanged),
     // which the open-time snapshot would miss for the rest of the show: ask the live
     // context on every readout, falling back to the snapshot when the driver will not say.
@@ -1405,7 +1405,7 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   // show load, so a workspace naming an unavailable backend must not interrupt playback
   // to say no.
   if (request.hasBackend && request.backend != "auto" && request.backend != options_.backend) {
-#if !defined(WINSLAB_ASIO)
+#if !defined(CUERUNNER_ASIO)
     if (request.backend == "asio") {
       error = {"device", "this engine was built without ASIO support (the Steinberg ASIO SDK was not present at build time)"};
       return false;
@@ -1505,7 +1505,7 @@ void Engine::reopenAfterBackendRequest(const std::string& reason) {
 }
 
 std::string Engine::backendDetail(const DeviceState& state) {
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
   if (state.backend == ma_backend_custom) return asio::contextMessage(state.context);
 #else
   (void)state;

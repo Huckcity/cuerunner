@@ -24,7 +24,7 @@ export function useCueTriggers(): void {
 
   useEffect(() => {
     if (!pro) return
-    return window.winslab.show.onEvents(events => {
+    return window.cuerunner.show.onEvents(events => {
       for (const event of events) {
         if (event.kind !== 'osc' && event.kind !== 'midi') continue
 

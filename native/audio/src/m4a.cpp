@@ -283,13 +283,13 @@ std::string selfDirectory() {
 }
 
 std::string findFfmpeg(std::string* missingOverride) {
-  const char* override = std::getenv("WINSLAB_FFMPEG");
+  const char* override = std::getenv("CUERUNNER_FFMPEG");
   if (override != nullptr && override[0] != '\0') {
     if (missingOverride != nullptr && ::access(override, X_OK) != 0) *missingOverride = override;
     return override;
   }
 
-  const char* resourceDir = std::getenv("WINSLAB_DECODER_DIR");
+  const char* resourceDir = std::getenv("CUERUNNER_DECODER_DIR");
   std::vector<std::string> packagedDirs;
   if (resourceDir != nullptr && resourceDir[0] != '\0') packagedDirs.push_back(resourceDir);
   const std::string self = selfDirectory();

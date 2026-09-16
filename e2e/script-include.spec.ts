@@ -22,7 +22,7 @@ test.afterEach(async () => {
 
 /** Writes a workspace with the given files beside it, then opens it the way a user would. */
 async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-include-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-include-'))
   for (const [name, content] of Object.entries(files)) {
     const full = path.join(dir, name)
     fs.mkdirSync(path.dirname(full), { recursive: true })

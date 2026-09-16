@@ -1,4 +1,4 @@
-// WinsLab and an Avantis: the same conversation as the SQ spec, on a desk whose protocol
+// Cuerunner and an Avantis: the same conversation as the SQ spec, on a desk whose protocol
 // is a different document with different tables — which is the whole reason the two are
 // separate specs and separate profiles.
 //

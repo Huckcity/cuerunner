@@ -12,7 +12,7 @@ import { verifyLicense } from '../src/main/license/key.ts'
 const ISSUED = '2026-09-14'
 
 function tempDir(): string {
-  return mkdtempSync(join(tmpdir(), 'winslab-dev-pro-'))
+  return mkdtempSync(join(tmpdir(), 'cuerunner-dev-pro-'))
 }
 
 describe('mintDevLicense', () => {
@@ -45,7 +45,7 @@ describe('devEnv', () => {
   it('tells the app which key to check a license against, and leaves the rest alone', () => {
     const license = mintDevLicense(ISSUED)
     const env = devEnv({ PATH: '/usr/bin' }, license)
-    expect(env['WINSLAB_LICENSE_PUBLIC_KEY']).toBe(license.publicKeyPem)
+    expect(env['CUERUNNER_LICENSE_PUBLIC_KEY']).toBe(license.publicKeyPem)
     expect(env['PATH']).toBe('/usr/bin')
   })
 })

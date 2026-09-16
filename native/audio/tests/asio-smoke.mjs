@@ -24,8 +24,8 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
 const binary =
-  process.env.WINSLAB_AUDIO_BIN ??
-  join(repoRoot, 'native', 'audio', 'build', process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio')
+  process.env.CUERUNNER_AUDIO_BIN ??
+  join(repoRoot, 'native', 'audio', 'build', process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio')
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name)
@@ -123,6 +123,6 @@ const smoke = spawnSync(
     '--device', device.id,
     '--channels', String(channels)
   ],
-  { stdio: 'inherit', env: { ...process.env, WINSLAB_AUDIO_BIN: binary } }
+  { stdio: 'inherit', env: { ...process.env, CUERUNNER_AUDIO_BIN: binary } }
 )
 process.exit(smoke.status ?? 1)

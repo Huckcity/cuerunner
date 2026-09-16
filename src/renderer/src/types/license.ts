@@ -1,5 +1,5 @@
 /**
- * A key is a signed statement, not a secret: it says who bought WinsLab Pro and when
+ * A key is a signed statement, not a secret: it says who bought Cuerunner Pro and when
  * it runs out, and it is verified against a public key built into the app. Nothing is
  * called home — a show machine that has never seen the internet unlocks the same as
  * any other, and a key that was issued while the venue was dark keeps working in it.

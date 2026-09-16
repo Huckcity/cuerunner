@@ -792,7 +792,7 @@ export async function openWorkspace(
 ): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null> {
   const result = await dialog.showOpenDialog(win, {
     title: 'Open Workspace',
-    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+    filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
     properties: ['openFile']
   })
   if (result.canceled || !result.filePaths[0]) return null
@@ -849,7 +849,7 @@ export async function saveWorkspace(
     const result = await dialog.showSaveDialog(win, {
       title: 'Save Workspace',
       defaultPath: `${workspace.name || 'Untitled'}.wlab`,
-      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }]
+      filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }]
     })
     if (result.canceled || !result.filePath) return null
     filePath = result.filePath
@@ -908,7 +908,7 @@ export async function compareWorkspace(
 ): Promise<WorkspaceComparison | null> {
   const result = await dialog.showOpenDialog(win, {
     title: 'Compare With',
-    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+    filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
     properties: ['openFile']
   })
   if (result.canceled || !result.filePaths[0]) return null
@@ -968,7 +968,7 @@ export async function mergeIntoNewFile(
     defaultPath: oursPath === null
       ? `${suggested}.wlab`
       : join(dirname(oursPath), `${suggested}.wlab`),
-    filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }]
+    filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }]
   })
   if (where.canceled || !where.filePath) return null
   await writeFileAtomically(where.filePath, serialiseWorkspace(merged, dirname(where.filePath)))
@@ -1000,14 +1000,14 @@ export async function mergeShow(
     const theirs = await dialog.showOpenDialog(win, {
       title: 'Merge which show in?',
       message: 'The other person’s copy of the show',
-      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+      filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
       properties: ['openFile']
     })
     if (theirs.canceled || !theirs.filePaths[0]) return null
     const ancestor = await dialog.showOpenDialog(win, {
       title: 'Which version did the two of you start from?',
       message: 'The copy both of you saved before working apart',
-      filters: [{ name: 'WinsLab Workspace', extensions: ['wlab'] }],
+      filters: [{ name: 'Cuerunner Workspace', extensions: ['wlab'] }],
       properties: ['openFile']
     })
     if (ancestor.canceled || !ancestor.filePaths[0]) return null

@@ -30,7 +30,7 @@ vi.mock('electron', async () => {
   const { join } = await import('path')
   // One directory for the whole file: getPath must be stable, or the recent list and
   // the recovery snapshot would land in different places.
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-media-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-media-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: { showOpenDialog: vi.fn() },
@@ -41,7 +41,7 @@ vi.mock('electron', async () => {
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-media-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-media-'))
   vi.mocked(dialog.showOpenDialog).mockReset()
 })
 

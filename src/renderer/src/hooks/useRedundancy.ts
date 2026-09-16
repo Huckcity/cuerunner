@@ -56,7 +56,7 @@ export function useRedundancy(): void {
     // The machine's own half of the pair, read once for the session. The settings tab
     // writes it back through the same slice, so a change made there is a change here.
     let live = true
-    window.winslab.redundancy.settings().then(
+    window.cuerunner.redundancy.settings().then(
       settings => {
         if (live) useStore.getState().setRedundancySettings(settings)
       },
@@ -100,7 +100,7 @@ export function useRedundancy(): void {
       lastPayload = payload
       // The stamp is what makes each publish its own event; it is not part of the
       // comparison, or every tick would be a change worth sending.
-      void window.winslab.show.command('redundancy', 'publish', { ...digest, at: Date.now() }).catch(() => {
+      void window.cuerunner.show.command('redundancy', 'publish', { ...digest, at: Date.now() }).catch(() => {
         // A service that is not running has nothing to publish to; the next change
         // publishes again, and the status panel says what the machine is doing.
       })

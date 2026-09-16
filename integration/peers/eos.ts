@@ -1,6 +1,6 @@
 // An ETC Eos family console, as far as a client on the wire can tell.
 //
-// WinsLab's OSC integration is written against this rather than against a console on the
+// Cuerunner's OSC integration is written against this rather than against a console on the
 // bench. Every address, argument order and argument type below comes from ETC's own
 // documentation for Eos v3.3.x — the OSC Dictionary (OSC Inputs / OSC Outputs) and the
 // OSC Get page under "Show Control > OSC > Third-Party Integration" — so a spec can hold

@@ -38,7 +38,7 @@ test('the app holds the OS off its timers', async () => {
   // Read in main rather than through the page: an app macOS has napped dispatches its
   // cues late, and the window is not the process that has to stay awake.
   const held = await app.evaluate(() => {
-    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
     return harness ? harness.keepAwakeHeld() : null
   })
 
@@ -55,7 +55,7 @@ test('the audio engine is running', async () => {
     await expect
       .poll(
         async () => {
-          latest = await app.evaluate(() => globalThis.__winslabDevHarness?.engineStatus() ?? null)
+          latest = await app.evaluate(() => globalThis.__cuerunnerDevHarness?.engineStatus() ?? null)
           return latest !== null && latest.started && latest.connected
         },
         { timeout: 10_000, message: 'the audio engine should be up and connected' }

@@ -9,7 +9,7 @@
  *
  * ASIO is opt-in per machine and never part of the default build: Steinberg's SDK
  * cannot be redistributed with the repository, so the backend and the SDK's own host
- * sources compile only when WINSLAB_ASIO_SDK resolves to an SDK root on Windows
+ * sources compile only when CUERUNNER_ASIO_SDK resolves to an SDK root on Windows
  * (scripts/asio-sdk.mjs). The resolved state is stamped into the build directory so
  * ensure-native.mjs can tell that a build without ASIO is not a build with it.
  *
@@ -46,10 +46,10 @@ const clean = process.argv.includes('--clean')
 const isWindows = process.platform === 'win32'
 const objectExtension = isWindows ? '.obj' : '.o'
 const binaryExtension = isWindows ? '.exe' : ''
-const outputName = `winslab-audio${binaryExtension}`
+const outputName = `cuerunner-audio${binaryExtension}`
 const outputPath = join(buildDir, outputName)
 
-const commonDefines = ['-DWINSLAB_ENGINE=1']
+const commonDefines = ['-DCUERUNNER_ENGINE=1']
 
 /**
  * The object file for a source path.
@@ -164,7 +164,7 @@ function main() {
     // directories ride along, because the backend's own headers are what include
     // common/asio.h.
     const asioFlags = asio
-      ? ['/DWINSLAB_ASIO=1', ...ASIO_SDK_INCLUDE_DIRS.map((dir) => `/I${join(sdk.dir, dir)}`)]
+      ? ['/DCUERUNNER_ASIO=1', ...ASIO_SDK_INCLUDE_DIRS.map((dir) => `/I${join(sdk.dir, dir)}`)]
       : []
     const objects = []
     for (const name of sources) {

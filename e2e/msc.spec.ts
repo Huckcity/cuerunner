@@ -30,7 +30,7 @@ const DESK_PORT = 51325
 const CUE = '12'
 
 test.beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-msc-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-msc-'))
   // No license: the show control cue is the free half of the app, and this launch is what
   // says so by using it. The Triggers tab the last case reads is the licensed one, so
   // that case starts its own instance with a key of its own.

@@ -105,7 +105,7 @@ async function start(options: { license?: TestLicense } = {}): Promise<Page> {
 }
 
 test.beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-changes-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-changes-'))
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
 

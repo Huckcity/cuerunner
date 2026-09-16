@@ -727,7 +727,7 @@ export class CueEngine {
 
   private executeMidi(cue: MidiCue, finish: Finish): void {
     const detail: Partial<CueRunResult> = {}
-    window.winslab.midi.send({
+    window.cuerunner.midi.send({
       portName: cue.portName || this.deps!.getMidiDefaultPort(),
       messages: cue.messages
     })
@@ -746,7 +746,7 @@ export class CueEngine {
 
   private executeOsc(cue: OscCue, finish: Finish): void {
     const detail: Partial<CueRunResult> = {}
-    window.winslab.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })
+    window.cuerunner.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })
       .then(result => {
         if (!result.ok) {
           detail.outcome = 'error'
@@ -888,8 +888,8 @@ export class CueEngine {
       // The cue stays in the file — a show written on a licensed machine opens on an
       // unlicensed one, and nothing is thrown away — but the desk is not driven
       // without a license, and a cue that did nothing quietly would be worse.
-      this.log({ level: 'error', message: 'scene cues need WinsLab Pro', label })
-      finish(this.now(), { outcome: 'error', error: 'WinsLab Pro is required' })
+      this.log({ level: 'error', message: 'scene cues need Cuerunner Pro', label })
+      finish(this.now(), { outcome: 'error', error: 'Cuerunner Pro is required' })
       return
     }
     if (cue.sceneId === '') {

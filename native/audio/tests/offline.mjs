@@ -14,12 +14,12 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `winslab-audio${process.platform === 'win32' ? '.exe' : ''}`)
+const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `cuerunner-audio${process.platform === 'win32' ? '.exe' : ''}`)
 const binaryIndex = process.argv.indexOf('--binary')
-const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.WINSLAB_AUDIO_BIN ?? defaultBinary
+const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.CUERUNNER_AUDIO_BIN ?? defaultBinary
 
 const SAMPLE_RATE = 48000
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-audio-tests-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-audio-tests-'))
 let failures = 0
 let checks = 0
 
@@ -145,7 +145,7 @@ writeFloatWav(longPath, 2, SAMPLE_RATE, SAMPLE_RATE * 3, () => 0.25)
 const rampPath = join(workDir, 'ramp.wav')
 writeFloatWav(rampPath, 2, SAMPLE_RATE, SAMPLE_RATE * 4, (channel, frame) => frame / 480000)
 
-console.log(`winslab-audio acceptance — binary ${binary}`)
+console.log(`cuerunner-audio acceptance — binary ${binary}`)
 
 // --- 1. exact start, stop and fade frames ---------------------------------
 {

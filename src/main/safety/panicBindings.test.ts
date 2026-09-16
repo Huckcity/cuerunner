@@ -1,4 +1,4 @@
-// The two bindings that let a desk or a keyboard stop the show: OSC /winslab/panic and
+// The two bindings that let a desk or a keyboard stop the show: OSC /cuerunner/panic and
 // MIDI all-sound-off. Both are decided here, away from sockets and interfaces, because
 // the decision is the part that has to be right at 20:05.
 import { describe, it, expect } from 'vitest'
@@ -17,15 +17,15 @@ const cc = (controller: number, value: number): ShowEvent => ({
 })
 
 describe('panicFromShowEvent', () => {
-  it('reads /winslab/panic as a panic, whoever sent it', () => {
-    expect(panicFromShowEvent(osc('/winslab/panic'))).toEqual({
+  it('reads /cuerunner/panic as a panic, whoever sent it', () => {
+    expect(panicFromShowEvent(osc('/cuerunner/panic'))).toEqual({
       source: 'osc',
-      reason: 'OSC /winslab/panic from 192.168.1.24:8000'
+      reason: 'OSC /cuerunner/panic from 192.168.1.24:8000'
     })
   })
 
   it('leaves every other OSC address to the cue stack', () => {
-    expect(panicFromShowEvent(osc('/winslab/go'))).toBeNull()
+    expect(panicFromShowEvent(osc('/cuerunner/go'))).toBeNull()
     expect(panicFromShowEvent(osc('/dca/1/mute'))).toBeNull()
   })
 

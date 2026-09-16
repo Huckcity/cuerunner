@@ -68,7 +68,7 @@ function audioCue(id: string, number: string, name: string, filePath: string): u
 }
 
 test.beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-sample-rates-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-sample-rates-'))
   const fortyFour = path.join(root, 'acetrack-44k.wav')
   const fortyEight = path.join(root, 'sting-48k.wav')
   writeWav(fortyFour, 44100)

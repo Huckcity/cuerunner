@@ -153,8 +153,8 @@ describe('SettingsDialog', () => {
 
     // An engine running ASIO holds the device alone: there is nothing for the operator
     // to choose, and the Device readout below still says what it is doing.
-    const silent = await window.winslab.audio.info()
-    vi.mocked(window.winslab.audio.info).mockResolvedValue({ ...silent, backend: 'asio' })
+    const silent = await window.cuerunner.audio.info()
+    vi.mocked(window.cuerunner.audio.info).mockResolvedValue({ ...silent, backend: 'asio' })
     act(() => { root.render(<div />) })
     render()
     await settle()

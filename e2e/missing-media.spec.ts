@@ -39,7 +39,7 @@ function audioCue(id: string, number: string, name: string, filePath: string): u
 
 /** A saved show with its media beside it, then the whole folder moved like a copied one. */
 function movedShow(): MovedShow {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-missing-media-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-missing-media-'))
   tempDirs.push(root)
   const before = path.join(root, 'old-machine')
   fs.mkdirSync(path.join(before, 'media'), { recursive: true })

@@ -34,7 +34,7 @@ function argValue(name, fallback) {
 }
 
 const BINARY =
-  argValue('binary', process.env.WINSLAB_AUDIO_BIN ?? join(repoRoot, 'native', 'audio', 'build', `winslab-audio${process.platform === 'win32' ? '.exe' : ''}`))
+  argValue('binary', process.env.CUERUNNER_AUDIO_BIN ?? join(repoRoot, 'native', 'audio', 'build', `cuerunner-audio${process.platform === 'win32' ? '.exe' : ''}`))
 const MINUTES = Number(argValue('minutes', 2))
 const SHARDS = Number(argValue('shards', 1))
 const SHARD = Number(argValue('shard', 0))
@@ -80,7 +80,7 @@ const pick = (list) => list[Math.floor(rng() * list.length)]
 const intBetween = (low, high) => Math.floor(between(low, high + 1))
 
 // ── Media ───────────────────────────────────────────────────────────────────
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-soak-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-soak-'))
 
 function writeFloatWav(path, channels, sampleRate, frames, sampleAt) {
   const dataBytes = frames * channels * 4

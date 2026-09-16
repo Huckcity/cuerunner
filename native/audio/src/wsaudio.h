@@ -1,4 +1,4 @@
-// WinsLab native audio engine — shared types.
+// Cuerunner native audio engine — shared types.
 //
 // Everything the audio thread touches lives in fixed-size pods: voices, commands and
 // events are all preallocated arrays with lock-free handoff between threads. Nothing

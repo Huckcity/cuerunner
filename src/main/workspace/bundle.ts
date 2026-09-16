@@ -204,7 +204,7 @@ export interface ReadBundle {
 export async function readBundle(bundlePath: string): Promise<ReadBundle> {
   const entries = await readZip(bundlePath)
   const show = entries.find(entry => entry.name === SHOW_ENTRY)
-  if (!show) throw new Error('that file is not a WinsLab bundle: it carries no show')
+  if (!show) throw new Error('that file is not a Cuerunner bundle: it carries no show')
   // The showfile is read whole into memory: refuse an absurd declared size before
   // the allocation, and cap the inflated bytes — a small deflated entry with a huge
   // output would otherwise OOM main before the size check runs.
@@ -270,7 +270,7 @@ export async function exportBundle(
   const result = await dialog.showSaveDialog(win, {
     title: 'Export Bundle',
     defaultPath: `${portable(workspace.name)}.${BUNDLE_EXTENSION}`,
-    filters: [{ name: 'WinsLab Bundle', extensions: [BUNDLE_EXTENSION] }]
+    filters: [{ name: 'Cuerunner Bundle', extensions: [BUNDLE_EXTENSION] }]
   })
   if (result.canceled || !result.filePath) return null
   return writeBundle(workspace, workspacePath, result.filePath)
@@ -284,7 +284,7 @@ export async function exportBundle(
 export async function importBundle(win: BrowserWindow): Promise<ImportedBundle | null> {
   const picked = await dialog.showOpenDialog(win, {
     title: 'Open Bundle',
-    filters: [{ name: 'WinsLab Bundle', extensions: [BUNDLE_EXTENSION] }],
+    filters: [{ name: 'Cuerunner Bundle', extensions: [BUNDLE_EXTENSION] }],
     properties: ['openFile']
   })
   if (picked.canceled || !picked.filePaths[0]) return null

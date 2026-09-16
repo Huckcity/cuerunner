@@ -1,5 +1,5 @@
 {
-  "name": "winslab",
+  "name": "cuerunner",
   "version": "0.13.0",
   "license": "FSL-1.1-MIT",
   "description": "QLab-style show control for Windows",
@@ -55,8 +55,8 @@
     "pretest:native:asio": "node scripts/ensure-native.mjs"
   },
   "build": {
-    "appId": "com.winslab.app",
-    "productName": "WinsLab",
+    "appId": "app.cuerunner",
+    "productName": "Cuerunner",
     "copyright": "Copyright © 2026",
     "directories": {
       "buildResources": "resources",
@@ -75,8 +75,8 @@
         "from": "native/audio/build",
         "to": "audio",
         "filter": [
-          "winslab-audio",
-          "winslab-audio.exe",
+          "cuerunner-audio",
+          "cuerunner-audio.exe",
           "decoders/**/*"
         ]
       }
@@ -120,7 +120,7 @@
         }
       ],
       "category": "AudioVideo",
-      "icon": "resources/logos/png/winslab-icon-512.png"
+      "icon": "resources/logos/png/cuerunner-icon-512.png"
     },
     "publish": null
   },

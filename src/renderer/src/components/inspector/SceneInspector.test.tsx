@@ -26,8 +26,8 @@ describe('SceneInspector', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({ ok: true })
   })
 
   afterEach(() => {
@@ -139,7 +139,7 @@ describe('SceneInspector', () => {
     })
     await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Yamaha',
       messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
     })

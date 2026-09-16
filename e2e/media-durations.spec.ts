@@ -87,7 +87,7 @@ let page: Page
 let root: string
 
 test.beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-durations-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-durations-'))
   const overture = path.join(root, 'overture.wav')
   writeWav(overture, OVERTURE_SECONDS)
 

@@ -76,7 +76,7 @@ describe('MissingMediaBar', () => {
     vi.clearAllMocks()
   })
 
-  const relink = (): Mock => window.winslab.workspace.relink as unknown as Mock
+  const relink = (): Mock => window.cuerunner.workspace.relink as unknown as Mock
 
   async function render(): Promise<void> {
     await act(async () => { root.render(<MissingMediaBar />) })

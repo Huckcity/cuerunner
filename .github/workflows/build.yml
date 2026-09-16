@@ -95,16 +95,16 @@ jobs:
       # ASIO is optional and the SDK behind it cannot be shipped with the repository
       # (Steinberg's licence forbids redistributing it): a runner that has an SDK builds
       # with ASIO, and one that does not builds without it — a warning here, not a
-      # failure. scripts/asio-sdk.mjs reads WINSLAB_ASIO_SDK and nothing else, so this is
+      # failure. scripts/asio-sdk.mjs reads CUERUNNER_ASIO_SDK and nothing else, so this is
       # the only place the path is decided: the variable a provisioned runner sets by
       # hand, then the documented default location.
       - name: Locate the ASIO SDK
         shell: cmd
         run: |
-          set "ASIO=%WINSLAB_ASIO_SDK%"
+          set "ASIO=%CUERUNNER_ASIO_SDK%"
           if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
-          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set WINSLAB_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
-          echo WINSLAB_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo CUERUNNER_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
           echo Using the ASIO SDK at %ASIO%
 
       # The engine is a separate binary; a build that ships one the user cannot identify
@@ -145,7 +145,7 @@ jobs:
       - name: Upload installer
         uses: actions/upload-artifact@v7
         with:
-          name: WinsLab-windows
+          name: Cuerunner-windows
           path: dist/*.exe
           retention-days: 30
 
@@ -201,7 +201,7 @@ jobs:
       - name: Upload dmg
         uses: actions/upload-artifact@v7
         with:
-          name: WinsLab-mac
+          name: Cuerunner-mac
           path: dist/*.dmg
           retention-days: 30
 
@@ -236,7 +236,7 @@ jobs:
       - name: Upload AppImage
         uses: actions/upload-artifact@v7
         with:
-          name: WinsLab-linux
+          name: Cuerunner-linux
           path: dist/*.AppImage
           retention-days: 30
 

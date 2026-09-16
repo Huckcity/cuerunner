@@ -32,8 +32,8 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  merge = window.winslab.workspace.merge as unknown as Mock
-  openPath = window.winslab.workspace.openPath as unknown as Mock
+  merge = window.cuerunner.workspace.merge as unknown as Mock
+  openPath = window.cuerunner.workspace.openPath as unknown as Mock
   merge.mockReset().mockResolvedValue({ ok: true, merged: null })
   openPath.mockReset().mockResolvedValue({
     path: '/shows/Hamlet (merged).wlab',

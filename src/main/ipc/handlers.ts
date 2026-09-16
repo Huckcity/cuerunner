@@ -89,7 +89,7 @@ const network = new NetworkClient({ fetch: (url, init) => net.fetch(url, init) }
  * this branch, so nothing here can make a real installation look broken.
  */
 function midiModuleLoader(): MidiModuleLoader | undefined {
-  if (!app.isPackaged && process.env['WINSLAB_TEST_MIDI_MISSING'] === '1') {
+  if (!app.isPackaged && process.env['CUERUNNER_TEST_MIDI_MISSING'] === '1') {
     return () => {
       throw new Error("Cannot find module 'midi'")
     }
@@ -114,7 +114,7 @@ let lastShowSettings: ShowSettings = defaultShowSettings()
 // does not use.
 let settingsReceived = false
 
-const PRO_REQUIRED = 'WinsLab Pro is required for the show services'
+const PRO_REQUIRED = 'Cuerunner Pro is required for the show services'
 
 // One batch, every window that is still alive. A window that is mid-reload has no
 // listener yet; it catches up from the snapshot it asks for on startup. A window whose
@@ -415,7 +415,7 @@ export function registerIpcHandlers(): void {
   // their includes through `script:readFile` above, which stays free.
   ipcMain.handle('script:readDocument', async (_, filePath: string, workspacePath: string | null) => {
     if (!isPro(license.status())) {
-      return { ok: false, error: 'The script panel is part of WinsLab Pro.' }
+      return { ok: false, error: 'The script panel is part of Cuerunner Pro.' }
     }
     return loadScriptDocument(filePath, workspacePath)
   })

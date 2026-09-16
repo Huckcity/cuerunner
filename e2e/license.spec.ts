@@ -1,4 +1,4 @@
-// WinsLab Pro is a license, not a download: the panels are all there, and the license is
+// Cuerunner Pro is a license, not a download: the panels are all there, and the license is
 // what turns them on. These tests hold both halves of that — the window that draws the
 // lock, and the main process that owns the sockets and refuses the work anyway — and both
 // ways a key arrives: pasted into Settings, or already on the machine at launch.
@@ -71,17 +71,17 @@ test('a machine with no key runs the free half and locks the rest', async () => 
 
   // And the process that would open the socket refuses on its own account — the lock in
   // the window is an explanation, not the thing standing in the way.
-  expect(await inRenderer("window.winslab.show.command('rf', 'repoll')"))
-    .toEqual({ ok: false, error: 'WinsLab Pro is required for the show services' })
-  expect(await inRenderer("window.winslab.script.readDocument('/etc/hosts', null)"))
-    .toEqual({ ok: false, error: 'The script panel is part of WinsLab Pro.' })
+  expect(await inRenderer("window.cuerunner.show.command('rf', 'repoll')"))
+    .toEqual({ ok: false, error: 'Cuerunner Pro is required for the show services' })
+  expect(await inRenderer("window.cuerunner.script.readDocument('/etc/hosts', null)"))
+    .toEqual({ ok: false, error: 'The script panel is part of Cuerunner Pro.' })
 
   // The Network tab says why its services are not listening, and leads to the tab that fixes
   // it — an operator who has configured a port and sees it stopped deserves the reason.
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Network', exact: true }).click()
-  await expect(dialog.locator('.license-hint')).toContainText('WinsLab Pro')
+  await expect(dialog.locator('.license-hint')).toContainText('Cuerunner Pro')
   await dialog.getByRole('button', { name: 'Enter a license key' }).click()
   await expect(dialog.locator('#license-key')).toBeVisible()
 
@@ -90,9 +90,9 @@ test('a machine with no key runs the free half and locks the rest', async () => 
   // open on the license tab — a lock's own button is the way in.
   await dialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
   await expect(dialog.locator('.pro-lock[data-feature="Redundant playback"]')).toBeVisible()
-  expect(await inRenderer("window.winslab.redundancy.configure({ enabled: true })"))
-    .toMatchObject({ ok: false, error: 'WinsLab Pro is required for the show services' })
-  expect(await inRenderer('window.winslab.redundancy.settings()'))
+  expect(await inRenderer("window.cuerunner.redundancy.configure({ enabled: true })"))
+    .toMatchObject({ ok: false, error: 'Cuerunner Pro is required for the show services' })
+  expect(await inRenderer('window.cuerunner.redundancy.settings()'))
     .toMatchObject({ enabled: false })
 
   await dialog.getByRole('button', { name: 'Close' }).click()
@@ -148,11 +148,11 @@ test('a key issued to somebody else, or mistyped, changes nothing', async () => 
   await openLicenseTab(page)
   await page.locator('#license-key').fill(stranger.text)
   await page.getByRole('button', { name: 'Activate' }).click()
-  await expect(page.locator('.license-error')).toContainText('not issued by WinsLab')
+  await expect(page.locator('.license-error')).toContainText('not issued by Cuerunner')
 
   await page.locator('#license-key').fill('WSL1-ABCDEFGH-ABCDEFGH')
   await page.getByRole('button', { name: 'Activate' }).click()
-  await expect(page.locator('.license-error')).toContainText('not a WinsLab license key')
+  await expect(page.locator('.license-error')).toContainText('not a Cuerunner license key')
 
   await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
