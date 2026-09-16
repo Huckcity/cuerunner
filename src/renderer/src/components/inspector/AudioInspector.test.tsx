@@ -283,29 +283,12 @@ describe('AudioInspector', () => {
     expect(useStore.getState().cues[0]).toMatchObject({ trimSilence: true })
   })
 
-  it('locks the trim on an unlicensed machine and says why', async () => {
+  it('trims without a licence, and says nothing about one', async () => {
     await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
 
     const box = container.querySelector<HTMLInputElement>('#inspector-trim-silence')!
     expect(box.checked).toBe(true)
-    expect(box.disabled).toBe(true)
-    // Nothing is scanning on a machine that may not apply the result, so the row says
-    // what it is waiting on rather than that it is measuring.
-    expect(container.querySelector('.trim-silence-readout')?.textContent)
-      .toBe('measured once this machine is licensed')
-
-    const hint = container.querySelector<HTMLParagraphElement>('.license-hint')!
-    expect(hint.className).toContain('inspector-hint')
-    expect(hint.textContent).toContain('WinsLab Pro')
-    await act(async () => { hint.querySelector<HTMLButtonElement>('.license-link')!.click() })
-    expect(useStore.getState().settingsTab).toBe('license')
-  })
-
-  it('leaves the row plain on a licensed machine', async () => {
-    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
-    await show(audioCue({ filePath: '/shows/walk-in.wav' }), 'Time & Loops')
-
-    expect(container.querySelector<HTMLInputElement>('#inspector-trim-silence')!.disabled).toBe(false)
+    expect(box.disabled).toBe(false)
     expect(container.querySelector('.license-hint')).toBeNull()
   })
 

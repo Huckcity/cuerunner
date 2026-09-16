@@ -224,17 +224,21 @@ test('the comparison says how this show differs from another file', async () => 
   await expect(dialog.locator('.changes-foot')).toContainText('the same in both files')
 })
 
-test('a machine with no key is told what the history is, rather than shown an empty list', async () => {
+test('a machine with no key still reads the history, and is told what comparing is', async () => {
   const page = await start()
   await openShow(page)
 
-  // The menu marks the press, as it does for the other Pro surfaces.
+  // The history is the show's own record of itself, so the menu does not mark it and
+  // nothing locks it; what needs a key is comparing this file with another.
   await page.locator('.toolbar-brand').click()
-  await expect(page.locator('.file-menu button[data-action="history"] .pro-mark')).toHaveCount(1)
+  await expect(page.locator('.file-menu button[data-action="history"] .pro-mark')).toHaveCount(0)
   await page.locator('.file-menu button[data-action="history"]').click()
 
   const dialog = page.getByRole('dialog', { name: 'Changes' })
-  await expect(dialog.locator('.pro-lock[data-feature="Show history"]')).toBeVisible()
-  await expect(dialog.locator('.changes-entry')).toHaveCount(0)
+  await expect(dialog.locator('.pro-lock')).toHaveCount(0)
+  await expect(dialog.locator('.changes-body')).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Compare', exact: true }).click()
+  await expect(dialog.locator('.pro-lock[data-feature="Comparing shows"]')).toBeVisible()
   await expect(dialog.locator('.changes-choose')).toHaveCount(0)
 })

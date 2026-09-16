@@ -311,13 +311,11 @@ export function ChangesDialog({ initialTab, onClose }: Props) {
           ))}
         </div>
         <div className="settings-body changes-body">
-          {pro ? (
-            tab === 'history' ? <HistoryTab /> : <CompareTab />
-          ) : (
+          {tab === 'history' ? <HistoryTab /> : pro ? <CompareTab /> : (
             <ProLock
               variant="section"
-              feature="Show history"
-              blurb="The showfile remembers what each save changed — who saved it, when, and which cues moved — and can compare itself with another version of the show. The file records its history either way."
+              feature="Comparing shows"
+              blurb="Comparing sets this show beside another version of it, cue by cue, and merging puts two people's work together. What this file's own saves changed reads anywhere."
             />
           )}
         </div>

@@ -1436,24 +1436,21 @@ describe('CueRunner — silence trim', () => {
     }))
   })
 
-  it('plays the whole region unlicensed, and says so once per cue', async () => {
+  it('applies the trim on a machine with no licence', async () => {
+    // The trim is the cue's own behaviour, not the machine's: a show written with it on
+    // sounds the same everywhere, and nothing says otherwise in the log.
     const cue = makeAudio({ duration: 20_000, trimSilence: true, soundRegion: SOUND })
     const { runner, appendLog } = setup([cue], undefined, false)
 
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
+
     expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
-      startTime: 0,
-      endTime: null
+      startTime: 2000,
+      endTime: 8000
     }))
-
-    runner.go()
-    await vi.advanceTimersByTimeAsync(0)
-
-    // Once per cue, not once per firing: a walk-in playlist is thirty cues, and thirty
-    // identical lines is a log nobody reads.
-    const notices = appendLog.mock.calls.flat(2).filter(entry => entry.message.includes('WinsLab Pro'))
-    expect(notices).toHaveLength(1)
+    const licenceLines = appendLog.mock.calls.flat(2).filter(entry => /licen[cs]e/i.test(entry.message))
+    expect(licenceLines).toEqual([])
   })
 })
 

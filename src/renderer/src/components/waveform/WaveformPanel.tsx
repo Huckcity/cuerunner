@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useStore, useSelectedCue, usePro } from '../../store'
+import { useStore, useSelectedCue } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueRunner } from '../../engine/CueRunner'
 import { PlaybackWarnings } from '../layout/PlaybackWarnings'
@@ -77,7 +77,6 @@ export function WaveformPanel() {
   const running = useStore(s => s.running)
   const cursor = useStore(s => s.waveformCursor)
   const setWaveformCursor = useStore(s => s.setWaveformCursor)
-  const pro = usePro()
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -114,7 +113,7 @@ export function WaveformPanel() {
    * licensed to apply it. The same two questions `CueRunner` asks before a firing, so
    * what the panel shades is what the engine will sound.
    */
-  const trim = pro && audioCue?.trimSilence === true
+  const trim = audioCue?.trimSilence === true
   const runState = audioCue ? running.get(audioCue.id) : undefined
   const isPlaying = runState?.state === 'playing'
 

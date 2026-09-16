@@ -28,9 +28,9 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
 ]
 
 /** The File menu entries that open a Pro surface. The file records its own history
- *  whether or not this machine is licensed; reading it back is what the key turns on. */
+ *  whether or not this machine is licensed; comparing it, merging it and bundling it are
+ *  what the key turns on. */
 const PRO_FILE_ACTIONS = new Set<FileMenuAction>([
-  'history',
   'compare',
   'merge',
   'export-bundle',

@@ -399,22 +399,12 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               )}
 
               <div className="field-section-title">New audio cues</div>
-              {!pro && (
-                <p className="inspector-hint license-hint">
-                  Trimming happens on a licensed machine. The setting is saved with the
-                  show either way.{' '}
-                  <button className="license-link" onClick={() => setTab('license')}>
-                    Enter a license key
-                  </button>
-                </p>
-              )}
               <div className="field-row">
                 <label htmlFor="settings-auto-trim">Trim silence</label>
                 <input
                   id="settings-auto-trim"
                   type="checkbox"
                   checked={audioSettings.autoTrimSilence ?? false}
-                  disabled={!pro}
                   onChange={e => updateAudioSettings({ autoTrimSilence: e.target.checked })}
                 />
                 <span className="settings-info">Skip silence at the start and end</span>

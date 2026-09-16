@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useStore, usePro } from '../../store'
+import { useStore } from '../../store'
 import type { AudioCue, AudioCrosspoint } from '../../types/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
@@ -58,7 +58,7 @@ function regionTouchesSound(cue: AudioCue): boolean {
  * rather than the flag alone — a cue whose file has been measured says what is on the
  * file even with the trim off, which is what an operator comparing two machines reads.
  */
-function trimReadout(cue: AudioCue, refused: boolean, pro: boolean): string {
+function trimReadout(cue: AudioCue, refused: boolean): string {
   const amounts = measuredAmounts(cue)
   if (cue.trimSilence !== true) {
     return amounts === null ? '' : `measured: ${trimSentence(amounts)} (trim is off)`
@@ -77,20 +77,16 @@ function trimReadout(cue: AudioCue, refused: boolean, pro: boolean): string {
     return trimSentence(amounts)
   }
   if (refused) return 'the file could not be read to measure it'
-  // The scan is part of Pro, and the measurement pass does not read a file for a machine
-  // that may not apply the result, so the waiting state says what it is waiting on.
-  return pro ? 'measuring…' : 'measured once this machine is licensed'
+  return 'measuring…'
 }
 
 export function AudioInspector({ cue, tab }: Props) {
   const update = useStore(s => s.updateCue)
   const outputDeviceId = useStore(s => s.audioSettings.outputDeviceId)
-  const openSettings = useStore(s => s.openSettings)
   // A refusal is keyed by the path it was for, so a cue pointed at another file since
   // then is asking about the new one — the same question the measurement pass asks.
   const refusedPath = useStore(s => s.silenceFailures[cue.id])
   const trimRefused = refusedPath !== undefined && refusedPath === cue.filePath
-  const pro = usePro()
   const set = (patch: Partial<AudioCue>) => update(cue.id, patch)
 
   const [loading, setLoading] = useState(false)
@@ -209,22 +205,12 @@ export function AudioInspector({ cue, tab }: Props) {
             id="inspector-trim-silence"
             type="checkbox"
             checked={cue.trimSilence === true}
-            disabled={!pro}
             onChange={e => set({ trimSilence: e.target.checked })}
           />
           <span className="inspector-readout trim-silence-readout">
-            {trimReadout(cue, trimRefused, pro)}
+            {trimReadout(cue, trimRefused)}
           </span>
         </div>
-        {!pro && (
-          <p className="inspector-hint license-hint">
-            WinsLab Pro: the trim leaves the silence at the edges of the file unheard.
-            Without a license this cue plays its whole region.{' '}
-            <button className="license-link" onClick={() => openSettings('license')}>
-              Enter a license key
-            </button>
-          </p>
-        )}
         <div className="field-row">
           <label>Fade in (s)</label>
           <NumberField when="typed" min={0} step={0.1} value={toSeconds(cue.fadeInDuration)}

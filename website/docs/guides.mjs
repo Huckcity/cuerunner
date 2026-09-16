@@ -907,7 +907,8 @@ export const GUIDES = [
       <div class="note">
         The history lives in the <code>.wlab</code>, so it survives being copied, emailed
         or handed over. It is written whether or not this machine is licensed — it is the
-        show's own record of itself — and reading it in the app is part of Pro.
+        show's own record of itself — and reading it back is free. What the key turns on is
+        comparing this file with another and merging two people's work.
       </div>
     </section>
 

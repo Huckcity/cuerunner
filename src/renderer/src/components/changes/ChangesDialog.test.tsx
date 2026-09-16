@@ -208,12 +208,29 @@ describe('comparing with another file', () => {
 })
 
 describe('without a license', () => {
-  it('describes what it would show rather than showing buttons that do nothing', async () => {
+  it('reads the show’s own history', async () => {
+    useStore.setState({
+      license: { state: 'unlicensed' },
+      showHistory: [
+        {
+          at: '2026-09-14T18:30:00.000Z',
+          by: 'associate',
+          cues: [{ kind: 'added', id: 'a', label: '3 Bows' }],
+          settings: []
+        }
+      ]
+    })
+    await show('history')
+
+    expect(container.querySelectorAll('.changes-entry')).toHaveLength(1)
+    expect(container.querySelector('.pro-lock')).toBeNull()
+  })
+
+  it('locks the comparison', async () => {
     useStore.setState({ license: { state: 'unlicensed' } })
-    await show()
+    await show('compare')
 
     expect(container.querySelector('.pro-lock')).not.toBeNull()
-    expect(container.querySelector('.changes-entry')).toBeNull()
     expect(container.querySelector('.changes-choose')).toBeNull()
   })
 })

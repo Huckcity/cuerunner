@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useStore, usePro, type LogEntry } from '../../store'
+import { useStore, type LogEntry } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { describeEvent } from '../monitor/MonitorPanel'
 import type { ShowEvent } from '../../types/show'
@@ -74,7 +74,6 @@ export function LogPanel({ onClose }: Props) {
   const events = useStore(s => s.showEvents)
   const clearLog = useStore(s => s.clearLog)
   const clearShowEvents = useStore(s => s.clearShowEvents)
-  const pro = usePro()
   const [filter, setFilter] = useState<LogFilter>('all')
 
   const rows = useMemo(() => logRows(log, events, filter), [log, events, filter])
@@ -103,23 +102,19 @@ export function LogPanel({ onClose }: Props) {
       <div className="log-header">
         <span className="log-title">Log</span>
         <span className="log-count">{rows.length === 0 ? 'empty' : `${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`}</span>
-        {/* The show only sends anything in on a licensed machine; without it there is
-            one source, and nothing to filter. */}
-        {pro && (
-          <div className="log-filters" role="group" aria-label="Show in the log">
-            {([['all', 'All'], ['cues', 'Cues'], ['show', 'Show in']] as const).map(([id, label]) => (
-              <button
-                key={id}
-                className="log-filter"
-                data-filter={id}
-                aria-pressed={filter === id}
-                onClick={() => setFilter(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="log-filters" role="group" aria-label="Show in the log">
+          {([['all', 'All'], ['cues', 'Cues'], ['show', 'Show in']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              className="log-filter"
+              data-filter={id}
+              aria-pressed={filter === id}
+              onClick={() => setFilter(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="log-actions">
           <button className="log-btn" onClick={clear} disabled={log.length === 0 && events.length === 0}>
             Clear
