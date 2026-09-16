@@ -214,7 +214,10 @@ interface CueListState {
    * the two meet there: a split pair is one boundary in two cues, and dragging it on one
    * side only would leave a gap nobody asked for.
    */
-  setRegionBoundary: (id: string, edge: 'start' | 'end', ms: number) => void
+  setRegionBoundary: (id: string, edge: 'start' | 'end', ms: number, dragging?: boolean) => void
+
+  /** The region grip has been let go, so the next drag of it opens a new edit. */
+  endRegionDrag: () => void
 
   /**
    * Splits an audio cue at a point in its own file, as one edit: the cue keeps its
@@ -419,6 +422,16 @@ interface CueListState {
   setDeskState: (deskState: Record<string, boolean>, deskSceneId: string | null) => void
 
   /**
+   * Writes the groups one recall actually moved onto the record as it stands, rather
+   * than publishing the whole record it read at the start of the sends: two recalls in
+   * flight at once — two scene cues at one timeline offset, a batch of triggers — would
+   * otherwise lose one another's groups, and a group recorded as closed while it is live
+   * on the desk is never told anything again. The scene id is left alone unless one is
+   * given, so a recall can record its groups as they land and name its scene at the end.
+   */
+  mergeDeskState: (entries: Record<string, boolean>, deskSceneId?: string | null) => void
+
+  /**
    * Whether the Scenes view is being edited. Session state, and off whenever a show is
    * opened: the view is run from at curtain up, so it starts where a stray click changes
    * nothing, and editing is a press somebody made on purpose.
@@ -583,6 +596,9 @@ function latestRedundancy(previous: RedundancyStatus | null, events: ShowEvent[]
 // Coalesce rapid updateCue calls for the same cue into one history entry.
 let _coalesceId: string | null = null
 let _coalesceTime = 0
+// The region grip whose drag is in progress ("<cueId>:<edge>"), so the moves of one drag
+// fold into the single edit it opened.
+let _regionGrip: string | null = null
 
 /** Whether a patch points the cue at a file other than the one it names now. */
 function cueRetargeted(cues: Cue[], id: string, patch: Partial<Cue>): boolean {
@@ -602,7 +618,14 @@ function patchedCue(cue: Cue, patch: Partial<Cue>): Cue {
   // file to belong to.
   const was = cue.type === 'audio' ? cue : null
   if (next.type === 'audio' && 'filePath' in patch && patch.filePath !== was?.filePath) {
+    // The scan and the length both came back from the file that answered, so neither
+    // outlives it — unless the patch carries the new file's own length with it, which is
+    // what the inspector's file pick does. A length left from the last file is a row, a
+    // group sum and a timeline width that all describe a different take, and nothing
+    // would ever ask again: `mediaLengthState` reads a length as measured. An empty
+    // length is what puts the cue back in the measurement pass.
     next.soundRegion = null
+    if (!('duration' in patch)) next.duration = 0
   }
   return next
 }
@@ -978,11 +1001,14 @@ export const useStore = create<CueListState>((set) => ({
     const toIndex = orderedIds.indexOf(toId)
     if (toIndex < 0) return s
     // One run of the list, the way the operator sees it: what is between the cue their
-    // hand was on and the cue they shift-clicked, inclusive.
+    // hand was on and the cue they shift-clicked, inclusive. An anchor the list does not
+    // hold — a child of a group that has been collapsed since — has no run to give, so
+    // the click is a fresh selection and the anchor moves to it: leaving the anchor off
+    // the list would make every later shift-click a plain selection.
     const ids = fromIndex < 0
       ? [toId]
       : orderedIds.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1)
-    return { selectedIds: ids, selectedId: toId, selectionAnchorId: from }
+    return { selectedIds: ids, selectedId: toId, selectionAnchorId: fromIndex < 0 ? toId : from }
   }),
 
   toggleSelected: (id) => set(s => {
@@ -1013,25 +1039,36 @@ export const useStore = create<CueListState>((set) => ({
    * came from. The edges are held a millisecond apart, because a region of no length is
    * a cue that plays nothing and two grips with no way to pull them apart again.
    */
-  setRegionBoundary: (id, edge, ms) => set(s => {
+  setRegionBoundary: (id, edge, ms, dragging = false) => set(s => {
     const cue = s.cues.find(c => c.id === id)
     if (!cue || cue.type !== 'audio') return s
     const filesEnd = Math.max(cue.duration, regionEndMs(cue))
     const cuePatch: Partial<AudioCue> = edge === 'end' ? { endTime: 0 } : { startTime: 0 }
-    let target = Math.max(0, Math.min(Math.round(ms), filesEnd))
 
-    // The head stops short of the tail and the tail of the head: whichever edge is being
-    // moved, the other one of its own cue wins when they would touch. A region of no
-    // length plays nothing, and the two grips would have no way to be pulled apart.
-    if (edge === 'start') target = Math.min(target, regionEndMs(cue) - 1)
-    else target = Math.max(target, cue.startTime + 1)
-    if (edge === 'end') cuePatch.endTime = target
-    else cuePatch.startTime = target
-
+    // The cue that continues this one at the edge being moved, when the two meet there.
+    // Read from the times as they stand, before this move: the pairing is what the two
+    // cues were, not what they are about to be. The pair moves as one, so this cue's
+    // target is also bounded by the far edge of the other one — dragging the head past
+    // the tail's end would write a region that runs backwards, which plays nothing.
     const partner: AudioCue | undefined = s.cues.find((c): c is AudioCue =>
       c.id !== id && c.type === 'audio' && c.filePath === cue.filePath && (edge === 'end'
         ? c.startTime === cue.endTime
         : regionEndMs(c) === cue.startTime))
+
+    // Whichever edge is being moved, the cue's own other edge wins when they would
+    // touch: a region of no length plays nothing, and the two grips would have no way
+    // to be pulled apart again.
+    const floor = edge === 'end'
+      ? cue.startTime + 1
+      : partner ? partner.startTime + 1 : 0
+    const ceiling = edge === 'start'
+      ? regionEndMs(cue) - 1
+      : partner ? regionEndMs(partner) - 1 : Infinity
+    const target = Math.max(floor, Math.min(Math.round(ms), filesEnd, ceiling))
+
+    if (edge === 'end') cuePatch.endTime = target
+    else cuePatch.startTime = target
+
     const partnerPatch: Partial<AudioCue> | null = partner === undefined
       ? null
       : edge === 'end'
@@ -1046,14 +1083,22 @@ export const useStore = create<CueListState>((set) => ({
       return c
     })
     const unchanged = next.every((c, i) => c === s.cues[i])
+    // One edit per drag: the grip reports every pointer move, and they all belong to the
+    // entry the first one opened. `endRegionDrag` says the pen is up; a move that is not
+    // part of a drag — the keyboard, a caller that never says — is its own edit.
+    const grip = `${cue.id}:${edge}`
+    const record = !dragging || _regionGrip !== grip
+    _regionGrip = dragging ? grip : null
     if (unchanged) return s
     return {
       cues: next,
       isDirty: true,
-      past: pushPast(s.past, snapshotOf(s)),
-      future: []
+      future: [],
+      ...(record ? { past: pushPast(s.past, snapshotOf(s)) } : {})
     }
   }),
+
+  endRegionDrag: () => { _regionGrip = null },
 
   splitAudioCueAt: (id, atMs) => set(s => {
     const cue = s.cues.find(c => c.id === id)
@@ -1074,7 +1119,14 @@ export const useStore = create<CueListState>((set) => ({
       ...split.tail,
       id: crypto.randomUUID(),
       number: `${cue.number}b`,
-      name: tailName
+      name: tailName,
+      // On a timeline the pair has to be placed as well as cut: the children are fired
+      // at their own offsets, so a tail left at the head's offset would play the second
+      // half of the file over the first. It takes up where the head's sound reaches the
+      // cut — the head's offset plus its own region before the cut.
+      timelineOffset: cue.parentId === null
+        ? split.tail.timelineOffset
+        : cue.timelineOffset + Math.max(0, atMs - cue.startTime)
     }
     const at = s.cues.findIndex(c => c.id === id)
     const cues = [...s.cues]
@@ -1473,6 +1525,11 @@ export const useStore = create<CueListState>((set) => ({
   }),
 
   setDeskState: (deskState, deskSceneId) => set({ deskState, deskSceneId }),
+
+  mergeDeskState: (entries, deskSceneId) => set(s => ({
+    deskState: { ...s.deskState, ...entries },
+    ...(deskSceneId === undefined ? {} : { deskSceneId })
+  })),
 
   setScenesEditing: (scenesEditing) => set({ scenesEditing }),
 

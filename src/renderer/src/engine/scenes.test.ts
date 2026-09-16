@@ -148,6 +148,31 @@ describe('recallScene', () => {
     expect(midiSend.mock.calls[0][0]).toMatchObject({ messages: noteOf(1).unmute.messages })
   })
 
+  it('remembers a group as its send lands, not when the recall has finished', async () => {
+    // A recall can be overtaken: two scene cues at one timeline offset, a batch of
+    // triggers, an operator pressing the next button while the desk is still answering.
+    // The record therefore follows the desk as the sends land — a record written from the
+    // copy read before them belongs to whichever recall finishes last, which is not the
+    // order the desk heard, and a group it gets wrong is never told anything again.
+    const first = Promise.withResolvers<{ ok: boolean }>()
+    const second = Promise.withResolvers<{ ok: boolean }>()
+    midiSend
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise)
+
+    const wedding = recallScene('s-1')
+    first.resolve({ ok: true })
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+
+    // DCA 1 is on the desk and said so, while DCA 2's message is still owed.
+    expect(useStore.getState().deskState).toEqual({ 'dca-1': true })
+
+    second.resolve({ ok: true })
+    await wedding
+    expect(useStore.getState().deskState).toEqual({ 'dca-1': true, 'dca-2': false })
+    expect(useStore.getState().deskSceneId).toBe('s-1')
+  })
+
   it('opens the DCAs of an ensemble the scene applies', async () => {
     // p-1 and p-2 in one ensemble, applied by a scene that names nobody: both DCAs open.
     seed({}, null, {

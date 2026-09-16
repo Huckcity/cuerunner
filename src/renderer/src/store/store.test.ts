@@ -434,6 +434,23 @@ describe('store — selection', () => {
     expect(useStore.getState().selectedIds).toEqual([ids[0]])
     expect(useStore.getState().selectedId).toBe(ids[0])
   })
+
+  it('re-anchors when the anchor is not in the order the click came from', () => {
+    // The order is what the list draws, so a collapsed group's child is not in it: an
+    // anchor left on that child would make every later shift-click a plain selection,
+    // because there is no run of the list between the two.
+    const ids = addWaits(3)
+    useStore.getState().select(ids[1])
+    useStore.getState().extendSelection([ids[0], ids[2]], ids[2])
+
+    const state = useStore.getState()
+    expect(state.selectedIds).toEqual([ids[2]])
+    expect(state.selectionAnchorId).toBe(ids[2])
+
+    // And the next shift-click extends from there.
+    useStore.getState().extendSelection([ids[0], ids[1], ids[2]], ids[0])
+    expect(useStore.getState().selectedIds).toEqual([ids[0], ids[1], ids[2]])
+  })
 })
 
 describe('store — batch edits', () => {
@@ -1467,6 +1484,29 @@ describe('store — silence trim', () => {
     expect(cue().filePath).toBe('/media/relinked.wav')
     expect(cue().soundRegion).toBeNull()
     expect(useStore.getState().silenceFailures).toEqual({})
+  })
+
+  it('forgets the length of the file a cue no longer points at', () => {
+    // The length came back from the file that answered, so it does not outlive it: a cue
+    // that keeps the old take's length is a row, a group sum and a timeline width that
+    // all describe a file it is not playing, and nothing would ever ask again.
+    useStore.getState().addCue('audio')
+    const id = cue().id
+    useStore.getState().updateCue(id, { filePath: '/media/old.wav', duration: 62_000 })
+
+    useStore.getState().applyRelinkedMedia({ [id]: '/media/relinked.wav' })
+
+    expect(cue().duration).toBe(0)
+  })
+
+  it('keeps the length when the file is the one it was measured from', () => {
+    useStore.getState().addCue('audio')
+    const id = cue().id
+    useStore.getState().updateCue(id, { filePath: '/media/old.wav', duration: 62_000 })
+
+    useStore.getState().updateCue(id, { volume: 0.5 })
+
+    expect(cue().duration).toBe(62_000)
   })
 
   it('remembers a refusal by path, and lets it go on request', () => {

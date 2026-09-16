@@ -73,6 +73,7 @@ export function WaveformPanel() {
   const selectedCue = useSelectedCue()
   const updateCue = useStore(s => s.updateCue)
   const setRegionBoundary = useStore(s => s.setRegionBoundary)
+  const endRegionDrag = useStore(s => s.endRegionDrag)
   const syncCueDuration = useStore(s => s.syncCueDuration)
   const running = useStore(s => s.running)
   const cursor = useStore(s => s.waveformCursor)
@@ -456,7 +457,9 @@ export function WaveformPanel() {
     const total = totalMs()
     const cue = audioCue
     if (!cue || total <= 0) return
-    setRegionBoundary(cue.id, mode, Math.round(fraction * total))
+    // A grip drag reports every pointer move; the store folds them into the one edit the
+    // drag opened, and `endRegionDrag` tells it the pen is up.
+    setRegionBoundary(cue.id, mode, Math.round(fraction * total), true)
   }
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>): void => {
@@ -508,6 +511,8 @@ export function WaveformPanel() {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId)
     }
+    // A grip drag is over: the next one is a new edit, not the rest of this one.
+    if (dragRef.current !== null && dragRef.current.mode !== 'cursor') endRegionDrag()
     dragRef.current = null
     setDragging(null)
   }
