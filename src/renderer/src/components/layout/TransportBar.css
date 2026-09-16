@@ -103,7 +103,7 @@
   padding: 3px var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--bg-input);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
 }
 
 .running-badge[data-active='true'] {
@@ -113,12 +113,12 @@
 
 .transport-keys {
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   white-space: nowrap;
 }
 
 .transport-keys kbd {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
 }

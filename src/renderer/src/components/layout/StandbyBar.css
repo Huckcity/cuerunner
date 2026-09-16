@@ -28,7 +28,7 @@
   font-weight: var(--fw-medium);
   letter-spacing: var(--ls-wide);
   text-transform: uppercase;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   flex-shrink: 0;
 }
 
@@ -49,7 +49,7 @@
   min-width: 60px;
 }
 
-.standby-none { font-size: var(--text-md); color: var(--fg-ghost); }
+.standby-none { font-size: var(--text-md); color: var(--fg-subtle); }
 
 .standby-disarmed,
 .standby-recalls {
@@ -59,8 +59,8 @@
   flex-shrink: 0;
 }
 
-.standby-disarmed { background: #3a2020; color: #e0a0a0; }
-.standby-recalls { background: var(--bg-input); color: var(--fg-secondary); }
+.standby-disarmed { background: var(--danger-bg); color: var(--danger-fg); }
+.standby-recalls { background: var(--bg-input); color: var(--fg-body); }
 
 .standby-note {
   font-size: var(--text-base);

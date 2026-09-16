@@ -46,14 +46,14 @@
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-family: inherit;
   font-size: var(--text-base);
   cursor: pointer;
   transition: var(--transition-std);
 }
 
-.dock-tab:hover { color: var(--fg-tertiary); }
+.dock-tab:hover { color: var(--fg-muted); }
 
 .dock-tab[data-active='true'] {
   color: var(--fg-primary);
@@ -65,7 +65,7 @@
   width: 28px;
   background: transparent;
   border: none;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-size: var(--text-sm);
   cursor: pointer;
 }
@@ -103,10 +103,10 @@
   padding: var(--space-3) var(--space-4);
   background: var(--bg-well);
   font-size: var(--text-base);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
 }
 
-.dock-summary-empty { color: var(--fg-ghost); }
+.dock-summary-empty { color: var(--fg-subtle); }
 
 .dock-summary-head {
   display: flex;
@@ -121,11 +121,7 @@
   color: var(--fg-muted);
 }
 
-.dock-summary-icon {
-  width: 18px;
-  text-align: center;
-  color: var(--fg-muted);
-}
+.dock-summary-icon { color: var(--fg-muted); }
 
 .dock-summary-children {
   list-style: none;
@@ -140,7 +136,7 @@
   align-items: baseline;
   gap: var(--space-2);
   padding-left: var(--space-4);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
 }
 
 .dock-summary-children strong { color: var(--fg-muted); font-weight: var(--fw-medium); }

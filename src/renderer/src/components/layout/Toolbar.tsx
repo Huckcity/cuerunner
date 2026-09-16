@@ -9,7 +9,7 @@ import {
 } from '../../hooks/useWorkspace'
 import type { CueType } from '../../types/cue'
 import { ProMark } from '../license/ProLock'
-import { CUE_ICON } from '../../utils/cueIcons'
+import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import './Toolbar.css'
@@ -246,7 +246,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       <div className="toolbar-actions" hidden={view !== 'cues'}>
         {PRIMARY_CUES.map(({ type, label }) => (
           <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
-            {CUE_ICON[type]} {label}
+            <CueIcon type={type} className="toolbar-cue-icon" />
+            {label}
           </button>
         ))}
 
@@ -263,7 +264,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                   data-locked={type === 'scene' && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                 >
-                  <span className="toolbar-more-menu-icon">{CUE_ICON[type]}</span>
+                  <CueIcon type={type} className="toolbar-more-menu-icon" />
                   {label}
                   {type === 'scene' && !pro && <ProMark />}
                 </button>

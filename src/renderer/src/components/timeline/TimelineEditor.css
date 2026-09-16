@@ -20,7 +20,7 @@
 .tl-title {
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -75,7 +75,7 @@
 .tl-zoom-btn {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   cursor: pointer;
   width: 20px;
   height: 20px;
@@ -104,7 +104,7 @@
   align-items: center;
   justify-content: center;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 /* ── Two-pane layout ── */
@@ -154,7 +154,7 @@
   background: var(--bg-selected);
 }
 .tl-row-label:hover:not([data-active='true']) {
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   background: var(--bg-hover);
 }
 
@@ -188,7 +188,7 @@
 
 .tl-tick-label {
   font-size: var(--text-xs);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
   padding-left: 3px;

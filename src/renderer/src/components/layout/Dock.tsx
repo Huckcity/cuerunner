@@ -8,7 +8,7 @@ import { MonitorPanel } from '../monitor/MonitorPanel'
 import { RfPanel } from '../rf/RfPanel'
 import { ScriptPanel } from '../script/ScriptPanel'
 import { ProLock, ProMark } from '../license/ProLock'
-import { CUE_ICON } from '../../utils/cueIcons'
+import { CueIcon } from '../../utils/cueIcons'
 import { formatDuration } from '../../utils/cueDefaults'
 import { groupDurationMs } from '../../utils/cueDuration'
 import type { ShowStrip } from './TransportBar'
@@ -66,7 +66,7 @@ function CueSummary({ cue }: { cue: Cue | null }) {
   return (
     <div className="dock-summary">
       <div className="dock-summary-head">
-        <span className="dock-summary-icon">{CUE_ICON[cue.type]}</span>
+        <CueIcon type={cue.type} className="dock-summary-icon" />
         <strong>{cue.number}</strong>
         <span>{cue.name || 'untitled'}</span>
         <span className="dock-summary-meta">
@@ -78,7 +78,7 @@ function CueSummary({ cue }: { cue: Cue | null }) {
         <ol className="dock-summary-children">
           {children.map(child => (
             <li key={child.id}>
-              <span className="dock-summary-icon">{CUE_ICON[child.type]}</span>
+              <CueIcon type={child.type} className="dock-summary-icon" />
               <strong>{child.number}</strong> {child.name}
             </li>
           ))}

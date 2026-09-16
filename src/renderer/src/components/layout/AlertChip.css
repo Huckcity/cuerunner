@@ -22,8 +22,8 @@
 
 .alert-chip[data-level='critical'] {
   border-color: var(--cue-color-red);
-  background: #3a2020;
-  color: #f1d4d0;
+  background: var(--danger-bg);
+  color: var(--danger-fg);
 }
 
 .alert-chip:hover { background: var(--bg-hover); }

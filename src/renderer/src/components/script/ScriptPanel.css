@@ -24,7 +24,7 @@
 .script-title {
   font-size: var(--text-xs);
   font-weight: var(--fw-bold);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   text-transform: uppercase;
   letter-spacing: var(--ls-wide);
 }
@@ -36,7 +36,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-sm);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 .script-actions {
@@ -65,7 +65,7 @@
   gap: var(--space-3);
   padding: var(--space-3);
   font-size: var(--text-base);
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
 }
 
 /* A document that cannot be shown: the same shape as the empty state, in the colour of
@@ -134,7 +134,7 @@
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--fg-ghost);
+  color: var(--fg-subtle);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
@@ -145,11 +145,11 @@
 
 .script-line-no:hover { color: var(--fg-primary); }
 
-.script-line[data-current='true'] .script-line-no { color: var(--fg-tertiary); }
+.script-line[data-current='true'] .script-line-no { color: var(--fg-muted); }
 
 .script-line-text {
   min-width: 0;
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   white-space: pre-wrap;
   word-break: break-word;
 }

@@ -82,14 +82,14 @@
   padding: var(--space-1) 14px;
   font-size: var(--text-xs);
   font-weight: var(--fw-medium);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   text-transform: uppercase;
   letter-spacing: var(--ls-caps);
 }
 
 .file-menu-recent {
   font-size: var(--text-base) !important;
-  color: var(--fg-tertiary) !important;
+  color: var(--fg-muted) !important;
 }
 
 .file-menu-recent:hover { color: var(--fg-primary) !important; }
@@ -101,7 +101,7 @@
 
 .workspace-name-text {
   font-size: var(--text-md);
-  color: var(--fg-tertiary);
+  color: var(--fg-muted);
   cursor: default;
   padding: 2px var(--space-1);
   border-radius: var(--radius-md);
@@ -167,7 +167,7 @@
 
 .toolbar-label {
   font-size: var(--text-sm);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   margin-right: var(--space-1);
 }
 
@@ -178,7 +178,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-input);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   cursor: pointer;
   font-family: inherit;
   transition: var(--transition-fast);
@@ -197,7 +197,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-input);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   cursor: pointer;
   font-family: inherit;
   transition: var(--transition-fast);
@@ -205,7 +205,7 @@
 
 .toolbar-more-btn:hover {
   background: var(--bg-hover);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
 }
 
 /* Expand / Collapse: the same shape as More, because they are the same kind of thing —
@@ -217,7 +217,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-input);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   cursor: pointer;
   font-family: inherit;
   transition: var(--transition-fast);
@@ -225,7 +225,7 @@
 
 .toolbar-list-btn:hover {
   background: var(--bg-hover);
-  color: var(--fg-secondary);
+  color: var(--fg-body);
 }
 
 .toolbar-more-menu {
@@ -249,7 +249,7 @@
   padding: 6px 14px;
   background: transparent;
   border: none;
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   font-size: var(--text-base);
   font-family: inherit;
   cursor: pointer;
@@ -261,12 +261,18 @@
   color: var(--fg-primary);
 }
 
-.toolbar-more-menu-icon {
-  font-size: var(--text-md);
-  color: var(--fg-dim);
-  width: 16px;
-  text-align: center;
+.toolbar-more-menu-icon { color: var(--fg-muted); }
+
+/* The buttons that add a cue: icon, then the type's name. */
+.toolbar-cue-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
+
+.toolbar-cue-icon { color: var(--fg-muted); }
+
+.toolbar-cue-btn:hover .toolbar-cue-icon { color: var(--fg-primary); }
 
 .toolbar-divider {
   width: 1px;

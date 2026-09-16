@@ -1,18 +1,17 @@
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
-export type CueType =
-  | 'audio'
-  | 'midi'
-  | 'osc'
-  | 'wait'
-  | 'fade'
-  | 'stop'
-  | 'group'
-  | 'network'
-  | 'script'
-  | 'scene'
-  | 'devamp'
-  | 'msc'
+
+/**
+ * Every cue type, as a list rather than only as a union: anything that has to cover all
+ * of them — the icon set, a menu, a test — reads them from here, so a type added to the
+ * union cannot be quietly missed by one of them.
+ */
+export const CUE_TYPES = [
+  'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
+  'group', 'network', 'script', 'scene', 'devamp', 'msc'
+] as const
+
+export type CueType = (typeof CUE_TYPES)[number]
 
 /**
  * What a second firing does to a cue that is already running.

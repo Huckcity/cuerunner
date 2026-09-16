@@ -17,7 +17,7 @@
   padding: 6px 14px;
   background: transparent;
   border: none;
-  color: var(--fg-secondary);
+  color: var(--fg-body);
   font-size: var(--text-base);
   font-family: inherit;
   cursor: pointer;
@@ -30,19 +30,19 @@
 }
 
 .cue-context-menu-item--danger:hover {
-  color: var(--color-red, #e05c5c);
+  color: var(--danger-fg);
 }
 
 .cue-context-menu-item kbd {
   margin-left: auto;
   font-size: 11px;
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   font-family: inherit;
 }
 
 .cue-context-menu-icon {
   font-size: var(--text-md);
-  color: var(--fg-dim);
+  color: var(--fg-subtle);
   width: 16px;
   text-align: center;
 }

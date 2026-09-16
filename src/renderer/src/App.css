@@ -1,97 +1,134 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ─── Winslab Design Tokens ─────────────────────────────────────────────── */
+/*
+ * Two rules hold this file together, and theme.test.ts enforces the first:
+ *
+ * 1. Four text tones, and every one of them is readable. --fg-primary, --fg-body,
+ *    --fg-muted and --fg-subtle all clear 4.5:1 against every surface they can sit on,
+ *    so nothing in the window is grey-on-grey. --fg-disabled is below that on purpose
+ *    and is for disabled controls only, which WCAG exempts.
+ * 2. The neutrals carry a slight blue-ink bias rather than being pure grey, so the step
+ *    from one panel to the next reads without a border doing the work.
+ */
 :root {
   /* Backgrounds */
-  --bg-well:          #111111;
-  --bg-base:          #181818;
-  --bg-raised:        #1a1a1a;
-  --bg-surface:       #1e1e1e;
-  --bg-card:          #252525;
-  --bg-input:         #2a2a2a;
-  --bg-hover:         #3a3a3a;
-  --bg-selected:      #0d1f33;
+  --bg-well:          #0f1216;
+  --bg-base:          #14171b;
+  --bg-raised:        #171a1f;
+  --bg-surface:       #1a1d22;
+  --bg-card:          #20242a;
+  --bg-input:         #272c33;
+  --bg-hover:         #30363e;
+  --bg-selected:      #12243a;
 
   /* Borders */
-  --border:           #333333;
-  --border-soft:      #2a2a2a;
-  --border-input:     #444444;
-  --border-focus:     #4a9eff;
+  --border:           #2b3038;
+  --border-soft:      #22262c;
+  --border-input:     #3b424c;
+  --border-focus:     #5aa9ff;
 
   /* State row backgrounds */
-  --bg-selected-row:  #1e2d3d;
-  --bg-playing-row:   #1a2a1a;
-  --bg-prewait-row:   #2a2a1a;
+  --bg-selected-row:  #1b2a3b;
+  --bg-playing-row:   #16281d;
+  --bg-prewait-row:   #2a2413;
 
-  /* Foreground */
-  --fg-primary:       #dddddd;
-  --fg-body:          #cccccc;
-  --fg-secondary:     #bbbbbb;
-  --fg-tertiary:      #aaaaaa;
-  --fg-muted:         #888888;
-  --fg-dim:           #666666;
-  --fg-ghost:         #555555;
+  /* Foreground — four readable tones, plus one for disabled controls */
+  --fg-primary:       #eef1f4;
+  --fg-body:          #cdd3da;
+  --fg-muted:         #a3adb8;
+  --fg-subtle:        #8e98a4;
+  --fg-disabled:      #6b7480;
 
-  /* Accent — amber */
-  --accent-amber:         #e0a020;
-  --accent-amber-bg:      rgba(224, 160, 32, 0.10);
+  /* Accent — amber. The brand, and the cue that is next. */
+  --accent-amber:         #f0b429;
+  --accent-amber-bg:      rgba(240, 180, 41, 0.12);
 
-  /* Accent — blue */
-  --accent-blue:          #4a9eff;
-  --accent-blue-dim:      #2a6099;
-  --accent-blue-glow:     rgba(74, 158, 255, 0.15);
-  --accent-blue-overlay:  rgba(74, 158, 255, 0.60);
+  /* Accent — blue. Anything the operator can act on. */
+  --accent-blue:          #5aa9ff;
+  --accent-blue-dim:      #2e4f73;
+  --accent-blue-glow:     rgba(90, 169, 255, 0.16);
+  --accent-blue-overlay:  rgba(90, 169, 255, 0.60);
 
-  /* Transport / state */
-  --state-go:           #2d7a2d;
-  --state-go-hover:     #39a039;
-  --state-go-active:    #1e5a1e;
-  --state-stop:         #444444;
-  --state-stop-hover:   #555555;
-  --state-stop-active:  #333333;
-  --state-panic:        #7a2d2d;
-  --state-panic-hover:  #a03939;
-  --state-panic-active: #5a1e1e;
-  --state-running-bg:   #1e4a1e;
-  --state-running-fg:   #5aaa5a;
+  /* Transport / state. GO is the one saturated colour in the window. */
+  --state-go:           #1c7a3c;
+  --state-go-hover:     #22924a;
+  --state-go-active:    #165f2f;
+  --state-stop:         #272c33;
+  --state-stop-hover:   #30363e;
+  --state-stop-active:  #20242a;
+  --state-panic:        #8e2b28;
+  --state-panic-hover:  #a83430;
+  --state-panic-active: #6d211f;
+  --state-running-bg:   rgba(76, 195, 106, 0.14);
+  --state-running-fg:   #4cc36a;
+
+  /*
+   * Semantic states. A failure, a warning and a success look the same wherever they are
+   * said — a chip in the transport, a badge in the inspector, a service in settings — so
+   * they are named by what they mean rather than mixed by hand at each site.
+   */
+  --danger-bg:     rgba(224, 68, 58, 0.16);
+  --danger-border: rgba(224, 68, 58, 0.42);
+  --danger-fg:     #ff8b80;
+  --warn-bg:       rgba(240, 180, 41, 0.13);
+  --warn-border:   rgba(240, 180, 41, 0.38);
+  --warn-fg:       #f0b429;
+  --ok-bg:         rgba(76, 195, 106, 0.14);
+  --ok-border:     rgba(76, 195, 106, 0.38);
+  --ok-fg:         #4cc36a;
 
   /* Cue color labels */
   --cue-color-none:   transparent;
-  --cue-color-red:    #c0392b;
-  --cue-color-orange: #e67e22;
-  --cue-color-yellow: #f1c40f;
-  --cue-color-green:  #27ae60;
-  --cue-color-blue:   #2980b9;
-  --cue-color-purple: #8e44ad;
-  --cue-color-pink:   #e91e8c;
+  --cue-color-red:    #e0443a;
+  --cue-color-orange: #f08c2a;
+  --cue-color-yellow: #f2c94c;
+  --cue-color-green:  #3bb66b;
+  --cue-color-blue:   #3d8fe0;
+  --cue-color-purple: #9b59d0;
+  --cue-color-pink:   #e8489b;
 
-  /* Typography */
-  --font-ui:   -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'Segoe UI Mono', 'SF Mono', 'Consolas', monospace;
+  /*
+   * Typography. IBM Plex ships inside the app (see main.tsx), so a show machine reads
+   * the same on Windows and macOS and needs no network to do it. Condensed carries the
+   * numbers and the small caps labels; mono carries times, ports and addresses, where
+   * tabular figures stop a running clock from jittering.
+   */
+  --font-ui:   'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --font-cond: 'IBM Plex Sans Condensed', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, 'SF Mono', monospace;
 
   --font-size-base:   13px;
-  --line-height-base: 1.4;
+  --line-height-base: 1.45;
 
-  --text-xs:   10px;
-  --text-sm:   11px;
-  --text-base: 12px;
-  --text-md:   13px;
-  --text-lg:   14px;
+  /*
+   * One scale, and each step has a job. Most of the window is --text-base: a field
+   * label, its value and a cue row are all the same size, which is what makes a column
+   * of them line up.
+   */
+  --text-xs:   11px;   /* small caps labels, badges */
+  --text-sm:   12px;   /* hints, meta, secondary readings */
+  --text-base: 13px;   /* labels, values, cue rows — the workhorse */
+  --text-md:   14px;   /* panel headings */
+  --text-lg:   16px;   /* dialog titles, the live cue */
+  --text-xl:   20px;   /* the next cue's name */
+  --text-2xl:  28px;   /* the next cue's number */
 
   --fw-normal: 400;
-  --fw-medium: 600;
+  --fw-medium: 500;
+  --fw-semi:   600;
   --fw-bold:   700;
 
-  --ls-caps:  0.06em;
-  --ls-wide:  0.08em;
-  --ls-brand: 0.05em;
+  --ls-caps:  0.08em;
+  --ls-wide:  0.12em;
+  --ls-brand: 0.06em;
 
   /* State pill (running indicator in cue rows) */
-  --pill-bg:    #2a3a1a;
-  --pill-fg:    #7aaa5a;
+  --pill-bg:    rgba(76, 195, 106, 0.14);
+  --pill-fg:    #4cc36a;
 
   /* Advance column in cue list */
-  --adv-fg:     #4a8a4a;
+  --adv-fg:     #4cc36a;
 
   /* Spacing */
   --space-1:  4px;
@@ -102,44 +139,52 @@
   --space-6: 24px;
 
   /* Component heights */
-  --h-toolbar:          44px;
-  --h-cue-row:          32px;
-  --h-col-header:       26px;
-  --h-transport:        52px;
-  --h-waveform:        110px;
-  --h-waveform-header:  24px;
+  --h-toolbar:          48px;
+  --h-context:          80px;
+  --h-cue-row:          34px;
+  --h-col-header:       30px;
+  --h-transport:        64px;
+  --h-waveform:        120px;
+  --h-waveform-header:  26px;
   --h-log:             180px;
   --h-monitor:         220px;
   --h-rf:              220px;
   --h-script:          260px;
   --h-timeline:        200px;
-  --h-button-sm:        26px;
-  --h-button-md:        28px;
-  --h-button-lg:        36px;
-  --h-input:            26px;
+  --h-button-sm:        28px;
+  --h-button-md:        30px;
+  --h-button-lg:        40px;
+  --h-input:            30px;
 
   /* Layout */
-  --inspector-width: 320px;
+  --inspector-width: 340px;
+  /*
+   * Every label/control pair in the window is laid out on this one grid — inspector,
+   * settings, show settings, the dialogs. One column width is what makes a stack of
+   * fields read as a column instead of as a ragged edge.
+   */
+  --field-label-w: 112px;
+  --field-gap:     10px;
 
   /* Radius */
-  --radius-sm:   2px;
-  --radius-md:   3px;
-  --radius-lg:   4px;
-  --radius-xl:   5px;
-  --radius-pill: 10px;
+  --radius-sm:   3px;
+  --radius-md:   4px;
+  --radius-lg:   5px;
+  --radius-xl:   6px;
+  --radius-pill: 11px;
 
   /* Shadow */
-  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.55);
 
   /* Transitions */
   --transition-fast: background 0.05s ease, color 0.05s ease;
   --transition-std:  background 0.10s ease, color 0.10s ease, border-color 0.10s ease;
 
   /* Scrollbar */
-  --scrollbar-width:       6px;
-  --scrollbar-track:       #1a1a1a;
-  --scrollbar-thumb:       #444444;
-  --scrollbar-thumb-hover: #555555;
+  --scrollbar-width:       8px;
+  --scrollbar-track:       var(--bg-raised);
+  --scrollbar-thumb:       #3b424c;
+  --scrollbar-thumb-hover: #4c545f;
 
   /* Base styles */
   font-family: var(--font-ui);
@@ -268,6 +313,20 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--radius-md); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* Cue type icons, wherever they are drawn: the list, the toolbar, the menus, the dock.
+   One box and one stroke weight, set here, so a row of them is a column and a type looks
+   the same on every surface. See utils/cueIcons.tsx. */
+.cue-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 /* One shape for every press that adds a row — a header, a message, a pack, a group, a
    source: small, bordered, left-aligned, with its plus. */
