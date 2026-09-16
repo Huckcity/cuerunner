@@ -145,6 +145,21 @@ describe('OscInputService', () => {
     ])
   })
 
+  it('publishes the messages inside a bundle that holds bundles', () => {
+    // OSC 1.0 allows a bundle of bundles, and a message one level down used to be read as
+    // a message with no address and dropped without a word.
+    const { service, servers, context, bus } = harness()
+    service.start(context, settings(true, 53000))
+
+    servers[0].emit(
+      'bundle',
+      { elements: [['/a', 1], { elements: [{ elements: [['/deep', 2]] }, ['/b', 'x']] }] },
+      { address: '10.0.0.2', port: 9000 }
+    )
+
+    expect(oscEvents(bus).map(event => event.address)).toEqual(['/a', '/deep', '/b'])
+  })
+
   it('degrades and warns instead of throwing when the socket errors', () => {
     const { service, servers, context, setState, bus } = harness()
     service.start(context, settings(true, 53000))

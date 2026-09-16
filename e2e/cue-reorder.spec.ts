@@ -81,3 +81,17 @@ test('reordering a collapsed group keeps the group and its children', async () =
   await page.locator('.group-toggle').first().click()
   expect(await rowShapes()).toEqual(['0G', '1 '])
 })
+
+test('dropping into the gap below the list lands at the top level, not in the group above', async () => {
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Group').click()
+  await toolbarCueBtn(page, 'Wait').click()
+  expect(await rowShapes()).toEqual(['0 ', '0G', '1 '])
+
+  // The gap under the last row is the end of the list. A drop there that joined the
+  // group above would leave that group's child with no place below it to be dragged to:
+  // the space under the last row is the only aim point there is.
+  await dragRow(2, 'gap')
+
+  expect(await rowShapes()).toEqual(['0 ', '0G', '0 '])
+})

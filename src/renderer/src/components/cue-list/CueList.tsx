@@ -38,7 +38,11 @@ function dropParentId(items: RenderItem[], dropAt: number): string | null {
     return items[dropAt].cue.parentId
   }
   if (dropAt > 0 && items[dropAt - 1].depth === 1) {
-    return items[dropAt - 1].cue.parentId
+    // Past the last row — the empty space under the list — is the end of the show, at
+    // the top level: a drop there must not join whichever group happens to be last, or a
+    // cue could never be dragged out of a trailing group at all, the gap being the only
+    // place below it to aim at.
+    return dropAt >= items.length ? null : items[dropAt - 1].cue.parentId
   }
   // Dropping at the bottom half of a group header (empty or collapsed group):
   // the previous item is a group AND the next item is not also a group header.

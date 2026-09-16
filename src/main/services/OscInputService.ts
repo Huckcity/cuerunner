@@ -90,9 +90,11 @@ export class OscInputService implements ShowService {
       this.publishMessage(context, message, rinfo)
     })
 
-    // A desk that sends its state as one bundle should arrive as its parts, in order.
+    // A desk that sends its state as one bundle should arrive as its parts, in order —
+    // and OSC allows a bundle to hold bundles, so the parts are walked rather than read
+    // one level deep: a message inside one would otherwise be dropped without a word.
     server.on('bundle', (bundle, rinfo) => {
-      for (const element of bundle.elements) this.publishMessage(context, element, rinfo)
+      this.publishBundle(context, bundle, rinfo)
     })
   }
 
@@ -106,6 +108,24 @@ export class OscInputService implements ShowService {
       void Promise.resolve(server.close(() => {})).catch(() => {})
     } catch {
       // A socket that is already closed throws from close(); nothing left to do.
+    }
+  }
+
+  /** Every message a bundle holds, in order, however deep the bundles go. */
+  private publishBundle(
+    context: ServiceContext,
+    bundle: { elements: unknown[][] },
+    rinfo: Rinfo
+  ): void {
+    for (const element of bundle.elements) {
+      if (Array.isArray(element)) {
+        this.publishMessage(context, element, rinfo)
+        continue
+      }
+      const nested = element as { elements?: unknown[][] } | null
+      if (nested !== null && typeof nested === 'object' && Array.isArray(nested.elements)) {
+        this.publishBundle(context, nested as { elements: unknown[][] }, rinfo)
+      }
     }
   }
 
