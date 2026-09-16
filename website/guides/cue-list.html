@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Building a cue list — Winslab</title>
+  <meta name="description" content="Numbering and notes, the cue types, groups, and the timing that makes a sequence run itself." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Building a cue list — Winslab" />
+  <meta property="og:description" content="Numbering and notes, the cue types, groups, and the timing that makes a sequence run itself." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Building a cue list</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Building a cue list</h1>
+      <p class="doc-lede">
+        A show is a list of cues in the order they happen. This is how to get one from a
+        script to something you can run with one finger.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Adding and ordering</h2>
+      <p>
+        The toolbar adds cues: <strong>Audio</strong>, <strong>Group</strong>,
+        <strong>Fade</strong>, <strong>Wait</strong>, <strong>Stop</strong>, and the rest
+        under <strong>More</strong>. A new cue lands after the selected one. Dragging a
+        row moves it; dropping audio files on the list adds them where you dropped them.
+      </p>
+      <figure class="figure">
+        <a href="../assets/guide/02-cue-list.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/02-cue-list.png" alt="The cue list: numbered rows with type icons, names, durations, pre-wait, post-wait and advance columns." />
+        </a>
+        <figcaption>One row per cue. The chevron on a group row opens it.</figcaption>
+      </figure>
+      <p>
+        Right-click a row for duplicate, delete, colour, arm and disarm. A
+        <strong>disarmed</strong> cue stays in the list and is skipped by GO, which is how
+        you take something out of a show without losing it. Undo is
+        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> and covers the last 50 edits.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Numbers and names</h2>
+      <p>
+        Numbers are yours: they are text, not positions, so <code>12.5</code> and
+        <code>LX 12</code> are both fine and inserting a cue renumbers nothing. Names are
+        what you read at speed — name them for the moment in the show, not the file.
+        Double-click a row to rename it.
+      </p>
+      <p>
+        Every cue has <strong>notes</strong>. The first line appears in the bar at the top
+        when the cue is playing or next, so a note is worth writing: "let it run under the
+        scene change", "wait for the door".
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>The cue types</h2>
+      <p>
+        Twelve of them, and the <a href="../reference/cue-types.html">reference</a> lists
+        every field of each. In practice:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>What it is for</th></tr></thead>
+          <tbody>
+            <tr><td>Audio</td><td>Play a file. Level, pan, fades, loops, trims and routing.</td></tr>
+            <tr><td>Wait</td><td>Hold for a set time. The glue in a sequence.</td></tr>
+            <tr><td>Fade</td><td>Ramp another cue's level, and optionally stop it at the end.</td></tr>
+            <tr><td>Stop</td><td>Stop one cue, or everything, with or without a fade.</td></tr>
+            <tr><td>Group</td><td>Cues inside a cue: fire them in order, all at once, at random, or on a timeline.</td></tr>
+            <tr><td>MIDI / OSC / Network</td><td>Send a message to something else in the rig.</td></tr>
+            <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
+            <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
+            <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
+            <tr><td>Devamp</td><td>Let a looping cue out of its loop and play on.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Groups</h2>
+      <p>
+        A group is a cue with cues inside it. GO fires the group, and what happens next is
+        the group's <strong>mode</strong>:
+      </p>
+      <ul class="tight-list">
+        <li><strong>Sequence</strong> — its children in order, each after the one before.</li>
+        <li><strong>All at once</strong> — everything together: a bang, a blackout, three sends in one press.</li>
+        <li><strong>Random</strong> — one child, picked at random. Good for a stinger you do not want to be identical every night.</li>
+        <li><strong>Timeline</strong> — each child at an offset you set by dragging it. The dock draws the timeline for a group in this mode.</li>
+      </ul>
+      <figure class="figure">
+        <a href="../assets/guide/07-timeline.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/07-timeline.png" alt="The timeline editor: a group's children laid out along a time axis with draggable offsets." />
+        </a>
+        <figcaption>A timeline group: drag a cue to change when it fires.</figcaption>
+      </figure>
+      <p>
+        Open a group with the chevron on its row. A group's duration is worked out from
+        what is inside it.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Timing: pre-wait, post-wait and advance</h2>
+      <p>Three settings on the Basics tab decide how a cue behaves in time.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Pre-wait</strong></td><td>Waits this long after GO before the cue does anything.</td></tr>
+            <tr><td><strong>Post-wait</strong></td><td>Waits this long after the cue finishes before handing over.</td></tr>
+            <tr><td><strong>Advance</strong></td><td>Whether the next cue fires by itself: <strong>None</strong>, <strong>On start</strong> (as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>On start</strong> chains cues that should happen together but stay separate
+        rows. <strong>On end</strong> is the one to reach for after a wait: a count-in that
+        hands over to the music by itself is a wait with Advance set to On end.
+      </p>
+      <div class="note">
+        An audio cue does not hold the show. It starts, and GO moves on. That is why a
+        sequence uses waits to time what comes next rather than waiting for the sound to
+        finish — unless you set Advance to On end, which does wait for it.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Next</h2>
+      <p>
+        <a href="./sound.html">Working with sound</a> goes into audio cues properly.
+        <a href="./running.html">Running the show</a> is the night itself.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

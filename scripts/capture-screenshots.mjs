@@ -120,12 +120,35 @@ const openTab = async name => {
   await page.locator('.inspector-tab', { hasText: name }).click()
 }
 
+// GO, with the repeat guard respected. Two presses inside the guard window (Settings →
+// General, 300 ms by default) are one firing as far as the app is concerned — which is
+// the point of it, and which quietly lost the second cue this script fired when the two
+// GOs were a couple of hundred milliseconds apart.
+const REPEAT_GUARD_MS = 300
+let lastGo = 0
+const go = async () => {
+  const since = Date.now() - lastGo
+  if (since < REPEAT_GUARD_MS + 100) await page.waitForTimeout(REPEAT_GUARD_MS + 100 - since)
+  await page.getByRole('button', { name: /GO/ }).click()
+  lastGo = Date.now()
+}
+
 console.log('Capturing to website/assets/guide:')
 
+// The window with the show actually running: the bar under the toolbar answers two
+// questions, and a figure with nothing playing only shows one of them. GO also moves the
+// selection on, so the inspector in this figure is the next cue's — which is the pairing
+// an operator sees mid-show.
 await selectCue('Walk-in Music')
+await go()
+await page.locator('.ctx-live .ctx-name').waitFor()
 await shot('01-window.png')
 
 await shot('02-cue-list.png', '.cue-list-container')
+
+// Back to a quiet show, and back on the audio cue, for the panels that follow.
+await page.getByRole('button', { name: /STOP/ }).click()
+await selectCue('Walk-in Music')
 
 await openTab('Audio')
 await shot('03-inspector-audio.png', '.inspector')
@@ -137,7 +160,7 @@ await shot('04-inspector-basics.png', '.inspector')
 // GO advances the selection, so re-select the cue before capturing.
 await selectCue('Trigger Video')
 await openTab('Network')
-await page.getByRole('button', { name: /GO/ }).click()
+await go()
 await selectCue('Trigger Video')
 await openTab('Network')
 await page.locator('.last-run-badge').waitFor()
@@ -145,7 +168,7 @@ await shot('05-inspector-network.png', '.inspector')
 
 await selectCue('House Lights')
 await openTab('Script')
-await page.getByRole('button', { name: /GO/ }).click()
+await go()
 await selectCue('House Lights')
 await openTab('Script')
 await page.locator('.last-run-badge').waitFor()
@@ -167,7 +190,7 @@ await page.locator('.btn-log').click()
 await page.evaluate(() => (document.querySelector('.dock').style.height = '340px'))
 await new Promise(resolve => server.close(resolve))
 await selectCue('Trigger Video')
-await page.getByRole('button', { name: /GO/ }).click()
+await go()
 await page.locator('.log-row[data-level="error"]').waitFor()
 await shot('08-run-log.png', '.log-panel')
 await page.locator('.btn-log').click()

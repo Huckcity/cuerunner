@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Firing cues from a console — Winslab</title>
+  <meta name="description" content="Let a lighting desk, sound desk, tablet or footswitch fire WinsLab cues over OSC and MIDI, and see what arrives." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Firing cues from a console — Winslab" />
+  <meta property="og:description" content="Let a lighting desk, sound desk, tablet or footswitch fire WinsLab cues over OSC and MIDI, and see what arrives." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Firing cues from a console</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Firing cues from a console<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        Somebody else presses GO: the lighting desk, a footswitch, a tablet, the stage
+        manager's cue light panel. WinsLab listens, and a cue can carry its own trigger.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>1. Let it listen</h2>
+      <p>
+        Settings → <strong>Network</strong> → <strong>OSC control</strong> is on by default
+        and listens on port 53000. Settings → <strong>MIDI</strong> →
+        <strong>Listen to MIDI</strong> opens the inputs you tick, or all of them if you
+        tick none.
+      </p>
+      <p>
+        The <strong>Monitor</strong> tab in the dock shows what is listening and what has
+        arrived, so you can point the desk at WinsLab and watch the messages land before
+        writing a single trigger.
+      </p>
+      <figure class="figure">
+        <a href="../assets/guide/12-show-monitor.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/12-show-monitor.png" alt="The show monitor: the services that are listening, what each is doing, and the devices they know about." />
+        </a>
+        <figcaption>The monitor: what is listening, and what it has heard.</figcaption>
+      </figure>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>2. Give a cue a trigger</h2>
+      <figure class="figure shot-narrow">
+        <a href="../assets/guide/14-triggers.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/14-triggers.png" alt="The Triggers tab: an OSC address, a MIDI note, and a show control command, each with a Learn button." />
+        </a>
+        <figcaption>The Triggers tab of a cue.</figcaption>
+      </figure>
+      <p>
+        Select the cue, open <strong>Triggers</strong>, and add one:
+      </p>
+      <ul class="tight-list">
+        <li><strong>OSC</strong> — an address, such as <code>/eos/cue/12/fire</code>. Arguments are ignored; the address is the trigger.</li>
+        <li><strong>MIDI</strong> — a note, a controller or a program change on a channel. A note fires whatever its velocity.</li>
+        <li><strong>Show control</strong> — an MSC command from a desk, matched on every field it sent.</li>
+      </ul>
+      <p>
+        <strong>Learn</strong> is the shortcut: press it, then send the message from the
+        desk, and the fields fill in with whatever arrived. A cue with a trigger shows a
+        count on its Triggers tab, so a glance down the list tells you which cues answer
+        to something other than a finger.
+      </p>
+      <div class="note">
+        A trigger fires the cue exactly as GO would, including its pre-wait and its
+        advance. A disarmed cue ignores its triggers, which makes disarming a safe way to
+        take a cue out of a show that a console is driving.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>3. Panic from the rig</h2>
+      <p>
+        Two messages panic the show whoever sends them, with no cue written for them: OSC
+        <code>/winslab/panic</code>, and MIDI <strong>All Sound Off</strong> — controller
+        120 at value 0, on any channel of any port being listened to. A desk with a spare
+        key, a footswitch, another program on the network: all of them can stop the sound.
+      </p>
+      <p>
+        It is handled where the engine is rather than in the window, so it works even if
+        the interface is busy, and the run log records who asked.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Repeats</h2>
+      <p>
+        A footswitch that bounces, a desk that sends twice, a key held down: Settings →
+        General → <strong>Repeat guard</strong> ignores a second GO arriving within the
+        window you set. 300 ms by default; 0 turns it off.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Next</h2>
+      <p>
+        The <a href="../reference/control.html">control reference</a> lists every message
+        WinsLab answers to and every field a trigger can match.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

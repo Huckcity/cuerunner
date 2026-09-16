@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Versions and handover — Winslab</title>
+  <meta name="description" content="What each save changed, comparing two versions of a show, merging two people's work, and handing the whole thing over as one file." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Versions and handover — Winslab" />
+  <meta property="og:description" content="What each save changed, comparing two versions of a show, merging two people's work, and handing the whole thing over as one file." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Versions and handover</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Versions and handover<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        A show is worked on over weeks, by more than one person, and then handed to
+        somebody else to run. These are the four things the file itself can tell you and
+        do for you.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="history">
+      <h2>1. What the file remembers</h2>
+      <p>
+        Every save that changes the show writes a line into the file: who saved it, when,
+        and what moved — the cues added, removed, edited and moved, and the settings that
+        changed. <strong>WinsLab &#9662; &rarr; Show History&hellip;</strong> reads those
+        lines back, newest first, with the detail of each entry behind a disclosure.
+      </p>
+      <p>
+        A save that changes nothing writes the same bytes back and adds no line, which is
+        what makes a showfile safe to keep in version control: a show opened, saved and
+        closed without an edit is the same file. Bringing an older file up to this
+        version's shape is a change to the file rather than to the show, so it is not
+        recorded as an edit. A file remembers its last two hundred changes and lets the
+        oldest fall off.
+      </p>
+      <div class="note">
+        The history lives in the <code>.wlab</code>, so it survives being copied, emailed
+        or handed over. It is written whether or not this machine is licensed — it is the
+        show's own record of itself — and reading it in the app is part of Pro.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-1" id="compare">
+      <h2>2. Comparing two versions</h2>
+      <p>
+        <strong>WinsLab &#9662; &rarr; Compare Show&hellip;</strong> takes another saved
+        show and says what changed from it to the show on screen: the cues added, the cues
+        removed, the cues edited with the fields that changed, the cues that moved, and the
+        settings that moved with them. The file you pick is the older side, so read the
+        heading as "what changed since this was written" — the version from last night's
+        rehearsal against the one you are holding.
+      </p>
+      <p>
+        The comparison is about the show rather than about the machine: the audio file a
+        cue plays is compared by the file's own name, so a show copied into another folder,
+        or onto another machine, does not read as every cue having been edited.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="merge">
+      <h2>3. Merging two people's work</h2>
+      <p>
+        <strong>WinsLab &#9662; &rarr; Merge Show&hellip;</strong> merges another person's
+        copy of the show into yours, and asks for the version the two of you started from.
+        That third file is not bookkeeping: with two files alone, "I changed this" and "you
+        changed it" look the same, and a merge that cannot tell them apart throws one
+        person's work away.
+      </p>
+      <p>
+        A cue one side changed is taken. A cue both sides changed in different fields is
+        put together. A cue both sides changed in the same field is a conflict: the merge
+        keeps one side's value and names the conflict — the cue, both values, and whose was
+        kept — rather than deciding quietly. The order is this show's, with the other
+        side's cues placed among the neighbours they were added after, and groups stay
+        together.
+      </p>
+      <p>
+        What a merge will not pretend to do is said rather than guessed: the audio file a
+        cue plays is this show's, because the other copy resolved its media on the other
+        machine; a cue whose group went away comes back at the top level; and each of those
+        is listed in the report.
+      </p>
+      <div class="note">
+        The merge writes a <strong>new</strong> file and leaves both inputs exactly as they
+        were, so it is safe to try twice. The report's second button runs the same merge
+        over the same two files again with the other side's choices for the conflicts.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="bundle">
+      <h2>4. Handing a show over as one file</h2>
+      <p>
+        <strong>WinsLab &#9662; &rarr; Export Bundle&hellip;</strong> writes the show and
+        every audio file it plays into one <code>.wlabx</code>: a zip holding
+        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        inside it. It opens in any file manager, and its bytes are a function of the show,
+        so two exports of the same show are the same file. A file the show names that is
+        not on this machine is reported rather than failing the export.
+      </p>
+      <p>
+        <strong>Import Bundle&hellip;</strong> asks where the show should live, unpacks it
+        there and opens it: the audio is in the folder beside the showfile, so every cue
+        plays without anything to relink. If the folder already holds files by those names,
+        the app asks before replacing them. A bundle whose contents do not match the
+        checksums it carries is refused rather than half-unpacked.
+      </p>
+      <p>
+        A bundle carries up to about 4 GB of media — the zip format's own limit without its
+        64-bit extension, which this app does not write. A show bigger than that says so
+        instead of being written as an archive that lies about its own contents; the
+        <code>.wlab</code> itself has no such limit, and a show that size can still be
+        moved by <a href="../reference/formats.html#workspace">copying its folder</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scenes and the desk — Winslab</title>
+  <meta name="description" content="Build a scene grid of who is open on stage, recall it from a cue, and let WinsLab send only the DCA changes." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Scenes and the desk — Winslab" />
+  <meta property="og:description" content="Build a scene grid of who is open on stage, recall it from a cue, and let WinsLab send only the DCA changes." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Scenes and the desk</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Scenes and the desk<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        Who is open, scene by scene, as a grid you can read from the back of the room —
+        and a cue that moves the desk to match.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>1. Tell WinsLab about the desk</h2>
+      <p>
+        <strong>WinsLab ▾ → Show Settings → Channels</strong>. Pick how the desk is
+        reached — OSC, MIDI, or MIDI over TCP — and the address or port it answers on. The
+        line under it reads back exactly what WinsLab will send, so you can check it
+        against the console's own documentation before anything is live.
+      </p>
+      <figure class="figure">
+        <a href="../assets/guide/19-show-settings.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/19-show-settings.png" alt="Show Settings on its Channels tab: the desk connection, the channel strips, and the DCAs each strip rides." />
+        </a>
+        <figcaption>The desk, the strips, and the DCAs they ride.</figcaption>
+      </figure>
+      <p>
+        Then list the <strong>channels</strong> — the strips on the console — and which
+        <strong>DCA</strong> each one rides. Several channels can share a DCA, which is
+        what a chorus master usually is, and the DCA rows read back who they are carrying.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>2. Enter the cast</h2>
+      <p>
+        <strong>Cast</strong> is the people: a name, a part, the channel they are on and
+        any note you need. <strong>Ensembles</strong> are groups you will open together —
+        principals, chorus, band — so a scene can apply a whole section in one press
+        instead of a row of them.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>3. Build the scenes</h2>
+      <figure class="figure">
+        <a href="../assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/18-scenes.png" alt="The scenes view: a grid of performers down the side and scenes across the top, with cells marking who is open." />
+        </a>
+        <figcaption>The scenes view, mid-build.</figcaption>
+      </figure>
+      <p>
+        Switch the window to <strong>Scenes</strong>, press <strong>Edit</strong>, and add
+        one. Performers run down the side, scenes across the top; click a cell to open that
+        mic in that scene. <strong>Done</strong> when you have finished.
+      </p>
+      <p>
+        Out of edit mode the grid is for running: press <strong>Recall</strong> on a scene
+        and the desk moves. The column the desk is currently on is marked, so the grid
+        always says where you are.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>4. Put a scene in the cue list</h2>
+      <p>
+        Add a <strong>Scene</strong> cue (toolbar → More) and point it at a scene. GO now
+        moves the desk as part of the show.
+      </p>
+      <p>
+        A recall sends only what changes: the difference between where the desk stands and
+        where the scene says it should be. Mics that are already open are left alone, so a
+        recall never bumps a live channel, and a scene cue is safe to fire twice.
+      </p>
+      <div class="note">
+        A scene cue with no scene chosen does nothing rather than closing every mic on the
+        desk. That is deliberate: the dangerous reading of an empty scene is "close
+        everything", and it is never what anyone meant.
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

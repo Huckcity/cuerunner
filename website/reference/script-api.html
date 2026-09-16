@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Script cue API — Winslab</title>
+  <meta name="description" content="What a WinsLab script cue can call: shell, include, timeouts, logging and the limits." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Script cue API — Winslab" />
+  <meta property="og:description" content="What a WinsLab script cue can call: shell, include, timeouts, logging and the limits." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html">Guides</a>
+        <a href="../reference/index.html" aria-current="page">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../reference/index.html">Reference</a>
+        <span aria-hidden="true">/</span>
+        <span>Script cue API</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Script cue API</h1>
+      <p class="doc-lede">
+        A script cue runs JavaScript on its own worker thread when the cue fires, and holds
+        the show until it finishes.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>How it runs</h2>
+      <ul class="tight-list">
+        <li><code>await</code> works; the cue is not finished until the script is.</li>
+        <li>A script that outlasts its <strong>timeout</strong> is stopped and reported as a failure. The default is 60000 ms; <code>0</code> waits for ever.</li>
+        <li>STOP, panic, and a stop cue aimed at this one all end it.</li>
+        <li>An empty script does nothing and completes at once.</li>
+        <li>A script cannot reach the interface. It has the helpers below and nothing else.</li>
+        <li><code>console.log()</code> and <code>console.error()</code> write to the run log. One run is capped at 200 lines before it is truncated.</li>
+      </ul>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2><code>shell(command, options?)</code></h2>
+      <p>Runs a system command and resolves with its result.</p>
+      <div class="code"><code>const r = await shell('echo dimmer 80%')
+console.log(r.stdout.trim())</code></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Resolves</th><th>Options</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>{ stdout, stderr, code, signal }</code></td>
+              <td><code>timeout</code> (ms, default 10000), <code>cwd</code>, <code>env</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Commands start in the workspace's folder.</p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2><code>include('path/to/file.js')</code></h2>
+      <p>
+        Runs another JavaScript file and resolves with whatever that file returned, so a
+        helper file can hand back values. Each file runs once per cue however many times it
+        is included, and an include inside a file resolves relative to that file.
+      </p>
+      <div class="code"><code>const rig = await include('lib/rig.js')
+await rig.blackout()</code></div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Where the output goes</h2>
+      <p>
+        The run log. In a packaged build there is no developer console, so the
+        <strong>Log</strong> tab is the only place to read what a script printed. Running
+        from source, the same lines also appear in the terminal as
+        <code>[renderer] …</code>.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

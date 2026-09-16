@@ -4,45 +4,33 @@ A cross-platform **QLab alternative** for Windows and macOS — professional sho
 
 Built with Electron, React, TypeScript, and Zustand. Source-available under the [Functional Source License 1.1, MIT future license](./LICENSE) — see [License](#license).
 
-**Operator documentation:** the [user guide](https://huckcity.github.io/winslab/guide.html) covers
-running a show — workspaces, timing and advance, every cue type, the run log, and
-troubleshooting. Its source is [`website/guide.html`](./website/guide.html).
+**Documentation lives on the site**, not here:
 
-## Features
+- [Guides](https://huckcity.github.io/winslab/guide.html) — first show, building a cue
+  list, working with sound, running the show, and the Pro features. Source in
+  [`website/docs/guides.mjs`](./website/docs/guides.mjs).
+- [Reference](https://huckcity.github.io/winslab/reference/index.html) — every cue type
+  and field, every setting, the keyboard table, the OSC and MIDI messages WinsLab answers
+  to, the script API and the file formats. Source in
+  [`website/docs/reference.mjs`](./website/docs/reference.mjs).
 
-The cue stack is free, and so is everything in it. The show services and the views
-around them are **WinsLab Pro** — one license key, checked on the machine. See
-[WinsLab Pro](#winslab-pro) and the [user guide](https://huckcity.github.io/winslab/guide.html#pro).
+Both are generated: edit the content modules and run `node website/build-docs.mjs`.
 
-### Free
+This README is for people building WinsLab rather than running a show with it.
 
-- **11 Cue Types**: Audio, MIDI, OSC, Wait, Fade, Stop, Group, Network, Script, Devamp and Show Control cues (the twelfth, Scene, drives the desk from the stack and is part of Pro)
-- **Audio Playback**: per-cue level, pan, rate, and trim with fade-in, loop counts, and a waveform that is a region editor — drag either boundary, split a cue at the cursor, zoom from the whole file down to a second of it, and the engine's note detection makes the attacks easy to land on
-- **MIDI Control**: Send MIDI messages to external instruments and gear
-- **Show Control**: a cue that says Go, Stop, Resume, Load or Reset to a lighting console or an automation system — MIDI Show Control, naming the receiving console's own cue number, over a MIDI port or the show's desk connection
-- **OSC Integration**: Send Open Sound Control messages for networked control
-- **Show Sequencing**: Group cues, set auto-advance, pre/post-wait delays, and arm/disarm
-- **Vamps and devamps**: a cue can loop a section until a Devamp cue releases it, and the release plays out of the loop on the sample. A section is a cue, so a track can carry as many as the show needs — a verse vamp and a chorus vamp are two cues, each with its own devamp
-- **No double triggers**: a firing window stands in front of the space bar, the OSC listener and every MIDI input, and a cue that is already running is left alone unless it asks to be restarted
-- **Session Log**: cue run results, script output, and failures in a bottom panel
-- **Workspace Management**: Save/load `.wlab` JSON workspaces with undo/redo
-- **Durable Saves**: atomic writes with a `.bak` of the previous version, autosaved recovery snapshots, and a crash banner instead of a silent reset
-- **Cross-Platform**: Windows (NSIS installer) and macOS (DMG) builds, plus an experimental Linux AppImage
-- **Timeline Mode**: Visual timeline-based show layout (alternative to list view), with blocks that snap end to end
+## What it is
 
-### WinsLab Pro
+An Electron app with three layers — main process, preload bridge, renderer — talking
+exclusively over IPC. The renderer has no Node access; the audio engine is a native
+process of its own, so a renderer crash does not stop the sound.
 
-Everything below is in the same download and is unlocked by a key, not by another
-installer:
-
-- **The show around the cue stack**: OSC and MIDI input, the show monitor, network presence, and the wireless service that reads a telemetry source
-- **Trim silence**: audio cues can play only the part of a file between its first and last audible samples — measured by the engine when the file is chosen, a default for new cues in a show that asks for it, and a toggle of its own on every cue
-- **Wireless and the mic plot**: who is wearing which pack, the alarm before a battery dies on someone with an entrance, a swap log, and the night's report
-- **Triggers**: a cue that fires from an OSC address, a MIDI note or a console's own show control command, with nobody's hand on GO
-- **The script panel**: the script beside the stack, cues pinned to its lines, and the tablet companion that serves it over the show network
-- **Scenes and the desk**: the view the show is run from, with the console's channels and the DCAs they open set up in Show Settings, ensembles that move a group of mics at once, and scene cues in the stack
-- **Redundant playback**: a second machine runs the same show, mirrors it cue by cue and warms the same media, and picks the show up where it stopped if the machine driving it goes quiet — the running audio cue back at the position it had reached, the operator's place in the show carried across, and everything that cannot be picked up named in the run log
-- **The showfile as a versionable artifact**: what each save changed, read back from the file itself; a cue-by-cue comparison with another version of the show; two people's copies merged into one with the cues they both changed named rather than decided quietly; and a bundle that carries the show and every file it plays as a single `.wlabx` for handover
+The **cue stack is free**: twelve cue types, groups and timelines, the waveform editor,
+the run log, workspaces, undo. **WinsLab Pro** is the show around it — OSC and MIDI input,
+triggers, the monitor, wireless and the mic plot, scenes and the desk, the script panel
+with its tablet view, redundant playback, and the showfile as a versionable artifact —
+what each save changed, a comparison with another version, two people's copies merged,
+and the show and its media bundled into one `.wlabx`. One key, checked offline on the
+machine; see [WinsLab Pro](#winslab-pro) for how keys are issued.
 
 ## Getting Started
 
@@ -246,8 +234,8 @@ Key fields affecting playback:
 ### Network and Script Cues
 
 **Network cues** make an HTTP request when they fire. The show waits for the response (or
-the cue's timeout, 5 s by default) before moving on. Requests are issued from the app
-window, so target servers must return CORS headers.
+the cue's timeout, 5 s by default) before moving on. The request is made in the main
+process rather than in the window, so a target on the show network needs no CORS headers.
 
 Every cue type shows a **Last Run** section in its own inspector tab: when it last fired,
 how long it took, and the reason for any failure — the HTTP status and start of the
@@ -562,7 +550,11 @@ GitHub Actions workflows in `.github/workflows/`:
 [`RELEASE_CHECKLIST.md`](./.github/RELEASE_CHECKLIST.md) is what a release engineer walks
 before that dispatch, including the check that keeps this file's limitations honest.
 
-## Known Limitations
+## Known limitations
+
+The operator-facing list is in the
+[reference](https://huckcity.github.io/winslab/reference/troubleshooting.html#limitations).
+These are the ones that matter when building or packaging the app.
 
 Playback and platform limits:
 
@@ -655,8 +647,8 @@ Redundant playback:
   machines of a pair run the same workspace file, so a role written into the show would be
   read as the same answer by both of them
 
-The [user guide](https://huckcity.github.io/winslab/guide.html) documents the behaviour of each of
-these in the context of the feature it affects.
+The [reference](https://huckcity.github.io/winslab/reference/troubleshooting.html#limitations)
+carries the operator-facing half of this list, in the words an operator would look it up in.
 
 ## Contributing
 

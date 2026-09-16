@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>File formats — Winslab</title>
+  <meta name="description" content="The .wlab workspace file, the .wlabx bundle, how media is referenced, and the wireless telemetry document WinsLab reads." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="File formats — Winslab" />
+  <meta property="og:description" content="The .wlab workspace file, the .wlabx bundle, how media is referenced, and the wireless telemetry document WinsLab reads." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html">Guides</a>
+        <a href="../reference/index.html" aria-current="page">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../reference/index.html">Reference</a>
+        <span aria-hidden="true">/</span>
+        <span>File formats</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>File formats</h1>
+    </section>
+
+    <section class="panel reveal delay-1" id="workspace">
+      <h2>The workspace file</h2>
+      <p>
+        A show is one <code>.wlab</code> file: JSON, holding the cues in order, the show's
+        setup — the desk, the cast, the scenes, the mic plot, the triggers — and the
+        window's own state such as which cue was selected.
+      </p>
+      <p>
+        <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
+        file. Moving a show to another machine means taking the sound with it and keeping
+        the paths valid: the simplest arrangement is a folder with the <code>.wlab</code>
+        file and the audio beside it, copied whole.
+      </p>
+      <p>
+        A cue whose file has gone says <em>missing</em> where its length should be, and a
+        bar across the top of the window offers to relink it — point it at the file once
+        and the rest of the cues in the same folder follow.
+      </p>
+      <div class="note">
+        Older show files are migrated as they open: the settings that were once
+        <code>autoContinue</code> and <code>autoFollow</code> become
+        <strong>Advance</strong>, and groups that listed their children become children
+        that name their parent. Saving writes the current shape.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-1" id="bundle">
+      <h2>The bundle file<span class="pro">Pro</span></h2>
+      <p>
+        A <code>.wlabx</code> is the show <em>and</em> its audio as one file: a zip holding
+        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        inside it. It opens in any file manager, and its bytes are a function of the show,
+        so two exports of the same show are the same file.
+      </p>
+      <p>
+        It carries up to about 4 GB of media — the zip format's own limit without its
+        64-bit extension, which WinsLab does not write. A larger show is refused rather
+        than written as an archive that misreports its own contents.
+      </p>
+      <p>
+        The file also carries a checksum of everything in it, and an import whose contents
+        do not match is refused rather than half-unpacked. See
+        <a href="../guides/showfile.html#bundle">Versions and handover</a>.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="telemetry">
+      <h2>Wireless telemetry</h2>
+      <p>
+        WinsLab does not speak any receiver's own protocol. A source — an HTTP address or a
+        file on disk — returns this document:
+      </p>
+      <div class="code"><code>{
+  "channels": [
+    { "id": "ulxd-1", "name": "Pack 1", "batteryPercent": 42,
+      "batteryMinutes": 95, "rfDbm": -62, "audioLevel": 71,
+      "muted": false, "frequencyMhz": 606.5 }
+  ]
+}</code></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>id</code></td><td>Stable identifier for the channel. Required.</td></tr>
+            <tr><td><code>name</code></td><td>What the receiver calls it.</td></tr>
+            <tr><td><code>batteryPercent</code></td><td>0–100.</td></tr>
+            <tr><td><code>batteryMinutes</code></td><td>Runtime left, if the receiver reports it.</td></tr>
+            <tr><td><code>rfDbm</code></td><td>Signal strength, negative dBm.</td></tr>
+            <tr><td><code>audioLevel</code></td><td>0–100.</td></tr>
+            <tr><td><code>muted</code></td><td>Whether the channel is muted.</td></tr>
+            <tr><td><code>frequencyMhz</code></td><td>The frequency it is on.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The field names are the contract: a bridge written against a receiver's own API
+        only has to emit them. Any field a channel does not report is left out, and the
+        panel shows nothing for a reading that was never made rather than a zero.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

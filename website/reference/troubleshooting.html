@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting — Winslab</title>
+  <meta name="description" content="Symptoms, causes and fixes for WinsLab, and the known limitations." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Troubleshooting — Winslab" />
+  <meta property="og:description" content="Symptoms, causes and fixes for WinsLab, and the known limitations." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html">Guides</a>
+        <a href="../reference/index.html" aria-current="page">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../reference/index.html">Reference</a>
+        <span aria-hidden="true">/</span>
+        <span>Troubleshooting</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Troubleshooting</h1>
+      <p class="doc-lede">
+        Start with the <strong>Log</strong> tab in the dock and the <strong>Last run</strong>
+        block in the cue's own inspector. Between them they usually say it outright.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Cues</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>GO skips a cue</td>
+              <td>It is disarmed — the row says so. Arm it from the right-click menu or the Basics tab.</td>
+            </tr>
+            <tr>
+              <td>An audio cue is silent after moving files</td>
+              <td>Its file has moved. The row says <em>missing</em>; use the relink bar at the top of the window, and see <a href="./formats.html#workspace">the workspace file</a>.</td>
+            </tr>
+            <tr>
+              <td>A MIDI cue does nothing</td>
+              <td>No port: the cue names none and the show has no default output, or the interface is gone. Settings → MIDI, and the Monitor reports an interface that disappeared.</td>
+            </tr>
+            <tr>
+              <td>A show control cue does nothing</td>
+              <td>The show's desk does not take MIDI — the cue's panel says so — or the device ID does not match the console. 127 reaches everything.</td>
+            </tr>
+            <tr>
+              <td>A network cue fails with "Failed to fetch"</td>
+              <td>Nothing answered at that address: wrong host or port, or the target is not running. The Last run block has the exact error.</td>
+            </tr>
+            <tr>
+              <td>A network cue succeeds but the show stalls</td>
+              <td>The cue holds the show until the server answers. Lower its timeout, or put it in a group set to fire everything at once.</td>
+            </tr>
+            <tr>
+              <td>A script cue never finishes</td>
+              <td>Its timeout is 0, which waits for ever. Set one, or check what the script is waiting on in the log.</td>
+            </tr>
+            <tr>
+              <td>A trigger does not fire the cue</td>
+              <td>The input is off (Settings → Network or MIDI), the cue is disarmed, the address does not match exactly, or the repeat guard is swallowing a second message. The Monitor shows what actually arrived.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>The window</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>A banner says the interface stopped unexpectedly</td>
+              <td>The window crashed and was recovered. The show itself kept playing — the engine is in another process. The banner carries the error; the log has the rest.</td>
+            </tr>
+            <tr>
+              <td>The cue list looks empty after opening a show</td>
+              <td>Every group is collapsed. <strong>Expand</strong> in the toolbar opens the top level.</td>
+            </tr>
+            <tr>
+              <td>The wireless panel shows no readings</td>
+              <td>No source, or the source is unreachable — Settings → Wireless reports which. <strong>Demo</strong> proves the panel works.</td>
+            </tr>
+            <tr>
+              <td>Where are the error messages?</td>
+              <td>The Log tab, and the Last run block on the cue. Alarms also appear in the transport bar, whatever panel is open.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="limitations">
+      <h2>Known limitations</h2>
+      <ul class="tight-list">
+        <li>No video or image cues. Video is driven by talking to something that plays it, through a network, OSC or MIDI cue.</li>
+        <li>No cue-level audio effects beyond level, pan, rate and fades.</li>
+        <li>OSC input is UDP only.</li>
+        <li>The tablet view is read-only by design.</li>
+        <li>WinsLab is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>
+        <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

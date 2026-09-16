@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your first show — Winslab</title>
+  <meta name="description" content="Install WinsLab, open the demo show, build a cue list of your own, and save it." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Your first show — Winslab" />
+  <meta property="og:description" content="Install WinsLab, open the demo show, build a cue list of your own, and save it." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Winslab home">
+        <img src="../assets/logo-mark.svg" alt="Winslab" class="brand-mark" />
+        <span>WINSLAB</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../reliability.html">Reliability</a>
+        <a href="../index.html#download">Download</a>
+      </nav>
+      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Your first show</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Your first show</h1>
+      <p class="doc-lede">
+        Ten minutes, start to finish: install it, look at a show that already works, then
+        build a small one of your own and save it.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>1. Install</h2>
+      <div class="cards two-col">
+        <article class="card download-card">
+          <h3>Windows</h3>
+          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/WinsLab-Setup.exe">Download .exe</a>
+        </article>
+        <article class="card download-card">
+          <h3>macOS</h3>
+          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/WinsLab.dmg">Download .dmg</a>
+        </article>
+      </div>
+      <p>
+        WinsLab is not signed for the app stores, so the first launch warns about an
+        unidentified developer. Downloads come from <code>pub.winslabapp.com</code>. A
+        Linux AppImage is published too, and is experimental.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>2. Open the demo</h2>
+      <p>
+        <strong>WinsLab ▾ → Open Demo Workspace</strong>. It is a real show: audio, a
+        group with a count-in, MIDI and OSC cues, a network cue, a script cue and a fade,
+        with its own sound files. Nothing you do to it touches a file of yours — it opens
+        unsaved, so Save As makes it yours if you want to keep it.
+      </p>
+      <figure class="figure">
+        <a href="../assets/guide/01-window.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/01-window.png" alt="The WinsLab window with the demo show loaded: the cue list on the left, the inspector on the right, the waveform below and the transport at the bottom." />
+        </a>
+        <figcaption>The demo show, ready to run.</figcaption>
+      </figure>
+      <p>Press <kbd>Space</kbd>. The first cue plays, and the bar at the top moves on to the next one.</p>
+      <ol class="steps">
+        <li><strong>The bar under the toolbar</strong> answers the two questions asked mid-show: what is playing, and what GO will fire next. Each side shows the cue's number, its name and the first line of its notes.</li>
+        <li><strong>The cue list</strong> is the running order. One row per cue.</li>
+        <li><strong>The inspector</strong> on the right is the selected cue's settings. Its tabs change with the type of cue.</li>
+        <li><strong>The dock</strong> along the bottom shows one panel at a time: the selected cue, the run log, and the Pro panels.</li>
+        <li><strong>STOP and GO</strong> are the transport. Panic is <kbd>Shift</kbd> + <kbd>Esc</kbd>, and in the Playback menu.</li>
+      </ol>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>3. Make one of your own</h2>
+      <ol class="steps">
+        <li><strong>WinsLab ▾ → New</strong>, then double-click the name in the toolbar and call it something.</li>
+        <li><strong>Drag your audio files onto the cue list.</strong> One cue per file, named after the file, in the order you dropped them. Or press <strong>Audio</strong> in the toolbar and pick a file with Browse.</li>
+        <li><strong>Select a cue</strong> and look at the inspector. On <strong>Basics</strong>, give it a number you will recognise in a running order and write a note to yourself — the note shows up in the bar at the top when the cue is next, which is where you will actually read it.</li>
+        <li><strong>Press GO</strong> to hear it. <strong>STOP</strong> stops everything.</li>
+        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. WinsLab writes a <code>.wlab</code> file, which holds the cues and the show's setup but not the audio itself.</li>
+      </ol>
+      <div class="note">
+        The show file points at your audio where it sits on disk. Moving a show to another
+        machine means taking the sound with it — see
+        <a href="../reference/formats.html">the workspace file</a> for how to keep the
+        links intact.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Next</h2>
+      <p>
+        <a href="./cue-list.html">Building a cue list</a> covers groups, waits, fades and
+        the timing that makes a run of cues fire itself.
+        <a href="./running.html">Running the show</a> is what to do on the night.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>WinsLab — show control for Windows and macOS. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>
