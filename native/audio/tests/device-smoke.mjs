@@ -147,7 +147,13 @@ class EngineClient {
 const workDir = mkdtempSync(join(tmpdir(), 'winslab-device-smoke-'))
 const fixture = join(workDir, 'tone.wav')
 const capture = join(workDir, 'capture.wav')
-const socketPath = join(tmpdir(), `winslab-audio-smoke-${process.pid}.sock`)
+// The engine addresses its endpoint the way the platform does: a named pipe on Windows, a
+// unix socket elsewhere. A path like C:\...\x.sock is not a pipe name, and Windows says so
+// with ERROR_INVALID_NAME (123) before the engine has done anything at all.
+const socketPath =
+  process.platform === 'win32'
+    ? `\\\\.\\pipe\\winslab-audio-smoke-${process.pid}`
+    : join(tmpdir(), `winslab-audio-smoke-${process.pid}.sock`)
 
 writeFloatWav(fixture, 2, 48000, 48000 * 2, (channel) => (channel === 0 ? 0.4 : 0.4))
 

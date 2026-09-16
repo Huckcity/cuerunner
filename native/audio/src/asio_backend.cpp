@@ -134,6 +134,16 @@ struct AsioHost {
 
   ma_device* device = nullptr;
   ASIOBufferInfo infos[kChannelCap] = {};
+  /**
+   * The callback table handed to the driver at buffer creation, kept here rather than on the
+   * stack of the function that made the buffers: a driver is entitled to keep this pointer
+   * for as long as the buffers exist, and Steinberg's built-in one does — it reads a slot out
+   * of it later, inside `ASIOStart`. On a stack frame that has been overwritten in the
+   * meantime that slot is whatever happened to be there, and calling it is an access
+   * violation with no clue in it (found on the Windows runner: `call r9` inside asiobtin.dll
+   * with `r9` read from the stale struct). It lives as long as the host does.
+   */
+  ASIOCallbacks driverCallbacks = {};
   SampleType types[kChannelCap] = {};
   /** The engine's block, interleaved f32: what miniaudio hands the engine's renderer and
    *  what this backend then writes into the driver's per-channel buffers. Sized once, at
@@ -268,18 +278,26 @@ class DriverThread {
 
  private:
   DriverThread() {
-    worker_ = std::thread([this]() { loop(); });
+    // The constructor does not return until the worker has its apartment and an id: without
+    // that, a `run` arriving in the gap would find `id_` still equal to the *caller's* thread
+    // id and execute the task inline, on a thread with no apartment of its own — which is
+    // the E_NOINTERFACE this whole class exists to avoid, arriving as "the driver could not
+    // be loaded".
+    std::promise<void> ready;
+    std::future<void> started = ready.get_future();
+    worker_ = std::thread([this, &ready]() {
+      CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+      id_ = std::this_thread::get_id();
+      ready.set_value();
+      loop();
+    });
+    started.wait();
     worker_.detach();
   }
   DriverThread(const DriverThread&) = delete;
   DriverThread& operator=(const DriverThread&) = delete;
 
   void loop() {
-    // The apartment, held for the life of the thread and never released: the driver objects
-    // created here outlive the calls that made them, and an apartment torn down under one
-    // unloads its DLL — the fault this file has already been through once.
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    id_ = std::this_thread::get_id();
     for (;;) {
       std::function<void()> task;
       {
@@ -293,7 +311,7 @@ class DriverThread {
   }
 
   std::thread worker_;
-  std::thread::id id_ = std::this_thread::get_id();
+  std::thread::id id_;  // set by the worker before the constructor returns
   std::mutex mutex_;
   std::condition_variable wake_;
   std::queue<std::function<void()>> queue_;
@@ -791,14 +809,13 @@ ma_result initDeviceOnDriverThread(ma_device* pDevice, const ma_device_config* p
     host->infos[channel].buffers[0] = nullptr;
     host->infos[channel].buffers[1] = nullptr;
   }
-  ASIOCallbacks callbacks = {};
-  callbacks.bufferSwitch = bufferSwitch;
-  callbacks.sampleRateDidChange = sampleRateDidChange;
-  callbacks.asioMessage = asioMessages;
-  callbacks.bufferSwitchTimeInfo = bufferSwitchTimeInfo;
+  host->driverCallbacks.bufferSwitch = bufferSwitch;
+  host->driverCallbacks.sampleRateDidChange = sampleRateDidChange;
+  host->driverCallbacks.asioMessage = asioMessages;
+  host->driverCallbacks.bufferSwitchTimeInfo = bufferSwitchTimeInfo;
   host->device = pDevice;
   g_preparedHost = host;
-  result = host->driver->createBuffers(host->infos, host->activeChannels, bufferFrames, &callbacks);
+  result = host->driver->createBuffers(host->infos, host->activeChannels, bufferFrames, &host->driverCallbacks);
   if (result != ASE_OK) {
     setMessage(*host, "the ASIO driver '" + name + "' refused to create buffers of " + std::to_string(bufferFrames) +
                           " frames for " + std::to_string(host->activeChannels) + " channels (" + asioErrorText(result) + ")");
