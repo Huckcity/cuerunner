@@ -41,31 +41,38 @@ export function ScriptInspector({ cue }: Props) {
       </div>
 
       <p className="inspector-hint">
-        Runs when the cue fires, on its own worker thread. <code>await</code> works, and the
-        cue holds the show until the script finishes. A script that runs longer than the
-        timeout — or never finishes at all — is stopped and reported as a failure; 0 waits
-        forever. STOP, PANIC, and a stop cue aimed at this one stop it too.
+        Runs when the cue fires and holds the show until it finishes. Anything it prints
+        goes to the log panel.
       </p>
-      <p className="inspector-hint">
-        The script has no access to the interface, only to the helpers below.{' '}
-        <code>console.log()</code> and <code>console.error()</code> from the script appear
-        in the log panel.
-      </p>
-      <p className="inspector-hint">
-        <code>shell(command, options?)</code> runs a system command and resolves{' '}
-        <code>{'{ stdout, stderr, code, signal }'}</code>. Options:{' '}
-        <code>timeout</code> (ms, default 10000), <code>cwd</code>, <code>env</code>.
-        Commands start in the workspace folder.
-      </p>
-      <p className="inspector-hint">
-        <code>include('path/to/file.js')</code> runs another JavaScript file and resolves
-        what that file returned, so a helper file can hand back values. Each file runs once
-        per cue, however many times it is included, and an include inside a file resolves
-        relative to that file.
-      </p>
-      <p className="inspector-hint">
-        An empty script does nothing and completes immediately.
-      </p>
+
+      {/* The panel used to carry four paragraphs of this, which is a reference page
+          standing where a hint goes. It stays in the app — a show machine has no network
+          to look it up on — but behind a press. */}
+      <details className="disclosure">
+        <summary>What a script can call</summary>
+        <div className="disclosure-body script-help">
+          <p>
+            <code>await</code> works. A script that outlasts its timeout is stopped and
+            reported as a failure; 0 waits for ever. STOP, panic and a stop cue aimed at
+            this one all end it.
+          </p>
+          <p>
+            <code>console.log()</code> and <code>console.error()</code> write to the log
+            panel. A script cannot reach the interface.
+          </p>
+          <p>
+            <code>shell(command, options?)</code> runs a system command and resolves{' '}
+            <code>{'{ stdout, stderr, code, signal }'}</code>. Options:{' '}
+            <code>timeout</code> (ms, default 10000), <code>cwd</code>, <code>env</code>.
+            Commands start in the workspace folder.
+          </p>
+          <p>
+            <code>include('path/to/file.js')</code> runs another JavaScript file and
+            resolves what it returned. Each file runs once per cue however many times it
+            is included, and an include inside a file is relative to that file.
+          </p>
+        </div>
+      </details>
 
       <LastRun cueId={cue.id} />
     </div>

@@ -57,19 +57,17 @@ export function LicenseSection() {
             </div>
           </div>
           <p className="license-note">
-            Deactivating returns this machine to the free feature set. Nothing in a show
-            file changes.
+            Deactivating puts this machine back to the free app. Your shows are untouched.
           </p>
         </>
       )}
 
       {license.state !== 'active' && (
         <>
-          <p className="inspector-hint">
-            The free app runs the cue stack: audio, MIDI, OSC, network, script and group
-            cues, the timeline, and the session log. WinsLab Pro adds the scenes view and
-            the desk, cues that fire from OSC and MIDI, the show monitor, wireless and the
-            mic plot, and the script panel with its tablet companion.
+          <p className="inspector-hint" data-scope="panel">
+            The cue stack is free, and always will be. Pro adds the show around it: scenes
+            and the desk, cues that fire from a console, the monitor, wireless mics, and
+            the script with its tablet view.
           </p>
 
           {license.state === 'expired' && (
@@ -85,7 +83,7 @@ export function LicenseSection() {
               className="license-input"
               value={draft}
               spellCheck={false}
-              placeholder="(paste the key from your purchase)"
+              placeholder="Paste the key from your purchase"
               onChange={e => {
                 setDraft(e.target.value)
                 setError(null)
@@ -111,7 +109,7 @@ export function LicenseSection() {
             </div>
           </div>
           <p className="license-note">
-            The key is checked on this machine, so a show computer never needs the internet.
+            Checked on this machine, so a show computer never needs the internet.
           </p>
         </>
       )}

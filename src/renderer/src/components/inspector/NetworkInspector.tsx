@@ -105,9 +105,7 @@ export function NetworkInspector({ cue }: Props) {
       </div>
 
       <p className="inspector-hint">
-        Fires when the cue runs and holds the show until the request settles or the
-        timeout elapses. The request is made by the app itself, not by the page, so a
-        console on the LAN needs no CORS headers.
+        The cue finishes when the server answers, or when the timeout runs out.
       </p>
 
       <LastRun cueId={cue.id} />

@@ -20,8 +20,8 @@ export function WaitInspector({ cue }: Props) {
           onReset={() => update(cue.id, { duration: WAIT_DEFAULTS.duration })} />
       </div>
       <p className="inspector-hint">
-        Wait cues pause the sequence for the specified duration, then continue.
-        Set Advance to "On end" on the Basics tab to automatically fire the next cue after waiting.
+        Holds for this long. To fire the next cue afterwards, set Advance to “On end” on
+        the Basics tab.
       </p>
       <LastRun cueId={cue.id} />
     </div>

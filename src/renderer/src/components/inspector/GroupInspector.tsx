@@ -24,7 +24,7 @@ export function GroupInspector({ cue }: Props) {
           onReset={() => set({ mode: GROUP_DEFAULTS.mode })} />
       </div>
       <p className="inspector-hint">
-        Expand the group in the cue list to add, remove, or reorder its children.
+        Open the group in the cue list to add, remove or reorder what is in it.
       </p>
       <LastRun cueId={cue.id} />
     </div>

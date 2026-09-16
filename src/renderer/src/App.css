@@ -415,6 +415,38 @@ html, body, #root {
 /* A hint about the panel rather than about a field starts at its edge. */
 .inspector-hint[data-scope='panel'] { margin-left: 0; }
 
+/* Detail that is read once, if ever: the protocol settings behind a service, the helpers
+   a script cue can call. It stays in the app — a show machine has no network to look it
+   up on — but one press away, rather than as three paragraphs on the panel. */
+.disclosure { margin: var(--space-2) 0 var(--space-3); }
+
+.disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker { display: none; }
+
+.disclosure > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.12s ease;
+}
+
+.disclosure[open] > summary::before { transform: rotate(45deg) translate(1px, -1px); }
+.disclosure > summary:hover { color: var(--fg-primary); }
+.disclosure-body { padding-top: var(--space-3); }
+
 /* Cue type icons, wherever they are drawn: the list, the toolbar, the menus, the dock.
    One box and one stroke weight, set here, so a row of them is a column and a type looks
    the same on every surface. See utils/cueIcons.tsx. */

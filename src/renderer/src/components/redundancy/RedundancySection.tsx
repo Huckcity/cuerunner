@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { usePro, useStore } from '../../store'
 import { NumberField, TextField } from '../common/Field'
+import { Advanced, ServiceBlock } from '../common/SettingsBlock'
+import { ServiceStatus } from '../common/ServiceStatus'
 import { ProLock } from '../license/ProLock'
 import {
   MAX_TIMEOUT_MS,
@@ -43,7 +45,7 @@ export function RedundancySection(): React.JSX.Element {
       <ProLock
         variant="section"
         feature="Redundant playback"
-        blurb="A second machine runs the same show, mirrors it cue by cue, and picks it up where it stopped if this one goes down."
+        blurb="A second computer runs the same show, and picks it up where this one stopped."
       />
     )
   }
@@ -83,141 +85,134 @@ export function RedundancySection(): React.JSX.Element {
 
   return (
     <>
-      <div className="field-section-title">This machine</div>
-      <p className="inspector-hint">
-        Two machines run the same show and the same workspace file. Which one is the main,
-        what it is called, and where the other one is are facts about the machines, so
-        they are kept with this one rather than with the show.
-      </p>
+      <ServiceBlock
+        title="Redundant playback"
+        blurb="Keep a second computer on the same show, ready to pick it up where this one stopped."
+        id="settings-redundancy-enabled"
+        enabled={settings.enabled}
+        onEnabled={enabled => update({ enabled })}
+        service={service}
+      >
+        <div className="field-row">
+          <label htmlFor="settings-redundancy-role">This computer is</label>
+          <select
+            id="settings-redundancy-role"
+            value={settings.role}
+            disabled={!settings.enabled}
+            onChange={event => update({ role: event.target.value === 'standby' ? 'standby' : 'live' })}
+          >
+            <option value="live">Live — it runs the show</option>
+            <option value="standby">Standby — it follows the other one</option>
+          </select>
+        </div>
 
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-enabled">Redundant playback</label>
-        <input
-          id="settings-redundancy-enabled"
-          type="checkbox"
-          checked={settings.enabled}
-          onChange={event => update({ enabled: event.target.checked })}
-        />
-      </div>
+        <div className="field-row">
+          <label htmlFor="settings-redundancy-name">Called</label>
+          <TextField
+            id="settings-redundancy-name"
+            when="leave"
+            value={settings.name}
+            disabled={!settings.enabled}
+            placeholder="desk-a"
+            onValue={name => { if (name !== settings.name) update({ name }) }}
+          />
+        </div>
 
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-role">Role</label>
-        <select
-          id="settings-redundancy-role"
-          value={settings.role}
-          disabled={!settings.enabled}
-          onChange={event => update({ role: event.target.value === 'standby' ? 'standby' : 'live' })}
-        >
-          <option value="live">Live — this machine runs the show</option>
-          <option value="standby">Standby — this machine mirrors it</option>
-        </select>
-      </div>
+        <div className="field-row">
+          <label htmlFor="settings-redundancy-takeover">If the other one stops</label>
+          <select
+            id="settings-redundancy-takeover"
+            value={settings.takeover}
+            disabled={!settings.enabled}
+            onChange={event => update({ takeover: event.target.value === 'auto' ? 'auto' : 'manual' })}
+          >
+            <option value="manual">Tell me, and let an operator take the show</option>
+            <option value="auto">Take the show over by itself</option>
+          </select>
+        </div>
 
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-name">Name</label>
-        <TextField
-          id="settings-redundancy-name"
-          when="leave"
-          value={settings.name}
-          disabled={!settings.enabled}
-          placeholder="desk-a"
-          onValue={name => { if (name !== settings.name) update({ name }) }}
-        />
-      </div>
+        {failed !== null && (
+          <p className="inspector-hint license-hint">Those settings were not taken: {failed}</p>
+        )}
+        {settings.enabled && settings.token === '' && (
+          <p className="inspector-hint license-hint">
+            Set an access code below, the same on both computers. Without one, any machine
+            that finds this port can claim the pair.
+          </p>
+        )}
 
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-takeover">When the partner goes quiet</label>
-        <select
-          id="settings-redundancy-takeover"
-          value={settings.takeover}
-          disabled={!settings.enabled}
-          onChange={event => update({ takeover: event.target.value === 'auto' ? 'auto' : 'manual' })}
-        >
-          <option value="manual">Tell me — an operator takes the show</option>
-          <option value="auto">Take it over — this machine carries on by itself</option>
-        </select>
-      </div>
+        <Advanced summary="How the two find each other: ports, address and access code">
+          <div className="field-row">
+            <label htmlFor="settings-redundancy-port">Port here</label>
+            <NumberField
+              id="settings-redundancy-port"
+              value={settings.port}
+              min={1}
+              max={65535}
+              disabled={!settings.enabled}
+              onValue={port => { if (port !== null) update({ port }) }}
+            />
+          </div>
+          <div className="field-row">
+            <label htmlFor="settings-redundancy-peer-host">Other computer</label>
+            <TextField
+              id="settings-redundancy-peer-host"
+              when="leave"
+              value={settings.peerHost}
+              disabled={!settings.enabled}
+              placeholder="10.0.0.9 — leave empty to wait for it"
+              onValue={peerHost => { if (peerHost !== settings.peerHost) update({ peerHost }) }}
+            />
+          </div>
+          <div className="field-row">
+            <label htmlFor="settings-redundancy-peer-port">Its port</label>
+            <NumberField
+              id="settings-redundancy-peer-port"
+              value={settings.peerPort}
+              min={1}
+              max={65535}
+              disabled={!settings.enabled}
+              onValue={peerPort => { if (peerPort !== null) update({ peerPort }) }}
+            />
+          </div>
+          <div className="field-row">
+            <label htmlFor="settings-redundancy-token">Access code</label>
+            <TextField
+              id="settings-redundancy-token"
+              when="leave"
+              value={settings.token}
+              disabled={!settings.enabled}
+              placeholder="The same on both computers"
+              onValue={token => { if (token !== settings.token) update({ token }) }}
+            />
+            <button
+              className="inspector-btn"
+              onClick={() => update({ token: crypto.randomUUID().slice(0, 8) })}
+            >
+              New code
+            </button>
+          </div>
+          <div className="field-row">
+            <label htmlFor="settings-redundancy-timeout">Gone after</label>
+            <NumberField
+              id="settings-redundancy-timeout"
+              value={settings.timeoutMs}
+              min={MIN_TIMEOUT_MS}
+              max={MAX_TIMEOUT_MS}
+              disabled={!settings.enabled}
+              onValue={timeoutMs => { if (timeoutMs !== null) update({ timeoutMs }) }}
+            />
+            <span className="settings-info">ms of silence</span>
+          </div>
+        </Advanced>
+      </ServiceBlock>
 
-      {failed !== null && (
-        <p className="inspector-hint license-hint">Those settings were not taken: {failed}</p>
-      )}
-      {settings.enabled && settings.token === '' && (
-        <p className="inspector-hint license-hint">
-          No token is set, so any machine that finds this port can claim the pair. Set one the
-          same on both machines.
-        </p>
-      )}
-
-      <div className="field-section-title">The pair</div>
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-port">Port here</label>
-        <NumberField
-          id="settings-redundancy-port"
-          value={settings.port}
-          min={1}
-          max={65535}
-          disabled={!settings.enabled}
-          onValue={port => { if (port !== null) update({ port }) }}
-        />
-      </div>
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-peer-host">Partner address</label>
-        <TextField
-          id="settings-redundancy-peer-host"
-          when="leave"
-          value={settings.peerHost}
-          disabled={!settings.enabled}
-          placeholder="10.0.0.9 — empty listens without dialling"
-          onValue={peerHost => { if (peerHost !== settings.peerHost) update({ peerHost }) }}
-        />
-      </div>
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-peer-port">Partner port</label>
-        <NumberField
-          id="settings-redundancy-peer-port"
-          value={settings.peerPort}
-          min={1}
-          max={65535}
-          disabled={!settings.enabled}
-          onValue={peerPort => { if (peerPort !== null) update({ peerPort }) }}
-        />
-      </div>
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-token">Token</label>
-        <TextField
-          id="settings-redundancy-token"
-          when="leave"
-          value={settings.token}
-          disabled={!settings.enabled}
-          placeholder="the same on both machines"
-          onValue={token => { if (token !== settings.token) update({ token }) }}
-        />
-        <button
-          className="inspector-btn"
-          onClick={() => update({ token: crypto.randomUUID().slice(0, 8) })}
-        >
-          New
-        </button>
-      </div>
-      <div className="field-row">
-        <label htmlFor="settings-redundancy-timeout">Silence before gone</label>
-        <NumberField
-          id="settings-redundancy-timeout"
-          value={settings.timeoutMs}
-          min={MIN_TIMEOUT_MS}
-          max={MAX_TIMEOUT_MS}
-          disabled={!settings.enabled}
-          onValue={timeoutMs => { if (timeoutMs !== null) update({ timeoutMs }) }}
-        />
-        <span className="settings-info">ms</span>
-      </div>
-
-      <div className="field-section-title">What this machine has heard</div>
+      <div className="field-section-title">Where the pair stands</div>
       {status === null || !status.enabled ? (
-        <p className="inspector-hint">
+        <p className="inspector-hint" data-scope="panel">
           {settings.enabled
-            ? 'Waiting for the service to report. A port another program is holding shows under the monitor.'
-            : 'Not paired: this machine is running the show on its own.'}
+            ? 'Waiting to hear from the service. If another program is holding the port, the Monitor says so.'
+            : 'Not paired — this computer is running the show on its own.'}
         </p>
       ) : (
         <div className="redundancy-status">
@@ -261,11 +256,7 @@ export function RedundancySection(): React.JSX.Element {
           </div>
         </div>
       )}
-      {service && (
-        <div className="settings-service" data-service={service.id} data-state={service.state}>
-          {service.state} — {service.detail}
-        </div>
-      )}
+      <ServiceStatus service={service} />
     </>
   )
 }

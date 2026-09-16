@@ -32,9 +32,8 @@ export function DevampInspector({ cue }: Props) {
         </select>
       </div>
       <p className="inspector-hint">
-        The target stops looping its section and plays on to the end of its file, from
-        wherever the loop had reached. Set the section to loop forever in the audio cue's
-        Time &amp; Loops tab to make it a vamp; this cue then lets it go.
+        Lets a looping cue go: it finishes the lap it is on, then plays to the end of the
+        file. Set a cue to loop forever on its Time &amp; Loops tab to make it a vamp.
       </p>
       <LastRun cueId={cue.id} />
     </div>

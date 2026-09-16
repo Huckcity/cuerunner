@@ -155,7 +155,7 @@ export function App() {
             <ProLock
               variant="view"
               feature="Scenes"
-              blurb="Scenes drive the desk: who is open on stage, and only the messages that change it. Recall one and the mics move with the show."
+              blurb="Who is open on stage, scene by scene. Recall one and the desk moves with the show."
             />
           )
         ) : (

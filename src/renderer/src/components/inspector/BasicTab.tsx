@@ -54,8 +54,7 @@ export function BasicTab({ cue }: Props) {
       </div>
       {colorTargets.length > 1 && (
         <p className="inspector-hint">
-          {colorTargets.length} cues selected — a colour goes on all of them, and one undo
-          takes it off again.
+          {colorTargets.length} cues selected: a colour goes on all of them.
         </p>
       )}
       <div className="field-section-title">Timing</div>
@@ -100,7 +99,7 @@ export function BasicTab({ cue }: Props) {
         </select>
       </div>
       <p className="inspector-hint">
-        What GO, a trigger or the space bar does to this cue while it is already running.
+        What GO does to this cue while it is already running.
       </p>
       <div className="field-row">
         <label>Armed</label>

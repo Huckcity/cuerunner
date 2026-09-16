@@ -221,35 +221,8 @@
 .settings-switch:checked::after { left: 18px; background: #fff; }
 .settings-switch:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
 
-/* Settings that are set once, if ever. */
+/* Settings that are set once, if ever. The shape is shared: see .disclosure. */
 .settings-advanced { margin-top: var(--space-2); }
-
-.settings-advanced summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) 0;
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  list-style: none;
-}
-
-.settings-advanced summary::-webkit-details-marker { display: none; }
-
-.settings-advanced summary::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform 0.12s ease;
-}
-
-.settings-advanced[open] summary::before { transform: rotate(45deg) translate(1px, -1px); }
-.settings-advanced summary:hover { color: var(--fg-primary); }
-.settings-advanced-body { padding-top: var(--space-3); }
 
 .settings-info {
   font-size: var(--text-base);
