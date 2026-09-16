@@ -5,8 +5,16 @@
 #define NOMINMAX
 #endif
 
+// miniaudio's implementation, compiled in this file and nowhere else. The define has to be
+// in place before the header's first inclusion anywhere in this translation unit, and
+// asio_backend.h below includes it for its types — so this comes first, before every other
+// header, or the implementation silently is not compiled and the link fails on ma_*.
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio_setup.h"
+
 #include "engine.h"
 
+#include "asio_backend.h"  // a no-op unless this build has the ASIO SDK
 #include "onsets.h"
 #include "util.h"
 
@@ -17,13 +25,6 @@
 #include <cstring>
 #include <random>
 #include <thread>
-
-#define MA_NO_DECODING
-#define MA_NO_ENCODING
-#define MA_NO_RESOURCE_MANAGER
-#define MA_NO_GENERATION
-#define MINIAUDIO_IMPLEMENTATION
-#include "miniaudio.h"
 
 namespace ws {
 namespace {
@@ -117,6 +118,9 @@ std::string backendNameOf(ma_backend backend) {
     case ma_backend_alsa: return "alsa";
     case ma_backend_pulseaudio: return "pulseaudio";
     case ma_backend_jack: return "jack";
+    // There is one custom backend in this engine and it is ASIO: miniaudio has no ASIO of
+    // its own, so the backend is registered through the custom hook (see asio_backend.cpp).
+    case ma_backend_custom: return "asio";
     case ma_backend_null: return "silent";
     default: return "unknown";
   }
@@ -128,6 +132,7 @@ bool parseBackendName(const std::string& name, ma_backend& out) {
   if (name == "alsa") { out = ma_backend_alsa; return true; }
   if (name == "pulseaudio" || name == "pulse" || name == "pipewire") { out = ma_backend_pulseaudio; return true; }
   if (name == "jack") { out = ma_backend_jack; return true; }
+  if (name == "asio") { out = ma_backend_custom; return true; }
   return false;
 }
 
@@ -159,6 +164,7 @@ std::string deviceIdToString(const ma_device_id& id, ma_backend backend) {
     case ma_backend_alsa: return id.alsa[0] != '\0' ? std::string(id.alsa) : std::string("alsa-default");
     case ma_backend_coreaudio: return id.coreaudio[0] != '\0' ? std::string(id.coreaudio) : std::string("coreaudio-default");
     case ma_backend_jack: return "jack-" + std::to_string(id.jack);
+    case ma_backend_custom: return id.custom.s[0] != '\0' ? std::string(id.custom.s) : std::string("asio-default");
     default: return "device-" + std::to_string(id.nullbackend);
   }
 }
@@ -189,6 +195,11 @@ struct Engine::DeviceState {
   std::string deviceId;
   std::string format = "f32";
   std::string internalFormat = "f32";
+  // What only the backend can say: the latency its own driver states (in samples, measured
+  // from the hardware rather than derived from the period size), and anything about this
+  // device the operator should be told in the engine's warnings.
+  double reportedLatencyMs = -1.0;
+  std::string backendNote;
   std::map<std::string, ma_device_id> ids;
 };
 
@@ -230,6 +241,11 @@ Engine::Engine() : mixer_(cache_, streams_, events_, reclaim_) {
   sessionId_ = mintSessionId();
 }
 
+Engine::Engine(const EngineOptions& options) : Engine() {
+  options_ = options;
+  cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
+}
+
 Engine::~Engine() { stop(); }
 
 void Engine::setEventCallback(std::function<void(const Event&)> callback) { eventCallback_ = callback; }
@@ -267,6 +283,15 @@ bool initBackendContext(const std::string& backend, ma_context& context, ma_back
   if (backend == "auto") {
     candidates = defaultBackends();
   } else {
+    // ASIO is the one backend that can be missing from a build entirely: the SDK it needs
+    // cannot be shipped with this source, so a build without it refuses by name and says
+    // why, rather than reporting that no backend could be initialised.
+    if (backend == "asio") {
+#if !defined(WINSLAB_ASIO)
+      reason = "this engine was built without ASIO support (the Steinberg ASIO SDK was not present at build time)";
+      return false;
+#endif
+    }
     ma_backend forced;
     if (!parseBackendName(backend, forced)) {
       reason = "unknown audio backend '" + backend + "'";
@@ -277,7 +302,15 @@ bool initBackendContext(const std::string& backend, ma_context& context, ma_back
   bool ready = false;
   for (ma_backend candidate : candidates) {
     ma_backend list[1] = {candidate};
-    const ma_result result = ma_context_init(list, 1, nullptr, &context);
+    ma_context_config config = ma_context_config_init();
+#if defined(WINSLAB_ASIO)
+    if (candidate == ma_backend_custom) {
+      // The custom hook is how a backend with its own driver arrives: miniaudio knows the
+      // device model, the backend knows ASIO.
+      config.custom = asio::backendCallbacks();
+    }
+#endif
+    const ma_result result = ma_context_init(list, 1, &config, &context);
     if (result == MA_SUCCESS) {
       resolved = candidate;
       ready = true;
@@ -342,9 +375,13 @@ bool Engine::startDevice(EngineError& error) {
 
   const ma_result result = ma_device_init(&state->context, &config, &state->device);
   if (result != MA_SUCCESS) {
+    // A backend that knows why says so in its own words; miniaudio's generic result would
+    // otherwise be all an operator sees.
+    const std::string detail = backendDetail(*state);
     ma_context_uninit(&state->context);
     error = {"device", std::string("cannot open audio device") +
-                          (options_.exclusive ? " in exclusive mode" : "") + ": " + maResultText(result)};
+                          (options_.exclusive ? " in exclusive mode" : "") + ": " +
+                          (detail.empty() ? maResultText(result) : detail)};
     return false;
   }
   state->deviceReady = true;
@@ -370,6 +407,18 @@ bool Engine::startDevice(EngineError& error) {
     if (actual > 0) state->bufferFrames = static_cast<int>(actual);
   }
 #endif
+#if defined(WINSLAB_ASIO)
+  if (state->backend == ma_backend_custom) {
+    // ASIO is exclusive by construction: the driver is held for as long as the stream
+    // runs, and no other application can open it meanwhile. The request that means
+    // "exclusive" on WASAPI has nothing to add here, and the readout says what is true.
+    state->exclusive = true;
+    // ASIO is the one backend whose driver states its own latency, in samples, from what
+    // it knows about its hardware rather than from the period size we asked for.
+    state->reportedLatencyMs = asio::contextLatencyMs(state->context);
+    state->backendNote = asio::contextNote(state->context);
+  }
+#endif
   ma_device_info runningInfo{};
   if (ma_device_get_info(&state->device, ma_device_type_playback, &runningInfo) == MA_SUCCESS) {
     state->deviceId = deviceIdToString(runningInfo.id, state->backend);
@@ -384,9 +433,11 @@ bool Engine::startDevice(EngineError& error) {
 
   const ma_result startResult = ma_device_start(&state->device);
   if (startResult != MA_SUCCESS) {
+    const std::string detail = backendDetail(*state);
     ma_device_uninit(&state->device);
     ma_context_uninit(&state->context);
-    error = {"device", std::string("cannot start audio device: ") + maResultText(startResult)};
+    error = {"device", std::string("cannot start audio device: ") +
+                          (detail.empty() ? maResultText(startResult) : detail)};
     return false;
   }
 
@@ -489,14 +540,38 @@ void Engine::backgroundLoop() {
 void Engine::checkDeviceHealth() {
   if (!deviceRunning_.load(std::memory_order_acquire)) return;
   if (expectedDeviceStop_.load(std::memory_order_acquire)) return;
-  std::unique_lock<std::mutex> lock(deviceMutex_, std::try_to_lock);
-  if (!lock.owns_lock()) return;
-  if (device_ == nullptr || !device_->deviceReady) return;
-  const ma_device_state state = ma_device_get_state(&device_->device);
-  if (state == ma_device_state_stopped || state == ma_device_state_stopping) {
-    deviceRunning_.store(false, std::memory_order_release);
-    failDeviceFromCallback("audio device stopped unexpectedly");
+  std::string restartReason;
+  {
+    std::unique_lock<std::mutex> lock(deviceMutex_, std::try_to_lock);
+    if (!lock.owns_lock()) return;
+    if (device_ == nullptr || !device_->deviceReady) return;
+    const ma_device_state state = ma_device_get_state(&device_->device);
+    if (state == ma_device_state_stopped || state == ma_device_state_stopping) {
+      deviceRunning_.store(false, std::memory_order_release);
+      failDeviceFromCallback("audio device stopped unexpectedly");
+      return;
+    }
+#if defined(WINSLAB_ASIO)
+    if (device_->backend == ma_backend_custom) {
+      // An ASIO driver whose hardware went away stops calling back without saying so, so
+      // silence is the only evidence there is — and it is enough: this backend is either
+      // rendering blocks or it is not.
+      if (asio::contextStalled(device_->context)) {
+        deviceRunning_.store(false, std::memory_order_release);
+        failDeviceFromCallback(asio::contextMessage(device_->context));
+        return;
+      }
+      // Blocks the driver itself caught are the same fact as an xrun measured here, from
+      // the one side that can see the hardware's deadline.
+      const uint64_t reported = asio::takeDropouts(device_->context);
+      if (reported > 0) xruns_.fetch_add(reported, std::memory_order_relaxed);
+      asio::takeRestartRequest(device_->context, restartReason);
+    }
+#endif
   }
+  // Outside the lock: reopening the device takes it again, and this is the one place that
+  // knows a driver asked for its stream to be rebuilt.
+  if (!restartReason.empty()) reopenAfterBackendRequest(restartReason);
 }
 
 void Engine::handleBackgroundWork() {
@@ -1111,7 +1186,10 @@ InfoDTO Engine::info() const {
     out.exclusive = device_->exclusive;
     out.bufferFrames = device_->bufferFrames;
     out.periodFrames = device_->periodFrames;
-    if (device_->periodFrames > 0 && device_->internalSampleRate > 0) {
+    if (device_->reportedLatencyMs > 0.0) {
+      out.latencyMs = device_->reportedLatencyMs;
+      out.latencySource = "driver";
+    } else if (device_->periodFrames > 0 && device_->internalSampleRate > 0) {
       const double periods = device_->bufferFrames > 0 ? static_cast<double>(device_->bufferFrames) /
                                                              static_cast<double>(device_->periodFrames)
                                                        : 1.0;
@@ -1126,6 +1204,7 @@ InfoDTO Engine::info() const {
       out.warnings.push_back("device runs at " + std::to_string(device_->internalSampleRate) +
                              " Hz; the engine resamples from " + std::to_string(device_->sampleRate) + " Hz");
     }
+    if (!device_->backendNote.empty()) out.warnings.push_back(device_->backendNote);
   } else if (options_.backend == "silent") {
     out.backend = "silent";
     out.deviceName = "(silent backend - no device I/O)";
@@ -1246,8 +1325,15 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
     error = {"device", "device configuration is unavailable with the " + options_.backend + " backend"};
     return false;
   }
+  // The silent and offline backends are spawn-time modes for a build or a test — they have
+  // no device at all — so there is nothing to switch to at runtime.
+  if (request.hasBackend && (request.backend == "silent" || request.backend == "offline")) {
+    error = {"device", "the " + request.backend + " backend has no device to configure"};
+    return false;
+  }
   const EngineOptions previous = options_;
   EngineOptions updated = options_;
+  if (request.hasBackend) updated.backend = request.backend;
   if (request.hasDeviceId) updated.deviceId = request.deviceId == "default" ? std::string() : request.deviceId;
   if (request.hasSampleRate) updated.sampleRate = request.sampleRate;
   if (request.hasChannels) updated.channels = request.channels;
@@ -1257,12 +1343,15 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   // Asking for what is already running is a no-op: bouncing the device would interrupt
   // audio and produce a stop/start cycle nobody asked for (the window re-sends its
   // settings on every launch and every settings change).
-  if (updated.deviceId == options_.deviceId && updated.sampleRate == options_.sampleRate &&
-      updated.channels == options_.channels && updated.exclusive == options_.exclusive &&
-      updated.bufferFrames == options_.bufferFrames) {
+  if (updated.backend == options_.backend && updated.deviceId == options_.deviceId &&
+      updated.sampleRate == options_.sampleRate && updated.channels == options_.channels &&
+      updated.exclusive == options_.exclusive && updated.bufferFrames == options_.bufferFrames) {
     return true;
   }
+  return reopenDeviceLocked(updated, previous, error);
+}
 
+bool Engine::reopenDeviceLocked(const EngineOptions& updated, const EngineOptions& previous, EngineError& error) {
   // Changing the device is a restart: every voice belongs to the old stream format.
   CommandResultDTO ignored;
   EngineError ignoredError;
@@ -1295,6 +1384,36 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   }
   restartCapture();
   return true;
+}
+
+/**
+ * A driver has asked for its stream to be rebuilt — its control panel changed the buffer
+ * size, or its clock changed the rate. The device is reopened with the same settings: the
+ * backend reads the driver's new buffer size and rate as it opens, which is exactly what
+ * the request means. The operator is told, because the show stopped for a moment to do it.
+ */
+void Engine::reopenAfterBackendRequest(const std::string& reason) {
+  std::lock_guard<std::mutex> lock(deviceMutex_);
+  if (device_ == nullptr) return;
+  const EngineOptions current = options_;
+  EngineError error;
+  if (!reopenDeviceLocked(current, current, error)) {
+    std::lock_guard<std::mutex> errorLock(errorMutex_);
+    lastError_ = "cannot reopen the audio device after a driver request: " + error.message;
+    failDevice(lastError_);
+    return;
+  }
+  std::lock_guard<std::mutex> errorLock(errorMutex_);
+  lastError_ = reason;
+}
+
+std::string Engine::backendDetail(const DeviceState& state) {
+#if defined(WINSLAB_ASIO)
+  if (state.backend == ma_backend_custom) return asio::contextMessage(state.context);
+#else
+  (void)state;
+#endif
+  return std::string();
 }
 
 void Engine::restartCapture() {

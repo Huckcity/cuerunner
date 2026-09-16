@@ -4,7 +4,7 @@
  * reported device truth, panics and verifies the captured output goes silent. Runs
  * against the isolated acceptance sink, never the machine's default output.
  *
- *   node native/audio/tests/device-smoke.mjs [--device name] [--backend pulseaudio]
+ *   node native/audio/tests/device-smoke.mjs [--device name] [--backend pulseaudio] [--channels n]
  */
 import { spawn } from 'node:child_process'
 import { connect } from 'node:net'
@@ -23,6 +23,9 @@ function argValue(name, fallback) {
 
 const device = argValue('--device', process.env.WINSLAB_AUDIO_TEST_DEVICE ?? 'winslab_acceptance')
 const backend = argValue('--backend', process.env.WINSLAB_AUDIO_TEST_BACKEND ?? 'pulseaudio')
+// Eight is the acceptance sink's channel count. An interface reached through ASIO has
+// whatever it has, so the caller passes the driver's own count (asio-smoke.mjs does).
+const requestedChannels = Number(argValue('--channels', process.env.WINSLAB_AUDIO_TEST_CHANNELS ?? '8'))
 
 let failures = 0
 let checks = 0
@@ -153,7 +156,7 @@ const child = spawn(binary, [
   '--socket', socketPath,
   '--backend', backend,
   '--device', device,
-  '--channels', '8',
+  '--channels', String(requestedChannels),
   '--sample-rate', '48000',
   '--buffer-frames', '512',
   '--capture', capture
@@ -185,10 +188,12 @@ try {
   const info = await client.request('info')
   check('backend is the real one asked for', info.backend === backend, JSON.stringify(info.backend))
   check('device is the one asked for', info.deviceId === device || info.deviceName.length > 0, JSON.stringify({ id: info.deviceId, name: info.deviceName }))
-  const requestedChannels = 8
   check('reported channel count is truthful', info.channels === requestedChannels, JSON.stringify(info.channels))
   check('reported sample rate is truthful', info.sampleRate === 48000, String(info.sampleRate))
-  check('latency is reported as measured/estimated, not invented', ['estimated', 'measured'].includes(info.latencySource) && info.latencyMs > 0 && info.latencyMs < 200, JSON.stringify({ latencyMs: info.latencyMs, source: info.latencySource }))
+  // `driver` is ASIO's: the driver states its own output latency in samples. The other two
+  // are miniaudio's estimate from the period size, and a measured one where a backend can
+  // measure it. Anything else is a number nobody stands behind.
+  check('latency is reported with its source, not invented', ['estimated', 'measured', 'driver'].includes(info.latencySource) && info.latencyMs > 0 && info.latencyMs < 200, JSON.stringify({ latencyMs: info.latencyMs, source: info.latencySource }))
   check('buffer and period frames are real numbers', info.periodFrames > 0 && info.bufferFrames >= info.periodFrames, JSON.stringify({ period: info.periodFrames, buffer: info.bufferFrames }))
 
   const devices = await client.request('devices')
@@ -196,14 +201,22 @@ try {
   check('enumeration lists the device with its real channel count', match !== undefined && match.channels >= requestedChannels, JSON.stringify(match))
   check('enumeration reports exclusive capability honestly', match !== undefined && match.exclusive === false, JSON.stringify(match))
 
-  // Exclusive access is a WASAPI/CoreAudio thing: asking for it here must fail loudly.
-  let exclusiveRefused = false
-  try {
-    await client.request('configure', { options: { exclusive: true } })
-  } catch (error) {
-    exclusiveRefused = /exclusive/i.test(error.message)
+  // Exclusive access is a WASAPI/CoreAudio request. A backend that cannot be asked for it
+  // either refuses the request (PulseAudio, ALSA) or is already exclusive by construction —
+  // ASIO holds the driver for as long as the stream runs — and in that second case the
+  // engine's own readout has to say so, because the two are different things and one of
+  // them is a promise about the hardware.
+  if (info.exclusive) {
+    check('an already-exclusive backend says so in its readout', info.exclusive === true && match.exclusive === false, JSON.stringify({ info: info.exclusive, device: match.exclusive }))
+  } else {
+    let exclusiveRefused = false
+    try {
+      await client.request('configure', { options: { exclusive: true } })
+    } catch (error) {
+      exclusiveRefused = /exclusive/i.test(error.message)
+    }
+    check('an unsupported exclusive request is refused, not silently downgraded', exclusiveRefused)
   }
-  check('an unsupported exclusive request is refused, not silently downgraded', exclusiveRefused)
 
   // A reconfigure stops and reopens the device; that must not be logged or broadcast as
   // a lost device (the backend posts a `stopped` notification for our own stop).

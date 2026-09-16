@@ -43,7 +43,7 @@ void usage() {
                "  winslab-audio --offline-render <script.json> --out <out.wav> [--events <events.jsonl>] [options]\n"
                "  winslab-audio --list-devices [options]\n"
                "options:\n"
-               "  --backend <auto|wasapi|coreaudio|alsa|pulseaudio|jack|silent|offline>\n"
+               "  --backend <auto|wasapi|coreaudio|alsa|pulseaudio|jack|asio|silent|offline>\n"
                "  --device <id>              device id from --list-devices\n"
                "  --sample-rate <hz>         default 48000\n"
                "  --channels <n>             default: device channels\n"
@@ -171,7 +171,9 @@ int main(int argc, char** argv) {
     // The engine is several MiB of embedded queues, and Windows gives a thread one MiB of
     // stack: every Engine lives on the heap, on every path, so startup cannot overflow
     // before the process has printed a word. (It did: main died with 0xC00000FD.)
-    auto engine = std::make_unique<ws::Engine>();
+    // Its options come in at construction because nothing here calls start(): the list is
+    // of the backend the caller named, not of whatever the platform defaults to.
+    auto engine = std::make_unique<ws::Engine>(engineOptions);
     std::vector<ws::DeviceDTO> devices;
     ws::EngineError error;
     if (!engine->devices(devices, error)) {
