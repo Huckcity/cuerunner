@@ -71,6 +71,7 @@
 #include <iterator>
 #include <map>
 #include <mutex>
+#include <new>
 #include <string>
 #include <vector>
 
