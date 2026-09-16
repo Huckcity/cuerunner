@@ -866,7 +866,7 @@ describe('CueRunner — stop cue', () => {
     expect(setRunning).toHaveBeenCalledWith('s1', expect.objectContaining({ state: 'post-wait' }))
   })
 
-  it('counts a timeline child stopped mid-group down without finishing the group', () => {
+  it('counts a stopped timeline child down, and settles the group with its last child', () => {
     const group: GroupCue = {
       id: 'g1', number: '1', name: 'Group', type: 'group',
       colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
@@ -880,10 +880,40 @@ describe('CueRunner — stop cue', () => {
     runner.go()
     vi.advanceTimersByTime(100)
     runner.stop('c1')
-    vi.advanceTimersByTime(20000)
-
     expect(setRunning).toHaveBeenCalledWith('c1', null)
-    expect(setRunning).not.toHaveBeenCalledWith('g1', null)
+
+    // The child still to come runs, and the group settles when it does instead of
+    // staying lit over a child that was taken away.
+    vi.advanceTimersByTime(20000)
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('c2')
+    expect(setRunning).toHaveBeenCalledWith('g1', null)
+  })
+
+  it('moves a sequence past a stopped child and settles the group at the end of it', () => {
+    const group: GroupCue = {
+      id: 'g1', number: '1', name: 'Group', type: 'group',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      mode: 'sequence'
+    }
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 5000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const stop = makeStop({ id: 's1', number: '9', targetCueId: 'c1' })
+    const { runner, setRunning, setLastRun } = setup([group, c1, c2, stop])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    runner.goById('s1')
+
+    // The step the stopped child held is over: the sequence moves on to c2.
+    expect(setRunning).toHaveBeenCalledWith('c1', null)
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('c2')
+
+    vi.advanceTimersByTime(5000)
+    // c2's end finishes the group rather than leaving it lit, and the child that was
+    // taken away is not recorded as having completed.
+    expect(setRunning).toHaveBeenCalledWith('g1', null)
+    expect(setLastRun).not.toHaveBeenCalledWith('c1', expect.anything())
   })
 
   it('advances a sequence past an engine-stopped child', () => {
@@ -1981,5 +2011,83 @@ describe('CueRunner — stopping a group', () => {
     expect(setRunning).toHaveBeenCalledWith('g1', null)
     vi.advanceTimersByTime(5000)
     expect(fired(setRunning)).not.toContain('c2')
+  })
+})
+
+// A playlist group steps one child per GO, and the group holds the show until the pass
+// is complete. The interlock that does it — `isMidPlaylist` — only ever runs when the
+// pass is unfinished, so a test that lets the whole pass finish never reaches it.
+describe('CueRunner — playlist groups', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  function playlist(overrides: Partial<GroupCue> = {}): GroupCue {
+    return {
+      id: 'g1', number: '1', name: 'Group', type: 'group',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      mode: 'playlist',
+      ...overrides
+    }
+  }
+
+  function makeStop(overrides: Partial<StopCue> = {}): StopCue {
+    return {
+      id: 's1', number: '9', name: 'Stop', type: 'stop',
+      colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '',
+      targetCueId: 'all', fadeOut: false, fadeOutDuration: 0, waitForFade: false,
+      ...overrides
+    }
+  }
+
+  const fired = (setRunning: Mock): string[] => setRunning.mock.calls
+    .filter(c => c[1]?.state === 'playing')
+    .map(c => c[0])
+
+  it('holds the show until the pass is complete, then hands over', () => {
+    const group = playlist({ advance: 'on-end' })
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 1000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const next = makeWait({ id: 'w2', number: '2', duration: 1000 })
+    const { runner, setRunning } = setup([group, c1, c2, next])
+
+    runner.go()
+    vi.advanceTimersByTime(2000)
+    // One step of two: the pass is not over, so the show does not move on.
+    expect(fired(setRunning)).not.toContain('w2')
+
+    // The operator's GO again: the selection was held on the group, so this is the
+    // second step of the pass.
+    runner.go()
+    vi.advanceTimersByTime(2000)
+    expect(fired(setRunning)).toContain('c2')
+    expect(fired(setRunning)).toContain('w2')
+  })
+
+  it('holds the pass open when a step is stopped, and resumes where the cursor says', () => {
+    const group = playlist({ advance: 'on-end' })
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 5000 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000 })
+    const next = makeWait({ id: 'w2', number: '2', duration: 1000 })
+    const stop = makeStop({ targetCueId: 'c1' })
+    const { runner, setRunning } = setup([group, c1, c2, next, stop])
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    runner.goById('s1')
+
+    // The step was taken away, and a stopped step is not the end of a pass.
+    expect(setRunning).toHaveBeenCalledWith('c1', null)
+    expect(setRunning).toHaveBeenCalledWith('g1', null)
+    vi.advanceTimersByTime(10000)
+    expect(fired(setRunning)).not.toContain('w2')
+
+    // The next GO fires the child the cursor was left pointing at, and that step
+    // finishes the pass.
+    runner.go()
+    expect(fired(setRunning)).toContain('c2')
+    vi.advanceTimersByTime(2000)
+    expect(fired(setRunning)).toContain('w2')
   })
 })

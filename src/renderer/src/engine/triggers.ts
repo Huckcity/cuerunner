@@ -50,6 +50,11 @@ export function matchesTrigger(trigger: CueTrigger, event: ShowEvent): boolean {
       return incoming.kind === 'cc' && incoming.controller === wanted.controller
     case 'programChange':
       return incoming.kind === 'programChange' && incoming.program === wanted.program
+    // A show saved while the picker still offered releases can carry one. It has no
+    // case here — and no event that could answer it, since learning skips note-offs —
+    // so it stays inert rather than falling off the end of the switch.
+    default:
+      return false
   }
 }
 

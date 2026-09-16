@@ -211,3 +211,33 @@ test('a machine with no key is told what merging is for, and merges nothing', as
   await expect(page.locator('.app-notice')).toContainText('WinsLab Pro is required')
   expect(fs.existsSync(merged)).toBe(false)
 })
+
+test('cancelling the save dialog merges nothing and leaves the show where it was', async () => {
+  test.setTimeout(120_000)
+  const page = await start({ license: mintLicense() })
+  await openShow(page)
+
+  // The two files answer; the one that decides all three — where to write — is cancelled.
+  await app!.evaluate(async ({ dialog }, [theirsPath, ancestorPath]) => {
+    let opens = 0
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [opens++ === 0 ? theirsPath : ancestorPath]
+    })
+    dialog.showSaveDialog = async () => ({ canceled: true, filePath: '' })
+  }, [theirs, ancestor])
+
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button[data-action="merge"]').click()
+
+  // No report to look at, nothing written, and the session is untouched: the answer to
+  // a cancelled merge is no merge, not a report with no file in it.
+  await expect(page.getByRole('dialog', { name: 'Merge' })).toHaveCount(0)
+  await expect(page.locator('.crash-screen')).toHaveCount(0)
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in' })).toBeVisible()
+  expect(fs.existsSync(merged)).toBe(false)
+
+  // And the window still takes input afterwards.
+  await page.locator('.cue-row', { hasText: 'Walk-in' }).click()
+  await expect(page.locator('.cue-row[data-selected="true"]', { hasText: 'Walk-in' })).toBeVisible()
+})
