@@ -145,6 +145,21 @@ describe('OscInputService', () => {
     ])
   })
 
+  it('publishes the messages inside a bundle that holds bundles', () => {
+    // OSC 1.0 allows a bundle of bundles, and a message one level down used to be read as
+    // a message with no address and dropped without a word.
+    const { service, servers, context, bus } = harness()
+    service.start(context, settings(true, 53000))
+
+    servers[0].emit(
+      'bundle',
+      { elements: [['/a', 1], { elements: [{ elements: [['/deep', 2]] }, ['/b', 'x']] }] },
+      { address: '10.0.0.2', port: 9000 }
+    )
+
+    expect(oscEvents(bus).map(event => event.address)).toEqual(['/a', '/deep', '/b'])
+  })
+
   it('degrades and warns instead of throwing when the socket errors', () => {
     const { service, servers, context, setState, bus } = harness()
     service.start(context, settings(true, 53000))
@@ -159,6 +174,25 @@ describe('OscInputService', () => {
         message: 'OSC input: EADDRINUSE'
       })
     ])
+  })
+
+  it('ignores a datagram that is not OSC instead of latching the service degraded', () => {
+    // Anyone on the show network may send junk to this port. The listener is fine, so the
+    // row stays running and the messages that do arrive keep firing cues; one line says it
+    // happened, and a flood of junk is not a flood of alarms.
+    const { service, servers, context, setState, bus } = harness()
+    service.start(context, settings(true, 53000))
+    servers[0].emit('listening')
+
+    const junk = new Error("can't decode incoming message: Malformed Packet")
+    servers[0].emit('error', junk, { address: '10.0.0.9', port: 9000 })
+    servers[0].emit('error', junk, { address: '10.0.0.9', port: 9000 })
+    servers[0].emit('message', ['/go'], { address: '10.0.0.9', port: 9000 })
+
+    expect(setState).not.toHaveBeenCalledWith('degraded', expect.anything())
+    expect(setState).toHaveBeenLastCalledWith('running', 'listening on port 53000')
+    expect(bus.snapshot().alerts.filter(alert => alert.level === 'info')).toHaveLength(1)
+    expect(oscEvents(bus)).toHaveLength(1)
   })
 
   it('closes the socket on stop, once', () => {

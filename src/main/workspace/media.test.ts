@@ -5,13 +5,16 @@
 // These tests run against the real filesystem with Electron stubbed out, because the
 // behaviour under test is what the app does with paths that exist and paths that do not.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, truncateSync, writeFileSync
+} from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { dialog } from 'electron'
 import { writeRecovery } from './recovery'
 import {
   openRecovery,
+  openWorkspace,
   openWorkspaceFromPath,
   planMediaRelink,
   relinkWorkspaceMedia,
@@ -325,6 +328,39 @@ describe('saving and reopening a show folder', () => {
     const recovered = await openRecovery()
 
     expect(recovered?.missingMedia).toEqual([{ cueId: 'a1', path: gone, originalPath: gone }])
+  })
+
+  it('migrates a snapshot left by an older build, the way it migrates a file', async () => {
+    // A session that died on an older build leaves an older snapshot: without the
+    // migration its groups come back with no children, because the children are still
+    // named by the `childIds` field this build no longer reads.
+    const legacy = {
+      ...workspaceWith([]),
+      cues: [
+        { id: 'g1', type: 'group', mode: 'sequence', name: 'Act 1', childIds: ['c1'] },
+        { id: 'c1', type: 'wait', name: 'Top of act', duration: 1000, parentId: null }
+      ]
+    } as unknown as Workspace
+    await writeRecovery(legacy, join(dir, 'Tour Show.wlab'))
+
+    const recovered = await openRecovery()
+
+    expect(recovered?.workspace.cues.map(cue => [cue.id, cue.parentId])).toEqual([
+      ['g1', null],
+      ['c1', 'g1']
+    ])
+  })
+
+  it('refuses a workspace past the size this app will open, from the dialog too', async () => {
+    // File→Open is how most shows arrive, and the cap has to be on that path as much as
+    // on the ones that go through readWorkspaceFile: a 500 MB file would spike the
+    // main process by several gigabytes before anything could say no.
+    const huge = join(dir, 'huge.wlab')
+    writeFileSync(huge, '')
+    truncateSync(huge, 64 * 1024 * 1024 + 1)
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [huge] })
+
+    await expect(openWorkspace({} as never)).rejects.toThrow('larger than this app will open')
   })
 })
 

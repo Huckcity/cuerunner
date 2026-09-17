@@ -126,6 +126,17 @@ interface CueRun {
   beganAt: number
 }
 
+/**
+ * One start waiting for its moment in a timeline, and the scheduler's id for it once
+ * there is one. The box exists because `schedule()` dispatches a task whose time has
+ * already come before it returns — inside that call there is no id yet, so the box is
+ * what the dispatch takes out of the set it was registered in, and `id` is filled in
+ * for a start that is still pending.
+ */
+interface TimelineStart {
+  id: number
+}
+
 interface RunnerDeps {
   getCues: GetCues
   getSelected: GetSelected
@@ -153,8 +164,11 @@ export class CueEngine {
   private unsubscribeSession: (() => void) | null = null
   private runs = new Map<string, CueRun>()
   // Starts scheduled at a timeline offset, kept per child so stopping the child (or the
-  // group above it) takes the pending start away before it fires.
-  private timelineTasks = new Map<string, Set<number>>()
+  // group above it) takes the pending start away before it fires. Each entry is a box
+  // rather than a bare task id: a start whose moment has already come is dispatched
+  // inside `schedule()`, before the call can return an id, and the box is what the
+  // dispatch takes out of the set — see `TimelineStart`.
+  private timelineTasks = new Map<string, Set<TimelineStart>>()
   private groupStartOffsets = new Map<string, number>()
   // Playlist groups step one child per GO. The cursor holds the index of the child the
   // next GO will fire; 0 means a pass is complete or has not started.
@@ -250,7 +264,13 @@ export class CueEngine {
 
     // Firing a cue that is already in flight replaces it rather than stacking a second
     // copy of it on the same cue id — which is what a cue set to restart is asking for.
-    if (this.hasActiveRun(cue.id)) this.stop(cue.id)
+    // A group's children go with it, and no step is settled along the way: re-firing a
+    // child is not taking it away, so its parent's counting must not move (the same rule
+    // fireCue's own replacement obeys). The engine identity of the run being replaced is
+    // read before the stop takes the run away, so the late line about it — an `ended`
+    // batched 16 ms, for the stop this very GO issued — cannot be read as the new run's.
+    const supersededEngineRunId = this.runs.get(cue.id)?.engineRunId ?? null
+    if (this.hasActiveRun(cue.id)) this.stop(cue.id, false)
 
     const startMs = this.now()
     this.fireCue(cue, startMs, (doneAt, run) => {
@@ -258,7 +278,7 @@ export class CueEngine {
       if (cue.advance === 'on-end' && nextCue && !this.isMidPlaylist(cue.id)) {
         this.goById(nextCue.id, doneAt, run)
       }
-    })
+    }, undefined, 0, false, supersededEngineRunId)
 
     if (cue.advance === 'on-start' && nextCue) {
       this.goById(nextCue.id, startMs)
@@ -286,13 +306,20 @@ export class CueEngine {
       while (i < cues.length && cues[i].parentId === cue.id) i++
       return cues[i] ?? null
     })()
-    this.fireCue(cue, atMs ?? this.now(), (doneAt, run) => {
+    const startMs = atMs ?? this.now()
+    this.fireCue(cue, startMs, (doneAt, run) => {
       // A playlist pass that is not complete holds the show, the same interlock go()
       // applies: this entry point is how a trigger or a cue's own advance fires a group.
       if (cue.advance === 'on-end' && nextCue && !this.isMidPlaylist(cue.id)) {
         this.goById(nextCue.id, doneAt, run)
       }
     }, parent)
+    // On-start is the cue's own advance, so it belongs to the firing rather than to the
+    // key that made it: the guide promises a trigger fires a cue exactly as GO would,
+    // and this entry point is how a trigger, a desk button and a cue's own chain fire.
+    if (cue.advance === 'on-start' && nextCue) {
+      this.goById(nextCue.id, startMs, parent)
+    }
   }
 
   /**
@@ -391,15 +418,18 @@ export class CueEngine {
     onDone: Handover,
     parent?: CueRun,
     seekMs = 0,
-    adopted = false
+    adopted = false,
+    /** A run the caller already took away, whose engine identity only it could read. */
+    supersededRunId: string | null = null
   ): void {
     const generation = this.generation
 
     // A cue fired while it is already in flight replaces its previous run. Capture the
     // old run's engine identity before taking it away: an `ended` line from that run,
     // batched 16 ms, can arrive after this firing, and must not close the new run
-    // before its own start is acknowledged.
-    const supersededEngineRunId = this.runs.get(cue.id)?.engineRunId ?? null
+    // before its own start is acknowledged. A caller that had to stop the run itself —
+    // go()'s restart, so a group's children go with it — passes the identity instead.
+    const supersededEngineRunId = supersededRunId ?? this.runs.get(cue.id)?.engineRunId ?? null
     if (this.runs.has(cue.id)) this.stopCue(cue.id, 0, false)
 
     const seq = ++this.runSeq
@@ -1031,25 +1061,30 @@ export class CueEngine {
       // The child is fired a lookahead before its own time so its commands are in the
       // engine's hands before the moment they name.
       const fireAt = Math.max(now, atMs - SCHEDULER_LOOKAHEAD_MS)
-      let task = 0
-      task = this.scheduler!.schedule({
+      // The start is registered before it is scheduled, because a time that is already
+      // inside the lookahead — a stagger under 100 ms, or a seek that landed on it — is
+      // dispatched inside `schedule()`, before the call can return an id. The box is what
+      // that dispatch takes out of the set; the id lands in it when there is one to land
+      // (`TimelineStart`), so no entry outlives the start it stands for.
+      const start: TimelineStart = { id: 0 }
+      let tasks = this.timelineTasks.get(child.id)
+      if (!tasks) { tasks = new Set(); this.timelineTasks.set(child.id, tasks) }
+      tasks.add(start)
+      start.id = this.scheduler!.schedule({
         at: fireAt,
         due: () => {
-          this.removeTimelineTask(child.id, task)
+          this.removeTimelineStart(child.id, start)
           if (!stillRunning()) return
           this.fireCue(child, atMs, childDone, run)
         }
       })
-      let tasks = this.timelineTasks.get(child.id)
-      if (!tasks) { tasks = new Set(); this.timelineTasks.set(child.id, tasks) }
-      tasks.add(task)
     }
   }
 
-  private removeTimelineTask(cueId: string, task: number): void {
+  private removeTimelineStart(cueId: string, start: TimelineStart): void {
     const tasks = this.timelineTasks.get(cueId)
     if (!tasks) return
-    tasks.delete(task)
+    tasks.delete(start)
     if (tasks.size === 0) this.timelineTasks.delete(cueId)
   }
 
@@ -1081,8 +1116,7 @@ export class CueEngine {
   private stopCue(cueId: string, fadeMs: number, settles = true): void {
     const run = this.runs.get(cueId)
     if (run) this.cancelRun(cueId, run)
-    for (const task of this.timelineTasks.get(cueId) ?? []) this.scheduler!.cancel(task)
-    this.timelineTasks.delete(cueId)
+    this.cancelTimelineTasks(cueId)
     scriptHost.cancel(cueId)
     void audioEngine.stop(cueId, fadeMs).catch(() => {
       // A cue the engine never knew about has nothing to stop.
@@ -1102,6 +1136,21 @@ export class CueEngine {
   /** Whether this cue is a child of a group, so its handover settles a parent. */
   private isGroupChild(cueId: string): boolean {
     return (this.deps!.getCues().find(c => c.id === cueId)?.parentId ?? null) !== null
+  }
+
+  /** Takes every start this cue has waiting in a timeline out of the scheduler. */
+  private cancelTimelineTasks(cueId: string): void {
+    for (const start of this.timelineTasks.get(cueId) ?? []) this.scheduler!.cancel(start.id)
+    this.timelineTasks.delete(cueId)
+  }
+
+  /**
+   * Every start a timeline is still holding, whoever put it there. A cue that has not
+   * fired yet is a task and no run, so a walk that only looks at `runs` — "stop
+   * everything" and the restart path — would leave those starts to arrive after it.
+   */
+  private cancelTimelineStarts(): void {
+    for (const cueId of [...this.timelineTasks.keys()]) this.cancelTimelineTasks(cueId)
   }
 
   /** Cancels a run's tasks and takes back a not-yet-begun handover it released. */
@@ -1152,6 +1201,11 @@ export class CueEngine {
       for (const [cueId, other] of others) {
         if (this.deps!.getCues().find(c => c.id === cueId)?.type !== 'group') this.cancelRun(cueId, other)
       }
+      // A timeline child that has not fired yet is not a run at all: it is a start
+      // waiting in the scheduler, and "everything" has to take those too or a stopped
+      // group's children begin arriving after the stop — and each of them would hold its
+      // cue against a later GO as though it were already on.
+      this.cancelTimelineStarts()
       // A script runs in a worker of its own, so stopping the audio cannot reach it:
       // "everything" has to take the scripts the way STOP does.
       scriptHost.cancelAll()
@@ -1165,7 +1219,19 @@ export class CueEngine {
         // sound does. Everything else is taken away here, because nothing else will
         // report: a wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp,
         // an MSC command and a script hold no engine voice to answer for them.
-        void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
+        //
+        // A cue that has not begun is the one case where there is no voice to fade: a
+        // pre-wait run would otherwise begin after the stop that named it, so it is
+        // taken away here with its planned start. A start a timeline is still holding
+        // for this cue — a child that has not fired yet — goes the same way, whatever
+        // the run beside it is doing: it is a firing that has not happened.
+        const pending = this.runs.get(cue.targetCueId)
+        this.cancelTimelineTasks(cue.targetCueId)
+        if (pending && pending.phase === 'pending') {
+          this.stopCue(cue.targetCueId, fadeMs)
+        } else {
+          void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
+        }
       } else if (target === undefined) {
         // No such cue: still tell the engine, which refuses what it never knew.
         void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
@@ -1204,10 +1270,21 @@ export class CueEngine {
     const children = cues.filter(c => c.parentId === groupId)
     if (!this.isGroupPlaying(groupId, children)) return
 
-    this.stop(groupId)
+    // A seek is a re-fire, not a stop: the group is about to run again where the
+    // operator pointed, so the sequence above it is owed no step.
+    this.stop(groupId, false)
     const { setRunning } = this.deps!
     const groupCue = group as GroupCue
     const now = this.now()
+    // Where a fired timeline hands the show on: past the group's children, the way go()
+    // reads it — a seeked group is still the group the operator started, and a lost
+    // handover leaves the show parked on a group that has finished.
+    const nextCue = (() => {
+      const idx = cues.findIndex(c => c.id === groupId)
+      let i = idx + 1
+      while (i < cues.length && cues[i].parentId === groupId) i++
+      return cues[i] ?? null
+    })()
     // groupStartOffsets already has seekMs — executeGroup() will read + consume it
     const run: CueRun = {
       cueId: groupId,
@@ -1237,15 +1314,20 @@ export class CueEngine {
     const stillRunning = (): boolean => !run.cancelled && !this.isStale(run.generation)
     this.executeGroup(groupCue, run, now, (endMs) => {
       if (!stillRunning()) return
-      if (this.runs.get(groupId) === run) this.runs.delete(groupId)
       setRunning(groupId, { cueId: groupId, state: 'post-wait', startedAt: Date.now(), progress: 1 })
+      const doneAt = endMs + groupCue.postWait
+      // The run stays in `runs` until its post-wait is over, the way a fired group's
+      // does: a GO inside those milliseconds is a re-fire of a cue still on its way out.
       this.track(run, this.scheduler!.schedule({
-        at: endMs + groupCue.postWait,
+        at: doneAt,
         due: () => {
+          run.phase = 'done'
+          if (this.runs.get(groupId) === run) this.runs.delete(groupId)
           if (run.cancelled) return
           setRunning(groupId, null)
         }
       }))
+      if (groupCue.advance === 'on-end' && nextCue) this.goById(nextCue.id, doneAt, run)
     })
   }
 
@@ -1305,14 +1387,15 @@ export class CueEngine {
     this.playlistCursors.clear()
   }
 
-  stop(cueId?: string): void {
+  stop(cueId?: string, settles = true): void {
     const { clearAllRunning } = this.deps!
     if (cueId) {
       // A group is stopped with its children: leaving them running would be a name that
       // does nothing, and a sequence would keep firing them. The group's own run goes
-      // first, so its children settling cannot carry it on.
+      // first, so its children settling cannot carry it on. `settles` is the caller's
+      // answer to whether this is a cue being taken away or a cue about to run again.
       const cue = this.deps!.getCues().find(c => c.id === cueId)
-      this.stopCue(cueId, 0)
+      this.stopCue(cueId, 0, settles)
       if (cue?.type === 'group') this.stopGroup(cue as GroupCue, 0)
     } else {
       // Every run's cue is stopped individually as well: a start that has already been
@@ -1397,16 +1480,19 @@ export class CueEngine {
   }
 
   /**
-   * A routing change on a cue that is already playing. The engine takes its routing
-   * with the start command, so the run is put back down at the position it had reached,
-   * with the routing the store now holds — it does not start over from its start time.
+   * A routing change on a cue that is already playing. The engine replaces a running
+   * voice's matrix where it stands, so the routing the store now holds reaches the sound
+   * without the cue moving: no restart, no re-seek, and nothing about the run's timing
+   * changes with it.
    */
   setLiveRouting(cueId: string): void {
     const run = this.runs.get(cueId)
     if (!run || run.cancelled || run.phase !== 'running') return
-    const position = audioEngine.getProgress(cueId)?.elapsedMs
-    if (position === undefined || position === null) return
-    this.seekCue(cueId, position)
+    const cue = this.deps!.getCues().find(c => c.id === cueId)
+    if (!cue || cue.type !== 'audio') return
+    void audioEngine.routing(cueId, (cue as AudioCue).outputs).catch(() => {
+      // A cue with no voice has no matrix to replace.
+    })
   }
 
   /**

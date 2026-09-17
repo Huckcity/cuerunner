@@ -140,6 +140,58 @@ describe('CueEngine — timeline group mode', () => {
     expect(setRunning).toHaveBeenCalledWith('g1', null)
   })
 
+  it('lets a child whose slot came due at once be fired again after the group has run', () => {
+    // A start whose time is already inside the lookahead is dispatched inside
+    // `schedule()`, before there is an id to remember it by. A start nobody can name
+    // afterwards would hold its cue against every later GO for the rest of the session.
+    const group = makeGroup('g1')
+    const c1 = makeWait('c1', 'g1', { timelineOffset: 0, duration: 100 })
+    const c2 = makeWait('c2', 'g1', { timelineOffset: 50, duration: 100 })
+    const { runner, setRunning } = setup([group, c1, c2])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+    setRunning.mockClear()
+
+    runner.goById('c2')
+
+    expect(setRunning.mock.calls.some(c => c[0] === 'c2' && c[1]?.state === 'playing')).toBe(true)
+  })
+
+  it('stores the offset instead of starting the group when a finished one is seeked', () => {
+    // The ruler is drawn over the group's children, so a click on it reaches a group that
+    // has already played out: a start left behind by that run would read as "playing" and
+    // the click would take the seek path that starts the group again.
+    const group = makeGroup('g1')
+    const c1 = makeWait('c1', 'g1', { timelineOffset: 0, duration: 100 })
+    const { runner, setRunning } = setup([group, c1])
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+    setRunning.mockClear()
+
+    runner.seekTimeline('g1', 300)
+
+    expect(runner.getGroupStartOffset('g1')).toBe(300)
+    expect(setRunning.mock.calls.some(c => c[0] === 'g1' && c[1]?.state === 'playing')).toBe(false)
+  })
+
+  it('still hands the show on when a playing timeline is seeked', () => {
+    // A seek re-fires the group, and a re-fired group is still the group the operator
+    // started: losing its advance would park the show on a group that has finished.
+    const group = makeGroup('g1', { advance: 'on-end' })
+    const c1 = makeWait('c1', 'g1', { timelineOffset: 0, duration: 200 })
+    const next = makeWait('next', 'g1', { parentId: null, duration: 100 })
+    const { runner, setRunning } = setup([group, c1, next])
+
+    runner.go()
+    vi.advanceTimersByTime(50)
+    runner.seekTimeline('g1', 10)
+    vi.advanceTimersByTime(1000)
+
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('next')
+  })
+
   it('skips disarmed children', () => {
     const group = makeGroup('g1')
     const c1 = makeWait('c1', 'g1', { isArmed: false })

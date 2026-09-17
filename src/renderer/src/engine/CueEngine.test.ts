@@ -370,6 +370,20 @@ describe('CueEngine — auto-continue and auto-follow', () => {
     await vi.advanceTimersByTimeAsync(100)
     expect(setRunning.mock.calls.map(c => c[0])).toContain('a2')
   })
+
+  it('fires the next cue on start when a trigger fires the cue, not only when GO does', () => {
+    // The guide promises a trigger fires a cue exactly as GO would, advance included —
+    // and a trigger, a desk button and a cue's own chain all reach the runner here.
+    const cue1 = makeWait({ id: 'w1', number: '1', duration: 5000, advance: 'on-start' })
+    const cue2 = makeWait({ id: 'w2', number: '2', duration: 500 })
+    const { runner, setRunning } = setup([cue1, cue2])
+
+    runner.goById('w1')
+
+    const started = setRunning.mock.calls.map(c => c[0])
+    expect(started).toContain('w1')
+    expect(started).toContain('w2')
+  })
 })
 
 describe('CueEngine — stop and panic', () => {
@@ -507,6 +521,81 @@ describe('CueEngine — re-firing a running cue', () => {
     vi.advanceTimersByTime(1000)
 
     expect(starts(setRunning, 'w2')).toBe(1)
+  })
+})
+
+// Re-firing a child of a running group is not stopping it: the child is about to run
+// again, so the sequence must stay on that step rather than stepping past it.
+describe('CueRunner — restarting a group child', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  const makeGroup = (overrides: Partial<GroupCue> = {}): GroupCue => ({
+    id: 'g1', number: '1', name: 'Group', type: 'group',
+    colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: '',
+    mode: 'sequence',
+    ...overrides
+  })
+
+  const fired = (setRunning: Mock): string[] => setRunning.mock.calls
+    .filter(c => c[1]?.state === 'playing')
+    .map(c => c[0])
+
+  it('restarts the child without firing its next sibling', () => {
+    const group = makeGroup()
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 5000, refire: 'restart' })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 5000 })
+    const { runner, setRunning, setSelected } = setup([group, c1, c2], 'g1')
+
+    runner.go()
+    vi.advanceTimersByTime(100)
+    expect(fired(setRunning)).toContain('c1')
+
+    // The operator puts the selection back on the running child and presses GO, which
+    // its policy answers by starting it again.
+    setSelected('c1')
+    // A second press is a second press: the guard's window has passed.
+    runner.resetGuards()
+    runner.go()
+    vi.advanceTimersByTime(5000)
+
+    expect(fired(setRunning)).not.toContain('c2')
+    expect(fired(setRunning).filter(id => id === 'c1')).toHaveLength(2)
+  })
+
+  it('drops the replaced run’s stop line when GO is the hand that restarted it', async () => {
+    // A GO restart stops the old run before the new firing, so the identity of the run
+    // it replaced has to be read first. The engine's own line about that stop arrives
+    // while the new run has no identity yet — there is a prepare and a start between the
+    // two — and read as the new run's it would darken a cue that is playing.
+    const started = Promise.withResolvers<Awaited<ReturnType<typeof audioEngine.start>>>()
+    engine.start
+      .mockResolvedValueOnce({ cueId: 'a1', runId: 'old-run', state: 'playing', startAtMs: 0 })
+      .mockImplementationOnce(() => started.promise)
+    const cue = makeAudio({ id: 'a1', refire: 'restart', duration: 5000 })
+    const { runner, setRunning, setSelected } = setup([cue], 'a1')
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    setSelected('a1')
+    runner.resetGuards()
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    setRunning.mockClear()
+
+    emitEngineEvent({
+      type: 'ended', cueId: 'a1', runId: 'old-run', at: 0, reason: 'stopped',
+      loopsCompleted: 0, sessionId: 'test-session'
+    })
+
+    expect(setRunning).not.toHaveBeenCalledWith('a1', null)
+    expect(setRunning).not.toHaveBeenCalledWith('a1', expect.objectContaining({ state: 'post-wait' }))
+
+    started.resolve({ cueId: 'a1', runId: 'new-run', state: 'playing', startAtMs: 0 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(setRunning).not.toHaveBeenCalledWith('a1', null)
   })
 })
 
@@ -691,20 +780,20 @@ describe('CueEngine — sample-clock scheduling', () => {
     expect(engine.start).toHaveBeenCalledTimes(1)
   })
 
-  it('re-applies routing at the position a playing cue had reached', () => {
-    const cue = makeAudio({ id: 'a1', duration: 4000, outputs: [{ inputChannel: 0, outputChannel: 2, gain: 0.5 }] })
+  it('sends the new matrix to the voice that is already playing', () => {
+    // The engine replaces a running voice's routing where it stands, so the change is
+    // heard without the cue being restarted or moved: a seek here would be a lie about
+    // the matrix having arrived, and the operator's edit would be inaudible.
+    const outputs = [{ inputChannel: 0, outputChannel: 2, gain: 0.5 }]
+    const cue = makeAudio({ id: 'a1', duration: 4000, outputs })
     const { runner } = setup([cue])
 
     runner.go()
     vi.advanceTimersByTime(1000)
-    engine.getProgress.mockReturnValue({
-      cueId: 'a1', runId: 'run-a1', state: 'playing', playing: true,
-      elapsedMs: 1000, durationMs: 4000, fraction: 0.25, runFraction: 0.25,
-      loopsCompleted: 0, startedAtMs: 0
-    })
     runner.setLiveRouting('a1')
 
-    expect(engine.seek).toHaveBeenCalledWith('a1', 1000)
+    expect(engine.routing).toHaveBeenCalledWith('a1', outputs)
+    expect(engine.seek).not.toHaveBeenCalled()
     expect(engine.stop).not.toHaveBeenCalledWith('a1', 0)
   })
 
@@ -1795,6 +1884,41 @@ describe('CueEngine — script cue', () => {
     expect(scriptHostMock.cancel).not.toHaveBeenCalled()
     expect(setRunning).not.toHaveBeenCalledWith('a1', null)
   })
+
+  it('takes an audio cue in pre-wait away before it can begin', () => {
+    // Until the cue begins there is no voice in the engine to report on: a stop that
+    // names it has to take the planned start back itself, or the sound arrives after
+    // the stop did — which is the one thing a stop cue exists to prevent.
+    const audio = makeAudio({ id: 'a1', preWait: 5000, duration: 2000 })
+    const stop = makeStop({ id: 's1', number: '2', targetCueId: 'a1' })
+    const { runner, setRunning } = setup([audio, stop])
+
+    runner.goById('a1')
+    vi.advanceTimersByTime(100)
+    runner.goById('s1')
+    vi.advanceTimersByTime(10_000)
+
+    expect(setRunning).toHaveBeenCalledWith('a1', null)
+    expect(setRunning.mock.calls.filter(c => c[0] === 'a1').map(c => c[1]?.state))
+      .not.toContain('playing')
+  })
+
+  it('leaves a playing audio cue to the engine, so its fade is heard', () => {
+    const audio = makeAudio({ id: 'a1', duration: 5000 })
+    const stop = makeStop({ id: 's1', number: '2', targetCueId: 'a1' })
+    const { runner, setRunning } = setup([audio, stop])
+
+    runner.goById('a1')
+    vi.advanceTimersByTime(100)
+    setRunning.mockClear()
+    runner.goById('s1')
+
+    expect(engine.stop).toHaveBeenCalledWith('a1', 0)
+    // The row goes dark when the engine says the sound has gone, not when the stop cue
+    // fires: the fade that is still sounding keeps its row.
+    expect(setRunning).not.toHaveBeenCalledWith('a1', null)
+    expect(setRunning.mock.calls.map(c => c[1]?.state)).toContain('playing')
+  })
 })
 
 describe('CueEngine — panic details', () => {
@@ -1990,6 +2114,30 @@ describe('CueEngine — stopping a group', () => {
 
     vi.advanceTimersByTime(5000)
     expect(fired(setRunning)).not.toContain('c2')
+  })
+
+  it('takes a timeline start that has not fired yet with everything', () => {
+    // A child whose slot has not come is a task and no run, which is exactly the shape
+    // a walk over `runs` misses: its start must go with the stop, and the cue must not
+    // be held against a later GO as though it were already on.
+    const group = makeGroup({ mode: 'timeline' })
+    const c1 = makeWait({ id: 'c1', parentId: 'g1', duration: 1000, timelineOffset: 0 })
+    const c2 = makeWait({ id: 'c2', parentId: 'g1', duration: 1000, timelineOffset: 30_000 })
+    const { runner, setRunning, setSelected } = setup(
+      [group, c1, c2, makeStop({ targetCueId: 'all' })], 'g1'
+    )
+
+    runner.go()
+    vi.advanceTimersByTime(500)
+    runner.goById('s1')
+    vi.advanceTimersByTime(12_000)
+
+    expect(fired(setRunning)).not.toContain('c2')
+
+    setSelected('c2')
+    runner.go()
+
+    expect(fired(setRunning)).toContain('c2')
   })
 
   it('stop() on a group takes its children with it too', () => {

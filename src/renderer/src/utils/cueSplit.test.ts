@@ -170,6 +170,27 @@ describe('store — splitAudioCueAt', () => {
     expect(useStore.getState().cues).toHaveLength(1)
     expect(useStore.getState().isDirty).toBe(false)
   })
+
+  it('places the tail where the head’s sound reaches the cut on a timeline', () => {
+    // Timeline children are fired at their own offsets, so a tail left at the head's
+    // offset plays the second half of the file over the first: the pair's join is the
+    // head's offset plus its own region before the cut.
+    const group = {
+      id: 'g1', number: '1', name: 'Bows', type: 'group', colorLabel: 'none',
+      parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '', mode: 'timeline'
+    }
+    useStore.setState({
+      cues: [group as never, cue({ parentId: 'g1', timelineOffset: 2000, startTime: 5000, endTime: 90_000 })]
+    })
+
+    useStore.getState().splitAudioCueAt('a1', 25_000)
+
+    const cues = useStore.getState().cues as AudioCue[]
+    const tail = cues[cues.length - 1]
+    expect(tail?.timelineOffset).toBe(22_000)
+    expect(tail?.startTime).toBe(25_000)
+  })
 })
 
 describe('store — setRegionBoundary', () => {
@@ -234,5 +255,51 @@ describe('store — setRegionBoundary', () => {
     useStore.getState().setRegionBoundary('a1', 'start', 120_000)
     const narrowed = useStore.getState().cues[0] as AudioCue
     expect(narrowed.startTime).toBe(narrowed.duration - 1)
+  })
+
+  it('stops the head at the tail’s end, leaving the pair a pair', () => {
+    // Both edges of the pair are held: dragging the head's end past the tail's end
+    // would write a region that runs backwards, which plays nothing and is saved that
+    // way. The head stops one millisecond short of the tail's own edge.
+    const [head, tail] = halves()
+    useStore.getState().setRegionBoundary(tail.id, 'end', 40_000)
+    useStore.getState().setRegionBoundary(head.id, 'end', 90_000)
+
+    const cues = useStore.getState().cues as AudioCue[]
+    expect(cues[0].endTime).toBe(39_999)
+    expect(cues[1].startTime).toBe(39_999)
+    expect(cues[1].endTime).toBe(40_000)
+  })
+
+  it('stops the tail at the head’s start when it is dragged past it', () => {
+    useStore.setState({
+      cues: [
+        cue({ id: 'a1', startTime: 5000, endTime: 30_000 }),
+        cue({ id: 'a2', number: '2', startTime: 30_000, endTime: null })
+      ]
+    })
+
+    useStore.getState().setRegionBoundary('a2', 'start', 1000)
+
+    const cues = useStore.getState().cues as AudioCue[]
+    expect(cues[1].startTime).toBe(5001)
+    expect(cues[0].endTime).toBe(5001)
+    expect(cues[0].startTime).toBe(5000)
+  })
+
+  it('is one undo entry for a drag, however many moves it takes', () => {
+    // The grip reports every pointer move, and a drag of a second is sixty of them: one
+    // entry each would walk the whole 50-entry history off the end and leave Cmd+Z
+    // stepping back through the same drag instead of the operator's last action.
+    for (let ms = 30_000; ms < 30_060; ms++) {
+      useStore.getState().setRegionBoundary('a1', 'end', ms, true)
+    }
+    useStore.getState().endRegionDrag()
+    // A second drag is a second edit, whatever it does.
+    useStore.getState().setRegionBoundary('a1', 'end', 31_000, true)
+    useStore.getState().endRegionDrag()
+
+    expect(useStore.getState().past).toHaveLength(2)
+    expect((useStore.getState().cues[0] as AudioCue).endTime).toBe(31_000)
   })
 })

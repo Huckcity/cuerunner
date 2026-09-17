@@ -141,12 +141,16 @@ async function gatherMedia(workspace: Workspace, workspacePath: string | null): 
 
 /** `media/walk-in.wav`, then `media/walk-in-2.wav` when that name is spoken for. */
 function uniqueName(path: string, taken: Map<string, string>): string {
-  const used = new Set(taken.values())
+  // Compared folded, because the bundle is unpacked onto the filesystem that will hold
+  // it and Windows and macOS do not tell two names differing only in case apart: two
+  // entries that are one file extract over each other, and a cue ends up playing the
+  // other one's audio.
+  const used = new Set([...taken.values()].map(name => name.toLowerCase()))
   const stem = portable(basename(path, extname(path)))
   const extension = extname(path)
   for (let attempt = 1; ; attempt++) {
     const candidate = `${MEDIA_DIR}/${attempt === 1 ? stem : `${stem}-${attempt}`}${extension}`
-    if (!used.has(candidate)) return candidate
+    if (!used.has(candidate.toLowerCase())) return candidate
   }
 }
 

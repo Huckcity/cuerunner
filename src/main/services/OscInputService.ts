@@ -14,7 +14,7 @@ interface OscServer {
   on(event: 'listening', listener: () => void): void
   on(event: 'message', listener: (message: unknown[], rinfo: Rinfo) => void): void
   on(event: 'bundle', listener: (bundle: { elements: unknown[][] }, rinfo: Rinfo) => void): void
-  on(event: 'error', listener: (error: Error) => void): void
+  on(event: 'error', listener: (error: Error, rinfo?: Rinfo) => void): void
   close(cb?: (error?: Error) => void): void
 }
 
@@ -40,6 +40,8 @@ export class OscInputService implements ShowService {
   readonly label = 'OSC input'
 
   private server: OscServer | null = null
+  /** Whether a datagram that was not OSC has been reported, so it is reported once. */
+  private warnedJunk = false
 
   constructor(private readonly connect: ServerFactory = connectOscServer) {}
 
@@ -52,12 +54,27 @@ export class OscInputService implements ShowService {
 
     const server = this.connect(port, '0.0.0.0')
     this.server = server
+    this.warnedJunk = false
     context.setState('starting', `binding 0.0.0.0:${port}`)
 
     // Without a listener, an 'error' event on the server is an unhandled throw that
     // takes the main process down — and a port already in use is the likeliest error
     // there is, since the operator's QLab or TouchOSC may hold it.
-    server.on('error', (error: Error) => {
+    server.on('error', (error: Error, rinfo?: Rinfo) => {
+      // node-osc reports a failed socket and a datagram it could not decode through this
+      // one event, and tells them apart by the second argument: a decode error carries the
+      // sender's address, a socket error does not. A datagram that is not OSC at all is
+      // not the service being unwell — anyone on the network may send junk — so it is
+      // reported once and the row stays running, where latching it to "degraded" with an
+      // alarm per packet would leave a real outage indistinguishable from noise while
+      // valid traffic keeps firing cues.
+      if (rinfo !== undefined) {
+        if (!this.warnedJunk) {
+          this.warnedJunk = true
+          context.bus.alert('info', this.id, `OSC input: ignored a datagram from ${rinfo.address} that is not an OSC message`)
+        }
+        return
+      }
       context.setState('degraded', describe(error))
       context.bus.alert('warning', this.id, `OSC input: ${describe(error)}`)
     })
@@ -73,9 +90,11 @@ export class OscInputService implements ShowService {
       this.publishMessage(context, message, rinfo)
     })
 
-    // A desk that sends its state as one bundle should arrive as its parts, in order.
+    // A desk that sends its state as one bundle should arrive as its parts, in order —
+    // and OSC allows a bundle to hold bundles, so the parts are walked rather than read
+    // one level deep: a message inside one would otherwise be dropped without a word.
     server.on('bundle', (bundle, rinfo) => {
-      for (const element of bundle.elements) this.publishMessage(context, element, rinfo)
+      this.publishBundle(context, bundle, rinfo)
     })
   }
 
@@ -89,6 +108,24 @@ export class OscInputService implements ShowService {
       void Promise.resolve(server.close(() => {})).catch(() => {})
     } catch {
       // A socket that is already closed throws from close(); nothing left to do.
+    }
+  }
+
+  /** Every message a bundle holds, in order, however deep the bundles go. */
+  private publishBundle(
+    context: ServiceContext,
+    bundle: { elements: unknown[][] },
+    rinfo: Rinfo
+  ): void {
+    for (const element of bundle.elements) {
+      if (Array.isArray(element)) {
+        this.publishMessage(context, element, rinfo)
+        continue
+      }
+      const nested = element as { elements?: unknown[][] } | null
+      if (nested !== null && typeof nested === 'object' && Array.isArray(nested.elements)) {
+        this.publishBundle(context, nested as { elements: unknown[][] }, rinfo)
+      }
     }
   }
 

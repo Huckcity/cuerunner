@@ -157,3 +157,27 @@ test('services coming and going stay in the monitor, out of the log', async () =
   await expect(page.locator('.log-panel')).toBeVisible()
   await expect(page.locator('.log-panel .log-event[data-kind="service"]')).toHaveCount(0)
 })
+
+test('a cancelled quit leaves the show services listening', async () => {
+  const port = await oscPortOfItsOwn(page)
+
+  // Something to lose, so the quit has to ask before it goes: the prompt is the OS's
+  // own, and the answer here is Cancel.
+  await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
+  await app.evaluate(({ dialog }) => {
+    dialog.showMessageBox = (async () => ({ response: 2, checkboxChecked: false })) as typeof dialog.showMessageBox
+  })
+
+  // File → Exit is `app.quit()`: `before-quit` fires, then the window is asked to close,
+  // and the operator's Cancel aborts the quit from there.
+  await app.evaluate(({ app }) => app.quit())
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+    .toBe(1)
+
+  // The listener is really bound and really heard: a datagram sent now reaches the log,
+  // which it cannot do if the cancelled quit took the show services with it.
+  await sendOsc(port, '/show/after-cancel')
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel .log-event[data-kind="osc"]').first())
+    .toContainText('/show/after-cancel')
+})

@@ -166,6 +166,49 @@ describe('two people changing different things', () => {
     expect(merged.notes).toEqual([])
   })
 
+  it('breaks a cycle two legal moves make, instead of losing both groups', () => {
+    // Each side did something an operator can do — dragged one group onto the other —
+    // and the two answers together are a show where A is inside B and B is inside A.
+    // Nothing is reachable from the top level then, so the walk that orders the merged
+    // show would emit neither group nor anything under them, without a word.
+    const ancestor = workspace([
+      group('A', 'Act 1'),
+      cue({ id: 'a1', number: '1', name: 'Top of act', parentId: 'A' }),
+      group('B', 'Act 2'),
+      cue({ id: 'b1', number: '2', name: 'Changeover', parentId: 'B' })
+    ])
+    const ours = workspace([
+      group('A', 'Act 1'),
+      cue({ id: 'a1', number: '1', name: 'Top of act', parentId: 'A' }),
+      group('B', 'Act 2', ),
+      cue({ id: 'b1', number: '2', name: 'Changeover', parentId: 'B' })
+    ])
+    // This show dragged B into A; the other dragged A into B.
+    ours.cues[2] = { ...ours.cues[2], parentId: 'A' }
+    const theirs = workspace([
+      group('B', 'Act 2'),
+      cue({ id: 'b1', number: '2', name: 'Changeover', parentId: 'B' }),
+      group('A', 'Act 1'),
+      cue({ id: 'a1', number: '1', name: 'Top of act', parentId: 'A' })
+    ])
+    theirs.cues[2] = { ...theirs.cues[2], parentId: 'B' }
+
+    const merged = mergeWorkspaces(ancestor, ours, theirs)
+
+    const ids = merged.workspace.cues.map(c => c.id)
+    expect(ids).toContain('A')
+    expect(ids).toContain('a1')
+    expect(ids).toContain('B')
+    expect(ids).toContain('b1')
+    // One side's place is dropped, so the other's stands, and the report says which.
+    expect(merged.notes.some(note => note.detail.includes('ends up inside it'))).toBe(true)
+    // Every parent named is still in the show.
+    const present = new Set(ids)
+    for (const mergedCue of merged.workspace.cues) {
+      if (mergedCue.parentId !== null) expect(present.has(mergedCue.parentId)).toBe(true)
+    }
+  })
+
   it('applies the same change made twice once', () => {
     const ours = workspace([cue({ id: 'b', number: '2', name: 'Interval', volume: 0.4 })])
     const theirs = workspace([cue({ id: 'b', number: '2', name: 'Interval', volume: 0.4 })])

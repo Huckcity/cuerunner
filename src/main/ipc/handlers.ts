@@ -183,13 +183,18 @@ function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
 }
 
 export function registerIpcHandlers(): void {
-  // OSC keeps a socket open per destination, so the process has to let go of them.
-  app.on('before-quit', () => osc.close())
+  // Teardown belongs in `will-quit`, not `before-quit`: the unsaved-changes prompt runs
+  // after `before-quit` and the operator can cancel the quit there, at which point the
+  // window is still up and the show is still meant to run. A closed ShowBus cannot be
+  // reopened, and a service stopped here is never started again — the next configure
+  // finds the settings unchanged and asks for nothing — so a cancelled quit would leave
+  // the session with no OSC input, no triggers, no desk and no companion, silently.
+  app.on('will-quit', () => osc.close())
   // A request in flight must not outlive the window that asked for it.
-  app.on('before-quit', () => network.close())
-  app.on('before-quit', () => clearTimeout(audioEventFlush ?? undefined))
+  app.on('will-quit', () => network.close())
+  app.on('will-quit', () => clearTimeout(audioEventFlush ?? undefined))
   // The services hold sockets and poll timers of their own.
-  app.on('before-quit', () => show.close())
+  app.on('will-quit', () => show.close())
 
   // The services come up with the defaults, before the window has finished loading:
   // a console that is already sending when the operator launches the app should not

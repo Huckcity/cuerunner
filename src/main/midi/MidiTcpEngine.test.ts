@@ -7,9 +7,10 @@
 // dial), not on a duration, so a loaded machine does not turn a race into a flake. The
 // one exception is the retry window below, where the absence of a dial over time is the
 // property under test.
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { EventEmitter } from 'node:events'
 import { createConnection, createServer, type Server, type Socket } from 'node:net'
-import { MidiTcpEngine } from './MidiTcpEngine'
+import { CONNECT_DEADLINE_MS, MidiTcpEngine } from './MidiTcpEngine'
 import type { MidiMessageKind } from '../../renderer/src/types/cue'
 
 interface Desk {
@@ -78,6 +79,33 @@ function dials(): { connect: (host: string, port: number) => Socket; count: () =
   }
 }
 
+/**
+ * A dial the test opens by hand, for the cases that are about what the queue does while a
+ * connection is in flight rather than about TCP itself: `arrive()` is the desk accepting.
+ * The cast is the price of standing in for a socket with only the surface the engine uses
+ * (write, destroy, and the events it subscribes to).
+ */
+function heldDial(): {
+  connect: (host: string, port: number) => Socket
+  arrive: () => void
+  writes: number[][]
+} {
+  const writes: number[][] = []
+  const socket = new EventEmitter() as EventEmitter & {
+    write: (bytes: Buffer) => boolean
+    destroy: () => void
+    setNoDelay: () => void
+  }
+  socket.write = bytes => { writes.push([...bytes]); return true }
+  socket.destroy = () => {}
+  socket.setNoDelay = () => {}
+  return {
+    connect: () => socket as unknown as Socket,
+    arrive: () => socket.emit('connect'),
+    writes
+  }
+}
+
 function engine(retryMs = 20, connect = dials().connect): MidiTcpEngine {
   const created = new MidiTcpEngine(connect, retryMs)
   engines.push(created)
@@ -143,6 +171,40 @@ describe('sending to a desk', () => {
     await until(() => late.sockets.length >= 1)
 
     expect(late.received).toEqual([])
+  })
+
+  it('delivers a recall that queued behind one the dial gave up on', async () => {
+    // Two recalls to one desk while the link is still dialling, the first of which times
+    // out: the second's bytes are its own, and it is answered for its own bytes. Losing
+    // them with the first recall's failure and then reading an empty queue as a send is a
+    // desk that never moves while the log says the cue went.
+    //
+    // The dial is held open by the test — that is the whole shape of this case, and no
+    // real socket holds a connection for exactly one deadline — so it is the engine's own
+    // bookkeeping that is under test here.
+    vi.useFakeTimers()
+    try {
+      const held = heldDial()
+      const link = engine(20, held.connect)
+
+      const timedOut = link.send('127.0.0.1', 51325, [NOTE_ON])
+      // The second recall queues while the first is still dialling, and its own deadline
+      // is its own: it is the first that gives up here.
+      await vi.advanceTimersByTimeAsync(100)
+      const queued = link.send('127.0.0.1', 51325, [
+        { kind: 'noteOn', channel: 1, note: 6, velocity: 100 }
+      ])
+      await vi.advanceTimersByTimeAsync(CONNECT_DEADLINE_MS - 100)
+      expect((await timedOut).ok).toBe(false)
+
+      // The desk answers after that deadline: the second recall's bytes were still waiting
+      // behind the dial, and go out as soon as the socket is up.
+      held.arrive()
+      expect(await queued).toEqual({ ok: true })
+      expect(held.writes).toEqual([[0x90, 0x06, 0x64]])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

@@ -22,6 +22,7 @@ import type {
   AudioCancelResult,
   AudioClockReading,
   AudioCommandResult,
+  AudioCrosspoint,
   AudioDeviceInfo,
   AudioEngineBridge,
   AudioEngineEvent,
@@ -219,6 +220,7 @@ export class AudioEngineClient {
       // change as it did before it: showNow = engineNow + epoch, both at `perfMs`.
       this.anchor = { engineMs, perfMs }
       this.recordSession(reading.sessionId, previousEpoch + (projectedEngineMs - engineMs))
+      this.dropWatchesForOtherSessions()
       this.announceSessionChange(change)
       return
     }
@@ -240,6 +242,19 @@ export class AudioEngineClient {
       const oldest = this.epochs.keys().next().value
       if (oldest === undefined || oldest === sessionId) break
       this.epochs.delete(oldest)
+    }
+  }
+
+  /**
+   * A run this client is watching belonged to the engine that has gone: the replacement
+   * never heard of it, so nothing will ever answer for it — and the watch would go on
+   * asking, every tick for the rest of the session, for a cue that will never play.
+   */
+  private dropWatchesForOtherSessions(): void {
+    for (const [cueId, watch] of [...this.watched]) {
+      if (watch.sessionId === this.sessionId) continue
+      this.watched.delete(cueId)
+      this.progressCache.delete(cueId)
     }
   }
 
@@ -398,7 +413,11 @@ export class AudioEngineClient {
     // is watched without a session to compare against.
     const sessionId = this.sessionId ?? ''
     const result = await bridge().start(cueId, this.toEngineMs(whenMs), options)
-    this.watched.set(cueId, { sessionId, runId: result.runId })
+    // The watch, though, belongs to whatever engine is current now: the command was sent
+    // before the await and an engine replaced in between is the one that owns the run.
+    // Pinned to the session from before it, no line about the run could ever match it,
+    // and the polling would never stop.
+    this.watched.set(cueId, { sessionId: this.sessionId ?? '', runId: result.runId })
     return { ...result, startAtMs: result.startAtMs + this.epochFor(sessionId) }
   }
 
@@ -420,6 +439,16 @@ export class AudioEngineClient {
   async seek(cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> {
     const result = await bridge().seek(cueId, positionMs, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
     // `positionMs` is a place in the file, not a time on the clock.
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /**
+   * Replaces a running voice's routing matrix where it stands — from the engine's next
+   * rendered sample, with no restart, no re-seek and no envelope of its own. `null` is
+   * automatic routing, `[]` is silent, a list is the new matrix.
+   */
+  async routing(cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> {
+    const result = await bridge().routing(cueId, outputs)
     return { ...result, at: this.toShowMs(result.at) }
   }
 

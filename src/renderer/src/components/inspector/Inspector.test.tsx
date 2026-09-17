@@ -113,4 +113,62 @@ describe('Inspector', () => {
       .map(button => button.title)
     expect(shown).toEqual(['Reset Pre-wait to default'])
   })
+
+  it('shows a SysEx cue’s bytes in hex, the way they are typed and sent', () => {
+    // The cue's data is bytes, and the placeholder, the field and the monitor all speak
+    // hex. Shown in decimal, the next keystroke in that field would re-parse a number the
+    // operator never typed — and put bytes on the wire that mean something else.
+    const midi = cue('midi', {
+      messages: [{ kind: 'sysex', data: [0xf0, 0x41, 0x10, 0xf7] }]
+    } as Partial<Cue>)
+    show([midi], midi)
+    openTab('MIDI')
+
+    const field = container.querySelector<HTMLInputElement>('input[placeholder*="F0 41"]')!
+    expect(field.value).toBe('F0 41 10 F7')
+  })
+
+  it('gives a new OSC string argument a value that is a string', () => {
+    // node-osc reads each argument's type tag off the JavaScript value, so a 0 left under
+    // an argument the panel calls `string` reaches the desk as an integer.
+    const osc = cue('osc', { args: [{ type: 'f', value: 0 }] } as Partial<Cue>)
+    show([osc], osc)
+    openTab('OSC')
+
+    const select = container.querySelector<HTMLSelectElement>('select')!
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+      setter?.call(select, 's')
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    const stored = useStore.getState().cues[0] as { args: Array<{ type: string; value: unknown }> }
+    expect(stored.args[0]).toEqual({ type: 's', value: '' })
+  })
+
+  it('refuses a header rename that would take another header’s value with it', () => {
+    // Headers are one plain object, so two rows with the same name are one entry: the
+    // rename would delete the other row — and its value — while the operator is still
+    // typing, and typing on would not bring it back.
+    const network = cue('network', {
+      headers: { Accept: 'application/json', 'Content-Type': 'text/plain' }
+    } as Partial<Cue>)
+    show([network], network)
+    openTab('Network')
+
+    const rows = [...container.querySelectorAll('.field-row')]
+      .filter(row => row.querySelector('label')?.textContent?.startsWith('Header'))
+    const secondKey = rows[1].querySelector<HTMLInputElement>('input')!
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(secondKey, 'Accept')
+      secondKey.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    const stored = useStore.getState().cues[0] as { headers: Record<string, string> }
+    expect(stored.headers).toEqual({
+      Accept: 'application/json',
+      'Content-Type': 'text/plain'
+    })
+  })
 })

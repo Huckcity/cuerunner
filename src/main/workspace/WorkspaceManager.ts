@@ -21,6 +21,7 @@ import {
 } from '../../shared/showfile'
 import type { Workspace } from '../../renderer/src/types/workspace'
 import type { AudioCue, Cue } from '../../renderer/src/types/cue'
+import { CUE_TYPES } from '../../renderer/src/types/cue'
 import {
   CHANNEL_START_COUNT,
   defaultShowSettings,
@@ -324,6 +325,20 @@ function migrateCast(showSettings: Record<string, unknown> | undefined): void {
 }
 
 export function migrateWorkspace(workspace: Workspace): Workspace {
+  // A cue type this build has never heard of — a file from a newer build, or a hand
+  // edit — cannot be drawn: the row renders its icon from the type and the whole window
+  // goes down with it. Nothing is thrown away quietly either, because a show saved back
+  // without its unknown cues would be a show missing its cues, so the file is refused.
+  const unknown = workspace.cues.find(
+    cue => !(CUE_TYPES as readonly string[]).includes(cue.type as string)
+  )
+  if (unknown !== undefined) {
+    throw new Error(
+      `that show has a cue this version of WinsLab does not know (${String(unknown.type)})` +
+      ' — it was probably saved by a newer version'
+    )
+  }
+
   // Pass 1: normalize all cues
   const cues = workspace.cues.map(c => migrateCue(c as Cue & Record<string, unknown>))
 
@@ -798,6 +813,13 @@ export async function openWorkspace(
   if (result.canceled || !result.filePaths[0]) return null
 
   const filePath = result.filePaths[0]
+  // The same cap the rest of the load paths use: File→Open is the way most shows arrive,
+  // and a 500 MB one would spike main-process memory by several GB before anything could
+  // say no.
+  const { size } = await stat(filePath)
+  if (size > MAX_WORKSPACE_BYTES) {
+    throw new Error('that workspace file is larger than this app will open')
+  }
   const raw = await readFile(filePath, 'utf-8')
   const workspace: Workspace = migrateWorkspace(JSON.parse(raw))
   await addToRecent(filePath)
@@ -825,7 +847,16 @@ export async function openRecovery(): Promise<{
 } | null> {
   const snapshot = await readRecovery()
   if (!snapshot) return null
-  return { ...snapshot, ...resolveWorkspaceMedia(snapshot.workspace, snapshot.sourcePath) }
+  // A session that died on an older build leaves an older snapshot: it comes back
+  // through the same migration every other file does, or a pre-parentId one would
+  // return groups with no children and a show section whose panels cannot be read.
+  const workspace = migrateWorkspace(snapshot.workspace)
+  return {
+    savedAt: snapshot.savedAt,
+    sourcePath: snapshot.sourcePath,
+    selectedCueId: snapshot.selectedCueId,
+    ...resolveWorkspaceMedia(workspace, snapshot.sourcePath)
+  }
 }
 
 export interface SavedWorkspace {

@@ -1,4 +1,5 @@
 import { createServer, connect, type Server, type Socket } from 'node:net'
+import { StringDecoder } from 'node:string_decoder'
 import { describe } from '../bus/ServiceHost'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import {
@@ -53,6 +54,13 @@ interface PeerConnection {
   outgoing: boolean
   hello: HelloMessage | null
   buffer: string
+  /**
+   * A line's characters can arrive split across two reads, and decoding each chunk on its
+   * own would turn a byte pair into U+FFFD on both machines — a show name or a cue name
+   * that no longer matches the sender's, which the pair reads as "the cue lists differ".
+   * The decoder holds the partial character until the rest of it arrives.
+   */
+  decoder: StringDecoder
 }
 
 /** What this machine has heard from its partner. */
@@ -255,7 +263,7 @@ export class RedundancyService implements ShowService {
    * way at both ends, from the two machine ids.
    */
   private attach(socket: Socket, outgoing: boolean): void {
-    const connection: PeerConnection = { socket, outgoing, hello: null, buffer: '' }
+    const connection: PeerConnection = { socket, outgoing, hello: null, buffer: '', decoder: new StringDecoder('utf8') }
     this.connections.add(connection)
     socket.setNoDelay(true)
     socket.on('data', chunk => this.receive(connection, chunk))
@@ -329,7 +337,7 @@ export class RedundancyService implements ShowService {
   }
 
   private receive(connection: PeerConnection, chunk: Buffer): void {
-    connection.buffer += chunk.toString('utf8')
+    connection.buffer += connection.decoder.write(chunk)
     // A partner sends a line at a time. Anything past a message is not a partner that
     // has come unstuck, and buffering it would be this machine taken down by whoever
     // found the port.
@@ -482,6 +490,10 @@ export class RedundancyService implements ShowService {
       const name = this.peer.hello?.name ?? 'the partner'
       const quietFor = now - this.peer.lastHeardAt
       this.lastEvent = `${name} went quiet at ${clockTime(now)}`
+      // Who drives is recomputed on the silence, not only on the next hello: the machine
+      // the taker stood down is the one that has to carry on, and the taker is not coming
+      // back to release it.
+      this.updateDriving()
       this.context?.bus.alert(
         'warning',
         this.id,
@@ -559,7 +571,15 @@ export class RedundancyService implements ShowService {
    */
   private updateDriving(): void {
     const peer = this.peer.hello
-    const suppressed = peer !== null && peer.driving && peer.term > this.term
+    // A partner that has stopped answering is not running the show any more, whatever it
+    // claimed before it went: holding the live machine back for it would leave the pair
+    // with neither of them driving — the one state a pair exists to prevent. And two
+    // takeovers that land on the same term — a partition that healed with both machines
+    // having claimed the show — are broken by id, the way the two sockets between the pair
+    // are, so both ends compute the same answer and one of them yields.
+    const peerHoldsShow = peer !== null && peer.driving && this.peerAlive() &&
+      (peer.term > this.term || (peer.term === this.term && this.config.id > peer.id))
+    const suppressed = peerHoldsShow
     if (suppressed && this.tookOver) this.tookOver = false
     const driving = this.tookOver || (this.config.role === 'live' && !suppressed)
     // A machine that has just stopped driving says why — and the window is told, because

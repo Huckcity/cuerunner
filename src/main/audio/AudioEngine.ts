@@ -59,6 +59,10 @@ const SLOW_VERBS: Record<string, number> = {
   // ones — an hour of it is a pass over a gigabyte, which the default deadline would cut
   // off mid-read.
   silence: SLOW_REQUEST_TIMEOUT_MS,
+  // The same whole-file pass as `silence`, and the same files: a room-tone bed is
+  // analysed frame by frame to its last one, which the default deadline cuts off —
+  // silently, because the waveform panel treats a failed onsets request as "no ticks".
+  onsets: SLOW_REQUEST_TIMEOUT_MS,
   configure: SLOW_REQUEST_TIMEOUT_MS,
   devices: SLOW_REQUEST_TIMEOUT_MS
 }
@@ -416,7 +420,7 @@ export class NativeAudioEngine {
       // The engine already prefixes its own diagnostics; do not stack a second tag.
       process.stderr.write(text.startsWith('[cuerunner-audio]') ? `${text}\n` : `[cuerunner-audio] ${text}\n`)
     })
-    child.on('exit', (code, signal) => this.handleExit(code, signal))
+    child.on('exit', (code, signal) => this.handleExit(child, code, signal))
 
     try {
       await this.connectWithRetry(path, child)
@@ -462,7 +466,7 @@ export class NativeAudioEngine {
           socket.setNoDelay(true)
           socket.on('data', (chunk: Buffer) => this.handleStdout(chunk))
           socket.on('error', (error) => this.handleSocketError(error))
-          socket.on('close', () => this.handleSocketClose())
+          socket.on('close', () => this.handleSocketClose(socket))
           resolve()
         })
     }
@@ -590,7 +594,14 @@ export class NativeAudioEngine {
     this.lastStatus.lastError = describeError(error)
   }
 
-  private handleSocketClose(): void {
+  /**
+   * A socket closing is only news if it is the socket this engine is talking on. A
+   * replaced child's socket can close after its replacement is connected — the process
+   * takes seconds to die under a wedged driver — and mistaking that for the current
+   * connection would tear the replacement down with it.
+   */
+  private handleSocketClose(socket: Socket): void {
+    if (socket !== this.socket) return
     this.socket = null
     this.failPending(new AudioEngineError('engine', 'audio engine connection closed'))
     if (this.shuttingDown) return
@@ -598,7 +609,13 @@ export class NativeAudioEngine {
     this.scheduleRestart('audio engine connection closed')
   }
 
-  private handleExit(code: number | null, signal: NodeJS.Signals | null): void {
+  /**
+   * And an exit is only news if it is the child this engine spawned. One death arrives
+   * twice — the socket closes and the child exits — and a handler that answered both
+   * spent two of the three restart attempts and logged the fault twice for one crash.
+   */
+  private handleExit(child: ChildProcess, code: number | null, signal: NodeJS.Signals | null): void {
+    if (child !== this.child) return
     const reason = `audio engine exited (${code ?? signal ?? 'unknown'})`
     this.child = null
     if (this.socket !== null) {

@@ -163,6 +163,53 @@ describe('a hostile archive', () => {
     // the path a bomb with small declared sizes takes.
     await expect(readZipEntry(file, entry, 1)).rejects.toThrow('unpacks to more')
   })
+
+  it('stops a streamed entry at the size the archive declared for it', async () => {
+    // The write is what has to be bounded: a media entry that lied about its size would
+    // otherwise inflate to disk — a thousand to one — before anything could refuse it.
+    const { deflateRawSync } = await import('node:zlib')
+    const file = join(dir, 'bomb.wlabx')
+    const payload = deflateRawSync(Buffer.alloc(4 * 1024 * 1024))
+    writeFileSync(file, payload)
+    const entry = {
+      name: 'media/bomb.wav', offset: 0, compressedSize: payload.length, size: 1024, crc: 0, method: 8
+    }
+
+    await expect(extractZipEntry(file, entry, dir)).rejects.toThrow('more than the archive says')
+    expect(existsSync(join(dir, 'media', 'bomb.wav'))).toBe(false)
+  })
+
+  it('extracts an entry with nothing in it, which a show of empty files exports', async () => {
+    // A zero-byte media file is one a show can hold and a bundle can carry: there is
+    // nothing to stream for it, and a range that ends before it starts is one a read
+    // stream refuses outright.
+    const file = join(dir, 'empty.wlabx')
+    writeFileSync(join(dir, 'empty.wav'), Buffer.alloc(0))
+    await writeZip(file, [
+      { name: 'show.wlab', data: Buffer.from('{}') },
+      { name: 'media/empty.wav', file: join(dir, 'empty.wav') }
+    ])
+
+    const entries = await readZip(file)
+    expect(entries[1]).toMatchObject({ name: 'media/empty.wav', size: 0, compressedSize: 0 })
+    await extractZipEntry(file, entries[1], dir)
+
+    expect(existsSync(join(dir, 'media', 'empty.wav'))).toBe(true)
+    expect(readFileSync(join(dir, 'media', 'empty.wav')).length).toBe(0)
+  })
+
+  it('refuses a directory offset near the end of the file with a sentence', async () => {
+    const file = join(dir, 'short.zip')
+    await writeZip(file, [{ name: 'show.wlab', data: Buffer.from('{}') }])
+    const bytes = readFileSync(file)
+    // The central directory's local-header offset field: 42 bytes into the first central
+    // header, which is where the end record says the directory starts.
+    const centralOffset = bytes.readUInt32LE(bytes.length - 22 + 16)
+    bytes.writeUInt32LE(bytes.length - 2, centralOffset + 42)
+    writeFileSync(file, bytes)
+
+    await expect(readZip(file)).rejects.toThrow('does not start where the archive says')
+  })
 })
 
 describe('reading an archive this app did not write', () => {

@@ -34,7 +34,21 @@ Mixer::Mixer(DecodedCache& cache, StreamPool& streams, SpscQueue<Event, 1024>& e
 
 void Mixer::configure(int deviceChannels, int sampleRate) {
   deviceChannels_ = std::max(1, std::min(kMaxOutputChannels, deviceChannels));
-  sampleRate_ = sampleRate > 0 ? sampleRate : 48000;
+  const int rate = sampleRate > 0 ? sampleRate : 48000;
+  // The clock is published as `clockFrames_ * 1000 / sampleRate_`, so the frames already
+  // rendered have to come with it: a reopen that lands on another rate — the window's
+  // Settings → Audio, a show whose stored rate differs, a driver that requested the
+  // reopen — would otherwise step the show clock inside one engine session by the ratio
+  // of the two rates. Three minutes at 44.1 kHz reported at 48 kHz is 14.6 s of clock
+  // gone, and the window, which keeps the show on that clock, would schedule the rest of
+  // the show fifteen seconds in the future. Rebasing keeps the milliseconds exactly
+  // where they were, and the session's clock continuous.
+  if (rate != sampleRate_ && sampleRate_ > 0 && clockFrames_ > 0) {
+    clockFrames_ = static_cast<int64_t>(std::llround(
+        static_cast<double>(clockFrames_) * static_cast<double>(rate) /
+        static_cast<double>(sampleRate_)));
+  }
+  sampleRate_ = rate;
 }
 
 void Mixer::reset() {

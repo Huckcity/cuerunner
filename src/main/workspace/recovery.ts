@@ -1,7 +1,11 @@
 import { app } from 'electron'
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'fs/promises'
+import { randomUUID } from 'crypto'
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import type { Workspace } from '../../renderer/src/types/workspace'
+
+/** The largest snapshot this app reads back: the same ceiling a workspace file gets. */
+const MAX_RECOVERY_BYTES = 64 * 1024 * 1024
 
 export interface RecoverySnapshot {
   workspace: Workspace
@@ -38,7 +42,13 @@ export async function writeRecovery(
 
 export async function readRecovery(): Promise<RecoverySnapshot | null> {
   try {
-    const snapshot = JSON.parse(await readFile(recoveryFilePath(), 'utf-8')) as RecoverySnapshot
+    const filePath = recoveryFilePath()
+    // The same cap the app's other load paths use: a snapshot this app wrote is a show,
+    // and one far past this is not something to read into main's memory on the strength
+    // of a filename.
+    const { size } = await stat(filePath)
+    if (size > MAX_RECOVERY_BYTES) return null
+    const snapshot = JSON.parse(await readFile(filePath, 'utf-8')) as RecoverySnapshot
     return snapshot?.workspace ? snapshot : null
   } catch {
     // No snapshot, or one that was truncated by a dying process: either way there is
@@ -58,7 +68,10 @@ export async function clearRecovery(): Promise<void> {
  * wrong still leaves the operator a file to open.
  */
 export async function writeFileAtomically(filePath: string, contents: string): Promise<void> {
-  const tempPath = join(dirname(filePath), `.${basename(filePath)}.tmp`)
+  // The temp is named for this write, not for the path: two saves of one file can be in
+  // the air together — a Ctrl+S and a close-prompt save — and a shared temp would have
+  // both of them writing at their own offsets into the same file.
+  const tempPath = join(dirname(filePath), `.${basename(filePath)}.${randomUUID()}.tmp`)
   await writeFile(tempPath, contents, 'utf-8')
   try {
     // Keep the previous version aside before replacing it. copyFile leaves the

@@ -44,7 +44,6 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
 
   const failures: string[] = []
   const refused: string[] = []
-  const deskState = { ...state.deskState }
   for (const change of changes) {
     if (change.message === null) {
       refused.push(`${change.label}: ${change.error}`)
@@ -52,7 +51,13 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
     }
     const sent = await sendDeskMessage(change.message)
     if (sent.ok) {
-      deskState[change.channelId] = change.live
+      // A group is remembered the moment the desk has taken it, in the order the sends
+      // land rather than from the whole record read before them. Two recalls can overlap
+      // — scene cues at one timeline offset, a batch of triggers — and a record written
+      // from that earlier copy would be whichever recall finished last, not whatever the
+      // desk heard last; a group recorded as closed while it is live is never told
+      // anything again.
+      useStore.getState().mergeDeskState({ [change.channelId]: change.live })
     } else {
       failures.push(`${change.label}: ${describeDeskMessage(change.message)}`)
     }
@@ -61,7 +66,7 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
   // The all-closed scene is a real place the desk can be left, so it is remembered as
   // one: a view that said "nothing recalled" after every mic was closed would be wrong
   // about the one thing it is there to say.
-  useStore.getState().setDeskState(deskState, scene === null ? ALL_CLOSED_SCENE_ID : scene.id)
+  useStore.getState().mergeDeskState({}, scene === null ? ALL_CLOSED_SCENE_ID : scene.id)
 
   const opened = changes.filter(change => change.live).length
   const closed = changes.length - opened

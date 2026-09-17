@@ -503,6 +503,46 @@ describe('two machines in a pair', () => {
     expect(backup.notices().at(-1)).toMatchObject({ kind: 'stand-down', reason: 'the show was handed back' })
   })
 
+  it('resumes driving when the machine that took the show from it disappears', async () => {
+    // The live machine stands down for a higher term, and the taker then dies. Standing
+    // by for a machine that is not there is the pair with neither of them driving — the
+    // one state a pair exists to prevent — so the silence has to release the live one.
+    const { live, backup } = await pair({ takeover: 'auto' })
+    await until(() => backup.latest()?.status.peer?.name === 'desk-a', 'the pair to meet')
+    await backup.service.command('takeover')
+    await until(() => live.latest()?.status.driving === false, 'the live machine to stand down')
+    expect(live.latest()?.status.lastEvent).toContain('desk-b is running the show')
+
+    backup.close()
+
+    await until(() => live.latest()?.status.driving === true, 'the live machine to resume')
+    expect(live.latest()?.status.peer?.alive).toBe(false)
+  })
+
+  it('breaks a tie on the term by id, so two takeovers do not both drive', async () => {
+    // Both machines claimed the show while they could not hear each other, so both terms
+    // are the same and neither is suppressed by a higher one. Without a tie-break the
+    // pair heals with both of them driving the show; with it, both ends compute the same
+    // answer from the two ids and the higher one yields.
+    const portA = await freePort()
+    const portB = await freePort()
+    const lower = await start('desk-c', 'id-c', {
+      role: 'standby', port: portA, peerHost: '127.0.0.1', peerPort: portB, takeover: 'auto'
+    })
+    const higher = await start('desk-d', 'id-d', {
+      role: 'standby', port: portB, peerHost: '127.0.0.1', peerPort: portA, takeover: 'auto'
+    })
+    await until(() => lower.latest()?.status.peer?.name === 'desk-d', 'the pair to meet')
+
+    await Promise.all([lower.service.command('takeover'), higher.service.command('takeover')])
+    await settle(2 * TIMEOUT_MS)
+
+    const statuses = [lower, higher].map(machine => machine.latest()?.status)
+    expect(statuses[0]?.term).toBe(statuses[1]?.term)
+    expect(statuses[0]?.driving).toBe(true)
+    expect(statuses[1]?.driving).toBe(false)
+  })
+
   it('says when both machines are set to the same half', async () => {
     // The one configuration mistake a pair has: two machines driving two shows, or two
     // standing by while nothing drives at all. Neither is the app's to decide, and both

@@ -17,9 +17,16 @@ export function NetworkInspector({ cue }: Props) {
   const bodyDisabled = cue.method === 'GET'
 
   // Headers are stored as a plain object, so edits round-trip through
-  // Object.entries/Object.fromEntries. Row order is preserved, and editing a row
-  // whose key collides with another row keeps the value of the last duplicate.
+  // Object.entries/Object.fromEntries. Row order is preserved.
+  //
+  // A rename onto a name another row already has is refused, and the field says so by
+  // coming back to the name the row had: in a plain object the two rows are one entry,
+  // so the rename would take the other row — and its value — with it, mid-typing, and a
+  // value that disappears while the operator is still on the row is a value they have to
+  // type again.
   const setHeader = (i: number, row: [string, string]) => {
+    const [key] = row
+    if (key !== headers[i][0] && headers.some((h, idx) => idx !== i && h[0] === key)) return
     const rows = headers.map((h, idx) => (idx === i ? row : h))
     set({ headers: Object.fromEntries(rows) })
   }

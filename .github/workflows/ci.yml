@@ -159,7 +159,10 @@ jobs:
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y libasound2-dev
+        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -294,6 +297,12 @@ jobs:
           echo 'runtime libraries present'
 
       - name: Integration tests
+        env:
+          # The vendor chain answered from the recording the nightly made against a real
+          # console, so the two @vendor assertions run on every pull request with no
+          # console anywhere — which is what the fixture and the peer's replay mode are
+          # for (INTEGRATION-HARNESS.md §9).
+          EOS_REPLAY: integration/fixtures/vendor/eos-ubox-win.json
         run: npm run test:integration
 
       - name: Upload test results

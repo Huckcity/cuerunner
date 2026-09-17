@@ -6,6 +6,16 @@ import { NumberField, TextField } from '../common/Field'
 
 interface Props { cue: MidiCue }
 
+/** A SysEx body as the field shows it: hex, two digits a byte, the way it is typed. */
+function hexBytes(data: number[] | undefined): string {
+  return (data ?? []).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ')
+}
+
+/** One typed byte, or null for anything that is not a byte this app would put on the wire. */
+function parseByte(text: string): number | null {
+  return /^[0-9a-f]{1,2}$/i.test(text) ? parseInt(text, 16) : null
+}
+
 export function MidiInspector({ cue }: Props) {
   const update = useStore(s => s.updateCue)
   const set = (patch: Partial<MidiCue>) => update(cue.id, patch as any)
@@ -121,10 +131,15 @@ export function MidiInspector({ cue }: Props) {
               <label>Bytes</label>
               <TextField
                 when="typed"
-                value={(msg.data ?? []).join(' ')}
+                // Hex, the way the field is typed, the placeholder reads and the monitor
+                // prints the bytes that went out: the cue's data is bytes, so showing
+                // them in decimal would put a number the operator never typed back into
+                // the field — and parsing it as hex again on the next keystroke would
+                // send something else entirely.
+                value={hexBytes(msg.data)}
                 placeholder="F0 41 10 42 12 ... F7"
                 onValue={text => {
-                  const data = text.split(/\s+/).map(byte => parseInt(byte, 16)).filter(byte => !isNaN(byte))
+                  const data = text.split(/\s+/).map(parseByte).filter(byte => byte !== null)
                   updateMsg(i, { data })
                 }}
               />

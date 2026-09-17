@@ -139,7 +139,10 @@ export function Triggers({ cue }: Props) {
   cueRef.current = cue
   // How much of the river has been read. Events already in the log when learning starts
   // must not answer it, and a drained river must not be rescanned on every re-render.
-  const readRef = useRef(0)
+  // The last event the river showed, rather than how many it held: the store trims the
+  // river from the front at its cap, and a head pinned to a count would end up at 300 of
+  // 300 and never look at another event — Learn would wait for ever.
+  const readRef = useRef<ShowEvent | null>(null)
 
   const triggers = cueTriggers(cue)
 
@@ -164,24 +167,27 @@ export function Triggers({ cue }: Props) {
   }
 
   function startLearning(kind: 'osc' | 'midi' | 'msc'): void {
-    readRef.current = showEvents.length
+    readRef.current = showEvents[showEvents.length - 1] ?? null
     setLearning(kind)
   }
 
   useEffect(() => {
     if (!learning) return
 
-    // A cleared river rewinds the read head; otherwise anything already seen is old news.
-    const from = readRef.current > showEvents.length ? 0 : readRef.current
+    // Everything already seen is old news: the head is the last event that was on the
+    // river, so an event the cap trimmed away — or a river cleared entirely — rewinds it
+    // to the front rather than leaving it pointing past the end.
+    const seenAt = readRef.current === null ? -1 : showEvents.indexOf(readRef.current)
+    const from = seenAt + 1
     for (let i = from; i < showEvents.length; i++) {
       const trigger = triggerFromEvent(learning, showEvents[i])
       if (!trigger) continue
-      readRef.current = i + 1
+      readRef.current = showEvents[i]
       addTrigger(trigger)
       setLearning(null)
       return
     }
-    readRef.current = showEvents.length
+    readRef.current = showEvents[showEvents.length - 1] ?? readRef.current
   }, [showEvents, learning])
 
   function addOsc(): void {

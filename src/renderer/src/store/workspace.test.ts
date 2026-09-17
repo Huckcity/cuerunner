@@ -147,6 +147,23 @@ describe('store — saveSucceeded', () => {
     expect(useStore.getState().workspaceName).toBe('Renamed')
   })
 
+  it('stays dirty when the show was renamed while the save was out', () => {
+    // The witness useWorkspace keeps against the round trip: the file was written with
+    // the name it was sent with, and the operator typed another one while it was in the
+    // air. Renaming is not an undo step, so the cue and history comparisons would miss it
+    // and the session would read as saved with the file carrying the old name.
+    const sentName = useStore.getState().workspaceName
+    useStore.getState().setWorkspaceName('Hamlet (revised)')
+
+    // The save finishes, adopting the name the store has now rather than the sent one.
+    useStore.getState().saveSucceeded('/shows/hamlet.wlab', useStore.getState().workspaceName, [])
+    const after = useStore.getState()
+    if (after.workspaceName !== sentName) after.markDirty()
+
+    expect(useStore.getState().workspaceName).toBe('Hamlet (revised)')
+    expect(useStore.getState().isDirty).toBe(true)
+  })
+
   it('carries the history the file was written with, so the next save appends to it', () => {
     const entry = { at: '2026-09-16T10:00:00.000Z', by: 'adam', cues: [], settings: [] }
     useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', 'Hamlet', [entry])

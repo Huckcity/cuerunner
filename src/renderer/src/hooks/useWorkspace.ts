@@ -37,11 +37,17 @@ async function guardDirty(): Promise<boolean> {
       return false
     }
     if (!saved) return false     // User cancelled save dialog
-    saveSucceeded(saved.path, workspaceName, saved.history)
+    // The name the store has now, not the one this save was sent with: a rename typed
+    // while the file was being written is the operator's, and the file — which carries
+    // the name it was written with — is what the witness below keeps dirty.
+    saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
     // An edit that landed while the save was in flight is not on disk: the close must
-    // still ask. The undo depth is the cheap witness — every edit pushes exactly one.
+    // still ask. The undo depth is the cheap witness — every edit pushes exactly one —
+    // and the show's own name is checked too, because renaming is not an undo step.
     const after = useStore.getState()
-    if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
+    if (after.cues !== sentCues || after.past.length !== sentEdits || after.workspaceName !== workspaceName) {
+      after.markDirty()
+    }
     await window.cuerunner.workspace.clearRecovery().catch(() => {})
   } else {
     // "Don't Save" discards the session, including its recovery snapshot.
@@ -307,11 +313,14 @@ export function useWorkspace() {
     try {
       const saved = await window.cuerunner.workspace.save(ws, workspacePath)
       if (!saved) return false
-      saveSucceeded(saved.path, workspaceName, saved.history)
+      // The name the store has now, not the one this save was sent with: see guardDirty.
+      saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
       // Anything that moved while the save was in flight is still unsaved, even though
       // the round trip answered: compare against what went out.
       const after = useStore.getState()
-      if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
+      if (after.cues !== sentCues || after.past.length !== sentEdits || after.workspaceName !== workspaceName) {
+        after.markDirty()
+      }
       // The session is on disk now, so there is nothing left to recover.
       await window.cuerunner.workspace.clearRecovery().catch(() => {})
       return true
@@ -336,9 +345,11 @@ export function useWorkspace() {
     try {
       const saved = await window.cuerunner.workspace.saveAs(ws)
       if (!saved) return false
-      saveSucceeded(saved.path, workspaceName, saved.history)
+      saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
       const after = useStore.getState()
-      if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
+      if (after.cues !== sentCues || after.past.length !== sentEdits || after.workspaceName !== workspaceName) {
+        after.markDirty()
+      }
       await window.cuerunner.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {

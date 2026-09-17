@@ -154,6 +154,24 @@ describe('exporting a show as a bundle', () => {
     expect((bundle.workspace.cues[0] as AudioCue).filePath).toBe('media/walk-in.wav')
     expect((bundle.workspace.cues[1] as AudioCue).filePath).toBe('media/walk-in-2.wav')
   })
+
+  it('treats two names that differ only in case as the same name', async () => {
+    // The bundle is unpacked onto the filesystem that will hold it, and Windows and
+    // macOS do not tell those two names apart: one entry would extract over the other,
+    // and a cue would play the other file's audio with nothing said about it.
+    mkdirSync(join(dir, 'act2'))
+    writeFileSync(join(dir, 'act2', 'WALK-IN.WAV'), Buffer.alloc(64, 5))
+    const show = workspace([
+      audioCue('a1', '1', 'Walk-in', join(dir, 'music', 'walk-in.wav')),
+      audioCue('a2', '2', 'Walk-in (act 2)', join(dir, 'act2', 'WALK-IN.WAV'))
+    ])
+
+    await writeBundle(show, null, bundled)
+
+    const bundle = await readBundle(bundled)
+    expect(bundle.media.map(entry => entry.name))
+      .toEqual(['media/WALK-IN-2.WAV', 'media/walk-in.wav'])
+  })
 })
 
 describe('unpacking a bundle', () => {
