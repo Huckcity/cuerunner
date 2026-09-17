@@ -511,6 +511,13 @@ export const GUIDES = [
         and is not saved with the show. A line that repeats is said once with a count.
       </p>
       <p>
+        An audio event whose type the app does not recognise is named in the log with its
+        count and does nothing else — it never reaches the show. An event of a known type
+        carrying a field the app cannot look up still plays; the log names the field beside
+        it. An engine built against a different set of events is a line you can see rather
+        than a show that quietly does the wrong thing.
+      </p>
+      <p>
         A cue that failed also says so in its own inspector, under <strong>Last run</strong>:
         when it ran, how long it took, and what went wrong. If a cue "does nothing", that
         is the first place to look, then the log.

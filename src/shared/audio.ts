@@ -21,12 +21,12 @@
  * a build must not silently do without: the renderer's clock epoch is meaningless
  * against an engine that cannot say which session a reading came from.
  *
- * 3 opens every connection with a greeting that declares this number and the verb set
- * that goes with it (`AUDIO_WIRE`). The client reads it before it writes anything, so an
- * engine built against another meaning of the number is refused while the connection is
- * still empty, rather than after it has already answered a verb and its events have been
- * interpreted. The greeting is a new message kind, which is why the meaning changed with
- * it: an engine that does not greet speaks a build from before it.
+ * 3 opens every connection with a greeting that declares this number and the verb and
+ * event sets that go with it (`AUDIO_WIRE`). The client reads it before it writes
+ * anything, so an engine built against another meaning of the number is refused while the
+ * connection is still empty, rather than after it has already answered a verb and its
+ * events have been interpreted. The greeting is a new message kind, which is why the
+ * meaning changed with it: an engine that does not greet speaks a build from before it.
  */
 export const AUDIO_PROTOCOL_VERSION = 3
 
@@ -92,12 +92,50 @@ const AUDIO_WIRE_DEVICE_OPTIONS = {
 } as const satisfies Record<string, AudioWireField>
 
 /**
- * The wire's declaration: the protocol number and every verb, with the fields each one
- * reads. This is the one home of the verb set. The native engine cannot import this
- * module, so it carries the same table as data (`native/audio/src/protocol.cpp`),
- * prints it for `--protocol`, and refuses a request whose required field is missing or
- * mistyped; `src/main/audio/audioWire.test.ts` holds the two to each other, so a verb or
- * field edited at one end alone fails there.
+ * Every event the engine sends, and the top-level fields each type carries — the native
+ * truth `eventLine()` writes and this reader checks against. The recognition rule both
+ * ends of the stream follow: a type is known when this declaration names it, a field when
+ * the declaration names it for that type. Values are not declared and not checked: a name
+ * the reader cannot look up is what a report is for, not a value it dislikes. Every event
+ * is flat, so the top-level names are the whole check.
+ *
+ * The `satisfies` holds one direction — a name that is not a field of its own interface —
+ * and `EventSetCheck`, applied where the declaration is built, holds the other: an array
+ * type can say which names it may hold, never that every one of them appears, so
+ * completeness is checked against this declaration's own type rather than stated beside it.
+ */
+const AUDIO_WIRE_EVENTS = {
+  ended: ['type', 'cueId', 'runId', 'at', 'reason', 'loopsCompleted', 'sessionId'],
+  error: ['type', 'at', 'cueId', 'runId', 'code', 'message', 'sessionId'],
+  panic: ['type', 'at', 'fadeMs', 'sessionId'],
+  state: ['type', 'at', 'active', 'cueId', 'runId', 'playing', 'state', 'sessionId']
+} as const satisfies { [Name in AudioEventType]: readonly (keyof Extract<AudioEngineEvent, { type: Name }>)[] }
+
+/** The fields of an event interface that the declared set leaves out — nothing at all when
+ *  every list is complete. */
+type MissingEventFields<Declared extends { [Name in AudioEventType]: readonly string[] }> = {
+  [Name in AudioEventType]: Exclude<keyof Extract<AudioEngineEvent, { type: Name }>, Declared[Name][number]>
+}[AudioEventType]
+
+/**
+ * `unknown` while the declared set names every field of every event interface, and the
+ * fields left out otherwise: a missing field then makes `events` unsatisfiable at
+ * `AUDIO_WIRE`, naming itself, so a field or a type added to the interfaces can never ship
+ * this declaration stale. The other direction — a name an interface does not carry, or a
+ * type outside the union — is the `satisfies` on `AUDIO_WIRE_EVENTS`.
+ */
+type EventSetCheck = [MissingEventFields<typeof AUDIO_WIRE_EVENTS>] extends [never]
+  ? unknown
+  : { missingEventFields: MissingEventFields<typeof AUDIO_WIRE_EVENTS> }
+
+/**
+ * The wire's declaration: the protocol number, every verb with the fields each one
+ * reads, and every event with the fields each type carries. This is the one home of the
+ * verb and event sets. The native engine cannot import this module, so it carries the
+ * same table as data (`native/audio/src/protocol.cpp`), prints it for `--protocol`, and
+ * refuses a request whose required field is missing or mistyped;
+ * `src/main/audio/audioWire.test.ts` holds the two to each other, so a verb, an event or
+ * a field edited at one end alone fails there.
  *
  * Verb and field names are frozen, and so are the declared defaults: a well-formed
  * request that omits an optional field gets the default, never a refusal.
@@ -193,11 +231,25 @@ export const AUDIO_WIRE = {
       deliberate: { type: 'boolean', required: false, default: false }
     },
     shutdown: {}
-  }
-} as const satisfies { protocol: number; verbs: Record<string, Record<string, AudioWireField>> }
+  },
+  events: AUDIO_WIRE_EVENTS
+} as const satisfies {
+  protocol: number
+  verbs: Record<string, Record<string, AudioWireField>>
+  events: typeof AUDIO_WIRE_EVENTS & EventSetCheck
+}
 
 /** Every verb the wire carries, as a union of its names. */
 export type AudioWireVerb = keyof typeof AUDIO_WIRE.verbs
+
+/** The fields the declaration carries for an event type, or null when it names no such
+ *  type. The recognition rule, read by every site that checks an engine event: a type is
+ *  known when the declaration names it, a field when the declaration names it for that
+ *  type — never a second list beside the declaration. */
+export function declaredEventFields(type: unknown): readonly string[] | null {
+  if (typeof type !== 'string' || !Object.hasOwn(AUDIO_WIRE.events, type)) return null
+  return (AUDIO_WIRE.events as Record<string, readonly string[]>)[type]
+}
 
 /** Default stream format. The engine reports what it actually achieved in `info()`. */
 export const AUDIO_DEFAULT_SAMPLE_RATE = 48000
@@ -452,7 +504,14 @@ export interface AudioPanicResult {
   stoppedVoices: number
 }
 
-export type AudioEventType = 'ended' | 'error' | 'panic' | 'state'
+/**
+ * Every event type the wire carries: the union of the interfaces below. `AUDIO_WIRE.events`
+ * is the one home of the set and of the fields each type carries, and it must name every
+ * member of this union and nothing else — held where the declaration is built. An interface
+ * added to `AudioEngineEvent` therefore joins this union by existing, and the declaration
+ * has to carry it before the suite can compile.
+ */
+export type AudioEventType = AudioEngineEvent['type']
 
 export interface AudioEndedEvent {
   type: 'ended'

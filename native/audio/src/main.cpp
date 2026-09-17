@@ -62,7 +62,7 @@ void usage() {
                "  --stream-max-total-bytes <n>\n"
                "  --schedule-horizon-ms <n>  how far ahead a start may be scheduled\n"
                "  --frames <n>               offline: render exactly this many frames\n"
-               "  --protocol                 print the wire declaration: the protocol and every verb\n"
+               "  --protocol                 print the wire declaration: the protocol, every verb and every event\n"
                "  --declare-protocol <n>     declare another protocol on the wire (dev/test)\n"
                "  --version\n",
                ws::kEngineVersion);

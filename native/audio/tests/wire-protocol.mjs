@@ -9,8 +9,9 @@
  * The declaration itself is held against src/shared/audio.ts by
  * src/main/audio/audioWire.test.ts, which spawns this same `--protocol` output; this
  * harness walks the declaration against the live engine: every verb it carries is answered
- * (nothing is routed by the chain and missing from the table), and an engine told to
- * declare another protocol says so in its greeting and in `info()`.
+ * (nothing is routed by the chain and missing from the table), every event the engine emits
+ * carries exactly the fields its type declares, and an engine told to declare another
+ * protocol says so in its greeting and in `info()`.
  *
  *   node native/audio/tests/wire-protocol.mjs [--binary path]
  */
@@ -119,11 +120,18 @@ class EngineClient {
 /** What the engine prints for `--protocol`: the declaration this build speaks. */
 const declaration = JSON.parse(execFileSync(binary, ['--protocol'], { encoding: 'utf8' }))
 const declaredVerbs = Object.keys(declaration.verbs ?? {})
-console.log(`wire protocol — declaration ${JSON.stringify(declaration.protocol)}, ${declaredVerbs.length} verbs, binary ${binary}`)
+const declaredEvents = declaration.events ?? {}
+console.log(`wire protocol — declaration ${JSON.stringify(declaration.protocol)}, ${declaredVerbs.length} verbs, ${Object.keys(declaredEvents).length} events, binary ${binary}`)
 check(
   '--protocol answers with a declaration and its verbs',
   typeof declaration.protocol === 'number' && declaration.verbs !== undefined && declaration.verbs.prepare !== undefined && declaration.verbs.stop !== undefined,
   JSON.stringify(declaration).slice(0, 200)
+)
+check(
+  'it declares the event set, each type with its fields',
+  Object.keys(declaredEvents).length > 0 &&
+    Object.values(declaredEvents).every(fields => Array.isArray(fields) && fields.length > 0 && fields.every(field => typeof field === 'string')),
+  JSON.stringify(declaredEvents).slice(0, 200)
 )
 
 const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-wire-protocol-'))
@@ -322,6 +330,72 @@ try {
       'every verb in the declaration is routed by the engine',
       unrouted.length === 0,
       JSON.stringify(unrouted)
+    )
+
+    // The declaration's other half, walked against the live engine: a fixture played to
+    // its natural end, a panic, and a device the engine loses — the events the silent
+    // backend can be made to produce — with every line the engine wrote held to the fields
+    // the declaration names for its type. A field the engine writes and does not declare,
+    // or a type it emits without declaring it, is an engine that has drifted from the set
+    // this build checks events against.
+    const fixture = join(repoRoot, 'native', 'audio', 'tests', 'fixtures', 'tone.w64')
+    const firstEvent = client.events.length
+    const walked = () => client.events.slice(firstEvent)
+    // Waits on the engine's own output rather than on a guessed duration: the condition is
+    // polled until it holds or the deadline passes.
+    const waitForType = async (type, deadlineMs = 8000) => {
+      const deadline = Date.now() + deadlineMs
+      while (Date.now() < deadline) {
+        if (walked().some(event => event.type === type)) return true
+        await sleep(10)
+      }
+      return false
+    }
+
+    const prepared = await client.request('prepare', { cueId: 'walk', filePath: fixture })
+    check('the event-walk fixture prepares', prepared.ok === true, JSON.stringify(prepared))
+    if (prepared.ok === true) {
+      await client.request('start', { cueId: 'walk', options: {} })
+      check(
+        'the walk plays the fixture to its natural end',
+        (await waitForType('ended')) && walked().some(event => event.type === 'ended' && event.reason === 'complete'),
+        JSON.stringify(walked())
+      )
+      await client.request('panic', { fadeMs: 0 })
+      check('the walk panics', await waitForType('panic'), JSON.stringify(walked()))
+      // The loss the backend callback reports, run through the same classification: it is
+      // how the silent backend produces an `error` line, which is what holds that part of
+      // the declaration to what the engine really emits.
+      await client.request('simulateDeviceNotification', { type: 'stopped', deliberate: false })
+      check('the walk loses the device', await waitForType('error'), JSON.stringify(walked()))
+    }
+
+    const observedTypes = new Set()
+    const mismatched = []
+    for (const event of walked()) {
+      observedTypes.add(event.type)
+      // Own properties only: a type named `constructor` must read as undeclared, not as a
+      // function off the prototype.
+      const fields = Object.hasOwn(declaredEvents, event.type) ? declaredEvents[event.type] : undefined
+      if (fields === undefined) {
+        mismatched.push(`${event.type}: emitted but not declared`)
+        continue
+      }
+      const observed = Object.keys(event).sort()
+      const declared = [...fields].sort()
+      if (JSON.stringify(observed) !== JSON.stringify(declared)) {
+        mismatched.push(`${event.type}: [${observed}] instead of declared [${declared}]`)
+      }
+    }
+    check(
+      'every event the engine emits carries exactly the fields its declaration names',
+      mismatched.length === 0,
+      JSON.stringify(mismatched)
+    )
+    check(
+      'the walk saw every event kind this backend produces',
+      ['ended', 'error', 'panic', 'state'].every(type => observedTypes.has(type)),
+      JSON.stringify([...observedTypes])
     )
   }
 } finally {

@@ -9,6 +9,7 @@ import type {
   AudioFadeParam,
   AudioStartOptions
 } from './audioEngineClient'
+import { declaredEventFields } from '../../../shared/audio'
 import { SampleScheduler, SCHEDULER_LOOKAHEAD_MS } from './scheduler'
 import { InputGuard, refirePolicy } from './inputGuard'
 import type { FireSurface } from './inputGuard'
@@ -38,6 +39,11 @@ const PANIC_FADE_MS = 200
 // One that lands earlier means the media really did end early, and the run is closed
 // where the engine says rather than at a time it never reached.
 const PLANNED_END_TOLERANCE_MS = 25
+
+// Unrecognised event types whose count is kept. A skewed engine can name a fresh type in
+// every event, so the table has a bound like every other read path; past it a new name is
+// still logged — the line names the type — but has no count of its own to climb.
+const MAX_UNRECOGNISED_EVENT_TYPES = 64
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -182,6 +188,12 @@ export class CueEngine {
   // because this is the one place every surface reaches — the keyboard, a trigger, the
   // GO button — and a guard that lived in one of them would be a guard on one of them.
   private guard = new InputGuard(() => this.deps?.getTriggerGuard().windowMs ?? 0)
+  // Event types the declaration does not name, and how often each has arrived: the count
+  // belongs to the fact, so a repeat raises it rather than filling the log with copies.
+  // Bounded — a skewed engine naming a fresh type in every event must not grow this map
+  // for the life of the window; past the cap a new name is still logged, naming it, but
+  // earns no count of its own.
+  private unrecognisedEngineEvents = new Map<string, number>()
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -1575,6 +1587,15 @@ export class CueEngine {
    * records nothing and advances nothing.
    */
   private handleEngineEvent(event: AudioEngineEvent): void {
+    // Recognition before any run bookkeeping: a type the wire declaration does not name
+    // is not this projection's to interpret, and it must never be read as a cue's natural
+    // end — an unrecognised line that happens to carry a running cue's id would otherwise
+    // close it, turning "I do not understand this" into "the cue ended". It is reported
+    // instead, with how often it has arrived.
+    if (declaredEventFields(event.type) === null) {
+      this.reportUnrecognisedEngineEvent(event.type)
+      return
+    }
     if (event.type === 'panic') {
       this.handleExternalPanic()
       return
@@ -1628,6 +1649,31 @@ export class CueEngine {
     const now = this.now()
     if (run.endAt !== null && now >= run.endAt - PLANNED_END_TOLERANCE_MS) return
     run.finish(now)
+  }
+
+  /**
+   * A type the declaration does not name, logged with how many times it has arrived: the
+   * first as written, a repeat with its count, so the operator sees the climb rather than
+   * a wall of copies. The run bookkeeping above never touches it, and the names whose
+   * count is kept are bounded — past the cap a new name is still logged, naming it, but
+   * reports as a one-off each time.
+   *
+   * A type that is not a string is named as the value that arrived — `7`, `'7'` and `null`
+   * are three different types with three different counts — and only an event with no type
+   * at all reads as such.
+   */
+  private reportUnrecognisedEngineEvent(type: unknown): void {
+    const absent = type === undefined
+    const name = absent ? 'none' : JSON.stringify(type) ?? String(type)
+    const seen = this.unrecognisedEngineEvents.get(name) ?? 0
+    if (seen > 0 || this.unrecognisedEngineEvents.size < MAX_UNRECOGNISED_EVENT_TYPES) {
+      this.unrecognisedEngineEvents.set(name, seen + 1)
+    }
+    const repeat = seen > 0 ? ` (×${seen + 1})` : ''
+    const what = absent
+      ? 'an event with no type'
+      : `an unrecognised event type ${typeof type === 'string' ? `'${type}'` : name}`
+    this.log({ level: 'error', message: `audio engine sent ${what}${repeat}` })
   }
 }
 
