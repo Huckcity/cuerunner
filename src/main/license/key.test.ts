@@ -31,8 +31,8 @@ const key = (overrides: Partial<LicenseDraft> = {}): string =>
 describe('createLicense', () => {
   it('writes a prefixed, grouped, uppercase key', () => {
     const text = key()
-    expect(text.startsWith('WSL1-')).toBe(true)
-    expect(text).toMatch(/^WSL1(-[A-Z2-7]{8})+(-[A-Z2-7]{1,8})?$/)
+    expect(text.startsWith('CRN1-')).toBe(true)
+    expect(text).toMatch(/^CRN1(-[A-Z2-7]{8})+(-[A-Z2-7]{1,8})?$/)
   })
 
   it('is stable: minting the same payload twice gives the same key', () => {
@@ -67,7 +67,7 @@ describe('verifyLicense', () => {
   })
 
   it('refuses anything that is not a key', () => {
-    for (const text of ['', '   ', 'hello', 'WSL1', 'WSL1-', 'XXXX-1234', 'WSL1-11111111']) {
+    for (const text of ['', '   ', 'hello', 'CRN1', 'CRN1-', 'XXXX-1234', 'CRN1-11111111']) {
       expect(verifyLicense(text, [PUBLIC_PEM])).toEqual({ ok: false, reason: 'malformed' })
     }
   })
@@ -117,7 +117,7 @@ describe('canonicalLicense', () => {
   })
 
   it('refuses what it cannot read', () => {
-    expect(canonicalLicense('WSL1-@@@')).toBeNull()
+    expect(canonicalLicense('CRN1-@@@')).toBeNull()
     expect(canonicalLicense('WSL2-ABCDEFGH')).toBeNull()
     expect(canonicalLicense('x'.repeat(5000))).toBeNull()
   })

@@ -150,7 +150,7 @@ test('a key issued to somebody else, or mistyped, changes nothing', async () => 
   await page.getByRole('button', { name: 'Activate' }).click()
   await expect(page.locator('.license-error')).toContainText('not issued by Cuerunner')
 
-  await page.locator('#license-key').fill('WSL1-ABCDEFGH-ABCDEFGH')
+  await page.locator('#license-key').fill('CRN1-ABCDEFGH-ABCDEFGH')
   await page.getByRole('button', { name: 'Activate' }).click()
   await expect(page.locator('.license-error')).toContainText('not a Cuerunner license key')
 

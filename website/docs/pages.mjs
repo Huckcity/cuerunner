@@ -4,5 +4,6 @@
 import { GUIDES } from './guides.mjs'
 import { REFERENCE } from './reference.mjs'
 import { PRO } from './pro.mjs'
+import { INTEROP } from './interop.mjs'
 
-export const PAGES = [...GUIDES, ...REFERENCE, ...PRO]
+export const PAGES = [...GUIDES, ...REFERENCE, ...PRO, ...INTEROP]
