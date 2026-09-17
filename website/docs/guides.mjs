@@ -130,7 +130,7 @@ export const GUIDES = [
       </div>
       <p>
         Cuerunner is not signed for the app stores, so the first launch warns about an
-        unidentified developer. Downloads come from <code>pub.cuerunnerapp.com</code>. A
+        unidentified developer. Downloads come from <code>pub.winslabapp.com</code>. A
         Linux AppImage is published too, and is experimental.
       </p>
     </section>

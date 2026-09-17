@@ -1,5 +1,5 @@
 # Every lane runs on hardware in the homelab: Linux on `ubox`, macOS on the Mac mini beside
-# it, Windows on a NUC of its own (CLAUDE.md → CI runners). None of it is billed, and none
+# it, Windows on a NUC of its own (provisioning: ~/homelab/ci/). None of it is billed, and none
 # of it stops when the account's included minutes run out.
 name: CI
 
@@ -142,12 +142,12 @@ jobs:
             label: linux
           # Windows runs in a KVM guest on ubox: the same x64 Windows the installer ships
           # for, from the same eval media GitHub's own windows-latest uses, at none of the
-          # 2x minutes (CLAUDE.md → CI runners).
+          # 2x minutes (provisioning: ~/homelab/ci/).
           - runner: [self-hosted, windows, x64, win-ci]
             label: windows
           # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the
           # .dmg ships for, at none of the 10x minutes. It is a launchd agent in the
-          # login session the suite needs (CLAUDE.md → CI runners).
+          # login session the suite needs (provisioning: ~/homelab/ci/).
           - runner: [self-hosted, macos, arm64, mac-mini]
             label: macos
     steps:
@@ -184,7 +184,7 @@ jobs:
             dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
           done
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::missing on this runner: ${missing[*]} — provision the host (CLAUDE.md → CI runners)"
+            echo "::error::missing on this runner: ${missing[*]} — provision the host (~/homelab/ci/)"
             exit 1
           fi
           echo 'runtime libraries present'
@@ -291,7 +291,7 @@ jobs:
             dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
           done
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::missing on this runner: ${missing[*]} — provision the host (CLAUDE.md → CI runners)"
+            echo "::error::missing on this runner: ${missing[*]} — provision the host (~/homelab/ci/)"
             exit 1
           fi
           echo 'runtime libraries present'
