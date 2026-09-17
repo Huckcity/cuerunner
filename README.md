@@ -6,10 +6,10 @@ Built with Electron, React, TypeScript, and Zustand. Source-available under the 
 
 **Documentation lives on the site**, not here:
 
-- [Guides](https://huckcity.github.io/winslab/guide.html) — first show, building a cue
+- [Guides](https://huckcity.github.io/cuerunner/guide.html) — first show, building a cue
   list, working with sound, running the show, and the Pro features. Source in
   [`website/docs/guides.mjs`](./website/docs/guides.mjs).
-- [Reference](https://huckcity.github.io/winslab/reference/index.html) — every cue type
+- [Reference](https://huckcity.github.io/cuerunner/reference/index.html) — every cue type
   and field, every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers
   to, the script API and the file formats. Source in
   [`website/docs/reference.mjs`](./website/docs/reference.mjs).
@@ -584,7 +584,7 @@ before that dispatch, including the check that keeps this file's limitations hon
 ## Known limitations
 
 The operator-facing list is in the
-[reference](https://huckcity.github.io/winslab/reference/troubleshooting.html#limitations).
+[reference](https://huckcity.github.io/cuerunner/reference/troubleshooting.html#limitations).
 These are the ones that matter when building or packaging the app.
 
 Playback and platform limits:
@@ -679,7 +679,7 @@ Redundant playback:
   machines of a pair run the same workspace file, so a role written into the show would be
   read as the same answer by both of them
 
-The [reference](https://huckcity.github.io/winslab/reference/troubleshooting.html#limitations)
+The [reference](https://huckcity.github.io/cuerunner/reference/troubleshooting.html#limitations)
 carries the operator-facing half of this list, in the words an operator would look it up in.
 
 ## Contributing
