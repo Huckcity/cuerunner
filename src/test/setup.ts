@@ -8,6 +8,7 @@ import type {
   AudioSeekResult,
   AudioStartResult
 } from '../shared/audio'
+import { AUDIO_PROTOCOL_VERSION } from '../shared/audio'
 import type { CuerunnerBridge } from '../shared/ipc'
 import type { RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import type { WorkspaceCompareResult, WorkspaceExportResult, WorkspaceImportResult, WorkspaceMergeResult } from '../shared/ipc/workspace'
@@ -25,7 +26,7 @@ function engineInfo(): AudioEngineInfo {
   return {
     name: 'Test engine',
     version: '0.0.0',
-    protocol: 2,
+    protocol: AUDIO_PROTOCOL_VERSION,
     sessionId: 'test-session',
     backend: 'silent',
     deviceId: null,

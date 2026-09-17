@@ -15,6 +15,14 @@ namespace ws {
 
 inline constexpr const char* kEngineVersion = "1.0.0";
 
+/**
+ * The wire protocol this build speaks: the greeting it opens a connection with and the
+ * `protocol` in `info()`. The verb set that goes with it is the table in protocol.cpp,
+ * held against the declaration in src/shared/audio.ts by src/main/audio/audioWire.test.ts.
+ * There is one copy of this number, in code, tests and docs: this one.
+ */
+inline constexpr int kWireProtocolVersion = 3;
+
 constexpr int kMaxVoices = 64;
 constexpr int kMaxCrosspoints = 64;
 constexpr int kMaxOutputChannels = 32;

@@ -255,6 +255,11 @@ void SocketServer::acceptLoop() {
     ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
 #endif
 #endif
+    // The connection opens with the engine's declaration, written before the client is
+    // registered for broadcasts: an event emitted in between must not be the first line
+    // the client reads, and the client must be able to refuse a build it does not speak
+    // while the connection is still empty.
+    client->send(greetingLine(engine_.options().declaredProtocol));
     {
       std::lock_guard<std::mutex> lock(clientsMutex_);
       clients_.push_back(client);

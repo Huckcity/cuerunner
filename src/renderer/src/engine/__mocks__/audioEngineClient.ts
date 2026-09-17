@@ -2,6 +2,7 @@
 // below, so `vi.advanceTimersByTime` moves playback time exactly as a show would — and
 // the same tests can advance it unevenly to prove scheduled times do not move with it.
 import { vi } from 'vitest'
+import { AUDIO_PROTOCOL_VERSION } from '../../../../shared/audio'
 import type { AudioEngineClient } from '../audioEngineClient'
 
 const subscribers = new Set<() => void>()
@@ -67,7 +68,7 @@ export const audioEngine = {
   info: vi.fn(async () => ({
     name: 'test',
     version: '0',
-    protocol: 2,
+    protocol: AUDIO_PROTOCOL_VERSION,
     sessionId: 'test-session',
     backend: 'silent' as const,
     deviceId: null,

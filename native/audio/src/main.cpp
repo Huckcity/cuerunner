@@ -12,6 +12,7 @@
 #include "util.h"
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -30,6 +31,9 @@ std::atomic<int> g_clientCount{0};
 // With nobody connected, the engine must not keep a device open and a show playing: it
 // silences everything and then exits unless a client comes back.
 constexpr int kClientGraceSeconds = 3;
+
+/** A dev declaration's ceiling. A protocol number is a small count; past this it is a typo. */
+constexpr int kMaxDeclaredProtocol = 1000000;
 
 void onSignal(int) {
   if (g_server != nullptr) g_server->requestStop();
@@ -58,6 +62,8 @@ void usage() {
                "  --stream-max-total-bytes <n>\n"
                "  --schedule-horizon-ms <n>  how far ahead a start may be scheduled\n"
                "  --frames <n>               offline: render exactly this many frames\n"
+               "  --protocol                 print the wire declaration: the protocol and every verb\n"
+               "  --declare-protocol <n>     declare another protocol on the wire (dev/test)\n"
                "  --version\n",
                ws::kEngineVersion);
 }
@@ -69,7 +75,8 @@ bool nextValue(int argc, char** argv, int& index, std::string& out) {
 }
 
 bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& socketPath, std::string& scriptPath,
-               std::string& outPath, std::string& eventsPath, bool& listDevices, bool& version, int64_t& frames) {
+               std::string& outPath, std::string& eventsPath, bool& listDevices, bool& version, bool& protocol,
+               int64_t& frames) {
   for (int i = 1; i < argc; i++) {
     const std::string arg = argv[i];
     std::string value;
@@ -125,6 +132,19 @@ bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& so
       frames = std::atoll(value.c_str());
     } else if (arg == "--list-devices") {
       listDevices = true;
+    } else if (arg == "--protocol") {
+      protocol = true;
+    } else if (arg == "--declare-protocol") {
+      if (!nextValue(argc, argv, i, value)) return false;
+      // A whole number, not atoi's prefix: "3x" is a typo, not protocol 3.
+      char* end = nullptr;
+      errno = 0;
+      const long declared = std::strtol(value.c_str(), &end, 10);
+      if (end == value.c_str() || *end != '\0' || errno == ERANGE || declared < 1 || declared > kMaxDeclaredProtocol) {
+        std::fprintf(stderr, "--declare-protocol needs a whole protocol number from 1 to %d\n", kMaxDeclaredProtocol);
+        return false;
+      }
+      engine.declaredProtocol = static_cast<int>(declared);
     } else if (arg == "--version") {
       version = true;
     } else if (arg == "--help" || arg == "-h") {
@@ -148,15 +168,25 @@ int main(int argc, char** argv) {
   std::string eventsPath;
   bool listDevices = false;
   bool version = false;
+  bool protocol = false;
   int64_t frames = -1;
 
   if (!parseArgs(argc, argv, engineOptions, socketPath, scriptPath, outPath, eventsPath, listDevices, version,
-                 frames)) {
+                 protocol, frames)) {
     usage();
     return 2;
   }
+  if (protocol) {
+    // The declaration this engine carries, as JSON — the same table it validates requests
+    // with and opens connections with. src/main/audio/audioWire.test.ts compares it with
+    // the one in src/shared/audio.ts.
+    const std::string declaration = ws::wireDeclarationJson(engineOptions.declaredProtocol);
+    std::printf("%s\n", declaration.c_str());
+    return 0;
+  }
   if (version) {
-    std::printf("{\"name\":\"cuerunner-audio\",\"version\":\"%s\",\"protocol\":2}\n", ws::kEngineVersion);
+    std::printf("{\"name\":\"cuerunner-audio\",\"version\":\"%s\",\"protocol\":%d}\n", ws::kEngineVersion,
+                ws::kWireProtocolVersion);
     return 0;
   }
   if (!scriptPath.empty()) {

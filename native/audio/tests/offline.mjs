@@ -1120,6 +1120,41 @@ console.log(`cuerunner-audio acceptance — binary ${binary}`)
   )
 }
 
+// --- 21. panic and stopAll act where the script issues them --------------
+//
+// The runner stamps a script's `atMs` onto the verbs whose declaration carries a
+// `whenMs`; panic and stopAll do not carry one, so they act in the block that issues
+// them — which is what they did before the declaration decided it, and what this pins.
+{
+  console.log('\nscheduled panic and stopAll')
+  for (const verb of ['panic', 'stopAll']) {
+    const { summary, wav } = runEngine({
+      sampleRate: SAMPLE_RATE,
+      channels: 2,
+      blockFrames: 512,
+      stopWhenIdle: false,
+      frames: 24000,
+      commands: [
+        { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
+        { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+        { atMs: 200, verb }
+      ]
+    })
+    const reply = replyFor(summary, 2)
+    check(`${verb} with an atMs and no whenMs still stops the show`, reply.ok === true, JSON.stringify(reply))
+    // 200 ms of a 512-frame block is inside the block rendered from frame 9088: the file
+    // is still what was rendered before it, and the block itself is silence. A runner
+    // that started stamping a `whenMs` these verbs do not read would move neither.
+    check(`${verb} plays up to the block its atMs falls in`, near(sampleAt(wav, 4800), 0.5, 1e-3), `${sampleAt(wav, 4800)}`)
+    check(`${verb} is silent from that block on`, Math.abs(sampleAt(wav, 12000)) < 1e-6, `${sampleAt(wav, 12000)}`)
+    check(
+      `${verb} reports acting within a block of its atMs`,
+      reply.ok === true && reply.result.at > 150 && reply.result.at <= 200,
+      JSON.stringify(reply.result)
+    )
+  }
+}
+
 rmSync(workDir, { recursive: true, force: true })
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

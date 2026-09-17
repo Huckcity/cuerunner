@@ -3,6 +3,7 @@
 #include "util.h"
 #include "wsaudio.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -12,11 +13,6 @@ namespace ws {
 namespace {
 
 const cJSON* member(const cJSON* object, const char* name) { return cJSON_GetObjectItemCaseSensitive(object, name); }
-
-bool hasNumber(const cJSON* object, const char* name) {
-  const cJSON* item = member(object, name);
-  return item != nullptr && cJSON_IsNumber(item);
-}
 
 double number(const cJSON* object, const char* name, double fallback) {
   const cJSON* item = member(object, name);
@@ -38,19 +34,6 @@ int curveFromName(const std::string& name) {
   return static_cast<int>(Curve::Linear);
 }
 
-/**
- * The region a whole-file read is asked about: `startMs` and `endMs` together name a
- * window into the file, and neither leaves the read unbounded, which is the whole file.
- */
-RegionQuery regionOf(const cJSON* root) {
-  RegionQuery region;
-  if (!hasNumber(root, "startMs") || !hasNumber(root, "endMs")) return region;
-  region.bounded = true;
-  region.startMs = number(root, "startMs", 0.0);
-  region.endMs = number(root, "endMs", 0.0);
-  return region;
-}
-
 int paramFromName(const std::string& name) {
   if (name == "pan") return static_cast<int>(Param::Pan);
   if (name == "trim") return static_cast<int>(Param::Trim);
@@ -62,34 +45,465 @@ const char* stateName(int state) {
   return voiceStateName(static_cast<VoiceState>(state));
 }
 
-// Parses the `outputs` field: absent/null is automatic routing, [] is silence, an
-// array is the crosspoint matrix.
-bool parseOutputs(const cJSON* options, StartOptions& out, bool& automatic, int& count,
+/**
+ * The wire's declaration as native data: every verb with the fields its request carries,
+ * each with its type, whether the verb can do what its name says without it, whether
+ * `null` is a value of its own for it, and the default the engine takes when the field is
+ * absent — plus, for an object or an array of them, the fields inside.
+ *
+ * This is the native copy of AUDIO_WIRE in src/shared/audio.ts, which the engine cannot
+ * include. It is the one home of those defaults: the verb bodies read them through
+ * `numberField`/`textField`/`booleanField` rather than repeating a literal beside the
+ * table, handleRequestLine checks every present field against it, and `--protocol` prints
+ * it; src/main/audio/audioWire.test.ts holds the two ends to each other.
+ */
+enum class WireFieldType { String, Number, Boolean, Object, Array };
+
+struct WireField;
+
+/** A set of declared fields: a verb's, an object's members, or an array's elements. */
+struct WireFields {
+  const WireField* fields = nullptr;
+  size_t count = 0;
+};
+
+struct WireField {
+  const char* name;
+  WireFieldType type;
+  bool required;
+  /** A request may carry null for it, where null is a meaning of its own. */
+  bool nullable;
+  /**
+   * The declared default in the field's own terms — a number's digits, a string's raw
+   * text, "true"/"false" — or nullptr when the absent form is the null form, or when the
+   * field is required. Read by the verb bodies and printed by `--protocol`.
+   */
+  const char* defaultValue;
+  /** An object's members, or an array's elements; empty when the field has neither. */
+  WireFields sub;
+};
+
+struct WireVerb {
+  const char* name;
+  WireFields declared;
+};
+
+/** The declared fields of an array, with their count taken from it. */
+template <size_t N>
+constexpr WireFields fieldsOf(const WireField (&fields)[N]) {
+  return {fields, N};
+}
+
+// Shorthands for the table's entries. A field is either required, or it carries the value
+// its absence takes — `wireNull` for the fields whose absent form is the null form (to the
+// end of the file, automatic routing, a configure that leaves the device as it is).
+constexpr WireField wireRequired(const char* name, WireFieldType type) {
+  return {name, type, true, false, nullptr, {}};
+}
+constexpr WireField wireNumber(const char* name, const char* defaultValue) {
+  return {name, WireFieldType::Number, false, false, defaultValue, {}};
+}
+constexpr WireField wireText(const char* name, const char* defaultValue) {
+  return {name, WireFieldType::String, false, false, defaultValue, {}};
+}
+constexpr WireField wireFlag(const char* name, bool defaultValue) {
+  return {name, WireFieldType::Boolean, false, false, defaultValue ? "true" : "false", {}};
+}
+constexpr WireField wireNull(const char* name, WireFieldType type, bool nullable) {
+  return {name, type, false, nullable, nullptr, {}};
+}
+constexpr WireField wireRequiredObject(const char* name, WireFields sub) {
+  return {name, WireFieldType::Object, true, false, nullptr, sub};
+}
+constexpr WireField wireOptionalObject(const char* name, WireFields sub) {
+  return {name, WireFieldType::Object, false, true, nullptr, sub};
+}
+constexpr WireField wireOptionalElements(const char* name, WireFields sub) {
+  return {name, WireFieldType::Array, false, true, nullptr, sub};
+}
+
+// One zero-based matrix connection, as `start.options.outputs` and `routing.outputs`
+// carry it — the same declared shape in both, so the two cannot drift.
+const WireField kCrosspointFields[] = {
+    wireNumber("inputChannel", "-1"),
+    wireNumber("outputChannel", "-1"),
+    wireNumber("gain", "1"),
+};
+
+const WireField kStartOptionFields[] = {
+    wireNumber("startTime", "0"),
+    wireNull("endTime", WireFieldType::Number, true),
+    wireNumber("loopCount", "0"),
+    wireNumber("rate", "1"),
+    wireNumber("trim", "1"),
+    wireNumber("volume", "1"),
+    wireNumber("pan", "0"),
+    wireNumber("fadeInDuration", "0"),
+    wireOptionalElements("outputs", fieldsOf(kCrosspointFields)),
+};
+
+const WireField kDeviceOptionFields[] = {
+    wireNull("backend", WireFieldType::String, false),
+    wireNull("deviceId", WireFieldType::String, true),
+    wireNull("sampleRate", WireFieldType::Number, true),
+    wireNull("channels", WireFieldType::Number, true),
+    wireNull("exclusive", WireFieldType::Boolean, false),
+    wireNull("bufferFrames", WireFieldType::Number, true),
+};
+
+const WireField kPrepareFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireRequired("filePath", WireFieldType::String),
+};
+const WireField kProbeFields[] = {
+    wireRequired("filePath", WireFieldType::String),
+};
+const WireField kStartFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+    wireRequiredObject("options", fieldsOf(kStartOptionFields)),
+};
+const WireField kStopFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("fadeMs", "0"),
+    wireNumber("whenMs", "0"),
+};
+const WireField kStopAllFields[] = {
+    wireNumber("fadeMs", "0"),
+};
+const WireField kSeekFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("positionMs", "0"),
+    wireNumber("whenMs", "0"),
+};
+const WireField kReleaseFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+    wireNull("endMs", WireFieldType::Number, true),
+};
+const WireField kCancelFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
+const WireField kFadeFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireText("param", "volume"),
+    wireNumber("value", "0"),
+    wireNumber("durationMs", "0"),
+    wireText("curve", "linear"),
+    wireNumber("whenMs", "0"),
+};
+const WireField kRoutingFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireOptionalElements("outputs", fieldsOf(kCrosspointFields)),
+};
+const WireField kProgressFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+};
+const WireField kPanicFields[] = {
+    wireNumber("fadeMs", "0"),
+};
+const WireField kConfigureFields[] = {
+    wireOptionalObject("options", fieldsOf(kDeviceOptionFields)),
+};
+const WireField kWaveformFields[] = {
+    wireRequired("filePath", WireFieldType::String),
+    wireNumber("points", "512"),
+    wireNull("startMs", WireFieldType::Number, false),
+    wireNull("endMs", WireFieldType::Number, false),
+};
+const WireField kOnsetsFields[] = {
+    wireRequired("filePath", WireFieldType::String),
+    wireNumber("sensitivity", "1"),
+    wireNumber("maxOnsets", "0"),
+    wireNull("startMs", WireFieldType::Number, false),
+    wireNull("endMs", WireFieldType::Number, false),
+};
+const WireField kSilenceFields[] = {
+    wireRequired("filePath", WireFieldType::String),
+    wireNumber("thresholdDb", "-60"),
+};
+const WireField kSimulateDeviceNotificationFields[] = {
+    wireRequired("type", WireFieldType::String),
+    wireFlag("deliberate", false),
+};
+
+// The dispatch chain below answers the same set, verb for verb and in the same order; it
+// is the table that decides what a request must carry, what an absent field means and what
+// `--protocol` prints.
+const WireVerb kWireVerbs[] = {
+    {"prepare", fieldsOf(kPrepareFields)},
+    {"probe", fieldsOf(kProbeFields)},
+    {"start", fieldsOf(kStartFields)},
+    {"stop", fieldsOf(kStopFields)},
+    {"stopAll", fieldsOf(kStopAllFields)},
+    {"seek", fieldsOf(kSeekFields)},
+    {"release", fieldsOf(kReleaseFields)},
+    {"cancel", fieldsOf(kCancelFields)},
+    {"fade", fieldsOf(kFadeFields)},
+    {"routing", fieldsOf(kRoutingFields)},
+    {"progress", fieldsOf(kProgressFields)},
+    {"panic", fieldsOf(kPanicFields)},
+    {"clock", {}},
+    {"info", {}},
+    {"devices", {}},
+    {"configure", fieldsOf(kConfigureFields)},
+    {"waveform", fieldsOf(kWaveformFields)},
+    {"onsets", fieldsOf(kOnsetsFields)},
+    {"silence", fieldsOf(kSilenceFields)},
+    {"simulateDeviceNotification", fieldsOf(kSimulateDeviceNotificationFields)},
+    {"shutdown", {}},
+};
+
+constexpr size_t kWireVerbCount = sizeof(kWireVerbs) / sizeof(kWireVerbs[0]);
+
+const char* wireTypeName(WireFieldType type) {
+  switch (type) {
+    case WireFieldType::String:
+      return "string";
+    case WireFieldType::Number:
+      return "number";
+    case WireFieldType::Boolean:
+      return "boolean";
+    case WireFieldType::Object:
+      return "object";
+    case WireFieldType::Array:
+      return "array";
+  }
+  return "value";
+}
+
+const char* wireTypeArticle(WireFieldType type) {
+  return type == WireFieldType::Object || type == WireFieldType::Array ? "an" : "a";
+}
+
+bool wireValueMatches(WireFieldType type, const cJSON* value) {
+  switch (type) {
+    case WireFieldType::String:
+      return cJSON_IsString(value) != 0;
+    case WireFieldType::Number:
+      return cJSON_IsNumber(value) != 0;
+    case WireFieldType::Boolean:
+      return cJSON_IsBool(value) != 0;
+    case WireFieldType::Object:
+      return cJSON_IsObject(value) != 0;
+    case WireFieldType::Array:
+      return cJSON_IsArray(value) != 0;
+  }
+  return false;
+}
+
+const WireVerb* wireVerbEntry(const std::string& verb) {
+  for (size_t i = 0; i < kWireVerbCount; i++) {
+    if (verb == kWireVerbs[i].name) return &kWireVerbs[i];
+  }
+  return nullptr;
+}
+
+/** The answer for a name the declaration does not carry: a field with no value, so a
+ *  body that read one is reported rather than handed a literal of its own. */
+const WireField& undeclaredField() {
+  static const WireField kUndeclared = {nullptr, WireFieldType::Number, true, false, nullptr, {}};
+  return kUndeclared;
+}
+
+const WireField& findField(const WireFields& scope, const char* name) {
+  for (size_t i = 0; i < scope.count; i++) {
+    if (std::strcmp(scope.fields[i].name, name) == 0) return scope.fields[i];
+  }
+  return undeclaredField();
+}
+
+/**
+ * The declared field `name` of `verb`. A body that reads a name the declaration does not
+ * carry would otherwise fall back to a literal of its own — the drift this table ends —
+ * so the miss is reported and the request carries on with no value.
+ */
+const WireField& wireField(const std::string& verb, const char* name) {
+  const WireVerb* entry = wireVerbEntry(verb);
+  if (entry == nullptr) {
+    logError("the wire declaration does not carry verb '%s'", verb.c_str());
+    return undeclaredField();
+  }
+  const WireField& field = findField(entry->declared, name);
+  if (field.name == nullptr) logError("the wire declaration does not carry %s.%s", verb.c_str(), name);
+  return field;
+}
+
+/** The declared sub-field `name` of an object-typed (or array-elements) field. */
+const WireField& subField(const WireField& owner, const char* name) {
+  const WireField& field = findField(owner.sub, name);
+  if (field.name == nullptr) logError("the wire declaration does not carry '%s'", name);
+  return field;
+}
+
+/**
+ * The number a request carries for a declared field, or the declared default. A field
+ * whose absent form is the null form has no number to return: the body asks
+ * `fieldHasValue` first, and one that does not is reported rather than defaulted.
+ */
+double numberField(const cJSON* owner, const WireField& field) {
+  const cJSON* item = member(owner, field.name);
+  if (item != nullptr && cJSON_IsNumber(item)) return item->valuedouble;
+  if (field.defaultValue == nullptr) {
+    if (!field.required) logError("the wire declaration gives '%s' no number to fall back on", field.name);
+    return 0.0;
+  }
+  return std::strtod(field.defaultValue, nullptr);
+}
+
+/** The text a request carries for a declared field, or the declared default. */
+std::string textField(const cJSON* owner, const WireField& field) {
+  const cJSON* item = member(owner, field.name);
+  if (item != nullptr && cJSON_IsString(item)) return std::string(item->valuestring);
+  if (field.defaultValue == nullptr) {
+    if (!field.required) logError("the wire declaration gives '%s' no text to fall back on", field.name);
+    return std::string();
+  }
+  return std::string(field.defaultValue);
+}
+
+/** The flag a request carries for a declared field, or the declared default. */
+bool booleanField(const cJSON* owner, const WireField& field) {
+  const cJSON* item = member(owner, field.name);
+  if (item != nullptr && cJSON_IsBool(item)) return cJSON_IsTrue(item) != 0;
+  if (field.defaultValue == nullptr) {
+    if (!field.required) logError("the wire declaration gives '%s' no flag to fall back on", field.name);
+    return false;
+  }
+  return std::strcmp(field.defaultValue, "true") == 0;
+}
+
+/** True when the request names the field at all, null included. */
+bool fieldPresent(const cJSON* owner, const WireField& field) { return member(owner, field.name) != nullptr; }
+
+/** True when the request carries the field with a value: absent and an explicit null both
+ *  mean the field's declared null form. */
+bool fieldHasValue(const cJSON* owner, const WireField& field) {
+  const cJSON* item = member(owner, field.name);
+  return item != nullptr && !cJSON_IsNull(item);
+}
+
+std::string fieldsError(const WireFields& scope, const cJSON* owner, const std::string& path);
+
+/**
+ * The first thing wrong with one present value against its declaration — the wrong type,
+ * null where the declaration does not allow it, or the same inside an object's members or
+ * an array's elements — as the message the reply names it with, or "" when it matches.
+ * `path` is the field's name on that message ("options.sampleRate", "outputs[0].gain").
+ */
+std::string valueError(const WireField& field, const cJSON* value, const std::string& path) {
+  if (cJSON_IsNull(value)) {
+    if (field.nullable) return std::string();
+    return "'" + path + "' must be " + wireTypeArticle(field.type) + " " + wireTypeName(field.type);
+  }
+  if (!wireValueMatches(field.type, value)) {
+    return "'" + path + "' must be " + wireTypeArticle(field.type) + " " + wireTypeName(field.type);
+  }
+  if (field.sub.count == 0) return std::string();
+  if (field.type == WireFieldType::Object) return fieldsError(field.sub, value, path + ".");
+  const int total = cJSON_GetArraySize(value);
+  for (int i = 0; i < total; i++) {
+    const cJSON* item = cJSON_GetArrayItem(value, i);
+    const std::string itemPath = path + "[" + std::to_string(i) + "]";
+    if (!cJSON_IsObject(item)) return "'" + itemPath + "' must be an object";
+    const std::string error = fieldsError(field.sub, item, itemPath + ".");
+    if (!error.empty()) return error;
+  }
+  return std::string();
+}
+
+std::string fieldsError(const WireFields& scope, const cJSON* owner, const std::string& path) {
+  for (size_t i = 0; i < scope.count; i++) {
+    const WireField& field = scope.fields[i];
+    const cJSON* value = member(owner, field.name);
+    if (value == nullptr) {
+      if (field.required) return "missing required field '" + path + field.name + "'";
+      continue;
+    }
+    const std::string error = valueError(field, value, path + field.name);
+    if (!error.empty()) return error;
+  }
+  return std::string();
+}
+
+/**
+ * The declaration's answer to a request: the first required field it is missing, or the
+ * first present field that does not carry its declared type, as the message the reply
+ * names it with — "" when the request carries what its verb declares. An unknown verb is
+ * left to the dispatch chain, which names it with `unknown verb`.
+ */
+std::string requiredFieldError(const std::string& verb, const cJSON* root) {
+  const WireVerb* entry = wireVerbEntry(verb);
+  if (entry == nullptr) return std::string();
+  return fieldsError(entry->declared, root, "");
+}
+
+/** One field of the declaration as JSON, nested fields included. */
+std::string wireFieldJson(const WireField& field) {
+  std::string out = "{\"type\":\"";
+  out += wireTypeName(field.type);
+  out += "\",\"required\":";
+  out += field.required ? "true" : "false";
+  if (field.nullable) out += ",\"nullable\":true";
+  if (!field.required) {
+    out += ",\"default\":";
+    if (field.defaultValue == nullptr) out += "null";
+    else if (field.type == WireFieldType::String) out += "\"" + jsonEscape(field.defaultValue) + "\"";
+    else out += field.defaultValue;
+  }
+  if (field.sub.count > 0) {
+    out += ",\"fields\":{";
+    for (size_t i = 0; i < field.sub.count; i++) {
+      if (i > 0) out += ',';
+      out += "\"";
+      out += field.sub.fields[i].name;
+      out += "\":";
+      out += wireFieldJson(field.sub.fields[i]);
+    }
+    out += "}";
+  }
+  out += '}';
+  return out;
+}
+
+/**
+ * The region a whole-file read is asked about: `startMs` and `endMs` together name a
+ * window into the file, and neither leaves the read unbounded, which is the whole file.
+ */
+RegionQuery regionOf(const cJSON* root, const WireField& startMs, const WireField& endMs) {
+  RegionQuery region;
+  if (!fieldHasValue(root, startMs) || !fieldHasValue(root, endMs)) return region;
+  region.bounded = true;
+  region.startMs = numberField(root, startMs);
+  region.endMs = numberField(root, endMs);
+  return region;
+}
+
+// Parses the `outputs` field of the declaration it is handed: absent/null is automatic
+// routing, [] is silence, an array is the crosspoint matrix. The declaration has already
+// refused anything else, so this reads the values it declared.
+bool parseOutputs(const cJSON* owner, const WireField& declared, StartOptions& out, bool& automatic, int& count,
                   Crosspoint* points, std::string& error) {
-  const cJSON* outputs = member(options, "outputs");
+  const cJSON* outputs = member(owner, declared.name);
   automatic = true;
   count = 0;
   if (outputs == nullptr || cJSON_IsNull(outputs)) return true;
-  if (!cJSON_IsArray(outputs)) {
-    error = "outputs must be null or an array of crosspoints";
-    return false;
-  }
   automatic = false;
   const int total = cJSON_GetArraySize(outputs);
   if (total > kMaxCrosspoints) {
     error = "too many crosspoints";
     return false;
   }
+  const WireField& inputChannel = subField(declared, "inputChannel");
+  const WireField& outputChannel = subField(declared, "outputChannel");
+  const WireField& gain = subField(declared, "gain");
   for (int i = 0; i < total; i++) {
     const cJSON* item = cJSON_GetArrayItem(outputs, i);
-    if (!cJSON_IsObject(item)) {
-      error = "crosspoint must be an object";
-      return false;
-    }
     Crosspoint point;
-    point.inputChannel = integer(item, "inputChannel", -1);
-    point.outputChannel = integer(item, "outputChannel", -1);
-    point.gain = number(item, "gain", 1.0);
+    point.inputChannel = static_cast<int>(numberField(item, inputChannel));
+    point.outputChannel = static_cast<int>(numberField(item, outputChannel));
+    point.gain = numberField(item, gain);
     if (point.inputChannel < 0 || point.outputChannel < 0) {
       error = "crosspoint channels must be zero-based and non-negative";
       return false;
@@ -101,24 +515,22 @@ bool parseOutputs(const cJSON* options, StartOptions& out, bool& automatic, int&
   return true;
 }
 
-bool parseStartOptions(const cJSON* options, StartOptions& out, std::string& error) {
-  if (options == nullptr || !cJSON_IsObject(options)) {
-    error = "start needs an options object";
-    return false;
-  }
-  out.startTimeMs = number(options, "startTime", 0.0);
-  const cJSON* endTime = member(options, "endTime");
-  out.endTimeMs = endTime == nullptr || cJSON_IsNull(endTime) ? -1.0 : number(options, "endTime", -1.0);
-  out.loopCount = integer(options, "loopCount", 0);
-  out.rate = number(options, "rate", 1.0);
-  out.trim = number(options, "trim", 1.0);
-  out.volume = number(options, "volume", 1.0);
-  out.pan = number(options, "pan", 0.0);
-  out.fadeInMs = number(options, "fadeInDuration", 0.0);
+// Reads the options a `start` carries from the declaration: the declaration has already
+// refused a missing or mistyped one, so every value here is the request's or the table's.
+bool parseStartOptions(const cJSON* options, const WireField& declared, StartOptions& out, std::string& error) {
+  const WireField& endTime = subField(declared, "endTime");
+  out.startTimeMs = numberField(options, subField(declared, "startTime"));
+  out.endTimeMs = fieldHasValue(options, endTime) ? numberField(options, endTime) : -1.0;
+  out.loopCount = static_cast<int>(numberField(options, subField(declared, "loopCount")));
+  out.rate = numberField(options, subField(declared, "rate"));
+  out.trim = numberField(options, subField(declared, "trim"));
+  out.volume = numberField(options, subField(declared, "volume"));
+  out.pan = numberField(options, subField(declared, "pan"));
+  out.fadeInMs = numberField(options, subField(declared, "fadeInDuration"));
   bool automatic = true;
   int count = 0;
   Crosspoint points[kMaxCrosspoints];
-  if (!parseOutputs(options, out, automatic, count, points, error)) return false;
+  if (!parseOutputs(options, subField(declared, "outputs"), out, automatic, count, points, error)) return false;
   out.automatic = automatic;
   out.crosspointCount = count;
   return true;
@@ -244,6 +656,42 @@ std::string infoJson(const InfoDTO& info) {
   return out;
 }
 
+std::string wireDeclarationJson(int protocol) {
+  std::string out = "{\"protocol\":" + std::to_string(protocol) + ",\"verbs\":{";
+  for (size_t i = 0; i < kWireVerbCount; i++) {
+    const WireVerb& verb = kWireVerbs[i];
+    if (i > 0) out += ',';
+    out += '"';
+    out += verb.name;
+    out += "\":{";
+    for (size_t j = 0; j < verb.declared.count; j++) {
+      const WireField& field = verb.declared.fields[j];
+      if (j > 0) out += ',';
+      out += '"';
+      out += field.name;
+      out += "\":";
+      out += wireFieldJson(field);
+    }
+    out += '}';
+  }
+  out += "}}";
+  return out;
+}
+
+std::string greetingLine(int protocol) {
+  return std::string("{\"greeting\":true,\"name\":\"cuerunner-audio\",\"version\":\"") + kEngineVersion +
+         "\",\"protocol\":" + std::to_string(protocol) + "}";
+}
+
+bool wireVerbTakesWhenMs(const std::string& verb) {
+  const WireVerb* entry = wireVerbEntry(verb);
+  if (entry == nullptr) return false;
+  for (size_t i = 0; i < entry->declared.count; i++) {
+    if (std::strcmp(entry->declared.fields[i].name, "whenMs") == 0) return true;
+  }
+  return false;
+}
+
 std::string eventLine(const Event& event, const std::string& sessionId) {
   if (event.kind == Event::Ack) return {};
   cJSON* root = cJSON_CreateObject();
@@ -312,10 +760,26 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   const std::string verb = text(root, "verb", "");
   std::string out;
 
+  // The declaration decides what a request must carry, before any verb body reads it: a
+  // required field that is missing or mistyped is an error that names it, never the
+  // field's default. An unknown verb passes through to the chain below, which names it.
+  const std::string fieldError = requiredFieldError(verb, root);
+  if (!fieldError.empty()) {
+    cJSON_Delete(root);
+    return replyError(id, "invalid", fieldError);
+  }
+
+  // Every value a verb body reads comes from its declared field, so the default it falls
+  // back to is the one the table carries — and prints — rather than a literal beside it.
+  const auto declared = [&](const char* name) -> const WireField& { return wireField(verb, name); };
+  const auto numberOf = [&](const char* name) { return numberField(root, wireField(verb, name)); };
+  const auto textOf = [&](const char* name) { return textField(root, wireField(verb, name)); };
+  const auto carries = [&](const char* name) { return fieldHasValue(root, wireField(verb, name)); };
+
   if (verb == "prepare") {
     PrepareDTO result;
     EngineError error;
-    if (engine.prepare(text(root, "cueId", ""), text(root, "filePath", ""), result, error)) {
+    if (engine.prepare(textOf("cueId"), textOf("filePath"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "cueId", result.cueId.c_str());
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
@@ -336,7 +800,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "probe") {
     ProbeDTO result;
     EngineError error;
-    if (engine.probe(text(root, "filePath", ""), result, error)) {
+    if (engine.probe(textOf("filePath"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
       cJSON_AddStringToObject(body, "format", result.format.c_str());
@@ -358,12 +822,12 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     const cJSON* optionsJson = member(root, "options");
     StartOptions options;
     std::string parseError;
-    if (!parseStartOptions(optionsJson, options, parseError)) {
+    if (!parseStartOptions(optionsJson, declared("options"), options, parseError)) {
       out = replyError(id, "invalid", parseError);
     } else {
       StartResultDTO result;
       EngineError error;
-      if (engine.startCue(text(root, "cueId", ""), number(root, "whenMs", 0.0), options, result, error)) {
+      if (engine.startCue(textOf("cueId"), numberOf("whenMs"), options, result, error)) {
         cJSON* body = cJSON_CreateObject();
         cJSON_AddStringToObject(body, "cueId", result.cueId.c_str());
         cJSON_AddStringToObject(body, "runId", result.runId.c_str());
@@ -377,8 +841,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "stop") {
     CommandResultDTO result;
     EngineError error;
-    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
-    if (engine.stopCue(text(root, "cueId", ""), number(root, "fadeMs", 0.0), whenMs, result, error)) {
+    if (engine.stopCue(textOf("cueId"), numberOf("fadeMs"), numberOf("whenMs"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -390,7 +853,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "stopAll") {
     CommandResultDTO result;
     EngineError error;
-    if (engine.stopAll(number(root, "fadeMs", 0.0), result, error)) {
+    if (engine.stopAll(numberOf("fadeMs"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -402,8 +865,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "seek") {
     SeekResultDTO result;
     EngineError error;
-    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
-    if (engine.seekCue(text(root, "cueId", ""), number(root, "positionMs", 0.0), whenMs, result, error)) {
+    if (engine.seekCue(textOf("cueId"), numberOf("positionMs"), numberOf("whenMs"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -416,11 +878,9 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "release") {
     CommandResultDTO result;
     EngineError error;
-    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
-    // `endMs`, when present, is a time in the file, not on the clock: it is where a cue
-    // trimmed of its trailing silence stops hearing the file.
-    const bool hasEnd = hasNumber(root, "endMs");
-    if (engine.releaseCue(text(root, "cueId", ""), whenMs, hasEnd, number(root, "endMs", 0.0), result, error)) {
+    // `endMs`, when it carries a value, is a time in the file, not on the clock: it is
+    // where a cue trimmed of its trailing silence stops hearing the file.
+    if (engine.releaseCue(textOf("cueId"), numberOf("whenMs"), carries("endMs"), numberOf("endMs"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -432,8 +892,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "cancel") {
     CancelResultDTO result;
     EngineError error;
-    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
-    if (engine.cancelCue(text(root, "cueId", ""), whenMs, result, error)) {
+    if (engine.cancelCue(textOf("cueId"), numberOf("whenMs"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -445,11 +904,10 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "fade") {
     CommandResultDTO result;
     EngineError error;
-    const double whenMs = hasNumber(root, "whenMs") ? number(root, "whenMs", 0.0) : 0.0;
-    const int param = paramFromName(text(root, "param", "volume"));
-    const int curve = curveFromName(text(root, "curve", "linear"));
-    if (engine.fadeCue(text(root, "cueId", ""), param, number(root, "value", 0.0), number(root, "durationMs", 0.0),
-                       curve, whenMs, result, error)) {
+    const int param = paramFromName(textOf("param"));
+    const int curve = curveFromName(textOf("curve"));
+    if (engine.fadeCue(textOf("cueId"), param, numberOf("value"), numberOf("durationMs"), curve, numberOf("whenMs"),
+                       result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -470,7 +928,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       StartOptions scratch;
       int count = 0;
       Crosspoint parsed[kMaxCrosspoints];
-      if (!parseOutputs(root, scratch, automatic, count, parsed, parseError)) {
+      if (!parseOutputs(root, declared("outputs"), scratch, automatic, count, parsed, parseError)) {
         parseFailed = true;
       } else {
         for (int i = 0; i < count; i++) points.push_back(parsed[i]);
@@ -478,7 +936,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     }
     if (parseFailed) {
       out = replyError(id, "invalid", parseError);
-    } else if (engine.routeCue(text(root, "cueId", ""), automatic, points, result, error)) {
+    } else if (engine.routeCue(textOf("cueId"), automatic, points, result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -490,7 +948,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "progress") {
     VoiceSnapshot voice;
     bool found = false;
-    engine.progress(text(root, "cueId", ""), voice, found);
+    engine.progress(textOf("cueId"), voice, found);
     if (!found) {
       out = replyOk(id, nullptr);
     } else {
@@ -499,7 +957,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "panic") {
     PanicResultDTO result;
     EngineError error;
-    if (engine.panic(number(root, "fadeMs", 0.0), result, error)) {
+    if (engine.panic(numberOf("fadeMs"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -545,38 +1003,41 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       out = replyError(id, error.code, error.message);
     }
   } else if (verb == "configure") {
-    const cJSON* options = member(root, "options");
+    const WireField& optionsField = declared("options");
+    const cJSON* options = member(root, optionsField.name);
     DeviceRequest request;
     if (options != nullptr && cJSON_IsObject(options)) {
-      const cJSON* deviceId = member(options, "deviceId");
-      if (deviceId != nullptr && cJSON_IsString(deviceId)) {
+      // `deviceId: null` asks for the system default; every other field's null (or
+      // absence) means leave it as it is, which is the absence of the request field.
+      const WireField& deviceId = subField(optionsField, "deviceId");
+      if (fieldPresent(options, deviceId)) {
         request.hasDeviceId = true;
-        request.deviceId = deviceId->valuestring;
-      } else if (deviceId != nullptr && cJSON_IsNull(deviceId)) {
-        request.hasDeviceId = true;
-        request.deviceId = "default";
+        request.deviceId = fieldHasValue(options, deviceId) ? textField(options, deviceId) : "default";
       }
-      if (hasNumber(options, "sampleRate")) {
+      const WireField& sampleRate = subField(optionsField, "sampleRate");
+      if (fieldHasValue(options, sampleRate)) {
         request.hasSampleRate = true;
-        request.sampleRate = integer(options, "sampleRate", 0);
+        request.sampleRate = static_cast<int>(numberField(options, sampleRate));
       }
-      if (hasNumber(options, "channels")) {
+      const WireField& channels = subField(optionsField, "channels");
+      if (fieldHasValue(options, channels)) {
         request.hasChannels = true;
-        request.channels = integer(options, "channels", 0);
+        request.channels = static_cast<int>(numberField(options, channels));
       }
-      const cJSON* exclusive = member(options, "exclusive");
-      if (exclusive != nullptr && cJSON_IsBool(exclusive)) {
+      const WireField& exclusive = subField(optionsField, "exclusive");
+      if (fieldHasValue(options, exclusive)) {
         request.hasExclusive = true;
-        request.exclusive = cJSON_IsTrue(exclusive) != 0;
+        request.exclusive = booleanField(options, exclusive);
       }
-      if (hasNumber(options, "bufferFrames")) {
+      const WireField& bufferFrames = subField(optionsField, "bufferFrames");
+      if (fieldHasValue(options, bufferFrames)) {
         request.hasBufferFrames = true;
-        request.bufferFrames = integer(options, "bufferFrames", 0);
+        request.bufferFrames = static_cast<int>(numberField(options, bufferFrames));
       }
-      const cJSON* backend = member(options, "backend");
-      if (backend != nullptr && cJSON_IsString(backend)) {
+      const WireField& backend = subField(optionsField, "backend");
+      if (fieldHasValue(options, backend)) {
         request.hasBackend = true;
-        request.backend = backend->valuestring;
+        request.backend = textField(options, backend);
       }
     }
     EngineError error;
@@ -588,7 +1049,8 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "waveform") {
     WaveformDTO result;
     EngineError error;
-    if (engine.waveform(text(root, "filePath", ""), integer(root, "points", 512), regionOf(root), result, error)) {
+    if (engine.waveform(textOf("filePath"), static_cast<int>(numberOf("points")),
+                        regionOf(root, declared("startMs"), declared("endMs")), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
       cJSON_AddNumberToObject(body, "buckets", result.buckets);
@@ -608,8 +1070,8 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "onsets") {
     OnsetDTO result;
     EngineError error;
-    if (engine.onsets(text(root, "filePath", ""), number(root, "sensitivity", 1.0),
-                      integer(root, "maxOnsets", 0), regionOf(root), result, error)) {
+    if (engine.onsets(textOf("filePath"), numberOf("sensitivity"), static_cast<int>(numberOf("maxOnsets")),
+                      regionOf(root, declared("startMs"), declared("endMs")), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
       cJSON_AddNumberToObject(body, "durationMs", result.durationMs);
@@ -627,7 +1089,7 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   } else if (verb == "silence") {
     SilenceDTO result;
     EngineError error;
-    if (engine.silence(text(root, "filePath", ""), number(root, "thresholdDb", -60.0), result, error)) {
+    if (engine.silence(textOf("filePath"), numberOf("thresholdDb"), result, error)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
       cJSON_AddNumberToObject(body, "startMs", result.startMs);
@@ -647,9 +1109,8 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     if (!engine.hasNoDevice()) {
       out = replyError(id, "invalid", "simulateDeviceNotification is only available with the silent/offline backend");
     } else {
-      const std::string type = text(root, "type", "stopped");
-      const cJSON* deliberateItem = member(root, "deliberate");
-      const bool deliberate = deliberateItem != nullptr && cJSON_IsTrue(deliberateItem) != 0;
+      const std::string type = textOf("type");
+      const bool deliberate = booleanField(root, wireField(verb, "deliberate"));
       int notificationType = 1;  // ma_device_notification_type_stopped
       if (type == "interruption_began") notificationType = 2;
       else if (type == "unlocked") notificationType = 3;

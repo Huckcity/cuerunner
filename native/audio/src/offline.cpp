@@ -87,19 +87,12 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
       entry.order = order++;
       cJSON* idItem = cJSON_GetObjectItemCaseSensitive(command, "id");
       if (idItem == nullptr) cJSON_AddNumberToObject(command, "id", entry.order + 1);
-      // The script's `atMs` is when the verb is issued. Verbs that take a `whenMs` get
-      // it stamped from `atMs`, so the mixer places them on the exact frame instead of
-      // the block boundary the runner happens to reach.
+      // The script's `atMs` is when the verb is issued. The verbs whose declaration
+      // carries a `whenMs` get it stamped from `atMs`, so the mixer places them on the
+      // exact frame instead of the block boundary the runner happens to reach — the
+      // declaration decides which those are, not a second list here.
       const cJSON* verbItem = cJSON_GetObjectItemCaseSensitive(command, "verb");
-      const bool takesWhen = cJSON_IsString(verbItem) &&
-                             (std::strcmp(verbItem->valuestring, "start") == 0 ||
-                              std::strcmp(verbItem->valuestring, "stop") == 0 ||
-                              std::strcmp(verbItem->valuestring, "stopAll") == 0 ||
-                              std::strcmp(verbItem->valuestring, "seek") == 0 ||
-                              std::strcmp(verbItem->valuestring, "release") == 0 ||
-                              std::strcmp(verbItem->valuestring, "cancel") == 0 ||
-                              std::strcmp(verbItem->valuestring, "fade") == 0 ||
-                              std::strcmp(verbItem->valuestring, "panic") == 0);
+      const bool takesWhen = cJSON_IsString(verbItem) && wireVerbTakesWhenMs(verbItem->valuestring);
       if (takesWhen && cJSON_GetObjectItemCaseSensitive(command, "whenMs") == nullptr) {
         cJSON_AddNumberToObject(command, "whenMs", entry.atMs);
       }
