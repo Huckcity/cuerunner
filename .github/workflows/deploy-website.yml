@@ -37,3 +37,9 @@ jobs:
             || echo 'no published soak figures yet; the reliability page shows its empty state'
 
       - uses: actions/upload-pages-artifact@v5
+        with:
+          path: website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
