@@ -23,7 +23,7 @@ export type DockTab = 'cue' | ShowStrip
 const TABS: { id: DockTab; label: string; className: string; pro?: true }[] = [
   { id: 'cue', label: 'Cue', className: 'btn-cue' },
   { id: 'log', label: 'Log', className: 'btn-log' },
-  { id: 'monitor', label: 'Monitor', className: 'btn-monitor', pro: true },
+  { id: 'monitor', label: 'Monitor', className: 'btn-monitor' },
   { id: 'rf', label: 'Wireless', className: 'btn-rf', pro: true },
   { id: 'script', label: 'Script', className: 'btn-script', pro: true }
 ]
@@ -185,10 +185,7 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
       case 'log':
         return <LogPanel onClose={backToCue} />
       case 'monitor':
-        return pro ? <MonitorPanel onClose={backToCue} /> : (
-          <ProLock variant="strip" feature="Show monitor"
-            blurb="What is listening, and what is on the network." onClose={backToCue} />
-        )
+        return <MonitorPanel onClose={backToCue} />
       case 'rf':
         return pro ? <RfPanel onClose={backToCue} /> : (
           <ProLock variant="strip" feature="Wireless"

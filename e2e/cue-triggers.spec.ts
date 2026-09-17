@@ -2,7 +2,7 @@
 // exercised here is the whole one — a datagram arrives, lands on the bus, reaches the
 // renderer, and the cue's own work actually happens.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, oscPortOfItsOwn, sendOsc, startServer, type TestServer } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, oscPortOfItsOwn, sendOsc, startServer, type TestServer } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -10,9 +10,10 @@ let server: TestServer | undefined
 let port: number
 
 test.beforeEach(async () => {
-  // The show services, the scenes view, the panels that read them: everything this spec
-  // is about is the licensed half of the app.
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  // No key: the path this spec is about — a datagram arrives, lands on the bus, reaches
+  // the renderer, and the cue's own work happens — is the free half of the app, and the
+  // spec would be lying about the free half if it proved it with a licence.
+  ;({ app, page } = await launchApp())
   // A message that does nothing proves nothing if it went to another app in the run.
   port = await oscPortOfItsOwn(page)
 })

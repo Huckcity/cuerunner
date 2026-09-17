@@ -48,10 +48,11 @@ export const GUIDES = [
     </section>
 
     <section class="panel reveal delay-2">
-      <h2>The show around the cue stack<span class="pro">Pro</span></h2>
+      <h2>Around the cue stack</h2>
       <p class="doc-lede">
-        The cue stack is the free app and always will be. These are the parts that listen
-        to the room and drive the rest of the rig.
+        The cue stack is the free app and always will be — and so is being driven by one:
+        OSC and MIDI in, and the monitor that shows what arrived. These are the parts that
+        run the rest of the rig, and they are what a key turns on.
       </p>
       <div class="cards two-col doc-cards">
         <a class="card doc-card" href="./guides/console.html">
@@ -537,10 +538,9 @@ export const GUIDES = [
     section: 'Guides',
     title: 'Firing cues from a console',
     blurb: 'Let a lighting desk, sound desk, tablet or footswitch fire Cuerunner cues over OSC and MIDI, and see what arrives.',
-    pro: true,
     body: `
     <section class="panel reveal">
-      <h1>Firing cues from a console<span class="pro">Pro</span></h1>
+      <h1>Firing cues from a console</h1>
       <p class="doc-lede">
         Somebody else presses GO: the lighting desk, a footswitch, a tablet, the stage
         manager's cue light panel. Cuerunner listens, and a cue can carry its own trigger.

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { cueEngine } from '../engine/CueEngine'
 import { describeTriggerSource, triggeredCues } from '../engine/triggers'
 import { firingIdentity, noteKey } from '../engine/inputGuard'
-import { useStore, usePro } from '../store'
+import { useStore } from '../store'
 
 /**
  * Fires the cues that answer to what the show sends back.
@@ -16,14 +16,12 @@ import { useStore, usePro } from '../store'
  * repeats. Both are properties of the surface the message came in on, so they are
  * settled before anything looks for a cue to fire.
  *
- * The events only exist while the show services are licensed and listening, so with no
- * key there is nothing to do here.
+ * The events come from the show's own inputs — OSC and MIDI, which are the free half of
+ * the app — so this listens on every machine, and a key only adds the services that
+ * publish more (the desk link, the radios, the network).
  */
 export function useCueTriggers(): void {
-  const pro = usePro()
-
   useEffect(() => {
-    if (!pro) return
     return window.cuerunner.show.onEvents(events => {
       for (const event of events) {
         if (event.kind !== 'osc' && event.kind !== 'midi') continue
@@ -59,5 +57,5 @@ export function useCueTriggers(): void {
         }
       }
     })
-  }, [pro])
+  }, [])
 }

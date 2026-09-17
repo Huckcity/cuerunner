@@ -102,11 +102,10 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
  * Why a Pro service's settings are here but not running. The settings travel with the
  * show whatever the license says; only the listening waits for one.
  */
-function ProHint({ onUnlock }: { onUnlock: () => void }) {
+function ProHint({ onUnlock, children }: { onUnlock: () => void; children?: React.ReactNode }) {
   return (
     <p className="inspector-hint license-hint">
-      Part of Cuerunner Pro. These settings are saved with the show, and start working once
-      this machine is licensed.{' '}
+      {children ?? 'Part of Cuerunner Pro. These settings are saved with the show, and start working once this machine is licensed.'}{' '}
       <button className="license-link" onClick={onUnlock}>Enter a license key</button>
     </p>
   )
@@ -495,7 +494,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               </div>
               <p className="inspector-hint">The port MIDI cues use unless they name their own.</p>
 
-              {!pro && <ProHint onUnlock={() => setTab('license')} />}
               <ServiceBlock
                 title="Listen to MIDI"
                 blurb="Fire cues from notes and controllers, and see what arrives in the Monitor."
@@ -532,8 +530,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
 
           {tab === 'network' && (
             <>
-              {!pro && <ProHint onUnlock={() => setTab('license')} />}
-
               <ServiceBlock
                 title="OSC control"
                 blurb="Take cues and commands from lighting consoles, sound desks and tablets."
@@ -552,6 +548,13 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   onValue={port => updateOscInSettings({ port })}
                 />
               </ServiceBlock>
+
+              {!pro && (
+                <ProHint onUnlock={() => setTab('license')}>
+                  Finding devices and the tablet view are part of Cuerunner Pro. Listening
+                  for OSC is free.
+                </ProHint>
+              )}
 
               <ServiceBlock
                 title="Find devices"

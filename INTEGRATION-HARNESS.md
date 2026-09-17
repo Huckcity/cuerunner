@@ -253,7 +253,7 @@ Specs import the helpers that already exist, from `../e2e/helpers`:
 
 - `launchApp` / `closeApp` — the app, on a private display, with a license where a Pro
   surface is needed (`launchApp({ license: mintLicense() })`, as every existing spec does).
-- `openFromRecent` — a fixture `.wlab` written into a temp directory and opened through
+- `openFromRecent` — a fixture `.cuerunner` written into a temp directory and opened through
   the app's own recent list, no dialogs.
 - `freePort` / `oscPortOfItsOwn` — a port for the peer, and a port of the app's own.
 - `encodeOscMessage` / `sendOsc` to speak, and **`listenOsc` / `decodeOscMessage` to

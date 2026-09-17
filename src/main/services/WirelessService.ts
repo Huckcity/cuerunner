@@ -84,6 +84,7 @@ interface ChannelHistory {
 export class WirelessService implements ShowService {
   readonly id = 'rf'
   readonly label = 'Wireless'
+  readonly pro = true
 
   private context: ServiceContext | null = null
   private sources: TelemetrySource[] = []

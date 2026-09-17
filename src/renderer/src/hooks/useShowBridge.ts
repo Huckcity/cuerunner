@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useStore, usePro } from '../store'
+import { useStore } from '../store'
 import type { ShowEvent, ShowSnapshot } from '../types/show'
 
 /**
@@ -11,16 +11,14 @@ import type { ShowEvent, ShowSnapshot } from '../types/show'
  * the batches that arrived in between are replayed on top, minus anything the snapshot
  * already contains, which is why the snapshot carries the time it was taken.
  *
- * The services are part of Cuerunner Pro, so this does nothing until the machine is
- * licensed. A key entered while the window is open turns the effect back on, which is
- * what starts the listeners the operator had configured.
+ * This runs on any machine: the inputs the free half owns — OSC and MIDI — publish
+ * through the same bus, and a machine with no key should still see what it hears. The
+ * Pro services simply report as stopped with the reason, and the panels say so.
  */
 export function useShowBridge(): void {
   const settings = useStore(s => s.showSettings)
-  const pro = usePro()
 
   useEffect(() => {
-    if (!pro) return
     let live = true
     const pending: ShowEvent[][] = []
     let ready = false
@@ -60,19 +58,18 @@ export function useShowBridge(): void {
       live = false
       off()
     }
-  }, [pro])
+  }, [])
 
   useEffect(() => {
     // A settings change means a listener has to move: a new port, a different MIDI
     // input, or the service being turned off. The main process compares what it has
     // and only restarts what actually changed.
-    if (!pro) return
     window.cuerunner.show.configure(settings).catch(error => {
       useStore.getState().appendLog([
         { level: 'error', message: `Could not apply the show settings: ${describe(error)}` }
       ])
     })
-  }, [settings, pro])
+  }, [settings])
 }
 
 function describe(error: unknown): string {

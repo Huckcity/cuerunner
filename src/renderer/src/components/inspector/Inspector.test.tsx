@@ -73,14 +73,20 @@ describe('Inspector', () => {
     expect(container.querySelectorAll('.trigger-row')).toHaveLength(2)
   })
 
-  it('shows an unlicensed machine the lock on the Triggers tab, not on every Basics tab', () => {
+  it('gives an unlicensed machine the Triggers tab, and keeps the lock for a scene cue', () => {
     useStore.setState({ license: { state: 'unlicensed' } })
     const wait = cue('wait')
     show([wait], wait)
 
-    expect(container.querySelector('.pro-lock')).toBeNull()
+    // Firing a cue from the desk's key or a footswitch is the free half: the tab is
+    // not a Pro surface, and a show with no key can still be driven.
     openTab('Triggers')
-    expect(container.querySelector('.pro-lock[data-feature="Triggers"]')).not.toBeNull()
+    expect(container.querySelector('.pro-lock')).toBeNull()
+
+    const scene = cue('scene')
+    show([scene], scene)
+    openTab('Scene')
+    expect(container.querySelector('.pro-lock[data-feature="Scene cues"]')).not.toBeNull()
   })
 
   it('asks for a timeline offset only inside a timeline group, and in seconds', () => {

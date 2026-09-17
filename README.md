@@ -24,13 +24,14 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: twelve cue types, groups and timelines, the waveform editor,
-the run log, workspaces, undo. **Cuerunner Pro** is the show around it — OSC and MIDI input,
-triggers, the monitor, wireless and the mic plot, scenes and the desk, the script panel
-with its tablet view, redundant playback, and the showfile as a versionable artifact —
-what each save changed, a comparison with another version, two people's copies merged,
-and the show and its media bundled into one `.wlabx`. One key, checked offline on the
-machine; see [Cuerunner Pro](#cuerunner-pro) for how keys are issued.
+The **cue stack is free**: eleven cue types, groups and timelines, the waveform editor,
+the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
+and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
+wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
+redundant playback, and the showfile as a versionable artifact: what each save changed, a
+comparison with another version, two people's copies merged, and the show and its media
+bundled into one `.cuerunnerx`. One key, checked offline on the machine; see
+[Cuerunner Pro](#cuerunner-pro) for how keys are issued.
 
 ## Getting Started
 
@@ -87,7 +88,7 @@ npm run dev
 
 ### Try the demo workspace
 
-Every build ships a demo show — `resources/demo/Demo Show.wlab` — with one of each cue type
+Every build ships a demo show — `resources/demo/Demo Show.cuerunner` — with one of each cue type
 covered: a sequence group, a timeline group, audio with fades, MIDI, OSC, a network request, a
 script, and a stop cue. Open it from **Cuerunner ▾ → Open Demo Workspace**, or from the button in
 an empty cue list. It opens as an unsaved example (so Save asks where to put your copy, and
@@ -244,7 +245,7 @@ message for a script that threw or timed out, or the port an audio, MIDI or OSC 
 not reach. A cue that could not do what it says is marked failed rather than passed over;
 an OSC message that leaves the machine and is never received still counts as sent, since
 UDP reports nothing. Run results are runtime state — they are never written to the
-`.wlab` file.
+`.cuerunner` file.
 
 The **log panel** (LOG button in the transport bar) records every firing: when the cue
 started, what it did, the response status, and any failure. Script cues also send their
@@ -268,7 +269,7 @@ the cue waits for the script to finish. Two helpers are in scope:
 The script has no access to the interface (no `document`, no `window`); the helpers above
 are the whole surface.
 
-Script cues are not sandboxed — a workspace file is executable code, so only open `.wlab`
+Script cues are not sandboxed — a workspace file is executable code, so only open `.cuerunner`
 files you trust.
 
 ### Playback Engine
@@ -288,7 +289,7 @@ files you trust.
 ### Failure Handling
 
 - Saves go through a temporary file and a rename, and keep the previous version as
-  `<name>.wlab.bak`. A save that fails says so in a notice bar and the log; it never leaves
+  `<name>.cuerunner.bak`. A save that fails says so in a notice bar and the log; it never leaves
   a half-written file.
 - Unsaved work is snapshotted to the user-data folder every 30 s. The next launch offers it
   back with Recover / Discard, and saving or discarding clears it.
@@ -456,7 +457,7 @@ cuerunner/
 
 ## Workspace Format
 
-Workspaces are saved as `.wlab` files (JSON format matching the `Workspace` interface):
+Workspaces are saved as `.cuerunner` files (JSON format matching the `Workspace` interface):
 
 ```json
 {
@@ -510,7 +511,7 @@ Two properties of this file are load-bearing, and both are held by tests
   an older file up to this version's shape is a change to the file rather than to the show and
   is not recorded as an edit.
 
-An `.wlabx` bundle is a zip holding `show.wlab` and a `media/` folder, with the showfile's media
+An `.cuerunnerx` bundle is a zip holding `show.cuerunner` and a `media/` folder, with the showfile's media
 paths relative to the archive root. Entries are stored uncompressed in name order with fixed
 timestamps, so two bundles of one show are byte-identical, and each entry's CRC is checked on
 the way out. A bundle carries up to about 4 GB of media — the format's limit without its 64-bit
@@ -618,8 +619,9 @@ Behaviour worth knowing before a show:
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`
-- OSC input is part of Cuerunner Pro: with no license the app sends OSC and does not listen
-  for it
+- OSC and MIDI input are free on any machine: the app listens, triggers fire, and the
+  monitor shows what arrived. What a key turns on is the rest of the services — the desk
+  link, the radios, the network devices and the second machine
 
 Desk and console integration:
 
@@ -714,9 +716,9 @@ keys are verified on the machine they are entered on:
   would take.
 - **Show files are never affected.** A workspace written with Pro opens anywhere, keeping
   its scenes, its mic plot and its triggers, and saves back exactly as it arrived. On an
-  unlicensed machine the Pro surfaces show a lock, the show services do not start, and a
-  scene cue fired from the stack records that it needs a license and lets the rest of the
-  show run.
+  unlicensed machine the Pro surfaces show a lock, the Pro services do not start — the
+  OSC and MIDI listeners do — and a scene cue fired from the stack records that it needs
+  a license and lets the rest of the show run.
 - **A key can be deactivated**, which returns the machine to the free feature set.
 
 ### Issuing keys

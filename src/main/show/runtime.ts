@@ -22,6 +22,10 @@ export interface ServiceOptions {
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
   return [
+    // Hearing the room is free: the desk's own key, a footswitch, a tablet or another
+    // program must not be behind a key, or the free half stops competing with free
+    // software. What costs is the show of it — the desk link, the radios, the network
+    // and the second machine — so those services carry `pro` and the host asks.
     new OscInputService(),
     new MidiInputService(),
     new MidiTcpService(),
@@ -35,11 +39,6 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
 export interface ShowRuntime {
   /** Applies settings, restarting only the services whose settings changed. */
   configure(settings: ShowSettings): Promise<void>
-  /**
-   * Stops every service and forgets the settings. The next configure brings them back
-   * up, so this is how the show is told that the app is no longer licensed to run it.
-   */
-  suspend(): Promise<void>
   snapshot(): ShowSnapshot
   command(serviceId: string, action: string, payload?: unknown): Promise<CommandResult>
   restart(serviceId: string): Promise<CommandResult>
@@ -54,35 +53,42 @@ export interface ShowRuntime {
  * services exist: it configures them, reads a snapshot, and subscribes to the batch.
  * That is what lets a service be added without touching the window plumbing.
  */
-export function createShowRuntime(services: ShowService[] = defaultServices()): ShowRuntime {
+export function createShowRuntime(
+  services: ShowService[] = defaultServices(),
+  entitled: () => boolean = () => true
+): ShowRuntime {
   const bus = new ShowBus()
-  const host = new ServiceHost(bus)
+  const host = new ServiceHost(bus, entitled)
   for (const service of services) host.register(service)
 
   let current: string | null = null
+  // The licence is not asked about here: this factory runs at module load, before the
+  // manager that answers exists, and an eager call is a crash on the first launch. The
+  // question belongs to configure, which is the only place the answer is used.
+  let entitledNow: boolean | null = null
 
   return {
     async configure(settings: ShowSettings): Promise<void> {
       const serialized = JSON.stringify(settings)
-      // The renderer re-sends its settings whenever a workspace loads or autosaves;
-      // rebinding a UDP port each time would drop whatever is mid-flight.
-      if (serialized === current) return
-      if (current !== null) {
+      const mayRunPro = entitled()
+      // Whether the licence changed is a different question from whether the settings
+      // did, and a settings diff cannot answer it: it re-decides every service,
+      // including the ones whose settings have not moved (redundancy reads machine
+      // settings, and nothing here compares those). The renderer re-sends settings
+      // whenever a workspace loads or autosaves, which is why identical settings on an
+      // unchanged licence are left alone rather than rebinding a UDP port mid-flight.
+      const licenceChanged = entitledNow !== null && mayRunPro !== entitledNow
+      if (serialized === current && !licenceChanged) return
+      if (current !== null && serialized !== current) {
         // A restart here means the service is turned off or pointed somewhere else.
         // Say so once, at the level of the thing that changed.
         const before = JSON.parse(current) as ShowSettings
         announceChange(bus, before, settings)
       }
       current = serialized
-      await host.startChanged(settings)
-    },
-
-    async suspend(): Promise<void> {
-      // Forgetting the settings matters as much as stopping the services: the dedupe
-      // above compares against them, and a key entered later has to bring the same
-      // settings back up.
-      current = null
-      await host.stopAll()
+      entitledNow = mayRunPro
+      if (licenceChanged) await host.startAll(settings, { entitlementOnly: true })
+      else await host.startChanged(settings)
     },
 
     snapshot(): ShowSnapshot {

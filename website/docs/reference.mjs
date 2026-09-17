@@ -80,7 +80,7 @@ export const REFERENCE = [
             <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
             <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
             <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
-            <tr><td>Triggers<span class="pro">Pro</span></td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -247,23 +247,23 @@ export const REFERENCE = [
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>Send on</td><td>none</td><td>The port MIDI cues use unless they name their own.</td></tr>
-            <tr><td>Listen to MIDI<span class="pro">Pro</span></td><td>off</td><td>Opens the input ports you tick — all of them if you tick none — so cues can fire from notes and controllers.</td></tr>
+            <tr><td>Listen to MIDI</td><td>off</td><td>Opens the input ports you tick — all of them if you tick none — so cues can fire from notes and controllers.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="panel reveal delay-2" id="network">
-      <h2>Network<span class="pro">Pro</span></h2>
+      <h2>Network</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
-            <tr><td>Find devices</td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
+            <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
-            <tr><td>Tablet view</td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
+            <tr><td>Tablet view<span class="pro">Pro</span></td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
           </tbody>
         </table>
       </div>
@@ -400,7 +400,7 @@ export const REFERENCE = [
     blurb: 'What Cuerunner listens for, what a cue trigger matches, and what Cuerunner sends to a desk.',
     body: `
     <section class="panel reveal">
-      <h1>OSC &amp; MIDI control<span class="pro">Pro</span></h1>
+      <h1>OSC &amp; MIDI control</h1>
       <p class="doc-lede">
         For setting it up, see <a href="../guides/console.html">firing cues from a
         console</a>. This is the message-level detail.

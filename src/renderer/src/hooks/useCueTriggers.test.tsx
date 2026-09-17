@@ -96,15 +96,17 @@ describe('useCueTriggers', () => {
     emit(events)
   }
 
-  it('does not stay subscribed when the machine is not licensed', () => {
-    // The events only reach the window while the licensed show services are listening.
-    // With no key the hook has to come off the bridge, and stay off.
+  it('stays subscribed with no licence, because the inputs are the free half', () => {
+    // OSC and MIDI in are free: a desk's key or a footswitch has to fire cues on a
+    // machine that has never seen a key, so the hook never comes off the bridge.
     act(() => {
       useStore.setState({ license: { state: 'unlicensed' }, cues: [cue('7', [oscTrigger])] })
     })
 
-    expect(emit).toBeNull()
-    expect(goById).not.toHaveBeenCalled()
+    expect(emit).not.toBeNull()
+
+    act(() => { deliver([osc('/eos/cue/12/fire')]) })
+    expect(goById).toHaveBeenCalledWith('7')
   })
 
   it('fires the cue whose trigger matches, and logs what fired it', () => {

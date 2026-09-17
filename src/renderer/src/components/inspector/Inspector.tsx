@@ -46,15 +46,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   const pro = usePro()
   if (tab === 'Basics') return <BasicTab cue={cue} />
   if (tab === TRIGGERS_TAB) {
-    return pro ? (
-      <Triggers cue={cue} />
-    ) : (
-      <ProLock
-        variant="inspector"
-        feature="Triggers"
-        blurb="OSC and MIDI that fire a cue with nobody's hand on GO."
-      />
-    )
+    return <Triggers cue={cue} />
   }
   if (tab === 'Audio' || tab === 'Time & Loops') return <AudioInspector cue={cue as AudioCue} tab={tab} />
   if (tab === 'MIDI') return <MidiInspector cue={cue as MidiCue} />

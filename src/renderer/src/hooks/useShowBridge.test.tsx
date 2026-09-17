@@ -137,9 +137,10 @@ describe('useShowBridge', () => {
     expect(off).toHaveBeenCalled()
   })
 
-  it('never touches the show services while the machine is not licensed', async () => {
-    // The services themselves are gated in the main process; with no key the window has
-    // no reason to ask, and asking would leave a socket open behind a locked panel.
+  it('subscribes and configures on a machine with no licence, because the inputs are free', async () => {
+    // The Pro services are gated in the main process and report themselves as stopped;
+    // the window still has to listen, or a desk's key would fire a cue the monitor
+    // never showed.
     act(() => root.unmount())
     vi.clearAllMocks()
     act(() => { useStore.setState({ license: { state: 'unlicensed' } }) })
@@ -147,8 +148,8 @@ describe('useShowBridge', () => {
     act(() => { root.render(<Harness />) })
     await settle()
 
-    expect(vi.mocked(window.cuerunner.show.onEvents)).not.toHaveBeenCalled()
-    expect(vi.mocked(window.cuerunner.show.snapshot)).not.toHaveBeenCalled()
-    expect(vi.mocked(window.cuerunner.show.configure)).not.toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.show.onEvents)).toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.show.snapshot)).toHaveBeenCalled()
+    expect(vi.mocked(window.cuerunner.show.configure)).toHaveBeenCalled()
   })
 })
