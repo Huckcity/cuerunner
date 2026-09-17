@@ -98,9 +98,13 @@ test("shell() runs where the script says it should, not where the app was launch
   // The workspace *file* as the working directory: main resolves a file path to the
   // directory holding it, so the file lands beside the show — and would land in the app's
   // own launch directory if shell()'s options never reached exec().
-  await runScript(`await shell('printf x > rel.txt', { cwd: ${JSON.stringify(workspace)} })`)
+  // `echo x>file` writes just the x in both cmd.exe and a POSIX shell; the newline each
+  // adds is trimmed, and the command has to succeed — a failed one still leaves the
+  // redirect's empty file behind, which is what a Windows run of `printf` did.
+  const command = process.platform === 'win32' ? 'echo x> rel.txt' : 'printf x > rel.txt'
+  await runScript(`await shell(${JSON.stringify(command)}, { cwd: ${JSON.stringify(workspace)} })`)
 
   const written = path.join(path.dirname(workspace), 'rel.txt')
   await expect.poll(() => fs.existsSync(written)).toBe(true)
-  expect(fs.readFileSync(written, 'utf8')).toBe('x')
+  expect(fs.readFileSync(written, 'utf8').trim()).toBe('x')
 })
