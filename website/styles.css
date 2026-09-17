@@ -116,7 +116,7 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.donate-btn {
+.header-cta {
   text-decoration: none;
   color: #111;
   background: var(--accent-amber);
@@ -129,11 +129,11 @@ body {
   white-space: nowrap;
 }
 
-.donate-btn:hover {
+.header-cta:hover {
   filter: brightness(1.08);
 }
 
-.donate-btn:active {
+.header-cta:active {
   transform: translateY(1px);
 }
 

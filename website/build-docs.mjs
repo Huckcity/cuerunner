@@ -17,8 +17,8 @@ const site = path.dirname(fileURLToPath(import.meta.url))
 const NAV = [
   ['guide.html', 'Guides'],
   ['reference/index.html', 'Reference'],
-  ['reliability.html', 'Reliability'],
-  ['index.html#download', 'Download']
+  ['pro.html', 'Free and Pro'],
+  ['reliability.html', 'Reliability']
 ]
 
 const esc = text => text.replace(/&(?!#?\w+;)/g, '&amp;')
@@ -64,7 +64,7 @@ function shell(page) {
       <nav class="top-nav" aria-label="Primary">
 ${nav}
       </nav>
-      <a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=CMLJQS38QHP7W" target="_blank" rel="noreferrer">Say Thanks on PayPal</a>
+      <a class="header-cta" href="${up}index.html#download">Download</a>
     </div>
   </header>
 
@@ -73,7 +73,7 @@ ${crumb}${page.body.trimEnd()}
   </main>
 
   <footer class="site-footer">
-    <p>Cuerunner — show control for Windows and macOS. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a></p>
   </footer>
 </body>
 </html>

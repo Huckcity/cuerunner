@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free and Pro — Cuerunner</title>
+  <meta name="description" content="The free app runs a show: the cue stack, the engine, the ears and the file. Cuerunner Pro runs a production — the desk, the radios, the tablet, the second machine and the handover." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Free and Pro — Cuerunner" />
+  <meta property="og:description" content="The free app runs a show: the cue stack, the engine, the ears and the file. Cuerunner Pro runs a production — the desk, the radios, the tablet, the second machine and the handover." />
+  <link rel="icon" href="./assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="Cuerunner home">
+        <img src="./assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="./guide.html">Guides</a>
+        <a href="./reference/index.html">Reference</a>
+        <a href="./pro.html" aria-current="page">Free and Pro</a>
+        <a href="./reliability.html">Reliability</a>
+      </nav>
+      <a class="header-cta" href="./index.html#download">Download</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+
+    <section class="panel reveal">
+      <h1>Free and Pro</h1>
+      <p class="doc-lede">
+        Nothing about running a show is behind a key. The free app plays the sound, drives
+        the rig, fires from a footswitch and shows you what arrived. Cuerunner Pro is the
+        show <em>around</em> it: the desk, the radios, the tablet, the second machine and
+        the handover.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>The free half</h2>
+      <p>
+        No key, no account, no expiry, on as many of your own machines as you like.
+        Nothing is taken away from it later, and the file it writes opens anywhere.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What you get</th><th>Details</th></tr></thead>
+          <tbody>
+            <tr><td>The cue stack</td><td>Eleven cue types — audio, MIDI, OSC, MSC, network, script, wait, fade, stop, group and devamp — with playlist, random, sequence and timeline groups, pre- and post-waits, auto-advance, arm and disarm, colour, and undo.</td></tr>
+            <tr><td>The engine</td><td>Every output the interface has, one device at a time: WASAPI shared and exclusive, ASIO, Core Audio, ALSA and JACK. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.</td></tr>
+            <tr><td>The waveform</td><td>Zoom, onset detection, split, vamps and devamps, and trim silence at the edges — measured from the file itself.</td></tr>
+            <tr><td>Cueing it</td><td>OSC, MIDI and show-control messages that fire a cue, whether they come from a desk, a footswitch, a pad or another program; <a href="reference/control.html">the messages</a> Cuerunner sends; the Monitor, which shows what arrived; and panic.</td></tr>
+            <tr><td>The showfile</td><td><code>.cuerunner</code>, byte-for-byte the same for the same show, with its own history — who saved it, when, which cues moved — plus autosave, recovery and the demo show.</td></tr>
+            <tr><td>The log</td><td>What fired, what failed and why, filterable, alongside the show's own events.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>What a key turns on</h2>
+      <p>
+        Pro is what a production needs once there is more than one person, more than one
+        machine, or a radio mic in the room.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Capability</th><th>Free</th><th>Pro</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Scenes and the desk</td>
+              <td>—</td>
+              <td>The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis as one of its own steps, and the desk link that lets the desk's keys walk the show.</td>
+            </tr>
+            <tr>
+              <td>Radio mics</td>
+              <td>—</td>
+              <td>Every transmitter's battery and RF level in the Monitor and the mic plot, alarms when a pack or an aerial misbehaves, and the session report afterwards. Reads the receivers over a telemetry document or, on the bench, the demo rack.</td>
+            </tr>
+            <tr>
+              <td>The script</td>
+              <td>Script cues — JavaScript, with the show's own helpers.</td>
+              <td>The script panel beside the cue stack, and the read-only tablet view over the local network for the person calling the show.</td>
+            </tr>
+            <tr>
+              <td>The second machine</td>
+              <td>—</td>
+              <td>Redundant playback: a live and a standby machine, a heartbeat over the network, and a takeover that keeps the position — with the licence that lets both machines run.</td>
+            </tr>
+            <tr>
+              <td>The showfile</td>
+              <td>Its own history, readable anywhere.</td>
+              <td>Comparing this show with another version of it, merging two people's copies, and the <code>.cuerunnerx</code> bundle that carries the show and its media as one file.</td>
+            </tr>
+            <tr>
+              <td>The network</td>
+              <td>—</td>
+              <td>Finding the devices that announce themselves — Dante endpoints among them — and warning when one drops off.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>The key</h2>
+      <ul>
+        <li>Signed, and checked on the machine — nothing phones home, and nothing needs an account.</li>
+        <li>Not tied to one computer: the machine you run from and the one standing by.</li>
+        <li>Deactivate it and that machine is back to the free half.</li>
+        <li>A show written with Pro opens anywhere. Its scenes, its mic plot and its triggers travel with the file even on a machine that has no key — only the surfaces and the services wait for one.</li>
+      </ul>
+      <p class="note">
+        What Cuerunner does not do is play the video. Another program owns the projection
+        and Cuerunner tells it when to roll; that boundary is deliberate, and it is how the
+        room keeps one clock.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="./guide.html">Guides</a> · <a href="./reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

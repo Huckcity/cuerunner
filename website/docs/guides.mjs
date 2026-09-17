@@ -116,11 +116,11 @@ export const GUIDES = [
       <div class="cards two-col">
         <article class="card download-card">
           <h3>Windows</h3>
-          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/WinsLab-Setup.exe">Download .exe</a>
+          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/Cuerunner-Setup.exe">Download .exe</a>
         </article>
         <article class="card download-card">
           <h3>macOS</h3>
-          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/WinsLab.dmg">Download .dmg</a>
+          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/Cuerunner.dmg">Download .dmg</a>
         </article>
       </div>
       <p>
