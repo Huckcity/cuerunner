@@ -4,7 +4,7 @@
 //
 // The gate is not touched: the app is licensed the way an operator's machine is, and
 // told to trust the key that signed the license. The pair it trusts exists only for the
-// run — `WINSLAB_LICENSE_PUBLIC_KEY` is honoured in a source tree and ignored in a build
+// run — `CUERUNNER_LICENSE_PUBLIC_KEY` is honoured in a source tree and ignored in a build
 // (src/main/license/trustedKeys.ts) — so nothing here unlocks anything that ships.
 //
 // The key is planted in a user-data directory of its own, as e2e/helpers.ts and
@@ -21,10 +21,10 @@ import { pathToFileURL } from 'node:url'
 import { issueKey } from './license-keygen.ts'
 
 /** Where a Pro run keeps its state: beside the app's own profile, never inside it. */
-export const DEV_PROFILE_DIR = join(homedir(), '.winslab-dev', 'user-data')
+export const DEV_PROFILE_DIR = join(homedir(), '.cuerunner-dev', 'user-data')
 
 /** What Settings → License says the run is licensed to. */
-export const DEV_LICENSEE = 'WinsLab dev'
+export const DEV_LICENSEE = 'Cuerunner dev'
 
 export interface DevLicense {
   /** The key itself, as the app stores it and shows it. */
@@ -38,7 +38,7 @@ export function mintDevLicense(issued: string): DevLicense {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519')
   return {
     text: issueKey(
-      { licensee: DEV_LICENSEE, id: 'WSP-DEV', issued },
+      { licensee: DEV_LICENSEE, id: 'CRN-DEV', issued },
       privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
     ),
     publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString()
@@ -54,7 +54,7 @@ export function provision(license: DevLicense, profileDir: string = DEV_PROFILE_
 
 /** The environment for the dev server: the license, and the shell as it was. */
 export function devEnv(environment: NodeJS.ProcessEnv, license: DevLicense): NodeJS.ProcessEnv {
-  return { ...environment, WINSLAB_LICENSE_PUBLIC_KEY: license.publicKeyPem }
+  return { ...environment, CUERUNNER_LICENSE_PUBLIC_KEY: license.publicKeyPem }
 }
 
 /**

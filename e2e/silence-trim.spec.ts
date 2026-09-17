@@ -76,18 +76,18 @@ function writeShow(cues: unknown[], audioSettings: Record<string, unknown> = {})
 
 /**
  * The file and show for one test, a launch, and the show opened from the app's own
- * recents. Licensed unless the test says otherwise: the trim is a Pro feature, so the
- * unlicensed case is a launch of its own rather than a state another test leaves behind.
+ * recents. Licensed unless the test says otherwise: the trim needs no licence, and the
+ * unlicensed launch is the test that keeps that true.
  */
 async function openShow(options: {
   licensed?: boolean
   cues?: unknown[]
   audioSettings?: Record<string, unknown>
 } = {}): Promise<void> {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-trim-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-trim-'))
   media = path.join(root, 'shaped.wav')
   writeShapedWav(media)
-  showPath = path.join(root, 'Trim.wlab')
+  showPath = path.join(root, 'Trim.cuerunner')
   writeShow(
     options.cues ?? [audioCue('a1', '1', 'Reel One', media, { trimSilence: true })],
     options.audioSettings
@@ -202,28 +202,19 @@ test('the show setting seeds the cues added after it, not the show it was set in
   await expect(page.locator('#inspector-trim-silence')).not.toBeChecked()
 })
 
-test('without a license the trim is a row that says why it cannot move', async () => {
+test('the trim applies on a machine with no key', async () => {
   await openShow({ licensed: false })
   await inspect('Reel One')
 
-  // The cue asks for the trim and this machine may not apply it. The row stays where the
-  // feature is, disabled, with the way to unlock it next to it — a control that is gone
-  // would be a feature nobody could find out about.
+  // Nothing about this row asks for a key. A machine with no licence gets the same trim
+  // as any other, because the trim is the cue's own behaviour rather than an entitlement.
+  await expect(page.locator('.license-hint')).toHaveCount(0)
   const trim = page.locator('#inspector-trim-silence')
-  await expect(trim).toBeDisabled()
+  await expect(trim).toBeEnabled()
   await expect(trim).toBeChecked()
-  await expect(page.locator('.license-hint')).toBeVisible()
-  // The readout does not claim a measurement either, and says what it is waiting on:
-  // the pass is licensed too, so nothing has scanned this cue's file.
-  await expect(page.locator('.trim-silence-readout')).toHaveText('measured once this machine is licensed')
 
-  // Nothing was measured and nothing is applied: the panel reads the whole file, which
-  // is what an unlicensed cue played before the flag existed.
+  // The measurement pass runs here too, and the panel shades what the cue plays.
   await expect(page.locator('.waveform-total')).toHaveText('0:11.0')
-  await expect(page.locator('.waveform-region-tag')).toHaveCount(0)
-
-  // And the hint is the door, not a notice: it opens Settings on the tab that takes a key.
-  await page.locator('.license-link').click()
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
-  await expect(page.locator('.settings-tab[data-active="true"]')).toHaveText('License')
+  await expect(page.locator('.trim-silence-readout')).toHaveText(TRIMMED)
+  await expect(page.locator('.waveform-region-tag')).toHaveText('plays 0:02.0–0:08.0')
 })

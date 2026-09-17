@@ -105,11 +105,11 @@ async function start(options: { license?: TestLicense } = {}): Promise<Page> {
 }
 
 test.beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-changes-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-changes-'))
   const media = path.join(root, 'walk-in.wav')
   writeWav(media)
 
-  showPath = path.join(root, 'Press Night.wlab')
+  showPath = path.join(root, 'Press Night.cuerunner')
   writeShow(showPath, [
     audioCue('a1', '1', 'Walk-in Music', media),
     waitCue('w1', '3', 'Bows', 4000)
@@ -117,7 +117,7 @@ test.beforeEach(() => {
 
   // The version this one is compared against: one cue renamed since, one dropped, one
   // added — a change of each kind, so the comparison has all three to report.
-  previewPath = path.join(root, 'Press Night — preview.wlab')
+  previewPath = path.join(root, 'Press Night — preview.cuerunner')
   writeShow(previewPath, [
     audioCue('a1', '1', 'Walk-in', media),
     audioCue('a2', '2', 'Interval', media)
@@ -132,7 +132,7 @@ test.afterEach(async () => {
 
 async function openShow(page: Page): Promise<void> {
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Press Night.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Press Night.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 }
 
@@ -214,7 +214,7 @@ test('the comparison says how this show differs from another file', async () => 
   const dialog = page.getByRole('dialog', { name: 'Changes' })
   await dialog.locator('.changes-choose').click()
 
-  await expect(dialog.locator('.changes-intro')).toContainText('Press Night — preview.wlab')
+  await expect(dialog.locator('.changes-intro')).toContainText('Press Night — preview.cuerunner')
   // The preview had cue 2 and this show does not; this show has a cue 3 and the preview
   // did not; and cue 1 has been renamed since.
   await expect(dialog.locator('[data-group="added"] .changes-line')).toHaveText(['3 Bows'])
@@ -224,17 +224,21 @@ test('the comparison says how this show differs from another file', async () => 
   await expect(dialog.locator('.changes-foot')).toContainText('the same in both files')
 })
 
-test('a machine with no key is told what the history is, rather than shown an empty list', async () => {
+test('a machine with no key still reads the history, and is told what comparing is', async () => {
   const page = await start()
   await openShow(page)
 
-  // The menu marks the press, as it does for the other Pro surfaces.
+  // The history is the show's own record of itself, so the menu does not mark it and
+  // nothing locks it; what needs a key is comparing this file with another.
   await page.locator('.toolbar-brand').click()
-  await expect(page.locator('.file-menu button[data-action="history"] .pro-mark')).toHaveCount(1)
+  await expect(page.locator('.file-menu button[data-action="history"] .pro-mark')).toHaveCount(0)
   await page.locator('.file-menu button[data-action="history"]').click()
 
   const dialog = page.getByRole('dialog', { name: 'Changes' })
-  await expect(dialog.locator('.pro-lock[data-feature="Show history"]')).toBeVisible()
-  await expect(dialog.locator('.changes-entry')).toHaveCount(0)
+  await expect(dialog.locator('.pro-lock')).toHaveCount(0)
+  await expect(dialog.locator('.changes-body')).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Compare', exact: true }).click()
+  await expect(dialog.locator('.pro-lock[data-feature="Comparing shows"]')).toBeVisible()
   await expect(dialog.locator('.changes-choose')).toHaveCount(0)
 })

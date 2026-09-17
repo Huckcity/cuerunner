@@ -51,7 +51,7 @@ describe('ShowSettings', () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    listPorts = window.winslab.midi.listPorts as unknown as Mock
+    listPorts = window.cuerunner.midi.listPorts as unknown as Mock
     listPorts.mockReset().mockResolvedValue([])
   })
 

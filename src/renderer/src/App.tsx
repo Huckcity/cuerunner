@@ -85,10 +85,10 @@ export function App() {
   // The license can change while the window is open — a key entered in Settings, or one
   // that ran out overnight — so the panels follow the main process rather than the read
   // taken at startup. The startup read itself happens before the first frame (main.tsx).
-  useEffect(() => window.winslab.license.onChanged(setLicense), [setLicense])
+  useEffect(() => window.cuerunner.license.onChanged(setLicense), [setLicense])
 
   useEffect(() => {
-    return window.winslab.app.onMenuAction((action) => {
+    return window.cuerunner.app.onMenuAction((action) => {
       // The File menu's actions are the toolbar's (useWorkspace lives there).
       if (action !== 'undo' && action !== 'redo') return
       // The menu accelerator swallows the keystroke, so a focused text field never
@@ -118,11 +118,11 @@ export function App() {
     // well as the subscription. Subscribing first means a failure in between is caught
     // by one of the two; the set keeps it from being logged twice.
     const delivered = new Set<string>()
-    const off = window.winslab.app.onMainError((message) => {
+    const off = window.cuerunner.app.onMainError((message) => {
       delivered.add(message)
       useStore.getState().appendLog([{ level: 'error', message }])
     })
-    void window.winslab.app.drainMainErrors()
+    void window.cuerunner.app.drainMainErrors()
       .then(messages => {
         for (const message of messages) {
           if (delivered.has(message)) continue

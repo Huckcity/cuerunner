@@ -15,7 +15,7 @@ describe('MidiStatusBadge', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    ;(window.winslab.midi.status as unknown as Mock).mockResolvedValue({ available: true, error: null })
+    ;(window.cuerunner.midi.status as unknown as Mock).mockResolvedValue({ available: true, error: null })
   })
 
   afterEach(() => {
@@ -36,7 +36,7 @@ describe('MidiStatusBadge', () => {
   })
 
   it('says MIDI is unavailable, with the reason on the badge', async () => {
-    ;(window.winslab.midi.status as unknown as Mock)
+    ;(window.cuerunner.midi.status as unknown as Mock)
       .mockResolvedValue({ available: false, error: 'the MIDI module is not installed in this build' })
 
     const badge = await render()
@@ -47,7 +47,7 @@ describe('MidiStatusBadge', () => {
   })
 
   it('does not claim MIDI works when the status itself fails', async () => {
-    ;(window.winslab.midi.status as unknown as Mock).mockRejectedValue(new Error('no handler'))
+    ;(window.cuerunner.midi.status as unknown as Mock).mockRejectedValue(new Error('no handler'))
 
     const badge = await render()
 
@@ -55,7 +55,7 @@ describe('MidiStatusBadge', () => {
   })
 
   it('opens Settings on the MIDI tab when clicked', async () => {
-    ;(window.winslab.midi.status as unknown as Mock)
+    ;(window.cuerunner.midi.status as unknown as Mock)
       .mockResolvedValue({ available: false, error: 'no module' })
     useStore.setState({ settingsTab: null })
     const badge = await render()

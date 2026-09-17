@@ -26,6 +26,7 @@ export interface DeskLink {
 export class MidiTcpService implements ShowService {
   readonly id = 'midi-tcp'
   readonly label = 'Desk (MIDI over TCP)'
+  readonly pro = true
 
   constructor(private readonly engine: DeskLink = midiTcp) {}
 

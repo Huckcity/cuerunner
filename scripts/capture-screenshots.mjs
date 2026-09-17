@@ -69,13 +69,13 @@ await new Promise((resolve, reject) => {
 // override that a packaged build ignores. The app is given a private user-data directory
 // for the run, so the operator's own license is never read, written or shown.
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
-const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-shots-'))
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-shots-'))
 fs.writeFileSync(
   path.join(userDataDir, 'license.key'),
   createLicense(
     {
       v: 1,
-      id: 'WSP-SHOT01',
+      id: 'CRN-SHOT01',
       licensee: 'Guide Screenshots',
       issued: new Date().toISOString().slice(0, 10)
     },
@@ -93,7 +93,7 @@ const app = await electron.launch({
   args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
   env: {
     ...process.env,
-    WINSLAB_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    CUERUNNER_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString()
   }
 })
 const page = await app.firstWindow()
@@ -264,7 +264,7 @@ await shot('14-triggers.png', '.inspector')
 // The script panel, with a cue pinned to the line it fires on. The picker is the OS's,
 // so it is answered directly and everything after it — reading the file, rendering the
 // lines, pinning the cue — happens for real.
-const scriptPath = path.join(os.tmpdir(), 'winslab-guide-script.txt')
+const scriptPath = path.join(os.tmpdir(), 'cuerunner-guide-script.txt')
 fs.writeFileSync(scriptPath, [
   'ACT ONE',
   '',

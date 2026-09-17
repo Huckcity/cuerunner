@@ -1,4 +1,4 @@
-// The demo ships as data, so nothing type-checks the shipped .wlab and no compiler
+// The demo ships as data, so nothing type-checks the shipped .cuerunner and no compiler
 // catches a cue that points at a missing parent or an audio file that is not in the
 // folder. Electron is not available here, so the loader is imported with it stubbed.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -61,13 +61,13 @@ function loadDemo(raw: string): Workspace {
 }
 
 function readDemo(): Promise<string> {
-  return readFile(join(demoDir, 'Demo Show.wlab'), 'utf-8')
+  return readFile(join(demoDir, 'Demo Show.cuerunner'), 'utf-8')
 }
 
 let workDir: string
 
 beforeEach(async () => {
-  workDir = await mkdtemp(join(tmpdir(), 'winslab-demo-'))
+  workDir = await mkdtemp(join(tmpdir(), 'cuerunner-demo-'))
 })
 
 afterEach(async () => {

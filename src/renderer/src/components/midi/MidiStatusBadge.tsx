@@ -18,7 +18,7 @@ export default function MidiStatusBadge() {
 
   useEffect(() => {
     let live = true
-    window.winslab.midi.status()
+    window.cuerunner.midi.status()
       .then(status => {
         if (live) setError(status.available ? null : status.error ?? 'MIDI is unavailable')
       })

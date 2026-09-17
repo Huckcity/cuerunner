@@ -35,7 +35,7 @@ export function mintLicense(
   const { privateKeyPem, publicKeyPem } = options.issuer ?? newIssuer()
   const payload = {
     v: 1,
-    id: `WSP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    id: `CRN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
     licensee: options.licensee ?? 'End to End Test',
     issued: '2026-01-01',
     ...(options.expires === undefined ? {} : { expires: options.expires })
@@ -60,9 +60,9 @@ function newIssuer(): { privateKeyPem: string; publicKeyPem: string } {
 function launchEnv(trustPublicKey?: string): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !key.startsWith('WINSLAB_LICENSE_')) env[key] = value
+    if (value !== undefined && !key.startsWith('CUERUNNER_LICENSE_')) env[key] = value
   }
-  if (trustPublicKey !== undefined) env['WINSLAB_LICENSE_PUBLIC_KEY'] = trustPublicKey
+  if (trustPublicKey !== undefined) env['CUERUNNER_LICENSE_PUBLIC_KEY'] = trustPublicKey
   return env
 }
 
@@ -130,10 +130,10 @@ export async function launchApp(
       // the run. The policy it advises on is a real item and not a test-harness one; this
       // keeps the suite's log about the suite.
       ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-      ...(options.audio?.binPath !== undefined ? { WINSLAB_AUDIO_BIN: options.audio.binPath } : {}),
+      ...(options.audio?.binPath !== undefined ? { CUERUNNER_AUDIO_BIN: options.audio.binPath } : {}),
       // Explicit, not detected: a test run plays no user hardware, and a spec that wants
       // the real device says so.
-      WINSLAB_AUDIO_BACKEND: options.audio?.backend ?? 'silent',
+      CUERUNNER_AUDIO_BACKEND: options.audio?.backend ?? 'silent',
       ...options.env
     }
   })
@@ -205,10 +205,10 @@ export async function addCueFromMoreMenu(page: Page, label: string): Promise<voi
 // in its own recent list is written where it reads it from, rather than a file dialog
 // being driven. The list is read when the menu opens, so the write may happen at any
 // point before the click.
-export async function openFromRecent(page: Page, userDataDir: string, wlab: string): Promise<void> {
-  writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([wlab]))
+export async function openFromRecent(page: Page, userDataDir: string, cuerunner: string): Promise<void> {
+  writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([cuerunner]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: path.basename(wlab) }).click()
+  await page.locator('.file-menu-recent', { hasText: path.basename(cuerunner) }).click()
 }
 
 export interface RequestHit {
@@ -267,7 +267,7 @@ export async function startServer(options: { cors?: boolean } = {}): Promise<Tes
 }
 
 // ── The engine's own output, for the panic tests ──────────────────────────────
-// Launched with WINSLAB_TEST_AUDIO_CAPTURE=<path>, the engine tees its real mixer
+// Launched with CUERUNNER_TEST_AUDIO_CAPTURE=<path>, the engine tees its real mixer
 // output to a 32-bit float WAV (data size left as 0xFFFFFFFF while it runs, so the PCM
 // can be read past the header without waiting for a graceful close). A test can then
 // ask the only question that matters for a panic: is the tail of that file silent, or

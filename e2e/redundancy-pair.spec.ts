@@ -56,11 +56,11 @@ let backup: Page
 let liveDir: string
 
 test.beforeAll(async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-two-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-two-'))
   const overture = path.join(root, 'overture.wav')
   writeWav(overture, TRACK_SECONDS)
 
-  const showPath = path.join(root, 'Two Machine.wlab')
+  const showPath = path.join(root, 'Two Machine.cuerunner')
   fs.writeFileSync(showPath, JSON.stringify({
     version: 1,
     id: SHOW_ID,
@@ -78,8 +78,8 @@ test.beforeAll(async () => {
 
   const livePort = await freePort()
   const backupPort = await freePort()
-  liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-two-live-'))
-  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-two-backup-'))
+  liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-two-live-'))
+  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-two-backup-'))
   fs.writeFileSync(path.join(liveDir, 'redundancy.json'), JSON.stringify({
     enabled: true, name: 'desk-live', id: 'id-live', role: 'live', port: livePort,
     peerHost: '127.0.0.1', peerPort: backupPort, token: TOKEN, timeoutMs: 1500, takeover: 'manual'
@@ -140,8 +140,8 @@ test('two apps pair, and the backup picks the show up when the live one dies', a
 
   const progress = await backup.evaluate(async () => {
     const bridge = (window as unknown as {
-      winslab: { audio: { progress: (id: string) => Promise<{ elapsedMs: number } | null> } }
-    }).winslab
+      cuerunner: { audio: { progress: (id: string) => Promise<{ elapsedMs: number } | null> } }
+    }).cuerunner
     return bridge.audio.progress('a1')
   })
   expect(Math.round(progress?.elapsedMs ?? 0)).toBeGreaterThan(3000)

@@ -29,13 +29,13 @@ function run(argv: string[], publicKeys?: string[]): { lines: string[]; error: E
 }
 
 function tempDir(): string {
-  return mkdtempSync(join(tmpdir(), 'winslab-keygen-'))
+  return mkdtempSync(join(tmpdir(), 'cuerunner-keygen-'))
 }
 
 describe('issueKey', () => {
   it('mints a key the app reads back, carrying what was asked for', () => {
     const text = issueKey(
-      { licensee: 'Huckcity Ltd', id: 'WSP-4K7Q2', expires: '2027-09-12', issued: ISSUED },
+      { licensee: 'Huckcity Ltd', id: 'CRN-4K7Q2', expires: '2027-09-12', issued: ISSUED },
       PRIVATE_PEM
     )
 
@@ -43,7 +43,7 @@ describe('issueKey', () => {
       ok: true,
       payload: {
         v: 1,
-        id: 'WSP-4K7Q2',
+        id: 'CRN-4K7Q2',
         licensee: 'Huckcity Ltd',
         issued: ISSUED,
         expires: '2027-09-12'
@@ -55,7 +55,7 @@ describe('issueKey', () => {
     const verified = verifyLicense(issueKey({ licensee: 'Theatre X', issued: ISSUED }, PRIVATE_PEM), [PUBLIC_PEM])
     expect(verified.ok).toBe(true)
     expect(verified.ok && verified.payload.expires).toBeUndefined()
-    expect(verified.ok && verified.payload.id).toMatch(/^WSP-[A-Z2-7]{6}$/)
+    expect(verified.ok && verified.payload.id).toMatch(/^CRN-[A-Z2-7]{6}$/)
   })
 
   it('refuses to mint without a name', () => {
@@ -148,7 +148,7 @@ describe('issue from the command line', () => {
     // the key this build trusts, it is not a key this build will take.
     const { error } = run(['verify', issueKey({ licensee: 'Theatre X', issued: ISSUED }, PRIVATE_PEM)])
 
-    expect(error?.message).toContain('not issued by WinsLab')
+    expect(error?.message).toContain('not issued by Cuerunner')
   })
 
   it('says what a real key is, and when it runs out', () => {
@@ -177,9 +177,9 @@ describe('issue from the command line', () => {
 
 describe('parseArgs', () => {
   it('reads flags whether they are spaced or joined, and takes switches as switches', () => {
-    expect(parseArgs(['issue', '--name', 'Theatre X', '--id=WSP-1', '--force'])).toEqual({
+    expect(parseArgs(['issue', '--name', 'Theatre X', '--id=CRN-1', '--force'])).toEqual({
       command: 'issue',
-      flags: { name: 'Theatre X', id: 'WSP-1', force: 'true' },
+      flags: { name: 'Theatre X', id: 'CRN-1', force: 'true' },
       rest: []
     })
   })

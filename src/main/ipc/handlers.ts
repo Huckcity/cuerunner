@@ -75,7 +75,10 @@ const machineRedundancy = createMachineRedundancy({
   filePath: path.join(app.getPath('userData'), 'redundancy.json')
 })
 
-const show = createShowRuntime(defaultServices({ redundancy: () => machineRedundancy.current() }))
+const show = createShowRuntime(
+  defaultServices({ redundancy: () => machineRedundancy.current() }),
+  () => isPro(license.status())
+)
 
 // Network cues are HTTP clients, not page fetches: a console on the LAN has no reason to
 // send CORS headers, and the request has to survive the window being busy or reloaded.
@@ -89,7 +92,7 @@ const network = new NetworkClient({ fetch: (url, init) => net.fetch(url, init) }
  * this branch, so nothing here can make a real installation look broken.
  */
 function midiModuleLoader(): MidiModuleLoader | undefined {
-  if (!app.isPackaged && process.env['WINSLAB_TEST_MIDI_MISSING'] === '1') {
+  if (!app.isPackaged && process.env['CUERUNNER_TEST_MIDI_MISSING'] === '1') {
     return () => {
       throw new Error("Cannot find module 'midi'")
     }
@@ -114,7 +117,7 @@ let lastShowSettings: ShowSettings = defaultShowSettings()
 // does not use.
 let settingsReceived = false
 
-const PRO_REQUIRED = 'WinsLab Pro is required for the show services'
+const PRO_REQUIRED = 'Cuerunner Pro is required for the show services'
 
 // One batch, every window that is still alive. A window that is mid-reload has no
 // listener yet; it catches up from the snapshot it asks for on startup. A window whose
@@ -161,8 +164,10 @@ show.subscribe(events => {
 
 /**
  * A license that changes takes the show services with it: entering a key starts what
- * the window had configured, and removing one stops every socket and poller. The
- * window is told as well, so the panels it draws follow the same fact.
+ * the window had configured, and a key that lapses stops the Pro half while the free
+ * listeners keep running. One configure does both, because the host answers the
+ * licence question for every service rather than the app answering it for all of them.
+ * The window is told as well, so the panels it draws follow the same fact.
  *
  * A key entered before the window has sent its settings starts nothing: the window
  * re-sends them the moment it sees the license, and starting the defaults first would
@@ -170,10 +175,6 @@ show.subscribe(events => {
  */
 license.subscribe((status: LicenseStatus) => {
   for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, 'license:changed', status)
-  if (!isPro(status)) {
-    void show.suspend()
-    return
-  }
   if (settingsReceived) void show.configure(lastShowSettings)
 })
 
@@ -193,9 +194,10 @@ export function registerIpcHandlers(): void {
   // The services come up with the defaults, before the window has finished loading:
   // a console that is already sending when the operator launches the app should not
   // have its first cues fall on the floor. The renderer re-sends its own settings —
-  // which may come from the workspace — as soon as it has them. Nothing starts without
-  // a license: the show services are the Pro half of the app.
-  if (isPro(license.status())) void show.configure(defaultShowSettings())
+  // which may come from the workspace — as soon as it has them. The free services start
+  // on any machine; the Pro ones answer to the licence, and the host says so in their
+  // status rather than leaving a port bound to nothing.
+  void show.configure(defaultShowSettings())
 
   // Audio
   /**
@@ -348,20 +350,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('show:configure', async (_, settings: ShowSettings) => {
     lastShowSettings = settings
     settingsReceived = true
-    if (!isPro(license.status())) {
-      await show.suspend()
-      return
-    }
+    // No licence check here any more: the host decides per service, because OSC and
+    // MIDI input are the free half and the desk link, the radios, the network and the
+    // pair are not. A blanket refusal here would also have stopped the free listeners.
     await show.configure(settings)
   })
 
   ipcMain.handle('show:command', async (_, cmd: { service: string; action: string; payload?: unknown }) => {
-    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     return show.command(cmd.service, cmd.action, cmd.payload)
   })
 
   ipcMain.handle('show:restart', async (_, service: string) => {
-    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     return show.restart(service)
   })
 
@@ -415,7 +414,7 @@ export function registerIpcHandlers(): void {
   // their includes through `script:readFile` above, which stays free.
   ipcMain.handle('script:readDocument', async (_, filePath: string, workspacePath: string | null) => {
     if (!isPro(license.status())) {
-      return { ok: false, error: 'The script panel is part of WinsLab Pro.' }
+      return { ok: false, error: 'The script panel is part of Cuerunner Pro.' }
     }
     return loadScriptDocument(filePath, workspacePath)
   })

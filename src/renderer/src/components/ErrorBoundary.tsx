@@ -29,14 +29,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="crash-screen" role="alert">
-        <h1 className="crash-screen-title">WinsLab hit an error it could not recover from</h1>
+        <h1 className="crash-screen-title">Cuerunner hit an error it could not recover from</h1>
         <p className="crash-screen-body">
           The workspace file on disk is untouched. Work the autosave caught is offered back once
           the window reloads; anything since the last autosave is gone.
         </p>
         <pre className="crash-screen-message">{error.message}</pre>
         <button className="crash-screen-reload" onClick={() => window.location.reload()}>
-          Reload WinsLab
+          Reload Cuerunner
         </button>
       </div>
     )

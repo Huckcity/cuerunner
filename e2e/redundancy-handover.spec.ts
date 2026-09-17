@@ -52,8 +52,8 @@ async function freePort(): Promise<number> {
 async function position(page: Page): Promise<number | null> {
   const reading = await page.evaluate(async () => {
     const bridge = (window as unknown as {
-      winslab: { audio: { progress: (id: string) => Promise<{ elapsedMs: number } | null> } }
-    }).winslab
+      cuerunner: { audio: { progress: (id: string) => Promise<{ elapsedMs: number } | null> } }
+    }).cuerunner
     return bridge.audio.progress('a1')
   })
   return reading === null ? null : Math.round(reading.elapsedMs)
@@ -65,11 +65,11 @@ let backupApp: ElectronApplication
 let backup: Page
 
 test.beforeAll(async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-handover-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-handover-'))
   const overture = path.join(root, 'overture.wav')
   writeWav(overture, TRACK_SECONDS)
 
-  const showPath = path.join(root, 'Handover.wlab')
+  const showPath = path.join(root, 'Handover.cuerunner')
   fs.writeFileSync(showPath, JSON.stringify({
     version: 1,
     id: SHOW_ID,
@@ -87,8 +87,8 @@ test.beforeAll(async () => {
 
   const livePort = await freePort()
   const backupPort = await freePort()
-  const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-handover-live-'))
-  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-handover-backup-'))
+  const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-handover-live-'))
+  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-handover-backup-'))
   fs.writeFileSync(path.join(liveDir, 'redundancy.json'), JSON.stringify({
     enabled: true, name: 'desk-live', id: 'id-live', role: 'live', port: livePort,
     peerHost: '127.0.0.1', peerPort: backupPort, token: TOKEN, timeoutMs: 1500, takeover: 'manual'

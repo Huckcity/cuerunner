@@ -151,11 +151,13 @@ describe('LogPanel', () => {
     ])
   })
 
-  it('offers the filter only where the show can send anything in', () => {
+  it('offers the filter with or without a licence, and filters either half', () => {
     render()
-    expect(container.querySelector('.log-filters')).toBeNull()
+    // The log holds two kinds of row — what the cues did, and what the show sent in —
+    // and the filter is how either is read. It is not a Pro surface.
+    expect(container.querySelector('.log-filters')).not.toBeNull()
 
-    act(() => { useStore.setState({ license: { state: 'active', license: TEST_LICENSE }, showEvents: EVENTS }) })
+    act(() => { useStore.setState({ showEvents: EVENTS }) })
     const cuesOnly = container.querySelector<HTMLButtonElement>('.log-filter[data-filter="cues"]')!
     act(() => cuesOnly.click())
     expect(cuesOnly.getAttribute('aria-pressed')).toBe('true')

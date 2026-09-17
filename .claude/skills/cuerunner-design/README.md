@@ -1,14 +1,14 @@
-# Winslab Design System
+# Cuerunner Design System
 
 ## About
 
-**Winslab** is a cross-platform QLab alternative for Windows — a professional show-control desktop application built with Electron + React + TypeScript. It is the primary product by Huckcity.
+**Cuerunner** is a cross-platform QLab alternative for Windows — a professional show-control desktop application built with Electron + React + TypeScript. It is the primary product by Huckcity.
 
-QLab is the industry-standard macOS show-control tool used in live theatre, concerts, and events to trigger audio, MIDI, OSC, video, and lighting cues. Winslab brings this capability to Windows.
+QLab is the industry-standard macOS show-control tool used in live theatre, concerts, and events to trigger audio, MIDI, OSC, video, and lighting cues. Cuerunner brings this capability to Windows.
 
 ### Source
 
-- **Codebase:** GitHub — `Huckcity/winslab` (private, `main` branch)
+- **Codebase:** GitHub — `Huckcity/cuerunner` (private, `main` branch)
 - **Figma:** None provided
 - **Design system:** Derived entirely from the codebase CSS and component files
 
@@ -21,7 +21,7 @@ QLab is the industry-standard macOS show-control tool used in live theatre, conc
 | **Desktop App** | Electron + React renderer — the only current surface. A single-window, full-screen dark UI. |
 
 The app is a single-window layout with four main zones:
-1. **Toolbar** — file menu (WinsLab ▾), workspace name, + Add Cue buttons
+1. **Toolbar** — file menu (Cuerunner ▾), workspace name, + Add Cue buttons
 2. **Cue List** — virtualized table of cues, drag-to-reorder, file-drop support
 3. **Inspector** — right panel, tabbed settings for the selected cue
 4. **Waveform Panel** — canvas-rendered audio waveform below the cue list
@@ -64,7 +64,7 @@ The app is a single-window layout with four main zones:
 
 ### Color
 
-The Winslab palette is a **deep dark theme** with a single amber accent and a blue interactive accent. Backgrounds are near-black neutrals with a slight blue-ink bias — one panel steps off another without a border doing the work — and only interactive elements and status indicators use colour.
+The Cuerunner palette is a **deep dark theme** with a single amber accent and a blue interactive accent. Backgrounds are near-black neutrals with a slight blue-ink bias — one panel steps off another without a border doing the work — and only interactive elements and status indicators use colour.
 
 **There are four text tones and every one of them is readable.** Each clears 4.5:1 against
 every surface it can sit on; `scripts/theme.test.ts` reads `App.css` and fails the build if
@@ -88,7 +88,7 @@ disabled controls, which WCAG exempts. Do not introduce a sixth grey.
 | **fg-muted** | `#a3adb8` | Labels, numbers |
 | **fg-dim** | `#8e98a4` | Hints, column headers |
 | **fg-ghost** | `#8e98a4` | Empty states, placeholders |
-| **accent-amber** | `#f0b429` | Brand color — WinsLab wordmark, dirty-dot, start-time marker, waveform start marker |
+| **accent-amber** | `#f0b429` | Brand color — Cuerunner wordmark, dirty-dot, start-time marker, waveform start marker |
 | **accent-blue** | `#5aa9ff` | Interactive — selected tab underline, focused input border, drop indicator, audio playhead, progress fill |
 | **accent-blue-dim** | `#2e4f73` | Waveform fill (unplayed) |
 | **state-green** | `#1c7a3c` | GO button background |
@@ -118,7 +118,7 @@ These show as a 6×20px colored bar on the left of each cue row.
 
 The app **bundles IBM Plex** (latin subsets, via `@fontsource`, imported in
 `src/renderer/src/main.tsx`). A show machine has no network to fetch a webfont from, and
-the system UI font is a different face on every platform WinsLab ships to — which is how
+the system UI font is a different face on every platform Cuerunner ships to — which is how
 the same panel came out one size on Windows and another on macOS.
 
 ```
@@ -216,7 +216,7 @@ up.
 ## ICONOGRAPHY
 
 ### Approach
-Winslab uses **no icon library and no icon font**: the cue type icons are drawn by the app
+Cuerunner uses **no icon library and no icon font**: the cue type icons are drawn by the app
 itself, in `src/renderer/src/utils/cueIcons.tsx`. One 16×16 box, 1.5 stroke,
 `currentColor`, `fill: none`, rendered through `<CueIcon type="…" />` which stamps
 `data-type` on the SVG for stylesheets and tests to key off.

@@ -15,7 +15,7 @@ vi.mock('electron', async () => {
   const { join } = await import('path')
   // One directory for the whole file: getPath must be stable, or a write and the read
   // after it would look at different places.
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: {},
@@ -45,7 +45,7 @@ function workspaceWith(cues: Workspace['cues']): Workspace {
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-save-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-save-'))
 })
 
 afterEach(() => {
@@ -56,7 +56,7 @@ afterEach(() => {
 
 describe('writeFileAtomically', () => {
   it('keeps the previous version as .bak and leaves no temporary file behind', async () => {
-    const file = join(dir, 'show.wlab')
+    const file = join(dir, 'show.cuerunner')
 
     await writeFileAtomically(file, '{"first":true}')
     expect(readFileSync(file, 'utf-8')).toBe('{"first":true}')
@@ -66,11 +66,11 @@ describe('writeFileAtomically', () => {
     await writeFileAtomically(file, '{"second":true}')
     expect(readFileSync(file, 'utf-8')).toBe('{"second":true}')
     expect(readFileSync(`${file}.bak`, 'utf-8')).toBe('{"first":true}')
-    expect(readdirSync(dir)).toEqual(['show.wlab', 'show.wlab.bak'])
+    expect(readdirSync(dir)).toEqual(['show.cuerunner', 'show.cuerunner.bak'])
   })
 
   it('refuses to lose the file when the write cannot be completed', async () => {
-    const file = join(dir, 'show.wlab')
+    const file = join(dir, 'show.cuerunner')
     await writeFileAtomically(file, '{"good":true}')
 
     chmodSync(dir, 0o500)   // read + execute: no new files, no renames
@@ -79,13 +79,13 @@ describe('writeFileAtomically', () => {
 
     chmodSync(dir, 0o700)
     expect(readFileSync(file, 'utf-8')).toBe('{"good":true}')
-    expect(readdirSync(dir)).toEqual(['show.wlab'])
+    expect(readdirSync(dir)).toEqual(['show.cuerunner'])
   })
 })
 
 describe('saveWorkspace', () => {
   it('writes the workspace through the same atomic path', async () => {
-    const file = join(dir, 'show.wlab')
+    const file = join(dir, 'show.cuerunner')
     const win = {} as never
 
     expect(await saveWorkspace(win, workspaceWith([]), file)).toMatchObject({ path: file })
@@ -100,11 +100,11 @@ describe('recovery snapshots', () => {
   it('round-trips a snapshot and clears it again', async () => {
     expect(await readRecovery()).toBeNull()
 
-    await writeRecovery(workspaceWith([]), '/shows/My Show.wlab', 'cue-7')
+    await writeRecovery(workspaceWith([]), '/shows/My Show.cuerunner', 'cue-7')
     const snapshot = await readRecovery()
 
     expect(snapshot?.workspace.name).toBe('Show')
-    expect(snapshot?.sourcePath).toBe('/shows/My Show.wlab')
+    expect(snapshot?.sourcePath).toBe('/shows/My Show.cuerunner')
     expect(snapshot?.savedAt).toBeGreaterThan(0)
     // The cue GO would have fired next travels with the work.
     expect(snapshot?.selectedCueId).toBe('cue-7')
@@ -116,7 +116,7 @@ describe('recovery snapshots', () => {
   it('reads a snapshot written before the place was recorded', async () => {
     mkdirSync(userData, { recursive: true })
     writeFileSync(
-      join(userData, 'recovery.wlab'),
+      join(userData, 'recovery.cuerunner'),
       JSON.stringify({ workspace: workspaceWith([]), savedAt: 1, sourcePath: null }),
       'utf-8'
     )
@@ -129,7 +129,7 @@ describe('recovery snapshots', () => {
 
   it('reads nothing from a snapshot that was half-written when the process died', async () => {
     mkdirSync(userData, { recursive: true })
-    writeFileSync(join(userData, 'recovery.wlab'), '{"workspace":{"cues":[', 'utf-8')
+    writeFileSync(join(userData, 'recovery.cuerunner'), '{"workspace":{"cues":[', 'utf-8')
 
     expect(await readRecovery()).toBeNull()
   })

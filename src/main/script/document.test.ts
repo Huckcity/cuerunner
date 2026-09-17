@@ -12,7 +12,7 @@ import {
   looksBinary
 } from './document'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-document-'))
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-document-'))
 
 function write(name: string, contents: string | Buffer): string {
   const file = path.join(dir, name)
@@ -101,7 +101,7 @@ describe('loadScriptDocument', () => {
 
   it('resolves a relative path against the workspace, the way an include does', async () => {
     write('beside-workspace.txt', 'ACT TWO\n')
-    const workspace = path.join(dir, 'Show.wlab')
+    const workspace = path.join(dir, 'Show.cuerunner')
 
     expect(await loadScriptDocument('beside-workspace.txt', workspace)).toEqual({
       ok: true,

@@ -14,7 +14,7 @@ import type { RedundancySettings } from '../../shared/redundancy'
 import type { AudioEngineBridge } from '../../shared/audio'
 import type { MenuAction } from '../../shared/fileMenu'
 
-interface WinslabBridge {
+interface CuerunnerBridge {
   /** `process.platform` of the machine the app is running on. */
   platform: string
   getPathForFile: (file: File) => string
@@ -148,6 +148,6 @@ interface WinslabBridge {
 
 declare global {
   interface Window {
-    winslab: WinslabBridge
+    cuerunner: CuerunnerBridge
   }
 }

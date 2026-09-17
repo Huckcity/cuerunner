@@ -1,8 +1,8 @@
 /**
- * Winslab Design System
+ * Cuerunner Design System
  * Colors & Typography CSS Custom Properties
  *
- * Source: Huckcity/winslab — src/renderer/src/App.css, which is the app's own token
+ * Source: Huckcity/cuerunner — src/renderer/src/App.css, which is the app's own token
  * block. This file is a copy of it for prototyping outside the app; when the two differ,
  * App.css is right, and scripts/theme.test.ts is what holds it to the contrast rule.
  *

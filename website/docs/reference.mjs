@@ -7,7 +7,7 @@ export const REFERENCE = [
   {
     path: 'reference/index.html',
     title: 'Reference',
-    blurb: 'Every cue type and field, every setting, the keyboard table, the OSC and MIDI messages WinsLab answers to, the script helpers and the file formats.',
+    blurb: 'Every cue type and field, every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers to, the script helpers and the file formats.',
     body: `
     <section class="panel reveal">
       <h1>Reference</h1>
@@ -33,7 +33,7 @@ export const REFERENCE = [
         </a>
         <a class="card doc-card" href="./control.html">
           <h3>OSC &amp; MIDI control</h3>
-          <p>What WinsLab listens for, what a trigger matches, and what a cue sends.</p>
+          <p>What Cuerunner listens for, what a trigger matches, and what a cue sends.</p>
         </a>
         <a class="card doc-card" href="./script-api.html">
           <h3>Script cue API</h3>
@@ -41,7 +41,7 @@ export const REFERENCE = [
         </a>
         <a class="card doc-card" href="./formats.html">
           <h3>File formats</h3>
-          <p>The <code>.wlab</code> workspace, media paths, and the wireless telemetry document.</p>
+          <p>The <code>.cuerunner</code> workspace, media paths, and the wireless telemetry document.</p>
         </a>
         <a class="card doc-card" href="./troubleshooting.html">
           <h3>Troubleshooting</h3>
@@ -56,7 +56,7 @@ export const REFERENCE = [
     path: 'reference/cue-types.html',
     section: 'Reference',
     title: 'Cue types',
-    blurb: 'Every WinsLab cue type and every field it carries, with defaults.',
+    blurb: 'Every Cuerunner cue type and every field it carries, with defaults.',
     body: `
     <section class="panel reveal">
       <h1>Cue types</h1>
@@ -80,7 +80,7 @@ export const REFERENCE = [
             <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
             <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
             <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
-            <tr><td>Triggers<span class="pro">Pro</span></td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -194,14 +194,14 @@ export const REFERENCE = [
     path: 'reference/settings.html',
     section: 'Reference',
     title: 'Settings',
-    blurb: 'Every setting in WinsLab, what it does, and whether it is saved with the show or with the computer.',
+    blurb: 'Every setting in Cuerunner, what it does, and whether it is saved with the show or with the computer.',
     body: `
     <section class="panel reveal">
       <h1>Settings</h1>
       <p class="doc-lede">
-        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or WinsLab ▾ → Settings. The sidebar
+        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or Cuerunner ▾ → Settings. The sidebar
         splits them by where they are kept: <strong>this show</strong> travels in the
-        <code>.wlab</code> file, <strong>this computer</strong> stays on the machine.
+        <code>.cuerunner</code> file, <strong>this computer</strong> stays on the machine.
       </p>
     </section>
 
@@ -229,7 +229,7 @@ export const REFERENCE = [
             <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
             <tr><td>Channels</td><td>device default</td><td>How many outputs the device offers the routing matrix.</td></tr>
             <tr><td>Exclusive</td><td>off</td><td>Keeps other apps off the device, for every channel it has and steadier timing. A driver that refuses says why.</td></tr>
-            <tr><td>Trim silence<span class="pro">Pro</span></td><td>off</td><td>A default for new audio cues, not a switch over the show. Cues already in the list keep the trim they were made with.</td></tr>
+            <tr><td>Trim silence</td><td>off</td><td>A default for new audio cues, not a switch over the show. Cues already in the list keep the trim they were made with.</td></tr>
           </tbody>
         </table>
       </div>
@@ -247,23 +247,23 @@ export const REFERENCE = [
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>Send on</td><td>none</td><td>The port MIDI cues use unless they name their own.</td></tr>
-            <tr><td>Listen to MIDI<span class="pro">Pro</span></td><td>off</td><td>Opens the input ports you tick — all of them if you tick none — so cues can fire from notes and controllers.</td></tr>
+            <tr><td>Listen to MIDI</td><td>off</td><td>Opens the input ports you tick — all of them if you tick none — so cues can fire from notes and controllers.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="panel reveal delay-2" id="network">
-      <h2>Network<span class="pro">Pro</span></h2>
+      <h2>Network</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
-            <tr><td>Find devices</td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
+            <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
-            <tr><td>Tablet view</td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
+            <tr><td>Tablet view<span class="pro">Pro</span></td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
           </tbody>
         </table>
       </div>
@@ -306,7 +306,7 @@ export const REFERENCE = [
     <section class="panel reveal delay-3" id="show">
       <h2>Show Settings</h2>
       <p>
-        WinsLab ▾ → Show Settings. These are the show's own, and travel in the file.
+        Cuerunner ▾ → Show Settings. These are the show's own, and travel in the file.
       </p>
       <div class="table-wrap">
         <table>
@@ -326,7 +326,7 @@ export const REFERENCE = [
     path: 'reference/keyboard.html',
     section: 'Reference',
     title: 'Keyboard',
-    blurb: 'Every WinsLab keyboard shortcut and where it works.',
+    blurb: 'Every Cuerunner keyboard shortcut and where it works.',
     body: `
     <section class="panel reveal">
       <h1>Keyboard</h1>
@@ -397,10 +397,10 @@ export const REFERENCE = [
     path: 'reference/control.html',
     section: 'Reference',
     title: 'OSC & MIDI control',
-    blurb: 'What WinsLab listens for, what a cue trigger matches, and what WinsLab sends to a desk.',
+    blurb: 'What Cuerunner listens for, what a cue trigger matches, and what Cuerunner sends to a desk.',
     body: `
     <section class="panel reveal">
-      <h1>OSC &amp; MIDI control<span class="pro">Pro</span></h1>
+      <h1>OSC &amp; MIDI control</h1>
       <p class="doc-lede">
         For setting it up, see <a href="../guides/console.html">firing cues from a
         console</a>. This is the message-level detail.
@@ -408,7 +408,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-1" id="listening">
-      <h2>What WinsLab listens on</h2>
+      <h2>What Cuerunner listens on</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Input</th><th>Default</th><th>Notes</th></tr></thead>
@@ -427,7 +427,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Message</th><th>Effect</th></tr></thead>
           <tbody>
-            <tr><td><code>/winslab/panic</code> (any arguments)</td><td>Panic: everything stops with a 200 ms fade.</td></tr>
+            <tr><td><code>/cuerunner/panic</code> (any arguments)</td><td>Panic: everything stops with a 200 ms fade.</td></tr>
             <tr><td>MIDI All Sound Off — controller 120, value 0, any channel, any listened port</td><td>The same.</td></tr>
           </tbody>
         </table>
@@ -435,7 +435,7 @@ export const REFERENCE = [
       <p>
         Both are acted on where the engine is rather than in the window, so the fade starts
         whether or not the interface is answering. The run log records the sender:
-        <code>[main] panic (osc): /winslab/panic from 192.168.1.24:8000</code>.
+        <code>[main] panic (osc): /cuerunner/panic from 192.168.1.24:8000</code>.
       </p>
     </section>
 
@@ -461,7 +461,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="sending">
-      <h2>What WinsLab sends</h2>
+      <h2>What Cuerunner sends</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Cue</th><th>What goes out</th></tr></thead>
@@ -485,7 +485,7 @@ export const REFERENCE = [
     path: 'reference/script-api.html',
     section: 'Reference',
     title: 'Script cue API',
-    blurb: 'What a WinsLab script cue can call: shell, include, timeouts, logging and the limits.',
+    blurb: 'What a Cuerunner script cue can call: shell, include, timeouts, logging and the limits.',
     body: `
     <section class="panel reveal">
       <h1>Script cue API</h1>
@@ -513,7 +513,7 @@ export const REFERENCE = [
         A workspace file is executable code and network-triggerable: a script cue runs a
         system command as you when it fires, and a network trigger (OSC, MIDI or show
         control) lets one packet on the show network fire any cue, scripts included. Only
-        open <code>.wlab</code> files you trust, and only on a network you trust — the
+        open <code>.cuerunner</code> files you trust, and only on a network you trust — the
         composition is the risk, not either half alone. OSC input listens on all interfaces
         by default.
       </p>
@@ -565,7 +565,7 @@ await rig.blackout()</code></div>
     path: 'reference/formats.html',
     section: 'Reference',
     title: 'File formats',
-    blurb: 'The .wlab workspace file, the .wlabx bundle, how media is referenced, and the wireless telemetry document WinsLab reads.',
+    blurb: 'The .cuerunner workspace file, the .cuerunnerx bundle, how media is referenced, and the wireless telemetry document Cuerunner reads.',
     body: `
     <section class="panel reveal">
       <h1>File formats</h1>
@@ -574,14 +574,14 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="workspace">
       <h2>The workspace file</h2>
       <p>
-        A show is one <code>.wlab</code> file: JSON, holding the cues in order, the show's
+        A show is one <code>.cuerunner</code> file: JSON, holding the cues in order, the show's
         setup — the desk, the cast, the scenes, the mic plot, the triggers — and the
         window's own state such as which cue was selected.
       </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping
-        the paths valid: the simplest arrangement is a folder with the <code>.wlab</code>
+        the paths valid: the simplest arrangement is a folder with the <code>.cuerunner</code>
         file and the audio beside it, copied whole.
       </p>
       <p>
@@ -600,14 +600,14 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="bundle">
       <h2>The bundle file<span class="pro">Pro</span></h2>
       <p>
-        A <code>.wlabx</code> is the show <em>and</em> its audio as one file: a zip holding
-        <code>show.wlab</code> and a <code>media/</code> folder, with the showfile pointing
+        A <code>.cuerunnerx</code> is the show <em>and</em> its audio as one file: a zip holding
+        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
         inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file.
       </p>
       <p>
         It carries up to about 4 GB of media — the zip format's own limit without its
-        64-bit extension, which WinsLab does not write. A larger show is refused rather
+        64-bit extension, which Cuerunner does not write. A larger show is refused rather
         than written as an archive that misreports its own contents.
       </p>
       <p>
@@ -620,7 +620,7 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="telemetry">
       <h2>Wireless telemetry</h2>
       <p>
-        WinsLab does not speak any receiver's own protocol. A source — an HTTP address or a
+        Cuerunner does not speak any receiver's own protocol. A source — an HTTP address or a
         file on disk — returns this document:
       </p>
       <div class="code"><code>{
@@ -658,7 +658,7 @@ await rig.blackout()</code></div>
     path: 'reference/troubleshooting.html',
     section: 'Reference',
     title: 'Troubleshooting',
-    blurb: 'Symptoms, causes and fixes for WinsLab, and the known limitations.',
+    blurb: 'Symptoms, causes and fixes for Cuerunner, and the known limitations.',
     body: `
     <section class="panel reveal">
       <h1>Troubleshooting</h1>
@@ -746,7 +746,7 @@ await rig.blackout()</code></div>
         <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
         <li>The tablet view is read-only by design.</li>
-        <li>WinsLab is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>
+        <li>Cuerunner is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>
         <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>
       </ul>
     </section>

@@ -71,12 +71,12 @@ async function start(options: { license?: TestLicense } = {}): Promise<Page> {
 }
 
 test.beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-bundle-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-bundle-'))
   fs.mkdirSync(path.join(root, 'music'))
   writeWav(path.join(root, 'music', 'walk-in.wav'), 11)
   writeWav(path.join(root, 'music', 'bows.wav'), 22)
 
-  showPath = path.join(root, 'Press Night.wlab')
+  showPath = path.join(root, 'Press Night.cuerunner')
   fs.writeFileSync(
     showPath,
     `${JSON.stringify(
@@ -97,7 +97,7 @@ test.beforeEach(() => {
     )}\n`
   )
 
-  bundled = path.join(root, 'Press Night.wlabx')
+  bundled = path.join(root, 'Press Night.cuerunnerx')
   unpacked = path.join(root, 'handover')
 })
 
@@ -109,14 +109,14 @@ test.afterEach(async () => {
 
 async function openShow(page: Page): Promise<void> {
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Press Night.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Press Night.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
 }
 
 /** An archive as content rather than as bytes: its entries, and the show it carries. */
 async function archiveContent(file: string): Promise<{ entries: string[]; show: string }> {
   const entries = await readZip(file)
-  const show = entries.find(entry => entry.name === 'show.wlab')
+  const show = entries.find(entry => entry.name === 'show.cuerunner')
   return {
     entries: entries.map(entry => `${entry.name} ${entry.size} ${entry.crc}`),
     show: show ? (await readZipEntry(file, show)).toString('latin1') : ''
@@ -172,7 +172,7 @@ test('a show and its audio leave as one file and come back playable', async () =
   // The same show bundled twice is the same file: a bundle can be kept, compared, hashed.
   // The content is compared first, so a failure says which entry differs and by how much
   // rather than only that the two files are not equal.
-  const again = path.join(root, 'Press Night again.wlabx')
+  const again = path.join(root, 'Press Night again.cuerunnerx')
   await exportTo(page, again)
   await waitForBundle(again)
   expect(await archiveContent(again)).toEqual(await archiveContent(bundled))
@@ -206,7 +206,7 @@ test('a show and its audio leave as one file and come back playable', async () =
   // check made the moment the UI is up asks whether the app has finished rather than
   // whether it worked — the same mistake this spec made twice already, once with the
   // export's file and once here.
-  const unpackedShow = path.join(unpacked, 'Press Night.wlab')
+  const unpackedShow = path.join(unpacked, 'Press Night.cuerunner')
   await expect.poll(() => fs.existsSync(unpackedShow), { message: 'the unpacked show' }).toBe(true)
   expect(fs.existsSync(path.join(unpacked, 'media', 'walk-in.wav'))).toBe(true)
   expect(fs.existsSync(path.join(unpacked, 'media', 'bows.wav'))).toBe(true)
@@ -224,6 +224,6 @@ test('a machine with no key is told what a bundle is for, and bundles nothing', 
   await expect(page.locator('.file-menu button[data-action="export-bundle"] .pro-mark')).toHaveCount(1)
   await page.locator('.file-menu button[data-action="export-bundle"]').click()
 
-  await expect(page.locator('.app-notice')).toContainText('WinsLab Pro is required')
+  await expect(page.locator('.app-notice')).toContainText('Cuerunner Pro is required')
   expect(fs.existsSync(bundled)).toBe(false)
 })

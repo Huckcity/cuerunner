@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { usePro, useStore } from '../store'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { audioEngine } from '../engine/audioEngineClient'
 import {
   NOTICE_FRESH_MS,
@@ -56,7 +56,7 @@ export function useRedundancy(): void {
     // The machine's own half of the pair, read once for the session. The settings tab
     // writes it back through the same slice, so a change made there is a change here.
     let live = true
-    window.winslab.redundancy.settings().then(
+    window.cuerunner.redundancy.settings().then(
       settings => {
         if (live) useStore.getState().setRedundancySettings(settings)
       },
@@ -100,7 +100,7 @@ export function useRedundancy(): void {
       lastPayload = payload
       // The stamp is what makes each publish its own event; it is not part of the
       // comparison, or every tick would be a change worth sending.
-      void window.winslab.show.command('redundancy', 'publish', { ...digest, at: Date.now() }).catch(() => {
+      void window.cuerunner.show.command('redundancy', 'publish', { ...digest, at: Date.now() }).catch(() => {
         // A service that is not running has nothing to publish to; the next change
         // publishes again, and the status panel says what the machine is doing.
       })
@@ -182,7 +182,7 @@ export function useRedundancy(): void {
       // The show has moved to the other machine, which is already playing it. This one
       // stops being the sound: the same short fade a panic cuts with, so two machines
       // holding the same cue do not overlap.
-      cueRunner.standDown()
+      cueEngine.standDown()
       useStore.getState().appendLog([
         { level: 'info', message: `Stood down: ${notice.reason}; stopped this machine's playback` }
       ])
@@ -192,7 +192,7 @@ export function useRedundancy(): void {
     const plan = takeoverPlan(useStore.getState().cues.map(toPlanCue), notice.digest, notice.silentMs)
     // The runner writes the plan's own line to the session log — what was picked up,
     // what could not be, and how much of the show went by unheard.
-    cueRunner.adopt(plan)
+    cueEngine.adopt(plan)
   }, [pro, notice])
 }
 

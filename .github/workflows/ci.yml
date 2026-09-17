@@ -209,17 +209,17 @@ jobs:
       # opt-in on the machine rather than in the repository (Steinberg's licence forbids
       # redistributing the SDK). A runner with an SDK builds with ASIO; one without gets
       # this warning and an honest build without it. scripts/asio-sdk.mjs reads
-      # WINSLAB_ASIO_SDK and nothing else, so this step is the only place the path is
+      # CUERUNNER_ASIO_SDK and nothing else, so this step is the only place the path is
       # decided: the variable a provisioned runner sets by hand, then the documented
       # default location.
       - name: Locate the ASIO SDK
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          set "ASIO=%WINSLAB_ASIO_SDK%"
+          set "ASIO=%CUERUNNER_ASIO_SDK%"
           if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
-          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set WINSLAB_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
-          echo WINSLAB_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo CUERUNNER_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
           echo Using the ASIO SDK at %ASIO%
 
       # Electron opens a real window; the wrapper gives it a private Xvfb display on
@@ -237,7 +237,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          if "%WINSLAB_ASIO_SDK%"=="" (echo ::notice::No ASIO SDK on this runner - the engine is built without ASIO, so there is nothing to smoke & exit /b 0)
+          if "%CUERUNNER_ASIO_SDK%"=="" (echo ::notice::No ASIO SDK on this runner - the engine is built without ASIO, so there is nothing to smoke & exit /b 0)
           npm run test:native:asio
 
       - name: Upload test results
@@ -248,7 +248,7 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # The harness: WinsLab talking to a peer that stands in for the console and the desk.
+  # The harness: Cuerunner talking to a peer that stands in for the console and the desk.
   # No vendor software and no hardware on this lane — the peers are implementations of the
   # vendors' published protocols, written from their own documents (INTEGRATION-HARNESS.md,
   # §2), and `harness-*.spec.ts` holds them to those documents with no app running at all.

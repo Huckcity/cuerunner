@@ -87,13 +87,13 @@ let page: Page
 let root: string
 
 test.beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-durations-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-durations-'))
   const overture = path.join(root, 'overture.wav')
   writeWav(overture, OVERTURE_SECONDS)
 
   // Two timeline groups: one whose child is a file the spec wrote, one whose child is a
   // file nobody will find.
-  const showPath = path.join(root, 'Lengths.wlab')
+  const showPath = path.join(root, 'Lengths.cuerunner')
   fs.writeFileSync(
     showPath,
     JSON.stringify({
@@ -119,7 +119,7 @@ test.beforeAll(async () => {
 
   // Opened the way an operator opens it, and no cue is clicked afterwards.
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Lengths.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Lengths.cuerunner' }).click()
   await expect(page.locator('.workspace-name')).toContainText('Lengths')
 })
 

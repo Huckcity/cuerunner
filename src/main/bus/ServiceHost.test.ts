@@ -19,6 +19,7 @@ interface FakeOptions {
   stop?: () => void | Promise<void>
   command?: (action: string, payload?: unknown) => unknown
   withCommand?: boolean
+  pro?: true
 }
 
 const running = (context: ServiceContext): void => context.setState('running', 'up')
@@ -38,6 +39,7 @@ function fakeService(options: FakeOptions) {
     label: options.label ?? options.id,
     start,
     stop,
+    ...(options.pro === true ? { pro: true as const } : {}),
     ...(options.withCommand === false ? {} : { command })
   }
   return { service, start, stop, command }
@@ -49,9 +51,9 @@ interface Harness {
   alerts(): ShowAlert[]
 }
 
-function harness(): Harness {
+function harness(options: { entitled?: () => boolean } = {}): Harness {
   const bus = new ShowBus({ now: () => 1000 })
-  const host = new ServiceHost(bus)
+  const host = new ServiceHost(bus, options.entitled ?? (() => true))
   return { host, bus, alerts: () => bus.snapshot().alerts }
 }
 
@@ -384,5 +386,58 @@ describe('ServiceHost — restart and stop', () => {
     await host.stopAll()
 
     expect(host.status('bad')?.state).toBe('running')
+  })
+})
+
+describe('ServiceHost — entitlement', () => {
+  it('starts the free services and leaves the Pro ones stopped, with the reason', async () => {
+    const { host } = harness({ entitled: () => false })
+    const free = fakeService({ id: 'osc-in' })
+    const paid = fakeService({ id: 'rf', label: 'Wireless', pro: true })
+    host.register(free.service)
+    host.register(paid.service)
+
+    await host.startAll(showSettings())
+
+    expect(free.start).toHaveBeenCalledTimes(1)
+    expect(paid.start).not.toHaveBeenCalled()
+    expect(host.status('rf')).toMatchObject({
+      state: 'stopped',
+      detail: 'Wireless is part of Cuerunner Pro'
+    })
+  })
+
+  it('refuses a Pro service’s command and restart by name, and lets the free one work', async () => {
+    const { host } = harness({ entitled: () => false })
+    host.register(fakeService({ id: 'rf', label: 'Wireless', pro: true }).service)
+    host.register(fakeService({ id: 'osc-in' }).service)
+    await host.startAll(showSettings())
+
+    expect(await host.command('rf', 'repoll')).toEqual({
+      ok: false, error: 'Wireless is part of Cuerunner Pro'
+    })
+    expect(await host.restart('rf')).toEqual({
+      ok: false, error: 'Wireless is part of Cuerunner Pro'
+    })
+    expect(await host.command('osc-in', 'anything')).toEqual({ ok: true, result: 'ok' })
+  })
+
+  it('answers the licence afresh, so a key arriving brings the Pro half up and losing it puts it down', async () => {
+    let licensed = false
+    const { host } = harness({ entitled: () => licensed })
+    const paid = fakeService({ id: 'rf', label: 'Wireless', pro: true })
+    host.register(paid.service)
+
+    await host.startAll(showSettings())
+    expect(paid.start).not.toHaveBeenCalled()
+
+    licensed = true
+    await host.startAll(showSettings())
+    expect(paid.start).toHaveBeenCalledTimes(1)
+
+    licensed = false
+    await host.startAll(showSettings())
+    expect(paid.stop).toHaveBeenCalledTimes(1)
+    expect(host.status('rf')?.state).toBe('stopped')
   })
 })

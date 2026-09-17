@@ -15,7 +15,7 @@ const DEMO_AUDIO = path.join(process.cwd(), 'resources/demo/walk-in.wav')
 
 interface MovedShow {
   root: string
-  wlab: string
+  cuerunner: string
   media: string[]
 }
 
@@ -39,7 +39,7 @@ function audioCue(id: string, number: string, name: string, filePath: string): u
 
 /** A saved show with its media beside it, then the whole folder moved like a copied one. */
 function movedShow(): MovedShow {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-missing-media-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-missing-media-'))
   tempDirs.push(root)
   const before = path.join(root, 'old-machine')
   fs.mkdirSync(path.join(before, 'media'), { recursive: true })
@@ -58,7 +58,7 @@ function movedShow(): MovedShow {
       audioCue('a2', '2', 'Sting', path.join(before, 'media', 'sting.wav'))
     ]
   }
-  fs.writeFileSync(path.join(before, 'Tour Show.wlab'), JSON.stringify(workspace, null, 2))
+  fs.writeFileSync(path.join(before, 'Tour Show.cuerunner'), JSON.stringify(workspace, null, 2))
 
   // The copy that arrives on the other machine: no mount point from the old one, and the
   // files the workspace names are simply not there any more.
@@ -66,7 +66,7 @@ function movedShow(): MovedShow {
   fs.renameSync(before, after)
   return {
     root,
-    wlab: path.join(after, 'Tour Show.wlab'),
+    cuerunner: path.join(after, 'Tour Show.cuerunner'),
     media: [path.join(after, 'media', 'walk-in.wav'), path.join(after, 'media', 'sting.wav')]
   }
 }
@@ -81,7 +81,7 @@ test('a moved show folder reports its missing media and one pick relinks it', as
   let { app, page, userDataDir } = await launchApp()
 
   try {
-    await openFromRecent(page, userDataDir, show.wlab)
+    await openFromRecent(page, userDataDir, show.cuerunner)
 
     // Both files are named by the workspace and neither is where it says.
     const banner = page.locator('.missing-media-bar')
@@ -117,7 +117,7 @@ test('a moved show folder reports its missing media and one pick relinks it', as
 
     // The saved file carries both locations per file: relative for the media inside the
     // folder, and the absolute path it is at now.
-    const saved = JSON.parse(fs.readFileSync(show.wlab, 'utf-8')) as {
+    const saved = JSON.parse(fs.readFileSync(show.cuerunner, 'utf-8')) as {
       cues: Array<{ filePath: string; media?: { path: string; originalPath: string } }>
     }
     expect(saved.cues[0].media).toEqual({
@@ -132,7 +132,7 @@ test('a moved show folder reports its missing media and one pick relinks it', as
     // Reopening the saved show — even launched fresh — finds everything.
     await closeApp(app)
     ;({ app, page } = await launchApp({ userDataDir }))
-    await openFromRecent(page, userDataDir, show.wlab)
+    await openFromRecent(page, userDataDir, show.cuerunner)
     await expect(page.locator('.cue-row')).toHaveCount(2)
     await expect(page.locator('.missing-media-bar')).toHaveCount(0)
   } finally {
@@ -152,7 +152,7 @@ test('a pick that accounts for nothing else leaves the rest missing', async () =
     const lone = path.join(elsewhere, 'walk-in.wav')
     fs.copyFileSync(DEMO_AUDIO, lone)
 
-    await openFromRecent(page, userDataDir, show.wlab)
+    await openFromRecent(page, userDataDir, show.cuerunner)
     await expect(page.locator('.missing-media-bar')).toHaveText(/2 audio files/)
 
     await app.evaluate(async ({ dialog }, picked) => {

@@ -1,4 +1,4 @@
-// WinsLab and an Eos console: the show fires a cue in the console, the console says on the
+// Cuerunner and an Eos console: the show fires a cue in the console, the console says on the
 // wire what it fired, and a second cue answers that. Both halves go through the app's real
 // OSC paths — the cue that sends, and the input service the trigger listens on — with a peer
 // standing in for the console (`integration/peers/eos.ts`, written from ETC's OSC

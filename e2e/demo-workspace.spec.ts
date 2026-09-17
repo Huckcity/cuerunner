@@ -50,7 +50,7 @@ test('the demo opens clean and does not join the Recent list', async () => {
   await expect(page.locator('.cue-row', { hasText: 'Act 1' })).toBeVisible()
 
   // No path and no edits yet — saving it asks where to put the user's copy.
-  await expect(page).toHaveTitle('Demo Show — WinsLab')
+  await expect(page).toHaveTitle('Demo Show — Cuerunner')
   expect(readRecents()).toBe(before)
 })
 
@@ -91,7 +91,7 @@ test('the demo plays straight from the cue list, with no Audio tab ever opened',
   await expect
     .poll(
       async () =>
-        app.evaluate(async () => (await globalThis.__winslabDevHarness?.engineInfo())?.activeVoices ?? 0),
+        app.evaluate(async () => (await globalThis.__cuerunnerDevHarness?.engineInfo())?.activeVoices ?? 0),
       { timeout: 5000, message: 'the engine should have a voice playing' }
     )
     .toBeGreaterThan(0)

@@ -86,7 +86,7 @@ describe('Dock', () => {
 
     expect(dock().dataset.collapsed).toBe('true')
     expect(container.querySelector('.dock-body')).toBeNull()
-    expect(localStorage.getItem('winslab.dock.collapsed')).toBe('true')
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBe('true')
 
     // Any tab opens it again.
     act(() => tab('btn-log').click())
@@ -103,7 +103,7 @@ describe('Dock', () => {
     // A loaded machine mounts the dock while the window is still 0 high: that is not a
     // window to clamp against, and clamping against it used to floor the dock at the
     // minimum and remember 110 as the operator's choice.
-    localStorage.setItem('winslab.dock.height', '900')
+    localStorage.setItem('cuerunner.dock.height', '900')
     window.innerHeight = 0
     act(() => { root.render(<Harness />) })
     expect(dock().style.height).toBe('900px')
@@ -113,7 +113,7 @@ describe('Dock', () => {
     window.innerHeight = 768
     act(() => { window.dispatchEvent(new Event('resize')) })
     expect(dock().style.height).toBe(`${clampDockHeight(900, 768)}px`)
-    expect(localStorage.getItem('winslab.dock.height')).toBe('900')
+    expect(localStorage.getItem('cuerunner.dock.height')).toBe('900')
 
     window.innerHeight = 1600
     act(() => { window.dispatchEvent(new Event('resize')) })

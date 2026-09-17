@@ -1,5 +1,5 @@
-// Winslab UI Kit — TransportBar component
-// Exported to window.WinslabTransportBar
+// Cuerunner UI Kit — TransportBar component
+// Exported to window.CuerunnerTransportBar
 
 function TransportBar({ store }) {
   const { cues, selectedId, running, go, stop } = store;
@@ -54,4 +54,4 @@ const transportStyles = {
   },
 };
 
-Object.assign(window, { WinslabTransportBar: TransportBar });
+Object.assign(window, { CuerunnerTransportBar: TransportBar });

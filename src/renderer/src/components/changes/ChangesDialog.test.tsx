@@ -35,7 +35,7 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  compare = window.winslab.workspace.compare as unknown as Mock
+  compare = window.cuerunner.workspace.compare as unknown as Mock
   compare.mockReset().mockResolvedValue({ ok: true, comparison: null })
   useStore.setState({
     license: { state: 'active', license: TEST_LICENSE },
@@ -119,7 +119,7 @@ describe('comparing with another file', () => {
     compare.mockResolvedValue({
       ok: true,
       comparison: {
-        path: '/shows/Hamlet — press.wlab',
+        path: '/shows/Hamlet — press.cuerunner',
         diff: diff({
           empty: false,
           added: [{ id: 'n', label: '4 Bows', type: 'wait', place: { parent: null, after: null } }],
@@ -166,7 +166,7 @@ describe('comparing with another file', () => {
     compare.mockResolvedValue({
       ok: true,
       comparison: {
-        path: '/shows/Macbeth.wlab',
+        path: '/shows/Macbeth.cuerunner',
         diff: diff({ sameShow: false, empty: false, to: { ...SHOW, id: 'w2', name: 'Macbeth', cues: 3 } })
       }
     })
@@ -181,7 +181,7 @@ describe('comparing with another file', () => {
   it('stops showing an answer that belongs to the show it was made against', async () => {
     compare.mockResolvedValue({
       ok: true,
-      comparison: { path: '/shows/other.wlab', diff: diff({ empty: false, unchanged: 0 }) }
+      comparison: { path: '/shows/other.cuerunner', diff: diff({ empty: false, unchanged: 0 }) }
     })
     await show('compare')
     await act(async () => {
@@ -197,23 +197,40 @@ describe('comparing with another file', () => {
   })
 
   it('shows what the main process said instead of an empty list', async () => {
-    compare.mockResolvedValue({ ok: false, error: 'WinsLab Pro is required for the show services' })
+    compare.mockResolvedValue({ ok: false, error: 'Cuerunner Pro is required for the show services' })
     await show('compare')
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.changes-choose')?.click()
     })
 
-    expect(container.querySelector('.changes-error')?.textContent).toContain('WinsLab Pro is required')
+    expect(container.querySelector('.changes-error')?.textContent).toContain('Cuerunner Pro is required')
   })
 })
 
 describe('without a license', () => {
-  it('describes what it would show rather than showing buttons that do nothing', async () => {
+  it('reads the show’s own history', async () => {
+    useStore.setState({
+      license: { state: 'unlicensed' },
+      showHistory: [
+        {
+          at: '2026-09-14T18:30:00.000Z',
+          by: 'associate',
+          cues: [{ kind: 'added', id: 'a', label: '3 Bows' }],
+          settings: []
+        }
+      ]
+    })
+    await show('history')
+
+    expect(container.querySelectorAll('.changes-entry')).toHaveLength(1)
+    expect(container.querySelector('.pro-lock')).toBeNull()
+  })
+
+  it('locks the comparison', async () => {
     useStore.setState({ license: { state: 'unlicensed' } })
-    await show()
+    await show('compare')
 
     expect(container.querySelector('.pro-lock')).not.toBeNull()
-    expect(container.querySelector('.changes-entry')).toBeNull()
     expect(container.querySelector('.changes-choose')).toBeNull()
   })
 })

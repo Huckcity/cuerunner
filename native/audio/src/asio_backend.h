@@ -1,7 +1,7 @@
 // The ASIO backend's face towards the engine.
 //
 // Compiled only when Steinberg's ASIO SDK was present at build time (the build defines
-// WINSLAB_ASIO and adds this file plus the SDK's own host sources to the compile) — see
+// CUERUNNER_ASIO and adds this file plus the SDK's own host sources to the compile) — see
 // scripts/asio-sdk.mjs and the ASIO section of the README. A build without the SDK has
 // no ASIO devices, and says so rather than pretending: `--backend asio` is refused with
 // the reason.
@@ -14,7 +14,7 @@
 // reset, and the two numbers only the driver knows.
 #pragma once
 
-#if defined(WINSLAB_ASIO)
+#if defined(CUERUNNER_ASIO)
 
 #include "miniaudio_setup.h"
 
@@ -64,4 +64,4 @@ std::string contextMessage(const ma_context& context);
 }  // namespace asio
 }  // namespace ws
 
-#endif  // WINSLAB_ASIO
+#endif  // CUERUNNER_ASIO

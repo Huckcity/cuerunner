@@ -30,7 +30,7 @@ vi.mock('electron', async () => {
   const { join } = await import('path')
   // One directory for the whole file: getPath must be stable, or the recent list and
   // the recovery snapshot would land in different places.
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-media-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-media-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: { showOpenDialog: vi.fn() },
@@ -41,7 +41,7 @@ vi.mock('electron', async () => {
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-media-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-media-'))
   vi.mocked(dialog.showOpenDialog).mockReset()
 })
 
@@ -181,7 +181,7 @@ describe('resolveWorkspaceMedia', () => {
       media: { path: 'media/walk-in.wav', originalPath: join(dir, 'old-machine', 'media', 'walk-in.wav') }
     } as Cue
 
-    const resolved = resolveWorkspaceMedia(workspaceWith([cue]), join(dir, 'Tour Show.wlab'))
+    const resolved = resolveWorkspaceMedia(workspaceWith([cue]), join(dir, 'Tour Show.cuerunner'))
 
     expect(resolved.missingMedia).toEqual([])
     expect((resolved.workspace.cues[0] as AudioCue).filePath).toBe(media)
@@ -195,7 +195,7 @@ describe('resolveWorkspaceMedia', () => {
 
     const resolved = resolveWorkspaceMedia(
       workspaceWith([audioCue('a1', media)]),
-      join(dir, 'Tour Show.wlab')
+      join(dir, 'Tour Show.cuerunner')
     )
 
     expect(resolved.missingMedia).toEqual([])
@@ -209,7 +209,7 @@ describe('resolveWorkspaceMedia', () => {
       media: { path: 'media/walk-in.wav', originalPath: original }
     } as Cue
 
-    const resolved = resolveWorkspaceMedia(workspaceWith([cue]), join(dir, 'Tour Show.wlab'))
+    const resolved = resolveWorkspaceMedia(workspaceWith([cue]), join(dir, 'Tour Show.cuerunner'))
 
     expect(resolved.missingMedia).toEqual([
       { cueId: 'a1', path: 'media/walk-in.wav', originalPath: original }
@@ -222,7 +222,7 @@ describe('resolveWorkspaceMedia', () => {
 
     const resolved = resolveWorkspaceMedia(
       workspaceWith([blank]),
-      join(dir, 'Tour Show.wlab')
+      join(dir, 'Tour Show.cuerunner')
     )
 
     expect(resolved.missingMedia).toEqual([])
@@ -234,7 +234,7 @@ describe('resolveWorkspaceMedia', () => {
 
     const resolved = resolveWorkspaceMedia(
       workspaceWith([audioCue('a1', gone)]),
-      join(dir, 'Tour Show.wlab')
+      join(dir, 'Tour Show.cuerunner')
     )
 
     expect(resolved.missingMedia).toEqual([{ cueId: 'a1', path: gone, originalPath: gone }])
@@ -271,7 +271,7 @@ describe('saving and reopening a show folder', () => {
     const outside = write(join(dir, 'external'), 'sting.wav')
     const workspace = workspaceWith([audioCue('inside', inside), audioCue('outside', outside)])
 
-    const saved = join(showDir, 'Tour Show.wlab')
+    const saved = join(showDir, 'Tour Show.cuerunner')
     await saveWorkspace({} as never, workspace, saved)
 
     const onDisk = JSON.parse(readFileSync(saved, 'utf-8')) as Workspace
@@ -288,7 +288,7 @@ describe('saving and reopening a show folder', () => {
     // The operator copies the show folder to another machine; the outside file stays put.
     const moved = join(dir, 'other-machine')
     renameSync(showDir, moved)
-    const reopened = await openWorkspaceFromPath(join(moved, 'Tour Show.wlab'))
+    const reopened = await openWorkspaceFromPath(join(moved, 'Tour Show.cuerunner'))
 
     expect(reopened.missingMedia).toEqual([])
     const [movedInside, movedOutside] = reopened.workspace.cues as AudioCue[]
@@ -298,7 +298,7 @@ describe('saving and reopening a show folder', () => {
 
   it('keeps the last known location of a missing file across another save', async () => {
     const gone = join(dir, 'old-machine', 'media', 'walk-in.wav')
-    const saved = join(dir, 'Tour Show.wlab')
+    const saved = join(dir, 'Tour Show.cuerunner')
     await saveWorkspace({} as never, workspaceWith([audioCue('a1', gone)]), saved)
 
     const first = await openWorkspaceFromPath(saved)
@@ -320,7 +320,7 @@ describe('saving and reopening a show folder', () => {
 
   it('reports missing media in a recovered snapshot', async () => {
     const gone = join(dir, 'old-machine', 'walk-in.wav')
-    await writeRecovery(workspaceWith([audioCue('a1', gone)]), join(dir, 'Tour Show.wlab'))
+    await writeRecovery(workspaceWith([audioCue('a1', gone)]), join(dir, 'Tour Show.cuerunner'))
 
     const recovered = await openRecovery()
 
@@ -419,7 +419,7 @@ describe('relinkWorkspaceMedia', () => {
     const result = await relinkWorkspaceMedia(
       {} as never,
       workspace,
-      join(dir, 'Tour Show.wlab'),
+      join(dir, 'Tour Show.cuerunner'),
       'a'
     )
 
@@ -470,9 +470,9 @@ describe('relinkWorkspaceMedia', () => {
 
 describe('the demo folder stays loadable', () => {
   it('has no media references that point outside it', () => {
-    // The demo ships its audio beside its .wlab and is materialised on open; the media
+    // The demo ships its audio beside its .cuerunner and is materialised on open; the media
     // fields described here are for saved workspaces and must not have crept into it.
-    const demo = JSON.parse(readFileSync(join(process.cwd(), 'resources/demo/Demo Show.wlab'), 'utf-8'))
+    const demo = JSON.parse(readFileSync(join(process.cwd(), 'resources/demo/Demo Show.cuerunner'), 'utf-8'))
     for (const cue of demo.cues as Array<Record<string, unknown>>) {
       if (cue.type !== 'audio') continue
       expect(existsSync(join(process.cwd(), 'resources/demo', cue.filePath as string))).toBe(true)

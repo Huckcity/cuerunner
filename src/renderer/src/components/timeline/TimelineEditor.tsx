@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useStore } from '../../store'
 import type { GroupCue, Cue } from '../../types/cue'
-import { cueRunner } from '../../engine/CueRunner'
+import { cueEngine } from '../../engine/CueEngine'
 import { snapOffset, snapTargetsFor } from '../../utils/timelineSnap'
 import { mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import './TimelineEditor.css'
@@ -94,7 +94,7 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
     const rect = e.currentTarget.getBoundingClientRect()
     const ms = Math.max(0, Math.round((e.clientX - rect.left) / pxPerMs))
     setCursorMs(ms)
-    cueRunner.seekTimeline(cue.id, ms)
+    cueEngine.seekTimeline(cue.id, ms)
   }
 
   const children = cues.filter(c => c.parentId === cue.id)
@@ -113,9 +113,9 @@ export function TimelineEditor({ cue, expanded, onToggleExpand }: Props) {
 
   // Sync cursor when switching groups; clear stored offset when navigating away
   useEffect(() => {
-    const offset = cueRunner.getGroupStartOffset(cue.id)
+    const offset = cueEngine.getGroupStartOffset(cue.id)
     setCursorMs(offset > 0 ? offset : null)
-    return () => { cueRunner.clearGroupStartOffset(cue.id) }
+    return () => { cueEngine.clearGroupStartOffset(cue.id) }
   }, [cue.id])
 
   const contentEndMs = Math.max(

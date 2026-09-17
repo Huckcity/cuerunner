@@ -81,6 +81,7 @@ interface PeerFacts {
 export class RedundancyService implements ShowService {
   readonly id = 'redundancy'
   readonly label = 'Redundant playback'
+  readonly pro = true
 
   private context: ServiceContext | null = null
   private config: RedundancySettings = defaultRedundancySettings()

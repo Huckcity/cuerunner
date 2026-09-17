@@ -138,7 +138,7 @@ describe('Triggers', () => {
   })
 
   it.each(MIDI_CASES)('adds a $kind trigger with the value field named $label', async ({ kind, label, detail, message }) => {
-    ;(window.winslab.midi.listInputPorts as unknown as Mock).mockResolvedValue(['IAC Bus 1'])
+    ;(window.cuerunner.midi.listInputPorts as unknown as Mock).mockResolvedValue(['IAC Bus 1'])
     await mount()
 
     const add = $('.trigger-section[data-kind="midi"] .trigger-add') as HTMLButtonElement

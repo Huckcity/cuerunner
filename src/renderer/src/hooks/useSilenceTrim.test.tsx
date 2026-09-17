@@ -167,15 +167,12 @@ describe('useSilenceTrim', () => {
     expect(scan).toHaveBeenCalledTimes(2)
   })
 
-  it('reads nothing for a machine that may not apply the trim, and starts once it may', async () => {
+  it('measures for a machine with no licence', async () => {
+    // The trim is cue behaviour, so the scan runs wherever the trim is on.
     scan.mockImplementation(async (filePath: string) => scanOf(filePath))
     useStore.setState({ cues: [audio({ trimSilence: true })], license: { state: 'unlicensed' } })
 
     act(() => { root.render(<Harness />) })
-    await settle()
-    expect(scan).not.toHaveBeenCalled()
-
-    act(() => { useStore.setState({ license: { state: 'active', license: TEST_LICENSE } }) })
     await settle()
 
     expect(scan).toHaveBeenCalledWith(TRACK)

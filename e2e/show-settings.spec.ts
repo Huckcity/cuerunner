@@ -28,9 +28,9 @@ test.afterEach(async () => {
   await closeApp(app)
 })
 
-test('the WinsLab menu opens Show Settings on its Channels tab', async () => {
+test('the Cuerunner menu opens Show Settings on its Channels tab', async () => {
   // The application menu carries the same item, but it is Electron's own menu bar and
-  // not part of the page; only the window's WinsLab ▾ menu can be driven from here.
+  // not part of the page; only the window's Cuerunner ▾ menu can be driven from here.
   await page.locator('.toolbar-brand').click()
   const item = page.locator('.file-menu [data-action="show-settings"]')
   await expect(item).toBeVisible()

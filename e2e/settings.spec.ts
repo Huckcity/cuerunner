@@ -30,7 +30,7 @@ async function closeSettings(p: Page) {
   await expect(dialog).not.toBeVisible()
 }
 
-test('settings dialog opens via WinsLab file menu', async () => {
+test('settings dialog opens via Cuerunner file menu', async () => {
   await openSettings(page)
   await closeSettings(page)
 })
@@ -62,7 +62,7 @@ test('Audio tab offers the real device options the engine can honour', async () 
 
 test('Audio tab reports exactly what the engine says it is running', async () => {
   const info = await app.evaluate(async () => {
-    const harness = globalThis.__winslabDevHarness
+    const harness = globalThis.__cuerunnerDevHarness
     return harness ? harness.engineInfo() : null
   })
   expect(info).not.toBeNull()

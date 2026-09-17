@@ -7,7 +7,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { AudioInspector } from './AudioInspector'
 import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
-import { cueRunner } from '../../engine/CueRunner'
+import { cueEngine } from '../../engine/CueEngine'
 import { TEST_LICENSE } from '../../../../test/license'
 import type { AudioCue } from '../../types/cue'
 
@@ -146,7 +146,7 @@ describe('AudioInspector', () => {
   it('restores rate and trim to 1x through the runner, not just the store', async () => {
     const cue = audioCue({ playbackRate: 2, trim: 0.4 })
     await show(cue)
-    const setLiveParameter = vi.spyOn(cueRunner, 'setLiveParameter')
+    const setLiveParameter = vi.spyOn(cueEngine, 'setLiveParameter')
 
     await act(async () => { resetButton('Rate').click() })
     await act(async () => { resetButton('Trim').click() })
@@ -158,7 +158,7 @@ describe('AudioInspector', () => {
 
   it('restores master volume and pan through the runner', async () => {
     await show(audioCue({ volume: 0.2, pan: -0.7 }))
-    const setLiveParameter = vi.spyOn(cueRunner, 'setLiveParameter')
+    const setLiveParameter = vi.spyOn(cueEngine, 'setLiveParameter')
 
     await act(async () => { resetButton('Volume').click() })
     // The panel re-renders from the store after each edit, so feed the updated cue back in.
@@ -283,29 +283,12 @@ describe('AudioInspector', () => {
     expect(useStore.getState().cues[0]).toMatchObject({ trimSilence: true })
   })
 
-  it('locks the trim on an unlicensed machine and says why', async () => {
+  it('trims without a licence, and says nothing about one', async () => {
     await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
 
     const box = container.querySelector<HTMLInputElement>('#inspector-trim-silence')!
     expect(box.checked).toBe(true)
-    expect(box.disabled).toBe(true)
-    // Nothing is scanning on a machine that may not apply the result, so the row says
-    // what it is waiting on rather than that it is measuring.
-    expect(container.querySelector('.trim-silence-readout')?.textContent)
-      .toBe('measured once this machine is licensed')
-
-    const hint = container.querySelector<HTMLParagraphElement>('.license-hint')!
-    expect(hint.className).toContain('inspector-hint')
-    expect(hint.textContent).toContain('WinsLab Pro')
-    await act(async () => { hint.querySelector<HTMLButtonElement>('.license-link')!.click() })
-    expect(useStore.getState().settingsTab).toBe('license')
-  })
-
-  it('leaves the row plain on a licensed machine', async () => {
-    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
-    await show(audioCue({ filePath: '/shows/walk-in.wav' }), 'Time & Loops')
-
-    expect(container.querySelector<HTMLInputElement>('#inspector-trim-silence')!.disabled).toBe(false)
+    expect(box.disabled).toBe(false)
     expect(container.querySelector('.license-hint')).toBeNull()
   })
 
@@ -399,7 +382,7 @@ describe('AudioInspector', () => {
 
   it('tells the runner when the routing of a playing cue changes', async () => {
     await show(audioCue({ filePath: '/shows/walk-in.wav' }))
-    const setLiveRouting = vi.spyOn(cueRunner, 'setLiveRouting')
+    const setLiveRouting = vi.spyOn(cueEngine, 'setLiveRouting')
 
     await act(async () => { setRouting('matrix') })
 

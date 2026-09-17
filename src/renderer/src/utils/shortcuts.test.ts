@@ -21,6 +21,6 @@ describe('formatShortcut', () => {
   })
 
   it('reads the platform the preload reports when none is given', () => {
-    expect(formatShortcut('Mod+D')).toBe(window.winslab.platform === 'darwin' ? '⌘D' : 'Ctrl+D')
+    expect(formatShortcut('Mod+D')).toBe(window.cuerunner.platform === 'darwin' ? '⌘D' : 'Ctrl+D')
   })
 })

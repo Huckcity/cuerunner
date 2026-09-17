@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { CueRunner } from './CueRunner'
+import { CueEngine } from './CueEngine'
 import type { Cue, WaitCue, GroupCue } from '../types/cue'
 import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
 
@@ -30,13 +30,13 @@ function makeWait(id: string, parentId: string | null, overrides: Partial<WaitCu
 
 // Runners left behind by a test still hold scheduled work; disposing them keeps a
 // later test's clock from firing an earlier test's cues.
-const runners: CueRunner[] = []
+const runners: CueEngine[] = []
 afterEach(() => {
   for (const runner of runners.splice(0)) runner.dispose()
 })
 
 function setup(cues: Cue[]) {
-  const runner = new CueRunner()
+  const runner = new CueEngine()
   const setRunning = vi.fn()
   const setSelected = vi.fn()
 
@@ -58,7 +58,7 @@ function setup(cues: Cue[]) {
   return { runner, setRunning, setSelected }
 }
 
-describe('CueRunner — group cue (sequence mode)', () => {
+describe('CueEngine — group cue (sequence mode)', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -127,7 +127,7 @@ describe('CueRunner — group cue (sequence mode)', () => {
   })
 })
 
-describe('CueRunner — group cue (random mode)', () => {
+describe('CueEngine — group cue (random mode)', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -150,7 +150,7 @@ describe('CueRunner — group cue (random mode)', () => {
   })
 })
 
-describe('CueRunner — group cue (playlist mode)', () => {
+describe('CueEngine — group cue (playlist mode)', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -248,7 +248,7 @@ describe('CueRunner — group cue (playlist mode)', () => {
   })
 })
 
-describe('CueRunner — selection skips group children', () => {
+describe('CueEngine — selection skips group children', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -259,7 +259,7 @@ describe('CueRunner — selection skips group children', () => {
     const next = makeWait('next', null)
     const setSelected = vi.fn()
 
-    const runner = new CueRunner()
+    const runner = new CueEngine()
     runner.init({
       getCues: () => [group, c1, c2, next],
       getSelected: () => 'g1',

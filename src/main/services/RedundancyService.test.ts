@@ -229,7 +229,7 @@ function hello(id: string, overrides: Record<string, unknown> = {}): Record<stri
   }
 }
 
-/** A machine that is not a WinsLab: a socket the test writes the wire with. */
+/** A machine that is not a Cuerunner: a socket the test writes the wire with. */
 interface RawPeer {
   socket: Socket
   lines: string[]

@@ -15,7 +15,7 @@
 // the original process with the child's exit code. Everywhere else — and inside the child —
 // it does nothing, so the rest of the script reads as a script rather than as a wrapper.
 //
-// A developer who wants to watch the capture happen asks for it: WINSLAB_CAPTURE_HEADED=1
+// A developer who wants to watch the capture happen asks for it: CUERUNNER_CAPTURE_HEADED=1
 // runs it on the display they are using, the same deliberate opt-in as `test:e2e:headed`.
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -25,7 +25,7 @@ import path from 'node:path'
 const XVFB_SCREEN = '1600x1000x24'
 
 /** Set in the child, so the re-run happens once and not for ever. */
-const UNDER = 'WINSLAB_CAPTURE_VIRTUAL'
+const UNDER = 'CUERUNNER_CAPTURE_VIRTUAL'
 
 function findExecutable(name, pathEnv) {
   for (const dir of String(pathEnv || '').split(path.delimiter)) {
@@ -43,14 +43,14 @@ function findExecutable(name, pathEnv) {
 export function underVirtualDisplay({ script = process.argv[1], argv = process.argv.slice(2) } = {}) {
   if (process.platform !== 'linux') return
   if (process.env[UNDER] === '1') return
-  if (process.env.WINSLAB_CAPTURE_HEADED === '1') return
+  if (process.env.CUERUNNER_CAPTURE_HEADED === '1') return
 
   const xvfbRun = findExecutable('xvfb-run', process.env.PATH)
   if (xvfbRun === null) {
     throw new Error(
       'xvfb-run is not installed, so this capture has no display to run on that is not yours.\n' +
         '  Install it (Debian/Ubuntu: sudo apt install xvfb), or run the capture on your own\n' +
-        '  desktop on purpose with: WINSLAB_CAPTURE_HEADED=1 npm run <the capture script>'
+        '  desktop on purpose with: CUERUNNER_CAPTURE_HEADED=1 npm run <the capture script>'
     )
   }
 

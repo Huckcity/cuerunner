@@ -12,7 +12,7 @@ import { defaultShowSettings } from '../../types/show'
 import type { Cue } from '../../types/cue'
 
 const SCRIPT = 'First line\nSecond line\nThird line'
-const WORKSPACE = '/shows/My Show.wlab'
+const WORKSPACE = '/shows/My Show.cuerunner'
 
 function cue(overrides: Partial<Cue> = {}): Cue {
   return {
@@ -79,8 +79,8 @@ describe('ScriptPanel', () => {
     root = createRoot(container)
     onClose = vi.fn()
 
-    readDocument = window.winslab.script.readDocument as unknown as Mock
-    pickFile = window.winslab.script.pickFile as unknown as Mock
+    readDocument = window.cuerunner.script.readDocument as unknown as Mock
+    pickFile = window.cuerunner.script.pickFile as unknown as Mock
     readDocument.mockReset()
     pickFile.mockReset()
     readDocument.mockResolvedValue({ ok: true, lines: SCRIPT.split('\n') })

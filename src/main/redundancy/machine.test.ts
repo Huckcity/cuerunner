@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { createMachineRedundancy } from './machine'
 
 function machineFile(text?: string): string {
-  const dir = mkdtempSync(join(tmpdir(), 'winslab-redundancy-'))
+  const dir = mkdtempSync(join(tmpdir(), 'cuerunner-redundancy-'))
   const file = join(dir, 'redundancy.json')
   if (text !== undefined) writeFileSync(file, text)
   return file

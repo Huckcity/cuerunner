@@ -49,7 +49,7 @@ createServer((req, res) => {
     res.end(data)
   })
 }).listen(port, () => {
-  console.log(`Winslab site: http://localhost:${port}/`)
+  console.log(`Cuerunner site: http://localhost:${port}/`)
   console.log(`User guide:   http://localhost:${port}/guide.html`)
   console.log('Ctrl+C to stop.')
 })

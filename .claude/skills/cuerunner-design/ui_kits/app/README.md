@@ -1,14 +1,14 @@
-# Winslab App UI Kit
+# Cuerunner App UI Kit
 
-A high-fidelity interactive recreation of the Winslab desktop application.
+A high-fidelity interactive recreation of the Cuerunner desktop application.
 
 ## Architecture
 
-The Winslab app is a single-window Electron app with this layout:
+The Cuerunner app is a single-window Electron app with this layout:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Toolbar  (44px) — WinsLab ▾ | workspace name | Add Cue:…  │
+│  Toolbar  (44px) — Cuerunner ▾ | workspace name | Add Cue:…  │
 ├────────────────────────────────────┬────────────────────────┤
 │                                    │                        │
 │  Cue List  (flex 1)                │  Inspector  (320px)    │
@@ -26,7 +26,7 @@ The Winslab app is a single-window Electron app with this layout:
 | File | Description |
 |---|---|
 | `index.html` | Full interactive prototype entry point |
-| `Toolbar.jsx` | WinsLab brand btn, file menu, workspace name, Add Cue buttons |
+| `Toolbar.jsx` | Cuerunner brand btn, file menu, workspace name, Add Cue buttons |
 | `CueList.jsx` | Cue list with header, cue rows (all states), drop indicator |
 | `Inspector.jsx` | Inspector panel: tabbed, all cue type inspectors |
 | `TransportBar.jsx` | GO / STOP / PANIC transport with running badge |

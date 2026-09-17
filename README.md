@@ -1,4 +1,4 @@
-# WinsLab
+# Cuerunner
 
 A cross-platform **QLab alternative** for Windows and macOS — professional show-control software for managing audio, MIDI, OSC, and network cues in live performance and broadcast environments.
 
@@ -6,17 +6,17 @@ Built with Electron, React, TypeScript, and Zustand. Source-available under the 
 
 **Documentation lives on the site**, not here:
 
-- [Guides](https://huckcity.github.io/winslab/guide.html) — first show, building a cue
+- [Guides](https://huckcity.github.io/cuerunner/guide.html) — first show, building a cue
   list, working with sound, running the show, and the Pro features. Source in
   [`website/docs/guides.mjs`](./website/docs/guides.mjs).
-- [Reference](https://huckcity.github.io/winslab/reference/index.html) — every cue type
-  and field, every setting, the keyboard table, the OSC and MIDI messages WinsLab answers
+- [Reference](https://huckcity.github.io/cuerunner/reference/index.html) — every cue type
+  and field, every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers
   to, the script API and the file formats. Source in
   [`website/docs/reference.mjs`](./website/docs/reference.mjs).
 
 Both are generated: edit the content modules and run `node website/build-docs.mjs`.
 
-This README is for people building WinsLab rather than running a show with it.
+This README is for people building Cuerunner rather than running a show with it.
 
 ## What it is
 
@@ -24,13 +24,14 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: twelve cue types, groups and timelines, the waveform editor,
-the run log, workspaces, undo. **WinsLab Pro** is the show around it — OSC and MIDI input,
-triggers, the monitor, wireless and the mic plot, scenes and the desk, the script panel
-with its tablet view, redundant playback, and the showfile as a versionable artifact —
-what each save changed, a comparison with another version, two people's copies merged,
-and the show and its media bundled into one `.wlabx`. One key, checked offline on the
-machine; see [WinsLab Pro](#winslab-pro) for how keys are issued.
+The **cue stack is free**: eleven cue types, groups and timelines, the waveform editor,
+the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
+and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
+wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
+redundant playback, and the showfile as a versionable artifact: what each save changed, a
+comparison with another version, two people's copies merged, and the show and its media
+bundled into one `.cuerunnerx`. One key, checked offline on the machine; see
+[Cuerunner Pro](#cuerunner-pro) for how keys are issued.
 
 ## Getting Started
 
@@ -73,8 +74,8 @@ acceptance suite in `native/audio/tests/`.
 
 ```bash
 # Clone the repository
-git clone https://github.com/Huckcity/winslab.git
-cd winslab
+git clone https://github.com/Huckcity/cuerunner.git
+cd cuerunner
 
 # Install dependencies (add --legacy-peer-deps if npm reports ERESOLVE)
 npm install
@@ -87,9 +88,9 @@ npm run dev
 
 ### Try the demo workspace
 
-Every build ships a demo show — `resources/demo/Demo Show.wlab` — with one of each cue type
+Every build ships a demo show — `resources/demo/Demo Show.cuerunner` — with one of each cue type
 covered: a sequence group, a timeline group, audio with fades, MIDI, OSC, a network request, a
-script, and a stop cue. Open it from **WinsLab ▾ → Open Demo Workspace**, or from the button in
+script, and a stop cue. Open it from **Cuerunner ▾ → Open Demo Workspace**, or from the button in
 an empty cue list. It opens as an unsaved example (so Save asks where to put your copy, and
 never writes over the bundled file) and its audio is copied into the app's user data folder on
 open, which is where its cues read it from.
@@ -125,7 +126,7 @@ on every push to `main` that touches `website/**`.
 
 ## Linux
 
-WinsLab ships an **experimental Linux AppImage**. Audio, OSC, network, and script cues work
+Cuerunner ships an **experimental Linux AppImage**. Audio, OSC, network, and script cues work
 normally. MIDI cues are **unavailable** on Linux unless you install ALSA development headers
 (`libasound2-dev`) before installing dependencies — the native `midi` module needs them at
 build time.
@@ -137,8 +138,8 @@ build time.
 sudo apt-get install -y libasound2-dev
 
 # Clone and install
-git clone https://github.com/Huckcity/winslab.git
-cd winslab
+git clone https://github.com/Huckcity/cuerunner.git
+cd cuerunner
 npm install
 
 # Run in development
@@ -148,11 +149,11 @@ npm run dev
 npm run dist:linux
 ```
 
-The AppImage is written to `dist/WinsLab-<version>.AppImage`. If your distro has no FUSE,
+The AppImage is written to `dist/Cuerunner-<version>.AppImage`. If your distro has no FUSE,
 extract and run it instead:
 
 ```bash
-./dist/WinsLab-*.AppImage --appimage-extract-and-run
+./dist/Cuerunner-*.AppImage --appimage-extract-and-run
 ```
 
 ### Troubleshooting `Error: Electron uninstall`
@@ -186,17 +187,17 @@ npm install
 ```
 
 If Electron starts but aborts with *"The SUID sandbox helper binary was found, but is not
-configured correctly"*, that's distro-wide Chromium sandbox policy, not WinsLab: either fix
+configured correctly"*, that's distro-wide Chromium sandbox policy, not Cuerunner: either fix
 the helper (`sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod
 4755 node_modules/electron/dist/chrome-sandbox`) or launch with `ELECTRON_DISABLE_SANDBOX=1`.
 
 ## Architecture
 
-WinsLab is structured as an Electron app with three distinct layers communicating exclusively over IPC:
+Cuerunner is structured as an Electron app with three distinct layers communicating exclusively over IPC:
 
 ```
 Renderer Layer (React/Zustand)
-  ├─ window.winslab (IPC bridge via contextBridge)
+  ├─ window.cuerunner (IPC bridge via contextBridge)
   │   └─ src/preload/index.ts
   │
 Main Process Layer
@@ -244,7 +245,7 @@ message for a script that threw or timed out, or the port an audio, MIDI or OSC 
 not reach. A cue that could not do what it says is marked failed rather than passed over;
 an OSC message that leaves the machine and is never received still counts as sent, since
 UDP reports nothing. Run results are runtime state — they are never written to the
-`.wlab` file.
+`.cuerunner` file.
 
 The **log panel** (LOG button in the transport bar) records every firing: when the cue
 started, what it did, the response status, and any failure. Script cues also send their
@@ -268,7 +269,7 @@ the cue waits for the script to finish. Two helpers are in scope:
 The script has no access to the interface (no `document`, no `window`); the helpers above
 are the whole surface.
 
-Script cues are not sandboxed — a workspace file is executable code, so only open `.wlab`
+Script cues are not sandboxed — a workspace file is executable code, so only open `.cuerunner`
 files you trust.
 
 ### Playback Engine
@@ -288,7 +289,7 @@ files you trust.
 ### Failure Handling
 
 - Saves go through a temporary file and a rename, and keep the previous version as
-  `<name>.wlab.bak`. A save that fails says so in a notice bar and the log; it never leaves
+  `<name>.cuerunner.bak`. A save that fails says so in a notice bar and the log; it never leaves
   a half-written file.
 - Unsaved work is snapshotted to the user-data folder every 30 s. The next launch offers it
   back with Recover / Discard, and saving or discarding clears it.
@@ -299,10 +300,10 @@ files you trust.
 
 ### Audio Engine
 
-Playback runs in a native engine — `native/audio/`, built to `native/audio/build/winslab-audio`
+Playback runs in a native engine — `native/audio/`, built to `native/audio/build/cuerunner-audio`
 — that the main process starts as a child and talks to over a local socket (Unix domain
 socket, named pipe on Windows) in newline-delimited JSON. The renderer never sees media
-bytes and never touches a decoder: `window.winslab.audio` is a set of execution verbs
+bytes and never touches a decoder: `window.cuerunner.audio` is a set of execution verbs
 (`prepare`, `start`, `stop`, `stopAll`, `seek`, `cancel`, `routing`, `fade`, `progress`,
 `panic`, `clock`, `info`, `devices`, `configure`, `waveform`) whose times are all
 milliseconds on the engine's own sample clock. `src/shared/audio.ts` is the contract both
@@ -355,7 +356,7 @@ processes and the engine speak.
   repository contains it — so the path is supplied to the build:
 
   ```bash
-  WINSLAB_ASIO_SDK=/path/to/ASIOSDK npm run build:native      # Windows only
+  CUERUNNER_ASIO_SDK=/path/to/ASIOSDK npm run build:native      # Windows only
   ```
 
   `scripts/asio-sdk.mjs` reads that one variable (`ASIOSDK` is the directory holding
@@ -427,7 +428,7 @@ Zustand store (`src/renderer/src/store/index.ts`) maintains:
 ## Project Structure
 
 ```
-winslab/
+cuerunner/
 ├── src/
 │   ├── main/
 │   │   ├── ipc/
@@ -456,7 +457,7 @@ winslab/
 
 ## Workspace Format
 
-Workspaces are saved as `.wlab` files (JSON format matching the `Workspace` interface):
+Workspaces are saved as `.cuerunner` files (JSON format matching the `Workspace` interface):
 
 ```json
 {
@@ -510,7 +511,7 @@ Two properties of this file are load-bearing, and both are held by tests
   an older file up to this version's shape is a change to the file rather than to the show and
   is not recorded as an edit.
 
-An `.wlabx` bundle is a zip holding `show.wlab` and a `media/` folder, with the showfile's media
+An `.cuerunnerx` bundle is a zip holding `show.cuerunner` and a `media/` folder, with the showfile's media
 paths relative to the archive root. Entries are stored uncompressed in name order with fixed
 timestamps, so two bundles of one show are byte-identical, and each entry's CRC is checked on
 the way out. A bundle carries up to about 4 GB of media — the format's limit without its 64-bit
@@ -542,7 +543,7 @@ dropped.
     using instead.
   - Single spec: `npm run test:e2e -- e2e/<spec>.spec.ts`
 - **Integration Tests**: `npm run test:integration` (Playwright, requires build)
-  - Tests WinsLab against the systems it meets in a venue — an ETC Eos console, and an
+  - Tests Cuerunner against the systems it meets in a venue — an ETC Eos console, and an
     Allen & Heath SQ or Avantis desk — with a peer standing in for the device
   - Location: `integration/specs`. The peers are `integration/peers/` and run on their own,
     which is what makes them useful outside a test run: `npm run peer:eos`, and
@@ -568,7 +569,7 @@ GitHub Actions workflows in `.github/workflows/`:
   - Typecheck, unit tests, and the Electron-install contract on Ubuntu, on Node 24 (LTS)
     and 26 (current)
   - E2E tests on Windows, macOS, and Linux (Ubuntu under Xvfb)
-  - Integration tests on Linux: WinsLab against the protocol peers for the console and the
+  - Integration tests on Linux: Cuerunner against the protocol peers for the console and the
     desk (no vendor software, no hardware)
 - **`build.yml`**: Runs when a release is published, or manually
   - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
@@ -583,7 +584,7 @@ before that dispatch, including the check that keeps this file's limitations hon
 ## Known limitations
 
 The operator-facing list is in the
-[reference](https://huckcity.github.io/winslab/reference/troubleshooting.html#limitations).
+[reference](https://huckcity.github.io/cuerunner/reference/troubleshooting.html#limitations).
 These are the ones that matter when building or packaging the app.
 
 Playback and platform limits:
@@ -618,8 +619,9 @@ Behaviour worth knowing before a show:
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`
-- OSC input is part of WinsLab Pro: with no license the app sends OSC and does not listen
-  for it
+- OSC and MIDI input are free on any machine: the app listens, triggers fire, and the
+  monitor shows what arrived. What a key turns on is the rest of the services — the desk
+  link, the radios, the network devices and the second machine
 
 Desk and console integration:
 
@@ -653,7 +655,7 @@ Desk and console integration:
 
 Redundant playback:
 
-- **Two machines, one show.** Both run WinsLab with the same workspace open; one is set to
+- **Two machines, one show.** Both run Cuerunner with the same workspace open; one is set to
   *Live* and drives it, the other to *Standby* and mirrors it. What crosses the network is
   state rather than sound: which cue is running, how far into its file the engine has reached,
   what the operator has selected, and a fingerprint of the cue list so the two machines check
@@ -677,7 +679,7 @@ Redundant playback:
   machines of a pair run the same workspace file, so a role written into the show would be
   read as the same answer by both of them
 
-The [reference](https://huckcity.github.io/winslab/reference/troubleshooting.html#limitations)
+The [reference](https://huckcity.github.io/cuerunner/reference/troubleshooting.html#limitations)
 carries the operator-facing half of this list, in the words an operator would look it up in.
 
 ## Contributing
@@ -690,7 +692,7 @@ carries the operator-facing half of this list, in the words an operator would lo
 
 See `CLAUDE.md` for detailed development guidelines.
 
-## WinsLab Pro
+## Cuerunner Pro
 
 The Pro features listed above ship in the same app. A license key turns them on, and
 keys are verified on the machine they are entered on:
@@ -698,7 +700,7 @@ keys are verified on the machine they are entered on:
 - **Nothing is sent anywhere.** The key is signed by the issuer and checked against a
   public key compiled into the app, so a venue machine with no internet unlocks exactly
   like any other, and using a key tells nobody that it was used.
-- **Enter it once**: *WinsLab ▾ → Settings… → License*. The license is kept beside the
+- **Enter it once**: *Cuerunner ▾ → Settings… → License*. The license is kept beside the
   app's other settings in the user-data directory (`license.key`); it belongs to the
   computer it was entered on, not to a workspace or a show file. A machine's half of a
   redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
@@ -714,16 +716,16 @@ keys are verified on the machine they are entered on:
   would take.
 - **Show files are never affected.** A workspace written with Pro opens anywhere, keeping
   its scenes, its mic plot and its triggers, and saves back exactly as it arrived. On an
-  unlicensed machine the Pro surfaces show a lock, the show services do not start, and a
-  scene cue fired from the stack records that it needs a license and lets the rest of the
-  show run.
+  unlicensed machine the Pro surfaces show a lock, the Pro services do not start — the
+  OSC and MIDI listeners do — and a scene cue fired from the stack records that it needs
+  a license and lets the rest of the show run.
 - **A key can be deactivated**, which returns the machine to the free feature set.
 
 ### Issuing keys
 
 Keys are minted offline. The private half of the product key is not in this repository
 and must never be committed; it lives on the issuer's machine at
-`~/.winslab/license-private.pem` (mode 600).
+`~/.cuerunner/license-private.pem` (mode 600).
 
 ```bash
 npm run license:keygen                                  # once: write a pair, print the public half
@@ -738,25 +740,25 @@ their public key stays in the list. A key's text is base32 in groups of eight, c
 who it is for, an id to match it to a sale, and an optional last day (UTC, good through
 the end of it).
 
-**Development and E2E** mint their own keys: `WINSLAB_LICENSE_PUBLIC_KEY` overrides the
+**Development and E2E** mint their own keys: `CUERUNNER_LICENSE_PUBLIC_KEY` overrides the
 trusted key, and it is honoured only when the app is running from a source tree
 (`!app.isPackaged`). A packaged build ignores it. `npm run dev:pro` does all of that for a
 working session — a throwaway pair, a key signed with it, and a user-data directory of its
-own under `~/.winslab-dev`, so the license your normal `npm run dev` is using is never
+own under `~/.cuerunner-dev`, so the license your normal `npm run dev` is using is never
 read, written or shown. E2E specs that need the Pro surfaces launch with
 `launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the gate itself.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/Huckcity/winslab/issues)
-- **Feedback**: The fastest way to shape Winslab is to file an issue with your use case — "I run sound for X and need Y" directly drives the roadmap.
+- **Issues**: [GitHub Issues](https://github.com/Huckcity/cuerunner/issues)
+- **Feedback**: The fastest way to shape Cuerunner is to file an issue with your use case — "I run sound for X and need Y" directly drives the roadmap.
 
 ## Licence
 
-Winslab is source-available under the [Functional Source License 1.1, MIT future licence](./LICENSE) (FSL-1.1-MIT). In short:
+Cuerunner is source-available under the [Functional Source License 1.1, MIT future licence](./LICENSE) (FSL-1.1-MIT). In short:
 
 - **Use it for anything, including paid work.** Running a show, a tour, a venue, a broadcast — commercial use is permitted, and so are internal tools and professional services built around it.
-- **Don't sell it as a competing product.** You may not offer Winslab, or something substantially similar, as a commercial product or service of your own.
+- **Don't sell it as a competing product.** You may not offer Cuerunner, or something substantially similar, as a commercial product or service of your own.
 - **Every release becomes MIT two years after it is published**, irrevocably. FSL exists to keep this product alive while it is being built, not to hold it back forever.
 
 The versions published before this licence (up to and including v0.13.0) were released under MIT and stay under MIT — that grant cannot be withdrawn.

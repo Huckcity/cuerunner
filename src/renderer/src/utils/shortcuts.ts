@@ -9,7 +9,7 @@ const MAC_ORDER = ['Ctrl', 'Alt', 'Shift', 'Mod']
 const MODIFIERS = new Set(MAC_ORDER)
 
 export function currentPlatform(): string {
-  return window.winslab?.platform ?? 'win32'
+  return window.cuerunner?.platform ?? 'win32'
 }
 
 export function formatShortcut(combo: string, platform: string = currentPlatform()): string {

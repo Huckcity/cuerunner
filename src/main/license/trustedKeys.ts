@@ -11,6 +11,6 @@ import { PRODUCT_PUBLIC_KEYS } from './publicKey'
  * source tree. There is no supported way to set this in a package a user has installed.
  */
 export function trustedPublicKeys(isPackaged: boolean, env: NodeJS.ProcessEnv): string[] {
-  const override = env['WINSLAB_LICENSE_PUBLIC_KEY']
+  const override = env['CUERUNNER_LICENSE_PUBLIC_KEY']
   return !isPackaged && override ? [override] : PRODUCT_PUBLIC_KEYS
 }

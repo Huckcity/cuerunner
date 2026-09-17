@@ -139,7 +139,7 @@ struct WaveformDTO {
 };
 
 struct InfoDTO {
-  std::string name = "winslab-audio";
+  std::string name = "cuerunner-audio";
   std::string version;
   int protocol = 2;
   /** This process's identity. A respawned engine has a different one and counts from

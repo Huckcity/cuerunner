@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { describeTriggerSource, triggeredCues } from '../engine/triggers'
 import { firingIdentity, noteKey } from '../engine/inputGuard'
-import { useStore, usePro } from '../store'
+import { useStore } from '../store'
 
 /**
  * Fires the cues that answer to what the show sends back.
@@ -16,15 +16,13 @@ import { useStore, usePro } from '../store'
  * repeats. Both are properties of the surface the message came in on, so they are
  * settled before anything looks for a cue to fire.
  *
- * The events only exist while the show services are licensed and listening, so with no
- * key there is nothing to do here.
+ * The events come from the show's own inputs — OSC and MIDI, which are the free half of
+ * the app — so this listens on every machine, and a key only adds the services that
+ * publish more (the desk link, the radios, the network).
  */
 export function useCueTriggers(): void {
-  const pro = usePro()
-
   useEffect(() => {
-    if (!pro) return
-    return window.winslab.show.onEvents(events => {
+    return window.cuerunner.show.onEvents(events => {
       for (const event of events) {
         if (event.kind !== 'osc' && event.kind !== 'midi') continue
 
@@ -32,17 +30,17 @@ export function useCueTriggers(): void {
         // the next press of that note a press rather than a repeat.
         const note = noteKey(event)
         if (note !== null && event.kind === 'midi' && event.message.kind === 'noteOff') {
-          cueRunner.releaseNote(note)
+          cueEngine.releaseNote(note)
           // A note-off is not a trigger in any case: nothing below can match it.
           continue
         }
 
         const firing = firingIdentity(event)
-        if (!firing || !cueRunner.acceptsFire(firing.surface, firing.key)) continue
+        if (!firing || !cueEngine.acceptsFire(firing.surface, firing.key)) continue
 
         // The press is remembered only once it has been allowed: a note that was refused
         // never started anything, so nothing should be waiting for it to come up.
-        if (note !== null) cueRunner.pressNote(note)
+        if (note !== null) cueEngine.pressNote(note)
 
         // Read the cue list per event rather than per batch: a trigger that fires a cue
         // which is itself edited by that run should be matched against what is there.
@@ -55,9 +53,9 @@ export function useCueTriggers(): void {
             label: `${cue.number} · ${cue.name}`,
             message: `Triggered by ${describeTriggerSource(event)}`
           }])
-          cueRunner.goById(cue.id)
+          cueEngine.goById(cue.id)
         }
       }
     })
-  }, [pro])
+  }, [])
 }

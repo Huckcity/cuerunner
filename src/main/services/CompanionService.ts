@@ -63,6 +63,7 @@ function frame(value: CompanionState): string {
 export class CompanionService implements ShowService {
   readonly id = 'companion'
   readonly label = 'Companion'
+  readonly pro = true
 
   private context: ServiceContext | null = null
   private server: Server | null = null

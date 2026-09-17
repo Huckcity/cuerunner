@@ -1,6 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ─── Winslab Design Tokens ─────────────────────────────────────────────── */
+/* ─── Cuerunner Design Tokens ─────────────────────────────────────────────── */
 /*
  * Two rules hold this file together, and theme.test.ts enforces the first:
  *

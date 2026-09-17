@@ -44,7 +44,7 @@ function writeSparseWav(file: string, dataBytes = 80 * MB): void {
 }
 
 function longShow(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-footprint-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-footprint-'))
   tempDirs.push(root)
   const media = path.join(root, 'overture.wav')
   writeSparseWav(media)
@@ -65,15 +65,15 @@ function longShow(): string {
     }]
   }
 
-  const wlab = path.join(root, 'Long Show.wlab')
-  fs.writeFileSync(wlab, JSON.stringify(workspace, null, 2))
-  return wlab
+  const cuerunner = path.join(root, 'Long Show.cuerunner')
+  fs.writeFileSync(cuerunner, JSON.stringify(workspace, null, 2))
+  return cuerunner
 }
 
-async function openShow(page: Page, userDataDir: string, wlab: string): Promise<void> {
-  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([wlab]))
+async function openShow(page: Page, userDataDir: string, cuerunner: string): Promise<void> {
+  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([cuerunner]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: path.basename(wlab) }).click()
+  await page.locator('.file-menu-recent', { hasText: path.basename(cuerunner) }).click()
   await expect(page.locator('.cue-row', { hasText: 'Overture' })).toBeVisible()
 }
 
@@ -89,10 +89,10 @@ async function openSettingsAudio(page: Page) {
 }
 
 test('a workspace the engine will stream is announced, and measuring it decodes nothing', async () => {
-  const wlab = longShow()
+  const cuerunner = longShow()
   const { app, page, userDataDir } = await launchApp()
   try {
-    await openShow(page, userDataDir, wlab)
+    await openShow(page, userDataDir, cuerunner)
     const dialog = await openSettingsAudio(page)
 
     // The estimate is the engine's, and it says what will happen to the file.
@@ -107,7 +107,7 @@ test('a workspace the engine will stream is announced, and measuring it decodes 
     await expect(memory).toContainText('0 B resident')
 
     const info = await app.evaluate(async () => {
-      const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+      const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
       return harness ? harness.engineInfo() : null
     })
     expect(info).not.toBeNull()

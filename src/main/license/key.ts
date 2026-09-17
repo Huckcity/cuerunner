@@ -200,12 +200,12 @@ export function licenseExpired(payload: LicensePayload, now: number): boolean {
 export function describeRefusal(reason: LicenseRefusal): string {
   switch (reason) {
     case 'malformed':
-      return 'That is not a WinsLab license key. Paste the whole key, dashes and all.'
+      return 'That is not a Cuerunner license key. Paste the whole key, dashes and all.'
     case 'version':
-      return 'That key was issued for a newer version of WinsLab. Update the app, then try again.'
+      return 'That key was issued for a newer version of Cuerunner. Update the app, then try again.'
     case 'payload':
       return 'That key is missing part of its license. Paste the whole key.'
     case 'signature':
-      return 'That key was not issued by WinsLab.'
+      return 'That key was not issued by Cuerunner.'
   }
 }

@@ -87,7 +87,7 @@ const TAB_BLURB: Record<SettingsTab, string> = {
   network: 'How consoles, tablets and other gear reach this show.',
   wireless: 'Where pack readings come from, and when to warn about them.',
   redundancy: 'A second computer, ready to take the show over.',
-  license: 'WinsLab Pro on this machine.'
+  license: 'Cuerunner Pro on this machine.'
 }
 
 /** Which service reports for a tab, so the sidebar can show whether it is on. */
@@ -102,11 +102,10 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
  * Why a Pro service's settings are here but not running. The settings travel with the
  * show whatever the license says; only the listening waits for one.
  */
-function ProHint({ onUnlock }: { onUnlock: () => void }) {
+function ProHint({ onUnlock, children }: { onUnlock: () => void; children?: React.ReactNode }) {
   return (
     <p className="inspector-hint license-hint">
-      Part of WinsLab Pro. These settings are saved with the show, and start working once
-      this machine is licensed.{' '}
+      {children ?? 'Part of Cuerunner Pro. These settings are saved with the show, and start working once this machine is licensed.'}{' '}
       <button className="license-link" onClick={onUnlock}>Enter a license key</button>
     </p>
   )
@@ -135,8 +134,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
       .catch(() => {
         // No device list: the engine section says so rather than inventing devices.
       })
-    window.winslab.midi.listPorts().then(setMidiPorts)
-    window.winslab.midi.listInputPorts().then(setMidiInputPorts)
+    window.cuerunner.midi.listPorts().then(setMidiPorts)
+    window.cuerunner.midi.listInputPorts().then(setMidiInputPorts)
     // A device list belongs to the audio system that produced it, and the show can
     // change systems while this dialog is open: the devices of the old one are no
     // longer a list of anything.
@@ -399,22 +398,12 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               )}
 
               <div className="field-section-title">New audio cues</div>
-              {!pro && (
-                <p className="inspector-hint license-hint">
-                  Trimming happens on a licensed machine. The setting is saved with the
-                  show either way.{' '}
-                  <button className="license-link" onClick={() => setTab('license')}>
-                    Enter a license key
-                  </button>
-                </p>
-              )}
               <div className="field-row">
                 <label htmlFor="settings-auto-trim">Trim silence</label>
                 <input
                   id="settings-auto-trim"
                   type="checkbox"
                   checked={audioSettings.autoTrimSilence ?? false}
-                  disabled={!pro}
                   onChange={e => updateAudioSettings({ autoTrimSilence: e.target.checked })}
                 />
                 <span className="settings-info">Skip silence at the start and end</span>
@@ -505,7 +494,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               </div>
               <p className="inspector-hint">The port MIDI cues use unless they name their own.</p>
 
-              {!pro && <ProHint onUnlock={() => setTab('license')} />}
               <ServiceBlock
                 title="Listen to MIDI"
                 blurb="Fire cues from notes and controllers, and see what arrives in the Monitor."
@@ -542,8 +530,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
 
           {tab === 'network' && (
             <>
-              {!pro && <ProHint onUnlock={() => setTab('license')} />}
-
               <ServiceBlock
                 title="OSC control"
                 blurb="Take cues and commands from lighting consoles, sound desks and tablets."
@@ -562,6 +548,13 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   onValue={port => updateOscInSettings({ port })}
                 />
               </ServiceBlock>
+
+              {!pro && (
+                <ProHint onUnlock={() => setTab('license')}>
+                  Finding devices and the tablet view are part of Cuerunner Pro. Listening
+                  for OSC is free.
+                </ProHint>
+              )}
 
               <ServiceBlock
                 title="Find devices"

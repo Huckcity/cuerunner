@@ -40,10 +40,10 @@ const cue = (filePath: string): unknown => ({
 })
 
 test.beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-vamp-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-vamp-'))
   const media = path.join(root, 'playoff.wav')
   writeWav(media)
-  const showPath = path.join(root, 'Vamp.wlab')
+  const showPath = path.join(root, 'Vamp.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-vamp',
@@ -59,7 +59,7 @@ test.beforeEach(async () => {
   ;({ app, page } = await launchApp({ userDataDir }))
 
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Vamp.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Vamp.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Playoff' })).toBeVisible()
 })
 

@@ -1,9 +1,9 @@
 import { useEffect, useCallback } from 'react'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
 import { isPro } from '../types/license'
 
-export function useCueRunner() {
+export function useCueEngine() {
   const setRunning = useStore(s => s.setRunning)
   const clearAllRunning = useStore(s => s.clearAllRunning)
   const select = useStore(s => s.select)
@@ -12,7 +12,7 @@ export function useCueRunner() {
   const appendLog = useStore(s => s.appendLog)
 
   useEffect(() => {
-    cueRunner.init({
+    cueEngine.init({
       getCues: () => useStore.getState().cues,
       getSelected: () => useStore.getState().selectedId,
       setSelected: select,
@@ -28,9 +28,9 @@ export function useCueRunner() {
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 
-  const go = useCallback(() => cueRunner.go(), [])
-  const stop = useCallback(() => cueRunner.stop(), [])
-  const panic = useCallback(() => cueRunner.panic(), [])
+  const go = useCallback(() => cueEngine.go(), [])
+  const stop = useCallback(() => cueEngine.stop(), [])
+  const panic = useCallback(() => cueEngine.panic(), [])
 
   return { go, stop, panic }
 }

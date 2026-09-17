@@ -33,12 +33,12 @@ from `main`. `semantic-release` cuts the version from the commits since the last
       notes say.
 - [ ] **If the Windows installer contains ASIO, the Steinberg agreement is signed.**
       The engine hosts ASIO drivers only when Steinberg's ASIO SDK was present at build time
-      (`WINSLAB_ASIO_SDK`; see *Packaging prerequisites* in `README.md`), and the SDK's
+      (`CUERUNNER_ASIO_SDK`; see *Packaging prerequisites* in `README.md`), and the SDK's
       proprietary licence — the one a closed-source application uses — permits *building*
       against it but permits *publishing* a build that links it only under the License
       Agreement signed by Steinberg. So before a release that ships ASIO either the signed
       agreement is on file and the binary is the one that was tested with it, or the release
-      is built without the SDK (the default: no `WINSLAB_ASIO_SDK` in the build environment,
+      is built without the SDK (the default: no `CUERUNNER_ASIO_SDK` in the build environment,
       the log line says `native-audio: ASIO off`, and no ASIO device is offered anywhere).
       Check the `build-windows` job's log for which of the two it was; a build that silently
       gained ASIO is the failure this item exists to catch.

@@ -124,8 +124,8 @@ test('a show written before the desk had a socket opens on the port the desks us
   // The file is what an operator's workspace looks like after the upgrade: a desk pointed
   // over the network, and no MIDI-over-TCP port, because the field did not exist when it
   // was saved.
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-desk-tcp-'))
-  const showPath = path.join(root, 'Socket Show.wlab')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-desk-tcp-'))
+  const showPath = path.join(root, 'Socket Show.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-socket',

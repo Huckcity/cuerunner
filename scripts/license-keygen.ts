@@ -16,7 +16,7 @@ import { createLicense, describeRefusal, verifyLicense, type LicenseDraft } from
 import { PRODUCT_PUBLIC_KEYS } from '../src/main/license/publicKey.ts'
 
 /** Kept out of the repository on purpose: it is the whole of the product's protection. */
-export const DEFAULT_KEY_PATH = join(homedir(), '.winslab', 'license-private.pem')
+export const DEFAULT_KEY_PATH = join(homedir(), '.cuerunner', 'license-private.pem')
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -43,7 +43,7 @@ export function issueKey(options: IssueOptions, privateKeyPem: string): string {
   }
   const payload: LicenseDraft = {
     v: 1,
-    id: options.id ?? `WSP-${randomId()}`,
+    id: options.id ?? `CRN-${randomId()}`,
     licensee,
     issued: options.issued,
     ...(options.expires === undefined ? {} : { expires: options.expires })
@@ -157,11 +157,11 @@ export function runCli(
     return
   }
 
-  out('WinsLab license keys')
+  out('Cuerunner license keys')
   out('')
   out('  npm run license:keygen                        write a new key pair (once)')
   out('  npm run license:issue -- --name "Theatre X"   mint a key from that pair')
-  out('  npm run license:issue -- --name "…" --expires 2027-09-12 --id WSP-ABC123')
+  out('  npm run license:issue -- --name "…" --expires 2027-09-12 --id CRN-ABC123')
   out('  npm run license:verify -- "WSL1-…"            check a key against the shipped key')
 }
 

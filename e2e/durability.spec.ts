@@ -34,15 +34,15 @@ function workspaceFile(cues: unknown[] = []): string {
 test('a save that cannot be written is reported and leaves the file untouched', async () => {
   test.skip(process.platform === 'win32', 'needs POSIX directory permissions to make a save fail')
 
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-readonly-'))
-  const file = path.join(dir, 'Read Only Show.wlab')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-readonly-'))
+  const file = path.join(dir, 'Read Only Show.cuerunner')
   const original = workspaceFile()
   fs.writeFileSync(file, original)
 
   // Put it in this instance's recent list, then open it the way an operator would.
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([file]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Read Only Show.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Read Only Show.cuerunner' }).click()
   await expect(page.locator('.workspace-name')).toContainText('Read Only Show')
 
   // Dirty the session, then take the directory away from the app.
@@ -63,7 +63,7 @@ test('a save that cannot be written is reported and leaves the file untouched', 
   fs.chmodSync(dir, 0o700)
   expect(fs.readFileSync(file, 'utf-8')).toBe(original)
   // No half-written file and no leftover temporary next to it.
-  expect(fs.readdirSync(dir)).toEqual(['Read Only Show.wlab'])
+  expect(fs.readdirSync(dir)).toEqual(['Read Only Show.cuerunner'])
 
   fs.rmSync(dir, { recursive: true, force: true })
 })
@@ -93,7 +93,7 @@ test('unsaved work is offered back after a session that ended without saving', a
   }
 
   // What autosave would have left behind, then a session that never saved.
-  fs.writeFileSync(path.join(userDataDir, 'recovery.wlab'), JSON.stringify(snapshot))
+  fs.writeFileSync(path.join(userDataDir, 'recovery.cuerunner'), JSON.stringify(snapshot))
   await closeApp(app)
   ;({ app, page } = await launchApp({ userDataDir }))
 
@@ -115,5 +115,5 @@ test('unsaved work is offered back after a session that ended without saving', a
   await expect(page.locator('.workspace-name')).toContainText('●')
   await expect(page.locator('.app-notice[data-kind="recovery"]')).toHaveCount(0)
   // The snapshot is consumed, so the next launch does not offer it again.
-  expect(fs.existsSync(path.join(userDataDir, 'recovery.wlab'))).toBe(false)
+  expect(fs.existsSync(path.join(userDataDir, 'recovery.cuerunner'))).toBe(false)
 })

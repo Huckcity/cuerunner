@@ -9,7 +9,7 @@ import { canonicalLicense, createLicense, type LicenseDraft } from './key'
 
 // The manager writes through the durable-write helper the workspace saves use, which
 // reads `app.getPath` at the module boundary.
-vi.mock('electron', () => ({ app: { getPath: () => process.env['WINSLAB_TEST_USER_DATA'] } }))
+vi.mock('electron', () => ({ app: { getPath: () => process.env['CUERUNNER_TEST_USER_DATA'] } }))
 
 const issuer = generateKeyPairSync('ed25519')
 const PRIVATE_PEM = issuer.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
@@ -20,7 +20,7 @@ const OTHER_PRIVATE_PEM = generateKeyPairSync('ed25519').privateKey
 
 const PAYLOAD: LicenseDraft = {
   v: 1,
-  id: 'WSP-4K7Q2',
+  id: 'CRN-4K7Q2',
   licensee: 'Huckcity Ltd',
   issued: '2026-09-12'
 }
@@ -33,7 +33,7 @@ let dir: string
 let filePath: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-license-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-license-'))
   filePath = join(dir, 'license.key')
 })
 
@@ -60,7 +60,7 @@ describe('reading the stored key', () => {
 
     expect(manager().status()).toEqual({
       state: 'active',
-      license: { v: 1, id: 'WSP-4K7Q2', licensee: 'Huckcity Ltd', issued: '2026-09-12' }
+      license: { v: 1, id: 'CRN-4K7Q2', licensee: 'Huckcity Ltd', issued: '2026-09-12' }
     })
   })
 
@@ -68,7 +68,7 @@ describe('reading the stored key', () => {
     writeFileSync(filePath, key({}, OTHER_PRIVATE_PEM), 'utf-8')
     const status = manager().status()
     expect(status.state).toBe('invalid')
-    expect(status.state === 'invalid' && status.error).toContain('not issued by WinsLab')
+    expect(status.state === 'invalid' && status.error).toContain('not issued by Cuerunner')
   })
 
   it('reports a stored key past its date as expired, keeping who it was for', () => {
@@ -96,7 +96,7 @@ describe('activate', () => {
     const result = await license.activate('hello there')
 
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('not a WinsLab license key')
+    expect(result.error).toContain('not a Cuerunner license key')
     expect(license.status().state).toBe('active')
   })
 
@@ -114,7 +114,7 @@ describe('activate', () => {
     const license = manager()
     const result = await license.activate(key({}, OTHER_PRIVATE_PEM))
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('not issued by WinsLab')
+    expect(result.error).toContain('not issued by Cuerunner')
   })
 
   it('refuses a key that has run out, judged by the clock it was handed', async () => {
@@ -128,7 +128,7 @@ describe('deactivate', () => {
   it('removes the key and every copy of it', async () => {
     const license = manager()
     await license.activate(key())
-    await license.activate(key({ id: 'WSP-9ZZZZ' }))
+    await license.activate(key({ id: 'CRN-9ZZZZ' }))
 
     expect(await license.deactivate()).toEqual({ state: 'unlicensed' })
     expect(existsSync(filePath)).toBe(false)

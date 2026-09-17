@@ -24,9 +24,9 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `winslab-audio${process.platform === 'win32' ? '.exe' : ''}`)
+const defaultBinary = join(repoRoot, 'native', 'audio', 'build', `cuerunner-audio${process.platform === 'win32' ? '.exe' : ''}`)
 const binaryIndex = process.argv.indexOf('--binary')
-const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.WINSLAB_AUDIO_BIN ?? defaultBinary
+const binary = binaryIndex >= 0 ? process.argv[binaryIndex + 1] : process.env.CUERUNNER_AUDIO_BIN ?? defaultBinary
 
 const SAMPLE_RATE = 48000
 const BLOCK_FRAMES = 512
@@ -145,7 +145,7 @@ if (process.platform === 'win32') {
   process.exit(0)
 }
 
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-stall-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-stall-'))
 const sourcePath = join(workDir, 'long.wav')
 const capturePath = join(workDir, 'capture.wav')
 

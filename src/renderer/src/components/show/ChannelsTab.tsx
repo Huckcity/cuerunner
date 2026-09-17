@@ -102,7 +102,7 @@ export function ChannelsTab() {
 
   useEffect(() => {
     let mounted = true
-    window.winslab.midi.listPorts().then(found => { if (mounted) setPorts(found) })
+    window.cuerunner.midi.listPorts().then(found => { if (mounted) setPorts(found) })
     return () => { mounted = false }
   }, [])
 

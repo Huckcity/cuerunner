@@ -35,7 +35,7 @@ function compiler() {
   return { command: 'g++', args: ['-std=c++17', '-O1', '-Wall', '-Wextra'] }
 }
 
-const workDir = mkdtempSync(join(tmpdir(), 'winslab-asio-rules-'))
+const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-asio-rules-'))
 const isMsvc = compiler().command.endsWith('cl') || compiler().command.endsWith('cl.exe')
 const binary = join(workDir, isMsvc ? 'asio-rules.exe' : 'asio-rules')
 const { command, args } = compiler()

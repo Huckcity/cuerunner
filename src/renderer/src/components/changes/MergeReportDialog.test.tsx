@@ -18,7 +18,7 @@ const TALLY = { oursOnly: 3, theirsOnly: 2, blended: 1, same: 12, conflicts: 1 }
 
 function report(over: Partial<{ notes: Array<{ subject: string; detail: string; conflict: boolean }>; policy: 'ours' | 'theirs' }> = {}) {
   return {
-    path: '/shows/Hamlet (merged).wlab',
+    path: '/shows/Hamlet (merged).cuerunner',
     tally: TALLY,
     policy: over.policy ?? ('ours' as const),
     notes: over.notes ?? [
@@ -32,11 +32,11 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  merge = window.winslab.workspace.merge as unknown as Mock
-  openPath = window.winslab.workspace.openPath as unknown as Mock
+  merge = window.cuerunner.workspace.merge as unknown as Mock
+  openPath = window.cuerunner.workspace.openPath as unknown as Mock
   merge.mockReset().mockResolvedValue({ ok: true, merged: null })
   openPath.mockReset().mockResolvedValue({
-    path: '/shows/Hamlet (merged).wlab',
+    path: '/shows/Hamlet (merged).cuerunner',
     workspace: { cues: [], name: 'Hamlet', missingMedia: [] },
     missingMedia: []
   })
@@ -65,7 +65,7 @@ describe('the merge report', () => {
     await show()
 
     const dialog = container.querySelector('.settings-dialog') as HTMLElement
-    expect(dialog.textContent).toContain('Hamlet (merged).wlab')
+    expect(dialog.textContent).toContain('Hamlet (merged).cuerunner')
     expect(dialog.textContent).toContain('3 from this show')
     expect(dialog.textContent).toContain('2 from the other show')
     expect(dialog.textContent).toContain('1 put together')
@@ -97,7 +97,7 @@ describe('the merge report', () => {
       open.click()
     })
 
-    expect(openPath.mock.calls[0][0]).toBe('/shows/Hamlet (merged).wlab')
+    expect(openPath.mock.calls[0][0]).toBe('/shows/Hamlet (merged).cuerunner')
   })
 
   it('does not draw the conflict line when nobody disagreed', async () => {

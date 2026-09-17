@@ -22,14 +22,14 @@ test.afterEach(async () => {
 
 /** Writes a workspace with the given files beside it, then opens it the way a user would. */
 async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-include-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-include-'))
   for (const [name, content] of Object.entries(files)) {
     const full = path.join(dir, name)
     fs.mkdirSync(path.dirname(full), { recursive: true })
     fs.writeFileSync(full, content)
   }
 
-  const workspace = path.join(dir, 'Include Show.wlab')
+  const workspace = path.join(dir, 'Include Show.cuerunner')
   fs.writeFileSync(workspace, JSON.stringify({
     version: 1,
     id: 'w1',
@@ -42,7 +42,7 @@ async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
 
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([workspace]))
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Show.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Show.cuerunner' }).click()
   await expect(page.locator('.workspace-name')).toContainText('Include Show')
 }
 

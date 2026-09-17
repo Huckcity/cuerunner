@@ -14,7 +14,7 @@ const PAGE = `<!doctype html>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
-    <title>WinsLab Companion</title>
+    <title>Cuerunner Companion</title>
     <style>
       :root {
         --bg: #0e1013;

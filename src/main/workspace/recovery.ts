@@ -20,7 +20,7 @@ export interface RecoverySnapshot {
 // Autosave writes here, not over the operator's file: a recovery snapshot is offered
 // back on the next launch instead of being applied behind their back.
 function recoveryFilePath(): string {
-  return join(app.getPath('userData'), 'recovery.wlab')
+  return join(app.getPath('userData'), 'recovery.cuerunner')
 }
 
 export async function writeRecovery(

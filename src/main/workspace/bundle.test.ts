@@ -15,7 +15,7 @@ vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')
   const { tmpdir } = await import('os')
   const { join } = await import('path')
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-bundle-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-bundle-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: {},
@@ -72,11 +72,11 @@ let dir: string
 let bundled: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'winslab-bundle-'))
+  dir = mkdtempSync(join(tmpdir(), 'cuerunner-bundle-'))
   mkdirSync(join(dir, 'music'))
   writeFileSync(join(dir, 'music', 'walk-in.wav'), Buffer.alloc(2048, 3))
   writeFileSync(join(dir, 'music', 'bows.wav'), Buffer.alloc(512, 9))
-  bundled = join(dir, 'Press Night.wlabx')
+  bundled = join(dir, 'Press Night.cuerunnerx')
 })
 
 afterEach(() => {
@@ -92,7 +92,7 @@ describe('exporting a show as a bundle', () => {
       audioCue('a3', '3', 'Walk-in again', join(dir, 'music', 'walk-in.wav'))
     ])
 
-    const exported = await writeBundle(show, join(dir, 'Press Night.wlab'), bundled)
+    const exported = await writeBundle(show, join(dir, 'Press Night.cuerunner'), bundled)
     expect(exported.missing).toEqual([])
 
     const bundle = await readBundle(bundled)
@@ -113,8 +113,8 @@ describe('exporting a show as a bundle', () => {
 
   it('writes the same bytes for the same show', async () => {
     const show = workspace([audioCue('a1', '1', 'Walk-in', join(dir, 'music', 'walk-in.wav'))])
-    const first = join(dir, 'first.wlabx')
-    const second = join(dir, 'second.wlabx')
+    const first = join(dir, 'first.cuerunnerx')
+    const second = join(dir, 'second.cuerunnerx')
 
     await writeBundle(show, null, first)
     await writeBundle(show, null, second)
@@ -168,7 +168,7 @@ describe('unpacking a bundle', () => {
     const bundle = await readBundle(bundled)
     const unpacked = await unpackBundle(bundled, elsewhere, bundle)
 
-    expect(unpacked.path).toBe(join(elsewhere, 'Press Night.wlab'))
+    expect(unpacked.path).toBe(join(elsewhere, 'Press Night.cuerunner'))
     expect(unpacked.missingMedia).toEqual([])
     expect(readFileSync(join(elsewhere, 'media', 'walk-in.wav')).length).toBe(2048)
     expect((unpacked.workspace.cues[0] as AudioCue).filePath)
@@ -183,8 +183,8 @@ describe('unpacking a bundle', () => {
     const elsewhere = join(dir, 'handover')
     const unpacked = await unpackBundle(bundled, elsewhere, bundle)
 
-    expect(bundleFileName('Hamlet: act 2/3')).toBe('Hamlet- act 2-3.wlab')
-    expect(unpacked.path).toBe(join(elsewhere, 'Hamlet- act 2-3.wlab'))
+    expect(bundleFileName('Hamlet: act 2/3')).toBe('Hamlet- act 2-3.cuerunner')
+    expect(unpacked.path).toBe(join(elsewhere, 'Hamlet- act 2-3.cuerunner'))
   })
 
   it('refuses to land on files that are already there, unless it is told to replace them', async () => {
@@ -194,12 +194,12 @@ describe('unpacking a bundle', () => {
     const elsewhere = join(dir, 'handover')
     mkdirSync(join(elsewhere, 'media'), { recursive: true })
     writeFileSync(join(elsewhere, 'media', 'walk-in.wav'), Buffer.from('something else'))
-    writeFileSync(join(elsewhere, 'Press Night.wlab'), '{}')
+    writeFileSync(join(elsewhere, 'Press Night.cuerunner'), '{}')
 
     await expect(unpackBundle(bundled, elsewhere, bundle)).rejects.toBeInstanceOf(BundleCollision)
     // Nothing was touched by the refusal.
     expect(readFileSync(join(elsewhere, 'media', 'walk-in.wav')).toString()).toBe('something else')
-    expect(readFileSync(join(elsewhere, 'Press Night.wlab'), 'utf-8')).toBe('{}')
+    expect(readFileSync(join(elsewhere, 'Press Night.cuerunner'), 'utf-8')).toBe('{}')
 
     const unpacked = await unpackBundle(bundled, elsewhere, bundle, { overwrite: true })
     expect(unpacked.missingMedia).toEqual([])
@@ -228,13 +228,13 @@ describe('unpacking a bundle', () => {
   })
 
   it('refuses a file that is not a bundle', async () => {
-    const notAnArchive = join(dir, 'notes.wlabx')
+    const notAnArchive = join(dir, 'notes.cuerunnerx')
     writeFileSync(notAnArchive, 'this is not an archive')
     await expect(readBundle(notAnArchive)).rejects.toThrow('not a zip archive')
 
     // A zip with no show in it is not a bundle either, whatever else it carries: a reader
     // must not unpack a folder of media and call it a show.
-    const mediaOnly = join(dir, 'media-only.wlabx')
+    const mediaOnly = join(dir, 'media-only.cuerunnerx')
     await writeZip(mediaOnly, [
       { name: 'media/walk-in.wav', file: join(dir, 'music', 'walk-in.wav') }
     ])

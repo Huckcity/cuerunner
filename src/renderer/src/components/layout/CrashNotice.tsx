@@ -13,7 +13,7 @@ export function CrashNotice() {
   const [crash, setCrash] = useState<RendererCrash | null>(null)
 
   useEffect(() => {
-    window.winslab.app
+    window.cuerunner.app
       .rendererCrash()
       .then(report => { if (report) setCrash(report) })
       .catch(() => { /* nothing to report if the bridge is unavailable */ })

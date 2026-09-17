@@ -1,5 +1,5 @@
-// Winslab UI Kit — Inspector panel (all cue type inspectors)
-// Exported to window.WinslabInspector
+// Cuerunner UI Kit — Inspector panel (all cue type inspectors)
+// Exported to window.CuerunnerInspector
 
 const { useState } = React;
 
@@ -308,4 +308,4 @@ const inspStyles = {
   },
 };
 
-Object.assign(window, { WinslabInspector: Inspector });
+Object.assign(window, { CuerunnerInspector: Inspector });

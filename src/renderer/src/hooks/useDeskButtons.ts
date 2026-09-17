@@ -82,7 +82,7 @@ export function useDeskButtons(): void {
 
     askWhereTheGroupsStand()
 
-    return window.winslab.show.onEvents(events => {
+    return window.cuerunner.show.onEvents(events => {
       const current = useStore.getState().showSettings.desk
       const device = deskDevice(current)
       if (device === null) return

@@ -20,7 +20,7 @@ const STRANGER_PEM = generateKeyPairSync('ed25519').publicKey
 
 const PAYLOAD: LicenseDraft = {
   v: 1,
-  id: 'WSP-4K7Q2',
+  id: 'CRN-4K7Q2',
   licensee: 'Huckcity Ltd',
   issued: '2026-09-12'
 }
@@ -47,7 +47,7 @@ describe('verifyLicense', () => {
     const result = verifyLicense(key(), [PUBLIC_PEM])
     expect(result).toEqual({
       ok: true,
-      payload: { v: 1, id: 'WSP-4K7Q2', licensee: 'Huckcity Ltd', issued: '2026-09-12' }
+      payload: { v: 1, id: 'CRN-4K7Q2', licensee: 'Huckcity Ltd', issued: '2026-09-12' }
     })
   })
 

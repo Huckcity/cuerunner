@@ -26,7 +26,7 @@ test.afterAll(() => {
 })
 
 function tempPath(name: string): string {
-  const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-e2e-')), name)
+  const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-e2e-')), name)
   tempFiles.push(p)
   return p
 }

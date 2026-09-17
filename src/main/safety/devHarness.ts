@@ -50,7 +50,7 @@ export interface PlaybackDevHarness {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __winslabDevHarness: PlaybackDevHarness | undefined
+  var __cuerunnerDevHarness: PlaybackDevHarness | undefined
 }
 
 export interface PlaybackDevHarnessDeps {
@@ -76,7 +76,7 @@ export interface PlaybackDevHarnessDeps {
 /** No-op in a packaged build, so a release cannot expose it by accident. */
 export function installPlaybackDevHarness(deps: PlaybackDevHarnessDeps): void {
   if (app.isPackaged) return
-  globalThis.__winslabDevHarness = {
+  globalThis.__cuerunnerDevHarness = {
     safety: () => deps.safety.state(),
     keepAwakeHeld: deps.keepAwakeHeld,
     engineStatus: deps.engine.status,

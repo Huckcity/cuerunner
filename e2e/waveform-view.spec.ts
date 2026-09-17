@@ -40,10 +40,10 @@ const cue = (id: string, number: string, name: string, filePath: string): unknow
 })
 
 test.beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-view-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-view-'))
   const media = path.join(root, 'reel.wav')
   writeWav(media)
-  const showPath = path.join(root, 'View.wlab')
+  const showPath = path.join(root, 'View.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-view',
@@ -62,7 +62,7 @@ test.beforeEach(async () => {
   ;({ app, page } = await launchApp({ userDataDir }))
 
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'View.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'View.cuerunner' }).click()
   await page.locator('.cue-row', { hasText: 'Reel One' }).click()
   await expect(page.locator('.waveform-total')).toHaveText('0:20.0')
 })

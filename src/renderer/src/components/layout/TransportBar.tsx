@@ -1,5 +1,5 @@
 import { useStore } from '../../store'
-import { useCueRunner, useKeyboard } from '../../hooks/useCueRunner'
+import { useCueEngine, useKeyboard } from '../../hooks/useCueEngine'
 import MidiStatusBadge from '../midi/MidiStatusBadge'
 import { AlertChip } from './AlertChip'
 import { PlaybackWarnings } from './PlaybackWarnings'
@@ -25,7 +25,7 @@ export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script'
  * meant rather than reached for. That leaves GO as the only saturated colour on screen.
  */
 export function TransportBar({ onShowStrip }: Props) {
-  const { go, stop, panic } = useCueRunner()
+  const { go, stop, panic } = useCueEngine()
   useKeyboard(go, stop, panic)
 
   const running = useStore(s => s.running)

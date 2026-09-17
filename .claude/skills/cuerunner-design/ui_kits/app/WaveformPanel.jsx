@@ -1,5 +1,5 @@
-// Winslab UI Kit — WaveformPanel component (simulated waveform)
-// Exported to window.WinslabWaveformPanel
+// Cuerunner UI Kit — WaveformPanel component (simulated waveform)
+// Exported to window.CuerunnerWaveformPanel
 
 const { useEffect, useRef, useState } = React;
 
@@ -119,4 +119,4 @@ const waveStyles = {
   canvasWrap: { flex: 1, position: 'relative', overflow: 'hidden' },
 };
 
-Object.assign(window, { WinslabWaveformPanel: WaveformPanel });
+Object.assign(window, { CuerunnerWaveformPanel: WaveformPanel });

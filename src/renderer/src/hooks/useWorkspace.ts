@@ -4,7 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { Workspace, WorkspaceIdentity } from '../types/workspace'
 import { buildWorkspace } from '../utils/workspace'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
 function reportFailure(message: string): void {
@@ -20,14 +20,14 @@ async function guardDirty(): Promise<boolean> {
     useStore.getState()
   if (!isDirty) return true
 
-  const response = await window.winslab.workspace.confirmClose(workspaceName)
+  const response = await window.cuerunner.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
     const sentCues = useStore.getState().cues
     const sentEdits = useStore.getState().past.length
     let saved: { path: string; history: ShowHistoryEntry[] } | null
     try {
-      saved = await window.winslab.workspace.save(buildWorkspace(
+      saved = await window.cuerunner.workspace.save(buildWorkspace(
         workspaceName, cues, audioSettings, midiSettings, showSettings,
         { id: workspaceId, createdAt: workspaceCreatedAt }, triggerGuard, showHistory
       ), workspacePath)
@@ -42,10 +42,10 @@ async function guardDirty(): Promise<boolean> {
     // still ask. The undo depth is the cheap witness — every edit pushes exactly one.
     const after = useStore.getState()
     if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
-    await window.winslab.workspace.clearRecovery().catch(() => {})
+    await window.cuerunner.workspace.clearRecovery().catch(() => {})
   } else {
     // "Don't Save" discards the session, including its recovery snapshot.
-    await window.winslab.workspace.clearRecovery().catch(() => {})
+    await window.cuerunner.workspace.clearRecovery().catch(() => {})
   }
   return true
 }
@@ -75,7 +75,7 @@ function loadIntoStore(
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
   // one from the show that was open before.
-  cueRunner.resetGuards()
+  cueEngine.resetGuards()
   store.setMissingMedia(missingMedia)
 }
 
@@ -87,7 +87,7 @@ export async function openDemoWorkspace(): Promise<void> {
     // The demo's audio is copied out of the app bundle as it loads, so there is never
     // anything missing to report. It is a template rather than a show someone owns, so
     // it takes a fresh identity: saving it as your own show must not keep the demo's.
-    const demo = await window.winslab.workspace.openDemo()
+    const demo = await window.cuerunner.workspace.openDemo()
     loadIntoStore(demo, null, [], { id: crypto.randomUUID(), createdAt: new Date().toISOString() })
   } catch (e) {
     reportFailure(`Could not open the demo workspace: ${message(e)}`)
@@ -107,7 +107,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     createdAt: workspaceCreatedAt
   }, triggerGuard)
   try {
-    const result = await window.winslab.workspace.relink(workspace, workspacePath, cueId)
+    const result = await window.cuerunner.workspace.relink(workspace, workspacePath, cueId)
     // Only cues that actually moved are written back, so an unresolved file keeps the
     // path it was last seen at instead of losing it.
     const resolved: Record<string, string> = {}
@@ -150,7 +150,7 @@ export async function exportShowBundle(): Promise<void> {
     showHistory
   )
   try {
-    const answer = await window.winslab.workspace.exportBundle(workspace, workspacePath)
+    const answer = await window.cuerunner.workspace.exportBundle(workspace, workspacePath)
     if (!answer.ok) {
       reportFailure(answer.error)
       return
@@ -197,7 +197,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     showHistory
   )
   try {
-    const answer = await window.winslab.workspace.merge(workspace, workspacePath, {
+    const answer = await window.cuerunner.workspace.merge(workspace, workspacePath, {
       policy,
       ...(again ? { again: true } : {})
     })
@@ -221,7 +221,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
 export async function openMergedShow(filePath: string): Promise<void> {
   if (!await guardDirty()) return
   try {
-    const opened = await window.winslab.workspace.openPath(filePath)
+    const opened = await window.cuerunner.workspace.openPath(filePath)
     loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
     useStore.getState().setMergeReport(null)
   } catch (e) {
@@ -233,7 +233,7 @@ export async function openMergedShow(filePath: string): Promise<void> {
 export async function importShowBundle(): Promise<void> {
   if (!await guardDirty()) return
   try {
-    const answer = await window.winslab.workspace.importBundle()
+    const answer = await window.cuerunner.workspace.importBundle()
     if (!answer.ok) {
       reportFailure(answer.error)
       return
@@ -250,16 +250,16 @@ export function useWorkspace() {
 
   // Keep window title in sync
   useEffect(() => {
-    const title = `${workspaceName}${isDirty ? ' ●' : ''} — WinsLab`
+    const title = `${workspaceName}${isDirty ? ' ●' : ''} — Cuerunner`
     document.title = title
-    window.winslab.workspace.setTitle(title)
+    window.cuerunner.workspace.setTitle(title)
   }, [workspaceName, isDirty])
 
   // When the main process intercepts the OS close button, run the dirty check.
   useEffect(() => {
-    const off = window.winslab.app.onCloseRequested(async () => {
+    const off = window.cuerunner.app.onCloseRequested(async () => {
       const canClose = await guardDirty()
-      if (canClose) window.winslab.app.confirmClose()
+      if (canClose) window.cuerunner.app.confirmClose()
     })
     return off
   }, [])
@@ -272,7 +272,7 @@ export function useWorkspace() {
   const openWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
     try {
-      const result = await window.winslab.workspace.open()
+      const result = await window.cuerunner.workspace.open()
       if (!result) return
       loadIntoStore(result.workspace, result.path, result.missingMedia)
     } catch (e) {
@@ -285,7 +285,7 @@ export function useWorkspace() {
     try {
       // The bridge hands back the file it read alongside the workspace; the store wants
       // the workspace itself.
-      const opened = await window.winslab.workspace.openPath(filePath)
+      const opened = await window.cuerunner.workspace.openPath(filePath)
       loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
     } catch (e) {
       reportFailure(`Could not open ${filePath}: ${message(e)}`)
@@ -305,7 +305,7 @@ export function useWorkspace() {
       createdAt: workspaceCreatedAt
     }, triggerGuard, showHistory)
     try {
-      const saved = await window.winslab.workspace.save(ws, workspacePath)
+      const saved = await window.cuerunner.workspace.save(ws, workspacePath)
       if (!saved) return false
       saveSucceeded(saved.path, workspaceName, saved.history)
       // Anything that moved while the save was in flight is still unsaved, even though
@@ -313,7 +313,7 @@ export function useWorkspace() {
       const after = useStore.getState()
       if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
       // The session is on disk now, so there is nothing left to recover.
-      await window.winslab.workspace.clearRecovery().catch(() => {})
+      await window.cuerunner.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {
       reportFailure(`Could not save the workspace: ${message(e)}`)
@@ -334,12 +334,12 @@ export function useWorkspace() {
       createdAt: workspaceCreatedAt
     }, triggerGuard, showHistory)
     try {
-      const saved = await window.winslab.workspace.saveAs(ws)
+      const saved = await window.cuerunner.workspace.saveAs(ws)
       if (!saved) return false
       saveSucceeded(saved.path, workspaceName, saved.history)
       const after = useStore.getState()
       if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
-      await window.winslab.workspace.clearRecovery().catch(() => {})
+      await window.cuerunner.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {
       reportFailure(`Could not save the workspace: ${message(e)}`)

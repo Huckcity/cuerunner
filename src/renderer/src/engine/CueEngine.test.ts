@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { CueRunner } from './CueRunner'
+import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
@@ -43,7 +43,7 @@ function emitEngineEvent(event: AudioEngineEvent): void {
 
 // Runners left behind by a test still hold scheduled work; disposing them keeps a
 // later test's clock from firing an earlier test's cues.
-const runners: CueRunner[] = []
+const runners: CueEngine[] = []
 afterEach(() => {
   for (const runner of runners.splice(0)) runner.dispose()
 })
@@ -114,7 +114,7 @@ function makeNetwork(overrides: Partial<NetworkCue> = {}): NetworkCue {
 }
 
 interface TestSetup {
-  runner: CueRunner
+  runner: CueEngine
   cues: Cue[]
   setRunning: Mock
   setSelected: Mock
@@ -124,7 +124,7 @@ interface TestSetup {
 }
 
 function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true): TestSetup {
-  const runner = new CueRunner()
+  const runner = new CueEngine()
   let selected: string | null = initialSelectedId ?? initialCues[0]?.id ?? null
   const setRunning = vi.fn()
   const setSelected = vi.fn((id: string | null) => { selected = id })
@@ -152,7 +152,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true):
   return { runner, cues, setRunning, setSelected, setLastRun, appendLog, clearAllRunning }
 }
 
-describe('CueRunner — basic execution', () => {
+describe('CueEngine — basic execution', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -256,7 +256,7 @@ describe('CueRunner — basic execution', () => {
 
 })
 
-describe('CueRunner — pre-wait and post-wait', () => {
+describe('CueEngine — pre-wait and post-wait', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -310,7 +310,7 @@ describe('CueRunner — pre-wait and post-wait', () => {
   })
 })
 
-describe('CueRunner — auto-continue and auto-follow', () => {
+describe('CueEngine — auto-continue and auto-follow', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -372,7 +372,7 @@ describe('CueRunner — auto-continue and auto-follow', () => {
   })
 })
 
-describe('CueRunner — stop and panic', () => {
+describe('CueEngine — stop and panic', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -422,7 +422,7 @@ describe('CueRunner — stop and panic', () => {
 // What a second firing does to a cue that is already running. The guard's window has
 // passed in each of these — an operator who waits and presses again is a second press,
 // and that is the one the policy is about.
-describe('CueRunner — re-firing a running cue', () => {
+describe('CueEngine — re-firing a running cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -511,7 +511,7 @@ describe('CueRunner — re-firing a running cue', () => {
 })
 
 // A cue that is in flight when STOP lands must not resume the show when it settles.
-describe('CueRunner — STOP abandons in-flight work', () => {
+describe('CueEngine — STOP abandons in-flight work', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -591,7 +591,7 @@ describe('CueRunner — STOP abandons in-flight work', () => {
   })
 })
 
-describe('CueRunner — sample-clock scheduling', () => {
+describe('CueEngine — sample-clock scheduling', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -723,7 +723,7 @@ describe('CueRunner — sample-clock scheduling', () => {
   })
 })
 
-describe('CueRunner — fade cue', () => {
+describe('CueEngine — fade cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -775,7 +775,7 @@ describe('CueRunner — fade cue', () => {
   })
 })
 
-describe('CueRunner — stop cue', () => {
+describe('CueEngine — stop cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -955,7 +955,7 @@ describe('CueRunner — stop cue', () => {
   })
 })
 
-describe('CueRunner — midi cue', () => {
+describe('CueEngine — midi cue', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -963,7 +963,7 @@ describe('CueRunner — midi cue', () => {
     const cue = makeMidi()
     const { runner } = setup([cue])
     runner.go()
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'default-midi-port',
       messages: cue.messages
     })
@@ -973,14 +973,14 @@ describe('CueRunner — midi cue', () => {
     const cue = makeMidi({ portName: 'Stage Rack' })
     const { runner } = setup([cue])
     runner.go()
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Stage Rack',
       messages: cue.messages
     })
   })
 })
 
-describe('CueRunner — show control cue', () => {
+describe('CueEngine — show control cue', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     // The store carries over between cases in this file, so a case that needs the show's
@@ -999,7 +999,7 @@ describe('CueRunner — show control cue', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'LX Rack',
       // Go cue 12, all-call and all-types: the command as a console's own document
       // writes it, framed as the sysex the MIDI layer puts on the wire.
@@ -1014,7 +1014,7 @@ describe('CueRunner — show control cue', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith(
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith(
       expect.objectContaining({ portName: 'default-midi-port' })
     )
   })
@@ -1027,12 +1027,12 @@ describe('CueRunner — show control cue', () => {
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(window.winslab.midi.sendTcp).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.sendTcp).toHaveBeenCalledWith({
       host: '10.0.0.5',
       port: 51325,
       messages: [{ kind: 'sysex', data: [0x7f, 0x7f, 0x02, 0x7f, 0x01, 0x31, 0x32, 0x00] }]
     })
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
   })
 
   it('reports a cue with nowhere to send it, rather than completing as a success', async () => {
@@ -1047,27 +1047,27 @@ describe('CueRunner — show control cue', () => {
     const expected = 'the show’s desk is driven over OSC, which does not carry MIDI Show Control'
     expect(setLastRun).toHaveBeenCalledWith('s1', expect.objectContaining({ outcome: 'error', error: expected }))
     expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: expected })])
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
-    expect(window.winslab.midi.sendTcp).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.sendTcp).not.toHaveBeenCalled()
   })
 })
 
 // A cue that could not do what it says must say so: these paths used to complete as
 // successes with nothing sent, played, or answered.
-describe('CueRunner — engine failures are reported', () => {
+describe('CueEngine — engine failures are reported', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     console.error = vi.fn()
     // Each test starts from engines that did what they were asked. `clearAllMocks`
     // in afterEach keeps implementations, so they are set here.
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({ ok: true })
     engine.start.mockResolvedValue({ cueId: 'a1', runId: 'run-a1', state: 'playing', startAtMs: 0 })
   })
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
   it('reports a MIDI cue that reached no port', async () => {
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({
       ok: false,
       error: 'No MIDI output port named "Stage Rack"'
     })
@@ -1087,7 +1087,7 @@ describe('CueRunner — engine failures are reported', () => {
   })
 
   it('reports an OSC cue whose send failed', async () => {
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({
       ok: false,
       error: 'getaddrinfo ENOTFOUND stage-lights.local'
     })
@@ -1223,7 +1223,7 @@ describe('CueRunner — engine failures are reported', () => {
 
 // A scene cue puts the desk where the scene says it should be, at the moment GO reaches
 // it — which is the whole point of having it in the stack rather than on a panel.
-describe('CueRunner — scene cues', () => {
+describe('CueEngine — scene cues', () => {
   function withDesk(sceneId = 's-1'): SceneCue {
     const defaults = defaultShowSettings()
     useStore.setState({
@@ -1265,8 +1265,8 @@ describe('CueRunner — scene cues', () => {
     // The bridge mocks are shared with every other case in this file, so their call
     // history has to go before each one.
     vi.clearAllMocks()
-    vi.mocked(window.winslab.midi.send).mockResolvedValue({ ok: true })
-    vi.mocked(window.winslab.osc.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.midi.send).mockResolvedValue({ ok: true })
+    vi.mocked(window.cuerunner.osc.send).mockResolvedValue({ ok: true })
   })
 
   it('recalls the scene the cue names, and says so under the cue', async () => {
@@ -1277,7 +1277,7 @@ describe('CueRunner — scene cues', () => {
     // the remembered desk state come after the sends.
     await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
 
-    expect(window.winslab.midi.send).toHaveBeenCalledWith({
+    expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Yamaha',
       messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
     })
@@ -1300,7 +1300,7 @@ describe('CueRunner — scene cues', () => {
       expect.objectContaining({ level: 'error', message: 'no scene chosen' })
     ]))
 
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskState).toEqual({})
     expect(useStore.getState().deskSceneId).toBeNull()
   })
@@ -1315,13 +1315,13 @@ describe('CueRunner — scene cues', () => {
     await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
 
     expect(appendLog).toHaveBeenCalledWith([
-      expect.objectContaining({ level: 'error', message: 'scene cues need WinsLab Pro' })
+      expect.objectContaining({ level: 'error', message: 'scene cues need Cuerunner Pro' })
     ])
     expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
       outcome: 'error',
-      error: 'WinsLab Pro is required'
+      error: 'Cuerunner Pro is required'
     }))
-    expect(window.winslab.midi.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBeNull()
   })
 })
@@ -1329,7 +1329,7 @@ describe('CueRunner — scene cues', () => {
 // A devamp releases a vamping cue: the music leaves its loop and plays out to the end of
 // the file. The cue itself is finished the moment it has asked, which is what lets a
 // group's next cue start over the tail.
-describe('CueRunner — devamp cues', () => {
+describe('CueEngine — devamp cues', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1401,7 +1401,7 @@ describe('CueRunner — devamp cues', () => {
   })
 })
 
-describe('CueRunner — silence trim', () => {
+describe('CueEngine — silence trim', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1436,28 +1436,25 @@ describe('CueRunner — silence trim', () => {
     }))
   })
 
-  it('plays the whole region unlicensed, and says so once per cue', async () => {
+  it('applies the trim on a machine with no licence', async () => {
+    // The trim is the cue's own behaviour, not the machine's: a show written with it on
+    // sounds the same everywhere, and nothing says otherwise in the log.
     const cue = makeAudio({ duration: 20_000, trimSilence: true, soundRegion: SOUND })
     const { runner, appendLog } = setup([cue], undefined, false)
 
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
+
     expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
-      startTime: 0,
-      endTime: null
+      startTime: 2000,
+      endTime: 8000
     }))
-
-    runner.go()
-    await vi.advanceTimersByTimeAsync(0)
-
-    // Once per cue, not once per firing: a walk-in playlist is thirty cues, and thirty
-    // identical lines is a log nobody reads.
-    const notices = appendLog.mock.calls.flat(2).filter(entry => entry.message.includes('WinsLab Pro'))
-    expect(notices).toHaveLength(1)
+    const licenceLines = appendLog.mock.calls.flat(2).filter(entry => /licen[cs]e/i.test(entry.message))
+    expect(licenceLines).toEqual([])
   })
 })
 
-describe('CueRunner — network cues', () => {
+describe('CueEngine — network cues', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     requestMock.mockResolvedValue({ ok: true, status: 200, statusText: 'OK', body: '', error: null })
@@ -1624,7 +1621,7 @@ describe('CueRunner — network cues', () => {
   })
 })
 
-describe('CueRunner — script cue', () => {
+describe('CueEngine — script cue', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     console.error = vi.fn()
@@ -1800,7 +1797,7 @@ describe('CueRunner — script cue', () => {
   })
 })
 
-describe('CueRunner — panic details', () => {
+describe('CueEngine — panic details', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1823,7 +1820,7 @@ describe('CueRunner — panic details', () => {
   })
 })
 
-describe('CueRunner — clearGroupStartOffset', () => {
+describe('CueEngine — clearGroupStartOffset', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1842,7 +1839,7 @@ describe('CueRunner — clearGroupStartOffset', () => {
   })
 })
 
-describe('CueRunner — timeline seek skips what already happened', () => {
+describe('CueEngine — timeline seek skips what already happened', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
@@ -1861,11 +1858,11 @@ describe('CueRunner — timeline seek skips what already happened', () => {
     vi.advanceTimersByTime(1000)
 
     expect(setRunning.mock.calls.filter(c => c[0] === 'oc1')).toHaveLength(0)
-    expect(window.winslab.osc.send).not.toHaveBeenCalled()
+    expect(window.cuerunner.osc.send).not.toHaveBeenCalled()
   })
 })
 
-describe('CueRunner — stopping a group', () => {
+describe('CueEngine — stopping a group', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     console.error = vi.fn()

@@ -133,10 +133,10 @@ test('an open menu does not eat the press', async () => {
 test('the missing-media dialog stands the transport down', async () => {
   // A show whose one audio file is not on this machine: it opens with the bar, and the
   // list behind the bar is a dialog nobody asked for, over a show that is already running.
-  const showDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-go-press-'))
-  const wlab = path.join(showDir, 'Go Press.wlab')
+  const showDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-go-press-'))
+  const cuerunner = path.join(showDir, 'Go Press.cuerunner')
   fs.writeFileSync(
-    wlab,
+    cuerunner,
     JSON.stringify(
       {
         version: 1,
@@ -169,7 +169,7 @@ test('the missing-media dialog stands the transport down', async () => {
   let second: { app: ElectronApplication; page: Page; userDataDir: string } | null = null
   try {
     second = await launchApp()
-    await openFromRecent(second.page, second.userDataDir, wlab)
+    await openFromRecent(second.page, second.userDataDir, cuerunner)
     // Its own Wait cues: the cue under the selection has to be one that runs. What is
     // missing is the media the bar is reporting, not the cue list.
     await toolbarCueBtn(second.page, 'Wait').click()

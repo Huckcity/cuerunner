@@ -38,9 +38,6 @@ export function useSilenceTrim(): void {
         for (;;) {
           if (cancelled) return
           const state = useStore.getState()
-          // The trim is part of WinsLab Pro, and this scan is what turns it on: a machine
-          // that may not apply it is not asked to read the show's files for it.
-          if (state.license.state !== 'active') return
           const [next] = cuesAwaitingSilence(state.cues, state.silenceFailures)
           if (!next) return
 

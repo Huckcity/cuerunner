@@ -28,7 +28,7 @@ describe('resolveAsioSdk', () => {
 
   it('is "not configured" when the variable is unset or empty — not an error', () => {
     expect(resolveAsioSdk({})).toEqual({ enabled: false, dir: null, reason: 'not configured' })
-    expect(resolveAsioSdk({ WINSLAB_ASIO_SDK: '   ' })).toEqual({
+    expect(resolveAsioSdk({ CUERUNNER_ASIO_SDK: '   ' })).toEqual({
       enabled: false,
       dir: null,
       reason: 'not configured'
@@ -36,13 +36,13 @@ describe('resolveAsioSdk', () => {
   })
 
   it('resolves a directory that holds common/asio.h', () => {
-    const sdk = resolveAsioSdk({ WINSLAB_ASIO_SDK: sdkDir })
+    const sdk = resolveAsioSdk({ CUERUNNER_ASIO_SDK: sdkDir })
     expect(sdk.enabled).toBe(true)
     expect(sdk.dir).toBe(sdkDir)
   })
 
   it('disables itself with a reason naming the path when the variable is not an SDK root', () => {
-    const sdk = resolveAsioSdk({ WINSLAB_ASIO_SDK: rootDir })
+    const sdk = resolveAsioSdk({ CUERUNNER_ASIO_SDK: rootDir })
     expect(sdk.enabled).toBe(false)
     // The build script fails on this reason, so it has to say which path and what was
     // missing — and it must not read as the ordinary "nobody asked for ASIO".
@@ -68,20 +68,20 @@ describe('describeAsioState', () => {
   })
 
   it('is off on a platform that does not build ASIO, whatever the variable holds', () => {
-    const sdk = resolveAsioSdk({ WINSLAB_ASIO_SDK: sdkDir })
+    const sdk = resolveAsioSdk({ CUERUNNER_ASIO_SDK: sdkDir })
     expect(describeAsioState(sdk, 'linux')).toBe('off (Windows only)')
     expect(describeAsioState(sdk, 'darwin')).toBe('off (Windows only)')
   })
 
   it('separates a configured SDK from a misconfigured one on Windows', () => {
     expect(describeAsioState(resolveAsioSdk({}), 'win32')).toBe('off (not configured)')
-    expect(describeAsioState(resolveAsioSdk({ WINSLAB_ASIO_SDK: rootDir }), 'win32')).not.toBe(
+    expect(describeAsioState(resolveAsioSdk({ CUERUNNER_ASIO_SDK: rootDir }), 'win32')).not.toBe(
       'off (not configured)'
     )
   })
 
   it('records the SDK directory with a fingerprint that holds still and notices the SDK change', () => {
-    const sdk = resolveAsioSdk({ WINSLAB_ASIO_SDK: sdkDir })
+    const sdk = resolveAsioSdk({ CUERUNNER_ASIO_SDK: sdkDir })
     const state = describeAsioState(sdk, 'win32')
     expect(state.startsWith(`${sdkDir} `)).toBe(true)
     // Unchanged tree, unchanged state: this is what keeps every developer command from

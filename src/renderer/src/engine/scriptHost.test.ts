@@ -52,7 +52,7 @@ describe('scriptHost', () => {
     FakeWorker.instances = []
     vi.stubGlobal('Worker', FakeWorker)
     onLog = vi.fn()
-    Object.defineProperty(window, 'winslab', {
+    Object.defineProperty(window, 'cuerunner', {
       value: {
         script: {
           shell: vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0, signal: null }),
@@ -73,7 +73,7 @@ describe('scriptHost', () => {
     scriptHost.run({
       cueId: 'sc1',
       code: 'console.log(1)',
-      workspacePath: '/shows/My Show.wlab',
+      workspacePath: '/shows/My Show.cuerunner',
       timeoutMs: 60000,
       onLog,
       ...overrides
@@ -133,7 +133,7 @@ describe('scriptHost', () => {
   })
 
   it('runs shell() through the main process in the workspace folder, and logs it', async () => {
-    const shell = window.winslab.script.shell as ReturnType<typeof vi.fn>
+    const shell = window.cuerunner.script.shell as ReturnType<typeof vi.fn>
     shell.mockResolvedValue({ stdout: 'hello\n', stderr: '', code: 0, signal: null })
 
     const settled = run()
@@ -141,7 +141,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'shell', id: 4, command: 'echo hello' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'shellResult')).toBe(true))
 
-    expect(shell).toHaveBeenCalledWith('echo hello', { cwd: '/shows/My Show.wlab' })
+    expect(shell).toHaveBeenCalledWith('echo hello', { cwd: '/shows/My Show.cuerunner' })
     expect(worker.posted).toContainEqual({
       type: 'shellResult',
       id: 4,
@@ -154,7 +154,7 @@ describe('scriptHost', () => {
   })
 
   it('lets the script see a failing shell command rather than rejecting the run', async () => {
-    const shell = window.winslab.script.shell as ReturnType<typeof vi.fn>
+    const shell = window.cuerunner.script.shell as ReturnType<typeof vi.fn>
     shell.mockResolvedValue({ stdout: '', stderr: 'nope\n', code: 127, signal: null })
 
     const settled = run()
@@ -162,7 +162,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'shell', id: 5, command: 'nope', options: { timeout: 2000 } })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'shellResult')).toBe(true))
 
-    expect(shell).toHaveBeenCalledWith('nope', { cwd: '/shows/My Show.wlab', timeout: 2000 })
+    expect(shell).toHaveBeenCalledWith('nope', { cwd: '/shows/My Show.cuerunner', timeout: 2000 })
     expect(worker.posted).toContainEqual(expect.objectContaining({
       type: 'shellResult',
       result: expect.objectContaining({ code: 127 })
@@ -174,7 +174,7 @@ describe('scriptHost', () => {
   })
 
   it('hands a failing shell call back to the script as an error', async () => {
-    const shell = window.winslab.script.shell as ReturnType<typeof vi.fn>
+    const shell = window.cuerunner.script.shell as ReturnType<typeof vi.fn>
     shell.mockRejectedValue(new Error('no such command'))
 
     const settled = run()
@@ -189,7 +189,7 @@ describe('scriptHost', () => {
   })
 
   it('resolves include() paths against the workspace', async () => {
-    const readFile = window.winslab.script.readFile as ReturnType<typeof vi.fn>
+    const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
     readFile.mockResolvedValue({ code: 'return 1', path: '/shows/lib.js' })
 
     const settled = run()
@@ -197,7 +197,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'readFile', id: 9, path: './lib.js' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
 
-    expect(readFile).toHaveBeenCalledWith('./lib.js', '/shows/My Show.wlab', undefined)
+    expect(readFile).toHaveBeenCalledWith('./lib.js', '/shows/My Show.cuerunner', undefined)
     expect(worker.posted).toContainEqual({
       type: 'readFileResult',
       id: 9,
@@ -210,7 +210,7 @@ describe('scriptHost', () => {
   })
 
   it('names the including file, so an include inside it resolves against that file', async () => {
-    const readFile = window.winslab.script.readFile as ReturnType<typeof vi.fn>
+    const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
     readFile.mockResolvedValue({ code: 'return 2', path: '/shows/cues/lamp.js' })
 
     const settled = run()
@@ -218,7 +218,7 @@ describe('scriptHost', () => {
     worker.emit({ type: 'readFile', id: 10, path: './lamp.js', base: '/shows/cues/kit.js' })
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
 
-    expect(readFile).toHaveBeenCalledWith('./lamp.js', '/shows/My Show.wlab', '/shows/cues/kit.js')
+    expect(readFile).toHaveBeenCalledWith('./lamp.js', '/shows/My Show.cuerunner', '/shows/cues/kit.js')
 
     worker.emit({ type: 'settled', error: null })
     await settled

@@ -12,7 +12,7 @@ vi.mock('electron', async () => {
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
-  const userData = mkdtempSync(join(tmpdir(), 'winslab-userdata-'))
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-userdata-'))
   return {
     app: { getPath: () => userData },
     dialog: {
@@ -52,9 +52,9 @@ beforeEach(() => {
 
 describe('mergeShow', () => {
   it('answers null when the save dialog is cancelled, merging nothing', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'winslab-merge-'))
-    const theirs = writeShow(dir, 'theirs.wlab')
-    const ancestor = writeShow(dir, 'ancestor.wlab')
+    const dir = mkdtempSync(join(tmpdir(), 'cuerunner-merge-'))
+    const theirs = writeShow(dir, 'theirs.cuerunner')
+    const ancestor = writeShow(dir, 'ancestor.cuerunner')
     showSaveDialog.mockResolvedValue({ canceled: true, filePath: '' })
 
     const merged = await mergeShow({} as never, {

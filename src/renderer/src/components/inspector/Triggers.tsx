@@ -145,7 +145,7 @@ export function Triggers({ cue }: Props) {
 
   useEffect(() => {
     let live = true
-    window.winslab.midi.listInputPorts().then(names => {
+    window.cuerunner.midi.listInputPorts().then(names => {
       // Keep the same array when the rig has not changed, so opening the tab is not
       // a state update for nothing.
       if (live) setPorts(prev =>

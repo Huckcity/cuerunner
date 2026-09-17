@@ -1,4 +1,4 @@
-// WinsLab Pro is a license, not a download: the panels are all there, and the license is
+// Cuerunner Pro is a license, not a download: the panels are all there, and the license is
 // what turns them on. These tests hold both halves of that — the window that draws the
 // lock, and the main process that owns the sockets and refuses the work anyway — and both
 // ways a key arrives: pasted into Settings, or already on the machine at launch.
@@ -42,11 +42,10 @@ async function openLicenseTab(page: Page): Promise<void> {
 test('a machine with no key runs the free half and locks the rest', async () => {
   const { page } = await start()
 
-  // The strips. The log is not licensed; the three that read the show services are.
+  // The strips. The log and the monitor are not licensed; the two that read the Pro
+  // services are.
   await page.locator('.btn-monitor').click()
-  await expect(page.locator('.pro-lock[data-feature="Show monitor"]')).toBeVisible()
-  await expect(page.locator('.monitor-panel')).toHaveCount(0)
-  await page.locator('.pro-lock-close').click()
+  await expect(page.locator('.monitor-panel')).toHaveCount(1)
   await expect(page.locator('.pro-lock')).toHaveCount(0)
 
   await page.locator('.btn-rf').click()
@@ -61,27 +60,28 @@ test('a machine with no key runs the free half and locks the rest', async () => 
   await expect(page.locator('.pro-lock[data-feature="Scenes"]')).toBeVisible()
   await expect(page.locator('.scenes-view')).toHaveCount(0)
 
-  // The cue stack is not licensed, and neither is firing it: a wait cue still runs, and
-  // its Triggers tab is what carries the lock.
+  // The cue stack is not licensed, and neither is being driven by one: a wait cue runs,
+  // and its Triggers tab is free — a desk's key or a footswitch must not need a key.
   await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
   await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
   await expect(page.locator('.cue-row')).toHaveCount(1)
   await page.locator('.inspector-tab', { hasText: 'Triggers' }).click()
-  await expect(page.locator('.pro-lock[data-feature="Triggers"]')).toBeVisible()
+  await expect(page.locator('#trigger-osc-address')).toBeVisible()
+  await expect(page.locator('.inspector .pro-lock')).toHaveCount(0)
 
-  // And the process that would open the socket refuses on its own account — the lock in
+  // And the process refuses the Pro services by name on its own account — the lock in
   // the window is an explanation, not the thing standing in the way.
-  expect(await inRenderer("window.winslab.show.command('rf', 'repoll')"))
-    .toEqual({ ok: false, error: 'WinsLab Pro is required for the show services' })
-  expect(await inRenderer("window.winslab.script.readDocument('/etc/hosts', null)"))
-    .toEqual({ ok: false, error: 'The script panel is part of WinsLab Pro.' })
+  expect(await inRenderer("window.cuerunner.show.command('rf', 'repoll')"))
+    .toEqual({ ok: false, error: 'Wireless is part of Cuerunner Pro' })
+  expect(await inRenderer("window.cuerunner.script.readDocument('/etc/hosts', null)"))
+    .toEqual({ ok: false, error: 'The script panel is part of Cuerunner Pro.' })
 
   // The Network tab says why its services are not listening, and leads to the tab that fixes
   // it — an operator who has configured a port and sees it stopped deserves the reason.
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Network', exact: true }).click()
-  await expect(dialog.locator('.license-hint')).toContainText('WinsLab Pro')
+  await expect(dialog.locator('.license-hint')).toContainText('Cuerunner Pro')
   await dialog.getByRole('button', { name: 'Enter a license key' }).click()
   await expect(dialog.locator('#license-key')).toBeVisible()
 
@@ -90,9 +90,9 @@ test('a machine with no key runs the free half and locks the rest', async () => 
   // open on the license tab — a lock's own button is the way in.
   await dialog.getByRole('button', { name: 'Backup machine', exact: true }).click()
   await expect(dialog.locator('.pro-lock[data-feature="Redundant playback"]')).toBeVisible()
-  expect(await inRenderer("window.winslab.redundancy.configure({ enabled: true })"))
-    .toMatchObject({ ok: false, error: 'WinsLab Pro is required for the show services' })
-  expect(await inRenderer('window.winslab.redundancy.settings()'))
+  expect(await inRenderer("window.cuerunner.redundancy.configure({ enabled: true })"))
+    .toMatchObject({ ok: false, error: 'Cuerunner Pro is required for the show services' })
+  expect(await inRenderer('window.cuerunner.redundancy.settings()'))
     .toMatchObject({ enabled: false })
 
   await dialog.getByRole('button', { name: 'Close' }).click()
@@ -148,11 +148,11 @@ test('a key issued to somebody else, or mistyped, changes nothing', async () => 
   await openLicenseTab(page)
   await page.locator('#license-key').fill(stranger.text)
   await page.getByRole('button', { name: 'Activate' }).click()
-  await expect(page.locator('.license-error')).toContainText('not issued by WinsLab')
+  await expect(page.locator('.license-error')).toContainText('not issued by Cuerunner')
 
   await page.locator('#license-key').fill('WSL1-ABCDEFGH-ABCDEFGH')
   await page.getByRole('button', { name: 'Activate' }).click()
-  await expect(page.locator('.license-error')).toContainText('not a WinsLab license key')
+  await expect(page.locator('.license-error')).toContainText('not a Cuerunner license key')
 
   await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
@@ -227,7 +227,7 @@ test('an unlicensed window marks each Pro feature once, quietly, where it opens'
   // One mark per press that opens a Pro feature, and none on the transport.
   await expect(page.locator('.transport-bar .pro-mark')).toHaveCount(0)
   await expect(page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).locator('.pro-mark')).toHaveCount(1)
-  await expect(page.locator('.dock-tab .pro-mark')).toHaveCount(3)
+  await expect(page.locator('.dock-tab .pro-mark')).toHaveCount(2)
 
   // Quiet: the amber belongs to the lock the press leads to, not to the chrome.
   const amber = 'rgb(224, 160, 32)'
@@ -235,9 +235,12 @@ test('an unlicensed window marks each Pro feature once, quietly, where it opens'
     marks.map(mark => getComputedStyle(mark).color))
   expect(colors.every(color => color !== amber)).toBe(true)
 
-  // A cue's Basics tab carries no lock; its Triggers tab does.
+  // A cue carries no lock anywhere: firing it by hand, from the desk's key or from a
+  // footswitch is the free half of the app. What carries a mark is the Scenes view,
+  // Wireless and the script panel.
   await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
   await expect(page.locator('.inspector .pro-lock')).toHaveCount(0)
   await page.locator('.inspector-tab', { hasText: 'Triggers' }).click()
-  await expect(page.locator('.inspector .pro-lock[data-feature="Triggers"]')).toBeVisible()
+  await expect(page.locator('.inspector .pro-lock')).toHaveCount(0)
+  await expect(page.locator('#trigger-osc-address')).toBeVisible()
 })

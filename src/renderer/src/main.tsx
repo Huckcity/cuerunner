@@ -27,7 +27,7 @@ installRuntimeErrorReporting()
  * If it fails, the store keeps its locked default and the app runs free — never the
  * other way round.
  */
-void window.winslab.license.status()
+void window.cuerunner.license.status()
   .then(status => useStore.getState().setLicense(status))
   .catch(() => {})
   .finally(() => {

@@ -52,7 +52,7 @@ function sendMenuAction(action: MenuAction): void {
 }
 
 // The File menu is the window's work — every item runs in the renderer, where the show
-// is — so each one is a message to it. The list itself is shared with the WinsLab ▾ button
+// is — so each one is a message to it. The list itself is shared with the Cuerunner ▾ button
 // in the window, which draws the same items from the same definition.
 function fileMenuItems(options: { withSettings: boolean }): Electron.MenuItemConstructorOptions[] {
   return FILE_MENU
@@ -72,18 +72,18 @@ function fileMenuItems(options: { withSettings: boolean }): Electron.MenuItemCon
 function createMenu(): void {
   const mac = process.platform === 'darwin'
   const about: Electron.MenuItemConstructorOptions = {
-    label: 'About WinsLab',
+    label: 'About Cuerunner',
     click: () => app.showAboutPanel()
   }
   // A Mac keeps About, Settings and Quit under the app's own name; Windows and Linux put
   // Settings and Exit in File and About in Help, and have no menu named after the app —
-  // which, on a bar drawn in the window, would sit over the WinsLab ▾ button saying
+  // which, on a bar drawn in the window, would sit over the Cuerunner ▾ button saying
   // something different.
   const settings = FILE_MENU.find(entry => entry !== 'separator' && entry.action === 'settings')
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(mac
       ? [{
-          label: 'WinsLab',
+          label: 'Cuerunner',
           submenu: [
             about,
             { type: 'separator' as const },
@@ -161,7 +161,7 @@ function createWindow(): void {
     // scrolls.
     minWidth: 1000,
     minHeight: 500,
-    title: 'WinsLab',
+    title: 'Cuerunner',
     backgroundColor: '#181818',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -250,7 +250,7 @@ app.whenReady().then(() => {
   // Before anything that runs on a timer: a napped app dispatches its cues late, which
   // on stage is a wait that takes twice as long as it says. keepAwake.ts carries the why.
   keepAwake()
-  electronApp.setAppUserModelId('com.winslab')
+  electronApp.setAppUserModelId('app.cuerunner')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
   // GPU and utility processes are Chromium's to restart, and they do not come through
@@ -261,7 +261,7 @@ app.whenReady().then(() => {
   
   // Set up about panel with current version
   app.setAboutPanelOptions({
-    applicationName: 'WinsLab',
+    applicationName: 'Cuerunner',
     applicationVersion: app.getVersion(),
     copyright: 'Copyright © 2026'
   })

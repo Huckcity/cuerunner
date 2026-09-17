@@ -20,11 +20,11 @@ describe('CrashNotice', () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    ;(window.winslab.app.rendererCrash as unknown as Mock).mockResolvedValue(null)
+    ;(window.cuerunner.app.rendererCrash as unknown as Mock).mockResolvedValue(null)
   })
 
   async function renderCrash(report: { reason: string; at: number } | null): Promise<void> {
-    ;(window.winslab.app.rendererCrash as unknown as Mock).mockResolvedValue(report)
+    ;(window.cuerunner.app.rendererCrash as unknown as Mock).mockResolvedValue(report)
     await act(async () => { root.render(<CrashNotice />) })
   }
 

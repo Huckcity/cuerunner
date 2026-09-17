@@ -146,7 +146,7 @@ interface RunnerDeps {
   getTriggerGuard: () => TriggerGuardSettings
 }
 
-export class CueRunner {
+export class CueEngine {
   private deps: RunnerDeps | null = null
   private scheduler: SampleScheduler | null = null
   private unsubscribeEvents: (() => void) | null = null
@@ -164,9 +164,6 @@ export class CueRunner {
   // STOP — a network request, a script — cannot resume the show.
   private generation = 0
   private runSeq = 0
-  // Cues whose silence trim was skipped for want of a licence, so a walk-in playlist
-  // says it once per cue rather than once per GO.
-  private trimNotices = new Set<string>()
   // What each firing surface last fired, and which notes are still down. Owned here
   // because this is the one place every surface reaches — the keyboard, a trigger, the
   // GO button — and a guard that lived in one of them would be a guard on one of them.
@@ -618,7 +615,7 @@ export class CueRunner {
       return
     }
 
-    const options = startOptions(cue, run.seekMs, this.trimAtFire(cue))
+    const options = startOptions(cue, run.seekMs, this.trimApplies(cue))
     this.track(run, this.scheduler!.schedule({
       at,
       early: () => {
@@ -730,7 +727,7 @@ export class CueRunner {
 
   private executeMidi(cue: MidiCue, finish: Finish): void {
     const detail: Partial<CueRunResult> = {}
-    window.winslab.midi.send({
+    window.cuerunner.midi.send({
       portName: cue.portName || this.deps!.getMidiDefaultPort(),
       messages: cue.messages
     })
@@ -749,7 +746,7 @@ export class CueRunner {
 
   private executeOsc(cue: OscCue, finish: Finish): void {
     const detail: Partial<CueRunResult> = {}
-    window.winslab.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })
+    window.cuerunner.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })
       .then(result => {
         if (!result.ok) {
           detail.outcome = 'error'
@@ -821,30 +818,11 @@ export class CueRunner {
   }
 
   /**
-   * Whether a cue's silence trim applies right now: the cue asked for it and this machine
-   * may apply it. A show written on a licensed machine opens on an unlicensed one with
-   * its cues intact and its trims unattended — the cue plays its whole region, which is
-   * what the cue did before the trim existed.
+   * Whether a cue's silence trim applies: the cue asked for it. Nothing else — a show
+   * written with the trim on is the show that plays, on any machine.
    */
   private trimApplies(cue: AudioCue): boolean {
-    return cue.trimSilence === true && this.deps!.isPro()
-  }
-
-  /** The trim as a cue's own firing sees it, which is also where a lapsed licence is said. */
-  private trimAtFire(cue: AudioCue): boolean {
-    if (this.trimApplies(cue)) return true
-    if (cue.trimSilence !== true) return false
-    if (!this.trimNotices.has(cue.id)) {
-      // Once per cue: a log line per firing would bury the show it is describing, and the
-      // cue's own panel already carries the lock.
-      this.trimNotices.add(cue.id)
-      this.log({
-        level: 'info',
-        message: 'silence trim needs WinsLab Pro — playing the whole region',
-        label: this.cueLabel(cue)
-      })
-    }
-    return false
+    return cue.trimSilence === true
   }
 
   /**
@@ -910,8 +888,8 @@ export class CueRunner {
       // The cue stays in the file — a show written on a licensed machine opens on an
       // unlicensed one, and nothing is thrown away — but the desk is not driven
       // without a license, and a cue that did nothing quietly would be worse.
-      this.log({ level: 'error', message: 'scene cues need WinsLab Pro', label })
-      finish(this.now(), { outcome: 'error', error: 'WinsLab Pro is required' })
+      this.log({ level: 'error', message: 'scene cues need Cuerunner Pro', label })
+      finish(this.now(), { outcome: 'error', error: 'Cuerunner Pro is required' })
       return
     }
     if (cue.sceneId === '') {
@@ -1567,4 +1545,4 @@ export class CueRunner {
   }
 }
 
-export const cueRunner = new CueRunner()
+export const cueEngine = new CueEngine()

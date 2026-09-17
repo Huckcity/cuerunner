@@ -32,8 +32,8 @@ export const VERSION_ANSWER = '/eos/out/get/version'
 
 export function writeEosShow(options: EosShowOptions): string {
   const { consoleHost, consolePort, oscInPort, cue } = options
-  const root = mkdtempSync(join(tmpdir(), 'winslab-eos-'))
-  const path = join(root, `${EOS_SHOW_NAME}.wlab`)
+  const root = mkdtempSync(join(tmpdir(), 'cuerunner-eos-'))
+  const path = join(root, `${EOS_SHOW_NAME}.cuerunner`)
   const base = {
     colorLabel: 'none',
     preWait: 0,

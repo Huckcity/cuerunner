@@ -1,7 +1,7 @@
 // The demo show that ships with the app: a complete little workspace a new user can
 // open from the File menu or the empty cue list.
 //
-// The bundled .wlab stores its audio paths relative ("walk-in.wav") so the same file
+// The bundled .cuerunner stores its audio paths relative ("walk-in.wav") so the same file
 // works from the source tree, an AppImage, and a Program Files install. Audio cues only
 // ever read absolute paths, so those are resolved at load time — not against the app
 // bundle, which may be read-only, and instead against a copy in the user-data folder,
@@ -13,7 +13,7 @@ import { basename, isAbsolute, join } from 'path'
 import { migrateWorkspace } from './WorkspaceManager'
 import type { Workspace } from '../../renderer/src/types/workspace'
 
-export const DEMO_WORKSPACE_FILE = 'Demo Show.wlab'
+export const DEMO_WORKSPACE_FILE = 'Demo Show.cuerunner'
 
 // Packaged builds carry the demo in extraResources; dev, E2E, and the screenshot script
 // run the app from the repository (out/main/index.js → repository root).

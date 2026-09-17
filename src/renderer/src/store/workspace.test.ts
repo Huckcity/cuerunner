@@ -83,25 +83,25 @@ describe('store — loadWorkspace', () => {
 
   it('replaces cues with loaded ones', () => {
     useStore.getState().addCue('wait') // pre-existing
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab')
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner')
     expect(useStore.getState().cues).toHaveLength(2)
     expect(useStore.getState().cues[0].name).toBe('House to half')
   })
 
   it('sets workspace name and path', () => {
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab')
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner')
     expect(useStore.getState().workspaceName).toBe('My Show')
-    expect(useStore.getState().workspacePath).toBe('/shows/my-show.wlab')
+    expect(useStore.getState().workspacePath).toBe('/shows/my-show.cuerunner')
   })
 
   it('clears dirty flag after load', () => {
     useStore.getState().addCue('wait') // makes dirty
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab')
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner')
     expect(useStore.getState().isDirty).toBe(false)
   })
 
   it('selects the first cue on load', () => {
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab')
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner')
     expect(useStore.getState().selectedId).toBe('c1')
   })
 
@@ -123,7 +123,7 @@ describe('store — saveSucceeded', () => {
 
   it('clears dirty flag', () => {
     useStore.getState().addCue('wait')
-    useStore.getState().saveSucceeded('/shows/my-show.wlab', 'My Show', [])
+    useStore.getState().saveSucceeded('/shows/my-show.cuerunner', 'My Show', [])
     expect(useStore.getState().isDirty).toBe(false)
   })
 
@@ -135,21 +135,21 @@ describe('store — saveSucceeded', () => {
     const sentCues = useStore.getState().cues
     const sentEdits = useStore.getState().past.length
     useStore.getState().addCue('wait')
-    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [])
+    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', 'Hamlet', [])
     const after = useStore.getState()
     if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
     expect(useStore.getState().isDirty).toBe(true)
   })
 
   it('updates path and name', () => {
-    useStore.getState().saveSucceeded('/new/path.wlab', 'Renamed', [])
-    expect(useStore.getState().workspacePath).toBe('/new/path.wlab')
+    useStore.getState().saveSucceeded('/new/path.cuerunner', 'Renamed', [])
+    expect(useStore.getState().workspacePath).toBe('/new/path.cuerunner')
     expect(useStore.getState().workspaceName).toBe('Renamed')
   })
 
   it('carries the history the file was written with, so the next save appends to it', () => {
     const entry = { at: '2026-09-16T10:00:00.000Z', by: 'adam', cues: [], settings: [] }
-    useStore.getState().saveSucceeded('/shows/hamlet.wlab', 'Hamlet', [entry])
+    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', 'Hamlet', [entry])
 
     expect(useStore.getState().showHistory).toEqual([entry])
   })
@@ -161,7 +161,7 @@ describe('store — the showfile’s own history', () => {
   it('adopts the history of the file it loads', () => {
     const entry = { at: '2026-09-14T18:00:00.000Z', by: 'associate', cues: [], settings: ['name'] }
     useStore.getState().loadWorkspace(
-      [], 'Hamlet', '/shows/hamlet.wlab', undefined, undefined, undefined, undefined, undefined,
+      [], 'Hamlet', '/shows/hamlet.cuerunner', undefined, undefined, undefined, undefined, undefined,
       [entry]
     )
 
@@ -173,7 +173,7 @@ describe('store — the showfile’s own history', () => {
 
     // A file written before the history existed has none, and a load says so rather than
     // carrying the last show's.
-    useStore.getState().saveSucceeded('/shows/other.wlab', 'Other', [
+    useStore.getState().saveSucceeded('/shows/other.cuerunner', 'Other', [
       { at: '2026-09-15T00:00:00.000Z', by: 'adam', cues: [], settings: [] }
     ])
     useStore.getState().loadWorkspace([], 'Untitled', null)
@@ -188,14 +188,14 @@ describe('store — the show’s identity', () => {
   const loaded = { id: 'w-my-show', createdAt: '2026-01-01T00:00:00.000Z' }
 
   it('is adopted from the file that is opened', () => {
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab', undefined, undefined, undefined, loaded)
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner', undefined, undefined, undefined, loaded)
 
     expect(useStore.getState().workspaceId).toBe('w-my-show')
     expect(useStore.getState().workspaceCreatedAt).toBe('2026-01-01T00:00:00.000Z')
   })
 
   it('is minted for a new show, not inherited from the last one', () => {
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab', undefined, undefined, undefined, loaded)
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner', undefined, undefined, undefined, loaded)
 
     useStore.getState().loadWorkspace([], 'Untitled', null)
 
@@ -206,7 +206,7 @@ describe('store — the show’s identity', () => {
   })
 
   it('survives editing the show', () => {
-    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.wlab', undefined, undefined, undefined, loaded)
+    useStore.getState().loadWorkspace(fakeCues, 'My Show', '/shows/my-show.cuerunner', undefined, undefined, undefined, loaded)
 
     useStore.getState().updateCue('c1', { name: 'Renamed' })
 

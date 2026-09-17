@@ -41,6 +41,7 @@ interface DevicePresence {
 export class PresenceService implements ShowService {
   readonly id = 'presence'
   readonly label = 'Network devices'
+  readonly pro = true
 
   private context: ServiceContext | null = null
   private services: string[] = []

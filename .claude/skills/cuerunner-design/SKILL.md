@@ -1,6 +1,6 @@
 ---
-name: winslab-design
-description: Use this skill to generate well-branded interfaces and assets for Winslab, a cross-platform QLab alternative (show control software) for Windows. Contains essential design guidelines, colors, type, assets, and UI kit components for prototyping.
+name: cuerunner-design
+description: Use this skill to generate well-branded interfaces and assets for Cuerunner, a cross-platform QLab alternative (show control software) for Windows. Contains essential design guidelines, colors, type, assets, and UI kit components for prototyping.
 user-invocable: true
 ---
 

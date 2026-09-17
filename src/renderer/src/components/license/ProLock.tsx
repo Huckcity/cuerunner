@@ -33,7 +33,7 @@ export function ProLock({ feature, blurb, variant = 'section', onClose }: Props)
         </button>
       )}
       <div className="pro-lock-body">
-        <span className="pro-chip pro-chip-lock">WinsLab Pro</span>
+        <span className="pro-chip pro-chip-lock">Cuerunner Pro</span>
         <h2 className="pro-lock-title">{feature}</h2>
         <p className="pro-lock-blurb">{blurb}</p>
         {license.state === 'expired' && (
@@ -56,5 +56,5 @@ export function ProLock({ feature, blurb, variant = 'section', onClose }: Props)
  * to say, once it is open.
  */
 export function ProMark() {
-  return <span className="pro-mark" title="Part of WinsLab Pro">pro</span>
+  return <span className="pro-mark" title="Part of Cuerunner Pro">pro</span>
 }

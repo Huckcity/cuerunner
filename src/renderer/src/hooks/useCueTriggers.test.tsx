@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useCueTriggers } from './useCueTriggers'
-import { cueRunner } from '../engine/CueRunner'
+import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
 import { TEST_LICENSE } from '../../../test/license'
 import type { Cue, CueTrigger } from '../types/cue'
@@ -63,17 +63,17 @@ describe('useCueTriggers', () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    vi.mocked(window.winslab.show.onEvents).mockImplementation(callback => {
+    vi.mocked(window.cuerunner.show.onEvents).mockImplementation(callback => {
       emit = callback
       return () => {
         if (emit === callback) emit = null
       }
     })
-    goById = vi.spyOn(cueRunner, 'goById').mockImplementation(() => {})
+    goById = vi.spyOn(cueEngine, 'goById').mockImplementation(() => {})
     // The guard is real here on purpose — a hook that asked it in the wrong order looked
     // fine against a stub and blocked every MIDI note in the app. What the tests control
     // is where the guard starts from.
-    cueRunner.resetGuards()
+    cueEngine.resetGuards()
 
     useStore.setState({ license: { state: 'active', license: TEST_LICENSE }, cues: [], log: [] })
     act(() => { root.render(<Harness />) })
@@ -96,15 +96,17 @@ describe('useCueTriggers', () => {
     emit(events)
   }
 
-  it('does not stay subscribed when the machine is not licensed', () => {
-    // The events only reach the window while the licensed show services are listening.
-    // With no key the hook has to come off the bridge, and stay off.
+  it('stays subscribed with no licence, because the inputs are the free half', () => {
+    // OSC and MIDI in are free: a desk's key or a footswitch has to fire cues on a
+    // machine that has never seen a key, so the hook never comes off the bridge.
     act(() => {
       useStore.setState({ license: { state: 'unlicensed' }, cues: [cue('7', [oscTrigger])] })
     })
 
-    expect(emit).toBeNull()
-    expect(goById).not.toHaveBeenCalled()
+    expect(emit).not.toBeNull()
+
+    act(() => { deliver([osc('/eos/cue/12/fire')]) })
+    expect(goById).toHaveBeenCalledWith('7')
   })
 
   it('fires the cue whose trigger matches, and logs what fired it', () => {

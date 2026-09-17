@@ -92,8 +92,8 @@ describe('ScenesView', () => {
     document.body.appendChild(container)
     root = createRoot(container)
 
-    midiSend = window.winslab.midi.send as unknown as Mock
-    oscSend = window.winslab.osc.send as unknown as Mock
+    midiSend = window.cuerunner.midi.send as unknown as Mock
+    oscSend = window.cuerunner.osc.send as unknown as Mock
     midiSend.mockReset().mockResolvedValue({ ok: true })
     oscSend.mockReset().mockResolvedValue({ ok: true })
   })

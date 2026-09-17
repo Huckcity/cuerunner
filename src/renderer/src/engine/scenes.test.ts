@@ -94,9 +94,9 @@ describe('recallScene', () => {
   let tcpSend: Mock
 
   beforeEach(() => {
-    midiSend = vi.mocked(window.winslab.midi.send)
-    oscSend = vi.mocked(window.winslab.osc.send)
-    tcpSend = vi.mocked(window.winslab.midi.sendTcp)
+    midiSend = vi.mocked(window.cuerunner.midi.send)
+    oscSend = vi.mocked(window.cuerunner.osc.send)
+    tcpSend = vi.mocked(window.cuerunner.midi.sendTcp)
     midiSend.mockResolvedValue({ ok: true })
     oscSend.mockResolvedValue({ ok: true })
     tcpSend.mockResolvedValue({ ok: true })

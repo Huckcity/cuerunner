@@ -5,7 +5,7 @@
 //
 // The panic tests read the main process and the native engine, not the page: the whole
 // point of those paths is that they work when the page cannot answer, so an assertion
-// against the renderer would prove the wrong thing. `__winslabDevHarness` is installed
+// against the renderer would prove the wrong thing. `__cuerunnerDevHarness` is installed
 // only by a build running from the source tree, and the engine runs its real mixer
 // against the silent backend, so a voice that really was playing really stops.
 import { test, expect, type ElectronApplication, type Page, type TestInfo } from '@playwright/test'
@@ -27,21 +27,21 @@ import type { AudioEngineEvent } from '../src/shared/audio'
 
 async function mainState(app: ElectronApplication): Promise<PlaybackSafetyState | null> {
   return app.evaluate(() => {
-    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
     return harness ? harness.safety() : null
   })
 }
 
 async function engineVoices(app: ElectronApplication): Promise<number | null> {
   return app.evaluate(async () => {
-    const harness: PlaybackDevHarness | undefined = globalThis.__winslabDevHarness
+    const harness: PlaybackDevHarness | undefined = globalThis.__cuerunnerDevHarness
     if (!harness) return null
     return (await harness.engineInfo()).activeVoices
   })
 }
 
 async function engineEvents(app: ElectronApplication): Promise<AudioEngineEvent[]> {
-  return app.evaluate(() => globalThis.__winslabDevHarness?.engineEvents() ?? [])
+  return app.evaluate(() => globalThis.__cuerunnerDevHarness?.engineEvents() ?? [])
 }
 
 /** The menu item's own click, from the main process — a synthesized key never reaches it. */
@@ -132,7 +132,7 @@ async function startCapturedRun(testInfo: TestInfo): Promise<{
 }> {
   const capturePath = testInfo.outputPath('engine-output.wav')
   const { app, page } = await launchApp({
-    env: { WINSLAB_TEST_AUDIO_CAPTURE: capturePath }
+    env: { CUERUNNER_TEST_AUDIO_CAPTURE: capturePath }
   })
   try {
     await playAndConfirmSound(app, page, capturePath)
@@ -200,7 +200,7 @@ test('a 3000 ms wait fires its follow-on cue while the window is off screen', as
 
     await addCueFromMoreMenu(page, 'OSC')
     await page.locator('.cue-row').last().click()
-    await configureOscCue(page, port, '/winslab/handoff')
+    await configureOscCue(page, port, '/cuerunner/handoff')
 
     await waitRow.click()
     const startedAt = performance.now()
@@ -212,7 +212,7 @@ test('a 3000 ms wait fires its follow-on cue while the window is off screen', as
     // Stamped when the datagram landed, on the same monotonic clock as `startedAt`.
     const elapsed = listener.receivedAt[0] - startedAt
 
-    expect(listener.received[0].address).toBe('/winslab/handoff')
+    expect(listener.received[0].address).toBe('/cuerunner/handoff')
     // 3000 ms of wait plus the click, taking the window off screen, and the send.
     expect(elapsed).toBeGreaterThanOrEqual(2900)
     expect(elapsed).toBeLessThan(3800)
@@ -244,7 +244,7 @@ test('chained short waits keep time while the window is off screen', async () =>
 
     await addCueFromMoreMenu(page, 'OSC')
     await page.locator('.cue-row').last().click()
-    await configureOscCue(page, port, '/winslab/handoff')
+    await configureOscCue(page, port, '/cuerunner/handoff')
 
     await groupRow.click()
     const startedAt = performance.now()
@@ -257,7 +257,7 @@ test('chained short waits keep time while the window is off screen', async () =>
     // Stamped when the datagram landed, not when the poll noticed.
     const elapsed = listener.receivedAt[0] - startedAt
 
-    expect(listener.received[0].address).toBe('/winslab/handoff')
+    expect(listener.received[0].address).toBe('/cuerunner/handoff')
     // 2400 ms of waits, plus the click, taking the window off screen, and the send.
     expect(elapsed).toBeGreaterThanOrEqual(2300)
     expect(elapsed).toBeLessThan(3800)
@@ -319,11 +319,11 @@ test('a crashed renderer mid-playback is silenced from main before it is brought
 
 // ── The licensed show inputs ───────────────────────────────────────────────────
 
-test('OSC /winslab/panic silences the show through the licensed input', async ({}, testInfo) => {
+test('OSC /cuerunner/panic silences the show through the licensed input', async ({}, testInfo) => {
   const capturePath = testInfo.outputPath('engine-output.wav')
   const { app, page } = await launchApp({
     license: mintLicense(),
-    env: { WINSLAB_TEST_AUDIO_CAPTURE: capturePath }
+    env: { CUERUNNER_TEST_AUDIO_CAPTURE: capturePath }
   })
   const port = freePort()
   try {
@@ -343,7 +343,7 @@ test('OSC /winslab/panic silences the show through the licensed input', async ({
     // And the dialog has to be gone before the toolbar is touched again.
     await expect(dialog).not.toBeVisible()
 
-    await sendOsc(port, '/winslab/panic')
+    await sendOsc(port, '/cuerunner/panic')
 
     await expect.poll(async () => (await mainState(app))?.lastPanic?.source).toBe('osc')
     await expectEngineSilenced(app, capturePath)
@@ -398,7 +398,7 @@ test('a build without the MIDI module says so, on the badge and on the cue', asy
   // The dev-only harness switch: the native module is withheld so the missing-module
   // path is exercised by the real application, not by a mock standing in for it.
   const { app, page } = await launchApp({
-    env: { WINSLAB_TEST_MIDI_MISSING: '1' }
+    env: { CUERUNNER_TEST_MIDI_MISSING: '1' }
   })
   try {
     const badge = page.locator('.midi-status')

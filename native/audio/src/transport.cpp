@@ -82,12 +82,12 @@ struct SocketServer::Client {
       if (!WriteFile(static_cast<HANDLE>(handle), data, static_cast<DWORD>(remaining), &written, &overlapped)) {
         const DWORD error = GetLastError();
         if (error != ERROR_IO_PENDING) {
-          std::fprintf(stderr, "[winslab-audio] event line dropped (write failed, error %lu)\n",
+          std::fprintf(stderr, "[cuerunner-audio] event line dropped (write failed, error %lu)\n",
                        static_cast<unsigned long>(error));
           return;
         }
         if (!GetOverlappedResult(static_cast<HANDLE>(handle), &overlapped, &written, TRUE)) {
-          std::fprintf(stderr, "[winslab-audio] event line dropped (write did not complete, error %lu)\n",
+          std::fprintf(stderr, "[cuerunner-audio] event line dropped (write did not complete, error %lu)\n",
                        static_cast<unsigned long>(GetLastError()));
           return;
         }

@@ -26,7 +26,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const audioRoot = join(repoRoot, 'native', 'audio')
 const buildScript = join(repoRoot, 'scripts', 'build-native-audio.mjs')
 const ffmpegScript = join(repoRoot, 'scripts', 'build-ffmpeg-linux.mjs')
-const binaryName = process.platform === 'win32' ? 'winslab-audio.exe' : 'winslab-audio'
+const binaryName = process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio'
 const enginePath = join(audioRoot, 'build', binaryName)
 const asioStamp = join(audioRoot, 'build', 'asio.stamp')
 const decoderPath = join(audioRoot, 'build', 'decoders', 'ffmpeg')

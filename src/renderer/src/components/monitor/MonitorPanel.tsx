@@ -82,7 +82,7 @@ export function MonitorPanel({ onClose }: Props) {
   // this promise, so there is nothing to show here — but the rejection still has to
   // be handled.
   const restart = (id: string): void => {
-    window.winslab.show.restart(id).catch(() => {})
+    window.cuerunner.show.restart(id).catch(() => {})
   }
 
   return (

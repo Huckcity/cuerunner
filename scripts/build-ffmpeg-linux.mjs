@@ -108,7 +108,7 @@ console.log(`checksum ok: ${digest}`)
 // Best effort signature check: the tarball was verified against this key when the pin
 // was recorded, and a machine with gpg and the key can re-verify it here.
 try {
-  const gnupgHome = join(tmpdir(), 'winslab-ffmpeg-gnupg')
+  const gnupgHome = join(tmpdir(), 'cuerunner-ffmpeg-gnupg')
   mkdirSync(gnupgHome, { recursive: true, mode: 0o700 })
   const env = { ...process.env, GNUPGHOME: gnupgHome }
   execFileSync('gpg', ['--keyserver', 'keyserver.ubuntu.com', '--recv-keys', FFMPEG_SIGNING_KEY], { stdio: 'ignore', timeout: 60_000, env })
@@ -184,7 +184,7 @@ const version = execFileSync(ffmpegPath, ['-version'], { encoding: 'utf8' }).spl
 writeFileSync(
   join(decoderDir, 'NOTICE.txt'),
   [
-    'FFmpeg helper binary for WinsLab (M4A/AAC and ALAC decoding on Linux)',
+    'FFmpeg helper binary for Cuerunner (M4A/AAC and ALAC decoding on Linux)',
     '',
     `Version:        ${FFMPEG_VERSION}`,
     `Source:         ${FFMPEG_URL}`,
@@ -195,7 +195,7 @@ writeFileSync(
     'Licence: LGPL-2.1-or-later. The build disables GPL, nonfree and version3 components,',
     'so no GPL code is linked or distributed. FFmpeg licence texts are in ./licenses.',
     '',
-    'The helper is executed as a separate process and no WinsLab code links against it.',
+    'The helper is executed as a separate process and no Cuerunner code links against it.',
     'To rebuild it, including the corresponding source of this exact binary:',
     '    npm run build:ffmpeg',
     'with no network restrictions other than access to ffmpeg.org for the pinned tarball',

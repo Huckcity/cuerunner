@@ -47,9 +47,9 @@ fs.mkdirSync(outDir, { recursive: true })
 
 /* ── The show both machines will have open ───────────────────────────────── */
 
-const work = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-shots-'))
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-shots-'))
 const track = path.join(work, 'overture.wav')
-const showPath = path.join(work, 'Redundancy Demo.wlab')
+const showPath = path.join(work, 'Redundancy Demo.cuerunner')
 const SHOW_ID = 'w-redundancy-demo'
 
 /** A WAV of an exact length: what the cue plays, written here rather than shipped. */
@@ -108,8 +108,8 @@ fs.writeFileSync(showPath, JSON.stringify({
 // public key, which a packaged build ignores.
 const license = mintLicense({ licensee: 'Redundancy Walkthrough' })
 
-const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-live-'))
-const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-backup-'))
+const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-live-'))
+const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-backup-'))
 const livePort = 53110
 const backupPort = 53111
 const TOKEN = 'stage-left'
@@ -228,7 +228,7 @@ async function capture() {
   // photographed as fast as the machine will take it, and stacked side by side at the end.
   // That is also the honest way to do it: these are the frames the app actually drew, at
   // real speed, and the speed is measured rather than assumed when they are encoded.
-  const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-frames-'))
+  const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-frames-'))
   const FRAME_MS = 200
   let frames = 0
   let lastLiveFrame = null

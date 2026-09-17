@@ -1,4 +1,4 @@
-// WinsLab and a sound desk: the show tells the desk's cue list to GO, and the desk's own
+// Cuerunner and a sound desk: the show tells the desk's cue list to GO, and the desk's own
 // button fires a cue in the show.
 //
 // The counterpart is `integration/peers/desk.ts`, whose SQ profile reads the specification's

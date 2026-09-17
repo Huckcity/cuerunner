@@ -28,9 +28,9 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
 ]
 
 /** The File menu entries that open a Pro surface. The file records its own history
- *  whether or not this machine is licensed; reading it back is what the key turns on. */
+ *  whether or not this machine is licensed; comparing it, merging it and bundling it are
+ *  what the key turns on. */
 const PRO_FILE_ACTIONS = new Set<FileMenuAction>([
-  'history',
   'compare',
   'merge',
   'export-bundle',
@@ -98,7 +98,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
 
   useEffect(() => {
     if (fileMenuOpen) {
-      window.winslab.workspace.recent().then(setRecentFiles)
+      window.cuerunner.workspace.recent().then(setRecentFiles)
     }
   }, [fileMenuOpen])
 
@@ -151,7 +151,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const fileActionsRef = useRef(fileActions)
   fileActionsRef.current = fileActions
 
-  useEffect(() => window.winslab.app.onMenuAction(action => {
+  useEffect(() => window.cuerunner.app.onMenuAction(action => {
     if (action === 'undo' || action === 'redo') return
     void fileActionsRef.current[action]()
   }), [])
@@ -176,7 +176,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   }
 
   const baseName = workspacePath
-    ? workspacePath.split(/[\\/]/).pop()?.replace('.wlab', '') ?? workspaceName
+    ? workspacePath.split(/[\\/]/).pop()?.replace('.cuerunner', '') ?? workspaceName
     : workspaceName
 
   return (
@@ -193,7 +193,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
               <rect x="40.64" y="17.52" width="8.32" height="28.95" rx="2.08" fill="currentColor" opacity="0.75" />
               <rect x="53.44" y="25.01" width="8.32" height="13.98" rx="2.08" fill="currentColor" opacity="0.55" />
             </svg>
-            WinsLab
+            Cuerunner
             <span className="toolbar-brand-caret">▾</span>
           </button>
           {fileMenuOpen && (
@@ -325,7 +325,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           data-active={view === 'scenes'}
           data-locked={!pro}
           onClick={() => onSwitchView('scenes')}
-          title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of WinsLab Pro'}
+          title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of Cuerunner Pro'}
         >
           Scenes
           {!pro && <ProMark />}

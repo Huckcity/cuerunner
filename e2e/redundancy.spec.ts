@@ -161,11 +161,11 @@ let peer: LivePeer
 let userData: string
 
 test.beforeAll(async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-'))
   const overture = path.join(root, 'overture.wav')
   writeWav(overture, TRACK_SECONDS)
 
-  const showPath = path.join(root, 'Redundancy.wlab')
+  const showPath = path.join(root, 'Redundancy.cuerunner')
   fs.writeFileSync(showPath, JSON.stringify({
     version: 1,
     id: SHOW_ID,
@@ -206,7 +206,7 @@ test.beforeAll(async () => {
 
   // This machine's own half of the pair, written where the app keeps it: with the
   // license and not with the show.
-  userData = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-redundancy-user-'))
+  userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-user-'))
   fs.writeFileSync(path.join(userData, 'redundancy.json'), JSON.stringify({
     enabled: true,
     name: 'desk-b',
@@ -279,8 +279,8 @@ test('the live machine going quiet is a takeover, and the cue comes back where i
   await expect.poll(async () => {
     const progress = await page.evaluate(() =>
       (window as unknown as {
-        winslab: { audio: { progress: (cueId: string) => Promise<{ elapsedMs: number } | null> } }
-      }).winslab.audio.progress('a1')
+        cuerunner: { audio: { progress: (cueId: string) => Promise<{ elapsedMs: number } | null> } }
+      }).cuerunner.audio.progress('a1')
     )
     return Math.round(progress?.elapsedMs ?? 0)
   }).toBeGreaterThanOrEqual(LIVE_POSITION_MS)

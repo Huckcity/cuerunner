@@ -68,15 +68,15 @@ function audioCue(id: string, number: string, name: string, filePath: string): u
 }
 
 test.beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'winslab-sample-rates-'))
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-sample-rates-'))
   const fortyFour = path.join(root, 'acetrack-44k.wav')
   const fortyEight = path.join(root, 'sting-48k.wav')
   writeWav(fortyFour, 44100)
   writeWav(fortyEight, 48000)
 
-  const wlab = path.join(root, 'Rate Show.wlab')
+  const cuerunner = path.join(root, 'Rate Show.cuerunner')
   fs.writeFileSync(
-    wlab,
+    cuerunner,
     JSON.stringify({
       version: 1,
       id: 'w-rates',
@@ -95,7 +95,7 @@ test.beforeAll(async () => {
   // the instances the rest of the suite is running.
   const userDataDir = path.join(root, 'userdata')
   fs.mkdirSync(userDataDir, { recursive: true })
-  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([wlab]))
+  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([cuerunner]))
   ;({ app, page } = await launchApp({ userDataDir }))
 })
 
@@ -106,7 +106,7 @@ test.afterAll(async () => {
 
 test('a cue at another rate says so on the cue, and only on that cue', async () => {
   await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu-recent', { hasText: 'Rate Show.wlab' }).click()
+  await page.locator('.file-menu-recent', { hasText: 'Rate Show.cuerunner' }).click()
   await expect(page.locator('.cue-row', { hasText: 'Acetrack' })).toBeVisible()
 
   // The notice lives on the Audio tab, with the file it describes; the panel opens on

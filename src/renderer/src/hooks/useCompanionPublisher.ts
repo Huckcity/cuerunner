@@ -55,7 +55,7 @@ export function useCompanionPublisher(): void {
         return
       }
       try {
-        const document = await window.winslab.script.readDocument(
+        const document = await window.cuerunner.script.readDocument(
           scriptPath,
           useStore.getState().workspacePath
         )
@@ -102,7 +102,7 @@ export function useCompanionPublisher(): void {
       const serialized = JSON.stringify(body)
       if (serialized === lastSent) return
       lastSent = serialized
-      window.winslab.show
+      window.cuerunner.show
         .command('companion', 'publish', { ...body, at: Date.now() })
         // A companion that cannot be updated is not worth a notice during a show: the
         // service's own state is where the operator reads that it is not serving.

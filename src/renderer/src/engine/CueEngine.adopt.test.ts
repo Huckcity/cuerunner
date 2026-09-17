@@ -4,7 +4,7 @@
 // everything the plan left behind is written down rather than passed over.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { CueRunner } from './CueRunner'
+import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import { scriptHost } from './scriptHost'
 import type { Cue, AudioCue, MidiCue, WaitCue } from '../types/cue'
@@ -24,7 +24,7 @@ vi.mock('./networkClient', () => ({
 
 const engine = vi.mocked(audioEngine)
 
-const runners: CueRunner[] = []
+const runners: CueEngine[] = []
 afterEach(() => {
   for (const runner of runners.splice(0)) runner.dispose()
 })
@@ -62,7 +62,7 @@ function makeMidi(overrides: Partial<MidiCue> = {}): MidiCue {
 }
 
 interface TestSetup {
-  runner: CueRunner
+  runner: CueEngine
   cues: Cue[]
   setRunning: Mock
   setSelected: Mock
@@ -71,7 +71,7 @@ interface TestSetup {
 }
 
 function setup(initialCues: Cue[], selectedId?: string): TestSetup {
-  const runner = new CueRunner()
+  const runner = new CueEngine()
   let selected: string | null = selectedId ?? null
   const setRunning = vi.fn()
   const setSelected = vi.fn((id: string | null) => { selected = id })
@@ -108,7 +108,7 @@ function plan(overrides: Partial<TakeoverPlan> = {}): TakeoverPlan {
   }
 }
 
-describe('CueRunner — putting a show back on the engine', () => {
+describe('CueEngine — putting a show back on the engine', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
@@ -257,7 +257,7 @@ describe('CueRunner — putting a show back on the engine', () => {
   })
 
   it('has nothing to do when there is no runner to adopt into', () => {
-    const runner = new CueRunner()
+    const runner = new CueEngine()
     expect(runner.adopt(plan())).toEqual({ adopted: 0, skipped: 0 })
   })
 })

@@ -41,8 +41,8 @@ export const DESK_SHOW_NAME = 'Desk Show'
 
 export function writeDeskShow(options: DeskShowOptions): string {
   const { port, channel, profile, dcaNote, deskScene = 7 } = options
-  const root = mkdtempSync(join(tmpdir(), 'winslab-desk-'))
-  const path = join(root, `${DESK_SHOW_NAME}.wlab`)
+  const root = mkdtempSync(join(tmpdir(), 'cuerunner-desk-'))
+  const path = join(root, `${DESK_SHOW_NAME}.cuerunner`)
   const device = `127.0.0.1:${port}`
 
   writeFileSync(path, `${JSON.stringify({
