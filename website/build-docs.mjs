@@ -18,6 +18,7 @@ const NAV = [
   ['guide.html', 'Guides'],
   ['reference/index.html', 'Reference'],
   ['pro.html', 'Free and Pro'],
+  ['interop.html', 'Other programs'],
   ['reliability.html', 'Reliability']
 ]
 

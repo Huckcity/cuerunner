@@ -60,6 +60,11 @@ export const GUIDES = [
           <p>Let a lighting desk, a sound desk or a footswitch press GO, and see what
              arrives.</p>
         </a>
+        <a class="card doc-card" href="./interop.html">
+          <h3>Working with other programs</h3>
+          <p>Video through an OSC cue, lights through the desk or MSC, and the buttons that
+             fire a cue.</p>
+        </a>
         <a class="card doc-card" href="./guides/desk.html">
           <h3>Scenes and the desk</h3>
           <p>Who is open on stage, scene by scene, and the DCAs that carry them.</p>
