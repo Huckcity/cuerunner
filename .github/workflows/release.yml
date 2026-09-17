@@ -5,7 +5,7 @@ name: Release
 # semantic-release then cuts the version from the commits since the last tag, and
 # build.yml picks it up from the published release. A run dispatched from any other ref
 # fails semantic-release's own branch check rather than publishing. It runs on the homelab
-# runner like the rest of the pipeline (CLAUDE.md → CI runners).
+# runner like the rest of the pipeline (provisioning: ~/homelab/ci/).
 on:
   workflow_dispatch:
 

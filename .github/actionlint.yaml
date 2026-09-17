@@ -1,5 +1,5 @@
 # actionlint's knowledge of runner labels stops at GitHub's own; the self-hosted hosts
-# register these (see CLAUDE.md → CI runners), so declare them rather than let every
+# register these from ~/homelab/ci/, so declare them rather than let every
 # `runs-on` read as a typo. `ubox` is the Linux machine and `win-ci` is the NUC that runs
 # the Windows lanes — a label named for what it does, so the next machine that does it
 # needs no rename here.

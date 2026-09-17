@@ -57,7 +57,7 @@ Measured on a Ryzen 7 5800X, one core, 44.1 kHz sources into a 48 kHz device
   recording is entered through a seek table rather than decoded from its start. An SSD shortens
   show loading, not playback.
 - **Graphics**: none required. Software rendering works; a GPU is nicer to look at.
-- **OS**: Windows 10+, macOS 10.15+, or 64-bit Linux.
+- **OS**: Windows 10+, macOS 12+, or 64-bit Linux.
 
 If a machine cannot keep up, that shows up rather than hiding: the engine counts the audio it
 could not fill and warns about it, the show clock keeps wall time through a stall instead of
@@ -66,9 +66,9 @@ acceptance suite in `native/audio/tests/`.
 
 ### Prerequisites
 
-- Node.js 20+ (Node 24 also supported)
+- Node 24 (what CI builds and tests on; Node 26 is exercised too)
 - npm or yarn
-- macOS 10.15+, Windows 10+, or Linux (for building)
+- macOS 12+, Windows 10+, or Linux (for building)
 
 ### Installation
 
@@ -689,8 +689,6 @@ carries the operator-facing half of this list, in the words an operator would lo
 3. Run `npm test && npm run typecheck` (and `npm run test:e2e` for UI changes)
 4. Commit with conventional commits: `feat:`, `fix:`, `chore:`, etc.
 5. Push and create a pull request
-
-See `CLAUDE.md` for detailed development guidelines.
 
 ## Cuerunner Pro
 
