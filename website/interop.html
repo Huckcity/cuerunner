@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Working with other programs — Cuerunner</title>
+  <meta name="description" content="Cuerunner owns the cue list, the sound and the clock. Video, lighting and the buttons are better at what they do — here is how the pieces talk." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Working with other programs — Cuerunner" />
+  <meta property="og:description" content="Cuerunner owns the cue list, the sound and the clock. Video, lighting and the buttons are better at what they do — here is how the pieces talk." />
+  <link rel="icon" href="./assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./index.html" aria-label="Cuerunner home">
+        <img src="./assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="./guide.html">Guides</a>
+        <a href="./reference/index.html">Reference</a>
+        <a href="./pro.html">Free and Pro</a>
+        <a href="./reliability.html">Reliability</a>
+      </nav>
+      <a class="header-cta" href="./index.html#download">Download</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+
+    <section class="panel reveal">
+      <h1>Working with other programs</h1>
+      <p class="doc-lede">
+        Cuerunner owns the cue list, the sound and the clock. Everything else in the room is
+        already good at its own job, and a cue is how you ask it to do that job now.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Video</h2>
+      <p>
+        Cuerunner does not play the pictures. Another program owns the projection —
+        Resolume, Mitti, vMix, a media server — and the ones that listen for OSC take the
+        roll from an <a href="reference/cue-types.html">OSC cue</a>: the cue names the host,
+        the port and the address, so the video roll sits in the same list as the sound, in
+        the same order, fired by the same GO. A program that takes MIDI instead is a
+        <a href="reference/cue-types.html">MIDI cue</a>, and one that speaks show control
+        takes the go, stop, load or reset of a
+        <a href="reference/cue-types.html">show-control cue</a> — the same message a
+        lighting console would take.
+      </p>
+      <p class="note">
+        That boundary is deliberate. One program keeps the clock; two programs keeping the
+        clock is how a show drifts.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Lighting</h2>
+      <ul>
+        <li>An ETC Eos desk, or an Allen &amp; Heath SQ or Avantis, is driven directly: the
+          <a href="guides/desk.html">desk guide</a> covers the scenes and the cues that move
+          it, and the show's GO is what moves it.</li>
+        <li>Any console that speaks MSC takes <a href="reference/cue-types.html">show-control
+          cues</a> — go, stop, resume, load, reset, to the format and the device id the
+          console expects.</li>
+        <li>The traffic runs both ways. A desk's keys can fire Cuerunner cues through the
+          <a href="reference/control.html">messages a cue answers to</a>, so the desk can
+          walk the show instead of Cuerunner walking the desk.</li>
+      </ul>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Buttons, phones and tablets</h2>
+      <ul>
+        <li>A Stream Deck, a Companion button, a TouchOSC page or anything else that can
+          send OSC is pointed at the address a cue answers to — that is the whole wiring,
+          and it works on a machine with no key.</li>
+        <li>The tablet view is the other direction: a read-only page served on the local
+          network, for the person calling the show.</li>
+        <li>Panic has an address of its own — <code>/cuerunner/panic</code> — so the button
+          that stops everything does not have to be a cue.</li>
+      </ul>
+    </section>
+
+    <section class="panel reveal delay-4">
+      <h2>The showfile</h2>
+      <p>
+        <code>.cuerunner</code> is JSON with a stable byte order: the same show saves the
+        same bytes, so it lives in version control beside the show's notes and its plots,
+        and a diff between two saves says which cues moved. What it does not do yet is read
+        another program's session file — an import from QLab or SCS is a wish, not a
+        feature, and this page will say so until it is not.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="./guide.html">Guides</a> · <a href="./reference/index.html">Reference</a></p>
+  </footer>
+</body>
+</html>

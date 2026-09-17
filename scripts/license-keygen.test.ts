@@ -127,7 +127,7 @@ describe('issue from the command line', () => {
 
       expect(error).toBeNull()
       const text = lines[0]
-      expect(text.startsWith('WSL1-')).toBe(true)
+      expect(text.startsWith('CRN1-')).toBe(true)
       expect(lines.join('\n')).toContain('For Theatre X')
       expect(lines.join('\n')).toContain('until 2027-01-31')
 

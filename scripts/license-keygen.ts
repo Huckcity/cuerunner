@@ -3,7 +3,7 @@
 //
 //   npm run license:keygen                       write a new pair, print the public half
 //   npm run license:issue -- --name "Theatre X"  mint a key from the pair on disk
-//   npm run license:verify -- "WSL1-…"           check a key against the shipped key
+//   npm run license:verify -- "CRN1-…"           check a key against the shipped key
 //
 // Node runs the TypeScript directly (type stripping), so the tooling and the app share
 // one implementation of the format. Nothing here is imported by the app.
@@ -147,7 +147,7 @@ export function runCli(
 
   if (parsed.command === 'verify') {
     const text = parsed.rest[0]
-    if (text === undefined) throw new Error('verify needs a key: npm run license:verify -- "WSL1-…"')
+    if (text === undefined) throw new Error('verify needs a key: npm run license:verify -- "CRN1-…"')
     const verified = verifyLicense(text, publicKeys)
     if (!verified.ok) throw new Error(`Refused: ${describeRefusal(verified.reason)}`)
     out(`Signed by the key this build ships, for ${verified.payload.licensee} (${verified.payload.id}).`)
@@ -162,7 +162,7 @@ export function runCli(
   out('  npm run license:keygen                        write a new key pair (once)')
   out('  npm run license:issue -- --name "Theatre X"   mint a key from that pair')
   out('  npm run license:issue -- --name "…" --expires 2027-09-12 --id CRN-ABC123')
-  out('  npm run license:verify -- "WSL1-…"            check a key against the shipped key')
+  out('  npm run license:verify -- "CRN1-…"            check a key against the shipped key')
 }
 
 /** The public half of a private key, for the check `issue` prints after minting. */

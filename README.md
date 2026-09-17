@@ -730,9 +730,37 @@ and must never be committed; it lives on the issuer's machine at
 ```bash
 npm run license:keygen                                  # once: write a pair, print the public half
 npm run license:issue -- --name "Theatre X" \
-  --expires 2027-09-12 --id WSP-ABC123                  # mint a key for a customer
-npm run license:verify -- "WSL1-…"                      # check a key against the shipped public key
+  --expires 2027-09-12 --id CRN-ABC123                  # mint a key for a customer
+npm run license:verify -- "CRN1-…"                      # check a key against the shipped public key
 ```
+
+**What the flags decide.** `--name` is the licensee as it will be shown to them; `--expires`
+is the last day the key is good (UTC, inclusive) and is left off for a key that does not
+lapse; `--id` is the sale's own identifier, carried inside the key and printed beside it,
+so a key found in an email can be matched back to a row in the ledger without opening the
+app.
+
+**The ledger is a spreadsheet.** One row per key: id, licensee, date, what it was for
+(trial, licence, venue, replacement) and the expiry. The `--id` is the join key. Nothing
+else in the product keeps a record of a sale, and nothing needs to: the key carries who it
+is for and until when, and the signature carries the rest.
+
+**A trial is a key that lapses.**
+
+```bash
+npm run license:issue -- --name "Theatre X — trial" \
+  --expires 2026-10-01 --id CRN-TRIAL-1414
+```
+
+Same surfaces and same services as a licence until the day passes, and then the machine
+falls back to the free half — with the show file untouched, so the operator keeps the
+scenes, the mic plot and the triggers they built during the trial.
+
+**Refunds and deactivation.** Deactivating in Settings → Licence returns that machine to
+the free half at once, and the key is not blacklisted anywhere, because nothing phones
+home. A refund is the ledger row marked refunded plus a request to deactivate; the licence
+text says a key is not transferable, and the honest enforcement of that is the ledger
+rather than the app.
 
 `src/main/license/publicKey.ts` holds the public keys a build trusts, so rotating a key
 means adding the new one there and releasing: existing keys keep verifying as long as

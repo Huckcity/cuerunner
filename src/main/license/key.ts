@@ -4,7 +4,7 @@ import type { LicensePayload } from '../../renderer/src/types/license'
 /**
  * License keys are signed offline and verified against a public key built into the app.
  *
- * The text is `WSL1-` followed by base32 of the payload, a NUL, and the Ed25519
+ * The text is `CRN1-` followed by base32 of the payload, a NUL, and the Ed25519
  * signature over those payload bytes. Base32 rather than base64 because a key is
  * pasted out of an email and typed back in by a human when the email is not to hand:
  * it is case-insensitive, has no characters that look like each other, and the dashes
@@ -15,7 +15,7 @@ import type { LicensePayload } from '../../renderer/src/types/license'
  */
 
 /** Marks the format, so a key out of an unrelated product is refused on sight. */
-export const LICENSE_PREFIX = 'WSL1'
+export const LICENSE_PREFIX = 'CRN1'
 
 /** The alphabet is RFC 4648 base32: A-Z and 2-7, uppercase, no padding. */
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
