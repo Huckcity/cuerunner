@@ -156,7 +156,7 @@ describe('store — saveSucceeded', () => {
     useStore.getState().setWorkspaceName('Hamlet (revised)')
 
     // The save finishes, adopting the name the store has now rather than the sent one.
-    useStore.getState().saveSucceeded('/shows/hamlet.wlab', useStore.getState().workspaceName, [])
+    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', useStore.getState().workspaceName, [])
     const after = useStore.getState()
     if (after.workspaceName !== sentName) after.markDirty()
 

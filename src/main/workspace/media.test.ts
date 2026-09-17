@@ -341,7 +341,7 @@ describe('saving and reopening a show folder', () => {
         { id: 'c1', type: 'wait', name: 'Top of act', duration: 1000, parentId: null }
       ]
     } as unknown as Workspace
-    await writeRecovery(legacy, join(dir, 'Tour Show.wlab'))
+    await writeRecovery(legacy, join(dir, 'Tour Show.cuerunner'))
 
     const recovered = await openRecovery()
 
@@ -355,7 +355,7 @@ describe('saving and reopening a show folder', () => {
     // File→Open is how most shows arrive, and the cap has to be on that path as much as
     // on the ones that go through readWorkspaceFile: a 500 MB file would spike the
     // main process by several gigabytes before anything could say no.
-    const huge = join(dir, 'huge.wlab')
+    const huge = join(dir, 'huge.cuerunner')
     writeFileSync(huge, '')
     truncateSync(huge, 64 * 1024 * 1024 + 1)
     vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [huge] })
