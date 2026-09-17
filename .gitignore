@@ -20,3 +20,7 @@ native/audio/.cache/
 # a replay lane that treats this machine's stand-ins as ground truth is worse than no replay
 # lane at all.
 integration/fixtures/vendor/
+
+# BMad: the install answers scoped to one machine rather than the repo. Team-wide overrides
+# belong in _bmad/custom/config.toml, which is committed.
+_bmad/config.user.toml
