@@ -257,6 +257,42 @@ const WireVerb kWireVerbs[] = {
 
 constexpr size_t kWireVerbCount = sizeof(kWireVerbs) / sizeof(kWireVerbs[0]);
 
+/**
+ * The wire's event set as native data: every event type `eventLine()` writes, and the
+ * top-level fields it writes for that type. This is the native copy of
+ * `AUDIO_WIRE.events` in src/shared/audio.ts, which the engine cannot include; it is what
+ * `--protocol` prints beside the verbs, and src/main/audio/audioWire.test.ts holds the two
+ * ends to each other.
+ */
+struct WireEvent {
+  const char* name;
+  const char* const* fields;
+  size_t count;
+};
+
+template <size_t N>
+constexpr WireEvent wireEvent(const char* name, const char* const (&fields)[N]) {
+  return {name, fields, N};
+}
+
+const char* const kEndedEventFields[] = {
+    "type", "cueId", "runId", "at", "reason", "loopsCompleted", "sessionId"};
+const char* const kErrorEventFields[] = {
+    "type", "at", "cueId", "runId", "code", "message", "sessionId"};
+const char* const kPanicEventFields[] = {
+    "type", "at", "fadeMs", "sessionId"};
+const char* const kStateEventFields[] = {
+    "type", "at", "active", "cueId", "runId", "playing", "state", "sessionId"};
+
+const WireEvent kWireEvents[] = {
+    wireEvent("ended", kEndedEventFields),
+    wireEvent("error", kErrorEventFields),
+    wireEvent("panic", kPanicEventFields),
+    wireEvent("state", kStateEventFields),
+};
+
+constexpr size_t kWireEventCount = sizeof(kWireEvents) / sizeof(kWireEvents[0]);
+
 const char* wireTypeName(WireFieldType type) {
   switch (type) {
     case WireFieldType::String:
@@ -673,6 +709,21 @@ std::string wireDeclarationJson(int protocol) {
       out += wireFieldJson(field);
     }
     out += '}';
+  }
+  out += "},\"events\":{";
+  for (size_t i = 0; i < kWireEventCount; i++) {
+    const WireEvent& event = kWireEvents[i];
+    if (i > 0) out += ',';
+    out += '"';
+    out += event.name;
+    out += "\":[";
+    for (size_t j = 0; j < event.count; j++) {
+      if (j > 0) out += ',';
+      out += '"';
+      out += event.fields[j];
+      out += '"';
+    }
+    out += ']';
   }
   out += "}}";
   return out;

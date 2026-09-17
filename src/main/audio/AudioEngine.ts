@@ -42,7 +42,8 @@ import type {
   AudioWireVerb,
   DeviceOptions
 } from '../../shared/audio'
-import { AUDIO_PROTOCOL_VERSION } from '../../shared/audio'
+import { AUDIO_PROTOCOL_VERSION, declaredEventFields } from '../../shared/audio'
+import { reportMainError } from '../errors'
 
 const REQUEST_TIMEOUT_MS = 15_000
 const SLOW_REQUEST_TIMEOUT_MS = 60_000
@@ -626,7 +627,25 @@ export class NativeAudioEngine {
   }
 
   private handleEvent(event: Record<string, unknown>): void {
+    // Recognition is by declaration: a field is known when the declaration names it for
+    // this event's type. An undeclared one is named and reported — the shared interfaces
+    // are flat, so the top-level names are the whole check — and the event still goes on
+    // as it is: a field this build does not carry must not cost the show a line it does
+    // understand.
+    const fields = declaredEventFields(event.type)
+    if (fields !== null) {
+      const type = event.type as string
+      for (const field of Object.keys(event)) {
+        if (fields.includes(field)) continue
+        reportMainError(
+          `[main] audio engine sent an unrecognised field '${field}' on event type '${type}'`,
+          `audio-event-field:${type}.${field}`
+        )
+      }
+    }
     const typed = this.normalizeEvent(event)
+    // A line this build cannot read has been reported by normalizeEvent. Nothing reaches
+    // a listener as an event with a shape the shared interfaces do not describe.
     if (typed === null) return
     // Keep the synchronous snapshot honest: the watchdog reads `active` at heartbeat
     // time, long before anyone would await info(). Only the live engine's lines may
@@ -690,8 +709,30 @@ export class NativeAudioEngine {
           sessionId
         }
       default:
+        // A type the declaration does not name — or one this reader has no case for —
+        // is not a line to guess at: it is reported, never dropped in silence, and it
+        // stops here rather than reaching a listener.
+        this.reportUnrecognisedEventType(type)
         return null
     }
+  }
+
+  /**
+   * A line whose type cannot be looked up: named in main's report and counted there, so a
+   * repetition raises one backlog entry's count rather than adding another. The key is the
+   * value that arrived, JSON so that `7`, `'7'` and `null` are three different facts; an
+   * event with no type at all is a fact of its own.
+   */
+  private reportUnrecognisedEventType(type: unknown): void {
+    if (type === undefined) {
+      reportMainError('[main] audio engine sent an event with no type', 'audio-event-type:none')
+      return
+    }
+    const name = JSON.stringify(type) ?? String(type)
+    reportMainError(
+      `[main] audio engine sent an unrecognised event type ${typeof type === 'string' ? `'${type}'` : name}`,
+      `audio-event-type:${name}`
+    )
   }
 
   private handleSocketError(error: Error): void {

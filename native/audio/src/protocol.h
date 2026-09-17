@@ -23,12 +23,12 @@ std::string requestVerb(const std::string& line);
 // it. Returns an empty string for acknowledgements, which are internal to the engine.
 std::string eventLine(const Event& event, const std::string& sessionId);
 
-// The wire's declaration as JSON: `protocol` and every verb with the fields it reads,
-// nested fields included. This is the native copy of src/shared/audio.ts's AUDIO_WIRE,
-// carried as the data handleRequestLine validates and reads defaults from; the two are
-// held to each other by src/main/audio/audioWire.test.ts, and this is what `--protocol`
-// prints — of the protocol the process would declare, which `--declare-protocol` may
-// have changed.
+// The wire's declaration as JSON: `protocol`, every verb with the fields it reads
+// (nested fields included), and every event with the fields its type carries. This is
+// the native copy of src/shared/audio.ts's AUDIO_WIRE, carried as the data
+// handleRequestLine validates and reads defaults from; the two are held to each other by
+// src/main/audio/audioWire.test.ts, and this is what `--protocol` prints — of the
+// protocol the process would declare, which `--declare-protocol` may have changed.
 std::string wireDeclarationJson(int protocol);
 
 // The line a connection is opened with, before any request is read: the protocol this

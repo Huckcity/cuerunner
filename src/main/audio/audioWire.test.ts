@@ -20,6 +20,8 @@ import { PassThrough } from 'node:stream'
 import type { ChildProcess } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
 import { AUDIO_PROTOCOL_VERSION, AUDIO_WIRE } from '../../shared/audio'
+import type { AudioEngineEvent } from '../../shared/audio'
+import { drainMainErrors } from '../errors'
 import { AudioEngineError, NativeAudioEngine } from './AudioEngine'
 
 // The client spawns its engine through node:child_process. The one test that has to
@@ -153,6 +155,107 @@ describe('the wire declaration', () => {
       await silent.shutdown()
       for (const socket of sockets) socket.destroy()
       await new Promise<void>((resolveClosed) => server.close(() => resolveClosed()))
+      rmSync(workDir, { recursive: true, force: true })
+    }
+  }, 15_000)
+
+  it('reports an event type and a field the declaration does not carry, counted', async () => {
+    // The engine a reader can be handed is not always the engine this build was written
+    // for: a line whose type or field the declaration does not name must be surfaced, and
+    // a repeat must raise one count rather than add another report. The socket is this
+    // test's own, so the lines are the only ones the client will ever see.
+    const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-wire-unrecognised-'))
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\cuerunner-wire-unrecognised-${process.pid}`
+        : join(workDir, 'engine.sock')
+    const sockets: Socket[] = []
+    const server: Server = createServer((socket) => {
+      sockets.push(socket)
+      // Declare this build's protocol, or the client refuses the connection before any
+      // event could be read.
+      socket.write(
+        `${JSON.stringify({
+          greeting: true,
+          name: 'cuerunner-audio',
+          version: 'test',
+          protocol: AUDIO_PROTOCOL_VERSION
+        })}\n`
+      )
+      socket.on('data', (chunk: Buffer) => {
+        for (const line of chunk.toString('utf8').split('\n')) {
+          if (line.trim() === '') continue
+          const request = JSON.parse(line) as { id?: number; verb?: string }
+          if (typeof request.id !== 'number') continue
+          const result = request.verb === 'info' ? { sessionId: 'feed-session' } : { ok: true, at: 0 }
+          socket.write(`${JSON.stringify({ id: request.id, ok: true, result })}\n`)
+        }
+      })
+    })
+    const { promise: listening, resolve: onListening, reject: onListenError } = Promise.withResolvers<void>()
+    server.once('error', onListenError)
+    server.listen(socketPath, onListening)
+    await listening
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const previousBin = process.env.CUERUNNER_AUDIO_BIN
+    const previousSocket = process.env.CUERUNNER_AUDIO_SOCKET
+    process.env.CUERUNNER_AUDIO_BIN = ensureBinary()
+    process.env.CUERUNNER_AUDIO_SOCKET = socketPath
+    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
+    const engine = new NativeAudioEngine()
+    const events: AudioEngineEvent[] = []
+    // The panic line is the last of the three, and the client reads a socket's lines in
+    // order: its arrival is the signal that both lines before it have been read. No
+    // sleep guesses at when that has happened.
+    const { promise: delivered, resolve: onDelivered } = Promise.withResolvers<void>()
+    const off = engine.subscribe(event => {
+      events.push(event)
+      onDelivered()
+    })
+    try {
+      await engine.ensureStarted()
+      // Only what this test feeds is its subject.
+      drainMainErrors()
+
+      sockets[0].write(
+        [
+          JSON.stringify({ event: { type: 'fly', sessionId: 'feed-session', at: 1 } }),
+          JSON.stringify({ event: { type: 'fly', sessionId: 'feed-session', at: 2 } }),
+          // A declared type carrying a field the declaration does not name must still be
+          // delivered exactly as before.
+          JSON.stringify({ event: { type: 'panic', at: 3, fadeMs: 0, why: 'because', sessionId: 'feed-session' } }),
+          // A type that is present but not a name is named as the value that arrived, and
+          // an event with no type at all is its own report — neither reads as the other.
+          JSON.stringify({ event: { type: 7, sessionId: 'feed-session', at: 4 } }),
+          JSON.stringify({ event: { sessionId: 'feed-session', at: 5 } })
+        ].join('\n') + '\n'
+      )
+      await delivered
+
+      // Nothing reaches a listener for a type the declaration does not name, and the
+      // declared event goes through exactly as it does today — its declared fields, the
+      // undeclared one reported rather than carried.
+      expect(events).toEqual([{ type: 'panic', at: 3, fadeMs: 0, sessionId: 'feed-session' }])
+      // The repeated type is one entry whose count climbed; the field is its own report,
+      // written as the caller wrote it since it has not repeated; and each line whose type
+      // is not a name is named by what arrived.
+      expect(drainMainErrors()).toEqual([
+        "[main] audio engine sent an unrecognised event type 'fly' (×2)",
+        "[main] audio engine sent an unrecognised field 'why' on event type 'panic'",
+        '[main] audio engine sent an unrecognised event type 7',
+        '[main] audio engine sent an event with no type'
+      ])
+    } finally {
+      off()
+      await engine.shutdown()
+      consoleError.mockRestore()
+      restoreEnv('CUERUNNER_AUDIO_BIN', previousBin)
+      restoreEnv('CUERUNNER_AUDIO_SOCKET', previousSocket)
+      for (const socket of sockets) socket.destroy()
+      const { promise: closed, resolve: onClosed } = Promise.withResolvers<void>()
+      server.close(() => onClosed())
+      await closed
       rmSync(workDir, { recursive: true, force: true })
     }
   }, 15_000)

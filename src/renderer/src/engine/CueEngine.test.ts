@@ -1224,6 +1224,29 @@ describe('CueEngine — engine failures are reported', () => {
     }))
   })
 
+  it('keeps a bounded set of counts, and still names a type first seen past the bound', () => {
+    // The count table is bounded so a skewed engine naming a fresh type in every event
+    // cannot grow it for the life of the window. The bound is observable: a name recorded
+    // while there was room keeps its count, one first seen past the cap is still logged —
+    // the line names it — but never climbs, and the table does not grow for it.
+    const { appendLog } = setup([])
+    const emit = (type: unknown): void =>
+      emitEngineEvent({ type, at: 1 } as unknown as AudioEngineEvent)
+    const messages = (): string[] => appendLog.mock.calls.map(([entries]) => entries[0].message)
+
+    for (let i = 0; i < 64; i++) emit(`fly-${i}`)
+
+    emit('fly-63')
+    expect(messages().at(-1)).toBe("audio engine sent an unrecognised event type 'fly-63' (×2)")
+
+    emit('fly-late')
+    emit('fly-late')
+    expect(messages().slice(-2)).toEqual([
+      "audio engine sent an unrecognised event type 'fly-late'",
+      "audio engine sent an unrecognised event type 'fly-late'"
+    ])
+  })
+
   it('reports an error the engine raises while the cue plays', async () => {
     const cue = makeAudio({ id: 'a1', duration: 5000 })
     const { runner, setLastRun } = setup([cue])
@@ -1240,6 +1263,39 @@ describe('CueEngine — engine failures are reported', () => {
       outcome: 'error',
       error: 'device lost'
     }))
+  })
+
+  it('never finishes a run on an event type the declaration does not name', async () => {
+    // A build from another meaning of the wire can send a type this projection has no
+    // meaning for, carrying a cue id that matches a running cue. It must be reported, and
+    // it must never be read as that cue's natural end: an unrecognised line is not a
+    // licence to close a run.
+    const cue = makeAudio({ id: 'a1', duration: 5000 })
+    const { runner, setRunning, appendLog } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    setRunning.mockClear()
+    appendLog.mockClear()
+
+    const unrecognised = { type: 'fly', cueId: 'a1', at: Date.now() } as unknown as AudioEngineEvent
+
+    emitEngineEvent(unrecognised)
+
+    expect(appendLog).toHaveBeenCalledTimes(1)
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: "audio engine sent an unrecognised event type 'fly'" })
+    ])
+    expect(setRunning).not.toHaveBeenCalled()
+
+    // A repeat is the same fact: the line carries its count rather than the log growing a
+    // copy, and the run is still left alone.
+    emitEngineEvent(unrecognised)
+
+    expect(appendLog).toHaveBeenLastCalledWith([
+      expect.objectContaining({ level: 'error', message: "audio engine sent an unrecognised event type 'fly' (×2)" })
+    ])
+    expect(setRunning).not.toHaveBeenCalled()
   })
 
   it('releases the show when the device goes, without waiting for the silence report', () => {
