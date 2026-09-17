@@ -20,8 +20,184 @@
  * 2 added the engine session identity (`clock()` replies, `info()`, every event), which
  * a build must not silently do without: the renderer's clock epoch is meaningless
  * against an engine that cannot say which session a reading came from.
+ *
+ * 3 opens every connection with a greeting that declares this number and the verb set
+ * that goes with it (`AUDIO_WIRE`). The client reads it before it writes anything, so an
+ * engine built against another meaning of the number is refused while the connection is
+ * still empty, rather than after it has already answered a verb and its events have been
+ * interpreted. The greeting is a new message kind, which is why the meaning changed with
+ * it: an engine that does not greet speaks a build from before it.
  */
-export const AUDIO_PROTOCOL_VERSION = 2
+export const AUDIO_PROTOCOL_VERSION = 3
+
+/** The type a request field carries on the wire. */
+export type AudioWireFieldType = 'string' | 'number' | 'boolean' | 'object' | 'array'
+
+/**
+ * One field of a request: the type it must have, and either that the verb cannot do what
+ * its name says without it, or the value the engine takes when it is absent. `nullable`
+ * marks the fields a request may carry `null` for, where null is a meaning of its own
+ * (to the end of the file, automatic routing, "default", leave as it is); a null anywhere
+ * else is refused. `fields` declares what is inside an object, or inside each element of
+ * an array of them — every present field is checked against its own declaration, at every
+ * depth.
+ *
+ * A `null` default is "absent means ...": the same meanings as above, named once.
+ */
+export type AudioWireField =
+  | {
+      type: AudioWireFieldType
+      required: true
+      nullable?: true
+      fields?: Record<string, AudioWireField>
+    }
+  | {
+      type: AudioWireFieldType
+      required: false
+      nullable?: true
+      default: string | number | boolean | null
+      fields?: Record<string, AudioWireField>
+    }
+
+/** One zero-based matrix connection, as a request carries it. */
+const AUDIO_WIRE_CROSSPOINT = {
+  inputChannel: { type: 'number', required: false, default: -1 },
+  outputChannel: { type: 'number', required: false, default: -1 },
+  gain: { type: 'number', required: false, default: 1 }
+} as const satisfies Record<string, AudioWireField>
+
+/** What a `start` asks the engine to play, field for field. */
+const AUDIO_WIRE_START_OPTIONS = {
+  startTime: { type: 'number', required: false, default: 0 },
+  /** A time in the file; null (or absent) plays to the end of the file. */
+  endTime: { type: 'number', required: false, nullable: true, default: null },
+  loopCount: { type: 'number', required: false, default: 0 },
+  rate: { type: 'number', required: false, default: 1 },
+  trim: { type: 'number', required: false, default: 1 },
+  volume: { type: 'number', required: false, default: 1 },
+  pan: { type: 'number', required: false, default: 0 },
+  fadeInDuration: { type: 'number', required: false, default: 0 },
+  /** Null/absent is automatic routing; `[]` is a deliberately silent voice. */
+  outputs: { type: 'array', required: false, nullable: true, default: null, fields: AUDIO_WIRE_CROSSPOINT }
+} as const satisfies Record<string, AudioWireField>
+
+/** What `configure()` accepts: null, and every sub-field of it, means leave as it is. */
+const AUDIO_WIRE_DEVICE_OPTIONS = {
+  backend: { type: 'string', required: false, default: null },
+  deviceId: { type: 'string', required: false, nullable: true, default: null },
+  sampleRate: { type: 'number', required: false, nullable: true, default: null },
+  channels: { type: 'number', required: false, nullable: true, default: null },
+  exclusive: { type: 'boolean', required: false, default: null },
+  bufferFrames: { type: 'number', required: false, nullable: true, default: null }
+} as const satisfies Record<string, AudioWireField>
+
+/**
+ * The wire's declaration: the protocol number and every verb, with the fields each one
+ * reads. This is the one home of the verb set. The native engine cannot import this
+ * module, so it carries the same table as data (`native/audio/src/protocol.cpp`),
+ * prints it for `--protocol`, and refuses a request whose required field is missing or
+ * mistyped; `src/main/audio/audioWire.test.ts` holds the two to each other, so a verb or
+ * field edited at one end alone fails there.
+ *
+ * Verb and field names are frozen, and so are the declared defaults: a well-formed
+ * request that omits an optional field gets the default, never a refusal.
+ */
+export const AUDIO_WIRE = {
+  protocol: AUDIO_PROTOCOL_VERSION,
+  verbs: {
+    /** Register a cue's file and measure it. */
+    prepare: {
+      cueId: { type: 'string', required: true },
+      filePath: { type: 'string', required: true }
+    },
+    /** Measure a file without decoding it into the cache. */
+    probe: {
+      filePath: { type: 'string', required: true }
+    },
+    start: {
+      cueId: { type: 'string', required: true },
+      /** Absolute sample-clock ms; 0 means now. */
+      whenMs: { type: 'number', required: false, default: 0 },
+      options: { type: 'object', required: true, fields: AUDIO_WIRE_START_OPTIONS }
+    },
+    stop: {
+      cueId: { type: 'string', required: true },
+      fadeMs: { type: 'number', required: false, default: 0 },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    stopAll: {
+      fadeMs: { type: 'number', required: false, default: 0 }
+    },
+    seek: {
+      cueId: { type: 'string', required: true },
+      positionMs: { type: 'number', required: false, default: 0 },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    release: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 },
+      /** A time in the file; null (or absent) plays the release out to the end of it. */
+      endMs: { type: 'number', required: false, nullable: true, default: null }
+    },
+    cancel: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    fade: {
+      cueId: { type: 'string', required: true },
+      param: { type: 'string', required: false, default: 'volume' },
+      value: { type: 'number', required: false, default: 0 },
+      durationMs: { type: 'number', required: false, default: 0 },
+      curve: { type: 'string', required: false, default: 'linear' },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    routing: {
+      cueId: { type: 'string', required: true },
+      /** Null/absent is automatic routing, `[]` is a deliberately silent voice. */
+      outputs: { type: 'array', required: false, nullable: true, default: null, fields: AUDIO_WIRE_CROSSPOINT }
+    },
+    progress: {
+      cueId: { type: 'string', required: true }
+    },
+    panic: {
+      fadeMs: { type: 'number', required: false, default: 0 }
+    },
+    clock: {},
+    info: {},
+    devices: {},
+    configure: {
+      /** Null/absent, and every sub-field of it, means "leave the device as it is". */
+      options: { type: 'object', required: false, nullable: true, default: null, fields: AUDIO_WIRE_DEVICE_OPTIONS }
+    },
+    waveform: {
+      filePath: { type: 'string', required: true },
+      points: { type: 'number', required: false, default: 512 },
+      /** Both ends together name a window; either one alone is the whole file. */
+      startMs: { type: 'number', required: false, default: null },
+      endMs: { type: 'number', required: false, default: null }
+    },
+    onsets: {
+      filePath: { type: 'string', required: true },
+      sensitivity: { type: 'number', required: false, default: 1 },
+      maxOnsets: { type: 'number', required: false, default: 0 },
+      startMs: { type: 'number', required: false, default: null },
+      endMs: { type: 'number', required: false, default: null }
+    },
+    silence: {
+      filePath: { type: 'string', required: true },
+      thresholdDb: { type: 'number', required: false, default: -60 }
+    },
+    /** Test hook: runs the real device-notification classification without hardware. */
+    simulateDeviceNotification: {
+      type: { type: 'string', required: true },
+      deliberate: { type: 'boolean', required: false, default: false }
+    },
+    shutdown: {}
+  }
+} as const satisfies { protocol: number; verbs: Record<string, Record<string, AudioWireField>> }
+
+/** Every verb the wire carries, as a union of its names. */
+export type AudioWireVerb = keyof typeof AUDIO_WIRE.verbs
 
 /** Default stream format. The engine reports what it actually achieved in `info()`. */
 export const AUDIO_DEFAULT_SAMPLE_RATE = 48000

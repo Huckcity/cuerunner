@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AudioEngineError, NativeAudioEngine, audioEngine } from './AudioEngine'
+import { AUDIO_PROTOCOL_VERSION } from '../../shared/audio'
 import type { AudioEndedEvent, AudioEngineEvent, AudioStartOptions } from '../../shared/audio'
 
 const repoRoot = resolve(__dirname, '..', '..', '..')
@@ -126,7 +127,7 @@ afterAll(async () => {
 describe('audioEngine client (against the real engine)', () => {
   it('reports the engine it actually started', async () => {
     const info = await audioEngine.info()
-    expect(info.protocol).toBe(2)
+    expect(info.protocol).toBe(AUDIO_PROTOCOL_VERSION)
     expect(info.sessionId).toMatch(/^[0-9a-f]{16}$/)
     expect(info.backend).toBe('silent')
     expect(info.sampleRate).toBe(48000)
@@ -425,7 +426,7 @@ describe('audioEngine client (against the real engine)', () => {
       await expect(revived.configure({})).rejects.toMatchObject({ code: 'device' })
       expect(revived.status().connected).toBe(true)
       const info = await revived.info()
-      expect(info.protocol).toBe(2)
+      expect(info.protocol).toBe(AUDIO_PROTOCOL_VERSION)
     } finally {
       process.env.CUERUNNER_AUDIO_BIN = binaryPath
       await revived.shutdown()

@@ -33,6 +33,12 @@ struct EngineOptions {
   bool exclusive = false;
   int bufferFrames = 512;
   std::string capturePath;
+  /**
+   * The protocol this engine declares: the greeting it opens every connection with and
+   * the `protocol` in `info()`. `--declare-protocol` sets another one, which is how the
+   * app's refusal of a build it does not speak is exercised against a real process.
+   */
+  int declaredProtocol = kWireProtocolVersion;
   int64_t cacheMaxBytes = 512LL * 1024 * 1024;
   int cacheMaxFiles = 100;
   int64_t cacheMaxFileBytes = 32LL * 1024 * 1024;
@@ -141,7 +147,7 @@ struct WaveformDTO {
 struct InfoDTO {
   std::string name = "cuerunner-audio";
   std::string version;
-  int protocol = 2;
+  int protocol = kWireProtocolVersion;
   /** This process's identity. A respawned engine has a different one and counts from
    *  zero again; callers use it to tell a new session from a discontinuity. */
   std::string sessionId;

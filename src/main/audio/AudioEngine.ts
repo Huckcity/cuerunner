@@ -39,6 +39,7 @@ import type {
   AudioStartResult,
   AudioVoiceState,
   AudioWaveform,
+  AudioWireVerb,
   DeviceOptions
 } from '../../shared/audio'
 import { AUDIO_PROTOCOL_VERSION } from '../../shared/audio'
@@ -50,8 +51,15 @@ const SHUTDOWN_GRACE_MS = 1_000
 const MAX_RESTARTS = 3
 const RESTART_BACKOFF_MS = [250, 1000, 4000]
 
+/**
+ * How long a connected engine has to declare itself. The greeting is written as the
+ * connection is accepted, so a declaration that has not arrived in this long never will —
+ * and a stale engine is refused promptly rather than after the whole startup budget.
+ */
+const GREETING_TIMEOUT_MS = 2_000
+
 /** Verbs that touch the disk or the device list and get the longer deadline. */
-const SLOW_VERBS: Record<string, number> = {
+const SLOW_VERBS: Partial<Record<AudioWireVerb, number>> = {
   prepare: SLOW_REQUEST_TIMEOUT_MS,
   probe: SLOW_REQUEST_TIMEOUT_MS,
   waveform: SLOW_REQUEST_TIMEOUT_MS,
@@ -76,6 +84,18 @@ interface WireReply {
 
 interface WireEventLine {
   event: Record<string, unknown>
+}
+
+/**
+ * What the engine declares as a connection opens, before it will read a request: the
+ * protocol it speaks. It is checked as part of connecting, so a build from another
+ * meaning of the number is refused while the connection is still empty.
+ */
+interface WireGreeting {
+  /** The declared protocol, or null when the line carried no number. */
+  protocol: number | null
+  name: string
+  version: string
 }
 
 interface PendingRequest {
@@ -117,6 +137,25 @@ export class AudioEngineError extends Error {
 function describeError(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
+}
+
+/**
+ * What the client says when the engine's declaration is not this build's. `greeting` is
+ * what arrived, null when the connection never declared anything. The engine's own name
+ * and build version are named with it when the greeting carried them: an operator
+ * otherwise cannot tell a pre-greeting build from a line that was cut short.
+ */
+function protocolMismatch(greeting: WireGreeting | null): string {
+  if (greeting === null) {
+    // An engine built before the greeting existed declares nothing and cannot: the
+    // absence is the mismatch, and there is no second protocol number to name for it.
+    return `audio engine did not declare its protocol (this build speaks ${AUDIO_PROTOCOL_VERSION})`
+  }
+  const engine =
+    greeting.name !== '' && greeting.version !== '' ? ` (${greeting.name} ${greeting.version})` : ''
+  return greeting.protocol === null
+    ? `audio engine declared no protocol${engine} (this build speaks ${AUDIO_PROTOCOL_VERSION})`
+    : `audio engine protocol ${greeting.protocol}${engine} does not match this build (${AUDIO_PROTOCOL_VERSION})`
 }
 
 function readEnv(name: string): string | undefined {
@@ -166,6 +205,10 @@ export class NativeAudioEngine {
   private buffer = ''
   private nextRequestId = 1
   private pending = new Map<number, PendingRequest>()
+  /** The declaration the live connection opened with; null until a greeting arrives. */
+  private greeting: WireGreeting | null = null
+  /** Whoever is connecting and waiting on that greeting, if anyone is. */
+  private greetingWaiter: { resolve: (greeting: WireGreeting) => void; reject: (error: Error) => void } | null = null
   private listeners = new Set<(event: AudioEngineEvent) => void>()
   private lastInfo: AudioEngineInfo | null = null
   /**
@@ -400,6 +443,10 @@ export class NativeAudioEngine {
     const args = ['--socket', path, '--backend', readEnv('CUERUNNER_AUDIO_BACKEND') ?? 'auto']
     const capture = readEnv('CUERUNNER_TEST_AUDIO_CAPTURE')
     if (capture !== undefined && !appIsPackaged()) args.push('--capture', capture)
+    // Dev/test only, like the capture tee: an engine that declares another protocol is
+    // how the refusal this build makes is exercised against a real process.
+    const declaredProtocol = readEnv('CUERUNNER_TEST_AUDIO_PROTOCOL')
+    if (declaredProtocol !== undefined && !appIsPackaged()) args.push('--declare-protocol', declaredProtocol)
     const deviceId = readEnv('CUERUNNER_AUDIO_DEVICE')
     if (deviceId !== undefined) args.push('--device', deviceId)
     const exclusive = readEnv('CUERUNNER_AUDIO_EXCLUSIVE')
@@ -423,14 +470,11 @@ export class NativeAudioEngine {
     child.on('exit', (code, signal) => this.handleExit(child, code, signal))
 
     try {
+      // connectWithRetry resolves only once the engine's greeting has been checked
+      // against this build, so everything below is written to an engine this build speaks.
       await this.connectWithRetry(path, child)
       const info = await this.info()
       this.lastInfo = info
-      if (info.protocol !== AUDIO_PROTOCOL_VERSION) {
-        const mismatch = `audio engine protocol ${info.protocol} does not match this build (${AUDIO_PROTOCOL_VERSION})`
-        this.lastStatus.lastError = mismatch
-        throw new AudioEngineError('engine', mismatch)
-      }
     } catch (error) {
       // A half-started engine must not be left running or half-connected.
       this.shuttingDown = true
@@ -444,10 +488,18 @@ export class NativeAudioEngine {
     this.lastStatus.lastError = null
   }
 
-  private connectWithRetry(path: string, child: ChildProcess): Promise<void> {
+  /**
+   * Connects and reads the engine's declaration before anything is written: a socket
+   * that accepts is not yet an engine this build speaks. A verb written before the check
+   * would have been answered by a build whose events this process then interprets, which
+   * is the refusal this ordering exists to make impossible.
+   */
+  private async connectWithRetry(path: string, child: ChildProcess): Promise<void> {
+    this.greeting = null
+    this.greetingWaiter = null
     const deadline = Date.now() + SPAWN_TIMEOUT_MS
-    const { promise, resolve, reject } = Promise.withResolvers<void>()
-    const attempt = (): void => {
+    await new Promise<void>((resolve, reject) => {
+      const attempt = (): void => {
         if (child.exitCode !== null || child.signalCode !== null) {
           reject(new AudioEngineError('engine', `audio engine exited during startup (code ${child.exitCode})`))
           return
@@ -464,17 +516,62 @@ export class NativeAudioEngine {
         socket.once('connect', () => {
           this.socket = socket
           socket.setNoDelay(true)
-          socket.on('data', (chunk: Buffer) => this.handleStdout(chunk))
+          socket.on('data', (chunk: Buffer) => this.handleStdout(chunk, socket))
           socket.on('error', (error) => this.handleSocketError(error))
           socket.on('close', () => this.handleSocketClose(socket))
           resolve()
         })
+      }
+      attempt()
+    })
+    const greeting = await this.awaitGreeting(deadline)
+    if (greeting.protocol !== AUDIO_PROTOCOL_VERSION) {
+      throw new AudioEngineError('engine', protocolMismatch(greeting))
     }
-    attempt()
+  }
+
+  /**
+   * The greeting the connected engine opened with. The wait is bounded by what is left of
+   * the startup budget the connect already ran on — one budget, not two — and by a shorter
+   * window of its own, because the declaration is written as the connection is accepted: an
+   * engine built before the greeting cannot send one, and neither can one that is wedged.
+   */
+  private awaitGreeting(deadlineMs: number): Promise<WireGreeting> {
+    if (this.greeting !== null) return Promise.resolve(this.greeting)
+    const { promise, resolve, reject } = Promise.withResolvers<WireGreeting>()
+    const remaining = Math.max(0, Math.min(deadlineMs, Date.now() + GREETING_TIMEOUT_MS) - Date.now())
+    const timer = setTimeout(() => {
+      this.greetingWaiter = null
+      reject(new AudioEngineError('engine', protocolMismatch(null)))
+    }, remaining)
+    if (typeof timer.unref === 'function') timer.unref()
+    this.greetingWaiter = {
+      resolve: (greeting) => {
+        clearTimeout(timer)
+        resolve(greeting)
+      },
+      reject: (error) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    }
     return promise
   }
 
-  private handleStdout(chunk: Buffer): void {
+  /** The declaration a connection opens with: the first line the engine sends. */
+  private handleGreeting(record: Record<string, unknown>): void {
+    const greeting: WireGreeting = {
+      protocol: typeof record.protocol === 'number' ? record.protocol : null,
+      name: typeof record.name === 'string' ? record.name : '',
+      version: typeof record.version === 'string' ? record.version : ''
+    }
+    this.greeting = greeting
+    const waiter = this.greetingWaiter
+    this.greetingWaiter = null
+    waiter?.resolve(greeting)
+  }
+
+  private handleStdout(chunk: Buffer, socket: Socket | null = null): void {
     this.buffer += chunk.toString('utf8')
     if (this.buffer.length > 8 * 1024 * 1024) {
       this.buffer = ''
@@ -485,12 +582,12 @@ export class NativeAudioEngine {
     while (newline >= 0) {
       const line = this.buffer.slice(0, newline).trim()
       this.buffer = this.buffer.slice(newline + 1)
-      if (line !== '') this.handleLine(line)
+      if (line !== '') this.handleLine(line, socket)
       newline = this.buffer.indexOf('\n')
     }
   }
 
-  private handleLine(line: string): void {
+  private handleLine(line: string, socket: Socket | null): void {
     let parsed: unknown
     try {
       parsed = JSON.parse(line)
@@ -500,6 +597,13 @@ export class NativeAudioEngine {
     }
     if (parsed === null || typeof parsed !== 'object') return
     const record = parsed as Record<string, unknown>
+    if (record.greeting === true) {
+      // Only the connection's own declaration counts: a replaced engine's socket can
+      // deliver a line after its replacement is connected, and a greeting that did not
+      // arrive on the socket in use must not settle the check the first verb rests on.
+      if (socket !== null && socket === this.socket) this.handleGreeting(record)
+      return
+    }
     if (typeof record.id === 'number') {
       this.handleReply(record as unknown as WireReply)
       return
@@ -604,6 +708,7 @@ export class NativeAudioEngine {
     if (socket !== this.socket) return
     this.socket = null
     this.failPending(new AudioEngineError('engine', 'audio engine connection closed'))
+    this.failGreeting(new AudioEngineError('engine', 'audio engine connection closed'))
     if (this.shuttingDown) return
     if (this.child === null) return  // the exit handler owns that case
     this.scheduleRestart('audio engine connection closed')
@@ -624,6 +729,7 @@ export class NativeAudioEngine {
       this.socket = null
     }
     this.failPending(new AudioEngineError('engine', reason))
+    this.failGreeting(new AudioEngineError('engine', reason))
     if (this.shuttingDown) return
     this.scheduleRestart(reason)
   }
@@ -673,6 +779,17 @@ export class NativeAudioEngine {
       this.socket = null
     }
     this.buffer = ''
+    // A connect waiting on a declaration that can no longer arrive must not sit out its
+    // timeout: whatever tore the connection down is the reason it failed.
+    this.greeting = null
+    this.failGreeting(new AudioEngineError('engine', 'audio engine connection closed'))
+  }
+
+  /** Fails whoever is waiting on a greeting the connection that owed it can no longer send. */
+  private failGreeting(error: Error): void {
+    const waiter = this.greetingWaiter
+    this.greetingWaiter = null
+    waiter?.reject(error)
   }
 
   private killChild(): void {
@@ -712,7 +829,7 @@ export class NativeAudioEngine {
     this.pending.clear()
   }
 
-  private request(verb: string, params: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
+  private request(verb: AudioWireVerb, params: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     const socket = this.socket
     if (socket === null || socket.destroyed) {
       return Promise.reject(new AudioEngineError('engine', 'audio engine is not running'))
