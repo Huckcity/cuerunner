@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useStore, usePro } from '../store'
-import type { CompanionCue, CompanionState } from '../types/show'
-import type { Cue } from '../types/cue'
+import type { CompanionCue, CompanionState } from '../../../shared/show'
+import type { Cue } from '../../../shared/cue'
 
 /** The shape the tablet is served, minus the timestamp that makes each publish unique. */
 type CompanionBody = Omit<CompanionState, 'at'>

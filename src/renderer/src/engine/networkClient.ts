@@ -3,7 +3,7 @@
 // is the small typed face of that bridge, so a request that fails, times out or is
 // cancelled is reported the same way wherever it came from.
 
-import type { NetworkRequest, NetworkResult } from '../types/network'
+import type { NetworkRequest, NetworkResult } from '../../../shared/network'
 
 export const network = {
   request: (options: NetworkRequest): Promise<NetworkResult> =>

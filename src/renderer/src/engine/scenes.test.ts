@@ -12,7 +12,7 @@ import {
   type CastSettings,
   type DeskSettings,
   type MicScene
-} from '../types/show'
+} from '../../../shared/show'
 
 // The desk the fixtures drive, and what its first two DCAs are sent: the note of their
 // own number, on the port and channel the show is pointed at.

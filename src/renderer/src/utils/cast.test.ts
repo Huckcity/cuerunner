@@ -21,8 +21,8 @@ import {
   updateEnsemble,
   updatePerformer
 } from './cast'
-import { DCA_LIMIT, defaultCastSettings, startingDcas, startingChannels } from '../types/show'
-import type { CastSettings, Performer } from '../types/show'
+import { DCA_LIMIT, defaultCastSettings, startingDcas, startingChannels } from '../../../shared/show'
+import type { CastSettings, Performer } from '../../../shared/show'
 
 function empty(): CastSettings {
   return { channels: [], performers: [], ensembles: [], dcas: [] }

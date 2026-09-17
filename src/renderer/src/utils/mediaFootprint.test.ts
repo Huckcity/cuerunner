@@ -9,7 +9,7 @@ import {
   summariseFootprint
 } from './mediaFootprint'
 import type { AudioProbe } from '../../../shared/audio'
-import type { Cue, WaitCue } from '../types/cue'
+import type { Cue, WaitCue } from '../../../shared/cue'
 
 const MB = 1024 * 1024
 

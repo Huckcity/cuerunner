@@ -11,7 +11,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { createConnection, createServer, type Server, type Socket } from 'node:net'
 import { CONNECT_DEADLINE_MS, MidiTcpEngine } from './MidiTcpEngine'
-import type { MidiMessageKind } from '../../renderer/src/types/cue'
+import type { MidiMessageKind } from '../../shared/cue'
 
 interface Desk {
   port: number

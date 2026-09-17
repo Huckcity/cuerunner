@@ -16,8 +16,8 @@ import {
   type RedundancyDigest,
   type ShowNotice
 } from '../../../shared/redundancy'
-import type { AudioCue } from '../types/cue'
-import type { RedundancyEvent, ShowEvent } from '../types/show'
+import type { AudioCue } from '../../../shared/cue'
+import type { RedundancyEvent, ShowEvent } from '../../../shared/show'
 
 vi.mock('../engine/audioEngineClient')
 

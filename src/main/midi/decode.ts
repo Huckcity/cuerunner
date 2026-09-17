@@ -1,4 +1,4 @@
-import type { MidiMessageKind } from '../../renderer/src/types/cue'
+import type { MidiMessageKind } from '../../shared/cue'
 
 /**
  * Turns a raw MIDI byte stream into the same message shapes a MIDI cue sends, so an

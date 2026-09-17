@@ -1,9 +1,9 @@
 // Migration runs in the main process on every workspace load. Electron is not
 // available in the test environment, so the module is imported with it stubbed.
 import { describe, it, expect, vi } from 'vitest'
-import type { StopCue, AudioCue, ScriptCue } from '../../renderer/src/types/cue'
-import type { Workspace } from '../../renderer/src/types/workspace'
-import { CHANNEL_START_COUNT } from '../../renderer/src/types/show'
+import type { StopCue, AudioCue, ScriptCue } from '../../shared/cue'
+import type { Workspace } from '../../shared/workspace'
+import { CHANNEL_START_COUNT } from '../../shared/show'
 import { migrateWorkspace } from './WorkspaceManager'
 
 // Hoisted above the import above, so WorkspaceManager never loads the real Electron.

@@ -17,9 +17,9 @@ import {
   oscMessages,
   profileMessages
 } from './desk'
-import { defaultDeskSettings } from '../types/show'
-import type { MidiMessageKind } from '../types/cue'
-import type { Dca, DeskMessage, DeskSettings } from '../types/show'
+import { defaultDeskSettings } from '../../../shared/show'
+import type { MidiMessageKind } from '../../../shared/cue'
+import type { Dca, DeskMessage, DeskSettings } from '../../../shared/show'
 
 function dca(overrides: Partial<Dca> = {}): Dca {
   return { id: 'dca-1', label: 'DCA 1', note: null, address: null, ...overrides }

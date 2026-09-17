@@ -5,7 +5,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ServiceStatus } from './ServiceStatus'
-import type { ServiceStatus as Status } from '../../types/show'
+import type { ServiceStatus as Status } from '../../../../shared/show'
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null

@@ -21,7 +21,7 @@ import {
   type ShowNotice,
   type UnstampedNotice
 } from '../../shared/redundancy'
-import type { ShowSettings } from '../../renderer/src/types/show'
+import type { ShowSettings } from '../../shared/show'
 
 /**
  * How often the partner's silence is looked at. A quarter of a second is four looks

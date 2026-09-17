@@ -1,5 +1,5 @@
 import { useStore } from '../../store'
-import type { GroupCue, GroupMode } from '../../types/cue'
+import type { GroupCue, GroupMode } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
 import { GROUP_DEFAULTS } from '../../utils/cueDefaults'

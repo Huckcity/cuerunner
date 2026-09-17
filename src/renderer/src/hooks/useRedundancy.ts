@@ -10,7 +10,7 @@ import {
   type PlanCue,
   type RedundancyDigest
 } from '../../../shared/redundancy'
-import type { Cue } from '../types/cue'
+import type { Cue } from '../../../shared/cue'
 import type { RunState } from '../store'
 
 /**

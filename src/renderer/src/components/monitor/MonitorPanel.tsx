@@ -1,6 +1,6 @@
 import { useStore } from '../../store'
-import type { MidiMessageKind } from '../../types/cue'
-import type { DeviceState, ShowEvent } from '../../types/show'
+import type { MidiMessageKind } from '../../../../shared/cue'
+import type { DeviceState, ShowEvent } from '../../../../shared/show'
 import './MonitorPanel.css'
 
 function describeMidi(message: MidiMessageKind): string {

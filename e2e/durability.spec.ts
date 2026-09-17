@@ -19,11 +19,11 @@ test.afterEach(async () => {
   await closeApp(app)
 })
 
-function workspaceFile(cues: unknown[] = []): string {
+function workspaceFile(cues: unknown[] = [], name = 'Read Only Show'): string {
   return JSON.stringify({
     version: 1,
     id: 'w1',
-    name: 'Read Only Show',
+    name,
     createdAt: '2026-01-01T00:00:00.000Z',
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
@@ -69,31 +69,45 @@ test('a save that cannot be written is reported and leaves the file untouched', 
 })
 
 test('unsaved work is offered back after a session that ended without saving', async () => {
-  const cue = {
+  // One autosave interval is thirty seconds, and the interval is the point of the test.
+  test.setTimeout(120_000)
+
+  const firstCue = {
     id: 'c1', number: '1', name: 'Recovered Wait', type: 'wait',
     colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0,
     duration: 1000, advance: 'none', isArmed: true, notes: ''
   }
-  const secondCue = { ...cue, id: 'c2', number: '2', name: 'Where I Was' }
-  const snapshot = {
-    savedAt: Date.now(),
-    sourcePath: null,
-    // The session was standing on the second cue when it ended: what GO would have fired
-    // next, and the first thing the operator needs back.
-    selectedCueId: 'c2',
-    workspace: {
-      version: 1,
-      id: 'w2',
-      name: 'Lost Show',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      audioSettings: { outputDeviceId: 'default' },
-      midiSettings: { outputPortName: '' },
-      cues: [cue, secondCue]
-    }
-  }
+  const secondCue = { ...firstCue, id: 'c2', number: '2', name: 'Where I Was' }
 
-  // What autosave would have left behind, then a session that never saved.
-  fs.writeFileSync(path.join(userDataDir, 'recovery.cuerunner'), JSON.stringify(snapshot))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-recovery-'))
+  const file = path.join(dir, 'Lost Show.cuerunner')
+  fs.writeFileSync(file, workspaceFile([firstCue, secondCue], 'Lost Show'))
+
+  fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([file]))
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu-recent', { hasText: 'Lost Show.cuerunner' }).click()
+  await expect(page.locator('.workspace-name')).toContainText('Lost Show')
+
+  // An operator's edit, then the cue GO would fire next: what a snapshot is for.
+  await page.locator('.cue-row').first().click()
+  await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
+  const duration = page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input')
+  await duration.click()
+  await duration.fill('4500')
+  await duration.blur()
+  await page.locator('.cue-row').nth(1).click()
+
+  // The app's own autosave writes the snapshot — no fabricated file — so what the
+  // recovery path reads is what the session actually left behind.
+  const snapshotPath = path.join(userDataDir, 'recovery.cuerunner')
+  await expect.poll(() => fs.existsSync(snapshotPath), { timeout: 60_000 }).toBe(true)
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'))
+  expect(snapshot.workspace.name).toBe('Lost Show')
+  expect(snapshot.workspace.cues.map((c: { name: string }) => c.name))
+    .toEqual(['Recovered Wait', 'Where I Was'])
+  expect(snapshot.selectedCueId).toBe(snapshot.workspace.cues[1].id)
+
+  // A session that never saved, then one that offers the work back.
   await closeApp(app)
   ;({ app, page } = await launchApp({ userDataDir }))
 
@@ -116,4 +130,6 @@ test('unsaved work is offered back after a session that ended without saving', a
   await expect(page.locator('.app-notice[data-kind="recovery"]')).toHaveCount(0)
   // The snapshot is consumed, so the next launch does not offer it again.
   expect(fs.existsSync(path.join(userDataDir, 'recovery.cuerunner'))).toBe(false)
+
+  fs.rmSync(dir, { recursive: true, force: true })
 })

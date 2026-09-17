@@ -1,4 +1,4 @@
-import type { MidiAvailability } from '../../renderer/src/types/midi'
+import type { MidiAvailability } from '../../shared/midi'
 import { encodeMidiMessage, type MidiMessage } from './encode'
 
 export interface MidiSendResult {

@@ -1,5 +1,5 @@
 import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
-import type { LicensePayload } from '../../renderer/src/types/license'
+import type { LicensePayload } from '../../shared/license'
 
 /**
  * License keys are signed offline and verified against a public key built into the app.

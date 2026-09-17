@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom'
-import type { Cue } from '../../types/cue'
+import type { Cue } from '../../../../shared/cue'
 import { useStore } from '../../store'
 import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'
 import { regionEndMs } from '../../utils/cueSplit'

@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import path from 'node:path'
 import { scriptLines } from '../../renderer/src/utils/scriptDocument'
-import type { ScriptDocument } from '../../renderer/src/types/show'
+import type { ScriptDocument } from '../../shared/show'
 
 /**
  * A script is a text document a person reads, and the panel renders one element per

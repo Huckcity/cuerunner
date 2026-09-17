@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { companionPage } from './companionPage'
-import type { CompanionState } from '../../renderer/src/types/show'
+import type { CompanionState } from '../../shared/show'
 
 const TOKEN = 's3cret'
 

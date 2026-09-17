@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import type { AudioCue, Cue } from '../../types/cue'
+import type { AudioCue, Cue } from '../../../../shared/cue'
 import type { RunningCue } from '../../store'
 import { useStore } from '../../store'
 import { formatDuration } from '../../utils/cueDefaults'

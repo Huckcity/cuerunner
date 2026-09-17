@@ -7,8 +7,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { Triggers, describeTrigger } from './Triggers'
 import { useStore } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
-import type { Cue, CueTrigger, MidiMessageKind } from '../../types/cue'
-import type { MidiInEvent, OscInEvent, ShowEvent } from '../../types/show'
+import type { Cue, CueTrigger, MidiMessageKind } from '../../../../shared/cue'
+import type { MidiInEvent, OscInEvent, ShowEvent } from '../../../../shared/show'
 
 const AT = 1_700_000_000_000
 

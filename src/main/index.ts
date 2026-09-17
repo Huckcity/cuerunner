@@ -9,10 +9,11 @@ import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
+import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
-let rendererCrash: { reason: string; at: number } | null = null
+let rendererCrash: RendererCrash | null = null
 
 // Measured on Electron 41 / macOS: reloading a webContents whose renderer was just
 // killed takes the whole browser process down with it, because the dead renderer's
@@ -25,7 +26,7 @@ const RENDERER_RESTART_DELAY_MS = 500
 // until a window is listening: the window subscribes a moment after it loads, and a
 // failure during startup would otherwise be pushed to nobody.
 onMainError(message => {
-  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, 'app:main-error', message)
+  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, APP_CHANNELS.mainError, message)
 })
 
 function describeError(error: unknown): string {
@@ -48,7 +49,7 @@ process.on('unhandledRejection', (reason) => {
 // fallback to the first open window.
 function sendMenuAction(action: MenuAction): void {
   const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-  sendToWindow(target, 'app:menu-action', action)
+  sendToWindow(target, APP_CHANNELS.menuAction, action)
 }
 
 // The File menu is the window's work — every item runs in the renderer, where the show
@@ -183,7 +184,7 @@ function createWindow(): void {
   win.on('close', (event) => {
     if (allowClose || rendererDead) return
     event.preventDefault()
-    sendToWindow(win, 'app:close-requested')
+    sendToWindow(win, APP_CHANNELS.closeRequested)
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {
@@ -210,14 +211,14 @@ function createWindow(): void {
   })
   win.webContents.on('responsive', () => reportMainError('[main] renderer responsive again'))
 
-  ipcMain.removeHandler('app:confirm-close')
-  ipcMain.handle('app:confirm-close', () => {
+  ipcMain.removeHandler(APP_CHANNELS.confirmClose)
+  ipcMain.handle(APP_CHANNELS.confirmClose, () => {
     allowClose = true
     win.close()
   })
 
-  ipcMain.removeHandler('app:renderer-crash')
-  ipcMain.handle('app:renderer-crash', () => {
+  ipcMain.removeHandler(APP_CHANNELS.rendererCrash)
+  ipcMain.handle(APP_CHANNELS.rendererCrash, () => {
     const crash = rendererCrash
     rendererCrash = null
     return crash

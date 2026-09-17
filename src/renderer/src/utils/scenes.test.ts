@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { oscMessages } from './desk'
 import type { MidiDeskMessage } from './desk'
-import { ALL_CLOSED_SCENE_ID, defaultDeskSettings } from '../types/show'
+import { ALL_CLOSED_SCENE_ID, defaultDeskSettings } from '../../../shared/show'
 import {
   addScene,
   ensembleState,
@@ -31,8 +31,8 @@ import type {
   ScenesSettings,
   ShowChannel,
   ShowSettings
-} from '../types/show'
-import { defaultShowSettings } from '../types/show'
+} from '../../../shared/show'
+import { defaultShowSettings } from '../../../shared/show'
 
 /**
  * What the show sends one DCA on the port and channel these fixtures drive: a note on to

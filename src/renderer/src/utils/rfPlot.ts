@@ -1,5 +1,5 @@
 import { formatClock } from './cueDefaults'
-import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../types/show'
+import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../../../shared/show'
 
 /**
  * The plot is the one part of a show that changes hands during it: a pack moves to

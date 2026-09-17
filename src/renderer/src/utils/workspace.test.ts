@@ -4,9 +4,9 @@
 // diffed. The store owns the identity; this is where it is spent.
 import { describe, it, expect } from 'vitest'
 import { buildWorkspace } from './workspace'
-import type { AudioCue } from '../types/cue'
-import { defaultShowSettings } from '../types/show'
-import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
+import type { AudioCue } from '../../../shared/cue'
+import { defaultShowSettings } from '../../../shared/show'
+import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 
 const identity = { id: 'w-press-night', createdAt: '2026-01-01T00:00:00.000Z' }
 

@@ -1,15 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { Workspace } from '../renderer/src/types/workspace'
-import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../renderer/src/types/show'
-import type { ActivationResult, LicenseStatus } from '../renderer/src/types/license'
-import type { MidiAvailability } from '../renderer/src/types/midi'
-import type { MidiMessageKind } from '../renderer/src/types/cue'
-import type { NetworkRequest, NetworkResult } from '../renderer/src/types/network'
-import type { PlaybackPanic } from '../renderer/src/types/playback'
-import type { RedundancySettings } from '../shared/redundancy'
-import type { MissingMedia } from '../shared/media'
-import type { ShowHistoryEntry, WorkspaceDiff } from '../shared/showfile'
-import type { MergeNote, MergeTally } from '../shared/showfileMerge'
+import type { MenuAction } from '../shared/fileMenu'
 import {
   AUDIO_CHANNELS,
   AUDIO_SILENCE_THRESHOLD_DB,
@@ -52,8 +42,52 @@ import {
   type AudioWaveformPayload,
   type DeviceOptions
 } from '../shared/audio'
-import type { MenuAction } from '../shared/fileMenu'
 import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
+import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
+import { PLAYBACK_CHANNELS } from '../shared/ipc/playback'
+import { LICENSE_CHANNELS } from '../shared/ipc/license'
+import { MIDI_CHANNELS, type MidiSendPayload, type MidiSendResult, type MidiSendTcpPayload } from '../shared/ipc/midi'
+import { NETWORK_CHANNELS } from '../shared/ipc/network'
+import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
+import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
+import {
+  SCRIPT_CHANNELS,
+  type ScriptReadDocumentPayload,
+  type ScriptReadFilePayload,
+  type ScriptReadFileResult,
+  type ScriptShellOptions,
+  type ScriptShellPayload,
+  type ScriptShellResult
+} from '../shared/ipc/script'
+import {
+  SHOW_CHANNELS,
+  type ShowCommandPayload,
+  type ShowCommandResult
+} from '../shared/ipc/show'
+import {
+  WORKSPACE_CHANNELS,
+  type OpenedWorkspace,
+  type RelinkedWorkspace,
+  type SavedWorkspace,
+  type WorkspaceCompareResult,
+  type WorkspaceExportPayload,
+  type WorkspaceExportResult,
+  type WorkspaceImportResult,
+  type WorkspaceMergePayload,
+  type WorkspaceMergeOptions,
+  type WorkspaceMergeResult,
+  type WorkspaceRecovery,
+  type WorkspaceRelinkPayload,
+  type WorkspaceSavePayload
+} from '../shared/ipc/workspace'
+import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
+import type { Workspace } from '../shared/workspace'
+import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
+import type { ActivationResult, LicenseStatus } from '../shared/license'
+import type { MidiAvailability } from '../shared/midi'
+import type { NetworkRequest, NetworkResult } from '../shared/network'
+import type { PlaybackPanic } from '../shared/playback'
+import type { RedundancySettings } from '../shared/redundancy'
 
 /**
  * One audio verb, unwrapped here in the window.
@@ -67,32 +101,39 @@ import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
 const invokeAudio = async <T>(channel: string, payload?: unknown): Promise<T> =>
   unwrapAudioResult((await ipcRenderer.invoke(channel, payload)) as AudioResult<T>)
 
+/**
+ * One verb on a channel that answers plainly. What comes back is asserted to the bridge's
+ * declared return type (see src/shared/ipc), not checked — `ipcRenderer.invoke` returns
+ * whatever main sent — so the payload is where a call site can be checked instead: one
+ * that builds it from the bridge's arguments writes it `satisfies <Payload>`.
+ */
+const invoke = <T>(channel: string, payload?: unknown): Promise<T> =>
+  ipcRenderer.invoke(channel, payload) as Promise<T>
+
+/** A push channel's listener, and the unsubscribe that takes it off again. */
+const subscribe = <T>(channel: EventChannel, callback: (value: T) => void): (() => void) => {
+  const listener = (_event: Electron.IpcRendererEvent, value: T): void => callback(value)
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.off(channel, listener)
+}
+
 contextBridge.exposeInMainWorld('cuerunner', {
   // Which keyboard the labels should be written for: ⌘ on a Mac, Ctrl everywhere else.
   platform: process.platform,
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   app: {
-    onCloseRequested: (callback: () => void): (() => void) => {
-      const listener = () => callback()
-      ipcRenderer.on('app:close-requested', listener)
-      return () => ipcRenderer.off('app:close-requested', listener)
-    },
-    onMenuAction: (callback: (action: MenuAction) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, action: MenuAction): void =>
-        callback(action)
-      ipcRenderer.on('app:menu-action', listener)
-      return () => ipcRenderer.off('app:menu-action', listener)
-    },
-    confirmClose: (): Promise<void> => ipcRenderer.invoke('app:confirm-close'),
-    rendererCrash: (): Promise<{ reason: string; at: number } | null> =>
-      ipcRenderer.invoke('app:renderer-crash'),
-    onMainError: (callback: (message: string) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, message: string): void => callback(message)
-      ipcRenderer.on('app:main-error', listener)
-      return () => ipcRenderer.off('app:main-error', listener)
-    },
+    onCloseRequested: (callback: () => void): (() => void) =>
+      subscribe(APP_CHANNELS.closeRequested, callback),
+    onMenuAction: (callback: (action: MenuAction) => void): (() => void) =>
+      subscribe(APP_CHANNELS.menuAction, callback),
+    confirmClose: (): Promise<void> =>
+      invoke(APP_CHANNELS.confirmClose),
+    rendererCrash: (): Promise<RendererCrash | null> =>
+      invoke(APP_CHANNELS.rendererCrash),
+    onMainError: (callback: (message: string) => void): (() => void) =>
+      subscribe(APP_CHANNELS.mainError, callback),
     drainMainErrors: (): Promise<string[]> =>
-      ipcRenderer.invoke('app:drainMainErrors')
+      invoke(APP_CHANNELS.drainMainErrors)
   },
   playback: {
     /**
@@ -103,14 +144,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
     heartbeat: (): void => {
       // Fire and forget: a heartbeat that fails is a missed heartbeat, and the watchdog
       // is the thing whose job it is to notice.
-      void ipcRenderer.invoke('playback:heartbeat').catch(() => {})
+      void ipcRenderer.invoke(PLAYBACK_CHANNELS.heartbeat).catch(() => {})
     },
     /** A panic main decided on — the menu, the watchdog, or a show input binding. */
-    onPanic: (callback: (panic: PlaybackPanic) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, panic: PlaybackPanic): void => callback(panic)
-      ipcRenderer.on('playback:panic', listener)
-      return () => ipcRenderer.off('playback:panic', listener)
-    }
+    onPanic: (callback: (panic: PlaybackPanic) => void): (() => void) =>
+      subscribe(PLAYBACK_CHANNELS.panic, callback)
   },
   /**
    * The native engine's verbs. Media never crosses this bridge — paths do — and every
@@ -172,27 +210,24 @@ contextBridge.exposeInMainWorld('cuerunner', {
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),
     /** Engine events, batched by main. Returns the unsubscribe function. */
-    onEvents: (callback: (events: AudioEngineEvent[]) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, events: AudioEngineEvent[]): void => callback(events)
-      ipcRenderer.on(AUDIO_CHANNELS.events, listener)
-      return () => ipcRenderer.off(AUDIO_CHANNELS.events, listener)
-    },
+    onEvents: (callback: (events: AudioEngineEvent[]) => void): (() => void) =>
+      subscribe(AUDIO_CHANNELS.events, callback),
     pickFile: (): Promise<string | null> =>
-      ipcRenderer.invoke(AUDIO_CHANNELS.pickFile)
+      invoke<string | null>(AUDIO_CHANNELS.pickFile)
   } satisfies AudioEngineBridge,
   midi: {
     listPorts: (): Promise<string[]> =>
-      ipcRenderer.invoke('midi:listPorts'),
+      invoke(MIDI_CHANNELS.listPorts),
     listInputPorts: (): Promise<string[]> =>
-      ipcRenderer.invoke('midi:listInputPorts'),
+      invoke(MIDI_CHANNELS.listInputPorts),
     /** Whether MIDI can work at all in this build, and why not when it cannot. */
     status: (): Promise<MidiAvailability> =>
-      ipcRenderer.invoke('midi:status'),
-    send: (cmd: { portName: string; messages: MidiMessageKind[] }): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke('midi:send', cmd),
+      invoke(MIDI_CHANNELS.status),
+    send: (cmd: MidiSendPayload): Promise<MidiSendResult> =>
+      invoke(MIDI_CHANNELS.send, cmd),
     /** MIDI to a desk on the network, which is where an SQ and an Avantis listen. */
-    sendTcp: (cmd: { host: string; port: number; messages: MidiMessageKind[] }): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke('midi:sendTcp', cmd)
+    sendTcp: (cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
+      invoke(MIDI_CHANNELS.sendTcp, cmd)
   },
   network: {
     /**
@@ -200,81 +235,65 @@ contextBridge.exposeInMainWorld('cuerunner', {
      * page's origin and does not stop when the window is busy.
      */
     request: (request: NetworkRequest): Promise<NetworkResult> =>
-      ipcRenderer.invoke('network:request', request),
+      invoke(NETWORK_CHANNELS.request, request),
     /** Abandons a request that is still in flight. False means it had already finished. */
     cancel: (requestId: string): Promise<boolean> =>
-      ipcRenderer.invoke('network:cancel', requestId)
+      invoke(NETWORK_CHANNELS.cancel, requestId)
   },
   osc: {
-    send: (cmd: { host: string; port: number; address: string; args: any[] }): Promise<{ ok: boolean; error?: string }> =>
-      ipcRenderer.invoke('osc:send', cmd)
+    send: (cmd: OscSendPayload): Promise<OscSendResult> =>
+      invoke(OSC_CHANNELS.send, cmd)
   },
   show: {
     snapshot: (): Promise<ShowSnapshot> =>
-      ipcRenderer.invoke('show:snapshot'),
+      invoke(SHOW_CHANNELS.snapshot),
     configure: (settings: ShowSettings): Promise<void> =>
-      ipcRenderer.invoke('show:configure', settings),
-    command: (
-      service: string,
-      action: string,
-      payload?: unknown
-    ): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
-      ipcRenderer.invoke('show:command', { service, action, payload }),
-    restart: (service: string): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
-      ipcRenderer.invoke('show:restart', service),
-    onEvents: (callback: (events: ShowEvent[]) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, events: ShowEvent[]): void => callback(events)
-      ipcRenderer.on('show:events', listener)
-      return () => ipcRenderer.off('show:events', listener)
-    }
+      invoke(SHOW_CHANNELS.configure, settings),
+    command: (service: string, action: string, payload?: unknown): Promise<ShowCommandResult> =>
+      invoke(SHOW_CHANNELS.command, { service, action, payload } satisfies ShowCommandPayload),
+    restart: (service: string): Promise<ShowCommandResult> =>
+      invoke(SHOW_CHANNELS.restart, service),
+    onEvents: (callback: (events: ShowEvent[]) => void): (() => void) =>
+      subscribe(SHOW_CHANNELS.events, callback)
   },
   redundancy: {
     /** This machine's half of a pair. Reading is free; changing it is a Pro feature. */
     settings: (): Promise<RedundancySettings> =>
-      ipcRenderer.invoke('redundancy:settings'),
-    configure: (patch: Partial<RedundancySettings>): Promise<{
-      ok: boolean
-      settings: RedundancySettings
-      error?: string
-    }> => ipcRenderer.invoke('redundancy:configure', patch)
+      invoke(REDUNDANCY_CHANNELS.settings),
+    configure: (patch: Partial<RedundancySettings>): Promise<RedundancyConfigureResult> =>
+      invoke(REDUNDANCY_CHANNELS.configure, patch)
   },
   license: {
     status: (): Promise<LicenseStatus> =>
-      ipcRenderer.invoke('license:status'),
+      invoke(LICENSE_CHANNELS.status),
     activate: (text: string): Promise<ActivationResult> =>
-      ipcRenderer.invoke('license:activate', text),
+      invoke(LICENSE_CHANNELS.activate, text),
     deactivate: (): Promise<LicenseStatus> =>
-      ipcRenderer.invoke('license:deactivate'),
-    onChanged: (callback: (status: LicenseStatus) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, status: LicenseStatus): void => callback(status)
-      ipcRenderer.on('license:changed', listener)
-      return () => ipcRenderer.off('license:changed', listener)
-    }
+      invoke(LICENSE_CHANNELS.deactivate),
+    onChanged: (callback: (status: LicenseStatus) => void): (() => void) =>
+      subscribe(LICENSE_CHANNELS.changed, callback)
   },
   script: {
     readFile: (
       relativePath: string,
       workspacePath: string | null,
       base?: string
-    ): Promise<{ code: string; path: string }> =>
-      ipcRenderer.invoke('script:readFile', relativePath, workspacePath, base),
+    ): Promise<ScriptReadFileResult> =>
+      invoke(SCRIPT_CHANNELS.readFile, { relativePath, workspacePath, base } satisfies ScriptReadFilePayload),
     pickFile: (): Promise<string | null> =>
-      ipcRenderer.invoke('script:pickFile'),
+      invoke(SCRIPT_CHANNELS.pickFile),
     readDocument: (filePath: string, workspacePath: string | null): Promise<ScriptDocument> =>
-      ipcRenderer.invoke('script:readDocument', filePath, workspacePath),
-    shell: (
-      command: string,
-      options?: { timeout?: number; cwd?: string; env?: Record<string, string> }
-    ): Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }> =>
-      ipcRenderer.invoke('script:shell', command, options ?? {})
+      invoke(SCRIPT_CHANNELS.readDocument, { filePath, workspacePath } satisfies ScriptReadDocumentPayload),
+    shell: (command: string, options?: ScriptShellOptions): Promise<ScriptShellResult> =>
+      invoke(SCRIPT_CHANNELS.shell, { command, options } satisfies ScriptShellPayload)
   },
   workspace: {
-    open: (): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null> =>
-      ipcRenderer.invoke('workspace:open'),
-    openPath: (filePath: string): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] }> =>
-      ipcRenderer.invoke('workspace:openPath', filePath),
+    open: (): Promise<OpenedWorkspace | null> =>
+      invoke(WORKSPACE_CHANNELS.open),
+    openPath: (filePath: string): Promise<OpenedWorkspace> =>
+      invoke(WORKSPACE_CHANNELS.openPath, filePath),
     openDemo: (): Promise<Workspace> =>
-      ipcRenderer.invoke('workspace:openDemo'),
+      invoke(WORKSPACE_CHANNELS.openDemo),
     /**
      * Points one cue's missing media at a file the operator picked. The dialog is shown
      * by the main process, so a cancel is a normal answer rather than a thrown error.
@@ -283,21 +302,16 @@ contextBridge.exposeInMainWorld('cuerunner', {
       workspace: Workspace,
       workspacePath: string | null,
       cueId: string
-    ): Promise<{ workspace: Workspace; missingMedia: MissingMedia[] }> =>
-      ipcRenderer.invoke('workspace:relink', workspace, workspacePath, cueId),
+    ): Promise<RelinkedWorkspace> =>
+      invoke(WORKSPACE_CHANNELS.relink, { workspace, workspacePath, cueId } satisfies WorkspaceRelinkPayload),
     /** A save writes the file and returns, with the path, the history it wrote into it. */
     save: (
       workspace: Workspace,
       existingPath: string | null
-    ): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
-      ipcRenderer.invoke('workspace:save', workspace, existingPath),
-    saveAs: (workspace: Workspace): Promise<{ path: string; history: ShowHistoryEntry[] } | null> =>
-      ipcRenderer.invoke('workspace:saveAs', workspace),
-    /**
-     * How this show differs from a file the operator picks. The dialog belongs to the
-     * OS and is shown by the main process, so a cancel is `comparison: null` rather
-     * than an error.
-     */
+    ): Promise<SavedWorkspace | null> =>
+      invoke(WORKSPACE_CHANNELS.save, { workspace, existingPath } satisfies WorkspaceSavePayload),
+    saveAs: (workspace: Workspace): Promise<SavedWorkspace | null> =>
+      invoke(WORKSPACE_CHANNELS.saveAs, workspace),
     /**
      * A show and its media as one file, and back again. Both dialogs belong to the OS and
      * are shown by the main process, so a cancel comes back as `null`.
@@ -305,14 +319,10 @@ contextBridge.exposeInMainWorld('cuerunner', {
     exportBundle: (
       workspace: Workspace,
       workspacePath: string | null
-    ): Promise<
-      | { ok: false; error: string }
-      | { ok: true; exported: { path: string; missing: string[] } | null }
-    > => ipcRenderer.invoke('workspace:exportBundle', workspace, workspacePath),
-    importBundle: (): Promise<
-      | { ok: false; error: string }
-      | { ok: true; imported: { path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null }
-    > => ipcRenderer.invoke('workspace:importBundle'),
+    ): Promise<WorkspaceExportResult> =>
+      invoke(WORKSPACE_CHANNELS.exportBundle, { workspace, workspacePath } satisfies WorkspaceExportPayload),
+    importBundle: (): Promise<WorkspaceImportResult> =>
+      invoke(WORKSPACE_CHANNELS.importBundle),
     /**
      * Two files merged into a third, written where the operator says. `again` runs the
      * same merge over the files it read last time, with the other side's choices.
@@ -320,39 +330,27 @@ contextBridge.exposeInMainWorld('cuerunner', {
     merge: (
       workspace: Workspace,
       workspacePath: string | null,
-      options?: { policy?: 'ours' | 'theirs'; again?: boolean }
-    ): Promise<
-      | { ok: false; error: string }
-      | {
-          ok: true
-          merged: {
-            path: string
-            notes: MergeNote[]
-            tally: MergeTally
-            inputs: { theirs: string; ancestor: string }
-          } | null
-        }
-    > => ipcRenderer.invoke('workspace:merge', workspace, workspacePath, options ?? {}),
-    compare: (workspace: Workspace): Promise<
-      | { ok: false; error: string }
-      | { ok: true; comparison: { path: string; diff: WorkspaceDiff } | null }
-    > => ipcRenderer.invoke('workspace:compare', workspace),
+      options?: WorkspaceMergeOptions
+    ): Promise<WorkspaceMergeResult> =>
+      invoke(WORKSPACE_CHANNELS.merge, { workspace, workspacePath, options } satisfies WorkspaceMergePayload),
+    /**
+     * How this show differs from a file the operator picks. The dialog belongs to the
+     * OS and is shown by the main process, so a cancel is `comparison: null` rather
+     * than an error.
+     */
+    compare: (workspace: Workspace): Promise<WorkspaceCompareResult> =>
+      invoke(WORKSPACE_CHANNELS.compare, workspace),
     recent: (): Promise<string[]> =>
-      ipcRenderer.invoke('workspace:recent'),
+      invoke(WORKSPACE_CHANNELS.recent),
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null): Promise<void> =>
-      ipcRenderer.invoke('workspace:autosave', workspace, sourcePath, selectedCueId),
-    recovery: (): Promise<{
-      workspace: Workspace
-      savedAt: number
-      sourcePath: string | null
-      selectedCueId?: string | null
-      missingMedia: MissingMedia[]
-    } | null> => ipcRenderer.invoke('workspace:recovery'),
+      invoke(WORKSPACE_CHANNELS.autosave, { workspace, sourcePath, selectedCueId }),
+    recovery: (): Promise<WorkspaceRecovery | null> =>
+      invoke(WORKSPACE_CHANNELS.recovery),
     clearRecovery: (): Promise<void> =>
-      ipcRenderer.invoke('workspace:clearRecovery'),
+      invoke(WORKSPACE_CHANNELS.clearRecovery),
     setTitle: (title: string): Promise<void> =>
-      ipcRenderer.invoke('workspace:setTitle', title),
+      invoke(WORKSPACE_CHANNELS.setTitle, title),
     confirmClose: (workspaceName: string): Promise<0 | 1 | 2> =>
-      ipcRenderer.invoke('workspace:confirmClose', workspaceName)
+      invoke(WORKSPACE_CHANNELS.confirmClose, workspaceName)
   }
-})
+} satisfies CuerunnerBridge)

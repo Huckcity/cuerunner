@@ -11,7 +11,7 @@ import {
   type MediaLengthAnswer,
   type MediaLengths
 } from './mediaLength'
-import type { AudioCue, Cue, GroupCue } from '../types/cue'
+import type { AudioCue, Cue, GroupCue } from '../../../shared/cue'
 
 function audio(id: string, patch: Partial<AudioCue> = {}): AudioCue {
   return {

@@ -1,4 +1,4 @@
-import type { CueType } from '../types/cue'
+import type { CueType } from '../../../shared/cue'
 
 /**
  * One icon per cue type, for every surface that names a type: the list, the toolbar, the

@@ -9,7 +9,7 @@ import {
 } from '../../utils/waveform'
 import { regionEndMs } from '../../utils/cueSplit'
 import { playRegion } from '../../utils/silenceTrim'
-import type { AudioCue } from '../../types/cue'
+import type { AudioCue } from '../../../../shared/cue'
 import './WaveformPanel.css'
 
 /**

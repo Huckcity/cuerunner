@@ -1,7 +1,7 @@
 import { useStore } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { addPack, assignPack, describeSwap, recordSwaps, removePack, updatePack } from '../../utils/rfPlot'
-import type { RfPlot, RfSwap } from '../../types/show'
+import type { RfPlot, RfSwap } from '../../../../shared/show'
 import { TextField } from '../common/Field'
 import './MicPlotTab.css'
 

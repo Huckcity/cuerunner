@@ -7,7 +7,7 @@ import {
   importShowBundle,
   mergeAnotherShow
 } from '../../hooks/useWorkspace'
-import type { CueType } from '../../types/cue'
+import type { CueType } from '../../../../shared/cue'
 import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'

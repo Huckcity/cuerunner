@@ -2,7 +2,7 @@ import { createConnection, type Socket } from 'node:net'
 import { decodeMidiMessage } from './decode'
 import { encodeMidiMessage, type MidiMessage } from './encode'
 import { createMidiStream } from './stream'
-import type { MidiMessageKind } from '../../renderer/src/types/cue'
+import type { MidiMessageKind } from '../../shared/cue'
 import { deskLinkName } from '../../shared/deskLink'
 
 export interface MidiTcpResult {

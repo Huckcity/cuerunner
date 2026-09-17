@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { ServiceStatus as Status } from '../../types/show'
+import type { ServiceStatus as Status } from '../../../../shared/show'
 import { ServiceStatus } from './ServiceStatus'
 
 interface ServiceBlockProps {

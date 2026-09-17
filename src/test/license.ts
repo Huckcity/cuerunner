@@ -1,4 +1,4 @@
-import type { LicensePayload } from '../renderer/src/types/license'
+import type { LicensePayload } from '../shared/license'
 
 /**
  * A license for tests that need a Pro surface to be drawn or a Pro service to run.

@@ -8,8 +8,8 @@ import { useCueTriggers } from './useCueTriggers'
 import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
 import { TEST_LICENSE } from '../../../test/license'
-import type { Cue, CueTrigger } from '../types/cue'
-import type { ShowEvent } from '../types/show'
+import type { Cue, CueTrigger } from '../../../shared/cue'
+import type { ShowEvent } from '../../../shared/show'
 
 function Harness() {
   useCueTriggers()

@@ -6,8 +6,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { MidiTcpService, type DeskLink } from './MidiTcpService'
 import { ShowBus } from '../bus/ShowBus'
 import type { ServiceContext } from '../bus/ServiceHost'
-import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
-import { defaultShowSettings } from '../../renderer/src/types/show'
+import type { ShowEvent, ShowSettings } from '../../shared/show'
+import { defaultShowSettings } from '../../shared/show'
 
 type MidiEvent = Extract<ShowEvent, { kind: 'midi' }>
 

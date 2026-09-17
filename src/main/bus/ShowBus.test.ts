@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ShowBus } from './ShowBus'
 import type { ShowBusOptions } from './ShowBus'
-import type { DeviceState, OscInEvent, ShowEvent } from '../../renderer/src/types/show'
+import type { DeviceState, OscInEvent, ShowEvent } from '../../shared/show'
 
 const FLUSH_MS = 50
 const DEVICE_INTERVAL_MS = 500

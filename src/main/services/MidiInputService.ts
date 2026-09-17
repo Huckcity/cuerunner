@@ -1,5 +1,5 @@
 import { decodeMidiMessage } from '../midi/decode'
-import type { ShowSettings } from '../../renderer/src/types/show'
+import type { ShowSettings } from '../../shared/show'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 
 // The `midi` package is an optional dependency: it needs build tools, and a machine

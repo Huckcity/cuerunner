@@ -1,5 +1,5 @@
 import { createSocket, type Socket } from 'node:dgram'
-import type { DeviceState, ShowSettings } from '../../renderer/src/types/show'
+import type { DeviceState, ShowSettings } from '../../shared/show'
 import { describe } from '../bus/ServiceHost'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import { buildPtrQuery, parseDnsRecords, presenceDevices } from './mdns'

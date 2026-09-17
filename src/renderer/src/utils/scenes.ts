@@ -6,7 +6,7 @@ import type {
   MicScene,
   ScenesSettings,
   ShowSettings
-} from '../types/show'
+} from '../../../shared/show'
 
 /**
  * Scenes, as pure operations.

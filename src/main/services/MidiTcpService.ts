@@ -1,8 +1,8 @@
 import { midiTcp } from '../midi/MidiTcpEngine'
 import { deskLinkName } from '../../shared/deskLink'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
-import type { MidiMessageKind } from '../../renderer/src/types/cue'
-import type { ShowSettings } from '../../renderer/src/types/show'
+import type { MidiMessageKind } from '../../shared/cue'
+import type { ShowSettings } from '../../shared/show'
 
 /**
  * What this service needs of the desk link. The engine behind it also owns a socket and a

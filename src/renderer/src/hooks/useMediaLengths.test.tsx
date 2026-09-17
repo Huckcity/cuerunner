@@ -10,7 +10,7 @@ import { audioEngine } from '../engine/audioEngineClient'
 import type { AudioEngineSessionChange } from '../engine/audioEngineClient'
 import { useStore } from '../store'
 import { createCue } from '../utils/cueDefaults'
-import type { AudioCue } from '../types/cue'
+import type { AudioCue } from '../../../shared/cue'
 import type { AudioProbe } from '../../../shared/audio'
 
 vi.mock('../engine/audioEngineClient')

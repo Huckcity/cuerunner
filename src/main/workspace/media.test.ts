@@ -24,8 +24,8 @@ import {
   storedMediaPath
 } from './WorkspaceManager'
 import type { MissingMedia } from '../../shared/media'
-import type { AudioCue, Cue } from '../../renderer/src/types/cue'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { AudioCue, Cue } from '../../shared/cue'
+import type { Workspace } from '../../shared/workspace'
 
 vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')

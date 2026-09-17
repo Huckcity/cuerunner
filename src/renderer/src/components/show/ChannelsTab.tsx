@@ -10,8 +10,8 @@ import {
 } from '../../utils/cast'
 import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue, dcaValueRange, deskChannelGap } from '../../utils/desk'
 import { MUTE_GROUP_COUNT } from '../../utils/deskInput'
-import { DCA_LIMIT } from '../../types/show'
-import type { CastSettings, DeskProfile, DeskSettings } from '../../types/show'
+import { DCA_LIMIT } from '../../../../shared/show'
+import type { CastSettings, DeskProfile, DeskSettings } from '../../../../shared/show'
 import { TextField, NumberField } from '../common/Field'
 
 const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)

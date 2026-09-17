@@ -9,7 +9,7 @@ import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueEngine } from '../../engine/CueEngine'
 import { TEST_LICENSE } from '../../../../test/license'
-import type { AudioCue } from '../../types/cue'
+import type { AudioCue } from '../../../../shared/cue'
 
 vi.mock('../../engine/audioEngineClient')
 

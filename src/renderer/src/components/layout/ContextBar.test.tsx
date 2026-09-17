@@ -7,8 +7,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { ContextBar, outermostRuns, standbyCue } from './ContextBar'
 import { useStore, type RunningCue } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
-import { defaultShowSettings } from '../../types/show'
-import type { Cue, SceneCue } from '../../types/cue'
+import { defaultShowSettings } from '../../../../shared/show'
+import type { Cue, SceneCue } from '../../../../shared/cue'
 
 function cue(type: Cue['type'], number: string, name: string, patch: Partial<Cue> = {}): Cue {
   return { ...createCue(type), number, name, ...patch } as Cue

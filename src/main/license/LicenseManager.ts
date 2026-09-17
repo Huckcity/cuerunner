@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { writeFileAtomically } from '../workspace/recovery'
 import { canonicalLicense, describeRefusal, licenseExpired, verifyLicense } from './key'
-import type { ActivationResult, LicensePayload, LicenseStatus } from '../../renderer/src/types/license'
+import type { ActivationResult, LicensePayload, LicenseStatus } from '../../shared/license'
 
 /**
  * The key this machine holds, and the only place it is read or written.

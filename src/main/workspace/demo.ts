@@ -11,7 +11,7 @@ import { app } from 'electron'
 import { copyFile, mkdir, readFile } from 'fs/promises'
 import { basename, isAbsolute, join } from 'path'
 import { migrateWorkspace } from './WorkspaceManager'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { Workspace } from '../../shared/workspace'
 
 export const DEMO_WORKSPACE_FILE = 'Demo Show.cuerunner'
 

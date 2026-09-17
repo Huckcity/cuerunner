@@ -1,5 +1,5 @@
 import { readFile } from 'fs/promises'
-import { defaultRfThresholds } from '../../renderer/src/types/show'
+import { defaultRfThresholds } from '../../shared/show'
 import type {
   DeviceHistory,
   DeviceState,
@@ -10,7 +10,7 @@ import type {
   TelemetryChannel,
   TelemetryDocument,
   TelemetrySource
-} from '../../renderer/src/types/show'
+} from '../../shared/show'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import { batteryBand, demoRack, isWorse, parseTelemetry, rfBand } from './telemetry'
 import type { Band } from './telemetry'

@@ -19,7 +19,7 @@ import { MscInspector } from './MscInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
   MscCue
-} from '../../types/cue'
+} from '../../../../shared/cue'
 import './Inspector.css'
 
 // Basics is what every cue shares, then what this type does, then what else can fire

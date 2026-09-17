@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
-import type { AudioCue, AudioCrosspoint } from '../../types/cue'
+import type { AudioCue, AudioCrosspoint } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'

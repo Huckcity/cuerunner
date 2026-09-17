@@ -3,7 +3,7 @@
 // the decision is the part that has to be right at 20:05.
 import { describe, it, expect } from 'vitest'
 import { MIDI_ALL_SOUND_OFF, panicFromShowEvent } from './panicBindings'
-import type { ShowEvent } from '../../renderer/src/types/show'
+import type { ShowEvent } from '../../shared/show'
 
 const osc = (address: string): ShowEvent => ({
   kind: 'osc', at: 1, from: '192.168.1.24:8000', address, args: []

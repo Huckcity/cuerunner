@@ -1,5 +1,5 @@
-import type { MidiMessageKind } from '../types/cue'
-import type { Dca, DeskMessage, DeskProfile, DeskSettings } from '../types/show'
+import type { MidiMessageKind } from '../../../shared/cue'
+import type { Dca, DeskMessage, DeskProfile, DeskSettings } from '../../../shared/show'
 
 /**
  * How the desk is driven.

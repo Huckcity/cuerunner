@@ -5,7 +5,7 @@
 // channel) for routing. This is the migration between the two, kept pure so the workspace
 // loader and the tests can both call it.
 
-import type { AudioCrosspoint } from '../renderer/src/types/cue'
+import type { AudioCrosspoint } from './cue'
 
 export interface MigratedAudioRouting {
   /** Master level, 0–1. */

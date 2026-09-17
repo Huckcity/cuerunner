@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createCue, formatDuration, formatClock } from './cueDefaults'
-import type { CueType } from '../types/cue'
+import type { CueType } from '../../../shared/cue'
 
 describe('createCue', () => {
   const types: CueType[] = ['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script', 'scene', 'devamp']

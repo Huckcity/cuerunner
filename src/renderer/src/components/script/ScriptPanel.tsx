@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useStore } from '../../store'
-import type { Cue } from '../../types/cue'
+import type { Cue } from '../../../../shared/cue'
 import './ScriptPanel.css'
 
 // How far the operator may scroll away before the panel stops chasing the next cue.

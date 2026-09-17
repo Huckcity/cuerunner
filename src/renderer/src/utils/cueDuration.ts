@@ -1,4 +1,4 @@
-import type { Cue } from '../types/cue'
+import type { Cue } from '../../../shared/cue'
 
 /**
  * Wall-clock length of a group cue, derived from its children. A group's own

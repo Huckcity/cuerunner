@@ -6,8 +6,8 @@ import type { Mock } from 'vitest'
 import { MidiInputService } from './MidiInputService'
 import type { ServiceContext } from '../bus/ServiceHost'
 import { ShowBus } from '../bus/ShowBus'
-import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
-import { defaultShowSettings } from '../../renderer/src/types/show'
+import type { ShowEvent, ShowSettings } from '../../shared/show'
+import { defaultShowSettings } from '../../shared/show'
 
 type MidiEvent = Extract<ShowEvent, { kind: 'midi' }>
 

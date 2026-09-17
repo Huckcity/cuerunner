@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
-import type { Workspace } from '../../types/workspace'
+import type { Workspace } from '../../../../shared/workspace'
 import { formatClock } from '../../utils/cueDefaults'
 import { NoticeBar } from './NoticeBar'
 

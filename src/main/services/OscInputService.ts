@@ -1,5 +1,5 @@
-import type { OscArg } from '../../renderer/src/types/cue'
-import type { ShowSettings } from '../../renderer/src/types/show'
+import type { OscArg } from '../../shared/cue'
+import type { ShowSettings } from '../../shared/show'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 
 interface Rinfo {

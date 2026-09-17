@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type LogEntry } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { describeEvent } from '../monitor/MonitorPanel'
-import type { ShowEvent } from '../../types/show'
+import type { ShowEvent } from '../../../../shared/show'
 import './LogPanel.css'
 
 // How close to the bottom counts as "following the log". Scrolling further up

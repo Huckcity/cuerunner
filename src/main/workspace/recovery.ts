@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { randomUUID } from 'crypto'
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { Workspace } from '../../shared/workspace'
 
 /** The largest snapshot this app reads back: the same ceiling a workspace file gets. */
 const MAX_RECOVERY_BYTES = 64 * 1024 * 1024

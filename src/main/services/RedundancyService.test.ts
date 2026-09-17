@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServer, createConnection, type AddressInfo, type Server, type Socket } from 'node:net'
 import { RedundancyService } from './RedundancyService'
 import { ShowBus } from '../bus/ShowBus'
-import { defaultShowSettings, type RedundancyEvent, type ServiceState } from '../../renderer/src/types/show'
+import { defaultShowSettings, type RedundancyEvent, type ServiceState } from '../../shared/show'
 import {
   REDUNDANCY_PROTOCOL,
   cueListHash,

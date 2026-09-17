@@ -7,7 +7,7 @@ import { Dock, clampDockHeight, DOCK_DEFAULT_HEIGHT, type DockTab } from './Dock
 import { useStore } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
 import type { AppView } from './Toolbar'
-import type { Cue, GroupCue } from '../../types/cue'
+import type { Cue, GroupCue } from '../../../../shared/cue'
 
 vi.mock('../waveform/WaveformPanel', () => ({ WaveformPanel: () => <div className="waveform-panel" /> }))
 vi.mock('../timeline/TimelineEditor', () => ({ TimelineEditor: () => <div className="timeline-panel" /> }))

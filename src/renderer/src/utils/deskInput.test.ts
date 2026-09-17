@@ -6,9 +6,9 @@
 import { describe, it, expect } from 'vitest'
 import { DeskButtons, MUTE_GROUP_COUNT, muteGroupGet } from './deskInput'
 import type { DeskButton } from './deskInput'
-import type { DeskProfile } from '../types/show'
-import type { MidiMessageKind } from '../types/cue'
-import type { ShowEvent } from '../types/show'
+import type { DeskProfile } from '../../../shared/show'
+import type { MidiMessageKind } from '../../../shared/cue'
+import type { ShowEvent } from '../../../shared/show'
 
 const DEVICE = '10.0.0.5:51325'
 const desk = (message: MidiMessageKind, device = DEVICE): ShowEvent =>

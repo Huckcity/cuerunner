@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { deskMidi } from '../utils/desk'
 import { encodeMsc } from '../utils/msc'
-import type { MidiMessageKind, MscCue } from '../types/cue'
+import type { MidiMessageKind, MscCue } from '../../../shared/cue'
 
 export interface MscSendResult {
   ok: boolean

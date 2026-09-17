@@ -6,7 +6,7 @@
 // sits past the sound — and the trim only ever shortens it.
 import { describe, it, expect } from 'vitest'
 import { cuesAwaitingSilence, playRegion, trimAmounts } from './silenceTrim'
-import type { AudioCue, Cue } from '../types/cue'
+import type { AudioCue, Cue } from '../../../shared/cue'
 
 function audio(patch: Partial<AudioCue> = {}): AudioCue {
   return {

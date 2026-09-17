@@ -1,4 +1,4 @@
-import type { AudioCue } from '../types/cue'
+import type { AudioCue } from '../../../shared/cue'
 
 /**
  * Splitting one audio cue into two that play what it played, end to end.

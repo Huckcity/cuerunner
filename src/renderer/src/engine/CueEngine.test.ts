@@ -6,10 +6,10 @@ import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue, MscCue } from '../types/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue, MscCue } from '../../../shared/cue'
 import { useStore } from '../store'
-import { defaultShowSettings } from '../types/show'
-import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
+import { defaultShowSettings } from '../../../shared/show'
+import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 
 vi.mock('./scriptHost', () => ({
   scriptHost: { run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn() },

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../store'
 import { cueTriggers } from '../../engine/triggers'
 import { MSC_COMMANDS, MSC_COMMAND_NAME, MSC_FORMATS, MSC_FORMAT_NAME, describeMsc, parseMsc } from '../../utils/msc'
-import type { Cue, CueTrigger, MidiMessageKind, MscCommand, MscFormat, TriggerMidiMessage } from '../../types/cue'
-import type { ShowEvent } from '../../types/show'
+import type { Cue, CueTrigger, MidiMessageKind, MscCommand, MscFormat, TriggerMidiMessage } from '../../../../shared/cue'
+import type { ShowEvent } from '../../../../shared/show'
 import './Triggers.css'
 
 /** The three MIDI messages a cue can answer to, in the order the picker offers them. */

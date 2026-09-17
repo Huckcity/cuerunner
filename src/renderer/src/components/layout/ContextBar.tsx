@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore, type RunningCue } from '../../store'
-import type { Cue, SceneCue } from '../../types/cue'
+import type { Cue, SceneCue } from '../../../../shared/cue'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { formatRunTime, runTiming } from '../../utils/runTiming'

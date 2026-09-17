@@ -13,7 +13,7 @@
 // says so again five times a second with the state of its show attached, and either side
 // may claim the show by saying it is driving under a higher term than its partner's.
 
-import type { Cue } from '../renderer/src/types/cue'
+import type { Cue } from './cue'
 
 /** Which half of the pair this machine is configured to be. */
 export type RedundancyRole = 'live' | 'standby'

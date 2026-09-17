@@ -9,8 +9,8 @@ import type { PresenceSocket } from './PresenceService'
 import { buildPtrQuery } from './mdns'
 import type { ServiceContext } from '../bus/ServiceHost'
 import { ShowBus } from '../bus/ShowBus'
-import { defaultShowSettings } from '../../renderer/src/types/show'
-import type { DeviceState, PresenceSettings, ShowSettings } from '../../renderer/src/types/show'
+import { defaultShowSettings } from '../../shared/show'
+import type { DeviceState, PresenceSettings, ShowSettings } from '../../shared/show'
 
 const BASE = Date.parse('2026-01-01T00:00:00.000Z')
 const SERVICE = '_netaudio-arc._udp.local'

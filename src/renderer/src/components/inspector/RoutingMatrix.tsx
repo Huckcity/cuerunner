@@ -1,7 +1,7 @@
 // Where an audio cue's channels go. Automatic is the file's own layout straight to the
 // device; a matrix is a list of crosspoints from file channel to device channel, and can
 // be any size the two channel counts allow; silent routes nothing at all, on purpose.
-import type { AudioCrosspoint, AudioCue } from '../../types/cue'
+import type { AudioCrosspoint, AudioCue } from '../../../../shared/cue'
 
 export type RoutingMode = 'automatic' | 'matrix' | 'silent'
 

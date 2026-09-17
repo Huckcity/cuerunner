@@ -9,9 +9,9 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MicPlotTab } from './MicPlotTab'
 import { useStore } from '../../store'
-import { defaultShowSettings } from '../../types/show'
+import { defaultShowSettings } from '../../../../shared/show'
 import { formatClock } from '../../utils/cueDefaults'
-import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../../types/show'
+import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../../../../shared/show'
 
 const AT = 1_700_000_000_000
 

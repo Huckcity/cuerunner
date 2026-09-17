@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron'
+import type { EventChannel } from '../../shared/ipc'
 
 /**
  * Is there still a window there to receive this?
@@ -16,8 +17,12 @@ export function liveWindow(win: BrowserWindow | null | undefined): win is Browse
   return !contents.isDestroyed() && !contents.isCrashed()
 }
 
-/** Send, if there is anyone to send to. */
-export function sendToWindow(win: BrowserWindow | null | undefined, channel: string, payload?: unknown): void {
+/** Send, if there is anyone to send to. The channel is one of the declared events. */
+export function sendToWindow(
+  win: BrowserWindow | null | undefined,
+  channel: EventChannel,
+  payload?: unknown
+): void {
   if (!liveWindow(win)) return
   try {
     win.webContents.send(channel, payload)

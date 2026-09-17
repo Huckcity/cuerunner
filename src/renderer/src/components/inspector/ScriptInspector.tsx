@@ -1,5 +1,5 @@
 import { useStore } from '../../store'
-import type { ScriptCue } from '../../types/cue'
+import type { ScriptCue } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'

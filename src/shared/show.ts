@@ -1,5 +1,5 @@
 import type { MidiMessageKind, OscArg } from './cue'
-import type { RedundancyStatus } from '../../../shared/redundancy'
+import type { RedundancyStatus } from './redundancy'
 
 // The show services are everything around the cue stack: the devices on stage, the
 // consoles they talk to, and the alarms when one of them stops answering. Everything

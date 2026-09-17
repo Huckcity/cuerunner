@@ -26,7 +26,7 @@ vi.mock('electron', async () => {
 const { app } = await import('electron')
 const { clearRecovery, readRecovery, writeFileAtomically, writeRecovery } = await import('./recovery')
 const { saveWorkspace } = await import('./WorkspaceManager')
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { Workspace } from '../../shared/workspace'
 
 const userData = app.getPath('userData')
 

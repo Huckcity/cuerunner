@@ -21,7 +21,7 @@ test.afterEach(async () => {
 })
 
 /** Writes a workspace with the given files beside it, then opens it the way a user would. */
-async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
+async function openWorkspaceWith(files: Record<string, string>): Promise<string> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-include-'))
   for (const [name, content] of Object.entries(files)) {
     const full = path.join(dir, name)
@@ -44,6 +44,8 @@ async function openWorkspaceWith(files: Record<string, string>): Promise<void> {
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu-recent', { hasText: 'Show.cuerunner' }).click()
   await expect(page.locator('.workspace-name')).toContainText('Include Show')
+
+  return workspace
 }
 
 async function runScript(script: string, timeoutMs = 120_000): Promise<void> {
@@ -89,4 +91,16 @@ test('a cycle between two files is reported, not run until the timeout', async (
   await page.locator('.inspector-tab', { hasText: 'Script' }).click()
   await expect(page.locator('.last-run-badge')).toHaveText('failed')
   await expect(page.locator('.last-run-error')).toContainText('include() cycle')
+})
+
+test("shell() runs where the script says it should, not where the app was launched", async () => {
+  const workspace = await openWorkspaceWith({})
+  // The workspace *file* as the working directory: main resolves a file path to the
+  // directory holding it, so the file lands beside the show — and would land in the app's
+  // own launch directory if shell()'s options never reached exec().
+  await runScript(`await shell('printf x > rel.txt', { cwd: ${JSON.stringify(workspace)} })`)
+
+  const written = path.join(path.dirname(workspace), 'rel.txt')
+  await expect.poll(() => fs.existsSync(written)).toBe(true)
+  expect(fs.readFileSync(written, 'utf8')).toBe('x')
 })

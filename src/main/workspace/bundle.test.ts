@@ -24,8 +24,8 @@ vi.mock('electron', async () => {
 })
 
 const { BundleCollision, bundleFileName, readBundle, unpackBundle, writeBundle } = await import('./bundle')
-import type { AudioCue, Cue } from '../../renderer/src/types/cue'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { AudioCue, Cue } from '../../shared/cue'
+import type { Workspace } from '../../shared/workspace'
 
 function audioCue(id: string, number: string, name: string, filePath: string): Cue {
   return {

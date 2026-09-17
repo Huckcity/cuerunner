@@ -4,8 +4,8 @@
 // the smallest set of cues that explains a reordering, and neither the route to a media
 // file nor the region a scan measured is an edit at all.
 import { describe, it, expect } from 'vitest'
-import type { AudioCue, Cue } from '../renderer/src/types/cue'
-import type { Workspace } from '../renderer/src/types/workspace'
+import type { AudioCue, Cue } from './cue'
+import type { Workspace } from './workspace'
 import {
   MAX_HISTORY_ENTRIES,
   MAX_LOGGED_CUES,

@@ -5,7 +5,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { AlertChip, topAlert } from './AlertChip'
 import { useStore } from '../../store'
-import type { ShowAlert } from '../../types/show'
+import type { ShowAlert } from '../../../../shared/show'
 
 function alert(id: number, level: ShowAlert['level'], message: string, extra: Partial<ShowAlert> = {}): ShowAlert {
   return { id, at: id * 1000, level, source: 'rf', message, ...extra }
