@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
-import type { Cue } from '../types/cue'
+import type { Cue } from '../../../shared/cue'
 
 function resetStore() {
   useStore.setState({

@@ -1,7 +1,7 @@
 import { parseMsc } from '../utils/msc'
 import type { MscMessage } from '../utils/msc'
-import type { Cue, MidiMessageKind, RefirePolicy } from '../types/cue'
-import type { OscInEvent, ShowEvent } from '../types/show'
+import type { Cue, MidiMessageKind, RefirePolicy } from '../../../shared/cue'
+import type { OscInEvent, ShowEvent } from '../../../shared/show'
 
 /**
  * The two guards that stand between a press and a cue, kept apart from the runner that

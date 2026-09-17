@@ -1,5 +1,5 @@
-import type { MidiMessageKind } from '../types/cue'
-import type { MscCommand, MscFormat } from '../types/cue'
+import type { MidiMessageKind } from '../../../shared/cue'
+import type { MscCommand, MscFormat } from '../../../shared/cue'
 
 /**
  * MIDI Show Control: how a show tells a console to go, stop, load or reset, and how a

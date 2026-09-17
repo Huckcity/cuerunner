@@ -1,5 +1,5 @@
-import { DEMO_PACK_COUNT, demoChannelId } from '../../renderer/src/types/show'
-import type { RfThresholds, TelemetryChannel, TelemetryDocument } from '../../renderer/src/types/show'
+import { DEMO_PACK_COUNT, demoChannelId } from '../../shared/show'
+import type { RfThresholds, TelemetryChannel, TelemetryDocument } from '../../shared/show'
 
 // The pure half of wireless telemetry: what a source is allowed to say, and how a
 // reading maps onto the bands the service raises alarms from. The service owns the

@@ -24,8 +24,8 @@ import type { ZipEntry, ZipSource } from './zip'
 import { extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
 import { migrateWorkspace, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
 import type { MediaReference, MissingMedia } from '../../shared/media'
-import type { AudioCue } from '../../renderer/src/types/cue'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { AudioCue } from '../../shared/cue'
+import type { Workspace } from '../../shared/workspace'
 
 export const BUNDLE_EXTENSION = 'cuerunnerx'
 

@@ -2,7 +2,7 @@
 // played, they are ordinary cues afterwards, and one undo puts the original back.
 import { describe, it, expect, beforeEach } from 'vitest'
 import { partName, regionEndMs, splitAudioCue } from './cueSplit'
-import type { AudioCue } from '../types/cue'
+import type { AudioCue } from '../../../shared/cue'
 import { useStore } from '../store'
 
 function cue(overrides: Partial<AudioCue> = {}): AudioCue {

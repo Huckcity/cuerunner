@@ -1,5 +1,5 @@
-import type { DeskMessage } from '../types/show'
-import type { OscArg } from '../types/cue'
+import type { DeskMessage } from '../../../shared/show'
+import type { OscArg } from '../../../shared/cue'
 
 export interface DeskSendResult {
   ok: boolean

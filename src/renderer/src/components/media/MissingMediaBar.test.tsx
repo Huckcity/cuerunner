@@ -7,8 +7,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MissingMediaBar } from './MissingMediaBar'
 import { useStore } from '../../store'
-import type { AudioCue, Cue } from '../../types/cue'
-import type { Workspace } from '../../types/workspace'
+import type { AudioCue, Cue } from '../../../../shared/cue'
+import type { Workspace } from '../../../../shared/workspace'
 
 function audioCue(id: string, number: string, name: string, filePath: string): AudioCue {
   return {

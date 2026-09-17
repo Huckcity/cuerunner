@@ -1,4 +1,4 @@
-import type { Cue } from '../types/cue'
+import type { Cue } from '../../../shared/cue'
 
 /**
  * How close, in screen pixels, a dragged block's edge has to come to a snap point

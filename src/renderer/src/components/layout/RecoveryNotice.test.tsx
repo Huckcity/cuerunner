@@ -7,9 +7,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
-import { defaultShowSettings } from '../../types/show'
-import type { Workspace } from '../../types/workspace'
-import type { Cue } from '../../types/cue'
+import { defaultShowSettings } from '../../../../shared/show'
+import type { Workspace } from '../../../../shared/workspace'
+import type { Cue } from '../../../../shared/cue'
 
 const cue: Cue = {
   id: 'c1', number: '1', name: 'Walk-in Music', type: 'wait', colorLabel: 'none',

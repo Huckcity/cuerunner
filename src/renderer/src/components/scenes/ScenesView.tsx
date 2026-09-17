@@ -13,7 +13,7 @@ import {
   updateScene
 } from '../../utils/scenes'
 import { TextField } from '../common/Field'
-import { ALL_CLOSED_SCENE_ID, type ScenesSettings } from '../../types/show'
+import { ALL_CLOSED_SCENE_ID, type ScenesSettings } from '../../../../shared/show'
 import './ScenesView.css'
 
 // A scene name is what its column is read by, so the field asks for about a name's worth of

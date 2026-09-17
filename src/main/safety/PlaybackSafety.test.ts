@@ -3,8 +3,8 @@
 // that has gone quiet while something is playing.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlaybackSafety, type PlaybackSafetyState } from './PlaybackSafety'
-import { PANIC_FADE_MS } from '../../renderer/src/types/playback'
-import type { PlaybackPanic } from '../../renderer/src/types/playback'
+import { PANIC_FADE_MS } from '../../shared/playback'
+import type { PlaybackPanic } from '../../shared/playback'
 
 describe('PlaybackSafety', () => {
   let panics: number[]

@@ -5,8 +5,8 @@ import type { Mock } from 'vitest'
 import { OscInputService } from './OscInputService'
 import type { ServiceContext } from '../bus/ServiceHost'
 import { ShowBus } from '../bus/ShowBus'
-import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
-import { defaultShowSettings } from '../../renderer/src/types/show'
+import type { ShowEvent, ShowSettings } from '../../shared/show'
+import { defaultShowSettings } from '../../shared/show'
 
 type OscEvent = Extract<ShowEvent, { kind: 'osc' }>
 

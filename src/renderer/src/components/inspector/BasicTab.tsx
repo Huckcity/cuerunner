@@ -1,5 +1,5 @@
 import { useStore, useParentGroup } from '../../store'
-import type { Cue, RefirePolicy } from '../../types/cue'
+import type { Cue, RefirePolicy } from '../../../../shared/cue'
 import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'
 import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'

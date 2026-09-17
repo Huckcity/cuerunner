@@ -1,11 +1,11 @@
 import { create } from 'zustand'
-import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../types/cue'
+import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../../../shared/cue'
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
-import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../types/workspace'
-import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../types/workspace'
-import { defaultShowSettings } from '../types/show'
+import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
+import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../../../shared/workspace'
+import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
   CastSettings,
@@ -27,7 +27,7 @@ import type {
   ShowEvent,
   ShowSettings,
   ShowSnapshot
-} from '../types/show'
+} from '../../../shared/show'
 import { createCue } from '../utils/cueDefaults'
 import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
@@ -43,7 +43,7 @@ import {
   setEnsembleApplied
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
-import type { LicenseStatus } from '../types/license'
+import type { LicenseStatus } from '../../../shared/license'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
 

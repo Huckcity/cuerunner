@@ -1,6 +1,8 @@
 /**
- * A MIDI message as it crosses the IPC boundary: the cue's own fields, flattened,
- * because the receiving side gets data rather than a union it can trust.
+ * A MIDI message as it leaves the IPC boundary: the cue's own fields, flattened, because
+ * the engines on this side read fields rather than a union. `MidiMessageKind` in
+ * src/shared/cue.ts is the wire shape the renderer sends — the union is the contract, and
+ * this is what an engine is handed once the channel has checked it.
  */
 export interface MidiMessage {
   kind: string

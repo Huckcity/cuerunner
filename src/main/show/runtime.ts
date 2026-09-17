@@ -8,7 +8,7 @@ import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
 import { RedundancyService } from '../services/RedundancyService'
 import type { RedundancySettings } from '../../shared/redundancy'
-import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../renderer/src/types/show'
+import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../shared/show'
 
 /**
  * What the services need from the rest of the app that is not the show. The redundancy

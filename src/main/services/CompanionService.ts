@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { networkInterfaces } from 'node:os'
-import type { CompanionState, ShowSettings } from '../../renderer/src/types/show'
+import type { CompanionState, ShowSettings } from '../../shared/show'
 import { describe } from '../bus/ServiceHost'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import { companionPage } from './companionPage'

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../../store'
-import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
+import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../../../shared/show'
 import { demoPacks, demoPerformers, demoSource } from '../../utils/rfDemo'
 import { buildReport, reportText } from '../../utils/rfPlot'
 import { formatClock } from '../../utils/cueDefaults'

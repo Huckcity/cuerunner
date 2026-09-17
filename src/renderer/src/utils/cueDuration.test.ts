@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createCue } from './cueDefaults'
 import { groupDurationMs } from './cueDuration'
-import type { Cue, CueType, GroupMode } from '../types/cue'
+import type { Cue, CueType, GroupMode } from '../../../shared/cue'
 
 function cue(type: CueType, patch: Partial<Cue> = {}): Cue {
   return { ...createCue(type), ...patch } as Cue

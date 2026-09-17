@@ -7,8 +7,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MonitorPanel, describeEvent } from './MonitorPanel'
 import { useStore } from '../../store'
-import type { MidiMessageKind } from '../../types/cue'
-import type { DeviceState, ServiceStatus, ShowAlert, ShowEvent } from '../../types/show'
+import type { MidiMessageKind } from '../../../../shared/cue'
+import type { DeviceState, ServiceStatus, ShowAlert, ShowEvent } from '../../../../shared/show'
 
 const AT = 1_700_000_000_000
 

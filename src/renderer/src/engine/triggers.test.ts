@@ -4,8 +4,8 @@
 import { describe, it, expect } from 'vitest'
 import { cueTriggers, describeTriggerSource, matchesTrigger, triggeredCues } from './triggers'
 import { encodeMsc } from '../utils/msc'
-import type { Cue, CueTrigger, MidiMessageKind } from '../types/cue'
-import type { ShowEvent } from '../types/show'
+import type { Cue, CueTrigger, MidiMessageKind } from '../../../shared/cue'
+import type { ShowEvent } from '../../../shared/show'
 
 function oscTrigger(address: string): CueTrigger {
   return { id: 't-osc', kind: 'osc', address }

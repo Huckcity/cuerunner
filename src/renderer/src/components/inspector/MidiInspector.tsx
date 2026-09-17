@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
-import type { MidiCue, MidiMessageKind } from '../../types/cue'
+import type { MidiCue, MidiMessageKind } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 import { NumberField, TextField } from '../common/Field'
 

@@ -8,7 +8,7 @@
 // pretending every file would be resident at once.
 
 import type { AudioProbe } from '../../../shared/audio'
-import type { Cue } from '../types/cue'
+import type { Cue } from '../../../shared/cue'
 
 /** What the engine is willing to hold, as `info()` reports it. */
 export interface MediaBudget {

@@ -1,6 +1,6 @@
 import { describeMsc, parseMsc } from '../utils/msc'
-import type { Cue, CueTrigger } from '../types/cue'
-import type { ShowEvent } from '../types/show'
+import type { Cue, CueTrigger } from '../../../shared/cue'
+import type { ShowEvent } from '../../../shared/show'
 
 /** The triggers on a cue, in the order they were added. */
 export function cueTriggers(cue: Cue): CueTrigger[] {

@@ -8,6 +8,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { usePlaybackBridge } from './usePlaybackBridge'
 import { audioEngine } from '../engine/audioEngineClient'
 import { useStore } from '../store'
+import { AUDIO_CHANNELS } from '../../../shared/audio'
 
 vi.mock('../engine/audioEngineClient')
 
@@ -88,7 +89,7 @@ describe('usePlaybackBridge — device settings', () => {
 
   it('keeps the engine\'s reason when the system it was asked for is not there', async () => {
     vi.mocked(audioEngine.configure).mockRejectedValue(new Error(
-      "Error invoking remote method 'audio:configure': AudioEngineError: no ASIO driver is installed on this machine"
+      `Error invoking remote method '${AUDIO_CHANNELS.configure}': AudioEngineError: no ASIO driver is installed on this machine`
     ))
     useStore.setState({ audioSettings: { outputDeviceId: 'default', backend: 'asio' } })
 
@@ -102,7 +103,7 @@ describe('usePlaybackBridge — device settings', () => {
 
   it('keeps the engine\'s reason when it refuses a request, not the IPC sentence around it', async () => {
     vi.mocked(audioEngine.configure).mockRejectedValue(new Error(
-      "Error invoking remote method 'audio:configure': AudioEngineError: the device is held exclusively by another application"
+      `Error invoking remote method '${AUDIO_CHANNELS.configure}': AudioEngineError: the device is held exclusively by another application`
     ))
 
     act(() => { root.render(<Harness />) })

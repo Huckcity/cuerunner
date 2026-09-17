@@ -1,6 +1,6 @@
 import { reportMainError } from '../errors'
-import { PANIC_FADE_MS } from '../../renderer/src/types/playback'
-import type { PanicSource, PlaybackPanic } from '../../renderer/src/types/playback'
+import { PANIC_FADE_MS } from '../../shared/playback'
+import type { PanicSource, PlaybackPanic } from '../../shared/playback'
 import type { AudioPanicResult } from '../../shared/audio'
 
 // The main process is the last line of defence for the sound. The window can crash, and

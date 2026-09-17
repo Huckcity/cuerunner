@@ -9,7 +9,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { DeskProfile } from '../../src/renderer/src/types/show'
+import type { DeskProfile } from '../../src/shared/show'
 
 export interface DeskShowOptions {
   /** The peer's port: where the show's desk is. */

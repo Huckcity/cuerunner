@@ -1,7 +1,7 @@
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue,
   MscCue
-} from '../types/cue'
+} from '../../../shared/cue'
 import { audioEngine } from './audioEngineClient'
 import type {
   AudioEngineEvent,
@@ -18,7 +18,7 @@ import { sendMsc } from './showControl'
 import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
-import type { TriggerGuardSettings } from '../types/workspace'
+import type { TriggerGuardSettings } from '../../../shared/workspace'
 import type { TakeoverPlan } from '../../../shared/redundancy'
 
 type SetRunning = (id: string, state: RunningCue | null) => void

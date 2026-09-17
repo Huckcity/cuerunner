@@ -12,8 +12,8 @@
 // an edit — a file copied to another folder, or an old file whose silence was measured
 // between two saves, must not diff against itself.
 
-import type { Cue } from '../renderer/src/types/cue'
-import type { Workspace } from '../renderer/src/types/workspace'
+import type { Cue } from './cue'
+import type { Workspace } from './workspace'
 
 /** A cue named the way the cue list names it: "12 Walk-in". */
 export function cueLabel(cue: { number?: string; name?: string }): string {

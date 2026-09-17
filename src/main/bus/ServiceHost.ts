@@ -2,7 +2,7 @@ import type {
   ServiceState,
   ServiceStatus,
   ShowSettings
-} from '../../renderer/src/types/show'
+} from '../../shared/show'
 import type { ShowBus } from './ShowBus'
 
 /**

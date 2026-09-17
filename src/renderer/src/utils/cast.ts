@@ -1,11 +1,11 @@
-import { DCA_LIMIT } from '../types/show'
+import { DCA_LIMIT } from '../../../shared/show'
 import type {
   CastSettings,
   Dca,
   Ensemble,
   Performer,
   ShowChannel
-} from '../types/show'
+} from '../../../shared/show'
 
 /**
  * The show's setup: the channels on the console, the cast and where their mics are

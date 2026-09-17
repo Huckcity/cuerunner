@@ -9,7 +9,7 @@
  * gone.
  */
 
-import type { NetworkRequest, NetworkResult } from '../../renderer/src/types/network'
+import type { NetworkRequest, NetworkResult } from '../../shared/network'
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
 

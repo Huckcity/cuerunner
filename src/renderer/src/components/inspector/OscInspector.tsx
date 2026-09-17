@@ -1,5 +1,5 @@
 import { useStore } from '../../store'
-import type { OscCue, OscArg, OscArgType } from '../../types/cue'
+import type { OscCue, OscArg, OscArgType } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'

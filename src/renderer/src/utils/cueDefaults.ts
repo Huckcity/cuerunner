@@ -1,7 +1,7 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue,
   MscCue, Cue, CueType, AudioCrosspoint
-} from '../types/cue'
+} from '../../../shared/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
 // reset controls restore them — one definition, so the two can never drift apart.

@@ -25,7 +25,7 @@ import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
 import { useSelectedCue, useStore, usePro } from './store'
-import type { GroupCue } from './types/cue'
+import type { GroupCue } from '../../shared/cue'
 import { ProLock } from './components/license/ProLock'
 import './App.css'
 

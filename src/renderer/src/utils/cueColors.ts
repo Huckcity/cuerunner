@@ -1,7 +1,7 @@
 // The cue colour palette, in one place: the swatch rows (the inspector, the context menu)
 // and the bar on every cue row all draw the same eight colours, and a label added to one
 // of them without the others would be a colour a cue cannot be set to.
-import type { CueColor } from '../types/cue'
+import type { CueColor } from '../../../shared/cue'
 
 /** The swatches, in the order every picker offers them. */
 export const CUE_COLORS: CueColor[] = ['none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink']

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useSelectedCue, useStore, usePro } from '../../store'
-import type { Cue, GroupCue } from '../../types/cue'
+import type { Cue, GroupCue } from '../../../../shared/cue'
 import { WaveformPanel } from '../waveform/WaveformPanel'
 import { TimelineEditor } from '../timeline/TimelineEditor'
 import { LogPanel } from '../log/LogPanel'

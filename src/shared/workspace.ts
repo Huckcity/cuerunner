@@ -1,6 +1,6 @@
 import type { Cue } from './cue'
 import type { ShowSettings } from './show'
-import type { ShowHistoryEntry } from '../../../shared/showfile'
+import type { ShowHistoryEntry } from './showfile'
 
 export interface AudioSettings {
   /**

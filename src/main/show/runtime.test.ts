@@ -2,9 +2,9 @@
 // the window plumbing never has to know which services exist.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createShowRuntime } from './runtime'
-import { defaultShowSettings } from '../../renderer/src/types/show'
+import { defaultShowSettings } from '../../shared/show'
 import type { CommandResult, ServiceContext, ShowService } from '../bus/ServiceHost'
-import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
+import type { ShowEvent, ShowSettings } from '../../shared/show'
 
 class FakeService implements ShowService {
   readonly id: string

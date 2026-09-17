@@ -4,8 +4,8 @@ import {
   DEMO_PACK_COUNT,
   DEMO_SOURCE_ID,
   demoChannelId
-} from '../types/show'
-import type { Performer, RfPack, ShowChannel, TelemetrySource } from '../types/show'
+} from '../../../shared/show'
+import type { Performer, RfPack, ShowChannel, TelemetrySource } from '../../../shared/show'
 
 // The demo rack is the whole feature in one click: a source the main process simulates
 // and a plot that names every channel it reports. Both are generated from the same ids

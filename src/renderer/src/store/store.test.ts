@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
-import type { AudioCue } from '../types/cue'
-import { defaultShowSettings } from '../types/show'
+import type { AudioCue } from '../../../shared/cue'
+import { defaultShowSettings } from '../../../shared/show'
 import { setDcaCount } from '../utils/cast'
 import type {
   AlertEvent,
@@ -15,7 +15,7 @@ import type {
   Performer,
   ServiceEvent,
   ShowEvent
-} from '../types/show'
+} from '../../../shared/show'
 
 const DCA: Dca = { id: 'dca-1', label: 'DCA 1', note: null, address: null }
 /** The strip Ada's mic is on, which is what carries her to the desk. */

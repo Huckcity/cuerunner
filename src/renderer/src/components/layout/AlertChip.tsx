@@ -1,5 +1,5 @@
 import { useStore } from '../../store'
-import type { ShowAlert } from '../../types/show'
+import type { ShowAlert } from '../../../../shared/show'
 import { isRfAlert } from '../rf/RfPanel'
 import type { ShowStrip } from './TransportBar'
 import './AlertChip.css'

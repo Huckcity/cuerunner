@@ -1,4 +1,4 @@
-import type { Cue } from '../types/cue'
+import type { Cue } from '../../../shared/cue'
 import type { RunningCue } from '../store'
 import type { AudioProgress } from '../../../shared/audio'
 

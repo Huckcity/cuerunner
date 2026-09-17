@@ -3,8 +3,8 @@
 // readings have to stay inside the ranges the panel is promised.
 import { describe, it, expect } from 'vitest'
 import { batteryBand, demoRack, isWorse, parseTelemetry, rfBand } from './telemetry'
-import { DEMO_PACK_COUNT, defaultRfThresholds, demoChannelId } from '../../renderer/src/types/show'
-import type { TelemetryChannel, TelemetryDocument } from '../../renderer/src/types/show'
+import { DEMO_PACK_COUNT, defaultRfThresholds, demoChannelId } from '../../shared/show'
+import type { TelemetryChannel, TelemetryDocument } from '../../shared/show'
 
 const thresholds = defaultRfThresholds()
 

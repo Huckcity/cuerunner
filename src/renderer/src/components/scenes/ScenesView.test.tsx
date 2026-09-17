@@ -10,10 +10,10 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScenesView } from './ScenesView'
 import { useStore } from '../../store'
-import { ALL_CLOSED_SCENE_ID, defaultDeskSettings, defaultShowSettings } from '../../types/show'
+import { ALL_CLOSED_SCENE_ID, defaultDeskSettings, defaultShowSettings } from '../../../../shared/show'
 import type {
   CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, ShowChannel
-} from '../../types/show'
+} from '../../../../shared/show'
 
 // The desk these tests drive: one connection for the show, MIDI on the port the desk
 // answers to, so what a recall put on the wire reads as a port and a note rather than a

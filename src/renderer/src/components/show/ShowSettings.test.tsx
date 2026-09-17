@@ -10,10 +10,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { ShowSettings } from './ShowSettings'
 import { useStore, type ShowSettingsTab } from '../../store'
 import { TEST_LICENSE } from '../../../../test/license'
-import { defaultShowSettings } from '../../types/show'
+import { defaultShowSettings } from '../../../../shared/show'
 import type {
   CastSettings, Dca, Ensemble, MicScene, Performer, RfPack, RfPlot, RfSwap, ShowChannel
-} from '../../types/show'
+} from '../../../../shared/show'
 
 function showChannel(id: string, name: string, dcaId: string | null = null): ShowChannel {
   return { id, name, dcaId }

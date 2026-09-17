@@ -8,7 +8,7 @@ import { Inspector } from './Inspector'
 import { useStore } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
 import { TEST_LICENSE } from '../../../../test/license'
-import type { Cue, GroupCue } from '../../types/cue'
+import type { Cue, GroupCue } from '../../../../shared/cue'
 
 function cue(type: Cue['type'], patch: Partial<Cue> = {}): Cue {
   return { ...createCue(type), ...patch } as Cue

@@ -8,8 +8,8 @@ import { tmpdir } from 'os'
 import { isAbsolute, join } from 'path'
 import { materialiseDemoAssets } from './demo'
 import { migrateWorkspace } from './WorkspaceManager'
-import type { AudioCue } from '../../renderer/src/types/cue'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { AudioCue } from '../../shared/cue'
+import type { Workspace } from '../../shared/workspace'
 
 vi.mock('electron', () => ({ app: {}, dialog: {}, BrowserWindow: {} }))
 

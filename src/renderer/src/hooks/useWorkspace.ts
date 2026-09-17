@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { useStore } from '../store'
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
-import type { Workspace, WorkspaceIdentity } from '../types/workspace'
+import type { Workspace, WorkspaceIdentity } from '../../../shared/workspace'
 import { buildWorkspace } from '../utils/workspace'
 import { cueEngine } from '../engine/CueEngine'
 

@@ -1,4 +1,4 @@
-import type { AlertLevel, DeviceState, ShowAlert, ShowEvent } from '../../renderer/src/types/show'
+import type { AlertLevel, DeviceState, ShowAlert, ShowEvent } from '../../shared/show'
 
 export interface ShowBusOptions {
   /** Coalescing window: everything published inside one window leaves as one batch. */

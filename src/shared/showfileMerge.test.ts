@@ -5,8 +5,8 @@
 // pieces neither side touched. What a merge does with each is a promise the report makes
 // to the person reading it, so each one is asserted here rather than in the app.
 import { describe, it, expect } from 'vitest'
-import type { AudioCue, Cue, GroupCue } from '../renderer/src/types/cue'
-import type { Workspace } from '../renderer/src/types/workspace'
+import type { AudioCue, Cue, GroupCue } from './cue'
+import type { Workspace } from './workspace'
 import { mergeWorkspaces } from './showfileMerge'
 
 function cue(over: Partial<AudioCue> & { id: string }): Cue {

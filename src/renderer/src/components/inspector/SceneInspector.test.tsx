@@ -10,8 +10,8 @@ import {
   type CastSettings,
   type MicScene,
   type ScenesSettings
-} from '../../types/show'
-import type { SceneCue } from '../../types/cue'
+} from '../../../../shared/show'
+import type { SceneCue } from '../../../../shared/cue'
 
 function scene(id: string, name: string, live: string[] = [], ensembles: string[] = []): MicScene {
   return { id, name, live, ensembles, excluded: [], notes: '' }

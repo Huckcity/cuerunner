@@ -24,8 +24,8 @@ vi.mock('electron', async () => {
 })
 
 const { openWorkspaceFromPath, saveWorkspace } = await import('./WorkspaceManager')
-import type { AudioCue, Cue } from '../../renderer/src/types/cue'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import type { AudioCue, Cue } from '../../shared/cue'
+import type { Workspace } from '../../shared/workspace'
 
 /** A show as an old build wrote it: no show-services section, no per-cue triggers. */
 const LEGACY_SHOW = `{

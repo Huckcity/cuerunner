@@ -8,7 +8,7 @@ import { describeEvent } from '../monitor/MonitorPanel'
 import { useStore, type LogEntry } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { TEST_LICENSE } from '../../../../test/license'
-import type { ShowEvent } from '../../types/show'
+import type { ShowEvent } from '../../../../shared/show'
 
 const AT = 1_700_000_000_000
 

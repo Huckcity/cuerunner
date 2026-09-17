@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
 import { sceneLiveIds } from '../../utils/scenes'
-import type { SceneCue } from '../../types/cue'
+import type { SceneCue } from '../../../../shared/cue'
 
 /**
  * A scene cue names a scene and nothing else: which groups change and what they are told

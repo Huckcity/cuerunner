@@ -12,7 +12,7 @@ Electron + React + TypeScript show control for live performance, a QLab alternat
 
 ## Where things are
 
-- Process contexts: `src/main`, `src/preload/index.ts` (the only bridge), `src/shared` (wire types), `src/renderer/src`, `native/audio`.
+- Process contexts: `src/main`, `src/preload/index.ts` (the only bridge), `src/shared` (wire types; `src/shared/ipc/` is the declared IPC surface), `src/renderer/src`, `native/audio`.
 - Tests: unit `src/**/*.test.ts(x)` (vitest), e2e `e2e/*.spec.ts` (Playwright against real Electron), integration `integration/specs`, native `native/audio/tests/*.mjs`.
 - UI work: `src/renderer/src/App.css` (`:root` tokens are the authority) and `.claude/skills/cuerunner-design/`.
 - CI topology and homelab caveats live in the workflow headers (`.github/workflows/*.yml`); runner labels in `.github/actionlint.yaml`.
@@ -28,8 +28,8 @@ Electron + React + TypeScript show control for live performance, a QLab alternat
 
 ## Conventions that differ from defaults
 
-- A new IPC channel means four hand-maintained places: `src/preload/index.ts`, `src/main/ipc/handlers.ts`, `src/renderer/src/env.d.ts`, and the `src/test/setup.ts` mock — only the audio namespace derives from `src/shared`.
-- Renderer code may not import Node or Electron (`tsconfig.web.json` has no Node types); `tsconfig.node.json`'s allow-list back into the renderer (`types/**`, `utils/scriptDocument.ts`, `utils/waveform.ts`) is deliberately minimal.
+- A new IPC channel is declared once, in `src/shared/ipc/<domain>.ts`: its name in that domain's `<DOMAIN>_CHANNELS` table, its payloads, and its bridge interface. The preload, `src/main/ipc/handlers.ts`, `src/renderer/src/env.d.ts` and the `src/test/setup.ts` mock all derive from that declaration, so a channel or member added at either end fails typecheck until the other end follows.
+- Renderer code may not import Node or Electron (`tsconfig.web.json` has no Node types); `tsconfig.node.json`'s allow-list back into the renderer (`utils/scriptDocument.ts`, `utils/waveform.ts`) is deliberately minimal.
 - No linter or formatter exists; `npm run typecheck` is the static gate. Match surrounding style.
 - Window copy: four text tones clear 4.5:1, held by `scripts/theme.test.ts` and `e2e/legibility.spec.ts` — do not add a fifth grey; every label/control pair is a `.field-row`; a hint fits one line, longer text belongs in `website/docs/reference.mjs`; cue icons are drawn in `src/renderer/src/utils/cueIcons.tsx`, never typed.
 - Cue list: array order is running order and children follow their parent by `parentId`; inside a timeline group `timelineOffset` decides firing.

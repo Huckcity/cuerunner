@@ -1,5 +1,5 @@
 import { useStore } from '../../store'
-import type { DevampCue } from '../../types/cue'
+import type { DevampCue } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 
 interface Props { cue: DevampCue }

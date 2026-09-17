@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { CUE_ICON_PATHS, CueIcon, GroupChevron } from './cueIcons'
-import { CUE_TYPES } from '../types/cue'
+import { CUE_TYPES } from '../../../shared/cue'
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null

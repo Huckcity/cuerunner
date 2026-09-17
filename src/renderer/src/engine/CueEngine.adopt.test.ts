@@ -7,8 +7,8 @@ import type { Mock } from 'vitest'
 import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import { scriptHost } from './scriptHost'
-import type { Cue, AudioCue, MidiCue, WaitCue } from '../types/cue'
-import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
+import type { Cue, AudioCue, MidiCue, WaitCue } from '../../../shared/cue'
+import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 import type { TakeoverPlan } from '../../../shared/redundancy'
 
 vi.mock('./scriptHost', () => ({

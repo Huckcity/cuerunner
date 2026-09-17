@@ -1,5 +1,5 @@
-import type { ShowEvent } from '../../renderer/src/types/show'
-import type { PanicSource } from '../../renderer/src/types/playback'
+import type { ShowEvent } from '../../shared/show'
+import type { PanicSource } from '../../shared/playback'
 
 // The two bindings a show already has for panicking. A desk, a tablet or a keyboard
 // sends them over the licensed inputs the show services are already listening on, and

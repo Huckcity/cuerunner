@@ -8,7 +8,7 @@
 // moment it is off. That is also why nothing here writes to the cue: a trim is a way of
 // playing a region, not an edit to it.
 
-import type { AudioCue, Cue } from '../types/cue'
+import type { AudioCue, Cue } from '../../../shared/cue'
 
 /** The part of a file a cue plays, in ms from the file's start; a null end is the file's. */
 export interface PlayRegion {

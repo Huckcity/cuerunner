@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../store'
-import type { ShowEvent, ShowSnapshot } from '../types/show'
+import type { ShowEvent, ShowSnapshot } from '../../../shared/show'
 
 /**
  * Connects the renderer to the show services running in the main process.

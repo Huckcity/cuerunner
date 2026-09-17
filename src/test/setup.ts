@@ -1,7 +1,81 @@
-// Global window.cuerunner mock — mirrors the preload bridge shape
+import type {
+  AudioCancelResult,
+  AudioCommandResult,
+  AudioEngineInfo,
+  AudioMetadata,
+  AudioPanicResult,
+  AudioProbe,
+  AudioSeekResult,
+  AudioStartResult
+} from '../shared/audio'
+import type { CuerunnerBridge } from '../shared/ipc'
+import type { RedundancyConfigureResult } from '../shared/ipc/redundancy'
+import type { WorkspaceCompareResult, WorkspaceExportResult, WorkspaceImportResult, WorkspaceMergeResult } from '../shared/ipc/workspace'
+import type { RedundancySettings } from '../shared/redundancy'
+import type { ScriptDocument } from '../shared/show'
+
+/**
+ * The engine's own record, as the mock reports it. `info()` and a `configure()` that took
+ * answer with the same description of the running engine, so both readers are given the
+ * whole of it rather than whatever half a mock was written with. A fresh object per call,
+ * because a test that writes to what it was handed must not change what the next one is
+ * handed — one shared fixture would leak across calls and across test files.
+ */
+function engineInfo(): AudioEngineInfo {
+  return {
+    name: 'Test engine',
+    version: '0.0.0',
+    protocol: 2,
+    sessionId: 'test-session',
+    backend: 'silent',
+    deviceId: null,
+    deviceName: 'Silent',
+    sampleRate: 48000,
+    channels: 2,
+    format: 'f32',
+    exclusive: false,
+    bufferFrames: 512,
+    periodFrames: 512,
+    latencyMs: null,
+    latencySource: 'unknown',
+    active: false,
+    activeVoices: 0,
+    activeCues: [],
+    cache: {
+      entries: 0, bytes: 0, limitBytes: 0, maxFiles: 0, maxFileBytes: 0,
+      hits: 0, misses: 0, evictions: 0, bypassed: 0, pinnedEntries: 0, pinnedBytes: 0
+    },
+    media: {
+      activeVoices: 0, streamingVoices: 0, residentBytes: 0, streamBufferBytes: 0,
+      streamBufferLimitBytes: 0, decodeQueueDepth: 0, decodeUnderruns: 0, xruns: 0,
+      droppedFileChunks: 0
+    },
+    lastError: null,
+    warnings: []
+  }
+}
+
+/** A machine that has never been paired: off, live, and alone. */
+const redundancySettings = {
+  enabled: false,
+  name: 'test-machine',
+  id: 'test-machine-id',
+  role: 'live',
+  port: 53110,
+  peerHost: '',
+  peerPort: 53110,
+  token: '',
+  timeoutMs: 3000,
+  takeover: 'manual'
+} satisfies RedundancySettings
+
+// Global window.cuerunner mock — the preload's own bridge, checked against the composed
+// type the preload implements (src/shared/ipc). A member added, renamed or removed there
+// fails to compile here until this mock follows, which is the point of the annotation.
 Object.defineProperty(window, 'cuerunner', {
   value: {
     platform: 'win32',
+    getPathForFile: vi.fn(() => 'C:\\show\\track01.wav'),
     app: {
       rendererCrash: vi.fn(() => Promise.resolve(null)),
       onMainError: vi.fn(() => () => {}),
@@ -17,65 +91,40 @@ Object.defineProperty(window, 'cuerunner', {
     // Plain vi.fn methods shaped like the native service's verbs. The renderer never
     // decodes or streams media: it schedules commands and reads state back.
     audio: {
-      prepare: vi.fn(() => Promise.resolve({
+      prepare: vi.fn((): Promise<AudioMetadata> => Promise.resolve({
         cueId: 'cue', filePath: '', format: 'wav', durationMs: 0, sampleRate: 48000,
         channels: 2, frames: 0, fileBytes: 0, streaming: false, cacheHit: false, decodedBytes: 0
       })),
-      start: vi.fn(() => Promise.resolve({
+      start: vi.fn((): Promise<AudioStartResult> => Promise.resolve({
         cueId: 'cue', runId: 'run', state: 'playing', startAtMs: 0
       })),
-      stop: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
-      stopAll: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
-      seek: vi.fn(() => Promise.resolve({ ok: true, at: 0, positionMs: 0, state: 'playing' })),
-      release: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
-      onsets: vi.fn(() => Promise.resolve({ filePath: '', onsetsMs: [], durationMs: 0, sampleRate: 48000, channels: 2, truncated: false })),
-      silence: vi.fn(() => Promise.resolve({ filePath: '', startMs: 0, endMs: 0, durationMs: 0, sampleRate: 48000, channels: 2, silent: true })),
-      cancel: vi.fn(() => Promise.resolve({ ok: true, at: 0, canceled: 0 })),
-      routing: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
-      fade: vi.fn(() => Promise.resolve({ ok: true, at: 0, applied: true })),
+      stop: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      stopAll: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      seek: vi.fn((): Promise<AudioSeekResult> => Promise.resolve({
+        ok: true, at: 0, positionMs: 0, state: 'playing'
+      })),
+      release: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      onsets: vi.fn(() => Promise.resolve({
+        filePath: '', onsetsMs: [], durationMs: 0, sampleRate: 48000, channels: 2,
+        truncated: false, startMs: 0, endMs: 0
+      })),
+      silence: vi.fn(() => Promise.resolve({
+        filePath: '', startMs: 0, endMs: 0, durationMs: 0, sampleRate: 48000, channels: 2, silent: true
+      })),
+      cancel: vi.fn((): Promise<AudioCancelResult> => Promise.resolve({ ok: true, at: 0, canceled: 0 })),
+      routing: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      fade: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
       progress: vi.fn(() => Promise.resolve(null)),
-      panic: vi.fn(() => Promise.resolve({ ok: true, at: 0, stoppedVoices: 0 })),
+      panic: vi.fn((): Promise<AudioPanicResult> => Promise.resolve({ ok: true, at: 0, stoppedVoices: 0 })),
       clock: vi.fn(() => Promise.resolve({ clockMs: Date.now(), sessionId: 'test-session' })),
-      info: vi.fn(() => Promise.resolve({
-        name: 'Test engine',
-        version: '0.0.0',
-        protocol: 2,
-        sessionId: 'test-session',
-        backend: 'silent',
-        deviceId: null,
-        deviceName: 'Silent',
-        sampleRate: 48000,
-        channels: 2,
-        format: 'f32',
-        exclusive: false,
-        bufferFrames: 512,
-        periodFrames: 512,
-        latencyMs: null,
-        latencySource: 'unknown',
-        active: false,
-        activeVoices: 0,
-        activeCues: [],
-        cache: {
-          entries: 0, bytes: 0, limitBytes: 0, maxFiles: 0, maxFileBytes: 0,
-          hits: 0, misses: 0, evictions: 0, bypassed: 0, pinnedEntries: 0, pinnedBytes: 0
-        },
-        media: {
-          activeVoices: 0, streamingVoices: 0, residentBytes: 0, streamBufferBytes: 0,
-          streamBufferLimitBytes: 0, decodeQueueDepth: 0, decodeUnderruns: 0, xruns: 0,
-          droppedFileChunks: 0
-        },
-        lastError: null,
-        warnings: []
-      })),
+      info: vi.fn(() => Promise.resolve(engineInfo())),
       devices: vi.fn(() => Promise.resolve([])),
-      configure: vi.fn(() => Promise.resolve({
-        name: 'Test engine', version: '0.0.0', protocol: 1, backend: 'silent'
-      })),
+      configure: vi.fn(() => Promise.resolve(engineInfo())),
       waveform: vi.fn(() => Promise.resolve({
-        filePath: '', buckets: 0, values: [], durationMs: 0,
-        sampleRate: 48000, channels: 2, truncated: false
+        filePath: '', buckets: 0, values: [], durationMs: 0, sampleRate: 48000, channels: 2,
+        truncated: false, startMs: 0, endMs: 0, sampled: false
       })),
-      probe: vi.fn(() => Promise.resolve({
+      probe: vi.fn((): Promise<AudioProbe> => Promise.resolve({
         filePath: '', format: 'wav', durationMs: 0, sampleRate: 48000, channels: 2,
         frames: null, fileBytes: 0, decodedBytes: null, streaming: false, resident: false
       })),
@@ -108,48 +157,22 @@ Object.defineProperty(window, 'cuerunner', {
       onEvents: vi.fn(() => () => {})
     },
     license: {
-      status: vi.fn(() => Promise.resolve({ state: 'unlicensed' })),
+      status: vi.fn(() => Promise.resolve({ state: 'unlicensed' as const })),
       activate: vi.fn(() => Promise.resolve({
-        ok: false, error: 'Unit tests run unlicensed', status: { state: 'unlicensed' }
+        ok: false, error: 'Unit tests run unlicensed', status: { state: 'unlicensed' as const }
       })),
-      deactivate: vi.fn(() => Promise.resolve({ state: 'unlicensed' })),
+      deactivate: vi.fn(() => Promise.resolve({ state: 'unlicensed' as const })),
       onChanged: vi.fn(() => () => {})
     },
     redundancy: {
-      // A machine that has never been paired: off, live, and alone.
-      settings: vi.fn(() => Promise.resolve({
-        enabled: false,
-        name: 'test-machine',
-        id: 'test-machine-id',
-        role: 'live',
-        port: 53110,
-        peerHost: '',
-        peerPort: 53110,
-        token: '',
-        timeoutMs: 3000,
-        takeover: 'manual'
-      })),
-      configure: vi.fn((patch: Record<string, unknown>) => Promise.resolve({
-        ok: true,
-        settings: {
-          enabled: false,
-          name: 'test-machine',
-          id: 'test-machine-id',
-          role: 'live',
-          port: 53110,
-          peerHost: '',
-          peerPort: 53110,
-          token: '',
-          timeoutMs: 3000,
-          takeover: 'manual',
-          ...patch
-        }
-      }))
+      settings: vi.fn(() => Promise.resolve({ ...redundancySettings })),
+      configure: vi.fn((patch: Partial<RedundancySettings>): Promise<RedundancyConfigureResult> =>
+        Promise.resolve({ ok: true, settings: { ...redundancySettings, ...patch } }))
     },
     script: {
       readFile: vi.fn(() => Promise.resolve({ code: '', path: '' })),
       pickFile: vi.fn(() => Promise.resolve(null)),
-      readDocument: vi.fn(() => Promise.resolve({ ok: true, lines: [] })),
+      readDocument: vi.fn((): Promise<ScriptDocument> => Promise.resolve({ ok: true, lines: [] })),
       shell: vi.fn(() => Promise.resolve({ stdout: '', stderr: '', code: 0, signal: null }))
     },
     workspace: {
@@ -159,18 +182,18 @@ Object.defineProperty(window, 'cuerunner', {
       relink: vi.fn(),
       save: vi.fn(() => Promise.resolve(null)),
       saveAs: vi.fn(() => Promise.resolve(null)),
-      compare: vi.fn(() => Promise.resolve({ ok: true, comparison: null })),
-      exportBundle: vi.fn(() => Promise.resolve({ ok: true, exported: null })),
-      merge: vi.fn(() => Promise.resolve({ ok: true, merged: null })),
-      importBundle: vi.fn(() => Promise.resolve({ ok: true, imported: null })),
+      compare: vi.fn((): Promise<WorkspaceCompareResult> => Promise.resolve({ ok: true, comparison: null })),
+      exportBundle: vi.fn((): Promise<WorkspaceExportResult> => Promise.resolve({ ok: true, exported: null })),
+      merge: vi.fn((): Promise<WorkspaceMergeResult> => Promise.resolve({ ok: true, merged: null })),
+      importBundle: vi.fn((): Promise<WorkspaceImportResult> => Promise.resolve({ ok: true, imported: null })),
       recent: vi.fn(() => Promise.resolve([])),
       autosave: vi.fn(() => Promise.resolve()),
       recovery: vi.fn(() => Promise.resolve(null)),
       clearRecovery: vi.fn(() => Promise.resolve()),
       setTitle: vi.fn(() => Promise.resolve()),
-      confirmClose: vi.fn(() => Promise.resolve(0))
+      confirmClose: vi.fn((): Promise<0 | 1 | 2> => Promise.resolve(0))
     }
-  },
+  } satisfies CuerunnerBridge,
   writable: true
 })
 

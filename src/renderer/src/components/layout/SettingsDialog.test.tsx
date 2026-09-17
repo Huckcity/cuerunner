@@ -6,7 +6,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { SettingsDialog } from './SettingsDialog'
 import { useStore } from '../../store'
-import { defaultShowSettings } from '../../types/show'
+import { defaultShowSettings } from '../../../../shared/show'
 import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement

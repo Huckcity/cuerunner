@@ -26,8 +26,8 @@
 // - The **show's name** is this file's. It is the name of the document, not a field of
 //   the show.
 
-import type { Cue } from '../renderer/src/types/cue'
-import type { Workspace } from '../renderer/src/types/workspace'
+import type { Cue } from './cue'
+import type { Workspace } from './workspace'
 import {
   cueLabel,
   cuePlaces,

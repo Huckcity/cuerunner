@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import { MSC_COMMANDS, MSC_COMMAND_NAME, MSC_FORMATS, MSC_FORMAT_NAME } from '../../utils/msc'
-import type { MscCommand, MscCue, MscFormat } from '../../types/cue'
+import type { MscCommand, MscCue, MscFormat } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
 import { NumberField, TextField } from '../common/Field'
 

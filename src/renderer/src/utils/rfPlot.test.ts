@@ -16,7 +16,7 @@ import {
   reportText,
   updatePack
 } from './rfPlot'
-import type { DeviceState, Performer, RfPlot, RfSwap } from '../types/show'
+import type { DeviceState, Performer, RfPlot, RfSwap } from '../../../shared/show'
 
 const AT = Date.parse('2026-09-11T20:14:00.000Z')
 

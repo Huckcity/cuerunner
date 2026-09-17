@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
 import { CueEngine } from './CueEngine'
-import type { Cue, WaitCue, GroupCue } from '../types/cue'
-import { DEFAULT_TRIGGER_GUARD } from '../types/workspace'
+import type { Cue, WaitCue, GroupCue } from '../../../shared/cue'
+import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 
 vi.mock('./audioEngineClient')
 vi.mock('./networkClient', () => ({

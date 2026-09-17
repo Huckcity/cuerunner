@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ServiceHost } from './ServiceHost'
 import type { ServiceContext, ShowService } from './ServiceHost'
 import { ShowBus } from './ShowBus'
-import type { ShowAlert, ShowSettings } from '../../renderer/src/types/show'
-import { defaultShowSettings } from '../../renderer/src/types/show'
+import type { ShowAlert, ShowSettings } from '../../shared/show'
+import { defaultShowSettings } from '../../shared/show'
 
 function showSettings(): ShowSettings {
   return defaultShowSettings()

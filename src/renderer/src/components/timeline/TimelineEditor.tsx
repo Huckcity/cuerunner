@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useStore } from '../../store'
-import type { GroupCue, Cue } from '../../types/cue'
+import type { GroupCue, Cue } from '../../../../shared/cue'
 import { cueEngine } from '../../engine/CueEngine'
 import { snapOffset, snapTargetsFor } from '../../utils/timelineSnap'
 import { mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'

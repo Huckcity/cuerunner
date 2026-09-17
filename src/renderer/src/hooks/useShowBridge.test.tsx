@@ -6,9 +6,9 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useShowBridge } from './useShowBridge'
 import { useStore } from '../store'
-import { defaultShowSettings } from '../types/show'
+import { defaultShowSettings } from '../../../shared/show'
 import { TEST_LICENSE } from '../../../test/license'
-import type { ShowEvent, ShowSettings, ShowSnapshot } from '../types/show'
+import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../../shared/show'
 
 function Harness() {
   useShowBridge()

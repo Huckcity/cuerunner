@@ -6,7 +6,7 @@ import { DeskButtons, muteGroupGet } from '../utils/deskInput'
 import { sceneStep } from '../utils/scenes'
 import { useStore, usePro } from '../store'
 import { deskLinkName } from '../../../shared/deskLink'
-import type { DeskButtons as DeskButtonMap, DeskSettings } from '../types/show'
+import type { DeskButtons as DeskButtonMap, DeskSettings } from '../../../shared/show'
 
 /**
  * Where the desk's messages come from, as the services name them: an input port's name, or

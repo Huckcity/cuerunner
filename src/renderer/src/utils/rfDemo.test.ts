@@ -12,7 +12,7 @@ import {
   demoChannelId,
   startingChannels,
   startingDcas
-} from '../types/show'
+} from '../../../shared/show'
 
 describe('demoSource', () => {
   it('describes an in-process rack with no target to poll', () => {

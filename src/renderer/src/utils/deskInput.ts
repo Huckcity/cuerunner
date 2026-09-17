@@ -1,6 +1,6 @@
-import type { ShowEvent } from '../types/show'
-import type { DeskProfile } from '../types/show'
-import type { MidiMessageKind } from '../types/cue'
+import type { ShowEvent } from '../../../shared/show'
+import type { DeskProfile } from '../../../shared/show'
+import type { MidiMessageKind } from '../../../shared/cue'
 
 /**
  * The desk's own buttons, read out of what it sends back.

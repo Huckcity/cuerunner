@@ -7,7 +7,7 @@ import {
   updateEnsemble,
   updatePerformer
 } from '../../utils/cast'
-import type { CastSettings } from '../../types/show'
+import type { CastSettings } from '../../../../shared/show'
 import { TextField } from '../common/Field'
 
 /** The DCA a strip drives, as the cast list names it: "DCA 4", or a label someone wrote. */

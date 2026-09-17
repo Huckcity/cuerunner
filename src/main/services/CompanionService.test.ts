@@ -9,13 +9,13 @@ import type { CompanionOptions } from './CompanionService'
 import { companionPage } from './companionPage'
 import type { ServiceContext } from '../bus/ServiceHost'
 import { ShowBus } from '../bus/ShowBus'
-import { defaultShowSettings } from '../../renderer/src/types/show'
+import { defaultShowSettings } from '../../shared/show'
 import type {
   CompanionCue,
   CompanionSettings,
   CompanionState,
   ShowSettings
-} from '../../renderer/src/types/show'
+} from '../../shared/show'
 
 const TOKEN = 's3cret'
 const HOST = '10.0.0.5'

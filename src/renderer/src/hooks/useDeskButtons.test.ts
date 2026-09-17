@@ -5,8 +5,8 @@
 // pinned here rather than inside the hook that reads the river.
 import { describe, it, expect } from 'vitest'
 import { deskButtonAction, deskDevice, watchedGroups } from './useDeskButtons'
-import { defaultDeskSettings } from '../types/show'
-import type { DeskSettings } from '../types/show'
+import { defaultDeskSettings } from '../../../shared/show'
+import type { DeskSettings } from '../../../shared/show'
 
 const desk = (overrides: Partial<DeskSettings> = {}): DeskSettings =>
   ({ ...defaultDeskSettings(), ...overrides })

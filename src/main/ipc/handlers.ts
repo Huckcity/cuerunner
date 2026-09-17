@@ -5,9 +5,8 @@ import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
-import type { MidiMessage } from '../midi/encode'
 import { NetworkClient } from '../network/NetworkClient'
-import type { NetworkRequest } from '../../renderer/src/types/network'
+import type { NetworkRequest } from '../../shared/network'
 import { audioEngine } from '../audio/AudioEngine'
 import {
   AudioRegion,
@@ -31,6 +30,45 @@ import {
   type AudioWaveformPayload
 } from '../../shared/audio'
 import { refusalFrom, type AudioResult } from '../../shared/audioResult'
+import { APP_CHANNELS } from '../../shared/ipc/app'
+import { LICENSE_CHANNELS } from '../../shared/ipc/license'
+import {
+  MIDI_CHANNELS,
+  type MidiSendPayload,
+  type MidiSendResult,
+  type MidiSendTcpPayload
+} from '../../shared/ipc/midi'
+import { NETWORK_CHANNELS } from '../../shared/ipc/network'
+import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../../shared/ipc/osc'
+import { PLAYBACK_CHANNELS } from '../../shared/ipc/playback'
+import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../../shared/ipc/redundancy'
+import {
+  SCRIPT_CHANNELS,
+  type ScriptReadDocumentPayload,
+  type ScriptReadFilePayload,
+  type ScriptReadFileResult,
+  type ScriptShellPayload,
+  type ScriptShellResult
+} from '../../shared/ipc/script'
+import { SHOW_CHANNELS, type ShowCommandPayload, type ShowCommandResult } from '../../shared/ipc/show'
+import {
+  WORKSPACE_CHANNELS,
+  type MergeInputs,
+  type OpenedWorkspace,
+  type RelinkedWorkspace,
+  type SavedWorkspace,
+  type WorkspaceAutosavePayload,
+  type WorkspaceCompareResult,
+  type WorkspaceExportPayload,
+  type WorkspaceExportResult,
+  type WorkspaceImportResult,
+  type WorkspaceMergePayload,
+  type WorkspaceMergeResult,
+  type WorkspaceRelinkPayload,
+  type WorkspaceRecovery,
+  type WorkspaceSavePayload
+} from '../../shared/ipc/workspace'
+import type { EventChannel } from '../../shared/ipc'
 import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { panicFromShowEvent } from '../safety/panicBindings'
@@ -48,8 +86,6 @@ import {
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { exportBundle, importBundle } from '../workspace/bundle'
-import type { ConflictPolicy } from '../../shared/showfileMerge'
-import type { MergeInputs } from '../workspace/WorkspaceManager'
 import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
@@ -58,11 +94,11 @@ import { drainMainErrors } from '../errors'
 import { loadScriptDocument } from '../script/document'
 import { createLicenseManager } from '../license/LicenseManager'
 import { trustedPublicKeys } from '../license/trustedKeys'
-import { defaultShowSettings } from '../../renderer/src/types/show'
-import { isPro } from '../../renderer/src/types/license'
-import type { ShowEvent, ShowSettings } from '../../renderer/src/types/show'
-import type { LicenseStatus } from '../../renderer/src/types/license'
-import type { Workspace } from '../../renderer/src/types/workspace'
+import { defaultShowSettings } from '../../shared/show'
+import { isPro } from '../../shared/license'
+import type { ScriptDocument, ShowEvent, ShowSettings } from '../../shared/show'
+import type { LicenseStatus } from '../../shared/license'
+import type { Workspace } from '../../shared/workspace'
 
 const midi = new MidiEngine(midiModuleLoader())
 const osc = new OscEngine()
@@ -124,12 +160,12 @@ const PRO_REQUIRED = 'Cuerunner Pro is required for the show services'
 // renderer was killed is the case that matters here: the show keeps running in this
 // process, so engine events keep arriving for a window that is not there, and sending to
 // it throws rather than being skipped.
-function broadcastToWindows(channel: string, payload: unknown): void {
+function broadcastToWindows(channel: EventChannel, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, channel, payload)
 }
 
 function broadcastShowEvents(events: ShowEvent[]): void {
-  broadcastToWindows('show:events', events)
+  broadcastToWindows(SHOW_CHANNELS.events, events)
 }
 
 // Engine events are batched over a frame: a panic stops every voice at once, and the
@@ -174,7 +210,7 @@ show.subscribe(events => {
  * bind a port on a machine that may not use one.
  */
 license.subscribe((status: LicenseStatus) => {
-  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, 'license:changed', status)
+  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, LICENSE_CHANNELS.changed, status)
   if (settingsReceived) void show.configure(lastShowSettings)
 })
 
@@ -226,7 +262,7 @@ export function registerIpcHandlers(): void {
       ? undefined
       : { startMs: payload.startMs, endMs: payload.endMs }
 
-  ipcMain.handle('audio:pickFile', async (event) => {
+  ipcMain.handle(AUDIO_CHANNELS.pickFile, async (event) => {
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Audio File',
       filters: [
@@ -299,50 +335,47 @@ export function registerIpcHandlers(): void {
   })
 
   // MIDI
-  ipcMain.handle('midi:listPorts', () => midi.listOutputPorts())
-  ipcMain.handle('midi:listInputPorts', () => midi.listInputPorts())
+  ipcMain.handle(MIDI_CHANNELS.listPorts, () => midi.listOutputPorts())
+  ipcMain.handle(MIDI_CHANNELS.listInputPorts, () => midi.listInputPorts())
 
   // Whether MIDI can work at all in this build. A machine without the optional native
   // module has to be able to say so, or a cue that reaches nothing looks like one that
   // worked.
-  ipcMain.handle('midi:status', () => midi.status())
+  ipcMain.handle(MIDI_CHANNELS.status, () => midi.status())
 
   // Both return what the engine did, so a cue that reached nothing is reported rather
   // than looking like every other successful firing.
-  ipcMain.handle('midi:send', async (_, cmd: { portName: string; messages: MidiMessage[] }) => {
-    return midi.send(cmd.portName, cmd.messages)
-  })
+  ipcMain.handle(MIDI_CHANNELS.send, async (_, cmd: MidiSendPayload): Promise<MidiSendResult> =>
+    midi.send(cmd.portName, cmd.messages))
 
   // A desk on the network — an SQ or an Avantis — where the same bytes go to a socket
   // rather than to a port this machine opened. A channel of its own because the
   // destination is an address, and the answer worth having is whether the desk took it.
-  ipcMain.handle('midi:sendTcp', async (_, cmd: { host: string; port: number; messages: MidiMessage[] }) => {
-    return midiTcp.send(cmd.host, cmd.port, cmd.messages)
-  })
+  ipcMain.handle(MIDI_CHANNELS.sendTcp, async (_, cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
+    midiTcp.send(cmd.host, cmd.port, cmd.messages))
 
   // OSC
-  ipcMain.handle('osc:send', async (_, cmd: { host: string; port: number; address: string; args: any[] }) => {
-    return osc.send(cmd.host, cmd.port, cmd.address, cmd.args)
-  })
+  ipcMain.handle(OSC_CHANNELS.send, async (_, cmd: OscSendPayload): Promise<OscSendResult> =>
+    osc.send(cmd.host, cmd.port, cmd.address, cmd.args))
 
   // Network cues. No license gate: network cues shipped in the free half of the app, and
   // this is the same cue making the same request from a process the page's origin does
   // not apply to. A console on the LAN does not send CORS headers, and the request has
   // to outlive a busy or reloaded window.
-  ipcMain.handle('network:request', async (_, request: NetworkRequest) => network.request(request))
-  ipcMain.handle('network:cancel', async (_, requestId: string) => network.cancel(requestId))
+  ipcMain.handle(NETWORK_CHANNELS.request, async (_, request: NetworkRequest) => network.request(request))
+  ipcMain.handle(NETWORK_CHANNELS.cancel, async (_, requestId: string) => network.cancel(requestId))
 
   // The renderer is alive and the show still has someone at the wheel. The watchdog
   // silences the engine when these stop arriving while anything is playing, so the
   // renderer sends one on its own timer whether or not a cue is running.
-  ipcMain.handle('playback:heartbeat', () => {
+  ipcMain.handle(PLAYBACK_CHANNELS.heartbeat, () => {
     playbackSafety.noteHeartbeat()
   })
 
   // Show services. The renderer never talks to a service directly: it configures the
   // set, reads a snapshot, and sends a command to one by id, so a service can be added
   // without a new IPC channel.
-  ipcMain.handle('show:snapshot', async () => {
+  ipcMain.handle(SHOW_CHANNELS.snapshot, async () => {
     // A locked app has services registered and none of them started, so this is the
     // truth: nothing is listening.
     return show.snapshot()
@@ -350,9 +383,9 @@ export function registerIpcHandlers(): void {
 
   // Failures the main process reported before the window was listening. The renderer
   // takes them on startup so a broken launch is explained rather than silent.
-  ipcMain.handle('app:drainMainErrors', () => drainMainErrors())
+  ipcMain.handle(APP_CHANNELS.drainMainErrors, () => drainMainErrors())
 
-  ipcMain.handle('show:configure', async (_, settings: ShowSettings) => {
+  ipcMain.handle(SHOW_CHANNELS.configure, async (_, settings: ShowSettings) => {
     lastShowSettings = settings
     settingsReceived = true
     // No licence check here any more: the host decides per service, because OSC and
@@ -361,22 +394,22 @@ export function registerIpcHandlers(): void {
     await show.configure(settings)
   })
 
-  ipcMain.handle('show:command', async (_, cmd: { service: string; action: string; payload?: unknown }) => {
-    return show.command(cmd.service, cmd.action, cmd.payload)
-  })
+  ipcMain.handle(SHOW_CHANNELS.command, async (_, cmd: ShowCommandPayload): Promise<ShowCommandResult> =>
+    show.command(cmd.service, cmd.action, cmd.payload))
 
-  ipcMain.handle('show:restart', async (_, service: string) => {
-    return show.restart(service)
-  })
+  ipcMain.handle(SHOW_CHANNELS.restart, async (_, service: string): Promise<ShowCommandResult> =>
+    show.restart(service))
 
   // Redundant playback. Which half of a pair this machine is, and where its partner is,
   // are the machine's own settings — the showfile travels between the two — so they are
   // read and written through their own pair of channels rather than through the
   // workspace's settings. Reading is open: a locked app should be able to say what it
   // would be, and the gate is on the change.
-  ipcMain.handle('redundancy:settings', () => machineRedundancy.current())
+  ipcMain.handle(REDUNDANCY_CHANNELS.settings, () => machineRedundancy.current())
 
-  ipcMain.handle('redundancy:configure', async (_, patch: Partial<RedundancySettings>) => {
+  ipcMain.handle(REDUNDANCY_CHANNELS.configure, async (
+    _, patch: Partial<RedundancySettings>
+  ): Promise<RedundancyConfigureResult> => {
     if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED, settings: machineRedundancy.current() }
     const settings = await machineRedundancy.update(patch)
     // The service reads this machine's settings when it starts, so a change is a restart
@@ -389,26 +422,23 @@ export function registerIpcHandlers(): void {
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.
-  ipcMain.handle('license:status', () => license.status())
-  ipcMain.handle('license:activate', (_, text: string) => license.activate(text))
-  ipcMain.handle('license:deactivate', () => license.deactivate())
+  ipcMain.handle(LICENSE_CHANNELS.status, () => license.status())
+  ipcMain.handle(LICENSE_CHANNELS.activate, (_, text: string) => license.activate(text))
+  ipcMain.handle(LICENSE_CHANNELS.deactivate, () => license.deactivate())
 
   // Script
   // include() resolves against the file that is doing the including, or the workspace
   // directory for the script body itself; the resolved path goes back so the file's own
   // includes can be resolved against it.
-  ipcMain.handle('script:readFile', async (
-    _,
-    relativePath: string,
-    workspacePath: string | null,
-    base?: string
-  ) => {
-    const from = base !== undefined
-      ? path.dirname(base)
-      : workspacePath !== null
-        ? path.dirname(workspacePath)
+  ipcMain.handle(SCRIPT_CHANNELS.readFile, async (_, payload: ScriptReadFilePayload): Promise<ScriptReadFileResult> => {
+    const from = payload.base !== undefined
+      ? path.dirname(payload.base)
+      : payload.workspacePath !== null
+        ? path.dirname(payload.workspacePath)
         : process.cwd()
-    const resolved = path.isAbsolute(relativePath) ? relativePath : path.resolve(from, relativePath)
+    const resolved = path.isAbsolute(payload.relativePath)
+      ? payload.relativePath
+      : path.resolve(from, payload.relativePath)
     return { code: await readFile(resolved, 'utf-8'), path: resolved }
   })
 
@@ -417,15 +447,15 @@ export function registerIpcHandlers(): void {
   // window's process to 3 GB and stopped the interface answering. The panel itself is
   // Pro, so a locked app is refused here as well as in the window. Script *cues* read
   // their includes through `script:readFile` above, which stays free.
-  ipcMain.handle('script:readDocument', async (_, filePath: string, workspacePath: string | null) => {
+  ipcMain.handle(SCRIPT_CHANNELS.readDocument, async (_, payload: ScriptReadDocumentPayload): Promise<ScriptDocument> => {
     if (!isPro(license.status())) {
       return { ok: false, error: 'The script panel is part of Cuerunner Pro.' }
     }
-    return loadScriptDocument(filePath, workspacePath)
+    return loadScriptDocument(payload.filePath, payload.workspacePath)
   })
 
   // The script panel reads the document the same way a script cue reads its includes.
-  ipcMain.handle('script:pickFile', async (event) => {
+  ipcMain.handle(SCRIPT_CHANNELS.pickFile, async (event) => {
     if (!isPro(license.status())) return null
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Script',
@@ -439,12 +469,9 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(
-    'script:shell',
-    async (
-      _,
-      command: string,
-      options: { timeout?: number; cwd?: string; env?: Record<string, string> }
-    ): Promise<{ stdout: string; stderr: string; code: number | null; signal: string | null }> => {
+    SCRIPT_CHANNELS.shell,
+    async (_event, payload: ScriptShellPayload): Promise<ScriptShellResult> => {
+      const options = payload.options ?? {}
       const timeout = options.timeout ?? 10000
       // If cwd is a file path (e.g. workspace file), resolve to its directory
       const cwd = options.cwd
@@ -452,28 +479,29 @@ export function registerIpcHandlers(): void {
         : process.cwd()
       const env = { ...process.env, ...options.env }
 
-      return new Promise(resolve => {
-        const child = exec(command, { cwd, env, timeout, killSignal: 'SIGTERM' })
+      const { promise, resolve } = Promise.withResolvers<ScriptShellResult>()
+      const child = exec(payload.command, { cwd, env, timeout, killSignal: 'SIGTERM' })
 
-        let stdout = ''
-        let stderr = ''
+      let stdout = ''
+      let stderr = ''
 
-        child.stdout?.on('data', (data: string) => {
-          stdout += data
-        })
-
-        child.stderr?.on('data', (data: string) => {
-          stderr += data
-        })
-
-        child.on('close', (code: number | null, signal: string | null) => {
-          resolve({ stdout, stderr, code, signal })
-        })
-
-        child.on('error', (err: Error & { code?: string }) => {
-          resolve({ stdout, stderr: err.message, code: 1, signal: null })
-        })
+      child.stdout?.on('data', (data: string) => {
+        stdout += data
       })
+
+      child.stderr?.on('data', (data: string) => {
+        stderr += data
+      })
+
+      child.on('close', (code: number | null, signal: string | null) => {
+        resolve({ stdout, stderr, code, signal })
+      })
+
+      child.on('error', (err: Error & { code?: string }) => {
+        resolve({ stdout, stderr: err.message, code: 1, signal: null })
+      })
+
+      return promise
     }
   )
 
@@ -481,34 +509,28 @@ export function registerIpcHandlers(): void {
   // points at, because a workspace that came from another machine has paths that only
   // mean something there; the result carries what is missing so the window can offer to
   // find it rather than firing a cue at a file that is not there.
-  ipcMain.handle('workspace:open', async (event) => {
-    return openWorkspace(getWin(event))
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.open, async (event): Promise<OpenedWorkspace | null> =>
+    openWorkspace(getWin(event)))
 
-  ipcMain.handle('workspace:openPath', async (_, filePath: string) => {
-    return openWorkspaceFromPath(filePath)
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.openPath, async (_, filePath: string): Promise<OpenedWorkspace> =>
+    openWorkspaceFromPath(filePath))
 
-  ipcMain.handle('workspace:openDemo', async () => {
-    return openDemoWorkspace()
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.openDemo, async (): Promise<Workspace> => openDemoWorkspace())
 
-  ipcMain.handle('workspace:relink', async (
-    event,
-    workspace: Workspace,
-    workspacePath: string | null,
-    cueId: string
-  ) => {
-    return relinkWorkspaceMedia(getWin(event), workspace, workspacePath, cueId)
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.relink, async (
+    event, payload: WorkspaceRelinkPayload
+  ): Promise<RelinkedWorkspace> =>
+    relinkWorkspaceMedia(getWin(event), payload.workspace, payload.workspacePath, payload.cueId))
 
-  ipcMain.handle('workspace:save', async (event, workspace: Workspace, existingPath: string | null) => {
-    return saveWorkspace(getWin(event), workspace, existingPath)
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.save, async (
+    event, payload: WorkspaceSavePayload
+  ): Promise<SavedWorkspace | null> =>
+    saveWorkspace(getWin(event), payload.workspace, payload.existingPath))
 
-  ipcMain.handle('workspace:saveAs', async (event, workspace: Workspace) => {
-    return saveWorkspaceAs(getWin(event), workspace)
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.saveAs, async (
+    event, workspace: Workspace
+  ): Promise<SavedWorkspace | null> =>
+    saveWorkspaceAs(getWin(event), workspace))
 
   // Reading a show's history — and comparing two of them — is the Pro half of the
   // showfile work. The file records its history either way: the data belongs to the show,
@@ -516,15 +538,15 @@ export function registerIpcHandlers(): void {
   // A bundle is a show and its media in one file, for handover. It is a Pro surface like
   // the rest of the showfile work; the show it carries is the operator's either way.
   ipcMain.handle(
-    'workspace:exportBundle',
-    async (event, workspace: Workspace, workspacePath: string | null) => {
+    WORKSPACE_CHANNELS.exportBundle,
+    async (event, payload: WorkspaceExportPayload): Promise<WorkspaceExportResult> => {
       if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
-      const exported = await exportBundle(getWin(event), workspace, workspacePath)
+      const exported = await exportBundle(getWin(event), payload.workspace, payload.workspacePath)
       return { ok: true, exported }
     }
   )
 
-  ipcMain.handle('workspace:importBundle', async (event) => {
+  ipcMain.handle(WORKSPACE_CHANNELS.importBundle, async (event): Promise<WorkspaceImportResult> => {
     if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     const imported = await importBundle(getWin(event))
     return { ok: true, imported }
@@ -534,63 +556,53 @@ export function registerIpcHandlers(): void {
   // merge read are kept for a second attempt with the other side's choices: the report is
   // where an operator learns there was a conflict, and re-running it should not mean
   // finding the same two files again.
-  let lastMerge: { theirs: string; ancestor: string } | null = null
+  let lastMerge: MergeInputs | null = null
   ipcMain.handle(
-    'workspace:merge',
-    async (
-      event,
-      workspace: Workspace,
-      workspacePath: string | null,
-      options: { policy?: ConflictPolicy; again?: boolean } = {}
-    ) => {
+    WORKSPACE_CHANNELS.merge,
+    async (event, payload: WorkspaceMergePayload): Promise<WorkspaceMergeResult> => {
       if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
-      const policy: ConflictPolicy = options.policy ?? 'ours'
-      if (options.again === true && !lastMerge) {
+      const policy = payload.options?.policy ?? 'ours'
+      const again = payload.options?.again === true
+      if (again && lastMerge === null) {
         return { ok: false, error: 'there is no merge to try again' }
       }
       const merged = await mergeShow(
         getWin(event),
-        workspace,
-        workspacePath,
+        payload.workspace,
+        payload.workspacePath,
         policy,
-        options.again === true ? (lastMerge as MergeInputs) : undefined
+        // A second attempt reads the same two files; without `again` the dialogs ask.
+        again ? (lastMerge ?? undefined) : undefined
       )
       if (merged) lastMerge = merged.inputs
       return { ok: true, merged }
     }
   )
 
-  ipcMain.handle('workspace:compare', async (event, workspace: Workspace) => {
+  ipcMain.handle(WORKSPACE_CHANNELS.compare, async (
+    event, workspace: Workspace
+  ): Promise<WorkspaceCompareResult> => {
     if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
     const comparison = await compareWorkspace(getWin(event), workspace)
     return { ok: true, comparison }
   })
 
-  ipcMain.handle('workspace:recent', async () => {
-    return getRecentFiles()
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.recent, async () => getRecentFiles())
 
   // Autosave goes to the recovery snapshot, never over the operator's file. The cue the
   // session is standing on goes with it, so a recovered show hands back the place as
   // well as the cues.
-  ipcMain.handle(
-    'workspace:autosave',
-    async (_, workspace: Workspace, sourcePath: string | null, selectedCueId: string | null = null) => {
-      await writeRecovery(workspace, sourcePath, selectedCueId)
-    }
-  )
-
-  ipcMain.handle('workspace:recovery', async () => {
-    // Recovery resolves the media in the snapshot the same way opening a file does; its
-    // directory is what a relative path in the snapshot is relative to.
-    return openRecovery()
+  ipcMain.handle(WORKSPACE_CHANNELS.autosave, async (_, payload: WorkspaceAutosavePayload) => {
+    await writeRecovery(payload.workspace, payload.sourcePath, payload.selectedCueId)
   })
 
-  ipcMain.handle('workspace:clearRecovery', async () => {
-    await clearRecovery()
-  })
+  // Recovery resolves the media in the snapshot the same way opening a file does; its
+  // directory is what a relative path in the snapshot is relative to.
+  ipcMain.handle(WORKSPACE_CHANNELS.recovery, async (): Promise<WorkspaceRecovery | null> => openRecovery())
 
-  ipcMain.handle('workspace:setTitle', async (event, title: string) => {
+  ipcMain.handle(WORKSPACE_CHANNELS.clearRecovery, async () => clearRecovery())
+
+  ipcMain.handle(WORKSPACE_CHANNELS.setTitle, async (event, title: string) => {
     // The window can be gone by the time this arrives: the kill tests stop the renderer
     // while the main process keeps running the show, and the title update that was in
     // flight then has nowhere to land. Doing nothing is the correct behaviour, and it is
@@ -599,7 +611,7 @@ export function registerIpcHandlers(): void {
     if (liveWindow(win)) win.setTitle(title)
   })
 
-  ipcMain.handle('workspace:confirmClose', async (event, workspaceName: string) => {
+  ipcMain.handle(WORKSPACE_CHANNELS.confirmClose, async (event, workspaceName: string): Promise<0 | 1 | 2> => {
     const result = await dialog.showMessageBox(getWin(event), {
       type: 'question',
       buttons: ['Save', "Don't Save", 'Cancel'],
@@ -608,6 +620,8 @@ export function registerIpcHandlers(): void {
       message: `Do you want to save changes to "${workspaceName}"?`,
       detail: 'Your changes will be lost if you don\'t save them.'
     })
-    return result.response // 0=save, 1=don't save, 2=cancel
+    // 0=save, 1=don't save, 2=cancel. The dialog has no fourth button, and the bridge's
+    // declared answer is the three it does have, so anything else reads as Save.
+    return result.response === 1 ? 1 : result.response === 2 ? 2 : 0
   })
 }

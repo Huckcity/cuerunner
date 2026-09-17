@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
-import { isPro } from '../types/license'
+import { isPro } from '../../../shared/license'
 
 export function useCueEngine() {
   const setRunning = useStore(s => s.setRunning)

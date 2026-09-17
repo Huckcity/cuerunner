@@ -14,7 +14,7 @@ import {
   defaultRfThresholds,
   defaultShowSettings,
   demoChannelId
-} from '../../renderer/src/types/show'
+} from '../../shared/show'
 import type {
   DeviceEvent,
   DeviceState,
@@ -26,7 +26,7 @@ import type {
   TelemetryChannel,
   TelemetryDocument,
   TelemetrySource
-} from '../../renderer/src/types/show'
+} from '../../shared/show'
 
 const BASE = Date.parse('2026-01-01T00:00:00.000Z')
 

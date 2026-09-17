@@ -19,18 +19,18 @@ import {
   type ShowHistoryEntry,
   type WorkspaceDiff
 } from '../../shared/showfile'
-import type { Workspace } from '../../renderer/src/types/workspace'
-import type { AudioCue, Cue } from '../../renderer/src/types/cue'
-import { CUE_TYPES } from '../../renderer/src/types/cue'
+import type { Workspace } from '../../shared/workspace'
+import type { AudioCue, Cue } from '../../shared/cue'
+import { CUE_TYPES } from '../../shared/cue'
 import {
   CHANNEL_START_COUNT,
   defaultShowSettings,
   normalizeShowSettings
-} from '../../renderer/src/types/show'
+} from '../../shared/show'
 import {
   DEFAULT_TRIGGER_GUARD,
   normalizeTriggerGuard
-} from '../../renderer/src/types/workspace'
+} from '../../shared/workspace'
 
 /**
  * The largest workspace file this app opens: 64 MiB of JSON is already far past a

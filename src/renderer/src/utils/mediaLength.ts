@@ -13,7 +13,7 @@
 // the file states no length. Both are facts about the file, not about the operator's
 // show, so neither belongs in the workspace file.
 
-import type { AudioCue, Cue } from '../types/cue'
+import type { AudioCue, Cue } from '../../../shared/cue'
 import type { MissingMedia } from '../../../shared/media'
 
 /** A final answer about one cue's file. Absent means nobody has asked yet. */

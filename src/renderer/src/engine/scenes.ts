@@ -2,7 +2,7 @@ import { useStore } from '../store'
 import { describeDeskMessage } from '../utils/desk'
 import { sendDeskMessage } from './deskSend'
 import { sceneChanges, type DeskChange } from '../utils/scenes'
-import { ALL_CLOSED_SCENE_ID } from '../types/show'
+import { ALL_CLOSED_SCENE_ID } from '../../../shared/show'
 
 export interface RecallResult {
   /** The scene that was recalled, or null when everything was closed. */

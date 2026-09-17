@@ -12,8 +12,8 @@ import {
   DEMO_SOURCE_ID,
   defaultRfThresholds,
   defaultShowSettings
-} from '../../types/show'
-import type { DeviceState, RfPack, Performer, RfPlot, RfThresholds, ShowAlert } from '../../types/show'
+} from '../../../../shared/show'
+import type { DeviceState, RfPack, Performer, RfPlot, RfThresholds, ShowAlert } from '../../../../shared/show'
 
 const AT = 1_700_000_000_000
 const THRESHOLDS = defaultRfThresholds()

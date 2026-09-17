@@ -5,8 +5,8 @@
 import { describe, it, expect } from 'vitest'
 import { HOLD_LIMIT_MS, InputGuard, firingIdentity, noteKey, refirePolicy } from './inputGuard'
 import { encodeMsc } from '../utils/msc'
-import type { Cue, MidiMessageKind } from '../types/cue'
-import type { ShowEvent } from '../types/show'
+import type { Cue, MidiMessageKind } from '../../../shared/cue'
+import type { ShowEvent } from '../../../shared/show'
 
 const guardAt = (windowMs: number) => new InputGuard(() => windowMs)
 
