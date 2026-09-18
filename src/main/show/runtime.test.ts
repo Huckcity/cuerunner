@@ -156,6 +156,27 @@ describe('createShowRuntime', () => {
     runtime.close()
   })
 
+  it('raises a fault the show itself owes, not a service, on the one alarm path', async () => {
+    // A device the engine lost belongs to no service, and its alarm still has one home:
+    // this surface, which is what main calls when the engine reports a fault. What the
+    // operator sees is the engine's own words — the same line the log carries — on the
+    // strip and the chip a service's alarm reaches.
+    vi.useFakeTimers()
+    const runtime = createShowRuntime([new FakeService()])
+    const batches: ShowEvent[][] = []
+    runtime.subscribe(batch => batches.push(batch))
+
+    runtime.alert('critical', 'audio', 'audio device stopped unexpectedly')
+    vi.advanceTimersByTime(100)
+
+    expect(runtime.snapshot().alerts).toEqual([
+      expect.objectContaining({ level: 'critical', source: 'audio', message: 'audio device stopped unexpectedly' })
+    ])
+    expect(batches.flat().flatMap(event => event.kind === 'alert' ? [event.alert.message] : []))
+      .toEqual(['audio device stopped unexpectedly'])
+    runtime.close()
+  })
+
   it('routes a command to the service that owns it, and stops the services on close', async () => {
     vi.useFakeTimers()
     const commands: string[] = []

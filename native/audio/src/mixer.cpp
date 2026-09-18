@@ -419,21 +419,31 @@ void Mixer::cancelVoice(Voice& voice, int64_t frame, int& canceled) {
   }
 }
 
-void Mixer::panic(double atFrame, double fadeFrames) {
+void Mixer::panic(double atFrame, double fadeFrames, EndReason soundingReason) {
   const int64_t frame = static_cast<int64_t>(atFrame);
   for (Voice& voice : voices_) {
     if (!voice.active) continue;
-    if (!voice.started && voice.startFrame > frame) {
+    if (!voice.started) {
+      // It never made a sound: a start scheduled ahead of the panic, or one whose frame
+      // has arrived with no block rendered since. Either way there is nothing in it the
+      // caller's reason can be about, so it is cancelled whatever the reason was.
       finishVoice(voice, frame, EndReason::Cancelled);
       continue;
     }
-    stopVoice(voice, frame, fadeFrames, EndReason::Stopped);
+    stopVoice(voice, frame, fadeFrames, soundingReason);
   }
   Event event;
   event.kind = Event::Panic;
   event.fadeMs = fadeFrames;
   event.atMs = static_cast<double>(frame) * 1000.0 / static_cast<double>(sampleRate_);
   emit(event);
+}
+
+void Mixer::cancelUnstartedVoices() {
+  for (Voice& voice : voices_) {
+    if (!voice.active || voice.started) continue;
+    finishVoice(voice, clockFrames_, EndReason::Cancelled);
+  }
 }
 
 void Mixer::apply(const Command& cmd) {
@@ -588,7 +598,8 @@ void Mixer::apply(const Command& cmd) {
     }
     case Command::Panic: {
       ackVoices = activeVoiceCount();  // every voice this panic silences
-      panic(atOrNow(cmd.whenMs, sampleRate_, now), static_cast<double>(frameForMs(cmd.fadeMs, sampleRate_)));
+      panic(atOrNow(cmd.whenMs, sampleRate_, now), static_cast<double>(frameForMs(cmd.fadeMs, sampleRate_)),
+            cmd.reason);
       applied = true;
       break;
     }

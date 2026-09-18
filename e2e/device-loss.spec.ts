@@ -10,7 +10,8 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { closeApp, launchApp } from './helpers'
 import type { PlaybackDevHarness } from '../src/main/safety/devHarness'
-import type { AudioEngineEvent, AudioErrorEvent } from '../src/shared/audio'
+import type { AudioEndedEvent, AudioEngineEvent, AudioErrorEvent } from '../src/shared/audio'
+import type { ShowAlert } from '../src/shared/show'
 
 let app: ElectronApplication
 let page: Page
@@ -55,6 +56,11 @@ test('a device that goes away mid-show silences the show, says why, and the show
   await playWalkInForever()
   await expect.poll(engineVoices, { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
 
+  // What the engine had said before the loss, so the lines below are read against the
+  // loss's own report rather than against everything main has kept: this device is not
+  // the only thing that can end a voice, and it is not the only thing that can alarm.
+  const endsBeforeLoss = (await engineEvents()).filter((event) => event.type === 'ended').length
+
   // The device is gone.
   await app.evaluate(async () => {
     await globalThis.__cuerunnerDevHarness?.simulateDeviceLoss()
@@ -78,10 +84,50 @@ test('a device that goes away mid-show silences the show, says why, and the show
   // problem rather than as something the cue did wrong.
   expect(deviceError?.cueId).toBeNull()
 
-  // The session log carries it too, phrased as the engine speaking.
+  // The voice the device took ended with a reason of its own, and that is what releases
+  // the row: `device-lost`, with the cue's end recorded against the loss rather than a
+  // stop nobody asked for.
+  const lossEnds = async (): Promise<string[]> =>
+    (await engineEvents())
+      .filter((event): event is AudioEndedEvent => event.type === 'ended')
+      .slice(endsBeforeLoss)
+      .map((event) => event.reason)
+  await expect
+    .poll(lossEnds, { timeout: 10_000, message: 'no device-lost end for the cue the device took' })
+    .toContain('device-lost')
+  expect(await lossEnds()).not.toContain('stopped')
+
+  // Nothing reads as playing once the loss is reported: the transport is idle again, and
+  // the cue's own record carries the fault.
+  await expect(page.locator('.running-badge')).toHaveText('idle')
+
+  // The session log carries it too, phrased as the engine speaking — and as the cue's own
+  // failure, which is the line the release is recorded from.
   await page.locator('.btn-log').click()
   await expect(page.locator('.log-panel')).toContainText('audio engine:')
   await expect(page.locator('.log-panel')).toContainText('stopped unexpectedly')
+  await expect(page.locator('.log-panel')).toContainText('audio device lost')
+
+  // The loss raises an alarm where the operator already looks for alarms: the engine's
+  // own fault line, on the monitor's strip and in the transport's chip, raised in main
+  // where the engine events are consumed rather than invented by the window. Standing
+  // alarms are shared with every other service, so this asks that the loss's is among
+  // them.
+  const alertSnapshot = await page.evaluate<ShowAlert[]>(
+    'window.cuerunner.show.snapshot().then(snapshot => snapshot.alerts)'
+  )
+  expect(alertSnapshot).toContainEqual(
+    expect.objectContaining({ level: 'critical', source: 'audio', message: expect.stringMatching(/stopped unexpectedly/) })
+  )
+  await page.locator('.btn-monitor').click()
+  const strip = page.locator('.monitor-alert', { hasText: 'stopped unexpectedly' })
+  await expect(strip).toBeVisible()
+  await expect(page.locator('.alert-chip')).toContainText('stopped unexpectedly')
+
+  // And it is dismissed the way every other alarm is.
+  await strip.locator('.monitor-alert-dismiss').click()
+  await expect(page.locator('.alert-chip', { hasText: 'stopped unexpectedly' })).toHaveCount(0)
+  await expect(page.locator('.monitor-alert', { hasText: 'stopped unexpectedly' })).toHaveCount(0)
 
   // And it stays on screen while the condition lasts, where a rig is checked.
   await page.locator('.toolbar-brand').click()
@@ -93,7 +139,9 @@ test('a device that goes away mid-show silences the show, says why, and the show
   await expect(page.locator('.settings-warning')).toContainText('stopped unexpectedly', { timeout: 15_000 })
   await page.keyboard.press('Escape')
 
-  // The show is not over: the same cue plays again on the same engine.
+  // The show is not over: the same cue plays again on the same engine, which is what the
+  // release bought — a GO on the row the device took is a new firing, not a refused
+  // repeat of a cue that is still somehow making a sound.
   await playWalkInForever()
   try {
     await expect.poll(engineVoices, { timeout: 15_000 }).toBeGreaterThanOrEqual(1)

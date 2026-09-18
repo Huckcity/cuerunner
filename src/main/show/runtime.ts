@@ -8,7 +8,7 @@ import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
 import { RedundancyService } from '../services/RedundancyService'
 import type { RedundancySettings } from '../../shared/redundancy'
-import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../shared/show'
+import type { AlertLevel, ShowEvent, ShowSettings, ShowSnapshot } from '../../shared/show'
 
 /**
  * What the services need from the rest of the app that is not the show. The redundancy
@@ -43,6 +43,13 @@ export interface ShowRuntime {
   command(serviceId: string, action: string, payload?: unknown): Promise<CommandResult>
   restart(serviceId: string): Promise<CommandResult>
   subscribe(listener: (events: ShowEvent[]) => void): () => void
+  /**
+   * Raises an alarm the show's own machinery owes the operator rather than a service —
+   * a device the engine lost — through the one alarm path that exists: the monitor's
+   * strip, the transport chip, and the session log. `source` names what raised it, the
+   * way a service's id does.
+   */
+  alert(level: AlertLevel, source: string, message: string): void
   close(): void
 }
 
@@ -104,6 +111,10 @@ export function createShowRuntime(
     restart: (serviceId) => host.restart(serviceId),
 
     subscribe: (listener) => bus.subscribe(listener),
+
+    alert(level: AlertLevel, source: string, message: string): void {
+      bus.alert(level, source, message)
+    },
 
     close(): void {
       // Stopping the services first lets them publish their last events; the bus then

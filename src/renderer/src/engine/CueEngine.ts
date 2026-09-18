@@ -1602,16 +1602,15 @@ export class CueEngine {
     }
     if (event.type === 'state') return
     if (event.type === 'error' && event.cueId === null) {
-      // An engine-wide fault (device loss, engine crash) has no cue to blame.
+      // An engine-wide fault (device loss, engine crash) has no cue to blame, and this
+      // line is the operator's: the engine's own words, and nothing more. The release is
+      // not its to take. A loss ends every voice it lost `device-lost`, so the run is
+      // closed by the `ended` line that names that cue and records `audio device lost`,
+      // and the panic the engine queues behind those lines clears what is left — the
+      // post-wait runs and any handover they had scheduled. Taking the release here as
+      // well would cancel every run before its own fault line could be acted on, which
+      // is exactly the per-cue handling the loss exists to reach.
       this.log({ level: 'error', message: `audio engine: ${event.message}` })
-      // A device fault is the engine already letting go of the sound: it panics what it
-      // was playing the moment the device goes. Its per-voice `ended` lines follow a
-      // couple of seconds later, because it waits for the audio thread to acknowledge
-      // that panic — and until they arrive every row would still read as playing, with
-      // the next GO on one of them refused as a repeat of a cue that is no longer making
-      // a sound. So the release the engine's `panic` line brings is taken here, with the
-      // fault, rather than when the silence finally gets reported.
-      if (event.code === 'device') this.handleExternalPanic()
       return
     }
 

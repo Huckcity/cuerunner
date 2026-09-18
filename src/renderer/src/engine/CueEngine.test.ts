@@ -1298,17 +1298,18 @@ describe('CueEngine — engine failures are reported', () => {
     expect(setRunning).not.toHaveBeenCalled()
   })
 
-  it('releases the show when the device goes, without waiting for the silence report', () => {
-    // The engine panics what it was playing the moment the device goes, but its per-voice
-    // `ended` lines only follow once the audio thread has acknowledged that panic — a
-    // couple of seconds, on a device that is no longer answering. Until then the rows
-    // would read as playing and the next GO on one of them would be refused as a repeat.
+  it('names the fault and leaves the release to the lines that follow it', async () => {
+    // The engine's device error is the operator's line: what happened, in the engine's
+    // words. It is not the release. Releasing here as well would cancel every run before
+    // its own `device-lost` line could be acted on, and the cue the device took would be
+    // recorded as nothing at all.
     const cue = makeAudio({ id: 'a1', duration: 5000 })
-    const { runner, clearAllRunning, appendLog } = setup([cue])
+    const { runner, setLastRun, clearAllRunning, appendLog } = setup([cue])
 
     runner.go()
-    vi.advanceTimersByTime(200)
+    await vi.advanceTimersByTimeAsync(0)
     clearAllRunning.mockClear()
+    appendLog.mockClear()
 
     emitEngineEvent({
       type: 'error', cueId: null, runId: null, at: Date.now(), code: 'device',
@@ -1318,7 +1319,71 @@ describe('CueEngine — engine failures are reported', () => {
     expect(appendLog).toHaveBeenCalledWith([
       expect.objectContaining({ level: 'error', message: 'audio engine: audio device stopped unexpectedly' })
     ])
+    expect(clearAllRunning).not.toHaveBeenCalled()
+    expect(setLastRun).not.toHaveBeenCalled()
+  })
+
+  it('records the cue the device took, and the panic clears what its end left behind', async () => {
+    // The voice the device took ends `device-lost`: that line is the cue's record — the
+    // fault in the engine's terms, on the cue that was making the sound — and the run
+    // goes on its way out. The panic the engine queues behind it then takes the post-wait
+    // run and the handover it had scheduled, so nothing carries the show into a dead
+    // device.
+    const cue = makeAudio({ id: 'a1', duration: 5000, postWait: 3000 })
+    const { runner, setRunning, setLastRun, clearAllRunning, appendLog } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+    setRunning.mockClear()
+    appendLog.mockClear()
+
+    emitEngineEvent({
+      type: 'ended', cueId: 'a1', runId: 'run-a1', at: 0, reason: 'device-lost',
+      loopsCompleted: 0, sessionId: 'test-session'
+    })
+
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: 'audio device lost'
+    }))
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: 'audio device lost' })
+    ])
+    expect(setRunning).toHaveBeenCalledWith('a1', expect.objectContaining({ state: 'post-wait' }))
+
+    emitEngineEvent({ type: 'panic', at: 0, fadeMs: 0, sessionId: 'test-session' })
+
     expect(clearAllRunning).toHaveBeenCalled()
+  })
+
+  it('lets the show go on after a loss: the row is clear and the next GO fires', async () => {
+    const cue = makeAudio({ id: 'a1', duration: 5000, postWait: 3000 })
+    const { runner, setLastRun } = setup([cue])
+
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The whole loss, in the order the engine reports it: the fault line, the end of the
+    // voice it lost, and the panic that clears what is left.
+    emitEngineEvent({
+      type: 'error', cueId: null, runId: null, at: 0, code: 'device',
+      message: 'audio device stopped unexpectedly', sessionId: 'test-session'
+    })
+    emitEngineEvent({
+      type: 'ended', cueId: 'a1', runId: 'run-a1', at: 0, reason: 'device-lost',
+      loopsCompleted: 0, sessionId: 'test-session'
+    })
+    emitEngineEvent({ type: 'panic', at: 0, fadeMs: 0, sessionId: 'test-session' })
+
+    engine.start.mockClear()
+    runner.resetGuards()
+    runner.go()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // A GO on the cue the device took is a new firing rather than a repeat of a cue that
+    // is no longer making a sound — even with three seconds of post-wait still owed.
+    expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.anything())
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({ error: 'audio device lost' }))
   })
 
   it('leaves a running show alone when the fault is not the device', () => {

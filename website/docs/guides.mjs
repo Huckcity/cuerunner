@@ -518,6 +518,16 @@ export const GUIDES = [
         than a show that quietly does the wrong thing.
       </p>
       <p>
+        If the sound device goes away mid-show — an interface unplugged, a driver that stops
+        calling, another program taking exclusive access — the engine stops playing rather
+        than pouring the show into a device that is no longer there. Every cue it was
+        playing is released at that moment and records <em>audio device lost</em> under
+        <strong>Last run</strong>, and what happened is on screen in the engine's own words:
+        the monitor's alarm strip, the alarm chip in the transport bar, and the log. The
+        show is not over — the cues it was playing were released, and Settings → Audio is
+        where the engine's own readout says what it made of the device.
+      </p>
+      <p>
         A cue that failed also says so in its own inspector, under <strong>Last run</strong>:
         when it ran, how long it took, and what went wrong. If a cue "does nothing", that
         is the first place to look, then the log.
