@@ -6,7 +6,7 @@
 // behaviour under test is what the app does with paths that exist and paths that do not.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, truncateSync, writeFileSync
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, truncateSync, writeFileSync
 } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -52,6 +52,13 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
+
+/** A cue as the store leaves it after a retarget: the new path, and no route pair. */
+function retargetedCue(cue: Cue, filePath: string): Cue {
+  const next = { ...cue, filePath } as Cue
+  delete (next as unknown as Record<string, unknown>).media
+  return next
+}
 
 function audioCue(id: string, filePath: string): AudioCue {
   return {
@@ -189,8 +196,12 @@ describe('resolveWorkspaceMedia', () => {
 
     expect(resolved.missingMedia).toEqual([])
     expect((resolved.workspace.cues[0] as AudioCue).filePath).toBe(media)
-    // The save-time shape must not leak into the running session.
-    expect((resolved.workspace.cues[0] as unknown as Record<string, unknown>).media).toBeUndefined()
+    // The route the file was saved with travels with the cue: it is what a later save
+    // writes back, so a show whose folder moved keeps the route it had.
+    expect((resolved.workspace.cues[0] as unknown as Record<string, unknown>).media).toEqual({
+      path: 'media/walk-in.wav',
+      originalPath: join(dir, 'old-machine', 'media', 'walk-in.wav')
+    })
     expect(resolved.workspace.name).toBe('Tour Show')
   })
 
@@ -284,8 +295,11 @@ describe('saving and reopening a show folder', () => {
     const outsideMedia = (outsideCue as unknown as Record<string, unknown>).media as Record<string, string>
     expect(insideMedia).toEqual({ path: join('media', 'walk-in.wav'), originalPath: inside })
     expect(outsideMedia).toEqual({ path: outside, originalPath: outside })
-    // The runtime path stays in the file too: an older reader sees what it always saw.
-    expect(insideCue.filePath).toBe(inside)
+    // The saved `filePath` is the route, not the path this machine resolved: a cue's
+    // runtime path is never what a save writes (AD-10). A file outside the folder keeps
+    // the absolute route it lives at.
+    expect(insideCue.filePath).toBe(join('media', 'walk-in.wav'))
+    expect(outsideCue.filePath).toBe(outside)
     // Saving must not mutate the workspace the renderer is holding.
     expect((workspace.cues[0] as unknown as Record<string, unknown>).media).toBeUndefined()
 
@@ -298,6 +312,140 @@ describe('saving and reopening a show folder', () => {
     const [movedInside, movedOutside] = reopened.workspace.cues as AudioCue[]
     expect(movedInside.filePath).toBe(join(moved, 'media', 'walk-in.wav'))
     expect(movedOutside.filePath).toBe(outside)
+  })
+
+  it('keeps the stored relative route when the folder moved and its media did not', async () => {
+    const machineA = join(dir, 'machine-a')
+    const media = write(join(machineA, 'media'), 'walk-in.wav')
+    const savedInA = join(machineA, 'Tour Show.cuerunner')
+    await saveWorkspace({} as never, workspaceWith([audioCue('a1', media)]), savedInA)
+
+    // Only the showfile arrives on the other machine, and the one it was saved on is
+    // gone: nothing at the stored route and nothing at the absolute it was last seen at.
+    const machineB = join(dir, 'machine-b')
+    mkdirSync(machineB, { recursive: true })
+    const arrived = join(machineB, 'Tour Show.cuerunner')
+    copyFileSync(savedInA, arrived)
+    rmSync(machineA, { recursive: true, force: true })
+
+    const opened = await openWorkspaceFromPath(arrived)
+    expect(opened.missingMedia).toEqual([
+      { cueId: 'a1', path: join('media', 'walk-in.wav'), originalPath: media }
+    ])
+
+    await saveWorkspace({} as never, opened.workspace, arrived)
+
+    const onDisk = JSON.parse(readFileSync(arrived, 'utf-8')) as Workspace
+    const cue = onDisk.cues[0] as unknown as { filePath: string; media: Record<string, string> }
+    // The route the show already had, in both fields, and the last known absolute kept
+    // beside it — never the path this machine happened to try.
+    expect(cue.media).toEqual({ path: join('media', 'walk-in.wav'), originalPath: media })
+    expect(cue.filePath).toBe(join('media', 'walk-in.wav'))
+    // Nothing about the route changed, so the save wrote no history entry for it.
+    expect((onDisk as unknown as Record<string, unknown>).history).toBeUndefined()
+
+    // And the next open reports the same file missing, at the same route.
+    const reopened = await openWorkspaceFromPath(arrived)
+    expect(reopened.missingMedia).toEqual([
+      { cueId: 'a1', path: join('media', 'walk-in.wav'), originalPath: media }
+    ])
+
+    // The media arrives with the folder later: the route the show kept finds it.
+    const restored = write(join(machineB, 'media'), 'walk-in.wav')
+    const found = await openWorkspaceFromPath(arrived)
+    expect(found.missingMedia).toEqual([])
+    expect((found.workspace.cues[0] as AudioCue).filePath).toBe(restored)
+  })
+
+  it('leaves a file that stayed at the old absolute out of the route', async () => {
+    const machineA = join(dir, 'machine-a')
+    const media = write(join(machineA, 'media'), 'walk-in.wav')
+    const savedInA = join(machineA, 'Tour Show.cuerunner')
+    await saveWorkspace({} as never, workspaceWith([audioCue('a1', media)]), savedInA)
+
+    // A copy of the show is opened elsewhere while the machine it came from — and the
+    // file on it — are still there.
+    const machineB = join(dir, 'machine-b')
+    mkdirSync(machineB, { recursive: true })
+    const arrived = join(machineB, 'Tour Show.cuerunner')
+    copyFileSync(savedInA, arrived)
+
+    const opened = await openWorkspaceFromPath(arrived)
+    expect(opened.missingMedia).toEqual([])
+    // It plays from where the file stayed.
+    expect((opened.workspace.cues[0] as AudioCue).filePath).toBe(media)
+
+    await saveWorkspace({} as never, opened.workspace, arrived)
+
+    const onDisk = JSON.parse(readFileSync(arrived, 'utf-8')) as Workspace
+    const cue = onDisk.cues[0] as unknown as { filePath: string; media: Record<string, string> }
+    // Where this session found the file is not promoted into the show: the route stays
+    // relative and the absolute remains only the pair's other half.
+    expect(cue.media).toEqual({ path: join('media', 'walk-in.wav'), originalPath: media })
+    expect(cue.filePath).toBe(join('media', 'walk-in.wav'))
+
+    const reopened = await openWorkspaceFromPath(arrived)
+    expect(reopened.missingMedia).toEqual([])
+    expect((reopened.workspace.cues[0] as AudioCue).filePath).toBe(media)
+  })
+
+  it('writes no media for a blank audio cue, and leaves its path empty', async () => {
+    const showDir = join(dir, 'show')
+    const media = write(join(showDir, 'media'), 'walk-in.wav')
+    const saved = join(showDir, 'Tour Show.cuerunner')
+    // The second blank cue is what a hand-edited file leaves behind: no path, but the
+    // route record was never cleared.
+    const stalePair = {
+      ...audioCue('blank-pair', ''),
+      media: { path: join('media', 'old.wav'), originalPath: join(dir, 'old', 'media', 'old.wav') }
+    } as unknown as Cue
+    await saveWorkspace(
+      {} as never,
+      workspaceWith([audioCue('blank', ''), stalePair, audioCue('a1', media)]),
+      saved
+    )
+
+    const onDisk = JSON.parse(readFileSync(saved, 'utf-8')) as Workspace
+    const [blank, pairBlank, filled] = onDisk.cues as unknown as Array<Record<string, unknown>>
+    expect('media' in blank).toBe(false)
+    expect(blank.filePath).toBe('')
+    // A cue with no file has no route to record: the pair goes with the file it named.
+    expect('media' in pairBlank).toBe(false)
+    expect(pairBlank.filePath).toBe('')
+    // The cue beside it is written as usual: the blank branch is a cue waiting for a
+    // file, not a hole in the walk.
+    expect(filled.media).toEqual({ path: join('media', 'walk-in.wav'), originalPath: media })
+  })
+
+  it('writes both halves for a file whose pair was only half recorded', async () => {
+    const showDir = join(dir, 'show')
+    const saved = join(showDir, 'Tour Show.cuerunner')
+    // A file that names the route beside the folder but never recorded the absolute the
+    // file was last seen at: half a pair, which is not a pair.
+    mkdirSync(showDir, { recursive: true })
+    writeFileSync(saved, JSON.stringify({
+      ...workspaceWith([
+        {
+          ...audioCue('a1', join('media', 'walk-in.wav')),
+          media: { path: join('media', 'walk-in.wav') }
+        } as unknown as Cue
+      ])
+    }, null, 2))
+
+    const opened = await openWorkspaceFromPath(saved)
+    expect(opened.missingMedia).toHaveLength(1)
+
+    await saveWorkspace({} as never, opened.workspace, saved)
+
+    const onDisk = JSON.parse(readFileSync(saved, 'utf-8')) as Workspace
+    const cue = onDisk.cues[0] as unknown as { filePath: string; media: Record<string, string> }
+    // The route is kept, and the half that was missing is written as the shape declares
+    // it — a string — rather than half a record being copied back.
+    expect(cue.filePath).toBe(join('media', 'walk-in.wav'))
+    expect(cue.media).toEqual({
+      path: join('media', 'walk-in.wav'),
+      originalPath: join(showDir, 'media', 'walk-in.wav')
+    })
   })
 
   it('keeps the last known location of a missing file across another save', async () => {
@@ -319,7 +467,10 @@ describe('saving and reopening a show folder', () => {
     expect(second.missingMedia).toEqual([
       { cueId: 'a1', path: join('old-machine', 'media', 'walk-in.wav'), originalPath: gone }
     ])
-    expect((second.workspace.cues[0] as AudioCue).filePath).toBe(gone)
+    // The route, not the path this machine tried: the absolute it was last seen at is
+    // the pair's other half and is not promoted into `filePath`.
+    expect((second.workspace.cues[0] as AudioCue).filePath)
+      .toBe(join('old-machine', 'media', 'walk-in.wav'))
   })
 
   it('reports missing media in a recovered snapshot', async () => {
@@ -470,6 +621,95 @@ describe('relinkWorkspaceMedia', () => {
     expect((result.workspace.cues[1] as AudioCue).filePath).toBe(join(newFolder, 'b.wav'))
     // Nothing about the cues besides their file changed.
     expect((result.workspace.cues[0] as AudioCue).name).toBe('Cue a')
+  })
+
+  it('writes the picked file’s route into the show, so the next save keeps the pick', async () => {
+    const showDir = join(dir, 'show')
+    const media = write(join(showDir, 'media'), 'walk-in.wav')
+    const saved = join(showDir, 'Tour Show.cuerunner')
+    await saveWorkspace({} as never, workspaceWith([audioCue('a1', media)]), saved)
+
+    // The folder moves without its media, and the operator finds the file elsewhere.
+    const movedShow = join(dir, 'moved')
+    mkdirSync(movedShow, { recursive: true })
+    const arrived = join(movedShow, 'Tour Show.cuerunner')
+    copyFileSync(saved, arrived)
+    // The folder it came from — and the media on it — is gone.
+    rmSync(showDir, { recursive: true, force: true })
+    const picked = write(join(dir, 'found-again'), 'walk-in.wav')
+
+    const opened = await openWorkspaceFromPath(arrived)
+    expect(opened.missingMedia).toHaveLength(1)
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [picked] })
+    const relinked = await relinkWorkspaceMedia({} as never, opened.workspace, arrived, 'a1')
+
+    // The pick replaces the cue's stored route as well as its runtime path, which is why
+    // re-resolving reports nothing missing.
+    expect(relinked.missingMedia).toEqual([])
+    expect((relinked.workspace.cues[0] as unknown as Record<string, unknown>).media)
+      .toEqual({ path: picked, originalPath: picked })
+
+    // This save is handed a cue that was read before a retarget let its pair go — what a
+    // window opened on a recovered snapshot from an earlier build holds — so it still
+    // carries the route the file it no longer plays was saved with: the pick, not that
+    // route, is what the show has to keep.
+    const patched = {
+      ...opened.workspace,
+      cues: opened.workspace.cues.map(cue => ({ ...cue, filePath: picked } as Cue))
+    }
+    await saveWorkspace({} as never, patched, arrived)
+
+    const onDisk = JSON.parse(readFileSync(arrived, 'utf-8')) as Workspace
+    const cue = onDisk.cues[0] as unknown as { filePath: string; media: Record<string, string> }
+    expect(cue.media).toEqual({ path: picked, originalPath: picked })
+    expect(cue.filePath).toBe(picked)
+  })
+
+  it('writes the picked file’s route relative to the folder when the pick is inside it', async () => {
+    const showDir = join(dir, 'machine-a')
+    const media = write(join(showDir, 'media'), 'walk-in.wav')
+    const saved = join(showDir, 'Tour Show.cuerunner')
+    await saveWorkspace({} as never, workspaceWith([audioCue('a1', media)]), saved)
+
+    // The folder moves without its media, and the operator picks a file that lives in
+    // the new folder but at a route the show never stored.
+    const movedShow = join(dir, 'machine-b')
+    mkdirSync(movedShow, { recursive: true })
+    const arrived = join(movedShow, 'Tour Show.cuerunner')
+    copyFileSync(saved, arrived)
+    rmSync(showDir, { recursive: true, force: true })
+    const picked = write(join(movedShow, 'audio'), 'walk-in.wav')
+
+    const opened = await openWorkspaceFromPath(arrived)
+    expect(opened.missingMedia).toHaveLength(1)
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [picked] })
+    const relinked = await relinkWorkspaceMedia({} as never, opened.workspace, arrived, 'a1')
+
+    // The pair names the route the pick sits at, relative to the show's own folder.
+    expect(relinked.missingMedia).toEqual([])
+    expect((relinked.workspace.cues[0] as unknown as Record<string, unknown>).media)
+      .toEqual({ path: join('audio', 'walk-in.wav'), originalPath: picked })
+    expect((relinked.workspace.cues[0] as AudioCue).filePath).toBe(picked)
+
+    // The window hands the save the cue as the store leaves it: the runtime path it
+    // patched on, and no pair — a retarget lets the pair go with the file it named. The
+    // next save writes the picked file's route, not the one it replaced and not an
+    // absolute.
+    const patched = {
+      ...opened.workspace,
+      cues: opened.workspace.cues.map(cue => retargetedCue(cue, picked))
+    }
+    await saveWorkspace({} as never, patched, arrived)
+
+    const onDisk = JSON.parse(readFileSync(arrived, 'utf-8')) as Workspace
+    const cue = onDisk.cues[0] as unknown as { filePath: string; media: Record<string, string> }
+    expect(cue.media).toEqual({ path: join('audio', 'walk-in.wav'), originalPath: picked })
+    expect(cue.filePath).toBe(join('audio', 'walk-in.wav'))
+
+    // And the show finds it where the pick left it.
+    const reopened = await openWorkspaceFromPath(arrived)
+    expect(reopened.missingMedia).toEqual([])
+    expect((reopened.workspace.cues[0] as AudioCue).filePath).toBe(picked)
   })
 
   it('hands back the unchanged workspace and misses when the operator cancels', async () => {
