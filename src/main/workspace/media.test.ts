@@ -23,6 +23,7 @@ import {
   saveWorkspace,
   storedMediaPath
 } from './WorkspaceManager'
+import { Refusal } from '../ipc/refusal'
 import type { MissingMedia } from '../../shared/media'
 import type { AudioCue, Cue } from '../../shared/cue'
 import type { Workspace } from '../../shared/workspace'
@@ -360,7 +361,12 @@ describe('saving and reopening a show folder', () => {
     truncateSync(huge, 64 * 1024 * 1024 + 1)
     vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [huge] })
 
-    await expect(openWorkspace({} as never)).rejects.toThrow('larger than this app will open')
+    // A marked refusal, so the `workspace:open` handler can answer it as a value; the
+    // channel-level pin is src/main/ipc/refusal.test.ts.
+    const refused = await openWorkspace({} as never).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(Refusal)
+    expect((refused as Error).message).toBe('that workspace file is larger than this app will open')
   })
 })
 

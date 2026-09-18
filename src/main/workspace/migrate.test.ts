@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { StopCue, AudioCue, ScriptCue } from '../../shared/cue'
 import type { Workspace } from '../../shared/workspace'
 import { CHANNEL_START_COUNT } from '../../shared/show'
+import { Refusal } from '../ipc/refusal'
 import { migrateWorkspace } from './WorkspaceManager'
 
 // Hoisted above the import above, so WorkspaceManager never loads the real Electron.
@@ -25,11 +26,14 @@ describe('migrateWorkspace', () => {
   it('refuses a cue type this build does not know rather than losing the window to it', () => {
     // A file from a newer build, or a hand edit: the row renders its icon from the type,
     // and an unknown one takes the whole window down. Dropping the cue quietly would be
-    // worse — a show saved back without it is a show with a cue missing.
-    expect(() => migrateWorkspace(workspaceWith([
+    // worse — a show saved back without it is a show with a cue missing. It is a marked
+    // refusal rather than a plain error, so the load channels answer it as a value.
+    const fromANewerBuild = workspaceWith([
       { id: 'w1', type: 'wait', duration: 1000 },
       { id: 'v1', type: 'video', filePath: 'clip.mp4' }
-    ]))).toThrow('does not know (video)')
+    ])
+    expect(() => migrateWorkspace(fromANewerBuild)).toThrow(Refusal)
+    expect(() => migrateWorkspace(fromANewerBuild)).toThrow('does not know (video)')
   })
 
   it('accepts every cue type this build does know', () => {

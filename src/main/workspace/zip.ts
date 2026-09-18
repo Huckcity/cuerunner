@@ -26,6 +26,7 @@ import { dirname, resolve, sep } from 'path'
 import { Transform } from 'stream'
 import { pipeline } from 'stream/promises'
 import { crc32, createInflateRaw } from 'zlib'
+import { asRefusal, Refusal } from '../ipc/refusal'
 
 const LOCAL_SIGNATURE = 0x04034b50
 const CENTRAL_SIGNATURE = 0x02014b50
@@ -78,10 +79,10 @@ export interface ZipSource {
  */
 function safeName(name: string): string {
   if (name === '' || name.startsWith('/') || name.includes('\\') || /^[A-Za-z]:/.test(name)) {
-    throw new Error(`"${name}" is not a path an archive may hold`)
+    throw new Refusal(`"${name}" is not a path an archive may hold`)
   }
   if (name.split('/').includes('..')) {
-    throw new Error(`"${name}" is not a path an archive may hold`)
+    throw new Refusal(`"${name}" is not a path an archive may hold`)
   }
   return name
 }
@@ -95,7 +96,7 @@ export function entryDestination(directory: string, name: string): string {
   const root = resolve(directory)
   const destination = resolve(root, safeName(name))
   if (destination !== root && !destination.startsWith(root + sep)) {
-    throw new Error(`"${name}" would be written outside the folder it came from`)
+    throw new Refusal(`"${name}" would be written outside the folder it came from`)
   }
   return destination
 }
@@ -161,7 +162,7 @@ async function prepare(sources: ZipSource[]): Promise<Prepared[]> {
     else throw new Error(`"${source.name}" has nothing in it`)
     total += size
     if (total > MAX_ARCHIVE_BYTES) {
-      throw new Error(
+      throw new Refusal(
         `this show comes to more than ${Math.round(MAX_ARCHIVE_BYTES / 1e9)} GB, which is more `
         + 'than a bundle this app writes can hold'
       )
@@ -289,7 +290,15 @@ async function writeEntries(filePath: string, entries: Prepared[]): Promise<void
  * media and nobody wants all of it in memory at once.
  */
 export async function readZip(filePath: string): Promise<ZipEntry[]> {
-  const { size } = await stat(filePath)
+  // The file being gone or unreadable is an ordinary state of what the operator picked —
+  // it may have moved between the picker and here — so it refuses like the file format
+  // checks below, rather than faulting.
+  let size: number
+  try {
+    size = (await stat(filePath)).size
+  } catch (error) {
+    throw asRefusal(error)
+  }
   const tailSize = Math.min(size, END_SIZE + MAX_COMMENT)
   const tailStart = size - tailSize
   const tail = await read(filePath, tailStart, tailSize)
@@ -304,21 +313,21 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
     end = at
     break
   }
-  if (end < 0) throw new Error('that file is not a zip archive')
+  if (end < 0) throw new Refusal('that file is not a zip archive')
 
   const disk = tail.readUInt16LE(end + 4)
   const directoryDisk = tail.readUInt16LE(end + 6)
   const count = tail.readUInt16LE(end + 10)
   const directorySize = tail.readUInt32LE(end + 12)
   const directoryOffset = tail.readUInt32LE(end + 16)
-  if (disk !== 0 || directoryDisk !== 0) throw new Error('that archive is spread over several files')
+  if (disk !== 0 || directoryDisk !== 0) throw new Refusal('that archive is spread over several files')
   if (count === 0xffff || directorySize === ZIP64_MARKER || directoryOffset === ZIP64_MARKER) {
-    throw new Error('that archive is too large to open here')
+    throw new Refusal('that archive is too large to open here')
   }
   // Declared sizes are the archive's claim about itself, and a hostile one lies: bound
   // them against the file before allocating or reading on their word.
   if (directorySize > size || directoryOffset > size || directoryOffset + directorySize > size) {
-    throw new Error('that archive’s directory runs past the end of the file')
+    throw new Refusal('that archive’s directory runs past the end of the file')
   }
 
   const directory = await read(filePath, directoryOffset, directorySize)
@@ -326,7 +335,7 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
   let at = 0
   for (let index = 0; index < count; index++) {
     if (at + 46 > directory.length || directory.readUInt32LE(at) !== CENTRAL_SIGNATURE) {
-      throw new Error('that archive’s directory is damaged')
+      throw new Refusal('that archive’s directory is damaged')
     }
     const flags = directory.readUInt16LE(at + 8)
     const method = directory.readUInt16LE(at + 10)
@@ -340,14 +349,14 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
     const name = directory.subarray(at + 46, at + 46 + nameLength).toString('utf8')
     at += 46 + nameLength + extraLength + commentLength
 
-    if ((flags & 0x1) !== 0) throw new Error('that archive is encrypted')
+    if ((flags & 0x1) !== 0) throw new Refusal('that archive is encrypted')
     if (method !== STORED && method !== DEFLATED) {
-      throw new Error(`that archive holds an entry packed in a way this app does not read (${method})`)
+      throw new Refusal(`that archive holds an entry packed in a way this app does not read (${method})`)
     }
     // The entry's own sizes are claims too: refuse an absurd declared size before it
     // is acted on (the showfile is read whole; media is streamed entry by entry).
     if (size_ > MAX_ARCHIVE_BYTES || compressedSize > size) {
-      throw new Error(`"${name}" claims a size this app will not read`)
+      throw new Refusal(`"${name}" claims a size this app will not read`)
     }
     if (name.endsWith('/')) continue      // A directory entry: nothing to extract.
     safeName(name)
@@ -356,11 +365,11 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
     // extra field may be a different length from the directory's copy.
     const local = await read(filePath, offset, 30)
     if (local.length < 30 || local.readUInt32LE(0) !== LOCAL_SIGNATURE) {
-      throw new Error(`"${name}" does not start where the archive says it does`)
+      throw new Refusal(`"${name}" does not start where the archive says it does`)
     }
     const dataOffset = offset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28)
     if (dataOffset + compressedSize > size) {
-      throw new Error(`"${name}" runs past the end of the archive`)
+      throw new Refusal(`"${name}" runs past the end of the archive`)
     }
     entries.push({ name, offset: dataOffset, compressedSize, size: size_, crc, method })
   }
@@ -376,10 +385,16 @@ export async function readZip(filePath: string): Promise<ZipEntry[]> {
  */
 export async function readZipEntry(filePath: string, entry: ZipEntry, outputLimit = MAX_ARCHIVE_BYTES): Promise<Buffer> {
   // The entry's sizes are the archive's claims: bound them against the file before
-  // allocating or inflating on their word.
-  const { size } = await stat(filePath)
+  // allocating or inflating on their word. The file itself may be gone by now, which is
+  // the same ordinary state `readZip` refuses.
+  let size: number
+  try {
+    size = (await stat(filePath)).size
+  } catch (error) {
+    throw asRefusal(error)
+  }
   if (entry.compressedSize > size || entry.size > MAX_ARCHIVE_BYTES) {
-    throw new Error(`"${entry.name}" claims a size this app will not read`)
+    throw new Refusal(`"${entry.name}" claims a size this app will not read`)
   }
   const raw = await read(filePath, entry.offset, entry.compressedSize)
   const data = entry.method === DEFLATED ? await inflate(raw, outputLimit) : raw
@@ -417,7 +432,7 @@ export async function extractZipEntry(filePath: string, entry: ZipEntry, into: s
     transform(chunk: Buffer, _encoding, callback) {
       written += chunk.length
       if (written > entry.size) {
-        callback(new Error(`"${entry.name}" unpacks to more than the archive says`))
+        callback(new Refusal(`"${entry.name}" unpacks to more than the archive says`))
         return
       }
       callback(null, chunk)
@@ -440,15 +455,22 @@ export async function extractZipEntry(filePath: string, entry: ZipEntry, into: s
 
 function checked(entry: ZipEntry, crc: number, size: number): void {
   if (size !== entry.size) {
-    throw new Error(`"${entry.name}" came out a different size than the archive says`)
+    throw new Refusal(`"${entry.name}" came out a different size than the archive says`)
   }
   if (crc !== entry.crc) {
-    throw new Error(`"${entry.name}" does not match its checksum — the archive is damaged`)
+    throw new Refusal(`"${entry.name}" does not match its checksum — the archive is damaged`)
   }
 }
 
 async function read(filePath: string, start: number, length: number): Promise<Buffer> {
-  const handle = await open(filePath, 'r')
+  // Nothing else in this file opens the archive: a file that cannot be opened now is the
+  // ordinary state `readZip` refuses, not a fault of the reader.
+  let handle: FileHandle
+  try {
+    handle = await open(filePath, 'r')
+  } catch (error) {
+    throw asRefusal(error)
+  }
   try {
     const buffer = Buffer.alloc(length)
     let read = 0
@@ -475,14 +497,14 @@ async function inflate(raw: Buffer, outputLimit: number): Promise<Buffer> {
       total += chunk.length
       if (total > outputLimit) {
         capped = true
-        stream.destroy(new Error('that archive entry unpacks to more than this app will read'))
+        stream.destroy(new Refusal('that archive entry unpacks to more than this app will read'))
         return
       }
       pieces.push(chunk)
     })
     stream.on('end', () => resolve(Buffer.concat(pieces, total)))
     stream.on('error', (error: Error) => {
-      reject(capped ? error : new Error('that archive entry could not be unpacked'))
+      reject(capped ? error : new Refusal('that archive entry could not be unpacked'))
     })
     stream.end(raw)
   })

@@ -1,6 +1,7 @@
 import { app, dialog, BrowserWindow } from 'electron'
 import { readFile, mkdir, stat, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
+import { asRefusal, Refusal } from '../ipc/refusal'
 import { hostname, userInfo } from 'os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import {
@@ -333,7 +334,7 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
     cue => !(CUE_TYPES as readonly string[]).includes(cue.type as string)
   )
   if (unknown !== undefined) {
-    throw new Error(
+    throw new Refusal(
       `that show has a cue this version of WinsLab does not know (${String(unknown.type)})` +
       ' — it was probably saved by a newer version'
     )
@@ -584,11 +585,27 @@ export function serialiseWorkspace(
 export async function readWorkspaceFile(filePath: string): Promise<Workspace> {
   // A hostile .cuerunner is a zip bomb of the plain kind: cap the read before the parse,
   // rather than inflating attacker-declared JSON into main-process memory.
-  const { size } = await stat(filePath)
-  if (size > MAX_WORKSPACE_BYTES) {
-    throw new Error('that workspace file is larger than this app will open')
+  //
+  // The file being unreadable, oversize or not JSON is an ordinary state of a file the
+  // operator picked, so each is a refusal — a marked error the channels answer as a
+  // value — while the migration below keeps its own refusals and its bugs keep throwing.
+  let text: string
+  try {
+    const { size } = await stat(filePath)
+    if (size > MAX_WORKSPACE_BYTES) {
+      throw new Refusal('that workspace file is larger than this app will open')
+    }
+    text = await readFile(filePath, 'utf-8')
+  } catch (error) {
+    throw asRefusal(error)
   }
-  return migrateWorkspace(JSON.parse(await readFile(filePath, 'utf-8')) as Workspace)
+  let parsed: Workspace
+  try {
+    parsed = JSON.parse(text) as Workspace
+  } catch (error) {
+    throw asRefusal(error)
+  }
+  return migrateWorkspace(parsed)
 }
 
 /** Who a save is attributed to: the operating system's own answer, not the app's. */
@@ -813,15 +830,10 @@ export async function openWorkspace(
   if (result.canceled || !result.filePaths[0]) return null
 
   const filePath = result.filePaths[0]
-  // The same cap the rest of the load paths use: File→Open is the way most shows arrive,
-  // and a 500 MB one would spike main-process memory by several GB before anything could
-  // say no.
-  const { size } = await stat(filePath)
-  if (size > MAX_WORKSPACE_BYTES) {
-    throw new Error('that workspace file is larger than this app will open')
-  }
-  const raw = await readFile(filePath, 'utf-8')
-  const workspace: Workspace = migrateWorkspace(JSON.parse(raw))
+  // The same read, cap and migration every other load path uses: File→Open is the way
+  // most shows arrive, and a 500 MB one must be refused here too — as the ordinary state
+  // it is, so the channel can answer it instead of logging a stack.
+  const workspace = await readWorkspaceFile(filePath)
   await addToRecent(filePath)
   return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath) }
 }

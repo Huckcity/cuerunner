@@ -22,6 +22,7 @@ import { mkdir, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
 import type { ZipEntry, ZipSource } from './zip'
 import { extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
+import { asRefusal, Refusal } from '../ipc/refusal'
 import { migrateWorkspace, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../shared/cue'
@@ -52,8 +53,13 @@ export interface ImportedBundle {
   missingMedia: MissingMedia[]
 }
 
-/** Raised when a bundle would be unpacked over files that are already there. */
-export class BundleCollision extends Error {
+/**
+ * Raised when a bundle would be unpacked over files that are already there. It is an
+ * ordinary state of the folder the operator picked, so it is a refusal: the import
+ * channel answers its sentence as a value, while the class still carries the colliding
+ * files for the callers in this process that read them.
+ */
+export class BundleCollision extends Refusal {
   constructor(readonly files: string[]) {
     super(`${files.length} ${files.length === 1 ? 'file is' : 'files are'} already there`)
     this.name = 'BundleCollision'
@@ -208,16 +214,24 @@ export interface ReadBundle {
 export async function readBundle(bundlePath: string): Promise<ReadBundle> {
   const entries = await readZip(bundlePath)
   const show = entries.find(entry => entry.name === SHOW_ENTRY)
-  if (!show) throw new Error('that file is not a Cuerunner bundle: it carries no show')
+  if (!show) throw new Refusal('that file is not a Cuerunner bundle: it carries no show')
   // The showfile is read whole into memory: refuse an absurd declared size before
   // the allocation, and cap the inflated bytes — a small deflated entry with a huge
   // output would otherwise OOM main before the size check runs.
   if (show.size > MAX_BUNDLE_SHOW_BYTES) {
-    throw new Error('that bundle’s show is larger than this app will read')
+    throw new Refusal('that bundle’s show is larger than this app will read')
   }
   const bytes = await readZipEntry(bundlePath, show, MAX_BUNDLE_SHOW_BYTES)
+  // A show the bundle carries but cannot parse is a damaged bundle — the same ordinary
+  // state as the archive checks above, so it refuses the same way.
+  let parsed: Workspace
+  try {
+    parsed = JSON.parse(bytes.toString('utf8')) as Workspace
+  } catch (error) {
+    throw asRefusal(error)
+  }
   return {
-    workspace: migrateWorkspace(JSON.parse(bytes.toString('utf8')) as Workspace),
+    workspace: migrateWorkspace(parsed),
     show: bytes,
     media: entries.filter(entry => entry.name.startsWith(`${MEDIA_DIR}/`))
   }

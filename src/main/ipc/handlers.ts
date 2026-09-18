@@ -54,7 +54,6 @@ import { SHOW_CHANNELS, type ShowCommandPayload, type ShowCommandResult } from '
 import {
   WORKSPACE_CHANNELS,
   type MergeInputs,
-  type OpenedWorkspace,
   type RelinkedWorkspace,
   type SavedWorkspace,
   type WorkspaceAutosavePayload,
@@ -64,11 +63,14 @@ import {
   type WorkspaceImportResult,
   type WorkspaceMergePayload,
   type WorkspaceMergeResult,
+  type WorkspaceOpenPathResult,
+  type WorkspaceOpenResult,
+  type WorkspaceRecoveryResult,
   type WorkspaceRelinkPayload,
-  type WorkspaceRecovery,
   type WorkspaceSavePayload
 } from '../../shared/ipc/workspace'
 import type { EventChannel } from '../../shared/ipc'
+import { asRefusal, refusalValue } from './refusal'
 import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { deviceFaultAlert } from '../safety/engineFaults'
@@ -437,18 +439,26 @@ export function registerIpcHandlers(): void {
   // Script
   // include() resolves against the file that is doing the including, or the workspace
   // directory for the script body itself; the resolved path goes back so the file's own
-  // includes can be resolved against it.
-  ipcMain.handle(SCRIPT_CHANNELS.readFile, async (_, payload: ScriptReadFilePayload): Promise<ScriptReadFileResult> => {
-    const from = payload.base !== undefined
-      ? path.dirname(payload.base)
-      : payload.workspacePath !== null
-        ? path.dirname(payload.workspacePath)
-        : process.cwd()
-    const resolved = path.isAbsolute(payload.relativePath)
-      ? payload.relativePath
-      : path.resolve(from, payload.relativePath)
-    return { code: await readFile(resolved, 'utf-8'), path: resolved }
-  })
+  // includes can be resolved against it. A file that is not there (or cannot be read) is
+  // an ordinary state of the show, so this answers with the declared refusal arm rather
+  // than rejecting — the script sees the same sentence, minus the transport wrapper a
+  // rejection carried, and main logs no stack for a path the operator typed.
+  ipcMain.handle(SCRIPT_CHANNELS.readFile, (_, payload: ScriptReadFilePayload): Promise<ScriptReadFileResult> =>
+    refusalValue(async () => {
+      const from = payload.base !== undefined
+        ? path.dirname(payload.base)
+        : payload.workspacePath !== null
+          ? path.dirname(payload.workspacePath)
+          : process.cwd()
+      const resolved = path.isAbsolute(payload.relativePath)
+        ? payload.relativePath
+        : path.resolve(from, payload.relativePath)
+      try {
+        return { ok: true as const, code: await readFile(resolved, 'utf-8'), path: resolved }
+      } catch (error) {
+        throw asRefusal(error)
+      }
+    }))
 
   // The script panel's reader. It refuses what it cannot show — a binary file, or a
   // document far larger than any script — because rendering one is what took the
@@ -517,11 +527,16 @@ export function registerIpcHandlers(): void {
   // points at, because a workspace that came from another machine has paths that only
   // mean something there; the result carries what is missing so the window can offer to
   // find it rather than firing a cue at a file that is not there.
-  ipcMain.handle(WORKSPACE_CHANNELS.open, async (event): Promise<OpenedWorkspace | null> =>
-    openWorkspace(getWin(event)))
+  // The handlers that declare a refusal arm — open, openPath, recovery, and the
+  // export/import/merge/compare block below — answer it for an ordinary reason: a file
+  // this build cannot draw, an archive that arrived damaged, a folder that already holds
+  // these files. Only a genuine fault rejects. The rest of the namespace keeps the shapes
+  // it had: a cancel is a null inside an `ok` arm, and a save's fs failure is a fault.
+  ipcMain.handle(WORKSPACE_CHANNELS.open, (event): Promise<WorkspaceOpenResult> =>
+    refusalValue(async () => ({ ok: true as const, opened: await openWorkspace(getWin(event)) })))
 
-  ipcMain.handle(WORKSPACE_CHANNELS.openPath, async (_, filePath: string): Promise<OpenedWorkspace> =>
-    openWorkspaceFromPath(filePath))
+  ipcMain.handle(WORKSPACE_CHANNELS.openPath, (_, filePath: string): Promise<WorkspaceOpenPathResult> =>
+    refusalValue(async () => ({ ok: true as const, opened: await openWorkspaceFromPath(filePath) })))
 
   ipcMain.handle(WORKSPACE_CHANNELS.openDemo, async (): Promise<Workspace> => openDemoWorkspace())
 
@@ -547,18 +562,18 @@ export function registerIpcHandlers(): void {
   // the rest of the showfile work; the show it carries is the operator's either way.
   ipcMain.handle(
     WORKSPACE_CHANNELS.exportBundle,
-    async (event, payload: WorkspaceExportPayload): Promise<WorkspaceExportResult> => {
-      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
-      const exported = await exportBundle(getWin(event), payload.workspace, payload.workspacePath)
-      return { ok: true, exported }
-    }
+    (event, payload: WorkspaceExportPayload): Promise<WorkspaceExportResult> =>
+      refusalValue(async (): Promise<WorkspaceExportResult> => {
+        if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+        return { ok: true, exported: await exportBundle(getWin(event), payload.workspace, payload.workspacePath) }
+      })
   )
 
-  ipcMain.handle(WORKSPACE_CHANNELS.importBundle, async (event): Promise<WorkspaceImportResult> => {
-    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
-    const imported = await importBundle(getWin(event))
-    return { ok: true, imported }
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.importBundle, (event): Promise<WorkspaceImportResult> =>
+    refusalValue(async (): Promise<WorkspaceImportResult> => {
+      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+      return { ok: true, imported: await importBundle(getWin(event)) }
+    }))
 
   // Two files merge into a third, written where the operator says. The files the last
   // merge read are kept for a second attempt with the other side's choices: the report is
@@ -567,33 +582,32 @@ export function registerIpcHandlers(): void {
   let lastMerge: MergeInputs | null = null
   ipcMain.handle(
     WORKSPACE_CHANNELS.merge,
-    async (event, payload: WorkspaceMergePayload): Promise<WorkspaceMergeResult> => {
-      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
-      const policy = payload.options?.policy ?? 'ours'
-      const again = payload.options?.again === true
-      if (again && lastMerge === null) {
-        return { ok: false, error: 'there is no merge to try again' }
-      }
-      const merged = await mergeShow(
-        getWin(event),
-        payload.workspace,
-        payload.workspacePath,
-        policy,
-        // A second attempt reads the same two files; without `again` the dialogs ask.
-        again ? (lastMerge ?? undefined) : undefined
-      )
-      if (merged) lastMerge = merged.inputs
-      return { ok: true, merged }
-    }
+    (event, payload: WorkspaceMergePayload): Promise<WorkspaceMergeResult> =>
+      refusalValue(async (): Promise<WorkspaceMergeResult> => {
+        if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+        const policy = payload.options?.policy ?? 'ours'
+        const again = payload.options?.again === true
+        if (again && lastMerge === null) {
+          return { ok: false, error: 'there is no merge to try again' }
+        }
+        const merged = await mergeShow(
+          getWin(event),
+          payload.workspace,
+          payload.workspacePath,
+          policy,
+          // A second attempt reads the same two files; without `again` the dialogs ask.
+          again ? (lastMerge ?? undefined) : undefined
+        )
+        if (merged) lastMerge = merged.inputs
+        return { ok: true, merged }
+      })
   )
 
-  ipcMain.handle(WORKSPACE_CHANNELS.compare, async (
-    event, workspace: Workspace
-  ): Promise<WorkspaceCompareResult> => {
-    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
-    const comparison = await compareWorkspace(getWin(event), workspace)
-    return { ok: true, comparison }
-  })
+  ipcMain.handle(WORKSPACE_CHANNELS.compare, (event, workspace: Workspace): Promise<WorkspaceCompareResult> =>
+    refusalValue(async (): Promise<WorkspaceCompareResult> => {
+      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
+      return { ok: true, comparison: await compareWorkspace(getWin(event), workspace) }
+    }))
 
   ipcMain.handle(WORKSPACE_CHANNELS.recent, async () => getRecentFiles())
 
@@ -606,7 +620,8 @@ export function registerIpcHandlers(): void {
 
   // Recovery resolves the media in the snapshot the same way opening a file does; its
   // directory is what a relative path in the snapshot is relative to.
-  ipcMain.handle(WORKSPACE_CHANNELS.recovery, async (): Promise<WorkspaceRecovery | null> => openRecovery())
+  ipcMain.handle(WORKSPACE_CHANNELS.recovery, (): Promise<WorkspaceRecoveryResult> =>
+    refusalValue(async () => ({ ok: true as const, recovery: await openRecovery() })))
 
   ipcMain.handle(WORKSPACE_CHANNELS.clearRecovery, async () => clearRecovery())
 

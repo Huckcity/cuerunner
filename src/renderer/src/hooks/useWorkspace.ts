@@ -227,8 +227,12 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
 export async function openMergedShow(filePath: string): Promise<void> {
   if (!await guardDirty()) return
   try {
-    const opened = await window.cuerunner.workspace.openPath(filePath)
-    loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
+    const answer = await window.cuerunner.workspace.openPath(filePath)
+    if (!answer.ok) {
+      reportFailure(`Could not open ${filePath}: ${answer.error}`)
+      return
+    }
+    loadIntoStore(answer.opened.workspace, answer.opened.path, answer.opened.missingMedia)
     useStore.getState().setMergeReport(null)
   } catch (e) {
     reportFailure(`Could not open ${filePath}: ${message(e)}`)
@@ -278,9 +282,16 @@ export function useWorkspace() {
   const openWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
     try {
-      const result = await window.cuerunner.workspace.open()
-      if (!result) return
-      loadIntoStore(result.workspace, result.path, result.missingMedia)
+      const answer = await window.cuerunner.workspace.open()
+      // A refusal is the answer for a file this build cannot read — an oversize show, one
+      // saved by a newer version — so it is branched on rather than caught. A cancel is
+      // the null inside the success arm.
+      if (!answer.ok) {
+        reportFailure(`Could not open the workspace: ${answer.error}`)
+        return
+      }
+      if (!answer.opened) return
+      loadIntoStore(answer.opened.workspace, answer.opened.path, answer.opened.missingMedia)
     } catch (e) {
       reportFailure(`Could not open the workspace: ${message(e)}`)
     }
@@ -290,9 +301,14 @@ export function useWorkspace() {
     if (!await guardDirty()) return
     try {
       // The bridge hands back the file it read alongside the workspace; the store wants
-      // the workspace itself.
-      const opened = await window.cuerunner.workspace.openPath(filePath)
-      loadIntoStore(opened.workspace, opened.path, opened.missingMedia)
+      // the workspace itself. A file it cannot read is the refusal arm — an answer, not
+      // something to catch.
+      const answer = await window.cuerunner.workspace.openPath(filePath)
+      if (!answer.ok) {
+        reportFailure(`Could not open ${filePath}: ${answer.error}`)
+        return
+      }
+      loadIntoStore(answer.opened.workspace, answer.opened.path, answer.opened.missingMedia)
     } catch (e) {
       reportFailure(`Could not open ${filePath}: ${message(e)}`)
     }

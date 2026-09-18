@@ -56,7 +56,7 @@ describe('scriptHost', () => {
       value: {
         script: {
           shell: vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0, signal: null }),
-          readFile: vi.fn().mockResolvedValue('// included')
+          readFile: vi.fn().mockResolvedValue({ ok: true, code: '// included', path: '' })
         }
       },
       writable: true
@@ -190,7 +190,7 @@ describe('scriptHost', () => {
 
   it('resolves include() paths against the workspace', async () => {
     const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
-    readFile.mockResolvedValue({ code: 'return 1', path: '/shows/lib.js' })
+    readFile.mockResolvedValue({ ok: true, code: 'return 1', path: '/shows/lib.js' })
 
     const settled = run()
     const worker = lastWorker()
@@ -211,7 +211,7 @@ describe('scriptHost', () => {
 
   it('names the including file, so an include inside it resolves against that file', async () => {
     const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
-    readFile.mockResolvedValue({ code: 'return 2', path: '/shows/cues/lamp.js' })
+    readFile.mockResolvedValue({ ok: true, code: 'return 2', path: '/shows/cues/lamp.js' })
 
     const settled = run()
     const worker = lastWorker()
@@ -219,6 +219,28 @@ describe('scriptHost', () => {
     await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'readFileResult')).toBe(true))
 
     expect(readFile).toHaveBeenCalledWith('./lamp.js', '/shows/My Show.cuerunner', '/shows/cues/kit.js')
+
+    worker.emit({ type: 'settled', error: null })
+    await settled
+  })
+
+  it('hands a missing include to the script as the rpcError the refusal carries', async () => {
+    // The include is not there: an ordinary state, so main answers the refusal arm rather
+    // than rejecting. The script sees the refusal's sentence, which is the one the throw
+    // carried — the transport wrapper a rejection used to add is gone.
+    const readFile = window.cuerunner.script.readFile as ReturnType<typeof vi.fn>
+    readFile.mockResolvedValue({ ok: false, error: "ENOENT: no such file or directory, open '/shows/gone.js'" })
+
+    const settled = run()
+    const worker = lastWorker()
+    worker.emit({ type: 'readFile', id: 11, path: './gone.js' })
+    await vi.waitFor(() => expect(worker.posted.some(m => m.type === 'rpcError')).toBe(true))
+
+    expect(worker.posted).toContainEqual({
+      type: 'rpcError',
+      id: 11,
+      message: "ENOENT: no such file or directory, open '/shows/gone.js'"
+    })
 
     worker.emit({ type: 'settled', error: null })
     await settled

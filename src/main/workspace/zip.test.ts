@@ -19,6 +19,7 @@ import {
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { entryDestination, extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
+import { Refusal } from '../ipc/refusal'
 
 const FOREIGN = join(__dirname, '../../test/fixtures/foreign.zip')
 const FOREIGN_ESCAPE = join(__dirname, '../../test/fixtures/foreign-escape.zip')
@@ -121,10 +122,32 @@ describe('writing a zip', () => {
     expect(readFileSync(target).equals(before)).toBe(true)
   })
 
+  it('refuses a show too large to describe in one archive, before writing a byte', async () => {
+    // A zip without zip64 cannot describe an archive this big, and the refusal is the
+    // operator's own show rather than a fault: `workspace:exportBundle` answers it as a
+    // value. Sparse, so the test measures 4 GiB without writing it.
+    const huge = join(dir, 'huge.bin')
+    writeFileSync(huge, '')
+    truncateSync(huge, 4.5e9)
+
+    const target = join(dir, 'too-big.cuerunnerx')
+    const writing = writeZip(target, [
+      { name: 'show.cuerunner', data: Buffer.from('{}') },
+      { name: 'media/huge.bin', file: huge }
+    ])
+    await expect(writing).rejects.toThrow('more than a bundle this app writes can hold')
+    await expect(writing).rejects.toBeInstanceOf(Refusal)
+    // Measured before anything was written: there is no half-archive on disk.
+    expect(existsSync(target)).toBe(false)
+  })
+
   it('refuses a name that would leave the folder it is unpacked into', async () => {
     await expect(
       writeZip(join(dir, 'bad.zip'), [{ name: '../escape.txt', data: Buffer.from('x') }])
     ).rejects.toThrow('not a path an archive may hold')
+    await expect(
+      writeZip(join(dir, 'bad.zip'), [{ name: '../escape.txt', data: Buffer.from('x') }])
+    ).rejects.toBeInstanceOf(Refusal)
     await expect(
       writeZip(join(dir, 'bad.zip'), [{ name: 'C:\\windows\\evil.txt', data: Buffer.from('x') }])
     ).rejects.toThrow('not a path an archive may hold')
@@ -151,6 +174,8 @@ describe('a hostile archive', () => {
     const greedy = { ...entries[0], size: 4 * 1024 * 1024 * 1024, compressedSize: 4 * 1024 * 1024 * 1024 }
 
     await expect(readZipEntry(file, greedy)).rejects.toThrow('claims a size')
+    // Marked, so the bundle channels answer the archive's claims as a value.
+    await expect(readZipEntry(file, greedy)).rejects.toBeInstanceOf(Refusal)
   })
 
   it('refuses a small deflated entry that unpacks past the cap', async () => {
@@ -226,6 +251,7 @@ describe('reading an archive this app did not write', () => {
 
   it('refuses an archive whose entry climbs out of the folder', async () => {
     await expect(readZip(FOREIGN_ESCAPE)).rejects.toThrow('not a path an archive may hold')
+    await expect(readZip(FOREIGN_ESCAPE)).rejects.toBeInstanceOf(Refusal)
     expect(existsSync(join(dir, '..', 'escape.txt'))).toBe(false)
   })
 
@@ -233,6 +259,13 @@ describe('reading an archive this app did not write', () => {
     const file = join(dir, 'show.cuerunner')
     writeFileSync(file, '{"version":1}')
     await expect(readZip(file)).rejects.toThrow('not a zip archive')
+    await expect(readZip(file)).rejects.toBeInstanceOf(Refusal)
+  })
+
+  it('refuses an archive that is not there, the way it refuses one that is damaged', async () => {
+    // The operator picked it a moment ago; a file that moved in between is their machine's
+    // ordinary state, so the channel answers a sentence rather than logging a fault.
+    await expect(readZip(join(dir, 'gone.cuerunnerx'))).rejects.toBeInstanceOf(Refusal)
   })
 })
 
@@ -253,6 +286,7 @@ describe('an archive that is damaged', () => {
     writeFileSync(file, damaged)
 
     await expect(extractZipEntry(file, entries[1], dir)).rejects.toThrow('checksum')
+    await expect(extractZipEntry(file, entries[1], dir)).rejects.toBeInstanceOf(Refusal)
     expect(existsSync(join(dir, 'media', 'media.wav'))).toBe(false)
     expect(readdirSync(join(dir, 'media'))).toEqual([])
   })

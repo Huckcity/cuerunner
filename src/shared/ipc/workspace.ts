@@ -5,10 +5,12 @@
 //
 // Where a file is asked for, the dialog belongs to the operating system and is shown by
 // main, so a cancel is an ordinary answer — `null` inside an `ok` envelope — rather than
-// a rejection. Only the Pro surfaces refuse, and they refuse as a value: the show is the
-// operator's either way, and a save writes its history whether or not this machine can
-// read it.
+// a rejection. Every other ordinary state refuses the same way: a file this build cannot
+// read, a show with a cue type it does not know, an archive that arrived damaged. The
+// Pro surfaces refuse as a value too: the show is the operator's either way, and a save
+// writes its history whether or not this machine can read it. Only a fault rejects.
 
+import type { Refusal } from './refusal'
 import type { ConflictPolicy, MergeNote, MergeTally } from '../showfileMerge'
 import type { ShowHistoryEntry, WorkspaceDiff } from '../showfile'
 import type { MissingMedia } from '../media'
@@ -116,20 +118,35 @@ export interface WorkspaceComparison {
 }
 
 export type WorkspaceExportResult =
-  | { ok: false; error: string }
+  | Refusal
   | { ok: true; exported: ExportedBundle | null }
 
 export type WorkspaceImportResult =
-  | { ok: false; error: string }
+  | Refusal
   | { ok: true; imported: OpenedWorkspace | null }
 
 export type WorkspaceMergeResult =
-  | { ok: false; error: string }
+  | Refusal
   | { ok: true; merged: MergedShow | null }
 
 export type WorkspaceCompareResult =
-  | { ok: false; error: string }
+  | Refusal
   | { ok: true; comparison: WorkspaceComparison | null }
+
+/** What a File→Open answered: the show it read, a cancel, or why it could not open one. */
+export type WorkspaceOpenResult =
+  | Refusal
+  | { ok: true; opened: OpenedWorkspace | null }
+
+/** A file a recent entry named. It is already chosen, so a cancel is not among the answers. */
+export type WorkspaceOpenPathResult =
+  | Refusal
+  | { ok: true; opened: OpenedWorkspace }
+
+/** The snapshot found on disk, or nothing to offer — a refusal only for a snapshot this build cannot bring forward. */
+export type WorkspaceRecoveryResult =
+  | Refusal
+  | { ok: true; recovery: WorkspaceRecovery | null }
 
 export interface WorkspaceAutosavePayload {
   workspace: Workspace
@@ -148,10 +165,10 @@ export interface WorkspaceRecovery {
 
 /** The showfile, as the renderer reads it (`window.cuerunner.workspace`). */
 export interface WorkspaceBridge {
-  /** The OS dialog; a cancel is `null` rather than an error. */
-  open(): Promise<OpenedWorkspace | null>
+  /** The OS dialog; a cancel is a `null` inside the `ok` arm rather than an error. */
+  open(): Promise<WorkspaceOpenResult>
   /** A file a recent entry names, opened without a dialog. */
-  openPath(filePath: string): Promise<OpenedWorkspace>
+  openPath(filePath: string): Promise<WorkspaceOpenPathResult>
   openDemo(): Promise<Workspace>
   /** Points one cue's missing media at a file the operator picked. */
   relink(workspace: Workspace, workspacePath: string | null, cueId: string): Promise<RelinkedWorkspace>
@@ -167,7 +184,8 @@ export interface WorkspaceBridge {
   compare(workspace: Workspace): Promise<WorkspaceCompareResult>
   recent(): Promise<string[]>
   autosave(workspace: Workspace, sourcePath: string | null, selectedCueId: string | null): Promise<void>
-  recovery(): Promise<WorkspaceRecovery | null>
+  /** The snapshot a session that ended without saving left behind, or nothing to offer. */
+  recovery(): Promise<WorkspaceRecoveryResult>
   clearRecovery(): Promise<void>
   setTitle(title: string): Promise<void>
   confirmClose(workspaceName: string): Promise<0 | 1 | 2>

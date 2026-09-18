@@ -171,13 +171,13 @@ Object.defineProperty(window, 'cuerunner', {
         Promise.resolve({ ok: true, settings: { ...redundancySettings, ...patch } }))
     },
     script: {
-      readFile: vi.fn(() => Promise.resolve({ code: '', path: '' })),
+      readFile: vi.fn(() => Promise.resolve({ ok: true as const, code: '', path: '' })),
       pickFile: vi.fn(() => Promise.resolve(null)),
       readDocument: vi.fn((): Promise<ScriptDocument> => Promise.resolve({ ok: true, lines: [] })),
       shell: vi.fn(() => Promise.resolve({ stdout: '', stderr: '', code: 0, signal: null }))
     },
     workspace: {
-      open: vi.fn(() => Promise.resolve(null)),
+      open: vi.fn(() => Promise.resolve({ ok: true as const, opened: null })),
       openPath: vi.fn(),
       openDemo: vi.fn(),
       relink: vi.fn(),
@@ -189,7 +189,7 @@ Object.defineProperty(window, 'cuerunner', {
       importBundle: vi.fn((): Promise<WorkspaceImportResult> => Promise.resolve({ ok: true, imported: null })),
       recent: vi.fn(() => Promise.resolve([])),
       autosave: vi.fn(() => Promise.resolve()),
-      recovery: vi.fn(() => Promise.resolve(null)),
+      recovery: vi.fn(() => Promise.resolve({ ok: true as const, recovery: null })),
       clearRecovery: vi.fn(() => Promise.resolve()),
       setTitle: vi.fn(() => Promise.resolve()),
       confirmClose: vi.fn((): Promise<0 | 1 | 2> => Promise.resolve(0))

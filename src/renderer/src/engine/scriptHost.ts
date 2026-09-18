@@ -122,7 +122,12 @@ class ScriptHost {
         run.workspacePath,
         message.base
       )
-      reply = { type: 'readFileResult', id: message.id, code: source.code, path: source.path }
+      // An include that is not there is an ordinary state of the show, so it arrives as
+      // the refusal arm; the script sees the same sentence, minus the transport wrapper a
+      // rejection carried, and main logs no stack for a path the operator typed.
+      reply = source.ok
+        ? { type: 'readFileResult', id: message.id, code: source.code, path: source.path }
+        : { type: 'rpcError', id: message.id, message: source.error }
     } catch (error) {
       reply = { type: 'rpcError', id: message.id, message: describe(error) }
     }

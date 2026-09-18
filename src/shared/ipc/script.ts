@@ -4,6 +4,7 @@
 // channels that are the panel rather than on the namespace.
 
 import type { ScriptDocument } from '../show'
+import type { Refusal } from './refusal'
 
 /** The IPC channels. Main owns the handlers; preload owns the bridge to them. */
 export const SCRIPT_CHANNELS = {
@@ -24,11 +25,20 @@ export interface ScriptReadFilePayload {
   base?: string
 }
 
-export interface ScriptReadFileResult {
-  code: string
-  /** Where the include resolved to, so its own includes resolve from there. */
-  path: string
-}
+/**
+ * One include, read — or the reason it could not be. A file the script names that is not
+ * there is an ordinary state of the show, so it answers rather than rejecting (the same
+ * shape `ScriptDocument` in `shared/show` uses); the script sees its sentence as the
+ * rpcError it would have seen from the rejection, minus the transport wrapper.
+ */
+export type ScriptReadFileResult =
+  | Refusal
+  | {
+      ok: true
+      code: string
+      /** Where the include resolved to, so its own includes resolve from there. */
+      path: string
+    }
 
 export interface ScriptReadDocumentPayload {
   filePath: string
@@ -59,7 +69,7 @@ export interface ScriptShellResult {
 export interface ScriptBridge {
   /**
    * Resolves one include. The resolved path goes back so the file's own includes can be
-   * resolved against it.
+   * resolved against it; an include that is not there comes back as the refusal arm.
    */
   readFile(relativePath: string, workspacePath: string | null, base?: string): Promise<ScriptReadFileResult>
   /** The panel's picker; null is a cancel, which is a normal answer. */

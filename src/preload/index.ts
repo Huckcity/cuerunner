@@ -66,7 +66,6 @@ import {
 } from '../shared/ipc/show'
 import {
   WORKSPACE_CHANNELS,
-  type OpenedWorkspace,
   type RelinkedWorkspace,
   type SavedWorkspace,
   type WorkspaceCompareResult,
@@ -76,7 +75,9 @@ import {
   type WorkspaceMergePayload,
   type WorkspaceMergeOptions,
   type WorkspaceMergeResult,
-  type WorkspaceRecovery,
+  type WorkspaceOpenPathResult,
+  type WorkspaceOpenResult,
+  type WorkspaceRecoveryResult,
   type WorkspaceRelinkPayload,
   type WorkspaceSavePayload
 } from '../shared/ipc/workspace'
@@ -288,9 +289,9 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(SCRIPT_CHANNELS.shell, { command, options } satisfies ScriptShellPayload)
   },
   workspace: {
-    open: (): Promise<OpenedWorkspace | null> =>
+    open: (): Promise<WorkspaceOpenResult> =>
       invoke(WORKSPACE_CHANNELS.open),
-    openPath: (filePath: string): Promise<OpenedWorkspace> =>
+    openPath: (filePath: string): Promise<WorkspaceOpenPathResult> =>
       invoke(WORKSPACE_CHANNELS.openPath, filePath),
     openDemo: (): Promise<Workspace> =>
       invoke(WORKSPACE_CHANNELS.openDemo),
@@ -344,7 +345,7 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(WORKSPACE_CHANNELS.recent),
     autosave: (workspace: Workspace, sourcePath: string | null, selectedCueId: string | null): Promise<void> =>
       invoke(WORKSPACE_CHANNELS.autosave, { workspace, sourcePath, selectedCueId }),
-    recovery: (): Promise<WorkspaceRecovery | null> =>
+    recovery: (): Promise<WorkspaceRecoveryResult> =>
       invoke(WORKSPACE_CHANNELS.recovery),
     clearRecovery: (): Promise<void> =>
       invoke(WORKSPACE_CHANNELS.clearRecovery),
