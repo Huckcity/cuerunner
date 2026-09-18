@@ -1,7 +1,8 @@
-import { app, BrowserWindow, shell, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, shell, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
+import { registerWindowIpcHandlers } from './ipc/windowHandlers'
 import { sendToWindow } from './ipc/broadcast'
 import { onMainError, reportMainError } from './errors'
 import { audioEngine } from './audio/AudioEngine'
@@ -211,17 +212,15 @@ function createWindow(): void {
   })
   win.webContents.on('responsive', () => reportMainError('[main] renderer responsive again'))
 
-  ipcMain.removeHandler(APP_CHANNELS.confirmClose)
-  ipcMain.handle(APP_CHANNELS.confirmClose, () => {
-    allowClose = true
-    win.close()
-  })
-
-  ipcMain.removeHandler(APP_CHANNELS.rendererCrash)
-  ipcMain.handle(APP_CHANNELS.rendererCrash, () => {
-    const crash = rendererCrash
-    rendererCrash = null
-    return crash
+  registerWindowIpcHandlers(win, {
+    allowClose: () => {
+      allowClose = true
+    },
+    takeRendererCrash: () => {
+      const crash = rendererCrash
+      rendererCrash = null
+      return crash
+    }
   })
 
   win.on('ready-to-show', () => win.show())

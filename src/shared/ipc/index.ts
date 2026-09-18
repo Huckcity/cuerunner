@@ -18,14 +18,14 @@
 import { AUDIO_CHANNELS, type AudioEngineBridge } from '../audio'
 import { APP_CHANNELS, type AppBridge } from './app'
 import { PLAYBACK_CHANNELS, type PlaybackBridge } from './playback'
-import type { MidiBridge } from './midi'
-import type { NetworkBridge } from './network'
-import type { OscBridge } from './osc'
+import { MIDI_CHANNELS, type MidiBridge } from './midi'
+import { NETWORK_CHANNELS, type NetworkBridge } from './network'
+import { OSC_CHANNELS, type OscBridge } from './osc'
 import { SHOW_CHANNELS, type ShowBridge } from './show'
-import type { RedundancyBridge } from './redundancy'
+import { REDUNDANCY_CHANNELS, type RedundancyBridge } from './redundancy'
 import { LICENSE_CHANNELS, type LicenseBridge } from './license'
-import type { ScriptBridge } from './script'
-import type { WorkspaceBridge } from './workspace'
+import { SCRIPT_CHANNELS, type ScriptBridge } from './script'
+import { WORKSPACE_CHANNELS, type WorkspaceBridge } from './workspace'
 
 /** Everything `window.cuerunner` carries, as the renderer reads it. */
 export interface CuerunnerBridge {
@@ -45,6 +45,27 @@ export interface CuerunnerBridge {
   script: ScriptBridge
   workspace: WorkspaceBridge
 }
+
+/**
+ * Every domain's channel table, joined where the whole surface is composed: the interface
+ * above joins the namespaces, and this joins the tables behind them. A reader that needs
+ * the declared set — the parity gate in `src/main/ipc/parity.test.ts` — derives it from
+ * here rather than listing the domains a second time, so a namespace that joins the bridge
+ * joins this too, or it is missing from the composition rather than from a test.
+ */
+export const CHANNEL_TABLES = [
+  APP_CHANNELS,
+  PLAYBACK_CHANNELS,
+  MIDI_CHANNELS,
+  NETWORK_CHANNELS,
+  OSC_CHANNELS,
+  SHOW_CHANNELS,
+  REDUNDANCY_CHANNELS,
+  LICENSE_CHANNELS,
+  SCRIPT_CHANNELS,
+  WORKSPACE_CHANNELS,
+  AUDIO_CHANNELS
+] as const
 
 /**
  * The channels main pushes on — the events, not the request channels. `sendToWindow`
