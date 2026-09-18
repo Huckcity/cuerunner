@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
-import type { Workspace } from '../../../../shared/workspace'
+import type { LoadNote, Workspace } from '../../../../shared/workspace'
 import { formatClock } from '../../utils/cueDefaults'
 import { buildWorkspace } from '../../utils/workspace'
 import { NoticeBar } from './NoticeBar'
@@ -12,6 +12,7 @@ interface Snapshot {
   sourcePath: string | null
   selectedCueId?: string | null
   missingMedia: MissingMedia[]
+  loadNotes: LoadNote[]
 }
 
 // Autosave writes snapshots to the user-data folder rather than over the operator's
@@ -97,8 +98,10 @@ export function RecoveryNotice() {
     // fires what it would have fired.
     if (standingOn !== null) live.select(standingOn.id)
     // The files the snapshot names may have moved since it was taken, so the same
-    // missing-media report a normal open gives is shown here too.
+    // missing-media report a normal open gives is shown here too — and the same goes for
+    // grouping the snapshot needed repaired on its way back.
     live.setMissingMedia(snapshot.missingMedia)
+    live.setLoadNotes(snapshot.loadNotes)
     // Recovered work is unsaved by definition: the file on disk is older than this. The
     // title bar's dot is the app's usual signal for that.
     live.markDirty()

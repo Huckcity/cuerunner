@@ -593,6 +593,15 @@ await rig.blackout()</code></div>
         bar across the top of the window offers to relink it — point it at the file once
         and the rest of the cues in the same folder follow.
       </p>
+      <p>
+        If a file's cue grouping is damaged, it is repaired as the show opens rather than
+        loaded as-is: a group's children are gathered into one block behind it, a cue whose
+        group is not in the file keeps its place at the top level and fires with the show,
+        and a loop of groups is broken so every cue in it returns to the top. A bar across
+        the top of the window says how many repairs were made, and the list behind it names
+        each one. The file on disk is unchanged until you save, which writes the repaired
+        grouping.
+      </p>
       <div class="note">
         Older show files are migrated as they open: the settings that were once
         <code>autoContinue</code> and <code>autoFollow</code> become
@@ -685,6 +694,10 @@ await rig.blackout()</code></div>
             <tr>
               <td>An audio cue is silent after moving files</td>
               <td>Its file has moved. The row says <em>missing</em>; use the relink bar at the top of the window, and see <a href="./formats.html#workspace">the workspace file</a>.</td>
+            </tr>
+            <tr>
+              <td>The cue list order differs from the file you saved</td>
+              <td>The file's cue grouping was damaged — children scattered, a cue naming a group that is not in the file, or groups inside each other — and was repaired as the show opened. A bar at the top of the window says how many repairs were made. The file on disk is unchanged until you save, which writes the repaired grouping.</td>
             </tr>
             <tr>
               <td>Everything goes quiet at once and the rows say <em>audio device lost</em></td>

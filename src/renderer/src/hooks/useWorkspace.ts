@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { useStore } from '../store'
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
-import type { Workspace, WorkspaceIdentity } from '../../../shared/workspace'
+import type { LoadNote, Workspace, WorkspaceIdentity } from '../../../shared/workspace'
 import { buildWorkspace } from '../utils/workspace'
 import { cueEngine } from '../engine/CueEngine'
 
@@ -71,6 +71,7 @@ function loadIntoStore(
   workspace: Workspace,
   path: string | null,
   missingMedia: MissingMedia[],
+  loadNotes: LoadNote[],
   identity?: WorkspaceIdentity
 ): void {
   const store = useStore.getState()
@@ -90,6 +91,7 @@ function loadIntoStore(
   // one from the show that was open before.
   cueEngine.resetGuards()
   store.setMissingMedia(missingMedia)
+  store.setLoadNotes(loadNotes)
 }
 
 // The demo opens with no path: it is an example rather than a file the user owns, so
@@ -101,7 +103,7 @@ export async function openDemoWorkspace(): Promise<void> {
     // anything missing to report. It is a template rather than a show someone owns, so
     // it takes a fresh identity: saving it as your own show must not keep the demo's.
     const demo = await window.cuerunner.workspace.openDemo()
-    loadIntoStore(demo, null, [], { id: crypto.randomUUID(), createdAt: new Date().toISOString() })
+    loadIntoStore(demo, null, [], [], { id: crypto.randomUUID(), createdAt: new Date().toISOString() })
   } catch (e) {
     reportFailure(`Could not open the demo workspace: ${message(e)}`)
   }
@@ -247,7 +249,15 @@ export async function openMergedShow(filePath: string): Promise<void> {
       reportFailure(`Could not open ${filePath}: ${answer.error}`)
       return
     }
-    loadIntoStore(answer.opened.workspace, answer.opened.path, answer.opened.missingMedia)
+    // The merge reports what it and its input reads repaired through its own report, but
+    // the file it wrote is a load like any other — the merge's own parent repair does not
+    // fix a parent that is not a group — so the load bar speaks for it too.
+    loadIntoStore(
+      answer.opened.workspace,
+      answer.opened.path,
+      answer.opened.missingMedia,
+      answer.opened.loadNotes
+    )
     useStore.getState().setMergeReport(null)
   } catch (e) {
     reportFailure(`Could not open ${filePath}: ${message(e)}`)
@@ -264,7 +274,12 @@ export async function importShowBundle(): Promise<void> {
       return
     }
     if (!answer.imported) return
-    loadIntoStore(answer.imported.workspace, answer.imported.path, answer.imported.missingMedia)
+    loadIntoStore(
+      answer.imported.workspace,
+      answer.imported.path,
+      answer.imported.missingMedia,
+      answer.imported.loadNotes
+    )
   } catch (e) {
     reportFailure(`Could not open the bundle: ${message(e)}`)
   }
@@ -306,7 +321,12 @@ export function useWorkspace() {
         return
       }
       if (!answer.opened) return
-      loadIntoStore(answer.opened.workspace, answer.opened.path, answer.opened.missingMedia)
+      loadIntoStore(
+        answer.opened.workspace,
+        answer.opened.path,
+        answer.opened.missingMedia,
+        answer.opened.loadNotes
+      )
     } catch (e) {
       reportFailure(`Could not open the workspace: ${message(e)}`)
     }
@@ -323,7 +343,12 @@ export function useWorkspace() {
         reportFailure(`Could not open ${filePath}: ${answer.error}`)
         return
       }
-      loadIntoStore(answer.opened.workspace, answer.opened.path, answer.opened.missingMedia)
+      loadIntoStore(
+        answer.opened.workspace,
+        answer.opened.path,
+        answer.opened.missingMedia,
+        answer.opened.loadNotes
+      )
     } catch (e) {
       reportFailure(`Could not open ${filePath}: ${message(e)}`)
     }

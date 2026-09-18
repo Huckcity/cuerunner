@@ -26,7 +26,7 @@ import { asRefusal, Refusal } from '../ipc/refusal'
 import { migrateWorkspace, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../shared/cue'
-import type { Workspace } from '../../shared/workspace'
+import type { LoadNote, Workspace } from '../../shared/workspace'
 
 export const BUNDLE_EXTENSION = 'cuerunnerx'
 
@@ -51,6 +51,8 @@ export interface ImportedBundle {
   path: string
   workspace: Workspace
   missingMedia: MissingMedia[]
+  /** Grouping repairs the showfile inside the bundle needed, same as any other load. */
+  loadNotes: LoadNote[]
 }
 
 /**
@@ -209,6 +211,11 @@ export interface ReadBundle {
   show: Buffer
   /** The media files it carries. */
   media: ZipEntry[]
+  /**
+   * Grouping repairs the showfile needed, carried only so `unpackBundle` can return them
+   * on the imported workspace; nothing else reads them.
+   */
+  loadNotes: LoadNote[]
 }
 
 export async function readBundle(bundlePath: string): Promise<ReadBundle> {
@@ -230,10 +237,14 @@ export async function readBundle(bundlePath: string): Promise<ReadBundle> {
   } catch (error) {
     throw asRefusal(error)
   }
+  // Import is a load path too: the showfile inside the bundle goes through the same
+  // migration, and the repair it makes must reach the window like any other load's.
+  const loadNotes: LoadNote[] = []
   return {
-    workspace: migrateWorkspace(parsed),
+    workspace: migrateWorkspace(parsed, loadNotes),
     show: bytes,
-    media: entries.filter(entry => entry.name.startsWith(`${MEDIA_DIR}/`))
+    media: entries.filter(entry => entry.name.startsWith(`${MEDIA_DIR}/`)),
+    loadNotes
   }
 }
 
@@ -273,7 +284,11 @@ export async function unpackBundle(
   // The showfile is written exactly as the bundle carries it: the paths inside it are
   // relative to the bundle's root, which is the folder it has just been unpacked into.
   await writeFile(targets.show, bundle.show)
-  return { path: targets.show, ...resolveWorkspaceMedia(bundle.workspace, targets.show) }
+  return {
+    path: targets.show,
+    ...resolveWorkspaceMedia(bundle.workspace, targets.show),
+    loadNotes: bundle.loadNotes
+  }
 }
 
 /**

@@ -1,0 +1,136 @@
+/* The grouping-repair bar and its list. The bar is the same shape as the other operator
+   notices across the top of the window, in the amber of a warning rather than the red of
+   a failure: the show loaded, its grouping just had to be repaired. */
+
+.grouping-note-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-amber-bg);
+  border-bottom: 1px solid var(--accent-amber);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+}
+
+.grouping-note-bar-text { flex: 1; }
+
+.grouping-note-bar-actions { display: flex; gap: var(--space-2); }
+
+.grouping-note-review {
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.grouping-note-review:hover { background: var(--bg-hover); }
+
+.grouping-note-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.grouping-note-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-height: 80vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.grouping-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+}
+
+.grouping-note-title {
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  color: var(--fg-primary);
+}
+
+.grouping-note-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 16px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.grouping-note-dismiss:hover { color: var(--fg-primary); }
+
+.grouping-note-blurb {
+  padding: var(--space-2) 16px 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-base);
+}
+
+.grouping-note-list {
+  flex: 1;
+  overflow-y: auto;
+  margin: var(--space-3) 0;
+  padding: 0 16px;
+  list-style: none;
+}
+
+.grouping-note-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+}
+
+.grouping-note-cue {
+  width: 160px;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+}
+
+.grouping-note-detail {
+  flex: 1;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.grouping-note-close {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.grouping-note-close:hover { background: var(--bg-hover); }
+
+.grouping-note-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 0 16px 14px;
+}

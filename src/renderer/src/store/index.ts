@@ -3,7 +3,7 @@ import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../../../sha
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
-import type { AudioSettings, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
+import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../../../shared/workspace'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
@@ -306,6 +306,14 @@ interface CueListState {
    */
   missingMedia: MissingMedia[]
   setMissingMedia: (media: MissingMedia[]) => void
+  /**
+   * Grouping repairs the loaded workspace needed, with the cue each is about. The file
+   * on disk does not hold them yet — loading never writes — so this is what tells the
+   * operator the grouping on screen is not what they saved. A successful save writes
+   * the repair and ends the condition, which clears them.
+   */
+  loadNotes: LoadNote[]
+  setLoadNotes: (notes: LoadNote[]) => void
   /**
    * Applies the cue paths a relink resolved. One pick can put several cues back at
    * once, and that is one edit: it dirties the session once and undoes once.
@@ -721,6 +729,7 @@ export const useStore = create<CueListState>((set) => ({
   audioDeviceError: null,
   notice: null,
   missingMedia: [],
+  loadNotes: [],
   mediaLengths: {},
   silenceFailures: {},
   past: [],
@@ -1262,6 +1271,8 @@ export const useStore = create<CueListState>((set) => ({
 
   setMissingMedia: (missingMedia) => set({ missingMedia }),
 
+  setLoadNotes: (loadNotes) => set({ loadNotes }),
+
   applyRelinkedMedia: (paths) => set(s => {
     const resolved = new Map(Object.entries(paths))
     if (resolved.size === 0) return s
@@ -1348,6 +1359,8 @@ export const useStore = create<CueListState>((set) => ({
       // Whatever the last workspace was missing says nothing about this one; the caller
       // sets this from the open result straight after.
       missingMedia: [],
+      // The same for what the last one's grouping needed repaired.
+      loadNotes: [],
       // What the last show's files answered says nothing about this one's either.
       mediaLengths: {},
       silenceFailures: {},
@@ -1376,6 +1389,10 @@ export const useStore = create<CueListState>((set) => ({
     // The history the file was just written with, including the entry this save added.
     // Carrying it means the next save appends to a history instead of replacing one.
     showHistory: history,
+    // The file on disk now holds the repaired grouping the notes described, so the
+    // condition they reported — and the "unchanged on disk" copy that went with it —
+    // has ended.
+    loadNotes: [],
     isDirty: false
   }),
 

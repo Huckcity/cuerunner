@@ -2,10 +2,10 @@
 // available in the test environment, so the module is imported with it stubbed.
 import { describe, it, expect, vi } from 'vitest'
 import type { StopCue, AudioCue, ScriptCue } from '../../shared/cue'
-import type { Workspace } from '../../shared/workspace'
+import type { LoadNote, Workspace } from '../../shared/workspace'
 import { CHANNEL_START_COUNT } from '../../shared/show'
 import { Refusal } from '../ipc/refusal'
-import { migrateWorkspace } from './WorkspaceManager'
+import { migrateWorkspace, serialiseWorkspace } from './WorkspaceManager'
 
 // Hoisted above the import above, so WorkspaceManager never loads the real Electron.
 vi.mock('electron', () => ({ app: {}, dialog: {}, BrowserWindow: {} }))
@@ -381,5 +381,218 @@ describe('migrateWorkspace', () => {
     const twice = migrateWorkspace(once)
 
     expect(twice.showSettings?.cast).toEqual(once.showSettings?.cast)
+  })
+})
+
+// The grouping repair: array order is the running order, a group's children belong
+// contiguously behind it, and a cue whose group is not in the file must still fire with
+// the show. What the migration changed is reported through the notes out-array, and a
+// file that needed nothing is untouched.
+describe('migrateWorkspace — cue grouping', () => {
+  it('leaves a well-formed file exactly as it is, with no notes', () => {
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'sequence' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
+      { id: 'x1', type: 'wait', duration: 3000 }
+    ])).cues
+
+    expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'x1'])
+
+    // The fixed point: a repaired (here, already healthy) workspace re-normalises to
+    // nothing, so a silent second repair cannot happen.
+    const notes: LoadNote[] = []
+    const again = migrateWorkspace({ ...workspaceWith([]), cues }, notes)
+    expect(again.cues).toEqual(cues)
+    expect(notes).toEqual([])
+  })
+
+  it('gathers scattered children into one block behind their group, sibling order kept', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'playlist' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+      { id: 'x1', type: 'wait', duration: 1000 },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+    ]), notes).cues
+
+    expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'x1'])
+    expect(notes).toEqual([{
+      cueId: 'g1',
+      kind: 'reordered',
+      detail: 'its children were gathered into one block behind it'
+    }])
+  })
+
+  it('gathers a whole subtree, inner groups included', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'playlist' },
+      { id: 'g2', type: 'group', mode: 'playlist', parentId: 'g1' },
+      { id: 'c1', type: 'wait', duration: 1000 },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g2' },
+      { id: 'c3', type: 'wait', duration: 3000, parentId: 'g1' }
+    ]), notes).cues
+
+    expect(cues.map(c => c.id)).toEqual(['g1', 'g2', 'c2', 'c3', 'c1'])
+    expect(notes.map(note => [note.kind, note.cueId])).toEqual([
+      ['reordered', 'g1'],
+      ['reordered', 'g2']
+    ])
+  })
+
+  it('returns an orphan to the top level, keeping its place among the top-level cues', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'sequence' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+      { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
+      { id: 'x1', type: 'wait', duration: 1000 }
+    ]), notes).cues
+
+    // The orphan was between c1 and c2; the gathered block goes where it now belongs, so
+    // the orphan lands behind it, before x1. What is kept is the relative order of the
+    // top-level cues, not the slot the orphan had inside the block it interrupted.
+    expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'o1', 'x1'])
+    expect(cues[3].parentId).toBeNull()
+    // Pass order: every missing-group note, then every cycle note, then every reordered.
+    expect(notes.map(note => [note.kind, note.cueId])).toEqual([
+      ['missing-group', 'o1'],
+      ['reordered', 'g1']
+    ])
+    expect(notes[0].detail).toBe('it has no group in this file: still fires with the show, at the top level')
+  })
+
+  it('returns a cue whose parent is not a group to the top level', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'w1', type: 'wait', duration: 1000 },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'w1' }
+    ]), notes).cues
+
+    expect(cues.map(c => [c.id, c.parentId])).toEqual([['w1', null], ['c1', null]])
+    expect(notes).toEqual([{
+      cueId: 'c1',
+      kind: 'missing-group',
+      detail: 'it has no group in this file: still fires with the show, at the top level'
+    }])
+  })
+
+  it('dissolves a loop of groups and completes the load', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'a', type: 'group', mode: 'sequence', parentId: 'b' },
+      { id: 'b', type: 'group', mode: 'sequence', parentId: 'a' },
+      { id: 'c', type: 'wait', duration: 1000, parentId: 'b' }
+    ]), notes).cues
+
+    // Both loop members return to the top level; the cue hanging under b was never in
+    // the loop and keeps its parent.
+    expect(cues.map(c => [c.id, c.parentId])).toEqual([['a', null], ['b', null], ['c', 'b']])
+    expect(notes.map(note => [note.kind, note.cueId])).toEqual([
+      ['cycle', 'a'],
+      ['cycle', 'b']
+    ])
+    expect(notes[0].detail).toBe('in a loop of groups: returned to the top level')
+  })
+
+  it('treats a group that names itself as a loop of one', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'sequence', parentId: 'g1' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' }
+    ]), notes).cues
+
+    expect(cues.map(c => [c.id, c.parentId])).toEqual([['g1', null], ['c1', 'g1']])
+    expect(notes.map(note => [note.kind, note.cueId])).toEqual([['cycle', 'g1']])
+  })
+
+  it('gathers a timeline group’s children without touching their offsets', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'timeline' },
+      { id: 'c2', type: 'audio', filePath: '', timelineOffset: 5000, parentId: 'g1' },
+      { id: 'x1', type: 'wait', duration: 1000 },
+      { id: 'c1', type: 'audio', filePath: '', timelineOffset: 0, parentId: 'g1' }
+    ]), notes).cues
+
+    // Array order is kept exactly as it was — the gather never sorts by timelineOffset,
+    // which is the timeline's own authority.
+    expect(cues.map(c => c.id)).toEqual(['g1', 'c2', 'c1', 'x1'])
+    expect((cues[1] as AudioCue).timelineOffset).toBe(5000)
+    expect((cues[2] as AudioCue).timelineOffset).toBe(0)
+    expect(notes.map(note => note.kind)).toEqual(['reordered'])
+  })
+
+  it('converts a legacy childIds file without calling the healthy tree damage', () => {
+    const notes: LoadNote[] = []
+    const cues = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'sequence', childIds: ['c2', 'c1'] },
+      { id: 'c1', type: 'wait', duration: 1000 },
+      { id: 'c2', type: 'wait', duration: 2000 }
+    ]), notes).cues
+
+    expect(cues.map(c => c.id)).toEqual(['g1', 'c2', 'c1'])
+    expect(notes).toEqual([])
+  })
+
+  it('keeps every cue of a file whose id repeats, on load and on save', () => {
+    const notes: LoadNote[] = []
+    const workspace = migrateWorkspace(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'playlist' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
+      { id: 'g1', type: 'group', mode: 'playlist' }
+    ]), notes)
+
+    // The gather emits by cue identity: the repeated id is neither dropped nor re-emitted
+    // under the second occurrence, so the count survives — and no repair is claimed for a
+    // duplicate id.
+    expect(workspace.cues).toHaveLength(4)
+    expect(workspace.cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'g1'])
+    expect(notes).toEqual([])
+
+    const written = JSON.parse(serialiseWorkspace(workspace, '/shows')) as { cues: Array<{ id: string }> }
+    expect(written.cues).toHaveLength(4)
+    expect(written.cues.map(cue => cue.id)).toEqual(['g1', 'c1', 'c2', 'g1'])
+  })
+
+  it('writes the repair once: the saved show reopens with no notes and the same bytes', () => {
+    const loading: LoadNote[] = []
+    const damaged = workspaceWith([
+      { id: 'g1', type: 'group', mode: 'playlist' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+      { id: 'x1', type: 'wait', duration: 1000 },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+    ])
+    const repaired = migrateWorkspace(damaged, loading)
+    expect(loading.map(note => note.kind)).toEqual(['reordered'])
+
+    // What a save writes is a healthy file: the next open has nothing to say about it,
+    // and writing it again puts the same bytes back.
+    const first = serialiseWorkspace(repaired, '/shows')
+    const reopened: LoadNote[] = []
+    const again = migrateWorkspace(JSON.parse(first) as Workspace, reopened)
+    expect(reopened).toEqual([])
+    expect(serialiseWorkspace(again, '/shows')).toBe(first)
+  })
+
+  it('takes the same damaged bytes to the same notes every time', () => {
+    // A file nobody saves is read the same way twice: loading never repairs the file
+    // itself, so the same damage comes back with the same report.
+    const bytes = JSON.stringify(workspaceWith([
+      { id: 'g1', type: 'group', mode: 'playlist' },
+      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+      { id: 'x1', type: 'wait', duration: 1000 },
+      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+    ]))
+    const first: LoadNote[] = []
+    const second: LoadNote[] = []
+    migrateWorkspace(JSON.parse(bytes) as Workspace, first)
+    migrateWorkspace(JSON.parse(bytes) as Workspace, second)
+
+    expect(second).toEqual(first)
+    expect(first.map(note => [note.kind, note.cueId])).toEqual([['reordered', 'g1']])
   })
 })

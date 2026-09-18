@@ -8,7 +8,7 @@ import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
 import { defaultShowSettings } from '../../../../shared/show'
-import type { Workspace } from '../../../../shared/workspace'
+import type { LoadNote, Workspace } from '../../../../shared/workspace'
 import type { Cue } from '../../../../shared/cue'
 
 const cue: Cue = {
@@ -25,6 +25,7 @@ function snapshot(): {
   sourcePath: string | null
   selectedCueId?: string | null
   missingMedia: MissingMedia[]
+  loadNotes: LoadNote[]
 } {
   const showSettings = defaultShowSettings()
   // The show reaches its desk over MIDI, and this DCA is on a note of its own rather than
@@ -63,6 +64,15 @@ function snapshot(): {
     // the show with a cue that cannot play.
     missingMedia: [
       { cueId: 'c1', path: 'media/walk-in.wav', originalPath: '/shows/media/walk-in.wav' }
+    ],
+    // The snapshot also needed a grouping repair on its way back, and that travels with
+    // it exactly as the missing-media report does.
+    loadNotes: [
+      {
+        cueId: 'c1',
+        kind: 'missing-group',
+        detail: 'it has no group in this file: still fires with the show, at the top level'
+      }
     ]
   }
 }
@@ -114,6 +124,14 @@ describe('RecoveryNotice', () => {
     // A file that cannot be found is part of what the recovered session has to say.
     expect(state.missingMedia).toEqual([
       { cueId: 'c1', path: 'media/walk-in.wav', originalPath: '/shows/media/walk-in.wav' }
+    ])
+    // So is the grouping the snapshot needed repaired on its way back.
+    expect(state.loadNotes).toEqual([
+      {
+        cueId: 'c1',
+        kind: 'missing-group',
+        detail: 'it has no group in this file: still fires with the show, at the top level'
+      }
     ])
     // The snapshot's own guard and history travel with it: the next save must not write
     // the default guard or an empty history over the operator's file.

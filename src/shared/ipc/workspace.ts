@@ -14,7 +14,7 @@ import type { Refusal } from './refusal'
 import type { ConflictPolicy, MergeNote, MergeTally } from '../showfileMerge'
 import type { ShowHistoryEntry, WorkspaceDiff } from '../showfile'
 import type { MissingMedia } from '../media'
-import type { Workspace } from '../workspace'
+import type { LoadNote, Workspace } from '../workspace'
 
 /** The IPC channels. Main owns the handlers; preload owns the bridge to them. */
 export const WORKSPACE_CHANNELS = {
@@ -41,6 +41,8 @@ export interface OpenedWorkspace {
   path: string
   workspace: Workspace
   missingMedia: MissingMedia[]
+  /** Grouping repairs the load made, beside the missing-media report. */
+  loadNotes: LoadNote[]
 }
 
 /** One cue's missing media pointed at a file the operator picked. */
@@ -161,6 +163,8 @@ export interface WorkspaceRecovery {
   sourcePath: string | null
   selectedCueId?: string | null
   missingMedia: MissingMedia[]
+  /** Grouping repairs the snapshot needed, beside the missing-media report. */
+  loadNotes: LoadNote[]
 }
 
 /** The showfile, as the renderer reads it (`window.cuerunner.workspace`). */

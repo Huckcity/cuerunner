@@ -60,6 +60,15 @@
         bar across the top of the window offers to relink it — point it at the file once
         and the rest of the cues in the same folder follow.
       </p>
+      <p>
+        If a file's cue grouping is damaged, it is repaired as the show opens rather than
+        loaded as-is: a group's children are gathered into one block behind it, a cue whose
+        group is not in the file keeps its place at the top level and fires with the show,
+        and a loop of groups is broken so every cue in it returns to the top. A bar across
+        the top of the window says how many repairs were made, and the list behind it names
+        each one. The file on disk is unchanged until you save, which writes the repaired
+        grouping.
+      </p>
       <div class="note">
         Older show files are migrated as they open: the settings that were once
         <code>autoContinue</code> and <code>autoFollow</code> become

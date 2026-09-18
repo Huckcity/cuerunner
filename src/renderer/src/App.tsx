@@ -12,6 +12,7 @@ import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
 import { MissingMediaBar } from './components/media/MissingMediaBar'
+import { GroupingNoteBar } from './components/layout/GroupingNoteBar'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
 import { useMediaLengths } from './hooks/useMediaLengths'
@@ -141,6 +142,7 @@ export function App() {
       <RecoveryNotice />
       <NoticeHost />
       <MissingMediaBar />
+      <GroupingNoteBar />
       <Toolbar
         onOpenSettings={() => openSettings('general')}
         view={view}

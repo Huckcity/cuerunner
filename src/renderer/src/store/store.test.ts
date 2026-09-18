@@ -1082,6 +1082,31 @@ describe('store — mediaLengths', () => {
   })
 })
 
+describe('store — load notes', () => {
+  const note = {
+    cueId: 'o1',
+    kind: 'missing-group' as const,
+    detail: 'it has no group in this file: still fires with the show, at the top level'
+  }
+
+  it('records the repairs a load reports', () => {
+    useStore.getState().setLoadNotes([note])
+    expect(useStore.getState().loadNotes).toEqual([note])
+  })
+
+  it('says nothing about the last show once another is loaded', () => {
+    useStore.getState().setLoadNotes([note])
+    useStore.getState().loadWorkspace([], 'Next show', null)
+    expect(useStore.getState().loadNotes).toEqual([])
+  })
+
+  it('forgets the repairs once a save has written them into the file', () => {
+    useStore.getState().setLoadNotes([note])
+    useStore.getState().saveSucceeded('/shows/Next show.cuerunner', 'Next show', [])
+    expect(useStore.getState().loadNotes).toEqual([])
+  })
+})
+
 describe('store — syncCueDuration', () => {
   beforeEach(() => {
     useStore.setState({ cues: [] })
