@@ -262,6 +262,11 @@ void Engine::handleSimulatedNotification(int type) {
 void Engine::failDeviceFromCallback(const std::string& message) {
   deviceFailures_.fetch_add(1, std::memory_order_relaxed);
   deviceFailed_.store(true, std::memory_order_release);
+  // Whatever the backend did to lose it, this device is not rendering any more — the
+  // reason it counts as lost. Recorded where the failure is classified rather than after
+  // the drain, so a tick that came too late to take the device can tell this device from
+  // one a reconfigure has opened since: a running device is not the one that failed.
+  deviceRunning_.store(false, std::memory_order_release);
   std::lock_guard<std::mutex> lock(errorMutex_);
   lastError_ = message;
 }
@@ -579,6 +584,12 @@ void Engine::checkDeviceHealth() {
 }
 
 void Engine::handleBackgroundWork() {
+  // A drain the device lock refused is tried again on every tick. A reader that held the
+  // lock for a moment must not cost the desk the ends the loss owes it, and the drain
+  // itself skips a device a reconfigure has opened in the meantime.
+  if (drainPending_.load(std::memory_order_acquire)) {
+    drainPending_.store(!drainLostDevice(), std::memory_order_release);
+  }
   if (deviceFailed_.load(std::memory_order_acquire)) {
     deviceFailed_.store(false, std::memory_order_release);
     std::string message;
@@ -590,11 +601,19 @@ void Engine::handleBackgroundWork() {
     // Ack-free on purpose: this is the service thread, and it is the only thread that
     // resolves acknowledgements. submitCommand here would wait the full ack timeout for
     // an answer queued unread behind it in the event loop below, stalling every other
-    // command's acknowledgement with it. The render thread applies this in queue order.
+    // command's acknowledgement with it. The render thread applies this in queue order —
+    // and the reason is the loss's own: what this panic ends was not stopped, it was
+    // lost, which is what the renderer's `device-lost` handling is for.
     Command command;
     command.kind = Command::Panic;
     command.fadeMs = 0.0;
+    command.reason = EndReason::DeviceLost;
     submitInternalCommand(command);
+    // The device that failed may never render again, and an ended line that waits on a
+    // thread that is gone is a show left reading as playing. Where this thread can prove
+    // nothing else will render — it ends the stream itself, the reopen's own precedent —
+    // it applies the queue, so the loss reaches the desk from inside this tick.
+    drainPending_.store(!drainLostDevice(), std::memory_order_release);
   }
 
   // Acks first, then the file work. A command's acknowledgement is a promise to the
@@ -621,6 +640,68 @@ void Engine::handleBackgroundWork() {
   // The state check is cheap but not free; a hundred milliseconds of latency on a device
   // that has already gone is plenty.
   if ((healthTick_++ % 50) == 0) checkDeviceHealth();
+}
+
+/**
+ * Applies the command queue on the service thread, once the device it belongs to can no
+ * longer render it.
+ *
+ * A device the engine has lost is one whose render thread is gone: miniaudio's worker
+ * left its loop, or an ASIO driver stopped calling back and nothing else calls the mixer
+ * at all. The failure's panic — and anything else queued behind it — would then sit in
+ * the queue until something opened a device again, and the voices it ends would stay
+ * published as playing. A reconnect replies to the same situation by stopping the old
+ * device and draining the queue itself; this is that precedent where the device is gone
+ * rather than replaced, and the stop is what makes it legal: `ma_device_stop` returns
+ * from the driver's own stop for ASIO (which is the driver's promise that the callback
+ * has finished and will not come back) and only after miniaudio's worker has left its
+ * loop for every other backend, so nothing is left that could pop this single-consumer
+ * queue or touch the mixer beside this thread.
+ *
+ * Returns false when the device lock was held — a reader is in `info()` for a moment, or
+ * a reconfigure is replacing the device — because that is a wait this thread may not take
+ * (a reconfigure waits for an acknowledgement only the service thread resolves). The
+ * caller keeps `drainPending_` set and tries again on its next tick; a device a
+ * reconfigure has since opened is skipped rather than stopped.
+ *
+ * A backend with no device to lose is not this path's business: the silent backend's loop
+ * and the offline caller's pump are still running after a failure, and they apply the
+ * queue themselves — the offline backend already did, where the panic was queued.
+ */
+bool Engine::drainLostDevice() {
+  if (options_.backend == "silent" || options_.backend == "offline") return true;
+  std::unique_lock<std::mutex> lock(deviceMutex_, std::try_to_lock);
+  // The lock is held by a reader for a moment, or by a reconfigure that is replacing the
+  // device. Neither is a wait this thread may take (a reconfigure waits on an
+  // acknowledgement only this thread resolves), so the drain reports that it did not run
+  // and the next tick tries again.
+  if (!lock.owns_lock()) return false;
+  // A device is running: a reconfigure has opened one since the failure, and its own
+  // stop-then-drain applied the queue this call owes — stopping what it opened would take
+  // the show off a device that never failed.
+  if (deviceRunning_.load(std::memory_order_acquire)) return true;
+  // No device at all is the simplest form of "nothing will render this queue": the engine
+  // was started with a device backend and has none open, so the queue is this thread's.
+  if (device_ != nullptr) {
+    noteDeliberateStop(true);
+    if (device_->deviceReady) ma_device_stop(&device_->device);
+    noteDeliberateStop(false);
+  }
+  applyQueuedCommands();
+  // A client's start can land behind the panic in the same apply: the voice it made is
+  // real to the mixer and nothing will ever render it, so it is ended here rather than
+  // left published as playing with no end coming. Nothing else applies this queue while
+  // this thread holds the device, so what this loop sees is what the apply left.
+  mixer_.cancelUnstartedVoices();
+  // Nothing will render what the apply left — this thread just ended the voices that were
+  // playing a moment ago — so the published state is written here, the way a rendered
+  // block writes it: `info()` and `progress()` read that snapshot, and on a device-backend
+  // loss there is no block left to refresh it.
+  mixer_.writeSnapshot(snapshot_, snapshotSeq_,
+                       static_cast<double>(mixer_.clockFrames()) * 1000.0 /
+                           static_cast<double>(mixer_.sampleRate()),
+                       renderedFrames_.load(std::memory_order_relaxed));
+  return true;
 }
 
 void Engine::resolveAck(const Event& event) {

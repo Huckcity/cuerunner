@@ -292,6 +292,11 @@ struct Command {
   char runId[32] = {};
   double whenMs = 0.0;
   double fadeMs = 0.0;
+  // A panic's end reason for the voices that were sounding: the caller's fact about why
+  // it happened, because a device the engine lost and a PANIC the operator pressed are
+  // not the same end. A voice that never started is `cancelled` whoever asked, since
+  // there is nothing to fault in a voice that never made a sound.
+  EndReason reason = EndReason::Stopped;
   double positionMs = 0.0;
   // A release's named end, in file ms: absent plays out to the end of the file.
   bool hasEndMs = false;

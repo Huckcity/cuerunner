@@ -582,6 +582,10 @@ console.log(`cuerunner-audio acceptance — binary ${binary}`)
   check('there is a panic event', events(summary, 'panic').length === 1)
   check('audio is silent after the panic', Math.abs(sampleAt(wav, 6000)) < 1e-6)
   check('both runs ended', events(summary, 'ended').length === 2)
+  // The reason belongs to the panic's caller: the device-failure panic ends its voices
+  // `device-lost`, and everything else that panics — the verb here, the watchdog, the
+  // menu — still stops them.
+  check('an operator panic ends what it silenced stopped', events(summary, 'ended').every((event) => event.reason === 'stopped'), JSON.stringify(events(summary, 'ended')))
 }
 
 // --- 12. zero-length edge -------------------------------------------------
@@ -675,11 +679,20 @@ console.log(`cuerunner-audio acceptance — binary ${binary}`)
     commands: [
       { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
       { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      // A second voice two seconds out, so it is scheduled and not started when the
+      // device goes: a loss ends what it lost `device-lost` and cancels the rest.
+      { atMs: 0, verb: 'prepare', cueId: 'b', filePath: dc2Path },
+      { atMs: 0, verb: 'start', cueId: 'b', whenMs: 2000, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      // A third whose start frame is the frame the loss lands on: applied, never rendered.
+      // It cannot have been lost with the device — no block ever made a sound from it — so
+      // it ends `cancelled` rather than `device-lost`.
+      { atMs: 60, verb: 'prepare', cueId: 'c', filePath: dc2Path },
+      { atMs: 60, verb: 'start', cueId: 'c', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: -1, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
       { atMs: 60, verb: 'simulateDeviceNotification', type: 'stopped', deliberate: false },
       { atMs: 90, verb: 'info' }
     ]
   })
-  const info = replyFor(summary, 3).result
+  const info = replyFor(summary, 7).result
   const errors = events(summary, 'error')
   check('an unexpected stop is reported as a device error', errors.length === 1 && errors[0].code === 'device', JSON.stringify(errors))
   check('the message names the failure', errors.length === 1 && /stopped unexpectedly/.test(errors[0].message), JSON.stringify(errors[0] ?? {}))
@@ -687,6 +700,18 @@ console.log(`cuerunner-audio acceptance — binary ${binary}`)
   // The loss must silence the show, not leave it playing into a dead device.
   const tailIsSilent = Math.abs(sampleAt(wav, 9000)) < 1e-6
   check('a lost device silences the mixer', tailIsSilent)
+  // Which end each voice got, through the applied-queue path this lane has instead of a
+  // render thread: the failure's panic is applied by the pump, so the ended lines leave
+  // from there, in queue order, before the panic that follows them.
+  const ended = events(summary, 'ended')
+  const endedFor = (cueId) => ended.find((event) => event.cueId === cueId) ?? null
+  check('the voice that was sounding ends device-lost', endedFor('a')?.reason === 'device-lost', JSON.stringify(ended))
+  check('the voice that never started ends cancelled', endedFor('b')?.reason === 'cancelled', JSON.stringify(ended))
+  check('the voice whose start frame arrived but never rendered ends cancelled too', endedFor('c')?.reason === 'cancelled', JSON.stringify(ended))
+  const panicAt = summary.events.findIndex((event) => event.type === 'panic')
+  check('the ends leave before the panic the pump applies',
+    ['a', 'b', 'c'].every((cueId) => panicAt > ended.indexOf(endedFor(cueId))),
+    JSON.stringify({ events: summary.events.map((event) => `${event.type}:${event.cueId ?? '-'}:${event.reason ?? ''}`) }))
 }
 
 // --- 15. probe: metadata only, no cache side effects ----------------------

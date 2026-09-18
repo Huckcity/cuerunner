@@ -100,6 +100,15 @@ class Mixer {
   // Renders `frames` interleaved frames into `out` (cleared by the caller).
   void render(float* out, int frames, int channels);
 
+  /**
+   * Ends every voice that never began to sound, as `cancelled` — the same end a voice
+   * that never started gets from a panic. The engine calls this only where nothing will
+   * render the queue again: a start applied behind a device's loss would otherwise sit
+   * published as playing for ever, with no block to become audible on and nothing to end
+   * it.
+   */
+  void cancelUnstartedVoices();
+
   void advanceClock(int frames) { clockFrames_ += frames; }
 
   // Publishes the externally visible state under a seqlock (odd = being written).
@@ -126,7 +135,12 @@ class Mixer {
   void stopVoice(Voice& voice, int64_t frame, double fadeFrames, EndReason reason);
   void finishVoice(Voice& voice, int64_t frame, EndReason reason);
   void cancelVoice(Voice& voice, int64_t frame, int& canceled);
-  void panic(double atFrame, double fadeFrames);
+  /**
+   * Silences everything at `atFrame`: a voice that never started ends `cancelled`, and
+   * one that was sounding ends with `soundingReason` — the reason the panic happened,
+   * which only the caller knows.
+   */
+  void panic(double atFrame, double fadeFrames, EndReason soundingReason);
   void reclaim(Voice& voice);
   void reclaimResourcesForCommand(const Command& cmd);
   void retryReclaims();

@@ -683,6 +683,10 @@ await rig.blackout()</code></div>
               <td>Its file has moved. The row says <em>missing</em>; use the relink bar at the top of the window, and see <a href="./formats.html#workspace">the workspace file</a>.</td>
             </tr>
             <tr>
+              <td>Everything goes quiet at once and the rows say <em>audio device lost</em></td>
+              <td>The sound device went away mid-show — unplugged, taken by another program in exclusive mode, or a driver that stopped calling. The engine released the cues it was playing and said so in the alarm strip, the transport bar's alarm chip and the log. Settings → Audio shows the device and the engine's own readout of it, and is where another interface is chosen.</td>
+            </tr>
+            <tr>
               <td>A MIDI cue does nothing</td>
               <td>No port: the cue names none and the show has no default output, or the interface is gone. Settings → MIDI, and the Monitor reports an interface that disappeared.</td>
             </tr>

@@ -364,7 +364,9 @@ class Engine {
    * is not running: applying a command is the render thread's job and this is a
    * single-consumer queue. A reopen stops the old device first, so this is where the stop
    * it owes the old voices lands — in the old frame domain, before startDevice() changes
-   * the format — and nothing queued for the old device is left for the new one.
+   * the format — and nothing queued for the old device is left for the new one. A device
+   * that has been lost is stopped the same way (drainLostDevice), so the ends the failure
+   * owes its voices are not waiting on a render thread that is gone.
    */
   void applyQueuedCommands();
   void releaseCommandResources(Command& command);
@@ -374,6 +376,14 @@ class Engine {
   void handleBackgroundWork();
   void restartCapture();
   void checkDeviceHealth();
+  /**
+   * Ends a failed device's stream and applies the queue on this thread — the one time a
+   * device-backend queue has no render thread behind it. Returns false when the device
+   * lock was held and the drain therefore did not run (the caller retries it on a later
+   * tick); true when there is nothing left to do. See the definition for what makes the
+   * drain legal.
+   */
+  bool drainLostDevice();
   void resolveAck(const Event& event);
   void failDevice(const std::string& message);
   double snapshotClockMs() const;
@@ -468,6 +478,8 @@ class Engine {
   std::atomic<uint64_t> deviceFailures_{0};
   std::atomic<bool> deviceFailed_{false};
   std::atomic<bool> deviceRunning_{false};
+  /** A failure's drain the device lock refused: retried on the next service tick. */
+  std::atomic<bool> drainPending_{false};
   std::atomic<bool> expectedDeviceStop_{false};
   std::atomic<bool> silentStop_{false};
   /** Set by cancelAnalysis(): a scan in progress stops at its next chunk. */

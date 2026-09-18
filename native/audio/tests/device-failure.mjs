@@ -218,13 +218,13 @@ for (;;) {
   }
 }
 
-/** Starts the cue and waits until the engine reports it moving. */
-async function startAndWaitForPlaying() {
-  await client.request('start', { cueId: 'tone', whenMs: 0, options: START_OPTIONS })
+/** Starts the named cue from the tone file and waits until the engine reports it moving. */
+async function startAndWaitForPlaying(cueId) {
+  await client.request('start', { cueId, whenMs: 0, options: START_OPTIONS })
   const deadline = Date.now() + 2000
   let progress = null
   while (Date.now() < deadline) {
-    progress = await client.request('progress', { cueId: 'tone' })
+    progress = await client.request('progress', { cueId })
     if (progress?.playing === true && progress.elapsedMs > 0) return progress
     await sleep(10)
   }
@@ -239,13 +239,35 @@ try {
 
     // Control: the same verb the failure triggers, asked for normally. It reports what it
     // silenced, which is what makes the check after the loss mean something.
-    const first = await startAndWaitForPlaying()
+    const first = await startAndWaitForPlaying('tone')
     check('a voice is playing before the loss', first?.playing === true, JSON.stringify(first))
     const control = await client.request('panic', { fadeMs: 0 })
     check('a panic before the loss silences the voice it reports', control.ok === true && control.stoppedVoices === 1, JSON.stringify(control))
 
-    const second = await startAndWaitForPlaying()
-    check('a second voice is playing when the device goes', second?.playing === true, JSON.stringify(second))
+    // Two voices for the loss, on cue ids of their own so nothing said before it can be
+    // read as its answer: one sounding, one scheduled four seconds out and therefore not
+    // started when the device goes. A loss has to end them differently — the voice that
+    // was making a sound was lost with the device, the one that never started was only
+    // cancelled — which is the distinction the desk's release runs on.
+    await client.request('prepare', { cueId: 'loss', filePath: tonePath })
+    await client.request('prepare', { cueId: 'scheduled', filePath: tonePath })
+    const clock = await client.request('clock')
+    // Nine seconds, inside the wire's ten-second schedule horizon: the voice has to stay
+    // ahead of the engine for the whole of the next second or so of test work, and what
+    // the loss must catch is a voice that has not started.
+    await client.request('start', { cueId: 'scheduled', whenMs: clock.clockMs + 9000, options: START_OPTIONS })
+    const awaiting = await client.request('progress', { cueId: 'scheduled' })
+    // `playing` is the wire's "can still make sound", so a scheduled voice is true: what
+    // says it never started is its state and its untouched position.
+    check('the second voice is scheduled, not started', awaiting?.state === 'scheduled' && awaiting?.elapsedMs === 0, JSON.stringify(awaiting))
+    const second = await startAndWaitForPlaying('loss')
+    check('a voice is playing when the device goes', second?.playing === true, JSON.stringify(second))
+    // Asked again here, one call from the injection: everything above — the engine
+    // starting, the control panic, the two prepares — comes out of the voice's margin, so
+    // this is the check that says the device went while the voice was still ahead of the
+    // engine, which is what makes the `cancelled` below its answer.
+    const stillAhead = await client.request('progress', { cueId: 'scheduled' })
+    check('the second voice has still not started when the device goes', stillAhead?.state === 'scheduled' && stillAhead?.elapsedMs === 0, JSON.stringify(stillAhead))
 
     // The device stops under the engine, exactly as the backend callback delivers it.
     const injectedAt = Date.now()
@@ -272,6 +294,35 @@ try {
     }
     check('the loss is announced as a panic', announced >= 2, `panics seen: ${announced}`)
 
+    // Which end each of those voices got. The reasons leave the engine untranslated, and
+    // the renderer's release is what reads them.
+    const endedLine = (cueId) => client.events
+      .flatMap((message) => message?.event?.type === 'ended' ? [message.event] : [])
+      .find((event) => event.cueId === cueId) ?? null
+    let lost = null
+    let cancelled = null
+    const endedDeadline = Date.now() + ANSWER_DEADLINE_MS
+    while (Date.now() < endedDeadline) {
+      lost = endedLine('loss')
+      cancelled = endedLine('scheduled')
+      if (lost !== null && cancelled !== null) break
+      await sleep(10)
+    }
+    check('the voice that was sounding ends device-lost', lost?.reason === 'device-lost', JSON.stringify(lost ?? {}))
+    check('the voice that never started ends cancelled', cancelled?.reason === 'cancelled', JSON.stringify(cancelled ?? {}))
+
+    // The order the release relies on: every ended line this loss produced is out before
+    // the panic that clears what is left, so a cue is never recorded twice.
+    const eventIndex = (predicate) => client.events.findIndex((message) => message?.event !== undefined && predicate(message.event))
+    const lastPanic = client.events.reduce(
+      (index, message, at) => (message?.event?.type === 'panic' ? at : index),
+      -1
+    )
+    check('the ended lines precede the panic the loss queued',
+      eventIndex((event) => event.type === 'ended' && event.cueId === 'loss') < lastPanic &&
+        eventIndex((event) => event.type === 'ended' && event.cueId === 'scheduled') < lastPanic,
+      JSON.stringify({ loss: eventIndex((event) => event.type === 'ended' && event.cueId === 'loss'), scheduled: eventIndex((event) => event.type === 'ended' && event.cueId === 'scheduled'), panic: lastPanic }))
+
     // Now the desk asks for something that needs an acknowledgement of its own. The
     // service thread is the only thread that can answer one, which is why it must never
     // wait for one: if it does, it is inside that wait now, and this is where it shows.
@@ -286,7 +337,7 @@ try {
     }
     const sinceLossMs = Date.now() - injectedAt
     check(`a command sent during the failure is answered ${sinceLossMs} ms after the loss`, followUp !== null && sinceLossMs < ANSWER_DEADLINE_MS, followUpError?.message ?? '')
-    check('the failure is what silenced the voice, not the panic that followed', followUp?.ok === true && followUp.stoppedVoices === 0, JSON.stringify(followUp))
+    check('the failure is what silenced the voices, not the panic that followed', followUp?.ok === true && followUp.stoppedVoices === 0, JSON.stringify(followUp))
 
     let after = null
     const silentDeadline = Date.now() + ANSWER_DEADLINE_MS

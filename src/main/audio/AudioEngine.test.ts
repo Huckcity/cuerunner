@@ -14,7 +14,7 @@ import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AudioEngineError, NativeAudioEngine, audioEngine } from './AudioEngine'
 import { AUDIO_LIMITS, AUDIO_PROTOCOL_VERSION } from '../../shared/audio'
-import type { AudioEndedEvent, AudioEngineEvent, AudioStartOptions } from '../../shared/audio'
+import type { AudioEndedEvent, AudioEngineEvent, AudioErrorEvent, AudioStartOptions } from '../../shared/audio'
 
 const repoRoot = resolve(__dirname, '..', '..', '..')
 const binaryName = process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio'
@@ -399,6 +399,41 @@ describe('audioEngine client (against the real engine)', () => {
     )
     expect(ended.reason).toBe('complete')
     expect(ended.at - started.startAtMs).toBeLessThan(1200)
+  })
+
+  it('carries a device loss to the desk as the engine’s own reason, untranslated', async () => {
+    // What the engine says about a lost device is what the desk must read: `device-lost`
+    // for the voice that was sounding, with the fault line beside it as an error the
+    // operator sees, and the panic the engine queued behind it. This client's job is to
+    // pass them through — a reason rewritten or dropped here would leave the renderer's
+    // release with nothing to act on.
+    const instance = new NativeAudioEngine()
+    const seen: AudioEngineEvent[] = []
+    instance.subscribe((event) => seen.push(event))
+    try {
+      await instance.ensureStarted()
+      await instance.prepare('lost', workFilePath)
+      const started = await instance.start('lost', 0, loopOptions())
+      await waitUntil('the voice to play', async () => ((await instance.progress('lost'))?.elapsedMs ?? 0) > 0 || null)
+
+      await instance.simulateDeviceLossForTest()
+
+      const ended = await waitUntil('the lost voice to end', async () =>
+        seen.find(
+          (event): event is AudioEndedEvent => event.type === 'ended' && event.runId === started.runId
+        ) ?? null
+      )
+      expect(ended.reason).toBe('device-lost')
+      const fault = seen.find(
+        (event): event is AudioErrorEvent => event.type === 'error' && event.code === 'device'
+      )
+      expect(fault?.cueId).toBeNull()
+      expect(fault?.message).toMatch(/stopped unexpectedly/)
+      // The panic rides beside it, as the line that clears what the ends left behind.
+      expect(seen.some((event) => event.type === 'panic')).toBe(true)
+    } finally {
+      await instance.shutdown()
+    }
   })
 
   it('fails loudly, and leaks no child, when the engine executable is missing', async () => {

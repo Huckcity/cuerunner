@@ -71,6 +71,7 @@ import {
 import type { EventChannel } from '../../shared/ipc'
 import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
+import { deviceFaultAlert } from '../safety/engineFaults'
 import { panicFromShowEvent } from '../safety/panicBindings'
 import { OscEngine } from '../osc/OscEngine'
 import {
@@ -332,6 +333,13 @@ export function registerIpcHandlers(): void {
   audioEngine.subscribe(event => {
     noteEngineEvents([event])
     queueAudioEvents(event)
+    // One of those lines is an alarm as well as a line for the log: a device the engine
+    // lost. It is raised in the engine's own words through the alarm path that is already
+    // there — the monitor's strip, the transport chip, dismissible as alarms are — and
+    // which events are that alarm is decided in one place, beside the other engine-event
+    // bindings (safety/engineFaults).
+    const alarm = deviceFaultAlert(event)
+    if (alarm !== null) show.alert(alarm.level, alarm.source, alarm.message)
   })
 
   // MIDI
