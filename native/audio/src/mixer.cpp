@@ -297,6 +297,9 @@ Voice* Mixer::startVoice(const Command& cmd) {
   } else if (cmd.streamSlot >= 0) {
     const StreamSlot* slot = streams_.at(cmd.streamSlot);
     voice->streamSlot = cmd.streamSlot;
+    // The ring is allocated once, when the slot is acquired: its achieved size — what
+    // the declared per-voice bound bought — is this voice's figure for its whole life.
+    voice->streamBytes = slot != nullptr ? slot->ringBytes() : 0;
     voice->channels = cmd.cacheChannels > 0 ? cmd.cacheChannels : (slot != nullptr ? slot->channels : 2);
     voice->sampleRate = cmd.cacheSampleRate > 0 ? cmd.cacheSampleRate : (slot != nullptr ? slot->sampleRate : sampleRate_);
     voice->sourceFrames = cmd.cacheFrames;
@@ -813,6 +816,7 @@ void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
   out.active = voice.active;
   out.startedAtMs = static_cast<double>(voice.startFrame) * 1000.0 / static_cast<double>(sampleRate_);
   out.loopsCompleted = voice.loopsCompleted;
+  out.streamBytes = voice.streamBytes;
   const double positionMs = voice.sampleRate > 0
                                 ? voice.position * 1000.0 / static_cast<double>(voice.sampleRate)
                                 : 0.0;

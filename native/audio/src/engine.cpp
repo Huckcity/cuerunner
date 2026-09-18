@@ -934,12 +934,6 @@ bool Engine::startCue(const std::string& cueId, double whenMs, const StartOption
     file = it->second;
   }
 
-  const double now = clockMs();
-  if (whenMs > now + static_cast<double>(options_.scheduleHorizonMs)) {
-    error = {"limit", "start is scheduled beyond the engine horizon"};
-    return false;
-  }
-
   Command command;
   command.kind = Command::Start;
   copyStr(command.cueId, sizeof(command.cueId), cueId);
@@ -966,9 +960,13 @@ bool Engine::startCue(const std::string& cueId, double whenMs, const StartOption
   } else if (bypassed) {
     SourceInfo info;
     std::string streamError;
-    const int slot = streams_.acquire(file.path, options_.streamPrerollMs, options_.streamMaxVoiceBytes, streamError, info);
+    StreamRefusal refusal = StreamRefusal::None;
+    const int slot = streams_.acquire(file.path, options_.streamPrerollMs, options_.streamMaxBytesPerVoice,
+                                      options_.streamMaxTotalBytes, refusal, streamError, info);
     if (slot < 0) {
-      error = {"decode", streamError};
+      // The declared total budget refuses with its own code; anything else that stopped
+      // the open keeps the `decode` the wire has always answered it with.
+      error = {refusal == StreamRefusal::Limit ? "limit" : "decode", streamError};
       return false;
     }
     command.streamSlot = slot;
@@ -993,7 +991,7 @@ bool Engine::startCue(const std::string& cueId, double whenMs, const StartOption
   out.cueId = cueId;
   out.runId = command.runId;
   out.state = ack.state == static_cast<int>(VoiceState::Scheduled) ? "scheduled" : "playing";
-  out.startAtMs = std::max(whenMs, now);
+  out.startAtMs = std::max(whenMs, clockMs());
   return true;
 }
 

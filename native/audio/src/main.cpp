@@ -54,15 +54,17 @@ void usage() {
                "  --exclusive <0|1>          request exclusive device access (WASAPI/CoreAudio)\n"
                "  --buffer-frames <n>        device period in frames, default 512\n"
                "  --capture <file.wav>       tee mixed output to a float WAV (dev/test)\n"
-               "  --cache-max-bytes <n>      decoded cache byte budget\n"
+               "  --cache-max-bytes <n>      decoded cache byte budget (default: the declaration)\n"
                "  --cache-max-files <n>      decoded cache file count\n"
                "  --cache-max-file-bytes <n> files above this decoded size stream instead\n"
                "  --stream-preroll-ms <n>    decoded audio kept ahead per stream\n"
-               "  --stream-max-voice-bytes <n>\n"
+               "  --stream-max-bytes-per-voice <n>\n"
+               "                             ring byte cap per streaming voice (0 = the declared bound)\n"
                "  --stream-max-total-bytes <n>\n"
-               "  --schedule-horizon-ms <n>  how far ahead a start may be scheduled\n"
+               "                             total streaming budget (0 = no budget)\n"
+               "  --schedule-horizon-ms <n>  how far ahead a stamped verb may be scheduled\n"
                "  --frames <n>               offline: render exactly this many frames\n"
-               "  --protocol                 print the wire declaration: the protocol, every verb and every event\n"
+               "  --protocol                 print the wire declaration: the protocol, every verb, every event and the shared bounds\n"
                "  --declare-protocol <n>     declare another protocol on the wire (dev/test)\n"
                "  --version\n",
                ws::kEngineVersion);
@@ -112,9 +114,9 @@ bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& so
     } else if (arg == "--stream-preroll-ms") {
       if (!nextValue(argc, argv, i, value)) return false;
       engine.streamPrerollMs = std::atoll(value.c_str());
-    } else if (arg == "--stream-max-voice-bytes") {
+    } else if (arg == "--stream-max-bytes-per-voice") {
       if (!nextValue(argc, argv, i, value)) return false;
-      engine.streamMaxVoiceBytes = std::atoll(value.c_str());
+      engine.streamMaxBytesPerVoice = std::atoll(value.c_str());
     } else if (arg == "--stream-max-total-bytes") {
       if (!nextValue(argc, argv, i, value)) return false;
       engine.streamMaxTotalBytes = std::atoll(value.c_str());
@@ -177,9 +179,9 @@ int main(int argc, char** argv) {
     return 2;
   }
   if (protocol) {
-    // The declaration this engine carries, as JSON — the same table it validates requests
-    // with and opens connections with. src/main/audio/audioWire.test.ts compares it with
-    // the one in src/shared/audio.ts.
+    // The declaration this engine carries, as JSON — the verbs it validates requests
+    // with, the bounds both ends share and the protocol connections open with.
+    // src/main/audio/audioWire.test.ts compares it with the ones in src/shared/audio.ts.
     const std::string declaration = ws::wireDeclarationJson(engineOptions.declaredProtocol);
     std::printf("%s\n", declaration.c_str());
     return 0;

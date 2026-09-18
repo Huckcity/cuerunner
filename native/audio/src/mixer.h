@@ -47,6 +47,8 @@ struct Voice {
   int64_t cachedFrames = 0;
   CacheEntry* cacheEntry = nullptr;
   int streamSlot = -1;
+  /** The ring this voice's stream slot holds, in bytes; 0 when cache-backed. */
+  int64_t streamBytes = 0;
   int channels = 0;
   int sampleRate = 0;
   int64_t sourceFrames = -1;

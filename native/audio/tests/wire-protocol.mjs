@@ -9,9 +9,12 @@
  * The declaration itself is held against src/shared/audio.ts by
  * src/main/audio/audioWire.test.ts, which spawns this same `--protocol` output; this
  * harness walks the declaration against the live engine: every verb it carries is answered
- * (nothing is routed by the chain and missing from the table), every event the engine emits
- * carries exactly the fields its type declares, and an engine told to declare another
- * protocol says so in its greeting and in `info()`.
+ * (nothing is routed by the chain and missing from the table), every event the engine
+ * emits carries exactly the fields its type declares, an engine told to declare another
+ * protocol says so in its greeting and in `info()`, and the bounds the declaration
+ * carries are enforced — a stamped verb beyond the schedule horizon is refused naming it,
+ * a streaming voice reports the ring it holds, and the total streaming budget refuses the
+ * voice that would exceed it.
  *
  *   node native/audio/tests/wire-protocol.mjs [--binary path]
  */
@@ -121,6 +124,14 @@ class EngineClient {
 const declaration = JSON.parse(execFileSync(binary, ['--protocol'], { encoding: 'utf8' }))
 const declaredVerbs = Object.keys(declaration.verbs ?? {})
 const declaredEvents = declaration.events ?? {}
+
+/**
+ * The bounds both ends share, as this build declares them — the same table
+ * src/shared/audio.ts carries, printed beside the verbs so that
+ * src/main/audio/audioWire.test.ts can hold the two equal. Read here rather than typed
+ * into this file, so a check below refuses against the declared figure itself.
+ */
+const limits = declaration.limits ?? {}
 console.log(`wire protocol — declaration ${JSON.stringify(declaration.protocol)}, ${declaredVerbs.length} verbs, ${Object.keys(declaredEvents).length} events, binary ${binary}`)
 check(
   '--protocol answers with a declaration and its verbs',
@@ -133,9 +144,20 @@ check(
     Object.values(declaredEvents).every(fields => Array.isArray(fields) && fields.length > 0 && fields.every(field => typeof field === 'string')),
   JSON.stringify(declaredEvents).slice(0, 200)
 )
+check(
+  'the declaration carries every bound with its value and its regime',
+  Object.keys(limits).length > 0 &&
+    Object.values(limits).every(
+      (limit) => typeof limit?.value === 'number' && limit.value > 0 && (limit.regime === 'refuse' || limit.regime === 'clamp-and-report')
+    ),
+  JSON.stringify(limits)
+)
 
 const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-wire-protocol-'))
 let sockets = 0
+
+/** A media file long enough to outlive the checks below: the streaming bounds need one. */
+const fixturePath = join(repoRoot, 'native', 'audio', 'tests', 'fixtures', 'long-tone.mp3')
 
 /**
  * Spawns an engine on its own socket and connects to it, retrying while it starts. The
@@ -309,11 +331,63 @@ try {
       JSON.stringify(clock)
     )
 
+    // A cache-backed voice holds no ring: `streamBytes` is the streaming half of the
+    // per-voice bound, and 0 is what says the voice is playing from decoded memory.
+    await client.request('prepare', { cueId: 'tone', filePath: fixturePath })
+    const cachedStart = await client.request('start', { cueId: 'tone', whenMs: 0, options: {} })
+    const cachedInfo = await client.request('info')
+    const cachedVoice = cachedInfo.result?.activeCues?.find((voice) => voice.cueId === 'tone')
+    check(
+      'a cache-backed voice reports no streaming ring',
+      cachedStart.ok === true && cachedVoice !== undefined && cachedVoice.streamBytes === 0 && cachedInfo.result?.media?.streamingVoices === 0,
+      JSON.stringify({ start: cachedStart, voice: cachedVoice, media: cachedInfo.result?.media })
+    )
+
+    // The schedule horizon refuses, and it covers every verb whose declaration carries a
+    // `whenMs` — derived from the declaration rather than a second list here, so a verb
+    // that gains one is covered the moment its declaration does.
+    const horizonMs = limits.scheduleHorizonMs?.value
+    const stamped = declaredVerbs.filter((verb) => declaration.verbs[verb]?.whenMs !== undefined)
+    const missed = []
+    for (const verb of stamped) {
+      const params = { cueId: 'never-prepared', whenMs: horizonMs + 600_000 }
+      if (verb === 'start') params.options = {}
+      const reply = await client.request(verb, params)
+      const message = reply.error?.message ?? ''
+      if (reply.ok !== false || reply.error?.code !== 'limit' || !message.includes(String(horizonMs))) {
+        missed.push(`${verb}: ${JSON.stringify(reply)}`)
+      }
+    }
+    check(
+      'every stamped verb is refused beyond the horizon, naming it',
+      stamped.length > 0 && missed.length === 0,
+      JSON.stringify(missed)
+    )
+    const afterRefusals = await client.request('clock')
+    check(
+      'the connection stays usable after a refusal',
+      afterRefusals.ok === true && typeof afterRefusals.result?.clockMs === 'number',
+      JSON.stringify(afterRefusals)
+    )
+
     const info = await client.request('info')
     check(
       'info reports the protocol the greeting declared',
       info.ok === true && info.result?.protocol === declaration.protocol,
       JSON.stringify(info?.result?.protocol)
+    )
+    // The bounds an engine with no limit flags runs with are the declaration's own: the
+    // figures it reports in force are the values the same build printed a moment ago.
+    check(
+      'a default-configured engine reports the declared bounds in force',
+      info.result?.cache?.limitBytes === limits.cacheMaxBytes?.value &&
+        info.result?.cache?.maxFiles === limits.cacheMaxFiles?.value &&
+        info.result?.cache?.maxFileBytes === limits.cacheMaxFileBytes?.value &&
+        info.result?.media?.streamBufferLimitBytes === limits.streamMaxTotalBytes?.value,
+      JSON.stringify({
+        cache: [info.result?.cache?.limitBytes, info.result?.cache?.maxFiles, info.result?.cache?.maxFileBytes],
+        streamBufferLimitBytes: info.result?.media?.streamBufferLimitBytes
+      })
     )
 
     // Every verb the declaration carries must be one the dispatch chain answers: a verb
@@ -426,6 +500,93 @@ try {
     }
   } finally {
     await stopEngine(other)
+  }
+}
+
+// The streaming bounds, on the silent backend and with the flags set narrow enough to
+// reach them: the per-voice ring is what a voice reports, and the total budget refuses
+// the voice that would take the pool past it rather than allocating it.
+{
+  const perVoiceCap = 100_000
+  const totalBudget = 150_000
+  const stream = await startEngine([
+    '--cache-max-file-bytes', '1000',
+    '--stream-max-bytes-per-voice', String(perVoiceCap),
+    '--stream-max-total-bytes', String(totalBudget)
+  ])
+  try {
+    check('an engine with the streaming flags starts', stream.connected, stream.connected ? '' : `${stream.error?.message}\n${stream.stderr()}`)
+    if (stream.connected) {
+      const { client } = stream
+      const prepared = await client.request('prepare', { cueId: 'stream-a', filePath: fixturePath })
+      check(
+        'a file above the per-file bound is reported as streaming',
+        prepared.ok === true && prepared.result?.streaming === true,
+        JSON.stringify(prepared)
+      )
+
+      const first = await client.request('start', { cueId: 'stream-a', whenMs: 0, options: {} })
+      check('the first streaming voice is within the budget', first.ok === true, JSON.stringify(first))
+      let info = null
+      for (let attempt = 0; attempt < 50; attempt++) {
+        info = await client.request('info')
+        if (info.result?.activeCues?.some((voice) => voice.cueId === 'stream-a')) break
+        await sleep(20)
+      }
+      const voice = info?.result?.activeCues?.find((entry) => entry.cueId === 'stream-a')
+      check(
+        'a streaming voice reports the ring it holds, and it is the pool’s own figure',
+        voice !== undefined && voice.streamBytes > 0 && voice.streamBytes <= perVoiceCap && voice.streamBytes === info.result?.media?.streamBufferBytes,
+        JSON.stringify({ voice, media: info?.result?.media })
+      )
+
+      await client.request('prepare', { cueId: 'stream-b', filePath: fixturePath })
+      const second = await client.request('start', { cueId: 'stream-b', whenMs: 0, options: {} })
+      check(
+        'a voice past the total budget is refused, naming the bound',
+        second.ok === false && second.error?.code === 'limit' && /streamMaxTotalBytes/.test(second.error?.message ?? '') && (second.error?.message ?? '').includes(String(totalBudget)),
+        JSON.stringify(second)
+      )
+      const after = await client.request('info')
+      check(
+        'the refusal left the first voice playing and the total inside the budget',
+        after.result?.media?.streamBufferBytes <= totalBudget &&
+          after.result?.activeCues?.some((entry) => entry.cueId === 'stream-a') === true &&
+          after.result?.activeCues?.some((entry) => entry.cueId === 'stream-b') === false,
+        JSON.stringify({ media: after.result?.media, cues: after.result?.activeCues?.map((entry) => entry.cueId) })
+      )
+    }
+  } finally {
+    await stopEngine(stream)
+  }
+
+  // A cap below the engine's 4096-frame floor: the floor must not raise the ring past
+  // what the caller declared, so the achieved figure is the cap, not the floor.
+  const subFloorCap = 1000
+  const tiny = await startEngine([
+    '--cache-max-file-bytes', '1000',
+    '--stream-max-bytes-per-voice', String(subFloorCap)
+  ])
+  try {
+    check('an engine with a sub-floor per-voice cap starts', tiny.connected, tiny.connected ? '' : `${tiny.error?.message}\n${tiny.stderr()}`)
+    if (tiny.connected) {
+      await tiny.client.request('prepare', { cueId: 'tiny', filePath: fixturePath })
+      const started = await tiny.client.request('start', { cueId: 'tiny', whenMs: 0, options: {} })
+      let info = null
+      for (let attempt = 0; attempt < 50; attempt++) {
+        info = await tiny.client.request('info')
+        if (info.result?.activeCues?.some((voice) => voice.cueId === 'tiny')) break
+        await sleep(20)
+      }
+      const voice = info?.result?.activeCues?.find((entry) => entry.cueId === 'tiny')
+      check(
+        'a ring below the frame floor still honours the byte cap',
+        started.ok === true && voice !== undefined && voice.streamBytes > 0 && voice.streamBytes <= subFloorCap,
+        JSON.stringify({ started, voice })
+      )
+    }
+  } finally {
+    await stopEngine(tiny)
   }
 }
 

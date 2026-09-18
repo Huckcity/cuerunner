@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AudioEngineError, NativeAudioEngine, audioEngine } from './AudioEngine'
-import { AUDIO_PROTOCOL_VERSION } from '../../shared/audio'
+import { AUDIO_LIMITS, AUDIO_PROTOCOL_VERSION } from '../../shared/audio'
 import type { AudioEndedEvent, AudioEngineEvent, AudioStartOptions } from '../../shared/audio'
 
 const repoRoot = resolve(__dirname, '..', '..', '..')
@@ -238,8 +238,8 @@ describe('audioEngine client (against the real engine)', () => {
     expect(waveform.values).toHaveLength(64)
     expect(waveform.values[0]).toBeCloseTo(0.5, 3)
     expect(waveform.values[1]).toBeCloseTo(0.5, 3)
-    const clamped = await audioEngine.waveform(workFilePath, 100000)
-    expect(clamped.buckets).toBe(4096)
+    const clamped = await audioEngine.waveform(workFilePath, AUDIO_LIMITS.maxWaveformPoints.value + 1)
+    expect(clamped.buckets).toBe(AUDIO_LIMITS.maxWaveformPoints.value)
     expect(clamped.truncated).toBe(true)
   })
 

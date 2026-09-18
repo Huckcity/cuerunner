@@ -39,13 +39,21 @@ struct EngineOptions {
    * app's refusal of a build it does not speak is exercised against a real process.
    */
   int declaredProtocol = kWireProtocolVersion;
-  int64_t cacheMaxBytes = 512LL * 1024 * 1024;
-  int cacheMaxFiles = 100;
-  int64_t cacheMaxFileBytes = 32LL * 1024 * 1024;
+  // The declared bounds (native/audio/src/wsaudio.h, the copy of AUDIO_LIMITS): each
+  // default below is the declaration's value, and a flag only moves what is in force.
+  int64_t cacheMaxBytes = limitValue(LimitId::CacheMaxBytes);
+  int cacheMaxFiles = static_cast<int>(limitValue(LimitId::CacheMaxFiles));
+  int64_t cacheMaxFileBytes = limitValue(LimitId::CacheMaxFileBytes);
+  /** Engine configuration, not a caller bound: how much decoded audio a ring keeps ahead. */
   int64_t streamPrerollMs = 2000;
-  int64_t streamMaxTotalBytes = 128LL * 1024 * 1024;
-  int64_t streamMaxVoiceBytes = 16LL * 1024 * 1024;
-  int64_t scheduleHorizonMs = 10000;
+  int64_t streamMaxBytesPerVoice = limitValue(LimitId::StreamMaxBytesPerVoice);
+  int64_t streamMaxTotalBytes = limitValue(LimitId::StreamMaxTotalBytes);
+  /**
+   * How far ahead a verb carrying `whenMs` may be placed. Enforced where the stamp is
+   * read — protocol.cpp refuses a request past it before any verb body runs, the
+   * declaration's `refuse` regime — so no stamped verb executes late.
+   */
+  int64_t scheduleHorizonMs = limitValue(LimitId::ScheduleHorizonMs);
   bool offline = false;
 };
 

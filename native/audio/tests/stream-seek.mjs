@@ -191,7 +191,7 @@ const child = spawn(binary, [
   '--buffer-frames', String(BLOCK_FRAMES),
   '--cache-max-file-bytes', '300000',
   '--stream-preroll-ms', String(PREROLL_MS),
-  '--stream-max-voice-bytes', String(4 * 1024 * 1024),
+  '--stream-max-bytes-per-voice', String(4 * 1024 * 1024),
   '--stream-max-total-bytes', String(64 * 1024 * 1024),
   '--capture', capturePath
 ], { stdio: ['ignore', 'pipe', 'pipe'] })

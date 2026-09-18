@@ -405,9 +405,8 @@ const child = spawn(BINARY, [
   '--cache-max-files', '64',
   '--cache-max-file-bytes', String(2 * 1024 * 1024),
   '--stream-preroll-ms', '750',
-  '--stream-max-voice-bytes', String(4 * 1024 * 1024),
-  '--stream-max-total-bytes', String(STREAM_MAX_TOTAL_BYTES),
-  '--schedule-horizon-ms', '10000'
+  '--stream-max-bytes-per-voice', String(4 * 1024 * 1024),
+  '--stream-max-total-bytes', String(STREAM_MAX_TOTAL_BYTES)
 ], { stdio: ['ignore', 'pipe', 'pipe'] })
 
 let engineStderr = ''

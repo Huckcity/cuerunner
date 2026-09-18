@@ -7,20 +7,15 @@
 
 namespace ws {
 
-namespace {
-// A slot's ring is capped by the caller's byte budget; this is the fallback when none
-// is configured (16 MiB of interleaved float).
-constexpr int64_t kFallbackVoiceBytes = 16 * 1024 * 1024;
-}  // namespace
-
 StreamPool::StreamPool() {
   scratch_.resize(static_cast<size_t>(kMaxChunkFrames) * static_cast<size_t>(kMaxOutputChannels));
 }
 
 StreamPool::~StreamPool() { closeAll(); }
 
-int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxBytesPerVoice, std::string& error,
-                        SourceInfo& info) {
+int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxBytesPerVoice, int64_t maxTotalBytes,
+                        StreamRefusal& refusal, std::string& error, SourceInfo& info) {
+  refusal = StreamRefusal::None;
   int index = -1;
   for (int i = 0; i < kMaxStreams; i++) {
     bool expected = false;
@@ -30,6 +25,9 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
     }
   }
   if (index < 0) {
+    // The stream-slot count is engine-internal (it is not a declared bound), and the
+    // wire has always answered a stream it could not open with `decode`; only the
+    // declared total budget is a refusal code of its own.
     error = "no free streaming slot (limit is " + std::to_string(kMaxStreams) + ")";
     return -1;
   }
@@ -37,6 +35,7 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
   StreamSlot& slot = slots_[index];
   std::unique_ptr<Source> source = openSource(path, error);
   if (!source) {
+    refusal = StreamRefusal::Decode;
     slot.inUse.store(false, std::memory_order_release);
     return -1;
   }
@@ -47,11 +46,39 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
   int64_t capacityFrames = sampleRate * prerollMs / 1000;
   if (capacityFrames < 4096) capacityFrames = 4096;
   const int64_t bytesPerFrame = static_cast<int64_t>(channels) * static_cast<int64_t>(sizeof(float));
-  const int64_t byteCap = maxBytesPerVoice > 0 ? maxBytesPerVoice : kFallbackVoiceBytes;
+  // The per-voice ring is capped by the caller's byte budget — the declaration's when a
+  // configuration names none.
+  const int64_t byteCap = maxBytesPerVoice > 0 ? maxBytesPerVoice : limitValue(LimitId::StreamMaxBytesPerVoice);
   if (capacityFrames * bytesPerFrame > byteCap) capacityFrames = byteCap / bytesPerFrame;
-  if (capacityFrames < 4096) capacityFrames = 4096;
+  if (capacityFrames < 4096) {
+    // The frame floor keeps a short pre-roll a real ring, but the byte cap is a declared
+    // bound: when it is below the floor the cap wins, or a caller asking for a tiny ring
+    // would get one above what it allowed. One frame is the smallest workable ring.
+    capacityFrames = std::max<int64_t>(1, std::min<int64_t>(4096, byteCap / bytesPerFrame));
+  }
 
+  // The declared total streaming budget, read as the pool's own accounting: the ring is
+  // reserved against the resident total before it is allocated, so a refusal here is
+  // exactly the figure `info()` reports — and two acquires racing cannot both be let
+  // past a budget with room for one.
   const size_t bytes = static_cast<size_t>(capacityFrames) * static_cast<size_t>(bytesPerFrame);
+  const int64_t reserved = static_cast<int64_t>(bytes);
+  if (maxTotalBytes > 0) {
+    int64_t resident = residentBytes_.load(std::memory_order_relaxed);
+    for (;;) {
+      if (resident + reserved > maxTotalBytes) {
+        refusal = StreamRefusal::Limit;
+        error = "the streaming budget is full (streamMaxTotalBytes " + std::to_string(maxTotalBytes) +
+                "): a further " + std::to_string(bytes) + " bytes would exceed it";
+        slot.inUse.store(false, std::memory_order_release);
+        return -1;
+      }
+      if (residentBytes_.compare_exchange_weak(resident, resident + reserved, std::memory_order_acq_rel)) break;
+    }
+  } else {
+    residentBytes_.fetch_add(reserved, std::memory_order_relaxed);
+  }
+
   slot.pcm.resize(bytes / sizeof(float));
   slot.source = std::move(source);
   slot.path = path;
@@ -62,7 +89,6 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
   slot.eof.store(false, std::memory_order_relaxed);
   slot.underruns.store(0, std::memory_order_relaxed);
   slot.ring.configure(slot.pcm.data(), capacityFrames, channels, static_cast<double>(sampleRate));
-  residentBytes_.fetch_add(static_cast<int64_t>(bytes), std::memory_order_relaxed);
   return index;
 }
 

@@ -139,6 +139,12 @@ type EventSetCheck = [MissingEventFields<typeof AUDIO_WIRE_EVENTS>] extends [nev
  *
  * Verb and field names are frozen, and so are the declared defaults: a well-formed
  * request that omits an optional field gets the default, never a refusal.
+ *
+ * `--protocol` prints the bounds both ends share (`AUDIO_LIMITS`) beside the verbs in
+ * the same JSON. They are not part of this number's meaning — the version still means
+ * this verb, event and field set, so an engine built before they joined the printout
+ * and declaring the same protocol stays acceptable at runtime; the two tables are held
+ * equal at build time by the comparison test, never negotiated at connect.
  */
 export const AUDIO_WIRE = {
   protocol: AUDIO_PROTOCOL_VERSION,
@@ -257,38 +263,70 @@ export const AUDIO_DEFAULT_BUFFER_FRAMES = 512
 export const AUDIO_DEFAULT_CHANNELS = 2
 
 /**
- * Bounds. The native engine may be configured lower, never higher; `info()` reports
- * the limits in force. They exist so a buggy or hostile caller cannot make the engine
- * allocate without limit, and so every scheduling verb has a definite failure.
+ * How a declared bound treats a request that asks past it.
+ *
+ * `refuse` — the request does not happen, and the answer says what refused it. The
+ * schedule horizon and the streaming budget name the bound and its value; the other
+ * refusals keep the wire's existing wording (an over-bound crosspoint matrix answers
+ * `invalid`, "too many crosspoints", and a start with no free voice answers `limit`
+ * without naming a bound).
+ *
+ * `clamp-and-report` — the engine applies what it can and publishes the achieved
+ * figure, so a caller never assumes what it asked for is what it got: the device
+ * figures and the cache/media counters in `info()`, a reply's `truncated`, and a
+ * streaming voice's `streamBytes`.
+ */
+export type AudioLimitRegime = 'refuse' | 'clamp-and-report'
+
+/** One bound both ends share: the value it is enforced at, and the regime it is in. */
+export interface AudioLimit {
+  value: number
+  regime: AudioLimitRegime
+}
+
+/**
+ * The bounds both ends share — the one declaration of them: each bound's name, value
+ * and regime exist here and nowhere else. The value is the engine's own default; a
+ * command-line setting may move what is in force, and `info()` carries the in-force
+ * figure for the bounds it reports — the cache's `limitBytes`, `maxFiles` and
+ * `maxFileBytes`, the streaming total as `media.streamBufferLimitBytes`, and the
+ * achieved device figures (rate, channels, buffer, exclusivity) — while the rest are
+ * visible in the figures each regime names below. The regime is what the engine does
+ * at it.
+ *
+ * The native engine cannot import this module, so it carries the same table as data
+ * (`native/audio/src/wsaudio.h`), reads it at every enforcement site and flag default,
+ * and prints it for `--protocol`; `src/main/audio/audioWire.test.ts` holds the two to
+ * each other, so a name, value or regime edited at one end alone fails there.
+ *
+ * The regimes: voices, crosspoints and the schedule horizon refuse — a request the
+ * engine cannot hold, or a schedule a show must not have moved under it. The cache
+ * bounds and a streaming voice's ring clamp and report the achieved figure, and the
+ * total streaming budget refuses rather than allocate past it. They exist so a buggy
+ * or hostile caller cannot make the engine allocate without limit, and so every
+ * scheduling verb has a definite failure.
  */
 export const AUDIO_LIMITS = {
   /** Voices that can be scheduled or playing at once. */
-  maxVoices: 64,
+  maxVoices: { value: 64, regime: 'refuse' },
   /** A single start's crosspoint matrix. */
-  maxCrosspoints: 64,
+  maxCrosspoints: { value: 64, regime: 'refuse' },
   /** Output channels a voice can address (the device may have fewer). */
-  maxOutputChannels: 32,
+  maxOutputChannels: { value: 32, regime: 'clamp-and-report' },
   /** Points a single `waveform()` call may return (min/max pairs per bucket). */
-  maxWaveformPoints: 4096,
-  /** How far ahead of the current sample clock a start may be scheduled. */
-  scheduleHorizonMs: 10_000,
-  /** Pending (future-dated) operations a cue may accumulate before rejecting new ones. */
-  maxPendingOpsPerCue: 16,
-  /** Pending (future-dated) operations across all cues. */
-  maxPendingOps: 256,
+  maxWaveformPoints: { value: 4096, regime: 'clamp-and-report' },
+  /** How far ahead of the current sample clock a verb carrying `whenMs` may be placed. */
+  scheduleHorizonMs: { value: 10_000, regime: 'refuse' },
   /** Decoded float data held for reuse, and how many files it may span. */
-  cacheMaxBytes: 512 * 1024 * 1024,
-  cacheMaxFiles: 100,
+  cacheMaxBytes: { value: 512 * 1024 * 1024, regime: 'clamp-and-report' },
+  cacheMaxFiles: { value: 100, regime: 'clamp-and-report' },
   /** Decoded size above which a file is streamed and never cached. */
-  cacheMaxFileBytes: 32 * 1024 * 1024,
-  /** Audio kept decoded ahead of the play position per streaming voice. */
-  streamPrerollMs: 2000,
-  /** Hard cap on decoded-but-unplayed bytes per voice and across all voices. */
-  streamMaxBytesPerVoice: 16 * 1024 * 1024,
-  streamMaxTotalBytes: 128 * 1024 * 1024,
-  /** Bytes in a waveform scan are read in these chunks; never whole-file resident. */
-  scanChunkFrames: 8192
-} as const
+  cacheMaxFileBytes: { value: 32 * 1024 * 1024, regime: 'clamp-and-report' },
+  /** Decoded-but-unplayed bytes a streaming voice's ring may hold. */
+  streamMaxBytesPerVoice: { value: 16 * 1024 * 1024, regime: 'clamp-and-report' },
+  /** Decoded-but-unplayed bytes across every streaming voice. */
+  streamMaxTotalBytes: { value: 128 * 1024 * 1024, regime: 'refuse' }
+} as const satisfies Record<string, AudioLimit>
 
 /** The IPC channels. Main owns the handlers; preload owns the bridge to them. */
 export const AUDIO_CHANNELS = {
@@ -395,7 +433,7 @@ export function isAudioFadeParam(value: string): value is AudioFadeParam {
 /** Waveform points are clamped here on both sides of the seam. */
 export function clampWaveformPoints(points: number): number {
   if (!Number.isFinite(points)) return 0
-  return Math.max(1, Math.min(AUDIO_LIMITS.maxWaveformPoints, Math.floor(points)))
+  return Math.max(1, Math.min(AUDIO_LIMITS.maxWaveformPoints.value, Math.floor(points)))
 }
 
 /**
@@ -620,6 +658,13 @@ export interface AudioActiveCue {
   runId: string
   state: AudioVoiceState
   elapsedMs: number
+  /**
+   * The ring the engine's streaming voice holds, in bytes — the achieved figure when
+   * the per-voice bound capped the configured pre-roll — or 0 for a cache-backed voice.
+   * Optional because an engine built before this field was added declares the same
+   * protocol and sends none; a caller treats that as unknown, not as zero.
+   */
+  streamBytes?: number
 }
 
 export interface AudioCacheStats {

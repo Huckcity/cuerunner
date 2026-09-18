@@ -6,7 +6,7 @@ describe('shared audio contract', () => {
     expect(clampWaveformPoints(0)).toBe(1)
     expect(clampWaveformPoints(-5)).toBe(1)
     expect(clampWaveformPoints(512)).toBe(512)
-    expect(clampWaveformPoints(AUDIO_LIMITS.maxWaveformPoints + 1)).toBe(AUDIO_LIMITS.maxWaveformPoints)
+    expect(clampWaveformPoints(AUDIO_LIMITS.maxWaveformPoints.value + 1)).toBe(AUDIO_LIMITS.maxWaveformPoints.value)
     expect(clampWaveformPoints(Number.NaN)).toBe(0)
     expect(clampWaveformPoints(12.9)).toBe(12)
   })
