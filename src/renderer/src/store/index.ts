@@ -618,6 +618,12 @@ function patchedCue(cue: Cue, patch: Partial<Cue>): Cue {
   // file to belong to.
   const was = cue.type === 'audio' ? cue : null
   if (next.type === 'audio' && 'filePath' in patch && patch.filePath !== was?.filePath) {
+    // The route pair the cue was read with names the file it no longer plays, and a pair
+    // is read before the cue's own path: keeping it would resolve a recovered session to
+    // the file the cue was moved off, and a save would write that route back. The path
+    // the cue holds now is the one to write a route from, which is what saving does for
+    // a cue that never carried a pair.
+    delete (next as unknown as Record<string, unknown>).media
     // The scan and the length both came back from the file that answered, so neither
     // outlives it — unless the patch carries the new file's own length with it, which is
     // what the inspector's file pick does. A length left from the last file is a row, a

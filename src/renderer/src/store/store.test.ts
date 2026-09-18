@@ -1497,6 +1497,37 @@ describe('store — silence trim', () => {
     expect(useStore.getState().silenceFailures).toEqual({})
   })
 
+  it('lets the route pair go with the file it names, whichever way the cue is pointed elsewhere', () => {
+    // A cue read from a showfile carries the pair the file stored for it. A pair left
+    // behind names the file the cue no longer plays, and a load reads the pair before the
+    // cue's own path: a recovered session would resolve that old file, and a save would
+    // write its route back.
+    const pair = { path: 'media/walk-in.wav', originalPath: '/shows/tour/media/walk-in.wav' }
+    const withPair = (): AudioCue =>
+      ({ ...cue(), filePath: '/shows/tour/media/walk-in.wav', media: pair } as AudioCue)
+    const pairOnCue = (): unknown => (cue() as unknown as Record<string, unknown>).media
+
+    useStore.getState().addCue('audio')
+    const id = cue().id
+    useStore.setState({ cues: [withPair()] })
+
+    // The relink funnel.
+    useStore.getState().applyRelinkedMedia({ [id]: '/shows/tour/other.wav' })
+    expect(cue().filePath).toBe('/shows/tour/other.wav')
+    expect(pairOnCue()).toBeUndefined()
+
+    // The inspector's pick, which patches the cue directly.
+    useStore.setState({ cues: [withPair()] })
+    useStore.getState().updateCue(id, { filePath: '/shows/elsewhere/walk-in.wav' })
+    expect(pairOnCue()).toBeUndefined()
+
+    // A patch that leaves the file alone leaves the pair alone: it is the route of the
+    // file the cue plays, not something every edit drops.
+    useStore.setState({ cues: [withPair()] })
+    useStore.getState().updateCue(id, { volume: 0.5 })
+    expect(pairOnCue()).toEqual(pair)
+  })
+
   it('forgets the length of the file a cue no longer points at', () => {
     // The length came back from the file that answered, so it does not outlive it: a cue
     // that keeps the old take's length is a row, a group sum and a timeline width that

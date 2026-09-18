@@ -135,9 +135,15 @@ describe('exporting a show as a bundle', () => {
     expect(exported.missing).toEqual([gone])
     const bundle = await readBundle(bundled)
     expect(bundle.media.map(entry => entry.name)).toEqual(['media/walk-in.wav'])
-    // The cue that is missing its file keeps the path it had: the next save of this show
-    // is not the place to lose where the file was.
-    expect((bundle.workspace.cues[1] as AudioCue).filePath).toBe(gone)
+    // The cue that is missing its file keeps where it was: the route is the written
+    // `filePath` and the absolute it was last seen at stays beside it, so the next save
+    // of this show is not the place to lose the file.
+    const missing = bundle.workspace.cues[1] as unknown as {
+      filePath: string
+      media: { path: string; originalPath: string }
+    }
+    expect(missing.filePath).toBe(join('music', 'gone.wav'))
+    expect(missing.media).toEqual({ path: join('music', 'gone.wav'), originalPath: gone })
   })
 
   it('gives two files with the same name an entry each', async () => {

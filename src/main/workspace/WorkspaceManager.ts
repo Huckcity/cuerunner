@@ -395,6 +395,12 @@ const MAX_RECENT = 10
 // is what survives a move — and falls back to the absolute original, which is what
 // finds media that stayed put while the workspace file was copied. What neither finds
 // is reported, so the operator can relink it instead of running a show with a silent cue.
+//
+// The pair travels with the resolved cue through the session, because nothing else knows
+// it: the window hands the show back at save time with no path arithmetic of its own, so
+// the route a file was read with is the only record of it a later save can write. A save
+// writes that pair back rather than deriving one from the path this machine happened to
+// resolve, which is what keeps a show that moved findable.
 
 /** Whether a candidate path is a file that can actually be played. */
 export type ExistsCheck = (candidate: string) => boolean
@@ -444,13 +450,28 @@ export function resolveMediaReference(
   }
 }
 
-function mediaOf(cue: AudioCue): MediaReference | null {
+/**
+ * The route pair a cue came with, or null when it carries none — a blank cue, a file
+ * dropped into this session, a workspace saved before the pair existed. Read through the
+ * cast for the same reason it always was: `media` is a disk shape, and the runtime cue
+ * type declares only `filePath`.
+ */
+function mediaOf(cue: AudioCue): MediaReferenceLike | null {
   const media = legacyFields(cue).media as Partial<MediaReference> | undefined
   if (!media || typeof media.path !== 'string' || media.path === '') return null
-  return {
-    path: media.path,
-    originalPath: typeof media.originalPath === 'string' ? media.originalPath : ''
-  }
+  return media as MediaReferenceLike
+}
+
+/**
+ * The pair a save may write back: a cue's own record only when the file holds both
+ * halves. Half a pair is not written back as half a pair — the file would carry a route
+ * whose last-known absolute was never recorded, and the cue's own path is then the better
+ * record of where the file is — so such a cue is saved the way a cue with no pair is.
+ */
+function storedPairOf(cue: AudioCue): MediaReference | null {
+  const media = mediaOf(cue)
+  if (media === null || typeof media.originalPath !== 'string') return null
+  return { path: media.path, originalPath: media.originalPath }
 }
 
 function resolveCueMedia(
@@ -470,10 +491,14 @@ function resolveCueMedia(
     workspaceDir
   )
 
-  // `media` is a disk shape. The runtime cue carries the path playback can open, so it
-  // is resolved here and dropped; saving writes it again from the current filePath.
+  // The session carries the route the show came from, not only the path this machine
+  // resolved: the pair is what a later save writes back, so a show whose folder moved
+  // keeps the route it was saved with. `filePath` is the absolute this machine found when
+  // the file was there; when nothing was found it keeps what the file carried, which for
+  // a file this build wrote is the stored route — the missing report and the next save
+  // are what work from there.
   const runtime = { ...audio } as AudioCue & Record<string, unknown>
-  delete runtime.media
+  if (stored) runtime.media = stored
   if (resolution.filePath !== null) {
     runtime.filePath = resolution.filePath
   } else {
@@ -519,9 +544,44 @@ export function storedMediaPath(absolutePath: string, workspaceDir: string): str
   return outside ? absolutePath : fromFolder
 }
 
+/**
+ * The route a save writes for one cue, and the absolute path the file was last seen at.
+ *
+ * A file this session resolved to a path inside the folder being saved into is this
+ * folder's own — the path is the proof — so the route is written from where the file now
+ * sits, relative to that folder.
+ *
+ * Everywhere else the route the show came with is the one that travels: it presumes the
+ * media moves with the show, and the absolute half is the fallback for the machine where
+ * the media stayed put, tried only where nothing sits at the route. So the pair is
+ * written back as the file carried it — the relative route kept, the last-known absolute
+ * kept with it — which is what a save over a folder that does not hold the media does.
+ * Deriving a route from the path this session tried instead would replace a portable
+ * route with one machine's absolute path, and the copy the show was made for would open
+ * missing its media.
+ *
+ * A cue whose own path the stored pair does not name has no route of its own to keep —
+ * the session was pointed at another file after that pair was read — so one is derived
+ * from the path the cue holds now, exactly as for a cue that never carried a pair.
+ */
+function savedMedia(cue: AudioCue, workspaceDir: string): MediaReference {
+  const held = cue.filePath
+  if (isAbsolute(held)) {
+    const route = storedMediaPath(held, workspaceDir)
+    if (route !== held) return { path: route, originalPath: held }
+  }
+  const stored = storedPairOf(cue)
+  if (stored && (held === stored.path || held === stored.originalPath)) return stored
+  const absolutePath = isAbsolute(held) ? held : resolve(workspaceDir, held)
+  return { path: storedMediaPath(absolutePath, workspaceDir), originalPath: absolutePath }
+}
+
 // The on-disk form: the runtime workspace, with each named file's location written as
-// both its workspace-relative form and the absolute original it had at this save. The
-// caller's object is left alone.
+// both its route — relative to the folder being saved into when the media lives inside
+// it — and the absolute path it was last seen at. A cue whose file this session resolved
+// inside that folder is refreshed from that path; otherwise the pair the show came with
+// is written back, which is what keeps a route that has moved portable. The caller's
+// object is left alone.
 //
 // The bytes are a function of the show's state and the folder it is saved into — nothing
 // else, and in particular not the clock. The show's id and createdAt arrive in the
@@ -548,16 +608,21 @@ export function serialiseWorkspace(
 ): string {
   const cues = workspace.cues.map(cue => {
     const recorded = references?.get(cue.id)
-    if (recorded) return { ...cue, media: recorded }
-    if (cue.type !== 'audio' || cue.filePath === '') return cue
-    const absolutePath = isAbsolute(cue.filePath) ? cue.filePath : resolve(workspaceDir, cue.filePath)
-    return {
-      ...cue,
-      media: {
-        path: storedMediaPath(absolutePath, workspaceDir),
-        originalPath: absolutePath
-      } satisfies MediaReference
+    // A recorded pair is the bundle's own route to the file, so it is the cue's written
+    // path too: no caller has to have set one first for the rule to hold.
+    if (recorded) return { ...cue, filePath: recorded.path, media: recorded }
+    if (cue.type !== 'audio' || cue.filePath === '') {
+      // A cue with no file has no route to record. A pair a file left on one — a
+      // hand-edited show, where the path was blanked but the record was not — names a
+      // file this cue does not play, so it is not written back.
+      const pairless = { ...cue } as Cue & { media?: unknown }
+      delete pairless.media
+      return pairless
     }
+    const media = savedMedia(cue, workspaceDir)
+    // The written `filePath` is the route, never the path this machine resolved: a path
+    // a workspace-relative route can describe has no business on disk (AD-10).
+    return { ...cue, filePath: media.path, media }
   })
   return JSON.stringify(savedShape({ ...workspace, cues }), null, 2)
 }
@@ -765,9 +830,21 @@ export async function relinkWorkspaceMedia(
   const plan = planMediaRelink(current.missingMedia, cueId, result.filePaths[0])
   if (plan.size === 0) return current
 
+  const workspaceDir = workspacePath === null ? null : dirname(workspacePath)
   const cues = current.workspace.cues.map(cue => {
     const relinked = cue.type === 'audio' ? plan.get(cue.id) : undefined
-    return relinked === undefined ? cue : ({ ...cue, filePath: relinked } as Cue)
+    if (relinked === undefined) return cue
+    // The picked file replaces the show's stored route as well as the runtime path: the
+    // next save writes where the file is now, not where the show last saw it. The route
+    // is the one a save would write — relative when the pick lives inside the show's own
+    // folder, absolute when it does not.
+    const audio = { ...cue } as AudioCue & Record<string, unknown>
+    audio.filePath = relinked
+    audio.media = {
+      path: workspaceDir === null ? relinked : storedMediaPath(relinked, workspaceDir),
+      originalPath: relinked
+    } satisfies MediaReference
+    return audio as Cue
   })
   // Resolving again reports whatever the pick did not account for, so the operator can
   // pick again for the rest.

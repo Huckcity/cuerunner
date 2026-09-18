@@ -140,6 +140,74 @@ test('a moved show folder reports its missing media and one pick relinks it', as
   }
 })
 
+/**
+ * The show as this build writes it: each cue points at the route beside its folder and
+ * carries the pair with the absolute the file was last seen at — here, where the media
+ * really is, in the folder the copy was taken from.
+ */
+function showWithRoutes(show: MovedShow): unknown {
+  const cue = (i: number): Record<string, unknown> => {
+    const entry = i === 0 ? 'walk-in.wav' : 'sting.wav'
+    return {
+      ...(audioCue(`a${i + 1}`, String(i + 1), i === 0 ? 'Walk-in Music' : 'Sting', path.join('media', entry)) as Record<string, unknown>),
+      media: { path: path.join('media', entry), originalPath: show.media[i] }
+    }
+  }
+  return {
+    version: 1,
+    id: 'w-copied',
+    name: 'Tour Show',
+    createdAt: new Date().toISOString(),
+    audioSettings: { outputDeviceId: 'default' },
+    midiSettings: { outputPortName: '' },
+    cues: [cue(0), cue(1)]
+  }
+}
+
+test('a save keeps the stored route when the media is only at the old absolute', async () => {
+  const show = movedShow()
+  let { app, page, userDataDir } = await launchApp()
+
+  try {
+    // The showfile is copied elsewhere while its media stays where it was: the show still
+    // plays, from the absolute each pair records, and the route it was saved with is the
+    // relative one beside the folder it came from.
+    const copied = path.join(show.root, 'copied')
+    fs.mkdirSync(copied, { recursive: true })
+    const cuerunner = path.join(copied, 'Tour Show.cuerunner')
+    fs.writeFileSync(cuerunner, JSON.stringify(showWithRoutes(show), null, 2))
+
+    await openFromRecent(page, userDataDir, cuerunner)
+    await expect(page.locator('.cue-row')).toHaveCount(2)
+    await expect(page.locator('.missing-media-bar')).toHaveCount(0)
+
+    await page.locator('.toolbar-brand').click()
+    await page.locator('.file-menu button[data-action="save"]').click()
+    await expect(page.locator('.workspace-name')).not.toContainText('●')
+
+    // The route the show already had, in both fields, with the absolute it resolved to
+    // kept as the pair's other half. A save that wrote the path this machine happened to
+    // use would put the old machine's absolute in both.
+    const saved = JSON.parse(fs.readFileSync(cuerunner, 'utf-8')) as {
+      cues: Array<{ filePath: string; media?: { path: string; originalPath: string } }>
+    }
+    for (const [i, cue] of saved.cues.entries()) {
+      const route = path.join('media', i === 0 ? 'walk-in.wav' : 'sting.wav')
+      expect(cue.filePath).toBe(route)
+      expect(cue.media).toEqual({ path: route, originalPath: show.media[i] })
+    }
+
+    // And the show opens again finding its media where it stayed.
+    await closeApp(app)
+    ;({ app, page } = await launchApp({ userDataDir }))
+    await openFromRecent(page, userDataDir, cuerunner)
+    await expect(page.locator('.missing-media-bar')).toHaveCount(0)
+    await expect(page.locator('.cue-row')).toHaveCount(2)
+  } finally {
+    await closeApp(app)
+  }
+})
+
 test('a pick that accounts for nothing else leaves the rest missing', async () => {
   const show = movedShow()
   const { app, page, userDataDir } = await launchApp()
