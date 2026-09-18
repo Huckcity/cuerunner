@@ -28,10 +28,8 @@ import {
   defaultShowSettings,
   normalizeShowSettings
 } from '../../shared/show'
-import {
-  DEFAULT_TRIGGER_GUARD,
-  normalizeTriggerGuard
-} from '../../shared/workspace'
+import { normalizeTriggerGuard } from '../../shared/workspace'
+import { savedShape } from '../../shared/workspaceSections'
 
 /**
  * The largest workspace file this app opens: 64 MiB of JSON is already far past a
@@ -531,11 +529,13 @@ export function storedMediaPath(absolutePath: string, workspaceDir: string): str
 // (`buildWorkspace`) and only mints them for a new show. That is what makes a showfile
 // diffable: saving a show that has not changed puts the same bytes back.
 //
-// The key order is written here rather than left to whichever object the caller built,
-// because a format whose bytes depend on the order somebody happened to assign fields in
-// is a format that will eventually churn for a reason nobody can find. Adding a key means
-// adding it here, in the place it is meant to sit.
-// Held by src/main/workspace/determinism.test.ts and e2e/showfile.spec.ts.
+// The key order is the saved form's own declaration, not whichever object the caller
+// built: a format whose bytes depend on the order somebody happened to assign fields in
+// is a format that will eventually churn for a reason nobody can find. `savedShape`
+// writes the declared order; adding or moving a key means editing the declaration
+// (`src/shared/workspaceSections.ts`), and the declaration is also what the settings diff
+// and the merge walk.
+// Held by src/main/workspace/savedShape.test.ts, determinism.test.ts and e2e/showfile.spec.ts.
 //
 // `references` is for the one caller that stores a show somewhere other than the folder
 // its media lives in: a bundle records each cue's entry inside the bundle and the
@@ -559,22 +559,7 @@ export function serialiseWorkspace(
       } satisfies MediaReference
     }
   })
-  return JSON.stringify(
-    {
-      version: workspace.version,
-      id: workspace.id,
-      name: workspace.name,
-      createdAt: workspace.createdAt,
-      history: workspace.history,
-      audioSettings: workspace.audioSettings,
-      midiSettings: workspace.midiSettings,
-      showSettings: workspace.showSettings,
-      triggerGuard: workspace.triggerGuard,
-      cues
-    },
-    null,
-    2
-  )
+  return JSON.stringify(savedShape({ ...workspace, cues }), null, 2)
 }
 
 /**
@@ -789,7 +774,7 @@ export async function relinkWorkspaceMedia(
   return resolveWorkspaceMedia({ ...current.workspace, cues }, workspacePath)
 }
 
-// Simple JSON persistence for recent files (avoids adding electron-store dep complexity)
+// Simple JSON persistence for the recent files: a handful of paths do not need a store
 function recentFilePath(): string {
   return join(app.getPath('userData'), 'recent.json')
 }
@@ -1061,16 +1046,3 @@ export async function mergeShow(
   return { ...merged, inputs: files }
 }
 
-export function blankWorkspace(name = 'Untitled'): Workspace {
-  return {
-    version: 1,
-    id: crypto.randomUUID(),
-    name,
-    createdAt: new Date().toISOString(),
-    audioSettings: { outputDeviceId: 'default' },
-    midiSettings: { outputPortName: '' },
-    showSettings: defaultShowSettings(),
-    triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
-    cues: []
-  }
-}

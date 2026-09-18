@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
 import type { Workspace } from '../../../../shared/workspace'
 import { formatClock } from '../../utils/cueDefaults'
+import { buildWorkspace } from '../../utils/workspace'
 import { NoticeBar } from './NoticeBar'
 
 interface Snapshot {
@@ -48,19 +49,20 @@ export function RecoveryNotice() {
       if (response === 2) return
       if (response === 0) {
         try {
+          // Through the one constructor, like every other save: a shape hand-built here
+          // would be missing whatever section the constructor gains next.
           const saved = await window.cuerunner.workspace.save(
-            {
-              version: 1,
+            buildWorkspace({
               id: store.workspaceId,
               name: store.workspaceName,
               createdAt: store.workspaceCreatedAt,
-              history: store.showHistory.length > 0 ? store.showHistory : undefined,
+              history: store.showHistory,
               audioSettings: store.audioSettings,
               midiSettings: store.midiSettings,
               showSettings: store.showSettings,
               triggerGuard: store.triggerGuard,
               cues: store.cues
-            },
+            }),
             store.workspacePath
           )
           if (!saved) return

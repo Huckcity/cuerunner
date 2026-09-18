@@ -46,7 +46,17 @@ const settings = defaultShowSettings()
 const guard = DEFAULT_TRIGGER_GUARD
 
 const build = () =>
-  buildWorkspace('Press Night', [cue()], { outputDeviceId: 'default' }, { outputPortName: '' }, settings, identity, guard)
+  buildWorkspace({
+    id: identity.id,
+    name: 'Press Night',
+    createdAt: identity.createdAt,
+    history: [],
+    audioSettings: { outputDeviceId: 'default' },
+    midiSettings: { outputPortName: '' },
+    showSettings: settings,
+    triggerGuard: guard,
+    cues: [cue()]
+  })
 
 describe('buildWorkspace', () => {
   it('writes the identity it was given, not one of its own', () => {
@@ -68,5 +78,11 @@ describe('buildWorkspace', () => {
     const second = JSON.stringify(build())
 
     expect(second).toBe(first)
+  })
+
+  it('writes no history key for a session with nothing to say about its past', () => {
+    // An empty array here would be the key every save of every show carries for no
+    // reason; the file a session with no history writes has no such key at all.
+    expect(JSON.parse(JSON.stringify(build()))).not.toHaveProperty('history')
   })
 })

@@ -27,10 +27,17 @@ async function guardDirty(): Promise<boolean> {
     const sentEdits = useStore.getState().past.length
     let saved: { path: string; history: ShowHistoryEntry[] } | null
     try {
-      saved = await window.cuerunner.workspace.save(buildWorkspace(
-        workspaceName, cues, audioSettings, midiSettings, showSettings,
-        { id: workspaceId, createdAt: workspaceCreatedAt }, triggerGuard, showHistory
-      ), workspacePath)
+      saved = await window.cuerunner.workspace.save(buildWorkspace({
+        id: workspaceId,
+        name: workspaceName,
+        createdAt: workspaceCreatedAt,
+        history: showHistory,
+        audioSettings,
+        midiSettings,
+        showSettings,
+        triggerGuard,
+        cues
+      }), workspacePath)
     } catch (e) {
       // Closing without a save would lose the show, so the close stops here and says why.
       reportFailure(`Could not save before closing: ${message(e)}`)
@@ -108,10 +115,16 @@ export async function openDemoWorkspace(): Promise<void> {
 export async function relinkMissingMedia(cueId: string): Promise<void> {
   const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt } =
     useStore.getState()
-  const workspace = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+  const workspace = buildWorkspace({
     id: workspaceId,
-    createdAt: workspaceCreatedAt
-  }, triggerGuard)
+    name: workspaceName,
+    createdAt: workspaceCreatedAt,
+    audioSettings,
+    midiSettings,
+    showSettings,
+    triggerGuard,
+    cues
+  })
   try {
     const result = await window.cuerunner.workspace.relink(workspace, workspacePath, cueId)
     // Only cues that actually moved are written back, so an unresolved file keeps the
@@ -145,16 +158,17 @@ export async function exportShowBundle(): Promise<void> {
   } = useStore.getState()
   // A show with unsaved edits is the show as it stands: what the bundle carries is what
   // is on screen, not what was last written.
-  const workspace = buildWorkspace(
-    workspaceName,
-    cues,
+  const workspace = buildWorkspace({
+    id: workspaceId,
+    name: workspaceName,
+    createdAt: workspaceCreatedAt,
+    history: showHistory,
     audioSettings,
     midiSettings,
     showSettings,
-    { id: workspaceId, createdAt: workspaceCreatedAt },
     triggerGuard,
-    showHistory
-  )
+    cues
+  })
   try {
     const answer = await window.cuerunner.workspace.exportBundle(workspace, workspacePath)
     if (!answer.ok) {
@@ -192,16 +206,17 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
   } = useStore.getState()
   // The show as it stands, unsaved edits included: merging in a version of a show that is
   // not what is on screen is merging the wrong thing.
-  const workspace = buildWorkspace(
-    workspaceName,
-    cues,
+  const workspace = buildWorkspace({
+    id: workspaceId,
+    name: workspaceName,
+    createdAt: workspaceCreatedAt,
+    history: showHistory,
     audioSettings,
     midiSettings,
     showSettings,
-    { id: workspaceId, createdAt: workspaceCreatedAt },
     triggerGuard,
-    showHistory
-  )
+    cues
+  })
   try {
     const answer = await window.cuerunner.workspace.merge(workspace, workspacePath, {
       policy,
@@ -322,10 +337,17 @@ export function useWorkspace() {
     // unconditionally would clear edits that landed while the disk was being written.
     const sentCues = cues
     const sentEdits = useStore.getState().past.length
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+    const ws = buildWorkspace({
       id: workspaceId,
-      createdAt: workspaceCreatedAt
-    }, triggerGuard, showHistory)
+      name: workspaceName,
+      createdAt: workspaceCreatedAt,
+      history: showHistory,
+      audioSettings,
+      midiSettings,
+      showSettings,
+      triggerGuard,
+      cues
+    })
     try {
       const saved = await window.cuerunner.workspace.save(ws, workspacePath)
       if (!saved) return false
@@ -354,10 +376,17 @@ export function useWorkspace() {
     const sentEdits = useStore.getState().past.length
     // Saving under another name is the same show in another file: the identity travels
     // with it, so both copies stay recognisably the same show.
-    const ws = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+    const ws = buildWorkspace({
       id: workspaceId,
-      createdAt: workspaceCreatedAt
-    }, triggerGuard, showHistory)
+      name: workspaceName,
+      createdAt: workspaceCreatedAt,
+      history: showHistory,
+      audioSettings,
+      midiSettings,
+      showSettings,
+      triggerGuard,
+      cues
+    })
     try {
       const saved = await window.cuerunner.workspace.saveAs(ws)
       if (!saved) return false

@@ -27,10 +27,17 @@ export function useAutosave(): void {
       if (!isDirty) return
       // The file's own history travels with the snapshot: a recovered session is the same
       // show, and its record of what it has done so far is part of what it is.
-      const snapshot = buildWorkspace(workspaceName, cues, audioSettings, midiSettings, showSettings, {
+      const snapshot = buildWorkspace({
         id: workspaceId,
-        createdAt: workspaceCreatedAt
-      }, triggerGuard, showHistory)
+        name: workspaceName,
+        createdAt: workspaceCreatedAt,
+        history: showHistory,
+        audioSettings,
+        midiSettings,
+        showSettings,
+        triggerGuard,
+        cues
+      })
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when
       // "where was I" is the first question.
       window.cuerunner.workspace.autosave(snapshot, workspacePath, selectedId).catch(() => {
