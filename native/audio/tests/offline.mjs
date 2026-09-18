@@ -745,13 +745,17 @@ console.log(`cuerunner-audio acceptance — binary ${binary}`)
       { atMs: 0, verb: 'prepare', cueId: 'a', filePath: join(workDir, 'missing.wav') },
       { atMs: 0, verb: 'prepare', cueId: 'a', filePath: dc2Path },
       { atMs: 0, verb: 'start', cueId: 'a', whenMs: 60000, options: { startTime: 0, endTime: null, loopCount: 0, rate: 1, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } },
+      // The horizon covers every verb carrying a `whenMs`, not the start alone: this
+      // stop is placed on the same clock and refused the same way, by the declaration.
+      { atMs: 0, verb: 'stop', cueId: 'a', whenMs: 60000 },
       { atMs: 0, verb: 'start', cueId: 'a', whenMs: 0, options: { startTime: 0, endTime: null, loopCount: 0, rate: 0, trim: 1, volume: 1, pan: 0, fadeInDuration: 0, outputs: null } }
     ]
   })
   check('start without prepare is refused', replyFor(summary, 0).ok === false && replyFor(summary, 0).error.code === 'not-prepared')
   check('a missing file is refused', replyFor(summary, 1).ok === false && replyFor(summary, 1).error.code === 'decode')
   check('a start beyond the horizon is refused', replyFor(summary, 3).ok === false && replyFor(summary, 3).error.code === 'limit')
-  check('a zero rate is refused', replyFor(summary, 4).ok === false && replyFor(summary, 4).error.code === 'invalid')
+  check('a stop beyond the horizon is refused, naming the horizon', replyFor(summary, 4).ok === false && replyFor(summary, 4).error.code === 'limit' && /horizon/.test(replyFor(summary, 4).error.message), JSON.stringify(replyFor(summary, 4)))
+  check('a zero rate is refused', replyFor(summary, 5).ok === false && replyFor(summary, 5).error.code === 'invalid')
 }
 
 // --- 17. pan belongs to automatic routing only ----------------------------

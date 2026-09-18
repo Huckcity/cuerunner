@@ -617,6 +617,9 @@ cJSON* voiceToJson(const VoiceSnapshot& voice) {
   cJSON_AddNumberToObject(object, "runFraction", voice.runFraction);
   cJSON_AddNumberToObject(object, "startedAtMs", voice.startedAtMs);
   cJSON_AddNumberToObject(object, "loopsCompleted", voice.loopsCompleted);
+  // The achieved streaming ring, so a caller sees what the per-voice bound bought
+  // rather than assuming the configured pre-roll; 0 for a cache-backed voice.
+  cJSON_AddNumberToObject(object, "streamBytes", static_cast<double>(voice.streamBytes));
   return object;
 }
 
@@ -681,6 +684,32 @@ cJSON* infoToJson(const InfoDTO& info) {
   return object;
 }
 
+/** The regime as the declaration names it in `--protocol` and in `AUDIO_LIMITS`. */
+const char* limitRegimeName(LimitRegime regime) {
+  return regime == LimitRegime::Refuse ? "refuse" : "clamp-and-report";
+}
+
+/**
+ * The declared bounds as JSON: one entry per bound, its value and its regime — the
+ * native copy of `AUDIO_LIMITS` in src/shared/audio.ts, printed beside the verbs so
+ * src/main/audio/audioWire.test.ts can hold the two ends equal.
+ */
+std::string limitsJson() {
+  std::string out = "{";
+  for (size_t i = 0; i < kLimitCount; i++) {
+    if (i > 0) out += ',';
+    out += '"';
+    out += kLimits[i].name;
+    out += "\":{\"value\":";
+    out += std::to_string(kLimits[i].value);
+    out += ",\"regime\":\"";
+    out += limitRegimeName(kLimits[i].regime);
+    out += "\"}";
+  }
+  out += '}';
+  return out;
+}
+
 }  // namespace
 
 std::string infoJson(const InfoDTO& info) {
@@ -725,7 +754,9 @@ std::string wireDeclarationJson(int protocol) {
     }
     out += ']';
   }
-  out += "}}";
+  out += "},\"limits\":";
+  out += limitsJson();
+  out += '}';
   return out;
 }
 
@@ -826,6 +857,21 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
   const auto numberOf = [&](const char* name) { return numberField(root, wireField(verb, name)); };
   const auto textOf = [&](const char* name) { return textField(root, wireField(verb, name)); };
   const auto carries = [&](const char* name) { return fieldHasValue(root, wireField(verb, name)); };
+
+  // `scheduleHorizonMs` is a bound that refuses, and it covers every verb whose declared
+  // fields carry a `whenMs` — the stamped set the offline runner also reads, rather than
+  // a list here. Checking it before the dispatch means no stamped verb can execute late
+  // or be clamped silently, and a verb that gains a `whenMs` is covered the moment its
+  // declaration does.
+  if (wireVerbTakesWhenMs(verb)) {
+    const double whenMs = numberOf("whenMs");
+    const int64_t horizonMs = engine.scheduleHorizonMs();
+    if (whenMs > engine.clockMs() + static_cast<double>(horizonMs)) {
+      cJSON_Delete(root);
+      return replyError(id, "limit",
+                        verb + " is scheduled beyond the engine horizon (" + std::to_string(horizonMs) + " ms)");
+    }
+  }
 
   if (verb == "prepare") {
     PrepareDTO result;

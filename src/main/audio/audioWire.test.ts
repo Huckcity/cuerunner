@@ -1,9 +1,10 @@
 /**
  * The wire declaration, held against the engine that has to honour it.
  *
- * The native engine cannot import src/shared, so it carries the same table as data and
- * prints it for `--protocol`; this file is the comparison. A verb or field edited at
- * either end alone fails here — that is its whole job.
+ * The native engine cannot import src/shared, so it carries the same tables as data and
+ * prints them for `--protocol`; this file is the comparison. A verb, event or field
+ * edited at either end alone fails here — and so does a bound's name, value or regime,
+ * which the same JSON carries beside them. That is this file's whole job.
  *
  * The engine is resolved the way the client resolves it and built through the same
  * idempotent check every command runs (`scripts/ensure-native.mjs`), so a source edited
@@ -19,7 +20,7 @@ import { join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import type { ChildProcess } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { AUDIO_PROTOCOL_VERSION, AUDIO_WIRE } from '../../shared/audio'
+import { AUDIO_LIMITS, AUDIO_PROTOCOL_VERSION, AUDIO_WIRE } from '../../shared/audio'
 import type { AudioEngineEvent } from '../../shared/audio'
 import { drainMainErrors } from '../errors'
 import { AudioEngineError, NativeAudioEngine } from './AudioEngine'
@@ -72,7 +73,10 @@ function restoreEnv(name: string, value: string | undefined): void {
 describe('the wire declaration', () => {
   it('is the one the built engine carries', () => {
     const output = execFileSync(ensureBinary(), ['--protocol'], { encoding: 'utf8' })
-    expect(JSON.parse(output)).toEqual(AUDIO_WIRE)
+    // The printed declaration is the protocol, the verbs with their fields, the event
+    // set and the bounds both ends share — compared whole, in both directions: a name,
+    // value or regime edited at either end alone fails here, and the diff names the entry.
+    expect(JSON.parse(output)).toEqual({ ...AUDIO_WIRE, limits: AUDIO_LIMITS })
   })
 
   it('refuses an engine that declares another protocol, before a verb is written', async () => {

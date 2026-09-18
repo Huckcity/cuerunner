@@ -6,9 +6,11 @@
 #pragma once
 
 #include <atomic>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ws {
@@ -23,16 +25,114 @@ inline constexpr const char* kEngineVersion = "1.0.0";
  */
 inline constexpr int kWireProtocolVersion = 3;
 
-constexpr int kMaxVoices = 64;
-constexpr int kMaxCrosspoints = 64;
-constexpr int kMaxOutputChannels = 32;
+/**
+ * How a declared bound treats a request that asks past it. `Refuse` is a request that
+ * does not happen, with an answer that says what refused it: the schedule horizon and
+ * the streaming budget name the bound and its value, and the other refusals keep the
+ * wire's existing wording (an over-bound matrix answers `invalid`, a start with no free
+ * voice answers `limit` without naming one). `ClampAndReport` applies what it can and
+ * publishes the achieved figure — `info()`'s device figures and cache/media counters, a
+ * reply's `truncated`, a voice's `streamBytes`. The regime of each bound is the
+ * declaration's, not a choice made at the site.
+ */
+enum class LimitRegime { Refuse, ClampAndReport };
+
+/** The name each bound is declared under in `AUDIO_LIMITS` (src/shared/audio.ts). */
+enum class LimitId : int {
+  MaxVoices = 0,
+  MaxCrosspoints,
+  MaxOutputChannels,
+  MaxWaveformPoints,
+  ScheduleHorizonMs,
+  CacheMaxBytes,
+  CacheMaxFiles,
+  CacheMaxFileBytes,
+  StreamMaxBytesPerVoice,
+  StreamMaxTotalBytes,
+  Count
+};
+
+/** One bound both ends share: its declared name, value and regime. */
+struct Limit {
+  const char* name;
+  int64_t value;
+  LimitRegime regime;
+};
+
+/**
+ * The declaration's bounds as native data: the native copy of `AUDIO_LIMITS` in
+ * src/shared/audio.ts, which the engine cannot include. This is the one home of these
+ * values on this side — the constants below, `EngineOptions`' defaults, every
+ * enforcement site, the limit flags' help and the `limits` section of `--protocol` all
+ * read it — and src/main/audio/audioWire.test.ts holds the two copies to each other, so
+ * a name, value or regime edited at one end alone fails there.
+ */
+inline constexpr Limit kLimits[] = {
+    {"maxVoices", 64, LimitRegime::Refuse},
+    {"maxCrosspoints", 64, LimitRegime::Refuse},
+    {"maxOutputChannels", 32, LimitRegime::ClampAndReport},
+    {"maxWaveformPoints", 4096, LimitRegime::ClampAndReport},
+    {"scheduleHorizonMs", 10000, LimitRegime::Refuse},
+    {"cacheMaxBytes", 512LL * 1024 * 1024, LimitRegime::ClampAndReport},
+    {"cacheMaxFiles", 100, LimitRegime::ClampAndReport},
+    {"cacheMaxFileBytes", 32LL * 1024 * 1024, LimitRegime::ClampAndReport},
+    {"streamMaxBytesPerVoice", 16LL * 1024 * 1024, LimitRegime::ClampAndReport},
+    {"streamMaxTotalBytes", 128LL * 1024 * 1024, LimitRegime::Refuse},
+};
+
+inline constexpr size_t kLimitCount = static_cast<size_t>(LimitId::Count);
+static_assert(sizeof(kLimits) / sizeof(kLimits[0]) == kLimitCount, "every declared bound has one table entry");
+
+// An id addresses an entry by position, so the two tables are only in step if each id
+// points at the entry carrying its own name: a reordered table alone would otherwise
+// re-point every limitValue() while the count and the printed JSON still agreed with
+// themselves — and the printed names would be unchanged, so the wire comparison would
+// not catch it either.
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::MaxVoices)].name) == "maxVoices",
+              "LimitId::MaxVoices must address the maxVoices entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::MaxCrosspoints)].name) == "maxCrosspoints",
+              "LimitId::MaxCrosspoints must address the maxCrosspoints entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::MaxOutputChannels)].name) == "maxOutputChannels",
+              "LimitId::MaxOutputChannels must address the maxOutputChannels entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::MaxWaveformPoints)].name) == "maxWaveformPoints",
+              "LimitId::MaxWaveformPoints must address the maxWaveformPoints entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::ScheduleHorizonMs)].name) == "scheduleHorizonMs",
+              "LimitId::ScheduleHorizonMs must address the scheduleHorizonMs entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::CacheMaxBytes)].name) == "cacheMaxBytes",
+              "LimitId::CacheMaxBytes must address the cacheMaxBytes entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::CacheMaxFiles)].name) == "cacheMaxFiles",
+              "LimitId::CacheMaxFiles must address the cacheMaxFiles entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::CacheMaxFileBytes)].name) == "cacheMaxFileBytes",
+              "LimitId::CacheMaxFileBytes must address the cacheMaxFileBytes entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::StreamMaxBytesPerVoice)].name) == "streamMaxBytesPerVoice",
+              "LimitId::StreamMaxBytesPerVoice must address the streamMaxBytesPerVoice entry");
+static_assert(std::string_view(kLimits[static_cast<size_t>(LimitId::StreamMaxTotalBytes)].name) == "streamMaxTotalBytes",
+              "LimitId::StreamMaxTotalBytes must address the streamMaxTotalBytes entry");
+
+/** A bound's declared value: what a site enforces and a default carries unless moved. */
+inline constexpr int64_t limitValue(LimitId id) { return kLimits[static_cast<size_t>(id)].value; }
+
+// The fixed-size arrays below are sized from the declaration, so a bound moved there
+// moves every array and refusal with it — and a declared bound the `int` these sizes
+// take could not hold is a compile error rather than a truncated array.
+static_assert(limitValue(LimitId::MaxVoices) > 0 && limitValue(LimitId::MaxVoices) <= std::numeric_limits<int>::max(),
+              "the declared maxVoices must fit the int arrays sized from it");
+static_assert(limitValue(LimitId::MaxCrosspoints) > 0 && limitValue(LimitId::MaxCrosspoints) <= std::numeric_limits<int>::max(),
+              "the declared maxCrosspoints must fit the int arrays sized from it");
+static_assert(limitValue(LimitId::MaxOutputChannels) > 0 && limitValue(LimitId::MaxOutputChannels) <= std::numeric_limits<int>::max(),
+              "the declared maxOutputChannels must fit the int arrays sized from it");
+static_assert(limitValue(LimitId::MaxWaveformPoints) > 0 && limitValue(LimitId::MaxWaveformPoints) <= std::numeric_limits<int>::max(),
+              "the declared maxWaveformPoints must fit the int point count");
+
+constexpr int kMaxVoices = static_cast<int>(limitValue(LimitId::MaxVoices));
+constexpr int kMaxCrosspoints = static_cast<int>(limitValue(LimitId::MaxCrosspoints));
+constexpr int kMaxOutputChannels = static_cast<int>(limitValue(LimitId::MaxOutputChannels));
 constexpr int kMaxCueIdLen = 64;
 constexpr int kMaxPathLen = 4096;
 constexpr int kMaxRampParams = 4;
-constexpr int kMaxPendingOps = 256;
 constexpr int kMaxStreams = 16;
 constexpr int kMaxRampsPerParam = 4;
-constexpr int kMaxWaveformPoints = 4096;
+constexpr int kMaxWaveformPoints = static_cast<int>(limitValue(LimitId::MaxWaveformPoints));
 constexpr int kMaxOnsets = 20000;
 
 /**
@@ -128,6 +228,8 @@ struct VoiceSnapshot {
   double startedAtMs = 0.0;
   int loopsCompleted = 0;
   bool active = false;
+  /** The streaming ring this voice holds, in bytes; 0 for a cache-backed voice. */
+  int64_t streamBytes = 0;
 };
 
 // Snapshot of everything the mixer publishes each block, read under a seqlock so a

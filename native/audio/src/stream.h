@@ -27,17 +27,33 @@ struct StreamSlot {
   int sampleRate = 0;
   std::atomic<bool> eof{false};
   std::atomic<uint64_t> underruns{0};
+
+  /**
+   * The ring this slot holds, in bytes: the achieved figure the per-voice bound bought,
+   * and the same figure the pool adds to its resident total.
+   */
+  int64_t ringBytes() const {
+    return capacityFrames * static_cast<int64_t>(channels) * static_cast<int64_t>(sizeof(float));
+  }
 };
+
+/** Why an acquire did not open a ring: a decode failure, or a bound that refuses. */
+enum class StreamRefusal { None, Decode, Limit };
 
 class StreamPool {
  public:
   StreamPool();
   ~StreamPool();
 
-  // Opens a decoder and allocates a bounded ring. Returns the slot index, or -1 with
-  // `error` filled. Called from a command thread.
-  int acquire(const std::string& path, int64_t prerollMs, int64_t maxBytesPerVoice, std::string& error,
-              SourceInfo& info);
+  /**
+   * Opens a decoder and allocates a bounded ring. Returns the slot index, or -1 with
+   * `refusal` and `error` filled. `maxBytesPerVoice` caps the ring and `maxTotalBytes`
+   * is the declared streaming budget: a ring that would take the pool's resident total
+   * past it is refused (`StreamRefusal::Limit`, naming the budget) rather than
+   * allocated, so the total never exceeds it. Called from a command thread.
+   */
+  int acquire(const std::string& path, int64_t prerollMs, int64_t maxBytesPerVoice, int64_t maxTotalBytes,
+              StreamRefusal& refusal, std::string& error, SourceInfo& info);
   StreamSlot* at(int index);
   const StreamSlot* at(int index) const;
   // Frees a slot after the voice using it has ended. Called from a command thread.
