@@ -17,8 +17,11 @@
  * the same fix — the stop a reopen owes its voices, and the restore-failure path that
  * used to deadlock on itself — only happens on a real device: the request comes from a
  * driver, and its failing branch needs two device opens in a row to fail. The successful
- * reopen is driven by device-smoke.mjs on hardware; that failing branch has no automated
- * cover at all.
+ * reopen is driven by device-smoke.mjs on hardware, and so is the restore half of a failed
+ * reopen: that lane configures to a device id no backend lists, gets the refusal by name,
+ * and checks the device it was already using is still the one reported and playing, with
+ * no error broadcast. The double failure — the requested open and the restore both failing
+ * — has no automated cover at all.
  *
  *   node native/audio/tests/device-failure.mjs [--binary path]
  */

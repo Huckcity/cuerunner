@@ -269,12 +269,14 @@ void Engine::failDeviceFromCallback(const std::string& message) {
   deviceRunning_.store(false, std::memory_order_release);
   std::lock_guard<std::mutex> lock(errorMutex_);
   lastError_ = message;
+  lastErrorIsFailure_ = true;
 }
 
 void Engine::failDevice(const std::string& message) {
   {
     std::lock_guard<std::mutex> lock(errorMutex_);
     lastError_ = message;
+    lastErrorIsFailure_ = true;
   }
   Event event;
   event.kind = Event::Error;
@@ -282,6 +284,22 @@ void Engine::failDevice(const std::string& message) {
   copyStr(event.message, sizeof(event.message), message);
   event.atMs = clockMs();
   if (eventCallback_) eventCallback_(event);
+}
+
+void Engine::clearDeviceError() {
+  // The lock is taken before the device is looked at, and the text is written under this
+  // same lock: a loss that lands while this runs either got its text in first (and left
+  // the device not running, which is what fails this check) or takes the lock after the
+  // clear and writes its own, newer text over the cleared one. Either way the loss the
+  // configure did not answer is the text left standing.
+  std::lock_guard<std::mutex> lock(errorMutex_);
+  if (!deviceRunning_.load(std::memory_order_acquire)) return;
+  // Only a failure is what a configure answers. The driver-request note says the show
+  // stopped for a moment to rebuild its stream, which is as true after a configure as
+  // before it.
+  if (!lastErrorIsFailure_) return;
+  lastError_.clear();
+  lastErrorIsFailure_ = false;
 }
 
 bool initBackendContext(const std::string& backend, ma_context& context, ma_backend& resolved,
@@ -1503,16 +1521,23 @@ bool Engine::configureDevice(const DeviceRequest& request, EngineError& error) {
   // that has latched off — the health check saw the stream die and nothing has reopened
   // it since. Identical settings are then exactly the request the device needs, so the
   // same options become a reopen rather than a shrug; the window re-sends them on every
-  // mount and settings change, which is how a returned interface comes back.
+  // mount and settings change, and Settings → Audio's own lever sends them on purpose,
+  // which is how a returned interface comes back.
   if (!deviceRunning_.load(std::memory_order_acquire)) {
-    return reopenDeviceLocked(updated, previous, error);
+    if (!reopenDeviceLocked(updated, previous, error)) return false;
+  } else if (updated.backend == options_.backend && updated.deviceId == options_.deviceId &&
+             updated.sampleRate == options_.sampleRate && updated.channels == options_.channels &&
+             updated.exclusive == options_.exclusive && updated.bufferFrames == options_.bufferFrames) {
+    // Nothing to reopen and nothing to apply: the no-op a healthy device deserves.
+  } else if (!reopenDeviceLocked(updated, previous, error)) {
+    return false;
   }
-  if (updated.backend == options_.backend && updated.deviceId == options_.deviceId &&
-      updated.sampleRate == options_.sampleRate && updated.channels == options_.channels &&
-      updated.exclusive == options_.exclusive && updated.bufferFrames == options_.bufferFrames) {
-    return true;
-  }
-  return reopenDeviceLocked(updated, previous, error);
+  // A configure that took has answered whatever the engine last reported about the
+  // device: the text described a device that is no longer the one in force, and a window
+  // left holding it would keep claiming a dead device after it is back. Every refusal
+  // returned above with the engine's own words, and those are not cleared here.
+  clearDeviceError();
+  return true;
 }
 
 bool Engine::reopenDeviceLocked(const EngineOptions& updated, const EngineOptions& previous, EngineError& error) {
@@ -1581,6 +1606,9 @@ void Engine::reopenAfterBackendRequest(const std::string& reason) {
   }
   std::lock_guard<std::mutex> errorLock(errorMutex_);
   lastError_ = reason;
+  // A note, not a failure: the show stopped for a moment to rebuild the stream, and a
+  // configure that follows is not an answer to it.
+  lastErrorIsFailure_ = false;
 }
 
 std::string Engine::backendDetail(const DeviceState& state) {
