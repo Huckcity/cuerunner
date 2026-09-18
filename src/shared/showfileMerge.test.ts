@@ -328,6 +328,21 @@ describe('two people changing the same thing', () => {
 })
 
 describe('what a merge does not carry', () => {
+  it('does not carry a length the app measured on either side', () => {
+    // A measurement is not something either person did: two copies whose only difference
+    // is the length the app wrote onto the same audio cue merge to this show's number,
+    // with nothing carried from the other side and nothing to report.
+    const ancestor = workspace([cue({ id: 'a', number: '1', name: 'Walk-in', duration: 0 })])
+    const ours = workspace([cue({ id: 'a', number: '1', name: 'Walk-in', duration: 3000 })])
+    const theirs = workspace([cue({ id: 'a', number: '1', name: 'Walk-in', duration: 4200 })])
+
+    const merged = mergeWorkspaces(ancestor, ours, theirs)
+
+    expect((merged.workspace.cues[0] as AudioCue).duration).toBe(3000)
+    expect(merged.notes).toEqual([])
+    expect(merged.tally).toMatchObject({ conflicts: 0, blended: 0, oursOnly: 0, theirsOnly: 0, same: 1 })
+  })
+
   it('keeps this show’s file for a cue the other side pointed elsewhere, and says so', () => {
     const ours = workspace([cue({ id: 'a', number: '1', name: 'Walk-in', filePath: 'media/walk-in.wav' })])
     const theirs = workspace([cue({ id: 'a', number: '1', name: 'Walk-in', filePath: 'media/bows.wav' })])

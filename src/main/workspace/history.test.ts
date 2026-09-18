@@ -23,8 +23,8 @@ vi.mock('electron', async () => {
   }
 })
 
-const { openWorkspaceFromPath, saveWorkspace } = await import('./WorkspaceManager')
-import type { AudioCue, Cue } from '../../shared/cue'
+const { compareWithFile, openWorkspaceFromPath, saveWorkspace } = await import('./WorkspaceManager')
+import type { AudioCue, Cue, WaitCue } from '../../shared/cue'
 import type { Workspace } from '../../shared/workspace'
 
 /** A show as an old build wrote it: no show-services section, no per-cue triggers. */
@@ -95,6 +95,30 @@ function cue(id: string, name: string): Cue {
     refire: 'ignore',
     trimSilence: false
   } as AudioCue as Cue
+}
+
+/**
+ * A cue nobody measures: a wait's length is what the operator typed, which is the other
+ * half of the rule the save's history follows.
+ */
+function waitCue(id: string, name: string, duration: number): Cue {
+  return {
+    type: 'wait',
+    id,
+    number: id,
+    name,
+    colorLabel: 'none',
+    parentId: null,
+    preWait: 0,
+    postWait: 0,
+    timelineOffset: 0,
+    duration,
+    advance: 'none',
+    isArmed: true,
+    notes: '',
+    triggers: [],
+    refire: 'ignore'
+  } as WaitCue
 }
 
 function workspace(cues: Cue[], over: Partial<Workspace> = {}): Workspace {
@@ -200,6 +224,62 @@ describe('a save writes what it changed into the file', () => {
     expect(historyOnDisk(other)).toEqual([entry])
   })
 
+  it('does not record the length the measurement pass wrote', async () => {
+    writeFileSync(file, JSON.stringify(workspace([cue('a', 'Walk-in'), waitCue('w', 'Bows', 1000)])))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+
+    // What the window holds once the pass has answered: the audio cue carries the length
+    // of its file, and nobody typed anything.
+    const measured = {
+      ...opened,
+      cues: opened.cues.map(entry => (entry.id === 'a' ? { ...entry, duration: 3000 } : entry))
+    }
+    await saveWorkspace({} as never, measured, file)
+
+    // The file really did change — it carries the measured length now — but the history
+    // must not claim a person made that change.
+    const onDisk = JSON.parse(readFileSync(file, 'utf-8')) as { cues: Array<{ id: string; duration: number }> }
+    expect(onDisk.cues.find(entry => entry.id === 'a')?.duration).toBe(3000)
+    expect(historyOnDisk()).toBeUndefined()
+  })
+
+  it('records a duration the operator typed on a wait cue as an edit', async () => {
+    writeFileSync(file, JSON.stringify(workspace([cue('a', 'Walk-in'), waitCue('w', 'Bows', 1000)])))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+
+    const typed = {
+      ...opened,
+      cues: opened.cues.map(entry => (entry.id === 'w' ? { ...entry, duration: 2500 } : entry))
+    }
+    await saveWorkspace({} as never, typed, file)
+
+    expect(historyOnDisk()).toEqual([
+      expect.objectContaining({
+        cues: [{ kind: 'edited', id: 'w', label: 'w Bows', fields: ['duration'] }]
+      })
+    ])
+  })
+
+  it('records the typed edit and not the measurement when both arrive in one save', async () => {
+    writeFileSync(file, JSON.stringify(workspace([cue('a', 'Walk-in'), waitCue('w', 'Bows', 1000)])))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+
+    // The pass measured the audio file while the operator typed a new wait length: one
+    // save carries both, and only the one a person made is the save's business.
+    const durations: Record<string, number> = { a: 3000, w: 2500 }
+    const changed = {
+      ...opened,
+      cues: opened.cues.map(entry => ({ ...entry, duration: durations[entry.id] ?? entry.duration }))
+    }
+    await saveWorkspace({} as never, changed, file)
+
+    expect(historyOnDisk()).toEqual([
+      expect.objectContaining({
+        cues: [{ kind: 'edited', id: 'w', label: 'w Bows', fields: ['duration'] }]
+      })
+    ])
+  })
+
   it('does not record one show’s difference from another', async () => {
     writeFileSync(file, JSON.stringify(workspace([cue('a', 'Walk-in')])))
 
@@ -210,5 +290,31 @@ describe('a save writes what it changed into the file', () => {
 
     expect(historyOnDisk()).toBeUndefined()
     expect(JSON.parse(readFileSync(file, 'utf-8')).id).toBe('w2')
+  })
+})
+
+describe('a comparison against a file', () => {
+  it('reports nothing for a show whose only difference is a measured length', async () => {
+    writeFileSync(file, JSON.stringify(workspace([cue('a', 'Walk-in'), waitCue('w', 'Bows', 1000)])))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+
+    // The window's show once the pass has answered, against the file it was loaded from.
+    // The comparison puts the window through the same serialiser and migration a save
+    // does, so this is the whole way round — and nothing about the show changed.
+    const measured = {
+      ...opened,
+      cues: opened.cues.map(entry => (entry.id === 'a' ? { ...entry, duration: 3000 } : entry))
+    }
+    const { diff } = await compareWithFile(measured, file)
+    expect(diff.empty).toBe(true)
+    expect(diff.changed).toEqual([])
+
+    // The same call with a typed edit beside the measurement does report it, so the empty
+    // answer above is the rule at work rather than one side compared with itself.
+    const typed = {
+      ...measured,
+      cues: measured.cues.map(entry => (entry.id === 'w' ? { ...entry, duration: 2500 } : entry))
+    }
+    expect((await compareWithFile(typed, file)).diff.changed.map(change => change.id)).toEqual(['w'])
   })
 })

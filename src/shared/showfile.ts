@@ -7,12 +7,16 @@
 // files are.
 //
 // What counts as a change is the whole question, and the answer is: what a person typed.
-// A cue's identity, the route to its media file on this machine, and the audible region
-// a scan measured are written by the app rather than by an operator, so none of them is
-// an edit — a file copied to another folder, or an old file whose silence was measured
-// between two saves, must not diff against itself.
+// A cue's identity, where it sits, the route to its media file on this machine, and the
+// audible region a scan measured are written by the app rather than by an operator, so
+// none of them is an edit — a file copied to another folder, or an old file whose silence
+// was measured between two saves, must not diff against itself. A cue that changes group
+// is reported as a move rather than as an edit to the field that says where it sits. And
+// some fields answer it per cue type rather than once and for all: `duration` is a
+// measurement the app wrote on an audio cue and an operator's own timing on a wait or a
+// fade. `isEdit` below is that rule.
 
-import type { Cue } from './cue'
+import type { Cue, CueType } from './cue'
 import type { Workspace } from './workspace'
 import { WORKSPACE_SECTIONS } from './workspaceSections'
 
@@ -103,8 +107,38 @@ export interface WorkspaceDiff {
  */
 const MAX_SETTING_DEPTH = 2
 
-/** Fields that are written by the app rather than typed by a person. */
-const NOT_AN_EDIT = new Set(['id', 'parentId', 'filePath', 'soundRegion'])
+/**
+ * Whether a field of a cue of this type is an edit — something a person typed — or
+ * something the app wrote down for itself. Authorship is a property of the pair, not of
+ * the name: `duration` is the length a scan measured on an audio cue, and the time an
+ * operator typed on a wait or a fade, so reading the field alone cannot answer it.
+ *
+ * A field nobody has classified is an edit. The walk is the union of both cues' keys, so
+ * a field this build has never heard of still arrives here, and staying an edit is what
+ * keeps a later version's field from going silently unrecorded.
+ */
+function isEdit(type: CueType, field: string): boolean {
+  switch (field) {
+    // A cue's identity, where it sits, and the route to its file on this machine are the
+    // app's own bookkeeping, at every type. `media` — the saved route to the file — is
+    // deliberately not here: it is compared, and what it is compared as is the file's own
+    // name (`fieldValue`'s fold), so a cue pointed at a differently named file is an edit
+    // even though the app writes the block.
+    case 'id':
+    case 'filePath':
+    case 'parentId':
+    case 'soundRegion':
+      return false
+    // An audio cue's length is what the measurement pass wrote onto it, and nothing types
+    // one today: choosing a file in the inspector writes the number the engine reported,
+    // through the same store writer. Every other type's duration is the operator's own —
+    // a wait holds for it, a fade runs for it — and the app has no writer for it.
+    case 'duration':
+      return type !== 'audio'
+    default:
+      return true
+  }
+}
 
 /**
  * The one field that is compared whether or not either side carries it. A file this
@@ -162,7 +196,7 @@ function fieldChanges(before: Cue, after: Cue): FieldChange[] {
   const changes: FieldChange[] = []
   const fields = [...new Set([...Object.keys(a), ...Object.keys(b), MEDIA_FIELD])].sort()
   for (const field of fields) {
-    if (NOT_AN_EDIT.has(field)) continue
+    if (!isEdit(after.type, field)) continue
     const from = fieldValue(a, field)
     const to = fieldValue(b, field)
     if (sameValue(from, to)) continue

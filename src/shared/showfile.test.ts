@@ -4,7 +4,8 @@
 // the smallest set of cues that explains a reordering, and neither the route to a media
 // file nor the region a scan measured is an edit at all.
 import { describe, it, expect } from 'vitest'
-import type { AudioCue, Cue } from './cue'
+import { CUE_TYPES } from './cue'
+import type { AudioCue, Cue, CueType } from './cue'
 import type { Workspace } from './workspace'
 import {
   MAX_HISTORY_ENTRIES,
@@ -48,6 +49,14 @@ function cue(over: Partial<AudioCue> & { id: string }): Cue {
 /** A cue as a file stores it: the runtime cue plus the app's record of where its file is. */
 function stored(cue: Cue, path: string, originalPath = `/shows/${path}`): Cue {
   return { ...cue, media: { path, originalPath } } as unknown as Cue
+}
+
+/**
+ * A cue of another type. The factory above builds an audio cue, and what a field means
+ * is asked per type, so the cases below need a wait and a fade as well as a group.
+ */
+function cueOf(type: CueType, over: { id: string } & Record<string, unknown>): Cue {
+  return cue({ type, ...over } as unknown as Partial<AudioCue> & { id: string })
 }
 
 function workspace(cues: Cue[], over: Partial<Workspace> = {}): Workspace {
@@ -264,6 +273,113 @@ describe('the diff between two showfiles', () => {
     expect(diff.empty).toBe(false)
     expect(diff.to.name).toBe('Macbeth')
     expect(diff.from.cues).toBe(0)
+  })
+})
+
+/**
+ * What counts as an edit is asked of a pair — this field, on this cue's type — because
+ * the same name means different things on different cues: `duration` is the length a
+ * scan measured on an audio cue and the time a person typed on a wait or a fade. Both
+ * sides are pinned here: the measurement stays silent, and the typed number does not,
+ * because silencing that is the same bug seen from the other end.
+ */
+describe('what counts as an edit, per cue type and field', () => {
+  it('does not read the length the app measured as an edit', () => {
+    const before = workspace([cue({ id: 'a', duration: 0 })])
+    const after = workspace([cue({ id: 'a', duration: 3000 })])
+    const diff = diffWorkspaces(before, after)
+    expect(diff.empty).toBe(true)
+    expect(diff.changed).toEqual([])
+    // A save whose only difference is the measurement has nothing to record.
+    expect(historyEntry(diff, '2026-09-16T10:00:00.000Z', 'adam')).toBeNull()
+  })
+
+  it('reads a duration a person typed on a wait or a fade as an edit', () => {
+    const before = workspace([
+      cueOf('wait', { id: 'w', duration: 1000 }),
+      cueOf('fade', { id: 'f', duration: 500 })
+    ])
+    const after = workspace([
+      cueOf('wait', { id: 'w', duration: 2500 }),
+      cueOf('fade', { id: 'f', duration: 1500 })
+    ])
+    const diff = diffWorkspaces(before, after)
+    expect(diff.changed.map(change => [change.id, change.fields])).toEqual([
+      ['w', [{ field: 'duration', from: 1000, to: 2500 }]],
+      ['f', [{ field: 'duration', from: 500, to: 1500 }]]
+    ])
+    expect(historyEntry(diff, '2026-09-16T10:00:00.000Z', 'adam')?.cues).toEqual([
+      { kind: 'edited', id: 'w', label: 'w Cue w', fields: ['duration'] },
+      { kind: 'edited', id: 'f', label: 'f Cue f', fields: ['duration'] }
+    ])
+  })
+
+  it('reads duration as an edit on every cue type but audio', () => {
+    for (const type of CUE_TYPES) {
+      const diff = diffWorkspaces(
+        workspace([cueOf(type, { id: 'c', duration: 100 })]),
+        workspace([cueOf(type, { id: 'c', duration: 200 })])
+      )
+      const fields = diff.changed.flatMap(change => change.fields?.map(field => field.field) ?? [])
+      expect(fields, `duration on a ${type} cue`).toEqual(type === 'audio' ? [] : ['duration'])
+    }
+  })
+
+  it('never reads a route, an identity or a measured region as an edit', () => {
+    // A cue is matched by its id, so an id that changed is an arrival and a departure:
+    // the name is never a field somebody edited.
+    const reidentified = diffWorkspaces(workspace([cue({ id: 'a' })]), workspace([cue({ id: 'b' })]))
+    expect(reidentified.added.map(entry => entry.id)).toEqual(['b'])
+    expect(reidentified.removed.map(entry => entry.id)).toEqual(['a'])
+    expect(reidentified.changed).toEqual([])
+
+    // `filePath` is this machine's route to the file, and the comparison reads neither it
+    // nor `media`'s absolute `originalPath`: what it compares is the file's own name,
+    // which is the same on both sides.
+    const relinked = diffWorkspaces(
+      workspace([stored(cue({ id: 'a', filePath: '/shows/walk-in.wav' }), 'walk-in.wav')]),
+      workspace([
+        stored(cue({ id: 'a', filePath: '/elsewhere/walk-in.wav' }), 'walk-in.wav', '/elsewhere/walk-in.wav')
+      ])
+    )
+    expect(relinked.empty).toBe(true)
+
+    // A region a scan measured is excluded on the type that carries one...
+    const rescanned = diffWorkspaces(
+      workspace([
+        stored(cue({ id: 'a', soundRegion: { startMs: 120, endMs: 900, durationMs: 1000, silent: false } }), 'walk-in.wav')
+      ]),
+      workspace([
+        stored(cue({ id: 'a', soundRegion: { startMs: 0, endMs: 4200, durationMs: 5000, silent: false } }), 'walk-in.wav')
+      ])
+    )
+    expect(rescanned.empty).toBe(true)
+
+    // ...and on a type that has no such field at all: the walk is the union of both
+    // sides' keys, so a `soundRegion` only one side carries still arrives, and the
+    // exclusion is by name on every type.
+    const regionOnAWait = diffWorkspaces(
+      workspace([cueOf('wait', { id: 'w', soundRegion: null })]),
+      workspace([cueOf('wait', { id: 'w', soundRegion: { startMs: 0, endMs: 1, durationMs: 2, silent: false } })])
+    )
+    expect(regionOnAWait.empty).toBe(true)
+  })
+
+  it('reports a reparent as a move and never as an edited parentId', () => {
+    const diff = diffWorkspaces(
+      workspace([cueOf('group', { id: 'g' }), cue({ id: 'a' })]),
+      workspace([cueOf('group', { id: 'g' }), cue({ id: 'a', parentId: 'g' })])
+    )
+    expect(diff.changed).toHaveLength(1)
+    expect(diff.changed[0].fields).toBeUndefined()
+    expect(diff.changed[0].moved?.from.parent).toBeNull()
+    expect(diff.changed[0].moved?.to.parent).toEqual({ id: 'g', label: 'g Cue g' })
+  })
+
+  it('still reads a field it has never heard of as an edit', () => {
+    const after = workspace([{ ...cue({ id: 'a' }), followspot: 'warm' } as unknown as Cue])
+    const diff = diffWorkspaces(workspace([cue({ id: 'a' })]), after)
+    expect(diff.changed[0].fields).toEqual([{ field: 'followspot', from: null, to: 'warm' }])
   })
 })
 
