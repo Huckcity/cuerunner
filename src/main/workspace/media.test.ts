@@ -482,6 +482,29 @@ describe('saving and reopening a show folder', () => {
     expect(recovered?.missingMedia).toEqual([{ cueId: 'a1', path: gone, originalPath: gone }])
   })
 
+  it('reports the grouping a recovered snapshot needed repaired, beside its missing media', async () => {
+    // The snapshot is read through the same migration every file is, so a damaged
+    // grouping comes back repaired — and like the missing-media report, the repair has
+    // to reach the window rather than being applied silently.
+    const damaged = {
+      ...workspaceWith([]),
+      cues: [
+        { id: 'g1', type: 'group', mode: 'playlist' },
+        { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+        { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
+        { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+      ]
+    } as unknown as Workspace
+    await writeRecovery(damaged, join(dir, 'Tour Show.cuerunner'))
+
+    const recovered = await openRecovery()
+
+    expect(recovered?.loadNotes.map(note => [note.kind, note.cueId])).toEqual([
+      ['missing-group', 'o1'],
+      ['reordered', 'g1']
+    ])
+  })
+
   it('migrates a snapshot left by an older build, the way it migrates a file', async () => {
     // A session that died on an older build leaves an older snapshot: without the
     // migration its groups come back with no children, because the children are still
@@ -501,6 +524,35 @@ describe('saving and reopening a show folder', () => {
       ['g1', null],
       ['c1', 'g1']
     ])
+  })
+
+  it('repairs and reports the grouping of a file opened from the dialog', async () => {
+    // File→Open is the way most shows arrive, so the notes that say what the load
+    // repaired have to travel on this result as much as on the ones that go through
+    // readWorkspaceFile directly.
+    const broken = join(dir, 'Broken Grouping.cuerunner')
+    writeFileSync(
+      broken,
+      JSON.stringify({
+        ...workspaceWith([]),
+        cues: [
+          { id: 'g1', type: 'group', mode: 'playlist' },
+          { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
+          { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
+          { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+        ]
+      })
+    )
+    vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [broken] })
+
+    const opened = await openWorkspace({} as never)
+
+    expect(opened?.loadNotes.map(note => [note.kind, note.cueId])).toEqual([
+      ['missing-group', 'o1'],
+      ['reordered', 'g1']
+    ])
+    // The workspace handed back is the repaired one, in the order the walks need.
+    expect(opened?.workspace.cues.map(cue => cue.id)).toEqual(['g1', 'c1', 'c2', 'o1'])
   })
 
   it('refuses a workspace past the size this app will open, from the dialog too', async () => {

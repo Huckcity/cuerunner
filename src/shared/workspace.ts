@@ -81,6 +81,21 @@ export interface WorkspaceIdentity {
   createdAt: string
 }
 
+/**
+ * One repair a load made to a file's cue grouping: a group's children gathered behind
+ * it, a cue whose group is not in the file returned to the top level, or a loop of
+ * groups dissolved. Loading never writes a file, so the repair lives in the session
+ * only until a save writes it — the note is how the operator hears that the grouping on
+ * screen is not the bytes on disk.
+ */
+export interface LoadNote {
+  /** The cue the note is about: the orphan, the loop member, or the group whose children moved. */
+  cueId: string
+  kind: 'reordered' | 'missing-group' | 'cycle'
+  /** What happened, in one line, ready for the dialog that lists it. */
+  detail: string
+}
+
 export interface Workspace {
   version: 1
   id: string

@@ -56,6 +56,23 @@ function audioCue(id: string, number: string, name: string, filePath: string): C
   } as AudioCue as Cue
 }
 
+/** A minimal healthy cue of a type that carries no file, for showfiles built in a test. */
+function waitCue(id: string, parentId: string | null): Cue {
+  return {
+    id, number: '', name: id, type: 'wait', colorLabel: 'none', parentId,
+    preWait: 0, postWait: 0, timelineOffset: 0, duration: 1000,
+    advance: 'none', isArmed: true, notes: ''
+  }
+}
+
+function groupCue(id: string, parentId: string | null): Cue {
+  return {
+    id, number: '', name: id, type: 'group', mode: 'playlist', colorLabel: 'none', parentId,
+    preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: ''
+  }
+}
+
 function workspace(cues: Cue[], over: Partial<Workspace> = {}): Workspace {
   return {
     version: 1,
@@ -253,6 +270,39 @@ describe('unpacking a bundle', () => {
     expect(unpacked.missingMedia).toHaveLength(1)
     expect(unpacked.missingMedia[0].path).toBe('media/walk-in.wav')
     expect(existsSync(join(elsewhere, 'media', 'walk-in.wav'))).toBe(false)
+  })
+
+  it('carries the grouping repairs the showfile inside it needs, through the import', async () => {
+    // A hand-made bundle whose showfile is damaged the two ways a load repairs: a group
+    // whose children are scattered, and a cue naming a group that is not in the file.
+    // Import is a load path too, so the repair and its notes must reach the window.
+    const show = workspace([
+      groupCue('g1', null),
+      waitCue('c1', 'g1'),
+      waitCue('o1', 'gone'),
+      waitCue('x1', null),
+      waitCue('c2', 'g1')
+    ])
+    await writeZip(bundled, [{
+      name: 'show.cuerunner',
+      data: Buffer.from(JSON.stringify(show), 'utf8')
+    }])
+
+    const bundle = await readBundle(bundled)
+    expect(bundle.loadNotes.map(note => [note.kind, note.cueId])).toEqual([
+      ['missing-group', 'o1'],
+      ['reordered', 'g1']
+    ])
+    expect(bundle.workspace.cues.map(cue => cue.id)).toEqual(['g1', 'c1', 'c2', 'o1', 'x1'])
+
+    const elsewhere = join(dir, 'repaired-handover')
+    const unpacked = await unpackBundle(bundled, elsewhere, bundle)
+    expect(unpacked.loadNotes).toEqual(bundle.loadNotes)
+    // The workspace the import hands back is the repaired one: the orphan is at the top
+    // level and fires with the show.
+    expect(unpacked.workspace.cues.map(cue => [cue.id, cue.parentId])).toEqual([
+      ['g1', null], ['c1', 'g1'], ['c2', 'g1'], ['o1', null], ['x1', null]
+    ])
   })
 
   it('refuses a file that is not a bundle', async () => {

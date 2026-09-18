@@ -61,6 +61,10 @@
               <td>Its file has moved. The row says <em>missing</em>; use the relink bar at the top of the window, and see <a href="./formats.html#workspace">the workspace file</a>.</td>
             </tr>
             <tr>
+              <td>The cue list order differs from the file you saved</td>
+              <td>The file's cue grouping was damaged — children scattered, a cue naming a group that is not in the file, or groups inside each other — and was repaired as the show opened. A bar at the top of the window says how many repairs were made. The file on disk is unchanged until you save, which writes the repaired grouping.</td>
+            </tr>
+            <tr>
               <td>Everything goes quiet at once and the rows say <em>audio device lost</em></td>
               <td>The sound device went away mid-show — unplugged, taken by another program in exclusive mode, or a driver that stopped calling. The engine released the cues it was playing and said so in the alarm strip, the transport bar's alarm chip and the log. Settings → Audio shows the device and the engine's own readout of it, and is where another interface is chosen. When the device is back, <strong>Reconnect device</strong> sends the show's settings again and the engine reopens it: the readout updates at once, and the failure text clears. The alarm the loss raised is not the engine's to take down — it stands in the alarm strip until it is dismissed there.</td>
             </tr>

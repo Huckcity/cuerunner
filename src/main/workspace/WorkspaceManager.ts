@@ -3,7 +3,7 @@ import { readFile, mkdir, stat, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
 import { asRefusal, Refusal } from '../ipc/refusal'
 import { hostname, userInfo } from 'os'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 import {
   mergeWorkspaces,
   type ConflictPolicy,
@@ -15,12 +15,13 @@ import { migrateLegacyAudioRouting } from '../../shared/audioRouting'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import {
   appendHistory,
+  cueLabel,
   diffWorkspaces,
   historyEntry,
   type ShowHistoryEntry,
   type WorkspaceDiff
 } from '../../shared/showfile'
-import type { Workspace } from '../../shared/workspace'
+import type { LoadNote, Workspace } from '../../shared/workspace'
 import type { AudioCue, Cue } from '../../shared/cue'
 import { CUE_TYPES } from '../../shared/cue'
 import {
@@ -323,7 +324,167 @@ function migrateCast(showSettings: Record<string, unknown> | undefined): void {
   migrateDesk(showSettings)
 }
 
-export function migrateWorkspace(workspace: Workspace): Workspace {
+// ─── Cue grouping ─────────────────────────────────────────────────────────────
+//
+// Array order is the running order: a group's children sit contiguously behind it, and
+// the walk that orders the show follows parentIds down from the top level. A hand-edited
+// or damaged file can disagree with both — children scattered through the list, a cue
+// naming a group that is not there, groups that lead back into each other — and then a
+// walk either mis-fires on a child where it does not sit or never reaches a cue at all.
+// The damage is repaired as the file is read, by one normaliser in the migration funnel,
+// rather than worked around in every walk. What it moved is reported through the
+// optional out-array, the way media resolution reports the files it could not find.
+
+/** The one-line wording of each repair on the load, read by the bar's dialog. */
+const LOAD_REPAIR_DETAIL: Record<LoadNote['kind'], string> = {
+  // True wherever the orphan sat: at the top level it keeps its place among the
+  // top-level cues, which is not necessarily where it sat inside the block it was in.
+  'missing-group': 'it has no group in this file: still fires with the show, at the top level',
+  cycle: 'in a loop of groups: returned to the top level',
+  reordered: 'its children were gathered into one block behind it'
+}
+
+/**
+ * Repairs a cue list's grouping and returns the running order the walks expect, in three
+ * passes: dissolve parents that name nothing (or a cue that is not a group), dissolve
+ * parent loops, then gather every group's subtree into one block behind it. Sibling and
+ * top-level relative order is preserved, and the rebuild of an already well-formed array
+ * is that array — the repair is a fixed point. The gather works on cue objects and
+ * carries an emitted guard, so a file with a repeated id neither drops nor duplicates a
+ * cue. Nothing but `parentId` and the order is touched; inside a timeline group the
+ * offsets stay authoritative and are left exactly as they were.
+ */
+function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
+  const note = (cueId: string, kind: LoadNote['kind']): void => {
+    notes?.push({ cueId, kind, detail: LOAD_REPAIR_DETAIL[kind] })
+  }
+
+  // The cue an id names. A repeated id names the first occurrence, as every other id
+  // lookup does; everything below works on cue objects, so the duplicate is neither
+  // dropped nor re-emitted on somebody else's behalf.
+  const byId = new Map<string, Cue>()
+  for (const cue of cues) {
+    if (!byId.has(cue.id)) byId.set(cue.id, cue)
+  }
+  const parentOf = (cue: Cue): Cue | null =>
+    cue.parentId === null ? null : byId.get(cue.parentId) ?? null
+
+  // Pass 1: a parent that is not in the file, or is not a group, cannot hold a cue. It
+  // returns to the top level, keeping its place among the top-level cues, and fires with
+  // the show.
+  for (const cue of cues) {
+    if (cue.parentId === null) continue
+    const parent = byId.get(cue.parentId)
+    if (parent !== undefined && parent.type === 'group') continue
+    cue.parentId = null
+    note(cue.id, 'missing-group')
+  }
+
+  // Pass 2: a loop of parents has no top-level way in, so the walk that orders the show
+  // never reaches its members. Every cue in the loop returns to the top level; a cue
+  // hanging under a loop member was never in the loop and keeps its parent.
+  const loop = new Set<Cue>()
+  const settled = new Set<Cue>()
+  for (const cue of cues) {
+    if (cue.parentId === null || loop.has(cue) || settled.has(cue)) continue
+    const path: Cue[] = []
+    const onPath = new Set<Cue>()
+    let at: Cue | null = cue
+    while (at !== null && !onPath.has(at) && !loop.has(at) && !settled.has(at)) {
+      path.push(at)
+      onPath.add(at)
+      at = parentOf(at)
+    }
+    if (at !== null && onPath.has(at)) {
+      // The chain re-enters itself: the run from the first sighting onwards is the loop.
+      for (const member of path.slice(path.indexOf(at))) loop.add(member)
+    }
+    for (const member of path) settled.add(member)
+  }
+  for (const cue of cues) {
+    if (!loop.has(cue)) continue
+    cue.parentId = null
+    note(cue.id, 'cycle')
+  }
+
+  // Pass 3: the rebuild needs every cue's children and its subtree's extent in the
+  // original array. Both are computed children-before-parent — each cue is reached once,
+  // as a child of its parent — so the pass stays linear in the cue count.
+  const childrenOf = new Map<Cue, Cue[]>()
+  for (const cue of cues) {
+    if (cue.parentId === null) continue
+    const parent = byId.get(cue.parentId)
+    if (parent === undefined) continue
+    const children = childrenOf.get(parent)
+    if (children === undefined) childrenOf.set(parent, [cue])
+    else children.push(cue)
+  }
+
+  const indexOf = new Map<Cue, number>()
+  cues.forEach((cue, index) => indexOf.set(cue, index))
+
+  const size = new Map<Cue, number>()
+  const least = new Map<Cue, number>()
+  const most = new Map<Cue, number>()
+  for (const root of cues) {
+    if (root.parentId !== null) continue
+    // An explicit stack, not recursion: a hand-edited file can nest groups past any sane
+    // depth, and blowing the stack on one is not a repair.
+    const stack: Array<{ cue: Cue; next: number }> = [{ cue: root, next: 0 }]
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]
+      const children = childrenOf.get(frame.cue) ?? []
+      if (frame.next < children.length) {
+        stack.push({ cue: children[frame.next++], next: 0 })
+        continue
+      }
+      stack.pop()
+      let extent = 1
+      let low = indexOf.get(frame.cue) ?? 0
+      let high = low
+      for (const child of children) {
+        extent += size.get(child) ?? 1
+        low = Math.min(low, least.get(child) ?? low)
+        high = Math.max(high, most.get(child) ?? high)
+      }
+      size.set(frame.cue, extent)
+      least.set(frame.cue, low)
+      most.set(frame.cue, high)
+    }
+  }
+
+  // A group is noted exactly when the rebuild moves something under it: its descendants
+  // already fill the slots immediately behind it, or they do not. They hold exactly
+  // `extent` cues, so lying inside the extent's slots is the same as filling them.
+  for (const cue of cues) {
+    if (cue.type !== 'group' || childrenOf.get(cue) === undefined) continue
+    const own = indexOf.get(cue) ?? 0
+    const extent = size.get(cue) ?? 1
+    if ((least.get(cue) ?? own) === own && (most.get(cue) ?? own) === own + extent - 1) continue
+    note(cue.id, 'reordered')
+  }
+
+  // The rebuild: top-level cues in array order, each followed by its subtree in a stable
+  // depth-first walk. On a well-formed array it reproduces that array exactly.
+  const ordered: Cue[] = []
+  const emitted = new Set<Cue>()
+  for (const root of cues) {
+    if (root.parentId !== null) continue
+    const stack: Cue[] = [root]
+    while (stack.length > 0) {
+      const cue = stack.pop() as Cue
+      if (emitted.has(cue)) continue
+      emitted.add(cue)
+      ordered.push(cue)
+      const children = childrenOf.get(cue)
+      if (children === undefined) continue
+      for (let i = children.length - 1; i >= 0; i--) stack.push(children[i])
+    }
+  }
+  return ordered
+}
+
+export function migrateWorkspace(workspace: Workspace, notes?: LoadNote[]): Workspace {
   // A cue type this build has never heard of — a file from a newer build, or a hand
   // edit — cannot be drawn: the row renders its icon from the type and the whole window
   // goes down with it. Nothing is thrown away quietly either, because a show saved back
@@ -369,7 +530,9 @@ export function migrateWorkspace(workspace: Workspace): Workspace {
     delete legacyFields(group).childIds
   }
 
-  workspace.cues = cues
+  // The grouping is repaired last, so it sees the tree the legacy conversion built:
+  // childIds already became parent pointers and the children already follow their group.
+  workspace.cues = normalizeGrouping(cues, notes)
   // Pass 3: the show's setup is brought forward to this build's shape — from the plot
   // and the scenes section onto the cast, and from desk routing on performers and
   // ensembles onto the channel strips that carry it now — before defaulting fills in a
@@ -632,7 +795,7 @@ export function serialiseWorkspace(
  * a comparison between two files has to look at — a diff of resolved workspaces would
  * compare this machine's paths with this machine's paths.
  */
-export async function readWorkspaceFile(filePath: string): Promise<Workspace> {
+export async function readWorkspaceFile(filePath: string, notes?: LoadNote[]): Promise<Workspace> {
   // A hostile .cuerunner is a zip bomb of the plain kind: cap the read before the parse,
   // rather than inflating attacker-declared JSON into main-process memory.
   //
@@ -655,7 +818,7 @@ export async function readWorkspaceFile(filePath: string): Promise<Workspace> {
   } catch (error) {
     throw asRefusal(error)
   }
-  return migrateWorkspace(parsed)
+  return migrateWorkspace(parsed, notes)
 }
 
 /** Who a save is attributed to: the operating system's own answer, not the app's. */
@@ -883,7 +1046,12 @@ export async function getRecentFiles(): Promise<string[]> {
 
 export async function openWorkspace(
   win: BrowserWindow
-): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] } | null> {
+): Promise<{
+  path: string
+  workspace: Workspace
+  missingMedia: MissingMedia[]
+  loadNotes: LoadNote[]
+} | null> {
   const result = await dialog.showOpenDialog(win, {
     title: 'Open Workspace',
     filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }],
@@ -895,17 +1063,24 @@ export async function openWorkspace(
   // The same read, cap and migration every other load path uses: File→Open is the way
   // most shows arrive, and a 500 MB one must be refused here too — as the ordinary state
   // it is, so the channel can answer it instead of logging a stack.
-  const workspace = await readWorkspaceFile(filePath)
+  const loadNotes: LoadNote[] = []
+  const workspace = await readWorkspaceFile(filePath, loadNotes)
   await addToRecent(filePath)
-  return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath) }
+  return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath), loadNotes }
 }
 
 export async function openWorkspaceFromPath(
   filePath: string
-): Promise<{ path: string; workspace: Workspace; missingMedia: MissingMedia[] }> {
-  const workspace = await readWorkspaceFile(filePath)
+): Promise<{
+  path: string
+  workspace: Workspace
+  missingMedia: MissingMedia[]
+  loadNotes: LoadNote[]
+}> {
+  const loadNotes: LoadNote[] = []
+  const workspace = await readWorkspaceFile(filePath, loadNotes)
   await addToRecent(filePath)
-  return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath) }
+  return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath), loadNotes }
 }
 
 /**
@@ -918,18 +1093,21 @@ export async function openRecovery(): Promise<{
   sourcePath: string | null
   selectedCueId?: string | null
   missingMedia: MissingMedia[]
+  loadNotes: LoadNote[]
 } | null> {
   const snapshot = await readRecovery()
   if (!snapshot) return null
   // A session that died on an older build leaves an older snapshot: it comes back
   // through the same migration every other file does, or a pre-parentId one would
   // return groups with no children and a show section whose panels cannot be read.
-  const workspace = migrateWorkspace(snapshot.workspace)
+  const loadNotes: LoadNote[] = []
+  const workspace = migrateWorkspace(snapshot.workspace, loadNotes)
   return {
     savedAt: snapshot.savedAt,
     sourcePath: snapshot.sourcePath,
     selectedCueId: snapshot.selectedCueId,
-    ...resolveWorkspaceMedia(workspace, snapshot.sourcePath)
+    ...resolveWorkspaceMedia(workspace, snapshot.sourcePath),
+    loadNotes
   }
 }
 
@@ -1050,6 +1228,35 @@ export interface MergedShow {
   inputs: MergeInputs
 }
 
+/**
+ * How the merge report words a repair one of its input reads made. The source file is
+ * named in every row: the same damage in both inputs would otherwise produce two rows
+ * that read identically, and the ancestor's would claim to be about "the file it came
+ * from" without saying which one that was.
+ */
+const MERGE_REPAIR_DETAIL: Record<LoadNote['kind'], (source: string) => string> = {
+  'missing-group': source => `its group is not in “${source}”: placed at the top level`,
+  cycle: source => `its group led back to it in “${source}”: placed at the top level`,
+  reordered: source => `its children were gathered into one block behind it in “${source}”`
+}
+
+/**
+ * The notes a read repaired one of the merge's input files with, as rows of the merge's
+ * own report: the cue is named by the file it came from, and the wording says which file.
+ * Without this the repair would have happened silently — the migration nulls a dangling
+ * parent before the merge's own parent repair ever sees it.
+ */
+function repairRows(notes: LoadNote[], file: Workspace, source: string): MergeNote[] {
+  return notes.map(note => {
+    const cue = file.cues.find(candidate => candidate.id === note.cueId)
+    return {
+      subject: cue ? cueLabel(cue) : note.cueId,
+      detail: MERGE_REPAIR_DETAIL[note.kind](source),
+      conflict: false
+    }
+  })
+}
+
 export async function mergeIntoNewFile(
   win: BrowserWindow,
   ours: Workspace,
@@ -1058,9 +1265,11 @@ export async function mergeIntoNewFile(
   ancestorPath: string,
   policy: ConflictPolicy = 'ours'
 ): Promise<MergedShow | null> {
+  const theirsNotes: LoadNote[] = []
+  const ancestorNotes: LoadNote[] = []
   const [theirs, ancestor] = await Promise.all([
-    readWorkspaceFile(theirsPath),
-    readWorkspaceFile(ancestorPath)
+    readWorkspaceFile(theirsPath, theirsNotes),
+    readWorkspaceFile(ancestorPath, ancestorNotes)
   ])
   const result = mergeWorkspaces(ancestor, ours, theirs, { onConflict: policy })
   // The history of the file being merged into is the one that continues: the other two
@@ -1080,7 +1289,11 @@ export async function mergeIntoNewFile(
   await addToRecent(where.filePath).catch(() => {})
   return {
     path: where.filePath,
-    notes: result.notes,
+    notes: [
+      ...result.notes,
+      ...repairRows(theirsNotes, theirs, basename(theirsPath)),
+      ...repairRows(ancestorNotes, ancestor, basename(ancestorPath))
+    ],
     tally: result.tally,
     inputs: { theirs: theirsPath, ancestor: ancestorPath }
   }
