@@ -60,6 +60,21 @@ test('Audio tab offers the real device options the engine can honour', async () 
   await closeSettings(page)
 })
 
+test('the Audio tab offers the Reconnect device lever, and withholds it on an engine with no device', async () => {
+  await openSettingsOn(page, 'Audio')
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+
+  const reconnect = dialog.getByRole('button', { name: 'Reconnect device' })
+  await expect(reconnect).toBeVisible()
+  // The suite's engine is the silent backend: it has no device to reconnect, and a
+  // configure there is refused by design, so the offer is withheld rather than answered
+  // with a refusal nobody can act on. This is the whole of what this lane can say about
+  // the lever: a revive needs a real device, and device-smoke.mjs is where that runs.
+  await expect(reconnect).toBeDisabled()
+
+  await closeSettings(page)
+})
+
 test('Audio tab reports exactly what the engine says it is running', async () => {
   const info = await app.evaluate(async () => {
     const harness = globalThis.__cuerunnerDevHarness

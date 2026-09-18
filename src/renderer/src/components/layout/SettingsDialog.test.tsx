@@ -7,6 +7,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { SettingsDialog } from './SettingsDialog'
 import { useStore } from '../../store'
 import { defaultShowSettings } from '../../../../shared/show'
+import { AUDIO_CHANNELS } from '../../../../shared/audio'
+import type { AudioEngineInfo } from '../../engine/audioEngineClient'
 import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement
@@ -14,6 +16,28 @@ let root: Root
 
 const text = (selector: string): string =>
   [...container.querySelectorAll(selector)].map(node => node.textContent ?? '').join('|')
+
+/** The reading row with this label, so a check can read the engine's own figure. */
+function row(label: string): string {
+  const found = [...container.querySelectorAll('.field-row')]
+    .find(node => node.querySelector('label')?.textContent === label)
+  return found?.textContent ?? ''
+}
+
+/**
+ * A reading from an engine with a device in force. The mock these tests run against
+ * reports the silent backend, the one backend where the lever must not be offered; a
+ * real device is what the checks about reconnecting are about.
+ */
+async function deviceReading(overrides: Partial<AudioEngineInfo> = {}): Promise<AudioEngineInfo> {
+  return {
+    ...(await window.cuerunner.audio.info()),
+    backend: 'pulseaudio',
+    deviceId: 'sink-9',
+    deviceName: 'Acceptance Sink',
+    ...overrides
+  }
+}
 
 function render(): void {
   act(() => { root.render(<SettingsDialog onClose={() => {}} />) })
@@ -52,6 +76,10 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
+  // Every test starts from the engine's own record again: a test that made the engine
+  // answer with a device, or refuse a request, must not leave that answer to the next.
+  vi.mocked(window.cuerunner.audio.info).mockReset()
+  vi.mocked(window.cuerunner.audio.configure).mockReset()
   useStore.setState({
     showSettings: defaultShowSettings(),
     showServices: [
@@ -162,5 +190,156 @@ describe('SettingsDialog', () => {
     // The panel really is the Audio one — the row is gone, not the whole tab with it.
     expect(container.querySelector('#settings-audio-system')).not.toBeNull()
     expect(container.querySelector('#settings-exclusive')).toBeNull()
+  })
+
+  it('sends the settings already in force when the device is reconnected', async () => {
+    useStore.setState({
+      audioSettings: {
+        outputDeviceId: 'sink-9', backend: 'auto', sampleRate: 48000,
+        channels: 8, exclusive: true, bufferFrames: 256
+      },
+      audioDeviceError: null
+    })
+    vi.mocked(window.cuerunner.audio.info).mockResolvedValue(await deviceReading())
+
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+
+    click('#settings-audio-reconnect')
+    await settle()
+
+    // The lever is the window's own device request: the exact fields the mount effect
+    // sends, derived from the show's settings and nothing else. Nothing is pretended to
+    // have changed — the engine reopens a latched-off device on exactly this ask.
+    expect(window.cuerunner.audio.configure).toHaveBeenLastCalledWith({
+      backend: 'auto',
+      deviceId: 'sink-9',
+      sampleRate: 48000,
+      channels: 8,
+      exclusive: true,
+      bufferFrames: 256
+    })
+  })
+
+  it('clears the refusal and shows the device again once the reconnect succeeds', async () => {
+    const loss = 'audio device stopped unexpectedly'
+    useStore.setState({
+      audioSettings: { outputDeviceId: 'default' },
+      audioDeviceError: loss
+    })
+    vi.mocked(window.cuerunner.audio.info).mockResolvedValue(
+      await deviceReading({ deviceName: 'Old Output', lastError: loss, warnings: [loss] })
+    )
+
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+    expect(text('.settings-device-error')).toBe(loss)
+    expect(text('.settings-warning')).toContain(loss)
+    expect(row('Device')).toContain('Old Output')
+
+    vi.mocked(window.cuerunner.audio.configure).mockResolvedValue(
+      await deviceReading({ deviceName: 'Acceptance Sink', lastError: null, warnings: [] })
+    )
+    click('#settings-audio-reconnect')
+    await settle()
+
+    // A configure that took answers the refusal, and the reading it returned is what the
+    // panel shows — the operator sees the device back without waiting for the next poll.
+    // The warnings bar reads the engine too, and gets the same fresh reading: it must not
+    // go on claiming a lost device beside a readout that says the device is back.
+    expect(useStore.getState().audioDeviceError).toBeNull()
+    expect(container.querySelector('.settings-device-error')).toBeNull()
+    expect(row('Device')).toContain('Acceptance Sink')
+    expect(text('.settings-warning')).not.toContain(loss)
+  })
+
+  it('keeps the engine\'s own words when the reconnect is refused', async () => {
+    vi.mocked(window.cuerunner.audio.info).mockResolvedValue(await deviceReading())
+    vi.mocked(window.cuerunner.audio.configure).mockImplementation(() => Promise.reject(new Error(
+      `Error invoking remote method '${AUDIO_CHANNELS.configure}': AudioEngineError: requested audio device 'gone' was not found`
+    )))
+
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+
+    click('#settings-audio-reconnect')
+    await settle()
+
+    // The engine's sentence, not the IPC plumbing around it and not a shrug.
+    expect(text('.settings-device-error')).toBe("requested audio device 'gone' was not found")
+  })
+
+  it('does not offer the lever to a backend that has no device', async () => {
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+
+    // The engine's own reading is the silent backend, where every device request is
+    // refused by design: an offer that can only ever produce a refusal nobody can act
+    // on is not an offer. Nothing is sent by a control that is not offered.
+    const reconnect = container.querySelector<HTMLButtonElement>('#settings-audio-reconnect')
+    expect(reconnect).not.toBeNull()
+    expect(reconnect!.disabled).toBe(true)
+
+    click('#settings-audio-reconnect')
+    await settle()
+    expect(window.cuerunner.audio.configure).not.toHaveBeenCalled()
+
+    // `none` is how the engine reports every other backend with no device — the offline
+    // one among them — and the same reading decides the lever there.
+    const silent = await window.cuerunner.audio.info()
+    vi.mocked(window.cuerunner.audio.info).mockResolvedValue({ ...silent, backend: 'none', deviceName: '' })
+    act(() => { root.render(<div />) })
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+    expect(container.querySelector<HTMLButtonElement>('#settings-audio-reconnect')!.disabled).toBe(true)
+  })
+
+  it('shows the refusal when a press finds no reading to hide it behind', async () => {
+    useStore.setState({ audioDeviceError: null })
+    vi.mocked(window.cuerunner.audio.info)
+      .mockImplementation(() => Promise.reject(new Error('the engine is not running')))
+    vi.mocked(window.cuerunner.audio.configure).mockImplementation(() => Promise.reject(new Error(
+      `Error invoking remote method '${AUDIO_CHANNELS.configure}': AudioEngineError: the engine could not be started`
+    )))
+
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+    // Nothing has been asked yet, and the readout has nothing to say.
+    expect(text('.settings-device-error')).toBe('')
+    expect(text('.inspector-hint')).toContain('The audio engine is not answering.')
+
+    click('#settings-audio-reconnect')
+    await settle()
+
+    // No reading named a backend and the engine cannot be reached, so there is nothing
+    // to hide the refusal behind — and nothing else would tell the operator that the
+    // press did anything at all.
+    expect(text('.settings-device-error')).toBe('the engine could not be started')
+  })
+
+  it('offers the lever while the engine cannot be reached, where a configure restarts it', async () => {
+    vi.mocked(window.cuerunner.audio.info)
+      .mockImplementation(() => Promise.reject(new Error('the engine is not running')))
+
+    render()
+    await settle()
+    openSection('Audio')
+    await settle()
+
+    const reconnect = container.querySelector<HTMLButtonElement>('#settings-audio-reconnect')
+    expect(reconnect).not.toBeNull()
+    expect(reconnect!.disabled).toBe(false)
   })
 })

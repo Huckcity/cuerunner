@@ -78,7 +78,11 @@
       <p>
         Under them, what the engine is actually doing: backend, rate, device, latency,
         voices playing, media memory, and any dropouts. That block is a reading, not a
-        setting.
+        setting. Under it sits <strong>Reconnect device</strong>, which sends the show's
+        settings to the engine again so a device it lost is reopened — a no-op while the
+        device is already running them, and the way back once the interface is plugged in
+        again. It is disabled while the engine runs a backend with no device at all, where
+        a device request can only be refused.
       </p>
     </section>
 

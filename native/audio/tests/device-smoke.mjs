@@ -264,6 +264,26 @@ try {
   const stillHealthy = await client.request('info')
   check('the refused configure left the device alone', stillHealthy.active === false && stillHealthy.lastError === null, JSON.stringify({ active: stillHealthy.active, lastError: stillHealthy.lastError }))
 
+  // A configure naming a device this machine does not have is the one honest way to
+  // reach the restore branch without a loss: the pre-check cannot refuse an id it does
+  // not resolve, so the engine stops the running device, fails to open the request, and
+  // puts the device it was using back. The refusal names the request; the device that
+  // was running is still the one reported, with no error broadcast — nothing was lost,
+  // it was asked to change and could not — and the playback checks below then run
+  // through the restored device.
+  const beforeRefusal = await client.request('info')
+  let unknownDeviceRefused = false
+  try {
+    await client.request('configure', { options: { deviceId: 'cuerunner-no-such-device' } })
+  } catch (error) {
+    unknownDeviceRefused = /requested audio device 'cuerunner-no-such-device' was not found/.test(error.message)
+  }
+  check('an unknown device id is refused by name', unknownDeviceRefused)
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 300))
+  const afterRestore = await client.request('info')
+  check('the previous device is restored and still reported', afterRestore.deviceId === beforeRefusal.deviceId && afterRestore.deviceName === beforeRefusal.deviceName && afterRestore.periodFrames === beforeRefusal.periodFrames && afterRestore.lastError === null, JSON.stringify({ before: { id: beforeRefusal.deviceId, name: beforeRefusal.deviceName, period: beforeRefusal.periodFrames }, after: { id: afterRestore.deviceId, name: afterRestore.deviceName, period: afterRestore.periodFrames }, lastError: afterRestore.lastError }))
+  check('the restore raises no device error', client.events.filter((event) => event.type === 'error').length === 0, JSON.stringify(client.events.filter((event) => event.type === 'error')))
+
   const prepared = await client.request('prepare', { cueId: 'tone', filePath: fixture })
   check('prepare reports the file metadata', prepared.sampleRate === 48000 && prepared.channels === 2 && prepared.frames === 96000, JSON.stringify(prepared))
 

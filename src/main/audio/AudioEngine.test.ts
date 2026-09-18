@@ -429,8 +429,11 @@ describe('audioEngine client (against the real engine)', () => {
       )
       expect(fault?.cueId).toBeNull()
       expect(fault?.message).toMatch(/stopped unexpectedly/)
-      // The panic rides beside it, as the line that clears what the ends left behind.
-      expect(seen.some((event) => event.type === 'panic')).toBe(true)
+      // The panic rides beside it, as the line that clears what the ends left behind;
+      // it is written after the ends, so under load it lands a tick later than they do.
+      await waitUntil('the panic behind the loss', async () =>
+        seen.some((event) => event.type === 'panic') || null
+      )
     } finally {
       await instance.shutdown()
     }

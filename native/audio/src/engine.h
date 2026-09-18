@@ -386,6 +386,15 @@ class Engine {
   bool drainLostDevice();
   void resolveAck(const Event& event);
   void failDevice(const std::string& message);
+  /**
+   * Drops the failure text a configure has just answered — the text describes a device
+   * that is not the one in force any more, and a window left holding it would keep
+   * claiming a dead device after it is back. Takes errorMutex_ itself, under the
+   * caller's deviceMutex_ (the file's order), and reads the device state under that
+   * lock: a loss recorded since the reopen keeps its own, newer text, and so does the
+   * driver-request note, which is not a failure for a configure to answer.
+   */
+  void clearDeviceError();
   double snapshotClockMs() const;
   void copySnapshot(MixSnapshot& out) const;
   std::string deviceIdString() const;
@@ -487,6 +496,12 @@ class Engine {
   int healthTick_ = 0;
   mutable std::mutex errorMutex_;
   mutable std::string lastError_;
+  /**
+   * Whether `lastError_` is a failure this engine recorded (`failDevice`,
+   * `failDeviceFromCallback`) rather than a note about a deliberate reopen. A configure
+   * answers the former and leaves the latter standing. Guarded by errorMutex_.
+   */
+  bool lastErrorIsFailure_ = false;
   std::atomic<uint64_t> nextRunId_{1};
 
   std::vector<float> renderScratch_;

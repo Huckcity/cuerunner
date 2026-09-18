@@ -236,7 +236,11 @@ export const REFERENCE = [
       <p>
         Under them, what the engine is actually doing: backend, rate, device, latency,
         voices playing, media memory, and any dropouts. That block is a reading, not a
-        setting.
+        setting. Under it sits <strong>Reconnect device</strong>, which sends the show's
+        settings to the engine again so a device it lost is reopened — a no-op while the
+        device is already running them, and the way back once the interface is plugged in
+        again. It is disabled while the engine runs a backend with no device at all, where
+        a device request can only be refused.
       </p>
     </section>
 
@@ -684,7 +688,7 @@ await rig.blackout()</code></div>
             </tr>
             <tr>
               <td>Everything goes quiet at once and the rows say <em>audio device lost</em></td>
-              <td>The sound device went away mid-show — unplugged, taken by another program in exclusive mode, or a driver that stopped calling. The engine released the cues it was playing and said so in the alarm strip, the transport bar's alarm chip and the log. Settings → Audio shows the device and the engine's own readout of it, and is where another interface is chosen.</td>
+              <td>The sound device went away mid-show — unplugged, taken by another program in exclusive mode, or a driver that stopped calling. The engine released the cues it was playing and said so in the alarm strip, the transport bar's alarm chip and the log. Settings → Audio shows the device and the engine's own readout of it, and is where another interface is chosen. When the device is back, <strong>Reconnect device</strong> sends the show's settings again and the engine reopens it: the readout updates at once, and the failure text clears. The alarm the loss raised is not the engine's to take down — it stands in the alarm strip until it is dismissed there.</td>
             </tr>
             <tr>
               <td>A MIDI cue does nothing</td>

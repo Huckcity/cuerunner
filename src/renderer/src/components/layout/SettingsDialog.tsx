@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore, usePro } from '../../store'
 import { useModal } from '../../hooks/useModal'
 import { audioEngine } from '../../engine/audioEngineClient'
+import { applyAudioDeviceSettings } from '../../engine/audioDeviceSettings'
 import type { AudioDeviceInfo } from '../../engine/audioEngineClient'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { PlaybackWarnings } from './PlaybackWarnings'
@@ -37,7 +38,7 @@ interface NumberRowProps {
 
 /** A backend that has no device to configure, so no device request can ever be honoured. */
 function backendHasNoDevice(backend: string): boolean {
-  return backend === 'silent' || backend === 'offline'
+  return backend === 'silent' || backend === 'offline' || backend === 'none'
 }
 
 /**
@@ -122,11 +123,13 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   const pro = usePro()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const [devices, setDevices] = useState<AudioDeviceInfo[]>([])
+  const [reconnecting, setReconnecting] = useState(false)
   const [midiPorts, setMidiPorts] = useState<string[]>([])
   const [midiInputPorts, setMidiInputPorts] = useState<string[]>([])
   // The engine reports its own device, sample rate, buffer and latency; the dialogs
-  // show what it says rather than what the page guessed.
-  const { info, available } = useAudioEngineInfo()
+  // show what it says rather than what the page guessed. A configure this panel sends
+  // is a fresh reading, taken through `accept` rather than waited for.
+  const { info, available, accept } = useAudioEngineInfo()
 
   useEffect(() => {
     audioEngine.devices()
@@ -203,6 +206,37 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   // where it belongs the moment it is made.
   const handleOutputDevice = (deviceId: string): void => {
     updateAudioSettings({ outputDeviceId: deviceId })
+  }
+
+  // A backend with no device — the silent and offline ones a test or a dev run uses —
+  // refuses every device request by design, so the lever is withheld while the engine's
+  // own reading says so. An engine that cannot be reached has no reading to withhold it
+  // on: that configure is the one that re-enters the engine's own start path.
+  const reconnectDisabled =
+    reconnecting || (available && info !== null && backendHasNoDevice(info.backend))
+
+  // The engine's refusal of a device request belongs on the panel unless the reading
+  // says the backend has no device at all — the silent, offline and `none` ones a test
+  // or a dev run uses — where every request is refused by definition and the Backend row
+  // already says which engine this is. While no reading has landed there is no backend to
+  // hide it behind, and it shows only when the engine could not be reached at all: the one
+  // state where the request itself was the thing that failed, and the lever is the way back.
+  const deviceRefusalShown =
+    audioDeviceError !== null && (info === null ? !available : !backendHasNoDevice(info.backend))
+
+  // The lever the engine's revive needs: a configure with the settings already in force
+  // reopens a device that was lost or latched off, and leaves a healthy one alone. The
+  // show's own settings are what it sends, so nothing is pretended to have changed.
+  const reconnectDevice = async (): Promise<void> => {
+    setReconnecting(true)
+    try {
+      accept(await applyAudioDeviceSettings(audioSettings))
+    } catch {
+      // The refusal is in the store in the engine's own words; the line below the
+      // device rows shows it, and nothing here has anything to add to it.
+    } finally {
+      setReconnecting(false)
+    }
   }
 
   return (
@@ -387,13 +421,14 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   </p>
                 </>
               )}
-              {/* A backend with no device at all — the silent and offline ones a test or
-                  a dev run uses — refuses every device request by definition, including
-                  the one this window sends when it opens. That is not a fault anyone can
-                  act on, and a red line that never clears teaches people to ignore red
-                  lines; the Backend row below already says which engine this is. A real
-                  device's refusal is shown in the engine's own words. */}
-              {audioDeviceError !== null && info !== null && !backendHasNoDevice(info.backend) && (
+              {/* A backend with no device at all — the silent, offline and `none` ones a
+                  test or a dev run uses — refuses every device request by definition,
+                  including the one this window sends when it opens. That is not a fault
+                  anyone can act on, and a red line that never clears teaches people to
+                  ignore red lines; the Backend row below already says which engine this
+                  is. A real device's refusal is shown in the engine's own words, and so is
+                  one that came back with no reading to hide it behind. */}
+              {deviceRefusalShown && (
                 <p className="settings-device-error" role="alert">{audioDeviceError}</p>
               )}
 
@@ -469,11 +504,30 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 </>
               ) : (
                 <p className="inspector-hint">
+                  {/* True of both reasons there is no reading: a build without an engine
+                      answers the same way as one whose engine has stopped answering. */}
                   {available === false
-                    ? 'This build has no audio engine.'
+                    ? 'The audio engine is not answering.'
                     : 'Reading the engine…'}
                 </p>
               )}
+              {/* The engine's revive lever, under the reading it acts on. A configure
+                  with the settings already in force reopens a device that was lost or
+                  latched off and leaves a healthy one alone, so what it sends is the
+                  show's own settings and nothing else; the reply replaces the reading
+                  above at once rather than at the next poll. */}
+              <div className="field-row">
+                <label />
+                <button
+                  id="settings-audio-reconnect"
+                  className="inspector-btn"
+                  disabled={reconnectDisabled}
+                  onClick={reconnectDevice}
+                >
+                  Reconnect device
+                </button>
+                <span className="settings-info">Reopens the device after a loss</span>
+              </div>
             </>
           )}
 
