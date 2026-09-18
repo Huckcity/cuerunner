@@ -14,6 +14,7 @@
 
 import type { Cue } from './cue'
 import type { Workspace } from './workspace'
+import { WORKSPACE_SECTIONS } from './workspaceSections'
 
 /** A cue named the way the cue list names it: "12 Walk-in". */
 export function cueLabel(cue: { number?: string; name?: string }): string {
@@ -278,27 +279,24 @@ function valueAt(root: unknown, path: string[]): unknown {
 }
 
 /**
- * Workspace-level settings, compared section by section. The sections are the ones a
- * person recognises — the show's audio, its MIDI port, its trigger guard, the show
- * services' own settings under 'show.' — and the routes reported inside one are as deep
- * as `MAX_SETTING_DEPTH`.
+ * Workspace-level settings, compared section by section. The sections, and the routes
+ * they are reported under, are the saved form's own declaration — the show's audio, its
+ * MIDI port, its trigger guard, the show services' own settings under 'show.' — and the
+ * routes reported inside one are as deep as `MAX_SETTING_DEPTH`. A section an older file
+ * never carried is compared as a null rather than as its absent self.
  */
 function settingChanges(from: Workspace, to: Workspace): SettingChange[] {
-  const sections: Array<{ path: string[]; from: unknown; to: unknown }> = [
-    { path: ['name'], from: from.name, to: to.name },
-    { path: ['audio'], from: from.audioSettings, to: to.audioSettings },
-    { path: ['midi'], from: from.midiSettings, to: to.midiSettings },
-    { path: ['guard'], from: from.triggerGuard ?? null, to: to.triggerGuard ?? null },
-    { path: ['show'], from: from.showSettings ?? null, to: to.showSettings ?? null }
-  ]
   const changes: SettingChange[] = []
-  for (const section of sections) {
-    for (const route of changedPaths(section.from, section.to, section.path, MAX_SETTING_DEPTH)) {
+  for (const section of WORKSPACE_SECTIONS) {
+    if (section.route === null) continue
+    const before = from[section.key] ?? null
+    const after = to[section.key] ?? null
+    for (const route of changedPaths(before, after, [section.route], MAX_SETTING_DEPTH)) {
       const segments = route.split('.')
       changes.push({
         path: route,
-        from: valueAt(section.from, segments.slice(section.path.length)),
-        to: valueAt(section.to, segments.slice(section.path.length))
+        from: valueAt(before, segments.slice(1)),
+        to: valueAt(after, segments.slice(1))
       })
     }
   }

@@ -225,16 +225,28 @@ describe('the diff between two showfiles', () => {
       workspace([], {
         name: 'Hamlet',
         audioSettings: { outputDeviceId: 'default', sampleRate: 48000 },
-        showSettings: { rf: { plot: ['a', 'b'] } } as unknown as Workspace['showSettings']
+        midiSettings: { outputPortName: 'Desk' },
+        showSettings: { rf: { plot: ['a', 'b'] } } as unknown as Workspace['showSettings'],
+        triggerGuard: { windowMs: 300 }
       }),
       workspace([], {
         name: 'Hamlet — press',
         audioSettings: { outputDeviceId: 'default', sampleRate: 44100 },
-        showSettings: { rf: { plot: ['a', 'b', 'c'] } } as unknown as Workspace['showSettings']
+        midiSettings: { outputPortName: 'Keys' },
+        showSettings: { rf: { plot: ['a', 'b', 'c'] } } as unknown as Workspace['showSettings'],
+        triggerGuard: { windowMs: 500 }
       })
     )
-    // The sections are reported in the order a person reads them, not alphabetically.
-    expect(diff.settings.map(setting => setting.path)).toEqual(['name', 'audio.sampleRate', 'show.rf.plot'])
+    // Every section is reported in the saved form's own order — the declaration's, which
+    // is the order the file's keys are written — not alphabetically and not in any list a
+    // reader keeps.
+    expect(diff.settings.map(setting => setting.path)).toEqual([
+      'name',
+      'audio.sampleRate',
+      'midi.outputPortName',
+      'show.rf.plot',
+      'guard.windowMs'
+    ])
     const rate = diff.settings.find(setting => setting.path === 'audio.sampleRate')
     expect(rate).toMatchObject({ from: 48000, to: 44100 })
     // An array is one change however many entries moved, and the value is the array.

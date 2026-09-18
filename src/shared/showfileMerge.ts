@@ -28,6 +28,7 @@
 
 import type { Cue } from './cue'
 import type { Workspace } from './workspace'
+import { WORKSPACE_SECTIONS } from './workspaceSections'
 import {
   cueLabel,
   cuePlaces,
@@ -269,17 +270,13 @@ function mergeOrder(
   return order
 }
 
-const SECTIONS: Array<{ path: string; read: (workspace: Workspace) => unknown; write: (workspace: Workspace, value: unknown) => Workspace }> = [
-  { path: 'audio', read: w => w.audioSettings, write: (w, value) => ({ ...w, audioSettings: value as Workspace['audioSettings'] }) },
-  { path: 'midi', read: w => w.midiSettings, write: (w, value) => ({ ...w, midiSettings: value as Workspace['midiSettings'] }) },
-  { path: 'guard', read: w => w.triggerGuard ?? null, write: (w, value) => ({ ...w, triggerGuard: value as Workspace['triggerGuard'] }) }
-]
-
 /**
- * The settings, section by section: a section one side changed is taken, a section both
- * changed the same way is taken once, and a section both changed differently is a
- * conflict the policy decides. Sections rather than fields, deliberately: two people
- * editing the same section of the show's setup are working on the same thing.
+ * The settings, section by section — the sections, and how each one blends, are the saved
+ * form's own declaration. A section one side changed is taken, a section both changed the
+ * same way is taken once, and a section both changed differently is a conflict the policy
+ * decides; a section that blends key by key reports and decides a key at a time instead.
+ * Sections rather than fields, deliberately: two people editing the same section of the
+ * show's setup are working on the same thing.
  */
 function mergeSettings(
   ancestor: Workspace,
@@ -305,28 +302,41 @@ function mergeSettings(
     return takeTheirs ? theirValue : myValue
   }
 
-  for (const section of SECTIONS) {
-    const base = section.read(ancestor)
-    const myValue = section.read(mine)
-    const theirValue = section.read(yours)
-    if (sameValue(base, theirValue) && sameValue(base, myValue)) continue
-    merged = section.write(merged, decide(section.path, base, myValue, theirValue))
+  for (const section of WORKSPACE_SECTIONS) {
+    if (section.merge === 'section') {
+      const base = ancestor[section.key] ?? null
+      const myValue = mine[section.key] ?? null
+      const theirValue = yours[section.key] ?? null
+      if (sameValue(base, theirValue) && sameValue(base, myValue)) continue
+      merged = { ...merged, [section.key]: decide(section.route, base, myValue, theirValue) } as Workspace
+    } else if (section.merge === 'keys') {
+      // The show's own settings, one key at a time: the services, the plot, the cast, the
+      // scenes. A section this show never had and the other one did is a section this show
+      // gains, which is what a merge is for.
+      const asRecord = (workspace: Workspace): Record<string, unknown> =>
+        (workspace[section.key] ?? {}) as Record<string, unknown>
+      const base = asRecord(ancestor)
+      const myValue = asRecord(mine)
+      const theirValue = asRecord(yours)
+      const show: Record<string, unknown> = { ...myValue }
+      const fields = [...new Set([...Object.keys(base), ...Object.keys(myValue), ...Object.keys(theirValue)])].sort()
+      for (const field of fields) {
+        const decided = decide(
+          `${section.route}.${field}`,
+          base[field] ?? null,
+          myValue[field] ?? null,
+          theirValue[field] ?? null
+        )
+        // A key the other show dropped is dropped here too, rather than becoming a null.
+        if (decided === null || decided === undefined) delete show[field]
+        else show[field] = decided
+      }
+      // The value is a record while it is being edited; it is the section's shape again
+      // once every key has been decided.
+      merged = { ...merged, [section.key]: show } as unknown as Workspace
+    }
   }
-
-  // The show's own settings, one key at a time: the services, the plot, the cast, the
-  // scenes. A section this show never had and the other one did is a section this show
-  // gains, which is what a merge is for.
-  const baseShow = (ancestor.showSettings ?? {}) as Record<string, unknown>
-  const myShow = (mine.showSettings ?? {}) as Record<string, unknown>
-  const theirShow = (yours.showSettings ?? {}) as Record<string, unknown>
-  const show: Record<string, unknown> = { ...myShow }
-  for (const key of [...new Set([...Object.keys(baseShow), ...Object.keys(myShow), ...Object.keys(theirShow)])].sort()) {
-    const decided = decide(`show.${key}`, baseShow[key] ?? null, myShow[key] ?? null, theirShow[key] ?? null)
-    // A section the other show dropped is dropped here too, rather than becoming a null.
-    if (decided === null || decided === undefined) delete show[key]
-    else show[key] = decided
-  }
-  return { ...merged, showSettings: show as unknown as Workspace['showSettings'] }
+  return merged
 }
 
 /**

@@ -288,6 +288,33 @@ describe('two people changing the same thing', () => {
     expect(merged.notes[0]).toMatchObject({ subject: 'audio', conflict: true })
   })
 
+  it('names the settings both sides changed in the order the file reads them', () => {
+    // The guard and a key of the show's own settings, decided differently on both sides:
+    // two conflicts, named in the saved form's own order — the declaration's — so the
+    // report reads in the order the file's keys are written.
+    const ancestor = workspace([], {
+      showSettings: { rf: { plot: ['a'] } } as unknown as Workspace['showSettings'],
+      triggerGuard: { windowMs: 300 }
+    })
+    const ours = workspace([], {
+      showSettings: { rf: { plot: ['a', 'b'] } } as unknown as Workspace['showSettings'],
+      triggerGuard: { windowMs: 500 }
+    })
+    const theirs = workspace([], {
+      showSettings: { rf: { plot: ['a', 'c'] } } as unknown as Workspace['showSettings'],
+      triggerGuard: { windowMs: 900 }
+    })
+
+    const merged = mergeWorkspaces(ancestor, ours, theirs)
+
+    expect(merged.notes.map(note => note.subject)).toEqual(['show.rf', 'guard'])
+    expect(merged.notes.map(note => note.conflict)).toEqual([true, true])
+    expect(merged.tally.conflicts).toBe(2)
+    // This show's values stand, as they do for every setting conflict.
+    expect(merged.workspace.showSettings).toMatchObject({ rf: { plot: ['a', 'b'] } })
+    expect(merged.workspace.triggerGuard).toEqual({ windowMs: 500 })
+  })
+
   it('takes the settings only one side changed', () => {
     const ours = workspace([], { triggerGuard: { windowMs: 500 } })
     const theirs = workspace([], { showSettings: { desk: { kind: 'none' } } as Workspace['showSettings'] })

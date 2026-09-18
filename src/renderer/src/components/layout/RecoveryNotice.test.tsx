@@ -187,4 +187,40 @@ describe('RecoveryNotice', () => {
     expect(useStore.getState().workspaceName).toBe('Live Show')
     expect(window.cuerunner.workspace.clearRecovery).not.toHaveBeenCalled()
   })
+
+  it('saves the live session through the one constructor before recovering over it', async () => {
+    // The Save arm of the prompt: the session on screen goes to its file first, as the
+    // one saved shape `buildWorkspace` builds — a section added to that shape cannot be
+    // missing from exactly this save.
+    const history = [{ at: '2026-01-01T18:00:00.000Z', by: 'adam', cues: [], settings: ['name'] }]
+    useStore.setState({
+      cues: [cue, secondCue],
+      isDirty: true,
+      workspaceName: 'Live Show',
+      showHistory: history
+    })
+    const live = useStore.getState()
+    const save = window.cuerunner.workspace.save as unknown as Mock
+    save.mockResolvedValue({ path: '/shows/live.cuerunner', history })
+    ;(window.cuerunner.workspace.confirmClose as unknown as Mock).mockResolvedValue(0)
+
+    await offer(snapshot())
+    await recover()
+
+    expect(save).toHaveBeenCalledTimes(1)
+    const [workspace, path] = save.mock.calls[0]
+    expect(workspace).toEqual({
+      version: 1,
+      id: live.workspaceId,
+      name: 'Live Show',
+      createdAt: live.workspaceCreatedAt,
+      history,
+      audioSettings: live.audioSettings,
+      midiSettings: live.midiSettings,
+      showSettings: live.showSettings,
+      triggerGuard: live.triggerGuard,
+      cues: [cue, secondCue]
+    })
+    expect(path).toBe(live.workspacePath)
+  })
 })

@@ -134,7 +134,6 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
-    "electron-store": "^11.0.2",
     "node-osc": "^11.4.0",
     "zustand": "^5.0.0"
   },

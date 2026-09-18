@@ -211,16 +211,17 @@ function CompareTab() {
       workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard,
       workspaceId, workspaceCreatedAt, showHistory
     } = useStore.getState()
-    const workspace = buildWorkspace(
-      workspaceName,
-      cues,
+    const workspace = buildWorkspace({
+      id: workspaceId,
+      name: workspaceName,
+      createdAt: workspaceCreatedAt,
+      history: showHistory,
       audioSettings,
       midiSettings,
       showSettings,
-      { id: workspaceId, createdAt: workspaceCreatedAt },
       triggerGuard,
-      showHistory
-    )
+      cues
+    })
     setBusy(true)
     setError(null)
     try {
