@@ -10,6 +10,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 // The one thing this file needs from the codec: a zip that is not a bundle.
 import { writeZip } from './zip'
+import { Refusal } from '../ipc/refusal'
 
 vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')
@@ -215,6 +216,9 @@ describe('unpacking a bundle', () => {
     writeFileSync(join(elsewhere, 'Press Night.cuerunner'), '{}')
 
     await expect(unpackBundle(bundled, elsewhere, bundle)).rejects.toBeInstanceOf(BundleCollision)
+    // The collision is a marked refusal, so `workspace:importBundle` answers a sentence
+    // rather than rejecting; the class itself is what still names the colliding files.
+    await expect(unpackBundle(bundled, elsewhere, bundle)).rejects.toBeInstanceOf(Refusal)
     // Nothing was touched by the refusal.
     expect(readFileSync(join(elsewhere, 'media', 'walk-in.wav')).toString()).toBe('something else')
     expect(readFileSync(join(elsewhere, 'Press Night.cuerunner'), 'utf-8')).toBe('{}')
@@ -249,6 +253,7 @@ describe('unpacking a bundle', () => {
     const notAnArchive = join(dir, 'notes.cuerunnerx')
     writeFileSync(notAnArchive, 'this is not an archive')
     await expect(readBundle(notAnArchive)).rejects.toThrow('not a zip archive')
+    await expect(readBundle(notAnArchive)).rejects.toBeInstanceOf(Refusal)
 
     // A zip with no show in it is not a bundle either, whatever else it carries: a reader
     // must not unpack a folder of media and call it a show.

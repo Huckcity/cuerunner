@@ -36,9 +36,12 @@ beforeEach(() => {
   openPath = window.cuerunner.workspace.openPath as unknown as Mock
   merge.mockReset().mockResolvedValue({ ok: true, merged: null })
   openPath.mockReset().mockResolvedValue({
-    path: '/shows/Hamlet (merged).cuerunner',
-    workspace: { cues: [], name: 'Hamlet', missingMedia: [] },
-    missingMedia: []
+    ok: true,
+    opened: {
+      path: '/shows/Hamlet (merged).cuerunner',
+      workspace: { cues: [], name: 'Hamlet', missingMedia: [] },
+      missingMedia: []
+    }
   })
   useStore.setState({
     license: { state: 'active', license: TEST_LICENSE },
@@ -98,6 +101,24 @@ describe('the merge report', () => {
     })
 
     expect(openPath.mock.calls[0][0]).toBe('/shows/Hamlet (merged).cuerunner')
+  })
+
+  it('reports a merged show it cannot read, rather than losing the window to it', async () => {
+    // `openMergedShow` branches on the refusal arm: the file is an ordinary state — one
+    // saved by a newer build — so the notice carries the sentence and nothing is thrown.
+    openPath.mockResolvedValue({
+      ok: false,
+      error: 'that show has a cue this version of WinsLab does not know (video)'
+    })
+    await show()
+
+    const open = container.querySelector<HTMLButtonElement>('.changes-actions button') as HTMLButtonElement
+    await act(async () => {
+      open.click()
+    })
+
+    expect(useStore.getState().notice).toContain('does not know (video)')
+    expect(useStore.getState().notice).toContain('Could not open')
   })
 
   it('does not draw the conflict line when nobody disagreed', async () => {

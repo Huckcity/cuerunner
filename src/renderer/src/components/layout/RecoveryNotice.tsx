@@ -20,10 +20,11 @@ export function RecoveryNotice() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
 
   useEffect(() => {
-    window.cuerunner.workspace
+    // `recovery: null` is the ordinary "nothing to offer"; a snapshot this build cannot
+    // read is the refusal arm, and is offered as nothing rather than caught.
+    void window.cuerunner.workspace
       .recovery()
-      .then(found => { if (found) setSnapshot(found) })
-      .catch(() => { /* no snapshot, nothing to offer */ })
+      .then(answer => { if (answer.ok && answer.recovery) setSnapshot(answer.recovery) })
   }, [])
 
   if (!snapshot) return null

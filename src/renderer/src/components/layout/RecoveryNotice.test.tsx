@@ -86,7 +86,9 @@ describe('RecoveryNotice', () => {
   })
 
   async function offer(found: ReturnType<typeof snapshot> | null): Promise<void> {
-    ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue(found)
+    // The channel's success arm: the snapshot, or nothing to offer inside `ok`.
+    ;(window.cuerunner.workspace.recovery as unknown as Mock)
+      .mockResolvedValue({ ok: true, recovery: found })
     await act(async () => { root.render(<RecoveryNotice />) })
   }
 
@@ -145,6 +147,19 @@ describe('RecoveryNotice', () => {
 
   it('offers nothing when there is no snapshot', async () => {
     await offer(null)
+
+    expect(container.querySelector('.app-notice')).toBeNull()
+  })
+
+  it('offers nothing when the snapshot is one this build cannot read', async () => {
+    // The refusal arm: an ordinary state, so it is branched on rather than caught, and
+    // the window simply has nothing to offer.
+    ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
+      ok: false,
+      error: 'that show has a cue this version of WinsLab does not know (video)'
+    })
+
+    await act(async () => { root.render(<RecoveryNotice />) })
 
     expect(container.querySelector('.app-notice')).toBeNull()
   })
