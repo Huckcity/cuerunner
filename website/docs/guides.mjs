@@ -933,10 +933,13 @@ export const GUIDES = [
       <p>
         A save that changes nothing writes the same bytes back and adds no line, which is
         what makes a showfile safe to keep in version control: a show opened, saved and
-        closed without an edit is the same file. Bringing an older file up to this
-        version's shape is a change to the file rather than to the show, so it is not
-        recorded as an edit. A file remembers its last two hundred changes and lets the
-        oldest fall off.
+        closed without an edit is the same file. A measurement the app took since the file
+        was written — a file's length, the audible region inside it — is the one thing that
+        can still change the bytes: it is not an edit, so it adds no line, and a show whose
+        media was scanned between two saves compares as unchanged. Bringing an older file
+        up to this version's shape is a change to the file rather than to the show, so it
+        is not recorded as an edit. A file remembers its last two hundred changes and lets
+        the oldest fall off.
       </p>
       <div class="note">
         The history lives in the <code>.cuerunner</code>, so it survives being copied, emailed
