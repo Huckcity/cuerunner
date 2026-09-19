@@ -17,6 +17,7 @@ import {
   openFromRecent,
   oscPortOfItsOwn,
   sendOsc,
+  setGuardWindow,
   startServer,
   type TestServer
 } from './helpers'
@@ -47,16 +48,6 @@ async function triggeredNetworkCue(address: string): Promise<void> {
   await expect(page.locator('.trigger-row[data-kind="osc"]')).toContainText(address)
 }
 
-/** Sets the show's firing window, the way an operator would, and closes the panel. */
-async function setGuardWindow(ms: number): Promise<void> {
-  await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu button[data-action="settings"]').click()
-  await page.locator('#settings-guard-window').fill(String(ms))
-  await page.locator('#settings-guard-window').press('Enter')
-  await expect(page.locator('#settings-guard-window')).toHaveValue(String(ms))
-  await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click()
-}
-
 function hits(): number {
   return server?.hits.length ?? 0
 }
@@ -82,7 +73,7 @@ test('the window is the show’s, and it is over when it is over', async () => {
 
   // One and a half seconds: far longer than any desk's double send, and a config the
   // operator typed rather than the third-of-a-second default.
-  await setGuardWindow(1500)
+  await setGuardWindow(page, 1500)
 
   await sendOsc(port, '/eos/cue/12/fire')
   await expect.poll(hits).toBe(1)
