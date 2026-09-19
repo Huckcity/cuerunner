@@ -652,4 +652,27 @@ describe('ServiceHost — entitlement', () => {
     expect(paid.stop).toHaveBeenCalledTimes(1)
     expect(host.status('rf')?.state).toBe('stopped')
   })
+
+  it('restarts a service whose slice moved in the same pass as a licence change', async () => {
+    // The licence pass leaves the services that are already up alone, so entering a key
+    // mid-session does not re-bind every port. A service whose settings moved in that
+    // same configure is the exception: its settings are only in force once it has
+    // restarted, and the caller records the configure as applied.
+    let licensed = false
+    const { host } = harness({ entitled: () => licensed })
+    const listener = fakeService({ id: 'osc-in', sections: ['oscIn'] })
+    const other = fakeService({ id: 'midi-in', sections: ['midiIn'] })
+    host.register(listener.service)
+    host.register(other.service)
+    const before = showSettings()
+    await host.startAll(before)
+
+    licensed = true
+    const moved = { ...before, oscIn: { enabled: true, port: 53001 } }
+    await host.startAll(moved, { entitlementOnly: true })
+
+    expect(listener.start).toHaveBeenCalledTimes(2)
+    expect(listener.start).toHaveBeenLastCalledWith(expect.anything(), moved)
+    expect(other.start).toHaveBeenCalledTimes(1)
+  })
 })
