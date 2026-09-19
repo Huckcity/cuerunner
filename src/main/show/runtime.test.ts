@@ -98,6 +98,25 @@ describe('createShowRuntime', () => {
     runtime.close()
   })
 
+  it('restarts nothing when a configure carries the same values in another key order', async () => {
+    // The configure is where the operator's edit lands, so the claim is held here too:
+    // a rebuilt settings object whose keys moved must reach the host and change nothing.
+    vi.useFakeTimers()
+    const service = new FakeService('fake', 'Fake service', ['oscIn'])
+    const runtime = createShowRuntime([service])
+
+    const settings = defaultShowSettings()
+    await runtime.configure(settings)
+    await runtime.configure({
+      ...settings,
+      oscIn: { port: settings.oscIn.port, enabled: settings.oscIn.enabled }
+    })
+
+    expect(service.starts).toBe(1)
+    expect(service.stops).toBe(0)
+    runtime.close()
+  })
+
   it('restarts the services when a section they declare actually changes', async () => {
     vi.useFakeTimers()
     const service = new FakeService('fake', 'Fake service', ['oscIn'])
