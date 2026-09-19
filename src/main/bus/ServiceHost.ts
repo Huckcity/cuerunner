@@ -32,6 +32,14 @@ export interface ShowService {
    * second machine — is what the key turns on.
    */
   readonly pro?: true
+  /**
+   * The `ShowSettings` sections this service's `start()` reads — whole sections, not
+   * paths into one. The host restarts the service when one of them moved and leaves it
+   * alone otherwise, so this declaration is the only record of the slice: nothing in the
+   * host maps a service to its settings. A service configured from the machine rather
+   * than the show declares none, and a configure never restarts it.
+   */
+  readonly settingsSections: readonly (keyof ShowSettings)[]
   start(context: ServiceContext, settings: ShowSettings): Promise<void> | void
   stop(): Promise<void> | void
   /** Operator-initiated action, e.g. reconnecting or rescanning. */
@@ -84,16 +92,16 @@ export class ServiceHost {
   }
 
   /**
-   * Restarts only the services whose slice of the settings changed: every settings
-   * edit otherwise drops every listener. A service declares its slice by id; an
-   * unknown id restarts everywhere, because a setting nobody reads is not a reason
-   * to keep a stale listener.
+   * Restarts only the services whose declared slice of the settings changed: every
+   * settings edit otherwise drops every listener. Each service says which sections its
+   * start() reads; one that declares none — its settings are the machine's — is left
+   * exactly where it is.
    */
   async startChanged(settings: ShowSettings): Promise<void> {
     const before = this.settings
     this.settings = settings
     for (const entry of this.entries.values()) {
-      if (before !== null && !serviceSettingsChanged(entry.service.id, before, settings)) continue
+      if (before !== null && !serviceSettingsChanged(entry.service, before, settings)) continue
       await this.apply(entry, settings)
     }
   }
@@ -245,32 +253,15 @@ export class ServiceHost {
 }
 
 /**
- * Whether this service reads anything that changed between two settings. The slices
- * are the sections each service's start() reads; desk-adjacent services also read the
- * desk section they send through.
+ * Whether this service reads anything that changed between two settings. A service
+ * declares the whole sections its start() reads, so a section that moved restarts it
+ * and a section it never declared cannot: the declaration is the only record of the
+ * slice, and a service that declares none is never restarted by a configure.
  */
-function serviceSettingsChanged(id: string, before: ShowSettings, after: ShowSettings): boolean {
-  switch (id) {
-    case 'osc-in':
-      return JSON.stringify(before.oscIn) !== JSON.stringify(after.oscIn)
-    case 'midi-in':
-      return JSON.stringify(before.midiIn) !== JSON.stringify(after.midiIn)
-    case 'midi-tcp':
-      return JSON.stringify(before.desk) !== JSON.stringify(after.desk)
-    case 'rf':
-      return JSON.stringify(before.rf) !== JSON.stringify(after.rf) ||
-        JSON.stringify(before.cast) !== JSON.stringify(after.cast)
-    case 'presence':
-      return JSON.stringify(before.presence) !== JSON.stringify(after.presence)
-    case 'companion':
-      return JSON.stringify(before.companion) !== JSON.stringify(after.companion) ||
-        JSON.stringify(before.script) !== JSON.stringify(after.script)
-    case 'redundancy':
-      // Machine settings, not show settings: the service reads its own file.
-      return false
-    default:
-      return JSON.stringify(before) !== JSON.stringify(after)
-  }
+function serviceSettingsChanged(service: ShowService, before: ShowSettings, after: ShowSettings): boolean {
+  return service.settingsSections.some(
+    section => JSON.stringify(before[section]) !== JSON.stringify(after[section])
+  )
 }
 
 export function describe(error: unknown): string {

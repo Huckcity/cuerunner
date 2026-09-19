@@ -85,6 +85,8 @@ export class WirelessService implements ShowService {
   readonly id = 'rf'
   readonly label = 'Wireless'
   readonly pro = true
+  /** The rack and its sources, and the cast the plot's alarms are named after. */
+  readonly settingsSections = ['rf', 'cast'] as const
 
   private context: ServiceContext | null = null
   private sources: TelemetrySource[] = []
@@ -223,6 +225,9 @@ export class WirelessService implements ShowService {
     // one signal: a request to a receiver that has left the network cannot outlive the
     // settings that asked for it.
     const timer = setTimeout(() => controller.abort(new Error('timed out')), source.timeoutMs)
+    // A request to a rack that has left the network must not be what keeps the app
+    // alive on quit, any more than the polls that made it.
+    timer.unref?.()
     try {
       const response = await this.ports.fetchJson(source.target, controller.signal)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)

@@ -38,6 +38,7 @@ function connectOscServer(port: number, host: string): OscServer {
 export class OscInputService implements ShowService {
   readonly id = 'osc-in'
   readonly label = 'OSC input'
+  readonly settingsSections = ['oscIn'] as const
 
   private server: OscServer | null = null
   /** Whether a datagram that was not OSC has been reported, so it is reported once. */

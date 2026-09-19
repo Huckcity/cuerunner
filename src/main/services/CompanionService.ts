@@ -64,6 +64,11 @@ export class CompanionService implements ShowService {
   readonly id = 'companion'
   readonly label = 'Companion'
   readonly pro = true
+  /**
+   * The companion only: the script the tablet serves is published by the renderer, so a
+   * script edit has no business dropping the tablet's stream.
+   */
+  readonly settingsSections = ['companion'] as const
 
   private context: ServiceContext | null = null
   private server: Server | null = null

@@ -15,6 +15,8 @@ function showSettings(): ShowSettings {
 interface FakeOptions {
   id: string
   label?: string
+  /** The settings sections the fake reads — the id is deliberately not what decides. */
+  sections?: readonly (keyof ShowSettings)[]
   start?: (context: ServiceContext, settings: ShowSettings) => void | Promise<void>
   stop?: () => void | Promise<void>
   command?: (action: string, payload?: unknown) => unknown
@@ -37,6 +39,7 @@ function fakeService(options: FakeOptions) {
   const service: ShowService = {
     id: options.id,
     label: options.label ?? options.id,
+    settingsSections: options.sections ?? [],
     start,
     stop,
     ...(options.pro === true ? { pro: true as const } : {}),
@@ -202,6 +205,120 @@ describe('ServiceHost — startAll', () => {
         message: 'Bad service failed: no driver'
       })
     ])
+  })
+})
+
+describe('ServiceHost — startChanged', () => {
+  it('restarts the services whose declared section moved, and not the others', async () => {
+    const { host } = harness()
+    const osc = fakeService({ id: 'osc-in', sections: ['oscIn'] })
+    const midi = fakeService({ id: 'midi-in', sections: ['midiIn'] })
+    host.register(osc.service)
+    host.register(midi.service)
+    await host.startAll(showSettings())
+
+    const moved = { ...showSettings(), oscIn: { enabled: true, port: 53001 } }
+    await host.startChanged(moved)
+
+    expect(osc.start).toHaveBeenCalledTimes(2)
+    expect(osc.stop).toHaveBeenCalledTimes(1)
+    // The restart is handed what just arrived, not the settings it came up on.
+    expect(osc.start.mock.calls[1][1]).toBe(moved)
+    expect(midi.start).toHaveBeenCalledTimes(1)
+    expect(midi.stop).not.toHaveBeenCalled()
+  })
+
+  it('leaves a service alone when a section it has not declared moved', async () => {
+    // The arm this replaces claimed `script`, which CompanionService.start never reads,
+    // so a script edit dropped the tablet's stream for nothing.
+    const { host } = harness()
+    const companion = fakeService({ id: 'companion', sections: ['companion'] })
+    host.register(companion.service)
+    await host.startAll(showSettings())
+
+    await host.startChanged({
+      ...showSettings(),
+      script: { path: '/shows/hamlet.txt', fontSize: 20 }
+    })
+
+    expect(companion.start).toHaveBeenCalledTimes(1)
+    expect(companion.stop).not.toHaveBeenCalled()
+  })
+
+  it('never restarts a service that declares no sections', async () => {
+    // Redundancy reads the machine's settings rather than the show's, so a configure
+    // must not drop the pair's link.
+    const { host } = harness()
+    const redundancy = fakeService({ id: 'redundancy', sections: [] })
+    host.register(redundancy.service)
+    await host.startAll(showSettings())
+
+    await host.startChanged({
+      ...showSettings(),
+      oscIn: { enabled: true, port: 53001 },
+      script: { path: '/shows/hamlet.txt', fontSize: 20 }
+    })
+
+    expect(redundancy.start).toHaveBeenCalledTimes(1)
+    expect(redundancy.stop).not.toHaveBeenCalled()
+  })
+
+  it('restarts a two-section service whichever of its sections moved, and remembers what it applied', async () => {
+    const { host } = harness()
+    const rf = fakeService({ id: 'rf', sections: ['rf', 'cast'] })
+    const midi = fakeService({ id: 'midi-in', sections: ['midiIn'] })
+    host.register(rf.service)
+    host.register(midi.service)
+    await host.startAll(showSettings())
+
+    // The second declared section: a comparison that stopped at the first would leave the
+    // service watching a cast it no longer matches.
+    const cast = { ...defaultShowSettings().cast, ensembles: [{ id: 'chorus', name: 'Chorus', members: [] }] }
+    const movedCast = { ...showSettings(), cast }
+    await host.startChanged(movedCast)
+
+    expect(rf.start).toHaveBeenCalledTimes(2)
+    expect(rf.start.mock.calls[1][1]).toBe(movedCast)
+    expect(midi.start).toHaveBeenCalledTimes(1)
+
+    // A later change somewhere else compares against what was last applied, not against
+    // the first settings: the service whose own sections have not moved since stays up.
+    await host.startChanged({ ...movedCast, midiIn: { enabled: true, portNames: ['Keys'] } })
+
+    expect(midi.start).toHaveBeenCalledTimes(2)
+    expect(rf.start).toHaveBeenCalledTimes(2)
+  })
+
+  it('brings every service up when no settings have been applied yet', async () => {
+    // The first configure: there is nothing to compare against, so the declaration cannot
+    // decide anything and every service — including one that declares nothing — comes up.
+    const { host } = harness()
+    const redundancy = fakeService({ id: 'redundancy', sections: [] })
+    const osc = fakeService({ id: 'osc-in', sections: ['oscIn'] })
+    host.register(redundancy.service)
+    host.register(osc.service)
+
+    await host.startChanged(showSettings())
+
+    expect(redundancy.start).toHaveBeenCalledTimes(1)
+    expect(osc.start).toHaveBeenCalledTimes(1)
+    expect(host.status('osc-in')?.state).toBe('running')
+  })
+
+  it('restarts and answers a service registered by its declaration alone', async () => {
+    // Nothing in the host was built knowing this id: the declaration is what says whether
+    // a configure reaches it, and the by-id routes work for whatever was registered.
+    const { host } = harness()
+    const late = fakeService({ id: 'late-service', sections: ['oscIn'] })
+    host.register(late.service)
+    await host.startAll(showSettings())
+
+    await host.startChanged({ ...showSettings(), oscIn: { enabled: true, port: 53001 } })
+
+    expect(late.start).toHaveBeenCalledTimes(2)
+    expect(late.stop).toHaveBeenCalledTimes(1)
+    expect(await host.restart('late-service')).toEqual({ ok: true })
+    expect(await host.command('late-service', 'rescan')).toEqual({ ok: true, result: 'ok' })
   })
 })
 

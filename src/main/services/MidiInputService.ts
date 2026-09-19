@@ -33,6 +33,7 @@ const PORT_POLL_MS = 2000
 export class MidiInputService implements ShowService {
   readonly id = 'midi-in'
   readonly label = 'MIDI input'
+  readonly settingsSections = ['midiIn'] as const
 
   private inputs = new Map<string, MidiInputPort>()
   private poll: ReturnType<typeof setInterval> | null = null
