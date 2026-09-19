@@ -86,10 +86,23 @@ export class ServiceHost {
 
   /** Starts every registered service. One failing service does not stop the others. */
   async startAll(settings: ShowSettings, options: { entitlementOnly?: boolean } = {}): Promise<void> {
-    this.settings = settings
+    const before = this.settings
     for (const entry of this.entries.values()) {
-      await this.apply(entry, settings, options.entitlementOnly === true)
+      // On a licence change — the one case a settings diff cannot express — a service
+      // that is already up stays up: re-binding the OSC port because a key was entered
+      // would drop whatever is in flight, and a key gets entered during a show. A
+      // service whose declared slice moved in this same configure is the exception: its
+      // settings are only in force once it is restarted, and the caller records the
+      // configure as applied, so leaving it up would lose the move for the session.
+      const leaveUp =
+        options.entitlementOnly === true &&
+        before !== null &&
+        !serviceSettingsChanged(entry.service, before, settings)
+      await this.apply(entry, settings, leaveUp)
     }
+    // Committed once the services have taken them, like every other memory of what is
+    // running: one that moves first describes a show no service is giving.
+    this.settings = settings
   }
 
   /**
@@ -100,11 +113,13 @@ export class ServiceHost {
    */
   async startChanged(settings: ShowSettings): Promise<void> {
     const before = this.settings
-    this.settings = settings
     for (const entry of this.entries.values()) {
       if (before !== null && !serviceSettingsChanged(entry.service, before, settings)) continue
       await this.apply(entry, settings)
     }
+    // Committed once the services have taken them, so an apply that threw on its way
+    // through leaves the baseline where the services really are and the retry converges.
+    this.settings = settings
   }
 
   async stopAll(): Promise<void> {
@@ -184,9 +199,11 @@ export class ServiceHost {
    * not raise an alert. Everything else is brought up as the settings ask. This is
    * called for *every* service when the licence changes — the one case the settings
    * diff cannot express — so a key entered mid-session starts what the operator had
-   * configured and a lapsed key leaves the free listeners running.
+   * configured and a lapsed key leaves the free listeners running. That pass is the one
+   * caller that can ask for a service to be left alone: `leaveUp` says the licence moved
+   * and this service's slice did not, which is decided where the two are known.
    */
-  private async apply(entry: Entry, settings: ShowSettings, entitlementOnly = false): Promise<void> {
+  private async apply(entry: Entry, settings: ShowSettings, leaveUp = false): Promise<void> {
     const refusal = this.refusal(entry)
     if (refusal !== null) {
       if (entry.status.state !== 'stopped') {
@@ -195,10 +212,7 @@ export class ServiceHost {
       this.setState(entry, 'stopped', refusal)
       return
     }
-    // On a licence change — the one case a settings diff cannot express — a service
-    // that is already up stays up. Re-binding the OSC port because a key was entered
-    // would drop whatever is in flight, and a key gets entered during a show.
-    if (entitlementOnly && entry.status.state !== 'stopped') return
+    if (leaveUp && entry.status.state !== 'stopped') return
     await this.bringUp(entry, settings)
   }
 

@@ -295,4 +295,180 @@ describe('createShowRuntime', () => {
 
     runtime.close()
   })
+
+  it('applies a configure that arrives mid-apply after the first, not alongside it', async () => {
+    // The renderer's settings effect, a licence change and redundancy:configure all fire
+    // without waiting for an apply in flight. Two applies interleaved at a service's
+    // start can leave it on the older settings while the memory records the newer ones,
+    // and no later configure then corrects it — the memory says they are in force.
+    const held = Promise.withResolvers<void>()
+    const heldStarted = Promise.withResolvers<void>()
+    const ports: number[] = []
+    let starts = 0
+    const service: ShowService = {
+      id: 'osc-in',
+      label: 'OSC input',
+      settingsSections: ['oscIn'],
+      async start(context: ServiceContext, settings: ShowSettings): Promise<void> {
+        starts++
+        ports.push(settings.oscIn.port)
+        if (starts === 1) {
+          heldStarted.resolve()
+          await held.promise
+        }
+        context.setState('running', 'listening')
+      },
+      stop(): void {}
+    }
+    const runtime = createShowRuntime([service])
+
+    const first = runtime.configure(movedPort(53000))
+    await heldStarted.promise
+    const second = runtime.configure(movedPort(53001))
+
+    // Every turn it needs: an apply that did not wait its turn would have started by
+    // now, and this one must not reach the service while the first is still in it.
+    await new Promise<void>(resolve => {
+      setImmediate(resolve)
+    })
+    expect(ports).toEqual([53000])
+
+    held.resolve()
+    await Promise.all([first, second])
+
+    expect(ports).toEqual([53000, 53001])
+    expect(runtime.snapshot().services[0]).toMatchObject({ state: 'running' })
+    runtime.close()
+  })
+
+  it('holds a re-sent configure until the apply it duplicates has settled', async () => {
+    // The renderer re-sends its settings on every autosave tick, and the memory is what
+    // says a re-send is nothing to do. Answered at once, it says "already applied" while
+    // a service is still starting on them.
+    const held = Promise.withResolvers<void>()
+    const heldStarted = Promise.withResolvers<void>()
+    let starts = 0
+    const service: ShowService = {
+      id: 'osc-in',
+      label: 'OSC input',
+      settingsSections: ['oscIn'],
+      async start(context: ServiceContext): Promise<void> {
+        starts++
+        if (starts === 1) {
+          heldStarted.resolve()
+          await held.promise
+        }
+        context.setState('running', 'listening')
+      },
+      stop(): void {}
+    }
+    const runtime = createShowRuntime([service])
+
+    const settings = movedPort(53000)
+    const first = runtime.configure(settings)
+    await heldStarted.promise
+
+    let duplicateSettled = false
+    const duplicate = runtime.configure(settings).then(() => {
+      duplicateSettled = true
+    })
+    await Promise.resolve()
+    expect(duplicateSettled).toBe(false)
+
+    held.resolve()
+    await Promise.all([first, duplicate])
+
+    // Skipped on honest memory, not waved through while the service was starting.
+    expect(starts).toBe(1)
+    runtime.close()
+  })
+
+  it('applies a move that arrives with a licence change, rather than recording it unapplied', async () => {
+    // Entering a key re-decides every service, and a service already up is left alone by
+    // that pass — but not when its settings moved in the same configure. Recorded as
+    // applied, the move would never come again: the renderer re-sends the same settings
+    // on every autosave tick, and the memory answers for it.
+    let licensed = false
+    const listener = new FakeService('osc-in', 'OSC input', ['oscIn'])
+    const runtime = createShowRuntime([listener], () => licensed)
+    await runtime.configure(defaultShowSettings())
+
+    licensed = true
+    const moved = movedPort(53001)
+    await runtime.configure(moved)
+    expect(listener.starts).toBe(2)
+
+    await runtime.configure(moved)
+    expect(listener.starts).toBe(2)
+    runtime.close()
+  })
+
+  it('leaves each service on the newest settings when a configure and a by-id restart race', async () => {
+    // redundancy:configure restarts its one service by id while the renderer's settings
+    // effect may be mid-apply; the restart waits its turn, so a service cannot be
+    // restated from settings the host is still moving away from.
+    const held = Promise.withResolvers<void>()
+    const heldStarted = Promise.withResolvers<void>()
+    const defaults = defaultShowSettings()
+    const events: string[] = []
+    const listener: ShowService = {
+      id: 'osc-in',
+      label: 'OSC input',
+      settingsSections: ['oscIn'],
+      async start(context: ServiceContext, settings: ShowSettings): Promise<void> {
+        events.push(`osc:start:${settings.oscIn.port}`)
+        if (settings.oscIn.port === 53001) {
+          heldStarted.resolve()
+          await held.promise
+        }
+        context.setState('running', 'listening')
+      },
+      stop(): void {
+        events.push('osc:stop')
+      }
+    }
+    const redundancy: ShowService = {
+      id: 'redundancy',
+      label: 'Redundancy',
+      settingsSections: [],
+      start(context: ServiceContext): void {
+        events.push('redundancy:start')
+        context.setState('running', 'in sync')
+      },
+      stop(): void {
+        events.push('redundancy:stop')
+      }
+    }
+    const runtime = createShowRuntime([listener, redundancy])
+    await runtime.configure(defaults)
+    expect(events).toEqual([`osc:start:${defaults.oscIn.port}`, 'redundancy:start'])
+
+    const configure = runtime.configure(movedPort(53001))
+    await heldStarted.promise
+    const restart = runtime.restart('redundancy')
+    await Promise.resolve()
+    expect(events).toEqual([
+      `osc:start:${defaults.oscIn.port}`,
+      'redundancy:start',
+      'osc:stop',
+      'osc:start:53001'
+    ])
+
+    held.resolve()
+    await Promise.all([configure, restart])
+
+    expect(events).toEqual([
+      `osc:start:${defaults.oscIn.port}`,
+      'redundancy:start',
+      'osc:stop',
+      'osc:start:53001',
+      'redundancy:stop',
+      'redundancy:start'
+    ])
+    expect(runtime.snapshot().services).toEqual([
+      expect.objectContaining({ id: 'osc-in', state: 'running' }),
+      expect.objectContaining({ id: 'redundancy', state: 'running' })
+    ])
+    runtime.close()
+  })
 })

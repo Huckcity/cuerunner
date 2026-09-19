@@ -1,5 +1,6 @@
 import { ShowBus } from '../bus/ShowBus'
 import { ServiceHost, type CommandResult, type ShowService } from '../bus/ServiceHost'
+import { stableJson } from '../../shared/showfile'
 import { OscInputService } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
 import { MidiTcpService } from '../services/MidiTcpService'
@@ -74,29 +75,56 @@ export function createShowRuntime(
   // question belongs to configure, which is the only place the answer is used.
   let entitledNow: boolean | null = null
 
+  // Settings application is serialised: a configure that arrives while another is
+  // applying waits for it and is applied after, rather than racing it. Two applies in
+  // flight interleave at every `await` on a service, and a service left on the older
+  // settings while the memory records the newer ones is one no later configure
+  // corrects — the memory says those settings are already in force. The callers that
+  // move the services under settings — the renderer's settings effect, a licence change
+  // and redundancy:configure's by-id restart — come through here; a command moves no
+  // settings and does not wait, and teardown (`close`) deliberately does not either.
+  let applying: Promise<void> = Promise.resolve()
+  function serialised<T>(task: () => Promise<T>): Promise<T> {
+    const run = applying.then(task, task)
+    // A failing apply is the caller's to see, not the queue's to stop on.
+    applying = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
   return {
-    async configure(settings: ShowSettings): Promise<void> {
-      const serialized = JSON.stringify(settings)
-      const mayRunPro = entitled()
-      // Whether the licence changed is a different question from whether the settings
-      // did, and a settings diff cannot answer it: it re-decides every service,
-      // including the ones whose settings have not moved (redundancy reads machine
-      // settings, and nothing here compares those). The renderer re-sends settings
-      // whenever a workspace loads or autosaves, which is why identical settings on an
-      // unchanged licence are left alone rather than rebinding a UDP port mid-flight.
-      const licenceChanged = entitledNow !== null && mayRunPro !== entitledNow
-      if (serialized === current && !licenceChanged) return
-      if (current !== null && serialized !== current) {
-        // A restart here means the service is turned off or pointed somewhere else.
-        // Say so once, at the level of the thing that changed.
-        const before = JSON.parse(current) as ShowSettings
-        announceChange(bus, before, settings)
-      }
-      current = serialized
-      entitledNow = mayRunPro
-      if (licenceChanged) await host.startAll(settings, { entitlementOnly: true })
-      else await host.startChanged(settings)
-    },
+    configure: (settings: ShowSettings) =>
+      serialised(async () => {
+        // Read when the apply runs, not when it was asked for: what a queued configure
+        // is compared against is the settings the services settled on before it. The
+        // comparison is by value — `stableJson`, the equality the host's slice diff
+        // uses — so a re-send that only reorders keys is the same settings.
+        const serialized = stableJson(settings)
+        const mayRunPro = entitled()
+        // Whether the licence changed is a different question from whether the settings
+        // did, and a settings diff cannot answer it: it re-decides every service,
+        // including the ones whose settings have not moved (redundancy reads machine
+        // settings, and nothing here compares those). The renderer re-sends settings
+        // whenever a workspace loads or autosaves, which is why identical settings on an
+        // unchanged licence are left alone rather than rebinding a UDP port mid-flight.
+        const licenceChanged = entitledNow !== null && mayRunPro !== entitledNow
+        if (serialized === current && !licenceChanged) return
+        if (current !== null && serialized !== current) {
+          // A restart here means the service is turned off or pointed somewhere else.
+          // Say so once, at the level of the thing that changed.
+          const before = JSON.parse(current) as ShowSettings
+          announceChange(bus, before, settings)
+        }
+        if (licenceChanged) await host.startAll(settings, { entitlementOnly: true })
+        else await host.startChanged(settings)
+        // Committed once every service has settled — never before applying — so the
+        // memory says what is running, and settings already in force are the only ones a
+        // configure skips.
+        current = serialized
+        entitledNow = mayRunPro
+      }),
 
     snapshot(): ShowSnapshot {
       // The stamp is taken before the bus is read, so a renderer that is applying
@@ -108,7 +136,7 @@ export function createShowRuntime(
 
     command: (serviceId, action, payload) => host.command(serviceId, action, payload),
 
-    restart: (serviceId) => host.restart(serviceId),
+    restart: (serviceId) => serialised(() => host.restart(serviceId)),
 
     subscribe: (listener) => bus.subscribe(listener),
 
