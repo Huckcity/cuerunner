@@ -499,7 +499,7 @@ Workspaces are saved as `.cuerunner` files (JSON format matching the `Workspace`
 
 Two properties of this file are load-bearing, and both are held by tests
 (`src/main/workspace/determinism.test.ts`, `src/main/workspace/history.test.ts`,
-`e2e/showfile.spec.ts`):
+`src/main/workspace/writers.test.ts`, `e2e/showfile.spec.ts`):
 
 - **The bytes are a function of the show and the folder it is saved into.** The file's `id` and
   `createdAt` belong to the show and are written back as they came; nothing carries a save
