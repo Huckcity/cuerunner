@@ -1,4 +1,5 @@
 import { app, dialog, BrowserWindow } from 'electron'
+import { createHash } from 'crypto'
 import { readFile, mkdir, stat, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
 import { asRefusal, Refusal } from '../ipc/refusal'
@@ -790,12 +791,114 @@ export function serialiseWorkspace(
   return JSON.stringify(savedShape({ ...workspace, cues }), null, 2)
 }
 
+// ─── The identity of the file on disk ─────────────────────────────────────────
+//
+// A save replaces whatever is at the path it is handed. Every path it can be handed was
+// either read or written by this process first, so main can hold those bytes' identity —
+// and holding it is what lets a save tell "the file this session was built from" from "a
+// file somebody else has changed since". An identity is taken where main reads or writes
+// a showfile and nowhere else: the reads that merely report on a file (a comparison, a
+// merge, the save's own history pass) leave no record behind, or they would refresh the
+// very baseline the next save checks.
+//
+// The bytes are the verdict, never the mtime: a show lives on a share, a copy preserves
+// timestamps, and two writes inside one filesystem tick share one mtime.
+
+/** What main last saw at a path: the byte length, and the SHA-256 of the bytes. */
+export interface FileFingerprint {
+  size: number
+  hash: string
+}
+
+const fileIdentities = new Map<string, FileFingerprint>()
+
+/**
+ * The key a path is remembered by. The same file arrives spelled differently — a dialog
+ * that hands over a redundant segment, a share reached by its mapped letter and by its
+ * UNC name on Windows — and a check that missed one of those spellings would replace the
+ * very file it exists to ask about. Resolving settles the first; folding the case on
+ * win32, the same rule the relink below decides two paths with, settles the second.
+ */
+function identityKey(filePath: string): string {
+  return comparable(resolve(filePath))
+}
+
+function fingerprintOf(bytes: string | Buffer): FileFingerprint {
+  const buffer = typeof bytes === 'string' ? Buffer.from(bytes, 'utf-8') : bytes
+  return { size: buffer.byteLength, hash: createHash('sha256').update(buffer).digest('hex') }
+}
+
+/** Records the identity of a path from bytes this process has just read or written. */
+export function rememberFile(filePath: string, bytes: string | Buffer): void {
+  fileIdentities.set(identityKey(filePath), fingerprintOf(bytes))
+}
+
+/**
+ * Records an identity main was handed rather than computed itself: a recovery snapshot
+ * carries the fingerprint of the file the crashed session was built from, so a save after
+ * a crash can compare the disk against the file as it was before the app died — the only
+ * record that can speak for a session that is gone.
+ */
+function rememberFingerprint(filePath: string, fingerprint: FileFingerprint): void {
+  fileIdentities.set(identityKey(filePath), fingerprint)
+}
+
+/** The identity main holds for a path, or null when it holds none. */
+export function knownFingerprint(filePath: string | null): FileFingerprint | null {
+  return filePath === null ? null : fileIdentities.get(identityKey(filePath)) ?? null
+}
+
+/**
+ * Records the identity of a file from the disk itself, through the same ceiling every
+ * read path uses. Best-effort: a file that is missing, unreadable or past the ceiling
+ * keeps no identity, and a save to it asks nothing — the same treatment a path this app
+ * has never read gets.
+ */
+async function rememberFileFromDisk(filePath: string): Promise<void> {
+  try {
+    const { size } = await stat(filePath)
+    if (size > MAX_WORKSPACE_BYTES) return
+    rememberFile(filePath, await readFile(filePath))
+  } catch {
+    // Nothing there to remember.
+  }
+}
+
+/**
+ * Whether the file at a path is no longer the one main last read or wrote there. The
+ * verdict is the bytes: the sizes are compared first — a mismatch settles it without a
+ * read — and equal sizes are settled by a bounded read and a hash. A path main holds no
+ * identity for is not checked at all; a file that is gone or unreadable has changed, as
+ * far as the operator is concerned.
+ */
+async function fileChangedOnDisk(filePath: string): Promise<boolean> {
+  const known = knownFingerprint(filePath)
+  if (known === null) return false
+  try {
+    const { size } = await stat(filePath)
+    // An oversize file is a change decided without its body: the read below is bounded by
+    // what this app would read in the first place.
+    if (size !== known.size || size > MAX_WORKSPACE_BYTES) return true
+    return fingerprintOf(await readFile(filePath)).hash !== known.hash
+  } catch {
+    // Missing or unreadable: the file this session knew is not there to compare with.
+    return true
+  }
+}
+
 /**
  * A showfile as it is on disk, migrated but not resolved: the stored form, which is what
  * a comparison between two files has to look at — a diff of resolved workspaces would
  * compare this machine's paths with this machine's paths.
+ *
+ * `remember` is for the reads that establish a session over the file — File→Open and the
+ * recent list — and for nothing else.
  */
-export async function readWorkspaceFile(filePath: string, notes?: LoadNote[]): Promise<Workspace> {
+export async function readWorkspaceFile(
+  filePath: string,
+  notes?: LoadNote[],
+  remember = false
+): Promise<Workspace> {
   // A hostile .cuerunner is a zip bomb of the plain kind: cap the read before the parse,
   // rather than inflating attacker-declared JSON into main-process memory.
   //
@@ -803,12 +906,26 @@ export async function readWorkspaceFile(filePath: string, notes?: LoadNote[]): P
   // operator picked, so each is a refusal — a marked error the channels answer as a
   // value — while the migration below keeps its own refusals and its bugs keep throwing.
   let text: string
+  // Only a session's own read wants an identity, and it is taken from the bytes as they
+  // come off the disk — not from the decoded text, which a file that is not valid UTF-8
+  // would not round-trip — and the buffer is out of scope before the parse. What is
+  // carried through the parse is the fingerprint's two fields, not the file.
+  let identity: FileFingerprint | undefined
   try {
     const { size } = await stat(filePath)
     if (size > MAX_WORKSPACE_BYTES) {
       throw new Refusal('that workspace file is larger than this app will open')
     }
-    text = await readFile(filePath, 'utf-8')
+    if (remember) {
+      const bytes = await readFile(filePath)
+      identity = fingerprintOf(bytes)
+      text = bytes.toString('utf-8')
+    } else {
+      // The reads that only report on a file — a comparison, a merge, the save's own
+      // history pass — carry the text alone: there is no identity to take, and no reason
+      // to hold the file's bytes in memory beside their decoding.
+      text = await readFile(filePath, 'utf-8')
+    }
   } catch (error) {
     throw asRefusal(error)
   }
@@ -818,7 +935,12 @@ export async function readWorkspaceFile(filePath: string, notes?: LoadNote[]): P
   } catch (error) {
     throw asRefusal(error)
   }
-  return migrateWorkspace(parsed, notes)
+  const workspace = migrateWorkspace(parsed, notes)
+  // Recorded only once the read has produced a workspace: a file this build refuses is not
+  // one a session was established over, and the identity describes the bytes a session is
+  // built from — what the next save checks the disk against.
+  if (identity !== undefined) rememberFingerprint(filePath, identity)
+  return workspace
 }
 
 /** Who a save is attributed to: the operating system's own answer, not the app's. */
@@ -1064,7 +1186,7 @@ export async function openWorkspace(
   // most shows arrive, and a 500 MB one must be refused here too — as the ordinary state
   // it is, so the channel can answer it instead of logging a stack.
   const loadNotes: LoadNote[] = []
-  const workspace = await readWorkspaceFile(filePath, loadNotes)
+  const workspace = await readWorkspaceFile(filePath, loadNotes, true)
   await addToRecent(filePath)
   return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath), loadNotes }
 }
@@ -1078,7 +1200,7 @@ export async function openWorkspaceFromPath(
   loadNotes: LoadNote[]
 }> {
   const loadNotes: LoadNote[] = []
-  const workspace = await readWorkspaceFile(filePath, loadNotes)
+  const workspace = await readWorkspaceFile(filePath, loadNotes, true)
   await addToRecent(filePath)
   return { path: filePath, ...resolveWorkspaceMedia(workspace, filePath), loadNotes }
 }
@@ -1102,6 +1224,15 @@ export async function openRecovery(): Promise<{
   // return groups with no children and a show section whose panels cannot be read.
   const loadNotes: LoadNote[] = []
   const workspace = migrateWorkspace(snapshot.workspace, loadNotes)
+  // The file this session was built from gets its identity back before the session is on
+  // screen: the snapshot's own record of it speaks for a crash that left no process
+  // behind, so a file changed while the app was dead is a change the recovered save can
+  // report. A snapshot written before that record existed leaves the disk to answer,
+  // which makes the file as it is at recovery the baseline.
+  if (snapshot.sourcePath !== null) {
+    if (snapshot.sourceFingerprint) rememberFingerprint(snapshot.sourcePath, snapshot.sourceFingerprint)
+    else await rememberFileFromDisk(snapshot.sourcePath)
+  }
   return {
     savedAt: snapshot.savedAt,
     sourcePath: snapshot.sourcePath,
@@ -1138,6 +1269,29 @@ export async function saveWorkspace(
     filePath = result.filePath
   }
 
+  // The file about to be replaced, checked against the one this session was built from
+  // before anything is even serialised. What is checked is a path main holds an identity
+  // for — one this app has read or written. A path it has never seen, however it was
+  // chosen, is not checked: there is nothing to compare against, and the file was named
+  // in the OS dialog.
+  if (await fileChangedOnDisk(filePath)) {
+    const answer = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Overwrite', 'Abandon'],
+      // Enter and Escape both abandon: the file keeps whatever is at it, and the show
+      // stays unsaved — which is the recoverable half of the two answers.
+      defaultId: 1,
+      cancelId: 1,
+      // Worded for every verdict the check can reach — changed, gone, unreadable, or too
+      // large to read — and for what it can and cannot say: it never saw the bytes it was
+      // refused, so it cannot claim the file changed, only that it is not vouching for it.
+      message: `This app cannot confirm “${basename(filePath)}” is the file it opened or last saved`,
+      detail: 'It has changed, gone, or become unreadable since. Overwrite replaces whatever is at '
+        + 'that path with this show; Abandon leaves it alone and keeps this show unsaved.'
+    })
+    if (answer.response !== 0) return null
+  }
+
   // Serialise first: a workspace that cannot be turned into JSON must not touch the
   // file, and the write itself goes through a temporary file plus a rename. Media
   // locations are written against the folder the file is going into, which is what
@@ -1156,6 +1310,9 @@ export async function saveWorkspace(
           workspaceDir
         )
   await writeFileAtomically(filePath, written)
+  // The bytes this save put there are this session's baseline from then on: a save that
+  // replaces nothing new asks nothing.
+  rememberFile(filePath, written)
   // The recent list is a convenience. The workspace is on disk at this point, and
   // reporting a failure here would tell the operator their show was not saved.
   await addToRecent(filePath).catch(() => {})
@@ -1285,7 +1442,13 @@ export async function mergeIntoNewFile(
     filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }]
   })
   if (where.canceled || !where.filePath) return null
-  await writeFileAtomically(where.filePath, serialiseWorkspace(merged, dirname(where.filePath)))
+  const written = serialiseWorkspace(merged, dirname(where.filePath))
+  await writeFileAtomically(where.filePath, written)
+  // The merge wrote a showfile, so it is this app's own bytes at that path: an identity is
+  // taken where main writes one, here as much as in a save. (The window opens the merged
+  // show from the report, and would take the identity again there — this is for the file
+  // the merge left behind either way.)
+  rememberFile(where.filePath, written)
   await addToRecent(where.filePath).catch(() => {})
   return {
     path: where.filePath,

@@ -123,10 +123,13 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
 
   /**
    * Holds the flow's bridge promise until the returned function releases it: the write
-   * stays in flight, which is the window an edit can land in.
+   * stays in flight, which is the window an edit can land in. What it releases is
+   * whatever the save answered — a saved file, or the null the prompt's Abandon gives.
    */
-  function hold(flow: 'save' | 'saveAs'): (saved: { path: string; history: ShowHistoryEntry[] }) => void {
-    const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[] }>()
+  function hold(
+    flow: 'save' | 'saveAs'
+  ): (saved: { path: string; history: ShowHistoryEntry[] } | null) => void {
+    const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[] } | null>()
     ;(window.cuerunner.workspace[flow] as unknown as Mock).mockImplementation(() => gate.promise)
     return gate.resolve
   }
@@ -250,6 +253,30 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
 
     // The save answered without the second cue, so the close is refused rather than
     // taking the window down on work that is not on disk.
+    expect(confirmed).not.toHaveBeenCalled()
+    expect(useStore.getState().isDirty).toBe(true)
+  })
+
+  it('refuses the close when the save was abandoned at the prompt', async () => {
+    // The changed-file prompt's Abandon answers null, the same not-saved answer a cancelled
+    // dialog gives. The window must stay up with the work still unsaved: a close that did
+    // not save is a close that loses the show.
+    const confirmDialog = window.cuerunner.workspace.confirmClose as unknown as Mock
+    const confirmed = window.cuerunner.app.confirmClose as unknown as Mock
+    const onCloseRequested = window.cuerunner.app.onCloseRequested as unknown as Mock
+    confirmDialog.mockResolvedValue(0)
+    confirmed.mockClear()
+    act(() => { useStore.getState().addCue('wait') })
+
+    const close = onCloseRequested.mock.calls.at(-1)![0] as () => Promise<void>
+    const release = hold('save')
+    let closing!: Promise<void>
+    act(() => { closing = close() })
+    await act(async () => {
+      release(null)
+      await closing
+    })
+
     expect(confirmed).not.toHaveBeenCalled()
     expect(useStore.getState().isDirty).toBe(true)
   })
