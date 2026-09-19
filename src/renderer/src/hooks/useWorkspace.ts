@@ -4,6 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { LoadNote, Workspace, WorkspaceIdentity } from '../../../shared/workspace'
 import { buildWorkspace } from '../utils/workspace'
+import { witnessSave } from '../utils/saveWitness'
 import { cueEngine } from '../engine/CueEngine'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
@@ -23,38 +24,41 @@ async function guardDirty(): Promise<boolean> {
   const response = await window.cuerunner.workspace.confirmClose(workspaceName)
   if (response === 2) return false   // Cancel
   if (response === 0) {              // Save
-    const sentCues = useStore.getState().cues
-    const sentEdits = useStore.getState().past.length
+    // The payload is built out of the try, so the object the save carries out is the
+    // object the witness below is handed: a second build for the witness would compare
+    // the session against values nothing was ever written from.
+    const sent = buildWorkspace({
+      id: workspaceId,
+      name: workspaceName,
+      createdAt: workspaceCreatedAt,
+      history: showHistory,
+      audioSettings,
+      midiSettings,
+      showSettings,
+      triggerGuard,
+      cues
+    })
     let saved: { path: string; history: ShowHistoryEntry[] } | null
     try {
-      saved = await window.cuerunner.workspace.save(buildWorkspace({
-        id: workspaceId,
-        name: workspaceName,
-        createdAt: workspaceCreatedAt,
-        history: showHistory,
-        audioSettings,
-        midiSettings,
-        showSettings,
-        triggerGuard,
-        cues
-      }), workspacePath)
+      saved = await window.cuerunner.workspace.save(sent, workspacePath)
     } catch (e) {
       // Closing without a save would lose the show, so the close stops here and says why.
       reportFailure(`Could not save before closing: ${message(e)}`)
       return false
     }
     if (!saved) return false     // User cancelled save dialog
+    // A load replaced the session while the write was out: the answer belongs to the
+    // show that was on screen then, and closing now would act on the wrong show.
+    if (useStore.getState().workspaceId !== workspaceId) return false
     // The name the store has now, not the one this save was sent with: a rename typed
-    // while the file was being written is the operator's, and the file — which carries
-    // the name it was written with — is what the witness below keeps dirty.
+    // while the file was being written is the operator's, and the witness below reports
+    // the file as behind it.
     saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
-    // An edit that landed while the save was in flight is not on disk: the close must
-    // still ask. The undo depth is the cheap witness — every edit pushes exactly one —
-    // and the show's own name is checked too, because renaming is not an undo step.
-    const after = useStore.getState()
-    if (after.cues !== sentCues || after.past.length !== sentEdits || after.workspaceName !== workspaceName) {
-      after.markDirty()
-    }
+    // An edit that landed while the save was in flight is not on disk, so the flow must
+    // not proceed on it: the witness is the one comparison every save flow keeps, and
+    // when it reports, the close stops here — the next prompt offers the save again —
+    // with the recovery snapshot left in place for the work still unsaved.
+    if (witnessSave(sent)) return false
     await window.cuerunner.workspace.clearRecovery().catch(() => {})
   } else {
     // "Don't Save" discards the session, including its recovery snapshot.
@@ -357,11 +361,9 @@ export function useWorkspace() {
   const save = useCallback(async (): Promise<boolean> => {
     const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
-    // Snapshot the references, not the contents: the store replaces cues and the undo
-    // stack wholesale on every edit, so identity is the revision witness. Marking saved
-    // unconditionally would clear edits that landed while the disk was being written.
-    const sentCues = cues
-    const sentEdits = useStore.getState().past.length
+    // The saved shape the bridge is handed, kept as that exact object: the round trip's
+    // witness compares it against the session, so it must be the bytes that went out
+    // rather than a second build of the same values.
     const ws = buildWorkspace({
       id: workspaceId,
       name: workspaceName,
@@ -376,16 +378,19 @@ export function useWorkspace() {
     try {
       const saved = await window.cuerunner.workspace.save(ws, workspacePath)
       if (!saved) return false
+      // A load replaced the session while the write was out: this answer belongs to the
+      // show that was on screen then, and adopting its path over the loaded show's would
+      // point the next save at the wrong file.
+      if (useStore.getState().workspaceId !== workspaceId) return false
       // The name the store has now, not the one this save was sent with: see guardDirty.
       saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
       // Anything that moved while the save was in flight is still unsaved, even though
-      // the round trip answered: compare against what went out.
-      const after = useStore.getState()
-      if (after.cues !== sentCues || after.past.length !== sentEdits || after.workspaceName !== workspaceName) {
-        after.markDirty()
+      // the round trip answered: the witness compares against what went out, and while it
+      // reports, the snapshot stays — it is that work's only copy.
+      if (!witnessSave(ws)) {
+        // The session is on disk now, so there is nothing left to recover.
+        await window.cuerunner.workspace.clearRecovery().catch(() => {})
       }
-      // The session is on disk now, so there is nothing left to recover.
-      await window.cuerunner.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {
       reportFailure(`Could not save the workspace: ${message(e)}`)
@@ -396,11 +401,9 @@ export function useWorkspace() {
   const saveAs = useCallback(async (): Promise<boolean> => {
     const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
-    // Same round-trip witness as save: an edit landing mid-write stays dirty.
-    const sentCues = cues
-    const sentEdits = useStore.getState().past.length
     // Saving under another name is the same show in another file: the identity travels
-    // with it, so both copies stay recognisably the same show.
+    // with it, so both copies stay recognisably the same show. The same round-trip
+    // witness as save keeps an edit that landed mid-write dirty.
     const ws = buildWorkspace({
       id: workspaceId,
       name: workspaceName,
@@ -415,12 +418,13 @@ export function useWorkspace() {
     try {
       const saved = await window.cuerunner.workspace.saveAs(ws)
       if (!saved) return false
+      // A load replaced the session while the write was out: see save.
+      if (useStore.getState().workspaceId !== workspaceId) return false
       saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
-      const after = useStore.getState()
-      if (after.cues !== sentCues || after.past.length !== sentEdits || after.workspaceName !== workspaceName) {
-        after.markDirty()
+      // The same rule as save: the snapshot goes only when the witness reports nothing.
+      if (!witnessSave(ws)) {
+        await window.cuerunner.workspace.clearRecovery().catch(() => {})
       }
-      await window.cuerunner.workspace.clearRecovery().catch(() => {})
       return true
     } catch (e) {
       reportFailure(`Could not save the workspace: ${message(e)}`)

@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
+import { buildWorkspace } from '../utils/workspace'
+import { witnessSave } from '../utils/saveWitness'
 import type { Cue } from '../../../shared/cue'
+import type { Workspace } from '../../../shared/workspace'
 
 function resetStore() {
   useStore.setState({
@@ -12,6 +15,22 @@ function resetStore() {
     isDirty: false,
     selectedId: null,
     running: new Map()
+  })
+}
+
+/** The session as a save carries it out, for the witness to compare against. */
+function savedShape(): Workspace {
+  const s = useStore.getState()
+  return buildWorkspace({
+    id: s.workspaceId,
+    name: s.workspaceName,
+    createdAt: s.workspaceCreatedAt,
+    history: s.showHistory,
+    audioSettings: s.audioSettings,
+    midiSettings: s.midiSettings,
+    showSettings: s.showSettings,
+    triggerGuard: s.triggerGuard,
+    cues: s.cues
   })
 }
 
@@ -128,16 +147,15 @@ describe('store — saveSucceeded', () => {
   })
 
   it('stays dirty when an edit landed after the save went out', () => {
-    // The witness useWorkspace keeps: what the save sent, against what is live when the
-    // round trip answers. Both moved here — cues and undo depth — so the session is
-    // still unsaved.
     useStore.getState().addCue('wait')
-    const sentCues = useStore.getState().cues
-    const sentEdits = useStore.getState().past.length
+    // What the save carried out, before the second cue landed: the witness compares the
+    // session against exactly this.
+    const sent = savedShape()
     useStore.getState().addCue('wait')
-    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', 'Hamlet', [])
-    const after = useStore.getState()
-    if (after.cues !== sentCues || after.past.length !== sentEdits) after.markDirty()
+    // The name the store already has: the only thing that can report here is the cue
+    // edit, not the save adopting a name it was handed.
+    useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', useStore.getState().workspaceName, [])
+    witnessSave(sent)
     expect(useStore.getState().isDirty).toBe(true)
   })
 
@@ -148,17 +166,15 @@ describe('store — saveSucceeded', () => {
   })
 
   it('stays dirty when the show was renamed while the save was out', () => {
-    // The witness useWorkspace keeps against the round trip: the file was written with
-    // the name it was sent with, and the operator typed another one while it was in the
-    // air. Renaming is not an undo step, so the cue and history comparisons would miss it
-    // and the session would read as saved with the file carrying the old name.
-    const sentName = useStore.getState().workspaceName
+    // The file was written with the name the save carried out, and the operator typed
+    // another one while it was in the air. Renaming is not an undo step, so only the
+    // witness's comparison of the saved shape sees it.
+    const sent = savedShape()
     useStore.getState().setWorkspaceName('Hamlet (revised)')
 
     // The save finishes, adopting the name the store has now rather than the sent one.
     useStore.getState().saveSucceeded('/shows/hamlet.cuerunner', useStore.getState().workspaceName, [])
-    const after = useStore.getState()
-    if (after.workspaceName !== sentName) after.markDirty()
+    witnessSave(sent)
 
     expect(useStore.getState().workspaceName).toBe('Hamlet (revised)')
     expect(useStore.getState().isDirty).toBe(true)

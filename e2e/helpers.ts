@@ -201,6 +201,16 @@ export async function addCueFromMoreMenu(page: Page, label: string): Promise<voi
   await page.locator('.toolbar-more-menu-item', { hasText: label }).click()
 }
 
+/** Sets the show's firing window, the way an operator would, and closes the panel. */
+export async function setGuardWindow(page: Page, ms: number): Promise<void> {
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button[data-action="settings"]').click()
+  await page.locator('#settings-guard-window').fill(String(ms))
+  await page.locator('#settings-guard-window').press('Enter')
+  await expect(page.locator('#settings-guard-window')).toHaveValue(String(ms))
+  await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click()
+}
+
 // Opens a saved show the way an operator does from the File menu: the entry the app keeps
 // in its own recent list is written where it reads it from, rather than a file dialog
 // being driven. The list is read when the menu opens, so the write may happen at any

@@ -4,6 +4,7 @@ import type { MissingMedia } from '../../../../shared/media'
 import type { LoadNote, Workspace } from '../../../../shared/workspace'
 import { formatClock } from '../../utils/cueDefaults'
 import { buildWorkspace } from '../../utils/workspace'
+import { witnessSave } from '../../utils/saveWitness'
 import { NoticeBar } from './NoticeBar'
 
 interface Snapshot {
@@ -52,22 +53,24 @@ export function RecoveryNotice() {
         try {
           // Through the one constructor, like every other save: a shape hand-built here
           // would be missing whatever section the constructor gains next.
-          const saved = await window.cuerunner.workspace.save(
-            buildWorkspace({
-              id: store.workspaceId,
-              name: store.workspaceName,
-              createdAt: store.workspaceCreatedAt,
-              history: store.showHistory,
-              audioSettings: store.audioSettings,
-              midiSettings: store.midiSettings,
-              showSettings: store.showSettings,
-              triggerGuard: store.triggerGuard,
-              cues: store.cues
-            }),
-            store.workspacePath
-          )
+          const ws = buildWorkspace({
+            id: store.workspaceId,
+            name: store.workspaceName,
+            createdAt: store.workspaceCreatedAt,
+            history: store.showHistory,
+            audioSettings: store.audioSettings,
+            midiSettings: store.midiSettings,
+            showSettings: store.showSettings,
+            triggerGuard: store.triggerGuard,
+            cues: store.cues
+          })
+          const saved = await window.cuerunner.workspace.save(ws, store.workspacePath)
           if (!saved) return
           store.saveSucceeded(saved.path, store.workspaceName, saved.history)
+          // The same in-flight witness every other save keeps — mechanism, not outcome:
+          // recovering replaces this session and the snapshot comes back dirty by
+          // definition, but every save that resolves is witnessed by one rule.
+          witnessSave(ws)
         } catch {
           return
         }
