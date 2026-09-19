@@ -2,6 +2,7 @@
 // must leave the previous file alone, and unsaved work must survive a session that
 // ended without saving.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -106,6 +107,13 @@ test('unsaved work is offered back after a session that ended without saving', a
   expect(snapshot.workspace.cues.map((c: { name: string }) => c.name))
     .toEqual(['Recovered Wait', 'Where I Was'])
   expect(snapshot.selectedCueId).toBe(snapshot.workspace.cues[1].id)
+  // The snapshot carries the identity main holds for the file this session was built from
+  // — the show it opened from the recent list — so a save after this crash can tell that
+  // the file changed while the app was dead.
+  expect(snapshot.sourceFingerprint).toEqual({
+    size: fs.statSync(file).size,
+    hash: createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+  })
 
   // A session that never saved, then one that offers the work back.
   await closeApp(app)

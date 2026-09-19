@@ -85,7 +85,8 @@ import {
   compareWorkspace,
   mergeShow,
   relinkWorkspaceMedia,
-  getRecentFiles
+  getRecentFiles,
+  knownFingerprint
 } from '../workspace/WorkspaceManager'
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { exportBundle, importBundle } from '../workspace/bundle'
@@ -612,10 +613,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(WORKSPACE_CHANNELS.recent, async () => getRecentFiles())
 
   // Autosave goes to the recovery snapshot, never over the operator's file. The cue the
-  // session is standing on goes with it, so a recovered show hands back the place as
-  // well as the cues.
+  // session is standing on goes with it, so a recovered show hands back the place as well
+  // as the cues — and so does the identity of the file the session was built from, which
+  // main already holds: a save after a crash can then report the file changing while the
+  // app was dead.
   ipcMain.handle(WORKSPACE_CHANNELS.autosave, async (_, payload: WorkspaceAutosavePayload) => {
-    await writeRecovery(payload.workspace, payload.sourcePath, payload.selectedCueId)
+    await writeRecovery(
+      payload.workspace,
+      payload.sourcePath,
+      payload.selectedCueId,
+      knownFingerprint(payload.sourcePath)
+    )
   })
 
   // Recovery resolves the media in the snapshot the same way opening a file does; its

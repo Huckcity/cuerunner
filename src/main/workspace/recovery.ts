@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import type { Workspace } from '../../shared/workspace'
+import type { FileFingerprint } from './WorkspaceManager'
 
 /** The largest snapshot this app reads back: the same ceiling a workspace file gets. */
 const MAX_RECOVERY_BYTES = 64 * 1024 * 1024
@@ -19,6 +20,13 @@ export interface RecoverySnapshot {
    * selected: a recovered show hands the operator back their place, not just their cues.
    */
   selectedCueId?: string | null
+  /**
+   * The identity of `sourcePath` as main last read or wrote it. Main already holds it when
+   * autosave runs, so recording it costs no read — and it is the only thing that can say
+   * the file changed while the app was dead, which is exactly what a session that is gone
+   * cannot know. Absent from snapshots written before it was recorded.
+   */
+  sourceFingerprint?: FileFingerprint
 }
 
 // Autosave writes here, not over the operator's file: a recovery snapshot is offered
@@ -30,10 +38,17 @@ function recoveryFilePath(): string {
 export async function writeRecovery(
   workspace: Workspace,
   sourcePath: string | null,
-  selectedCueId: string | null = null
+  selectedCueId: string | null = null,
+  sourceFingerprint: FileFingerprint | null = null
 ): Promise<void> {
   const filePath = recoveryFilePath()
-  const snapshot: RecoverySnapshot = { workspace, savedAt: Date.now(), sourcePath, selectedCueId }
+  const snapshot: RecoverySnapshot = {
+    workspace,
+    savedAt: Date.now(),
+    sourcePath,
+    selectedCueId,
+    ...(sourceFingerprint === null ? {} : { sourceFingerprint })
+  }
   await mkdir(dirname(filePath), { recursive: true })
   // A death mid-write must not cost the previous good snapshot too: same atomic path
   // as every other write in this module.

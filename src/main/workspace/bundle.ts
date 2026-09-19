@@ -23,7 +23,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
 import type { ZipEntry, ZipSource } from './zip'
 import { extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
 import { asRefusal, Refusal } from '../ipc/refusal'
-import { migrateWorkspace, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
+import { migrateWorkspace, rememberFile, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../shared/cue'
 import type { LoadNote, Workspace } from '../../shared/workspace'
@@ -284,6 +284,10 @@ export async function unpackBundle(
   // The showfile is written exactly as the bundle carries it: the paths inside it are
   // relative to the bundle's root, which is the folder it has just been unpacked into.
   await writeFile(targets.show, bundle.show)
+  // An import establishes a session over this file the way File→Open does, and it does
+  // not read it back: the bytes are in hand, so the identity is recorded here or the
+  // imported show's first save would have no baseline to check.
+  rememberFile(targets.show, bundle.show)
   return {
     path: targets.show,
     ...resolveWorkspaceMedia(bundle.workspace, targets.show),
