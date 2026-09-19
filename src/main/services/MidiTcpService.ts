@@ -27,6 +27,7 @@ export class MidiTcpService implements ShowService {
   readonly id = 'midi-tcp'
   readonly label = 'Desk (MIDI over TCP)'
   readonly pro = true
+  readonly settingsSections = ['desk'] as const
 
   /** The context to publish through, so the desk's row can be taken offline on stop. */
   private context: ServiceContext | null = null

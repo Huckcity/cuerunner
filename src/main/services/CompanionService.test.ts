@@ -322,9 +322,10 @@ describe('CompanionService', () => {
     const state = published()
     h.service.command('publish', state)
 
-    // Changing a setting restarts every service; the state describes the show, not the
-    // socket, so the tablet keeps reading the last thing the renderer published.
-    // The mock is cleared first: serve() reports the port from the latest "running".
+    // A restart — what a change to the companion's own section does to the service — must
+    // not blank the tablet: the published state describes the show rather than the socket,
+    // so it survives. The mock is cleared first: serve() reports the port from the latest
+    // "running".
     h.setState.mockClear()
     const restarted = await serve(h)
 

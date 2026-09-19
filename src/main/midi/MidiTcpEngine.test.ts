@@ -118,6 +118,30 @@ async function desk(): Promise<Desk> {
   return created
 }
 
+/**
+ * Runs one drive with the process's timers recorded, so what the engine armed can be
+ * asked whether it would hold the app open. `hasRef()` is the question and the handles
+ * are Node's own, so the drive runs on the real clock; the swap is restored whichever way
+ * the drive leaves.
+ */
+async function armedTimers<T>(
+  run: () => Promise<T>
+): Promise<{ result: T; armed: Array<{ ms: number; handle: NodeJS.Timeout }> }> {
+  const armed: Array<{ ms: number; handle: NodeJS.Timeout }> = []
+  const realSetTimeout = globalThis.setTimeout
+  const createTimer = realSetTimeout as unknown as (callback: () => void, ms?: number) => NodeJS.Timeout
+  globalThis.setTimeout = ((callback: () => void, ms?: number): NodeJS.Timeout => {
+    const handle = createTimer(callback, ms)
+    armed.push({ ms: ms ?? 0, handle })
+    return handle
+  }) as unknown as typeof globalThis.setTimeout
+  try {
+    return { result: await run(), armed }
+  } finally {
+    globalThis.setTimeout = realSetTimeout
+  }
+}
+
 afterEach(async () => {
   for (const created of engines.splice(0)) created.closeAll()
   for (const created of desks.splice(0)) await created.close()
@@ -149,14 +173,19 @@ describe('sending to a desk', () => {
     expect(deskUnderTest.sockets).toHaveLength(1)
   })
 
-  it('names the address when the desk is not there', async () => {
+  it('names the address when the desk is not there, and holds nothing open while it waits', async () => {
     const port = await deadPort()
     const link = engine()
 
-    const result = await link.send('127.0.0.1', port, [NOTE_ON])
+    const { result, armed } = await armedTimers(() => link.send('127.0.0.1', port, [NOTE_ON]))
 
     expect(result.ok).toBe(false)
     expect(result.error).toContain(`127.0.0.1:${port}`)
+    // The deadline that ends the wait is the engine's own timer: a recall timing out must
+    // not be what keeps the app alive on quit.
+    const deadlines = armed.filter(timer => timer.ms === CONNECT_DEADLINE_MS)
+    expect(deadlines).toHaveLength(1)
+    expect(deadlines[0].handle.hasRef()).toBe(false)
   })
 
   it('does not deliver a recall it reported as failed', async () => {
@@ -276,20 +305,27 @@ describe('the state of the link', () => {
     expect(statuses[1]).toEqual([`127.0.0.1:${deskUnderTest.port}`, false])
   })
 
-  it('alarms once for an outage while it keeps dialling', async () => {
+  it('alarms once for an outage while it keeps dialling, with every retry unref’d', async () => {
     const port = await deadPort()
     const dialled = dials()
     const link = engine(20, dialled.connect)
     const statuses: Array<[string, boolean]> = []
     link.onStatus = (device, online) => statuses.push([device, online])
 
-    link.open('127.0.0.1', port)
-    await until(() => dialled.count() >= 3)
+    const { armed } = await armedTimers(async () => {
+      link.open('127.0.0.1', port)
+      await until(() => dialled.count() >= 3)
+    })
 
     // Three attempts, one report: a desk that is absent fails its dial every couple of
     // seconds, and an alarm per attempt is an alarm nobody reads.
     expect(statuses).toHaveLength(1)
     expect(statuses[0][1]).toBe(false)
+    // The retry a failed dial arms is the engine's own: a desk switched off overnight
+    // cannot be what keeps the app alive.
+    const retries = armed.filter(timer => timer.ms === 20)
+    expect(retries.length).toBeGreaterThanOrEqual(2)
+    for (const retry of retries) expect(retry.handle.hasRef()).toBe(false)
   })
 
   it('comes back on its own when the desk does', async () => {

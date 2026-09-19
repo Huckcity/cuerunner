@@ -9,13 +9,20 @@ import type { ShowEvent, ShowSettings } from '../../shared/show'
 class FakeService implements ShowService {
   readonly id: string
   readonly label: string
+  /** What this fake reads: a fake that declares nothing is never restarted. */
+  readonly settingsSections: readonly (keyof ShowSettings)[]
   starts = 0
   stops = 0
   command?: (action: string, payload?: unknown) => unknown
 
-  constructor(id = 'fake', label = 'Fake service') {
+  constructor(
+    id = 'fake',
+    label = 'Fake service',
+    sections: readonly (keyof ShowSettings)[] = []
+  ) {
     this.id = id
     this.label = label
+    this.settingsSections = sections
   }
 
   start(context: ServiceContext): void {
@@ -31,6 +38,7 @@ class FakeService implements ShowService {
 class DeviceService implements ShowService {
   readonly id = 'devices'
   readonly label = 'Devices'
+  readonly settingsSections = [] as const
 
   start(context: ServiceContext): void {
     context.bus.device({
@@ -90,9 +98,9 @@ describe('createShowRuntime', () => {
     runtime.close()
   })
 
-  it('restarts the services when the settings actually change', async () => {
+  it('restarts the services when a section they declare actually changes', async () => {
     vi.useFakeTimers()
-    const service = new FakeService()
+    const service = new FakeService('fake', 'Fake service', ['oscIn'])
     const runtime = createShowRuntime([service])
 
     await runtime.configure(defaultShowSettings())
@@ -103,10 +111,28 @@ describe('createShowRuntime', () => {
     runtime.close()
   })
 
-  it('restarts only the service whose settings changed', async () => {
+  it('leaves the companion alone when only the script moved', async () => {
+    // The arm this removes claimed `script`, which the companion's start() never reads:
+    // a script edit dropped the tablet's stream for nothing.
     vi.useFakeTimers()
-    const osc = new FakeService('osc-in', 'OSC input')
-    const midi = new FakeService('midi-in', 'MIDI input')
+    const companion = new FakeService('companion', 'Companion', ['companion'])
+    const runtime = createShowRuntime([companion])
+
+    await runtime.configure(defaultShowSettings())
+    await runtime.configure({
+      ...defaultShowSettings(),
+      script: { path: '/shows/hamlet.txt', fontSize: 20 }
+    })
+
+    expect(companion.starts).toBe(1)
+    expect(companion.stops).toBe(0)
+    runtime.close()
+  })
+
+  it('restarts only the service whose declared section changed', async () => {
+    vi.useFakeTimers()
+    const osc = new FakeService('osc-in', 'OSC input', ['oscIn'])
+    const midi = new FakeService('midi-in', 'MIDI input', ['midiIn'])
     const runtime = createShowRuntime([osc, midi])
 
     await runtime.configure(defaultShowSettings())
@@ -213,6 +239,9 @@ describe('createShowRuntime', () => {
     const service = (id: string, pro: boolean): ShowService => ({
       id,
       label: id,
+      // A licence change re-decides every service; the declarations here are beside the
+      // point, which the test says by leaving them empty.
+      settingsSections: [],
       ...(pro ? { pro: true as const } : {}),
       start: (context: ServiceContext) => {
         calls.push(`start:${id}`)
