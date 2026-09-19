@@ -12,6 +12,18 @@ function showSettings(): ShowSettings {
   return defaultShowSettings()
 }
 
+/** The same value with every object's keys written in the other order — never a change. */
+function reorderedKeys<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(reorderedKeys) as T
+  if (value !== null && typeof value === 'object') {
+    const source = value as Record<string, unknown>
+    const flipped: Record<string, unknown> = {}
+    for (const key of Object.keys(source).reverse()) flipped[key] = reorderedKeys(source[key])
+    return flipped as T
+  }
+  return value
+}
+
 interface FakeOptions {
   id: string
   label?: string
@@ -226,6 +238,89 @@ describe('ServiceHost — startChanged', () => {
     expect(osc.start.mock.calls[1][1]).toBe(moved)
     expect(midi.start).toHaveBeenCalledTimes(1)
     expect(midi.stop).not.toHaveBeenCalled()
+  })
+
+  it('restarts nothing when a declared section says the same thing in another key order', async () => {
+    // Key order is who built the object — the renderer rebuilds the settings on every
+    // publish and a workspace read back from disk carries the file's order — so a
+    // configure that moved no value must not restart a service for it.
+    const { host } = harness()
+    const osc = fakeService({ id: 'osc-in', sections: ['oscIn'] })
+    const desk = fakeService({ id: 'midi-tcp', sections: ['desk'] })
+    const rf = fakeService({ id: 'rf', sections: ['rf', 'cast'] })
+    host.register(osc.service)
+    host.register(desk.service)
+    host.register(rf.service)
+    const before = showSettings()
+    await host.startAll(before)
+
+    // `cast` is the section with the arrays of records, and it is `rf`'s second declared
+    // section — both the array recursion and the second section must be reached.
+    const reordered = {
+      ...before,
+      oscIn: reorderedKeys(before.oscIn),
+      desk: reorderedKeys(before.desk),
+      rf: reorderedKeys(before.rf),
+      cast: reorderedKeys(before.cast)
+    }
+    // A reorder only bites while the bytes differ too: a one-key section would compare
+    // equal either way and the case would hold nothing.
+    for (const section of ['oscIn', 'desk', 'rf', 'cast'] as const) {
+      expect(JSON.stringify(reordered[section])).not.toBe(JSON.stringify(before[section]))
+    }
+
+    await host.startChanged(reordered)
+
+    expect(osc.start).toHaveBeenCalledTimes(1)
+    expect(osc.stop).not.toHaveBeenCalled()
+    expect(desk.start).toHaveBeenCalledTimes(1)
+    expect(desk.stop).not.toHaveBeenCalled()
+    expect(rf.start).toHaveBeenCalledTimes(1)
+    expect(rf.stop).not.toHaveBeenCalled()
+  })
+
+  it('still restarts when an array inside a declared section is reordered', async () => {
+    // Array order is content — the order input ports are opened in — where object key
+    // order is not, so a reorder that moves an array is a move.
+    const { host } = harness()
+    const midi = fakeService({ id: 'midi-in', sections: ['midiIn'] })
+    host.register(midi.service)
+    await host.startAll({ ...showSettings(), midiIn: { enabled: true, portNames: ['Keys', 'Pad'] } })
+
+    await host.startChanged({ ...showSettings(), midiIn: { enabled: true, portNames: ['Pad', 'Keys'] } })
+
+    expect(midi.start).toHaveBeenCalledTimes(2)
+    expect(midi.stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a failed service to the real levers: a moved section retries it', async () => {
+    // Dropping the byte comparison also drops an accidental retry: a reorder-only
+    // configure used to thrash a service that failed, and now it does not. A declared
+    // section that really moved still brings it up, and the operator's by-id restart is
+    // the other lever.
+    const { host } = harness()
+    let broken = true
+    const osc = fakeService({
+      id: 'osc-in',
+      sections: ['oscIn'],
+      start: context => {
+        if (broken) throw new Error('no driver')
+        context.setState('running', 'up')
+      }
+    })
+    host.register(osc.service)
+    const before = showSettings()
+    await host.startAll(before)
+    expect(host.status('osc-in')?.state).toBe('failed')
+
+    await host.startChanged({ ...before, oscIn: reorderedKeys(before.oscIn) })
+    expect(osc.start).toHaveBeenCalledTimes(1)
+    expect(host.status('osc-in')?.state).toBe('failed')
+
+    broken = false
+    await host.startChanged({ ...before, oscIn: { enabled: true, port: 53001 } })
+    expect(osc.start).toHaveBeenCalledTimes(2)
+    expect(host.status('osc-in')?.state).toBe('running')
   })
 
   it('leaves a service alone when a section it has not declared moved', async () => {

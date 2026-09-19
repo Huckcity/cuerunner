@@ -1,3 +1,4 @@
+import { sameValue } from '../../shared/showfile'
 import type {
   ServiceState,
   ServiceStatus,
@@ -257,11 +258,15 @@ export class ServiceHost {
  * declares the whole sections its start() reads, so a section that moved restarts it
  * and a section it never declared cannot: the declaration is the only record of the
  * slice, and a service that declares none is never restarted by a configure.
+ *
+ * A section is compared by value, not by bytes: `sameValue` reads the plain data the
+ * section carries, so key order folds away and `undefined` reads as absent, while array
+ * order — the ports opened first, the scene order — stays content. Two settings that say
+ * the same thing in another key order are the same settings, and a live service must not
+ * be dropped for it.
  */
 function serviceSettingsChanged(service: ShowService, before: ShowSettings, after: ShowSettings): boolean {
-  return service.settingsSections.some(
-    section => JSON.stringify(before[section]) !== JSON.stringify(after[section])
-  )
+  return service.settingsSections.some(section => !sameValue(before[section], after[section]))
 }
 
 export function describe(error: unknown): string {
