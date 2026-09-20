@@ -2,6 +2,7 @@ import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue,
   MscCue
 } from '../../../shared/cue'
+import { isProCueType } from '../../../shared/cue'
 import { audioEngine } from './audioEngineClient'
 import type {
   AudioEngineEvent,
@@ -605,6 +606,18 @@ export class CueEngine {
   }
 
   private execute(cue: Cue, run: CueRun, at: number, finish: Finish): void {
+    // The class is a declaration (`PRO_CUE_TYPES`, beside `CUE_TYPES`) read where the cue
+    // is dispatched, so every Pro type the declaration names is refused — not only the one
+    // whose executor was written first.
+    if (isProCueType(cue.type) && !this.deps!.isPro()) {
+      const label = this.cueLabel(cue)
+      // The cue stays in the file — a show written on a licensed machine opens on an
+      // unlicensed one, and nothing is thrown away — but the desk is not driven
+      // without a license, and a cue that did nothing quietly would be worse.
+      this.log({ level: 'error', message: `${cue.type} cues need Cuerunner Pro`, label })
+      finish(this.now(), { outcome: 'error', error: 'Cuerunner Pro is required' })
+      return
+    }
     switch (cue.type) {
       case 'audio':
         // Planned when the cue was fired: its command and end carry absolute times.
@@ -926,14 +939,6 @@ export class CueEngine {
 
   private executeScene(cue: SceneCue, finish: Finish): void {
     const label = this.cueLabel(cue)
-    if (!this.deps!.isPro()) {
-      // The cue stays in the file — a show written on a licensed machine opens on an
-      // unlicensed one, and nothing is thrown away — but the desk is not driven
-      // without a license, and a cue that did nothing quietly would be worse.
-      this.log({ level: 'error', message: 'scene cues need Cuerunner Pro', label })
-      finish(this.now(), { outcome: 'error', error: 'Cuerunner Pro is required' })
-      return
-    }
     if (cue.sceneId === '') {
       // A cue pointed at nothing must not be read as "close every mic": that would be
       // a silent, and very loud, surprise in the middle of a show.

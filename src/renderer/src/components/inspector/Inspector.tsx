@@ -20,6 +20,7 @@ import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
   MscCue
 } from '../../../../shared/cue'
+import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
 
 // Basics is what every cue shares, then what this type does, then what else can fire
@@ -98,6 +99,11 @@ export function Inspector() {
   const tabs = [...(TYPE_TABS[cue.type] ?? ['Basics']), TRIGGERS_TAB]
   const tab = tabs.includes(activeTab) ? activeTab : tabs[0]
   const triggerCount = cueTriggers(cue).length
+  // The type's own tab — the one `TYPE_TABS` names beside `Basics` — is the one the type's
+  // class locks: `PRO_CUE_TYPES` is the declaration that says which types cost, so a type
+  // added to it is locked and marked here rather than only where its executor was written.
+  const typeTab = (TYPE_TABS[cue.type] ?? [])[1]
+  const typeLocked = isProCueType(cue.type) && !pro
 
   return (
     <div className="inspector">
@@ -107,14 +113,14 @@ export function Inspector() {
             key={t}
             className="inspector-tab"
             data-active={t === tab}
-            data-locked={(t === 'Scene' || t === TRIGGERS_TAB) && !pro}
+            data-locked={(t === typeTab && typeLocked) || (t === TRIGGERS_TAB && !pro)}
             onClick={() => setActiveTab(t)}
           >
             {t}
             {t === TRIGGERS_TAB && pro && triggerCount > 0 && (
               <span className="inspector-tab-count">{triggerCount}</span>
             )}
-            {t === 'Scene' && !pro && <ProMark />}
+            {t === typeTab && typeLocked && <ProMark />}
           </button>
         ))}
       </div>

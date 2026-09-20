@@ -8,6 +8,7 @@ import {
   mergeAnotherShow
 } from '../../hooks/useWorkspace'
 import type { CueType } from '../../../../shared/cue'
+import { isProCueType } from '../../../../shared/cue'
 import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
@@ -71,7 +72,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     // A scene cue belongs to the scenes the license unlocks: without one there is
     // nothing for it to point at, so the click goes to the place that fixes that
     // rather than adding a cue that cannot run.
-    if (type === 'scene' && !pro) {
+    if (isProCueType(type) && !pro) {
       openSettings('license')
       return
     }
@@ -271,12 +272,12 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                 <button
                   key={type}
                   className="toolbar-more-menu-item"
-                  data-locked={type === 'scene' && !pro}
+                  data-locked={isProCueType(type) && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                 >
                   <CueIcon type={type} className="toolbar-more-menu-icon" />
                   {label}
-                  {type === 'scene' && !pro && <ProMark />}
+                  {isProCueType(type) && !pro && <ProMark />}
                 </button>
               ))}
             </div>

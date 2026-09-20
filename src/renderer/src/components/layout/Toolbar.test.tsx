@@ -56,6 +56,23 @@ describe('Toolbar', () => {
     }
   })
 
+  it('marks the Pro cue types in the add menu, read from the declaration', () => {
+    useStore.setState({ license: { state: 'unlicensed' } })
+    render('cues')
+    act(() => container.querySelector<HTMLButtonElement>('.toolbar-more-btn')!.click())
+
+    const item = (label: string): HTMLButtonElement =>
+      [...container.querySelectorAll<HTMLButtonElement>('.toolbar-more-menu-item')]
+        .find(candidate => candidate.textContent?.startsWith(label))!
+
+    // The class is `isProCueType`'s answer, so a type added to `PRO_CUE_TYPES` is locked
+    // and marked here without the menu being edited.
+    expect(item('Scene').getAttribute('data-locked')).toBe('true')
+    expect(item('Scene').querySelector('.pro-mark')).not.toBeNull()
+    expect(item('MIDI').getAttribute('data-locked')).not.toBe('true')
+    expect(item('MIDI').querySelector('.pro-mark')).toBeNull()
+  })
+
   it('marks which view the window is showing', () => {
     render('scenes')
     // Unlicensed, the Scenes press also carries its Pro mark, so the check is on the
