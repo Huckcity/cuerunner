@@ -8,28 +8,33 @@
 // the bullet it prices and must carry that bullet's figures and terms, in the record's own
 // notation.
 //
-// The routes are declared once for the same reason. Each is the seller's own, and two of them
-// arrive after the page does: the storefront link and the inbox a purchase order goes to are
-// declared empty, the guard fails by name while either is, and the fill is the fix rather
-// than a relaxed check — the page never ships a placeholder where a checkout or an address
-// should be. The W-9 is not a value and needs no fill: it comes back by email, so its route is
-// the words that say so, declared once and rendered from here.
+// The routes are declared once for the same reason. Each is the seller's own and live: the
+// card links are the storefront's per-SKU payment links, the address is the inbox a purchase
+// order goes to, and the guard fails by name on a route that is empty, a placeholder or
+// carries markup — the page never ships a checkout or an address that does not exist. The W-9
+// is not a value and needs no fill: it comes back by email, so its route is the words that say
+// so, declared once and rendered from here.
 import { table } from './table.mjs'
 
 /** A route as it may sit in an attribute: the characters markup would read, escaped. */
 const attr = text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
- * The card route, declared once and interpolated by every row that sells by card, so a moved
- * link is one edit here and the guard can hold the rendered page to the declaration.
+ * The card routes, one live Stripe payment link per SKU, declared once and interpolated by the
+ * row that sells it, so a moved link is one edit here and the guard can hold the rendered page
+ * to the declaration. Each link sells that one thing — the $249 licence, the $49 renewal, a
+ * day's rental, the 90-day rental — in US dollars, one-time, with no subscription behind it.
  *
- * Live: the Stripe payment link for the $249 licence. It sells that one thing, so it is the
- * licence row's route alone — the renewal and the rental are conversations until they have
- * links of their own, because a checkout that cannot serve a row is a route that does not
- * exist. The guard holds it to a live `https://` link: an empty value, a placeholder and a
- * markup-bearing one all fail by name.
+ * The guard holds every one to a live `https://` link: an empty value, a placeholder and a
+ * markup-bearing one all fail by name, and a declared link no row sells (or two rows selling
+ * one link) fails too.
  */
-export const CARD_LINK = 'https://buy.stripe.com/dRm5kD1l7gru2L8ciV5ZC01'
+export const CARD_LINKS = {
+  licence: 'https://buy.stripe.com/dRm5kD1l7gru2L8ciV5ZC01',
+  renewal: 'https://buy.stripe.com/fZu3cv8Nz4IM4Tg1Eh5ZC02',
+  rentalDay: 'https://buy.stripe.com/8x24gz3tf5MQ99w0Ad5ZC03',
+  rental90: 'https://buy.stripe.com/bJe28r0h3b7a2L85Ux5ZC04'
+}
 
 /**
  * The one inbox a purchase order goes to, and the only address this page names. Venue,
@@ -53,7 +58,7 @@ export const W9_ROUTE = 'The completed W-9 comes back by email with the invoice.
  * How a row whose purchase is a conversation says so. A venue and a campus are sold against a
  * quote rather than a checkout, and a page that dressed them as one would claim a route that
  * cannot serve them; the guard fails a conversation row that does not carry these words, and a
- * self-serve row that carries them.
+ * card row that carries them.
  */
 export const BY_CONVERSATION = 'Talk to us'
 
@@ -67,8 +72,10 @@ export const BY_CONVERSATION = 'Talk to us'
  *   rounded prose — so a figure keeps its unit and two figures that read alike stay apart.
  * - `includes`, what the price includes, in the record's terms (the 12 months, the machines)
  *   and in the buyer's words.
- * - `route`, one of the route values this module declares, never a literal typed into the row.
- * - `conversation`, whether the purchase is a conversation rather than a checkout.
+ * - `buy`, how the row is bought: a card row names its links, each drawn from `CARD_LINKS`
+ *   with the words a buyer reads on it (`Buy a day`, `Buy 90 days`), and a conversation row
+ *   names the address a person answers. One link sells one SKU, so a row that shares a link
+ *   with another, or offers one the declaration does not hold, fails the guard by name.
  */
 export const PRICED_SKUS = [
   {
@@ -76,55 +83,60 @@ export const PRICED_SKUS = [
     record: '$249',
     figures: ['$249'],
     includes: `One perpetual licence: every Pro capability, 12 months of updates, and two machines — the one you run from and the one standing by.`,
-    route: CARD_LINK,
-    conversation: false
+    buy: { kind: 'card', links: [{ words: 'Buy with a card', href: CARD_LINKS.licence }] }
   },
   {
     label: 'Updates after the first year',
     record: '$49/yr',
     figures: ['$49/yr'],
     includes: `Optional. A licence does not stop when its year of updates does, and nothing in the app checks a renewal date — renewing adds the next 12 months to it.`,
-    route: ORDER_EMAIL,
-    conversation: true
+    buy: { kind: 'card', links: [{ words: 'Buy with a card', href: CARD_LINKS.renewal }] }
   },
   {
     label: 'A rental',
     record: '$12/day',
     figures: ['$12/day', '$99/90 days'],
     includes: `The same Pro half for a run or a season. Every dollar spent on a rental credits to a licence.`,
-    route: ORDER_EMAIL,
-    conversation: true
+    buy: {
+      kind: 'card',
+      links: [
+        { words: 'Buy a day', href: CARD_LINKS.rentalDay },
+        { words: 'Buy 90 days', href: CARD_LINKS.rental90 }
+      ]
+    }
   },
   {
     label: 'A venue or a campus',
     record: '$999',
     figures: ['$999', '$99/machine'],
     includes: `One key for up to ten machines, and per-machine pricing past the tenth, for a venue, a tour or a campus.`,
-    route: ORDER_EMAIL,
-    conversation: true
+    buy: { kind: 'conversation', address: ORDER_EMAIL }
   },
   {
     label: 'Education',
     record: '50% off',
     figures: ['50% off'],
     includes: `Half price on every SKU, for schools, colleges and students.`,
-    route: ORDER_EMAIL,
-    conversation: true
+    buy: { kind: 'conversation', address: ORDER_EMAIL }
   }
 ]
 
 /**
- * One row as the page serves it: the label, the figures, what it includes and how it is bought.
- * The buy cell is the one place a route is rendered, so the conversation rows say which kind of
- * purchase they are and the self-serve rows are a link and nothing else, and the route is
- * escaped where it goes into `href` — a live link can carry an ampersand, and markup would
- * otherwise read it as one.
+ * One row's buy cell: the card rows' links, each with the words a buyer reads on it, joined by
+ * a separator; the conversation rows' single address behind the phrase that says a person
+ * answers. A route is escaped where it goes into `href` — a live link can carry an ampersand,
+ * and markup would otherwise read it as one.
  */
+function buyCell(row) {
+  if (row.buy.kind === 'conversation') {
+    return `${BY_CONVERSATION} — <a href="mailto:${attr(row.buy.address)}">${attr(row.buy.address)}</a>`
+  }
+  return row.buy.links.map(link => `<a href="${attr(link.href)}">${link.words}</a>`).join(' · ')
+}
+
+/** One row as the page serves it: the label, the figures, what it includes and how it is bought. */
 function rowCells(row) {
-  const buy = row.conversation
-    ? `${BY_CONVERSATION} — <a href="mailto:${attr(row.route)}">${attr(row.route)}</a>`
-    : `<a href="${attr(row.route)}">Buy with a card</a>`
-  return [row.label, row.figures.join('<br />'), row.includes, buy]
+  return [row.label, row.figures.join('<br />'), row.includes, buyCell(row)]
 }
 
 export const PRICING = [

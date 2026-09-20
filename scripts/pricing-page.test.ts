@@ -15,12 +15,12 @@
 // (what an update includes, what a route serves, who a licence is for) is prose a buyer reads,
 // not a figure this guard holds; and the page's own prose beyond `includes` is not read at all.
 //
-// The routes are declared once and held to a shape: a live `https://` link for the card route,
-// an address for the purchase-order inbox, and the words that say how the W-9 comes back.
-// Empty and placeholder values fail by name — the two route values are the seller's and arrive
-// after the page does, so this guard is red on them until they are filled, which is the
-// branch's intended state and never a case to silence. Every page the site serves is read back
-// for the price page's link in its primary nav.
+// The routes are declared once and held to a shape: one live `https://` link per card SKU, an
+// address for the purchase-order inbox, and the words that say how the W-9 comes back. Empty
+// values, placeholders and markup-bearing values fail by name; a card row's links are drawn
+// from `CARD_LINKS` — one link per SKU, and a declared link no row sells fails — and each row
+// is read back for the hrefs its buy cell carries and nothing else. Every page the site serves
+// is read back for the price page's link in its primary nav.
 //
 // Every check is a pure function of what it reads, so the second describe can hand it a page
 // the repository would never commit and get the failure back by name. The failure paths are
@@ -31,11 +31,27 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // @ts-ignore — js file, no type declarations
-import { BY_CONVERSATION, CARD_LINK, ORDER_EMAIL, PRICED_SKUS, PRICING, W9_ROUTE } from '../website/docs/pricing.mjs'
+import {
+  BY_CONVERSATION,
+  CARD_LINKS,
+  ORDER_EMAIL,
+  PRICED_SKUS,
+  PRICING,
+  W9_ROUTE
+} from '../website/docs/pricing.mjs'
 // @ts-ignore — js file, no type declarations
 import { NAV, renderPage } from '../website/build-docs.mjs'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+/** One link a card row sells through: the words a buyer reads on it and the live href behind it. */
+interface CardLink {
+  words: string
+  href: string
+}
+
+/** How a row is bought: the card links it sells through, or the address a person answers. */
+type Buy = { kind: 'card'; links: CardLink[] } | { kind: 'conversation'; address: string }
 
 /** One declared row of the price page, as this guard reads it. */
 interface Sku {
@@ -44,9 +60,11 @@ interface Sku {
   record: string
   figures: string[]
   includes: string
-  route: string
-  conversation: boolean
+  buy: Buy
 }
+
+/** A card row as the checks read it, where the links are the thing being held. */
+type CardRow = Sku & { buy: { kind: 'card'; links: CardLink[] } }
 
 /** A figure money is stated in, read from either side of the comparison as the same thing. */
 interface Figure {
@@ -74,7 +92,7 @@ interface Bullet {
 
 /**
  * One route the page declares: the constant that holds it, what a buyer it is for reads, and
- * what a live value reads like. The card link is a page a buyer visits and the purchase-order
+ * what a live value reads like. The card links are pages a buyer visits and the purchase-order
  * address is an inbox; the W-9 has no value at all — it comes back by email — so its shape is
  * the words that say how.
  */
@@ -219,15 +237,27 @@ function pricedBullets(markdown: string): string[] {
 const PLACEHOLDER =
   /\b(?:placeholder|todo|tbd|fixme|changeme|example|foo|bar|yoursite|xxx|your-(?:store|link|domain|address|site))\b|\.(?:test|invalid)\b|…/i
 
-/** The routes the page declares, in the order it names them, with the shape each live one has. */
+/** What each card route sells, for the failures that name it. */
+const CARD_ROUTE_WHAT: Record<string, string> = {
+  licence: 'the card route for the licence',
+  renewal: 'the card route for a renewal',
+  rentalDay: 'the card route for a day of rental',
+  rental90: 'the card route for 90 days of rental'
+}
+
+/**
+ * The routes the page declares, in the order a buyer meets them: one live card link per SKU,
+ * the inbox a purchase order goes to, and the words that say how the W-9 comes back. A failure
+ * names the constant a row draws the route from, so it says which line of the module to fix.
+ */
 const ROUTES: Route[] = [
-  {
-    name: 'CARD_LINK',
-    value: CARD_LINK,
-    what: 'the card route',
+  ...Object.entries(CARD_LINKS).map(([key, value]) => ({
+    name: `CARD_LINKS.${key}`,
+    value,
+    what: CARD_ROUTE_WHAT[key] ?? `the card route "${key}"`,
     want: 'a live https:// link to the storefront',
-    live: value => /^https:\/\/\S+$/.test(value)
-  },
+    live: (value: string) => /^https:\/\/\S+$/.test(value)
+  })),
   {
     name: 'ORDER_EMAIL',
     value: ORDER_EMAIL,
@@ -299,36 +329,25 @@ const LIVE: Reading = {
   nav: NAV
 }
 
-/**
- * The rendered page with the markup's entities put back, so a route carrying an ampersand is
- * read as the buyer reads it: the page escapes what it renders into href, and a comparison
- * against the declaration has to be made on the words rather than on the escaping.
- */
-function decoded(html: string): string {
-  return html.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+/** The rows that sell through card links, so a case names a kind of purchase rather than a label. */
+function cardRows(reading: Reading): CardRow[] {
+  return reading.skus.filter((row): row is CardRow => row.buy.kind === 'card')
+}
+
+/** The rows that take a conversation, so a case names a kind of purchase rather than a label. */
+function conversationRows(reading: Reading): Array<Sku & { buy: { kind: 'conversation'; address: string } }> {
+  return reading.skus.filter(
+    (row): row is Sku & { buy: { kind: 'conversation'; address: string } } => row.buy.kind === 'conversation'
+  )
 }
 
 /**
- * The reading as it stands once the seller has supplied both values — the state the page ships
- * in. A row's route is the value its kind of purchase uses, so the rows are pressed from the
- * same two values the way the page module presses them: the conversation rows take the
- * address, the rest the storefront link. Cases that test a row's route use this rather than
- * the branch's own unfilled state, where both values are empty and every route compares equal.
+ * The rendered page with the markup's entities put back, so a href carrying an ampersand is
+ * read as the buyer reads it: the page escapes what it renders into an attribute, and a
+ * comparison against the declaration has to be made on the words rather than on the escaping.
  */
-function supplied(reading: Reading): Reading {
-  const card = 'https://buy.cuerunner.app/pro'
-  const order = 'orders@cuerunner.app'
-  return {
-    ...reading,
-    routes: reading.routes.map(route =>
-      route.name === 'CARD_LINK'
-        ? { ...route, value: card }
-        : route.name === 'ORDER_EMAIL'
-          ? { ...route, value: order }
-          : route
-    ),
-    skus: reading.skus.map(row => ({ ...row, route: row.conversation ? order : card }))
-  }
+function decoded(html: string): string {
+  return html.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
 }
 
 /**
@@ -415,28 +434,61 @@ function renderedFigureProblems(reading: Reading): string[] {
 }
 
 /**
- * The rows whose purchase is not the route their kind needs: a self-serve row sells through
- * the card link and a conversation row through the purchase-order address, never each other's
- * and never a route the page does not declare. A purchase that is not a checkout is not
- * dressed as one, and a checkout is not dressed as a conversation.
+ * The rows' ways to buy, held to the routes the page declares. A card row sells through links
+ * drawn from `CARD_LINKS` — at least one, none the declaration does not hold, none without the
+ * words a buyer reads, and none wearing the conversation's phrase, since a row that is a
+ * checkout is not also a conversation. A conversation row names the announced address and no
+ * card link. Every declared card link is sold by exactly one row: a link declared and never
+ * sold, or two SKUs sharing one, fails by name.
  */
-function rowRouteProblems(reading: Reading): string[] {
-  const card = reading.routes.find(route => route.name === 'CARD_LINK')?.value ?? ''
+function rowBuyProblems(reading: Reading): string[] {
+  const declared = new Map(
+    reading.routes.filter(route => route.name.startsWith('CARD_LINKS.')).map(route => [route.value, route])
+  )
   const order = reading.routes.find(route => route.name === 'ORDER_EMAIL')?.value ?? ''
-  return reading.skus.flatMap(row => {
-    const expected = row.conversation ? order : card
-    if (row.route === expected) return []
-    if (row.route.trim() === '') {
-      return [
-        `the page's "${row.label}" row states a price and carries no route: a priced row offers ${row.conversation ? 'the purchase-order address' : 'the card link the page declares'}`
-      ]
+  const problems: string[] = []
+  const sellers = new Map<string, string[]>()
+  for (const row of reading.skus) {
+    if (row.buy.kind === 'conversation') {
+      if (row.buy.address !== order) {
+        problems.push(
+          `the page's "${row.label}" row takes a conversation and names "${row.buy.address}", which is not the purchase-order address the page declares`
+        )
+      }
+      continue
     }
-    return [
-      row.conversation
-        ? `the page's "${row.label}" row takes a conversation and offers "${row.route}" instead of the purchase-order address: a purchase that is not a checkout must not be dressed as one`
-        : `the page's "${row.label}" row is self-serve and offers "${row.route}" instead of the card link the page declares`
-    ]
-  })
+    if (row.buy.links.length === 0) {
+      problems.push(`the page's "${row.label}" row sells by card and declares no link to buy it`)
+    }
+    for (const link of row.buy.links) {
+      if (!declared.has(link.href)) {
+        problems.push(
+          `the page's "${row.label}" row offers "${link.href}", which is not one of the card routes website/docs/pricing.mjs declares`
+        )
+      } else {
+        sellers.set(link.href, [...(sellers.get(link.href) ?? []), row.label])
+      }
+      if (link.words.trim() === '') {
+        problems.push(`the page's "${row.label}" row offers a card link with no words: a buyer reads which link buys what`)
+      }
+      if (link.words.includes(BY_CONVERSATION)) {
+        problems.push(
+          `the page's "${row.label}" row is self-serve and its buy words read "${link.words}": the conversation phrase belongs to the rows that are not a checkout`
+        )
+      }
+    }
+  }
+  for (const route of declared.values()) {
+    const rows = sellers.get(route.value) ?? []
+    if (rows.length !== 1) {
+      problems.push(
+        rows.length === 0
+          ? `${route.name} (${route.what}) is declared and no row on the page sells through it`
+          : `${route.name} is sold by ${rows.length} rows (${rows.join(', ')}): one link buys one SKU`
+      )
+    }
+  }
+  return problems
 }
 
 /**
@@ -455,9 +507,10 @@ function rowMarkup(rendered: string, label: string): string | undefined {
 
 /**
  * Every row as the rendered page carries it: the label the row is found by, what the price
- * includes, the figures it declares, the route it declares and — where the purchase is a
- * conversation — the words that say so. This is the half a declaration alone cannot hold: a
- * row can be declared perfectly and rendered as something else.
+ * includes, the figures it declares, and the buy cell — a card row's hrefs, which must be the
+ * links it declares and nothing else, or a conversation row's address, and the words that say
+ * which kind of purchase it is. This is the half a declaration alone cannot hold: a row can be
+ * declared perfectly and rendered as something else.
  */
 function rowRenderProblems(reading: Reading): string[] {
   const rendered = decoded(reading.rendered)
@@ -475,14 +528,38 @@ function rowRenderProblems(reading: Reading): string[] {
         problems.push(`the page's "${row.label}" row declares the figure ${figure} and the rendered row does not state it`)
       }
     }
-    if (row.route !== '' && !cells.includes(row.route)) {
-      problems.push(`the page's "${row.label}" row declares its route and the rendered row does not carry it`)
-    }
-    if (row.conversation && !cells.includes(BY_CONVERSATION)) {
-      problems.push(`the page's "${row.label}" row takes a conversation and the rendered row does not say so ("${BY_CONVERSATION}")`)
-    }
-    if (!row.conversation && cells.includes(BY_CONVERSATION)) {
-      problems.push(`the page's "${row.label}" row is self-serve and the rendered row says "${BY_CONVERSATION}"`)
+    const hrefs = [...cells.matchAll(/href="([^"]*)"/g)].map(match => match[1])
+    if (row.buy.kind === 'card') {
+      const declared = row.buy.links.map(link => link.href)
+      for (const link of row.buy.links) {
+        if (!hrefs.includes(link.href)) {
+          problems.push(`the page's "${row.label}" row declares the link ${link.words} (${link.href}) and the rendered row does not carry it`)
+        }
+        if (link.words !== '' && !cells.includes(link.words)) {
+          problems.push(`the page's "${row.label}" row's link ${link.href} is rendered without its words ("${link.words}")`)
+        }
+      }
+      for (const href of hrefs) {
+        if (!declared.includes(href)) {
+          problems.push(`the rendered "${row.label}" row carries the card link ${href}, which the row does not declare`)
+        }
+      }
+      if (cells.includes(BY_CONVERSATION)) {
+        problems.push(`the page's "${row.label}" row is self-serve and the rendered row says "${BY_CONVERSATION}"`)
+      }
+    } else {
+      const expected = `mailto:${row.buy.address}`
+      if (!hrefs.includes(expected)) {
+        problems.push(`the page's "${row.label}" row takes a conversation and the rendered row does not carry its address (${row.buy.address})`)
+      }
+      for (const href of hrefs) {
+        if (href !== expected) {
+          problems.push(`the rendered "${row.label}" row carries the link ${href}, and a conversation row carries only the address`)
+        }
+      }
+      if (!cells.includes(BY_CONVERSATION)) {
+        problems.push(`the page's "${row.label}" row takes a conversation and the rendered row does not say so ("${BY_CONVERSATION}")`)
+      }
     }
     return problems
   })
@@ -570,15 +647,15 @@ describe('the price page', () => {
     expect(renderedFigureProblems(LIVE)).toEqual([])
   })
 
-  it('gives every priced row the route its kind of purchase needs', () => {
-    expect(rowRouteProblems(LIVE)).toEqual([])
+  it('gives every row the way to buy it that its kind of purchase declares', () => {
+    expect(rowBuyProblems(LIVE)).toEqual([])
   })
 
-  it('renders every row with its words, its figures, its route and the kind of purchase it is', () => {
+  it('renders every row with its words, its figures and its own way to buy', () => {
     expect(rowRenderProblems(LIVE)).toEqual([])
   })
 
-  it('declares each route as a live value the seller has supplied', () => {
+  it('declares every route as a live value', () => {
     expect(routeProblems(LIVE)).toEqual([])
   })
 
@@ -595,13 +672,21 @@ describe('the price page', () => {
  * The page the repository would never commit, one failure at a time: each case changes one
  * thing in the live reading and asserts the check names it. These are the states the checks
  * exist to refuse — the drifting figure, the price that moved to another row, the row with no
- * way to buy, the route the seller has not supplied yet, the nav that loses the link — and
- * nothing else in the suite exercises them.
+ * way to buy, the link a row does not declare, the nav that loses the link — and nothing else
+ * in the suite exercises them.
  */
 describe('the page the checks exist to refuse', () => {
   /** The live rows with one row replaced, found by its label. */
   function withRow(reading: Reading, label: string, change: Partial<Sku>): Reading {
     return { ...reading, skus: reading.skus.map(row => (row.label === label ? { ...row, ...change } : row)) }
+  }
+
+  /** The live page with one row's cells passed through `change`, found by the row's label. */
+  function withRendered(reading: Reading, label: string, change: (cells: string) => string): Reading {
+    const page = decoded(reading.rendered)
+    const cells = rowMarkup(page, label)
+    if (cells === undefined) throw new Error(`the rendered page carries no "${label}" row: this case edits one`)
+    return { ...reading, rendered: page.replace(cells, change(cells)) }
   }
 
   it('names a figure the record does not set', () => {
@@ -687,33 +772,97 @@ describe('the page the checks exist to refuse', () => {
     ])
   })
 
-  it('names a priced row with no route to buy it', () => {
-    const orphaned = supplied(LIVE)
-    expect(rowRouteProblems(withRow(orphaned, 'A rental', { route: '' }))).toEqual([
-      expect.stringContaining('the page\'s "A rental" row states a price and carries no route')
+  it('names a card row with no link to buy it, and the link it leaves unsold', () => {
+    const card = cardRows(LIVE)[0]
+    const dropped = card.buy.links[0]
+    const route = LIVE.routes.find(candidate => candidate.value === dropped.href)
+    if (route === undefined) throw new Error('the page no longer declares the link this case drops: it edits the first card row')
+    const stripped = withRow(LIVE, card.label, { buy: { kind: 'card', links: [] } })
+    expect(rowBuyProblems(stripped)).toEqual([
+      expect.stringContaining(`the page's "${card.label}" row sells by card and declares no link to buy it`),
+      expect.stringContaining(`${route.name} (${route.what}) is declared and no row on the page sells through it`)
     ])
   })
 
-  it('names a self-serve row routed to the purchase-order address', () => {
-    const misrouted = supplied(LIVE)
-    const row = misrouted.skus.find(sku => !sku.conversation)
-    if (row === undefined) throw new Error('the page declares no self-serve row for this case to misroute')
-    expect(rowRouteProblems(withRow(misrouted, row.label, { route: 'orders@cuerunner.app' }))).toEqual([
-      expect.stringContaining(`the page's "${row.label}" row is self-serve and offers "orders@cuerunner.app" instead of the card link`)
+  it('names a card row offering a link the declaration does not hold', () => {
+    const card = cardRows(LIVE)[0]
+    const inlined = withRow(LIVE, card.label, {
+      buy: { kind: 'card', links: [...card.buy.links, { words: 'Buy elsewhere', href: 'https://buy.cuerunner.app/typo' }] }
+    })
+    expect(rowBuyProblems(inlined)).toEqual([
+      expect.stringContaining(`the page's "${card.label}" row offers "https://buy.cuerunner.app/typo", which is not one of the card routes`)
     ])
   })
 
-  it('names a row routed to a route that is not a way to buy', () => {
-    const stray = supplied(LIVE)
-    expect(rowRouteProblems(withRow(stray, 'Cuerunner Pro', { route: W9_ROUTE }))).toEqual([
-      expect.stringContaining('the page\'s "Cuerunner Pro" row is self-serve and offers "The completed W-9 comes back by email with the invoice." instead of the card link')
+  it('names a declared card link no row sells through', () => {
+    const two = cardRows(LIVE).find(row => row.buy.links.length > 1)
+    if (two === undefined) throw new Error('the page no longer declares a card row with two links: this case drops one of them')
+    const [kept, dropped] = two.buy.links
+    const route = LIVE.routes.find(candidate => candidate.value === dropped.href)
+    if (route === undefined) throw new Error('the page no longer declares the link this case drops')
+    const short = withRow(LIVE, two.label, { buy: { kind: 'card', links: [kept] } })
+    expect(rowBuyProblems(short)).toEqual([
+      expect.stringContaining(`${route.name} (${route.what}) is declared and no row on the page sells through it`)
+    ])
+  })
+
+  it('names a card row wearing the conversation words', () => {
+    const card = cardRows(LIVE)[0]
+    const talking = withRow(LIVE, card.label, {
+      buy: { kind: 'card', links: card.buy.links.map(link => ({ ...link, words: BY_CONVERSATION })) }
+    })
+    expect(rowBuyProblems(talking)).toEqual([
+      expect.stringContaining(`the page's "${card.label}" row is self-serve and its buy words read "${BY_CONVERSATION}"`)
+    ])
+  })
+
+  it('names a card row whose link carries no words', () => {
+    const card = cardRows(LIVE)[0]
+    const wordless = withRow(LIVE, card.label, {
+      buy: { kind: 'card', links: card.buy.links.map(link => ({ ...link, words: ' ' })) }
+    })
+    expect(rowBuyProblems(wordless)).toEqual([
+      expect.stringContaining(`the page's "${card.label}" row offers a card link with no words`)
     ])
   })
 
   it('names a conversation row dressed as a checkout', () => {
-    const dressed = supplied(LIVE)
-    expect(rowRouteProblems(withRow(dressed, 'A venue or a campus', { route: 'https://buy.cuerunner.app/pro' }))).toEqual([
-      expect.stringContaining('the page\'s "A venue or a campus" row takes a conversation and offers "https://buy.cuerunner.app/pro" instead of the purchase-order address')
+    const talk = conversationRows(LIVE)[0]
+    const dressed = withRow(LIVE, talk.label, { buy: { kind: 'conversation', address: CARD_LINKS.licence } })
+    expect(rowBuyProblems(dressed)).toEqual([
+      expect.stringContaining(`the page's "${talk.label}" row takes a conversation and names "${CARD_LINKS.licence}", which is not the purchase-order address`)
+    ])
+  })
+
+  it('names a card row that loses one of its links in the render', () => {
+    const two = cardRows(LIVE).find(row => row.buy.links.length > 1)
+    if (two === undefined) throw new Error('the page no longer declares a card row with two links: this case drops one of them')
+    const dropped = two.buy.links[1]
+    const lost = withRendered(LIVE, two.label, cells => cells.replace(`<a href="${dropped.href}">${dropped.words}</a>`, ''))
+    expect(rowRenderProblems(lost)).toEqual([
+      expect.stringContaining(`the page's "${two.label}" row declares the link ${dropped.words} (${dropped.href}) and the rendered row does not carry it`),
+      expect.stringContaining(`the page's "${two.label}" row's link ${dropped.href} is rendered without its words ("${dropped.words}")`)
+    ])
+  })
+
+  it('names a card row the render dresses as a conversation', () => {
+    const card = cardRows(LIVE)[0]
+    const link = card.buy.links[0]
+    const talking = withRendered(LIVE, card.label, cells => cells.replace(link.words, BY_CONVERSATION))
+    expect(rowRenderProblems(talking)).toEqual([
+      expect.stringContaining(`the page's "${card.label}" row's link ${link.href} is rendered without its words ("${link.words}")`),
+      expect.stringContaining(`the page's "${card.label}" row is self-serve and the rendered row says "${BY_CONVERSATION}"`)
+    ])
+  })
+
+  it('names a conversation row the render carries as a card link', () => {
+    const talk = conversationRows(LIVE)[0]
+    const checkout = withRendered(LIVE, talk.label, cells =>
+      cells.replace(`href="mailto:${talk.buy.address}"`, `href="${CARD_LINKS.licence}"`)
+    )
+    expect(rowRenderProblems(checkout)).toEqual([
+      expect.stringContaining(`the page's "${talk.label}" row takes a conversation and the rendered row does not carry its address (${talk.buy.address})`),
+      expect.stringContaining(`the rendered "${talk.label}" row carries the link ${CARD_LINKS.licence}, and a conversation row carries only the address`)
     ])
   })
 
@@ -740,26 +889,19 @@ describe('the page the checks exist to refuse', () => {
     ])
   })
 
-  it('names a row whose conversation the rendered page stops declaring', () => {
-    const silent = LIVE.rendered.replaceAll(`<td>${BY_CONVERSATION} —`, '<td>Buy now —')
-    expect(rowRenderProblems({ ...LIVE, rendered: silent })).toEqual(
-      LIVE.skus
-        .filter(sku => sku.conversation)
-        .map(sku =>
-          expect.stringContaining(`the page's "${sku.label}" row takes a conversation and the rendered row does not say so`)
-        )
-    )
-  })
-
   it('names a route the seller has not supplied yet, and the fill that clears it', () => {
-    const unsupplied = supplied(LIVE).routes.map(route => (route.name === 'CARD_LINK' ? { ...route, value: '' } : route))
-    expect(routeProblems({ ...LIVE, routes: unsupplied })).toEqual([
-      expect.stringContaining('website/docs/pricing.mjs declares no value for CARD_LINK (the card route)')
+    const empty = LIVE.routes.map(route => (route.name === 'CARD_LINKS.rental90' ? { ...route, value: '' } : route))
+    expect(routeProblems({ ...LIVE, routes: empty })).toEqual([
+      expect.stringContaining('website/docs/pricing.mjs declares no value for CARD_LINKS.rental90 (the card route for 90 days of rental)')
+    ])
+    const address = LIVE.routes.map(route => (route.name === 'ORDER_EMAIL' ? { ...route, value: '' } : route))
+    expect(routeProblems({ ...LIVE, routes: address })).toEqual([
+      expect.stringContaining('website/docs/pricing.mjs declares no value for ORDER_EMAIL (the purchase-order address)')
     ])
   })
 
   it('names a route a placeholder was left in', () => {
-    const placeholder = supplied(LIVE).routes.map(route =>
+    const placeholder = LIVE.routes.map(route =>
       route.name === 'ORDER_EMAIL' ? { ...route, value: 'orders@example.com' } : route
     )
     expect(routeProblems({ ...LIVE, routes: placeholder })).toEqual([
@@ -768,61 +910,61 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a route pointed at a reserved name, which is documentation rather than a shop', () => {
-    const reserved = supplied(LIVE).routes.map(route =>
-      route.name === 'CARD_LINK' ? { ...route, value: 'https://buy.example.org/pro' } : route
+    const reserved = LIVE.routes.map(route =>
+      route.name === 'CARD_LINKS.licence' ? { ...route, value: 'https://buy.example.org/licence' } : route
     )
     expect(routeProblems({ ...LIVE, routes: reserved })).toEqual([
-      expect.stringContaining('CARD_LINK reads "https://buy.example.org/pro", which is a placeholder rather than a live https:// link to the storefront')
+      expect.stringContaining('CARD_LINKS.licence reads "https://buy.example.org/licence", which is a placeholder rather than a live https:// link')
     ])
-    const tld = supplied(LIVE).routes.map(route =>
-      route.name === 'CARD_LINK' ? { ...route, value: 'https://buy.cuerunner.test/pro' } : route
+    const tld = LIVE.routes.map(route =>
+      route.name === 'CARD_LINKS.renewal' ? { ...route, value: 'https://buy.cuerunner.test/renewal' } : route
     )
     expect(routeProblems({ ...LIVE, routes: tld })).toEqual([
-      expect.stringContaining('CARD_LINK reads "https://buy.cuerunner.test/pro", which is a placeholder rather than a live https:// link to the storefront')
+      expect.stringContaining('CARD_LINKS.renewal reads "https://buy.cuerunner.test/renewal", which is a placeholder rather than a live https:// link')
     ])
   })
 
   it('names a route that carries markup into the page', () => {
-    const markup = supplied(LIVE).routes.map(route =>
-      route.name === 'CARD_LINK' ? { ...route, value: 'https://buy.cuerunner.app/pro<buy>' } : route
+    const markup = LIVE.routes.map(route =>
+      route.name === 'CARD_LINKS.rentalDay' ? { ...route, value: 'https://buy.cuerunner.app/day<buy>' } : route
     )
     expect(routeProblems({ ...LIVE, routes: markup })).toEqual([
-      expect.stringContaining('CARD_LINK reads "https://buy.cuerunner.app/pro<buy>", which carries markup')
+      expect.stringContaining('CARD_LINKS.rentalDay reads "https://buy.cuerunner.app/day<buy>", which carries markup')
     ])
   })
 
   it('names a route that is not the shape it claims', () => {
-    const malformed = supplied(LIVE).routes.map(route =>
-      route.name === 'CARD_LINK' ? { ...route, value: 'buy.cuerunner.app/pro' } : route
+    const malformed = LIVE.routes.map(route =>
+      route.name === 'CARD_LINKS.renewal' ? { ...route, value: 'buy.cuerunner.app/renewal' } : route
     )
     expect(routeProblems({ ...LIVE, routes: malformed })).toEqual([
-      expect.stringContaining('CARD_LINK reads "buy.cuerunner.app/pro", which is not a live https:// link to the storefront')
+      expect.stringContaining('CARD_LINKS.renewal reads "buy.cuerunner.app/renewal", which is not a live https:// link to the storefront')
     ])
   })
 
   it('names a route the rendered page does not carry', () => {
-    const unbuilt = LIVE.routes
-      .filter(route => route.name === 'CARD_LINK')
-      .map(route => ({ ...route, value: 'https://buy.cuerunner.app/unbuilt' }))
+    const unbuilt = LIVE.routes.map(route =>
+      route.name === 'CARD_LINKS.licence' ? { ...route, value: 'https://buy.cuerunner.app/unbuilt' } : route
+    )
     expect(renderedRouteProblems({ ...LIVE, routes: unbuilt })).toEqual([
-      expect.stringContaining('the rendered page does not carry the card route from its declaration (CARD_LINK)')
+      expect.stringContaining('the rendered page does not carry the card route for the licence from its declaration (CARD_LINKS.licence)')
     ])
-    const nearMiss = LIVE.routes
-      .filter(route => route.name === 'W9_ROUTE')
-      .map(route => ({ ...route, value: 'The completed W-9 comes back by email with the paperwork.' }))
+    const nearMiss = LIVE.routes.map(route =>
+      route.name === 'W9_ROUTE' ? { ...route, value: 'The completed W-9 comes back by email with the paperwork.' } : route
+    )
     expect(renderedRouteProblems({ ...LIVE, routes: nearMiss })).toEqual([
       expect.stringContaining('the rendered page does not carry the W-9 route from its declaration (W9_ROUTE)')
     ])
   })
 
   it('reads an ampersand the page escapes, and refuses one it does not carry', () => {
-    const amp = LIVE.routes
-      .filter(route => route.name === 'CARD_LINK')
-      .map(route => ({ ...route, value: 'https://buy.cuerunner.app/pro?a=1&b=2' }))
-    const carried = `${LIVE.rendered}\n<a href="https://buy.cuerunner.app/pro?a=1&amp;b=2">Buy</a>`
+    const amp = LIVE.routes.map(route =>
+      route.name === 'CARD_LINKS.licence' ? { ...route, value: 'https://buy.cuerunner.app/licence?a=1&b=2' } : route
+    )
+    const carried = `${LIVE.rendered}\n<a href="https://buy.cuerunner.app/licence?a=1&amp;b=2">Buy with a card</a>`
     expect(renderedRouteProblems({ ...LIVE, routes: amp, rendered: carried })).toEqual([])
     expect(renderedRouteProblems({ ...LIVE, routes: amp })).toEqual([
-      expect.stringContaining('the rendered page does not carry the card route from its declaration (CARD_LINK)')
+      expect.stringContaining('the rendered page does not carry the card route for the licence from its declaration (CARD_LINKS.licence)')
     ])
   })
 
