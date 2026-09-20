@@ -354,6 +354,84 @@ test('a key that runs out while the app is open locks the Pro half, and the show
   }
 })
 
+test('a stored rental key whose day has passed ends at launch, and the free half runs the show', async () => {
+  test.setTimeout(90_000)
+
+  // A rental's ending, read at launch: the stored key's last day in UTC is behind us
+  // before the process starts, so the ending is derived by the launch's first read rather
+  // than crossed by a wait. The fixture is the shape a rental is sold as — one `expires`
+  // day — and the case takes that shape through the whole of the app: the derived state,
+  // the panel and its consequence, main's refusal and the stopped service, and the free
+  // half running the show.
+  const issuer = mintLicense()
+  const lastDay = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const { page } = await start({
+    license: mintLicense({ expires: lastDay, issuer }),
+    trustPublicKey: issuer.publicKeyPem
+  })
+
+  // The first read derives the ending with the key itself kept: what ran out is the
+  // clock's half, not the key's. The window reads that same state at startup, which is
+  // what the panel below draws from.
+  expect(await inRenderer('window.cuerunner.license.status()'))
+    .toMatchObject({ state: 'expired', license: { licensee: 'End to End Test', expires: lastDay } })
+
+  // Nothing Pro came up with the process: the desk link is stopped with the reason on the
+  // surface that reports services, and the free listener the show needs runs beside it.
+  await expect.poll(serviceStates, { timeout: 15_000 })
+    .toMatchObject({ 'osc-in': 'running', 'midi-tcp': 'stopped' })
+  await page.locator('.btn-monitor').click()
+  const deskRow = page.locator('.monitor-service', { hasText: 'Desk (MIDI over TCP)' })
+  await expect(deskRow).toHaveAttribute('data-state', 'stopped')
+  await expect(deskRow).toContainText('is part of Cuerunner Pro')
+  await expect(page.locator('.monitor-service', { hasText: 'OSC input' }))
+    .toHaveAttribute('data-state', 'running')
+  await page.locator('.btn-monitor').click()
+
+  // A Pro surface draws the lock, and main refuses the work on its own account — the
+  // lock in the window is an explanation, not the thing standing in the way.
+  await page.locator('.btn-rf').click()
+  const lock = page.locator('.pro-lock[data-feature="Wireless"]')
+  await expect(lock).toBeVisible()
+  await expect(lock.locator('.pro-lock-state')).toContainText(`expired on ${lastDay}`)
+  expect(await inRenderer("window.cuerunner.show.command('rf', 'repoll')"))
+    .toEqual({ ok: false, error: 'Wireless is part of Cuerunner Pro' })
+
+  // Settings → License states the ending, says what it leaves working, and offers the
+  // field a renewed key goes in.
+  await openLicenseTab(page)
+  await expect(page.locator('.license-warn'))
+    .toHaveText(`The key for this machine expired on ${lastDay}.`)
+  await expect(page.locator('.license-note', { hasText: 'The Pro half is off' }))
+    .toHaveText('The Pro half is off until a renewed key is entered; your shows and the cue stack keep working.')
+  await expect(page.locator('#license-key')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Activate' })).toBeVisible()
+  await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click()
+
+  // And the free half is untouched by any of it: the demo workspace opens, its walk-in
+  // loops, and the show runs on a machine whose only key has ended.
+  await openDemo(page)
+  await playWalkInForever(page)
+  await expect(page.locator('.running-badge')).toHaveText('1 running', { timeout: 10_000 })
+
+  // The field that panel offered takes a renewed key from the same issuer, and the
+  // ending is over: the ended line and the sentence under it are gone, the panel reads
+  // the new key back, and the lock the window was drawing has cleared.
+  const renewedDay = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const renewed = mintLicense({ licensee: 'Renewed Rental', expires: renewedDay, issuer })
+  await openLicenseTab(page)
+  const panel = page.getByRole('dialog', { name: 'Settings' })
+  await panel.locator('#license-key').fill(renewed.text)
+  await panel.getByRole('button', { name: 'Activate' }).click()
+  await expect(panel.locator('.settings-info', { hasText: 'Licensed to Renewed Rental' })).toBeVisible()
+  await expect(panel.locator('.field-row').filter({ hasText: 'Expires' }).locator('.settings-info'))
+    .toHaveText(renewedDay)
+  await expect(panel.locator('.license-warn')).toHaveCount(0)
+  await expect(panel.locator('.license-note', { hasText: 'The Pro half is off' })).toHaveCount(0)
+  await expect(page.locator('.pro-lock[data-feature="Wireless"]')).toHaveCount(0)
+  await expect(page.locator('.rf-panel')).toBeVisible()
+})
+
 test('an unlicensed window marks each Pro feature once, quietly, where it opens', async () => {
   const { page } = await start()
 

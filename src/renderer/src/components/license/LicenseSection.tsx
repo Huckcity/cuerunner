@@ -71,9 +71,17 @@ export function LicenseSection() {
           </p>
 
           {license.state === 'expired' && (
-            <p className="license-warn">
-              The key for this machine expired on {license.license.expires}.
-            </p>
+            <>
+              <p className="license-warn">
+                The key for this machine expired on {license.license.expires}.
+              </p>
+              {/* Under the sentence that says the key ended, and in the voice the
+                  Deactivate note already uses: what the ending leaves working. */}
+              <p className="license-note">
+                The Pro half is off until a renewed key is entered; your shows and the
+                cue stack keep working.
+              </p>
+            </>
           )}
 
           <div className="field-row">
