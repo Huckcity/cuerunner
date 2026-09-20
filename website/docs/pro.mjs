@@ -90,9 +90,11 @@ export const PRO = [
       <h2>The key</h2>
       <ul>
         <li>Signed, and checked on the machine — nothing phones home, and nothing needs an account.</li>
+        <li><strong>A key ends when it ends.</strong> The Pro half stops on that machine the moment the last day is out — the Pro services first, the desk link among them, and scene cues refused from then on — while nothing already playing is interrupted and the free half keeps working. A pair set to take over by itself hands the show to the standby when the machine that ran out goes quiet; keeping the standby licensed is what makes that work.</li>
         <li>Not tied to one computer: the machine you run from and the one standing by.</li>
         <li>Deactivate it and that machine is back to the free half.</li>
         <li>A show written with Pro opens anywhere. Its scenes, its mic plot and its triggers travel with the file even on a machine that has no key — only the surfaces and the services wait for one.</li>
+        <li>Enter a renewed key and the Pro half comes back on the spot, with no restart.</li>
       </ul>
       <p class="note">
         What Cuerunner does not do is play the video. Another program owns the projection

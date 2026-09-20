@@ -704,9 +704,14 @@ keys are verified on the machine they are entered on:
   redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
   machines of a pair run the same workspace file, so which one is the main is a fact about
   the machine rather than about the show.
-- **A session keeps the license it started with.** The key is checked when the app starts
-  and when one is entered, so a show that began licensed finishes licensed: a key that
-  runs out overnight locks the next launch rather than the performance.
+- **A key ends when it ends.** The key is checked when the app starts, when one is
+  entered, and whenever anything asks what the license is; the app's own clock crosses a
+  key's last day while it is open, with no operator action and no restart. The moment it
+  crosses, the Pro services stop there and then — the desk link among them — and scene cues
+  are refused from that instant, while a cue already playing keeps playing and the show
+  file is untouched.
+- **A renewed key puts the Pro half back** without a restart, and starts the services the
+  show had configured.
 - **A key is not bound to a machine.** Verification is offline by design and nothing
   counts activations, so one key can be entered on more than one computer. Keeping to one
   machine per operator is a matter of trust between the issuer and the buyer — an

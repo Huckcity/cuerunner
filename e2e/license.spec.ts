@@ -3,7 +3,8 @@
 // lock, and the main process that owns the sockets and refuses the work anyway — and both
 // ways a key arrives: pasted into Settings, or already on the machine at launch.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
+import net from 'net'
+import { closeApp, launchApp, mintLicense, pointDeskAtTcp, type TestLicense } from './helpers'
 
 let app: ElectronApplication | undefined
 
@@ -13,7 +14,13 @@ test.afterEach(async () => {
 })
 
 async function start(
-  options: { license?: TestLicense; trustPublicKey?: string; userDataDir?: string } = {}
+  options: {
+    license?: TestLicense
+    trustPublicKey?: string
+    userDataDir?: string
+    /** Extra environment: the dev-only harness switches main reads. */
+    env?: Record<string, string>
+  } = {}
 ): Promise<{ page: Page; userDataDir: string }> {
   const launched = await launchApp(options)
   app = launched.app
@@ -38,6 +45,38 @@ async function openLicenseTab(page: Page): Promise<void> {
     .getByRole('button', { name: 'License', exact: true })
     .click()
 }
+
+/** The host's own record of its services, by id, as main has it. */
+async function serviceStates(): Promise<Record<string, string>> {
+  const snapshot = await inRenderer('window.cuerunner.show.snapshot()') as {
+    services: { id: string; state: string }[]
+  }
+  return Object.fromEntries(snapshot.services.map(service => [service.id, service.state]))
+}
+
+/** The demo workspace, opened the way the File menu opens it. */
+async function openDemo(page: Page): Promise<void> {
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
+}
+
+/** The demo's walk-in, looped, so a cue is running through whatever the case does next. */
+async function playWalkInForever(page: Page): Promise<void> {
+  await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
+  // Loop count lives on the Timing tab, with the start/end times it interacts with.
+  await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
+  await page.locator('.field-row').filter({ hasText: 'Loop count' }).locator('input').fill('-1')
+  await page.getByRole('button', { name: /GO/ }).click()
+}
+
+/**
+ * How far ahead of the run the app is told the key's boundary is. Launch and every
+ * assertion made while the key is still good come out of this, and the case then waits
+ * out whatever is left — so it is sized well past what those take, or a slow machine
+ * would look like a key that ended early.
+ */
+const LAPSE_AFTER_MS = 25_000
 
 test('a machine with no key runs the free half and locks the rest', async () => {
   const { page } = await start()
@@ -219,6 +258,100 @@ test('deactivating gives the free half back', async () => {
   await expect(page.locator('.pro-lock[data-feature="Scenes"]')).toBeVisible()
   await page.locator('.btn-rf').click()
   await expect(page.locator('.pro-lock[data-feature="Wireless"]')).toBeVisible()
+})
+
+test('a key that runs out while the app is open locks the Pro half, and the show keeps running', async () => {
+  test.setTimeout(150_000)
+
+  // A desk for the show to drive, so a Pro service is genuinely up before the key ends:
+  // what stops it is the licence rather than a port with nothing behind it. The app's
+  // socket is still open when the case ends and `close()` waits for its connections to go,
+  // so they are tracked here and dropped before the server is.
+  const connections = new Set<net.Socket>()
+  const desk = net.createServer(socket => {
+    connections.add(socket)
+    socket.on('error', () => socket.destroy())
+    socket.on('close', () => connections.delete(socket))
+  })
+  await new Promise<void>((resolve, reject) => {
+    desk.once('error', reject)
+    desk.listen(0, '127.0.0.1', () => resolve())
+  })
+  const address = desk.address()
+  if (address === null || typeof address === 'string') throw new Error('the desk has no port')
+
+  try {
+    // The key's last day is tomorrow in UTC, and the app is told the clock stands a fixed
+    // distance short of that instant: the manager's own wait crosses the boundary while
+    // the test watches, at whatever the wall clock says — including a run beginning
+    // seconds before midnight. An offset rather than an instant, because that wait is a
+    // real timer and a clock standing still would never let it fire.
+    const issuer = mintLicense()
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const offset = Date.parse(`${expires}T23:59:59.999Z`) - Date.now() - LAPSE_AFTER_MS
+    const { page } = await start({
+      license: mintLicense({ expires, issuer }),
+      trustPublicKey: issuer.publicKeyPem,
+      env: { CUERUNNER_TEST_CLOCK_OFFSET_MS: String(offset) }
+    })
+
+    // A show that is really running: the demo workspace, its walk-in looped, so what
+    // happens next happens with a cue playing.
+    await openDemo(page)
+    await playWalkInForever(page)
+    await expect(page.locator('.running-badge')).toHaveText('1 running', { timeout: 10_000 })
+
+    // With the key still good: the Pro panel is the panel, and the Pro desk link is up
+    // beside the free listener the show uses.
+    await page.locator('.btn-rf').click()
+    await expect(page.locator('.rf-panel')).toBeVisible()
+    await pointDeskAtTcp(page, address.port)
+    await page.locator('.show-settings-dialog .show-settings-done').click()
+    await expect.poll(serviceStates, { timeout: 15_000 }).toMatchObject({
+      'osc-in': 'running',
+      'midi-tcp': 'running'
+    })
+
+    // Licensed this instant, so what the wait below sees is the boundary crossing and not
+    // a launch that was slow.
+    const lock = page.locator('.pro-lock[data-feature="Wireless"]')
+    await expect(lock).toHaveCount(0)
+
+    // Nobody touches the app: the clock crosses the key's last instant, and the window is
+    // told through the state it already expects for "it ran out".
+    await expect(lock).toBeVisible({ timeout: LAPSE_AFTER_MS + 30_000 })
+    await expect(lock.locator('.pro-lock-state')).toContainText(`expired on ${expires}`)
+
+    // The desk link the operator was watching stopped, with the reason, on the surface
+    // that reports services.
+    await page.locator('.btn-monitor').click()
+    const deskRow = page.locator('.monitor-service', { hasText: 'Desk (MIDI over TCP)' })
+    await expect(deskRow).toHaveAttribute('data-state', 'stopped')
+    await expect(deskRow).toContainText('is part of Cuerunner Pro')
+
+    // Main re-derived on its own account — the Pro work is refused without a restart —
+    // and only the Pro service stopped while the free one kept running.
+    expect(await inRenderer("window.cuerunner.show.command('rf', 'repoll')"))
+      .toEqual({ ok: false, error: 'Wireless is part of Cuerunner Pro' })
+    await expect.poll(serviceStates).toMatchObject({ 'osc-in': 'running', 'midi-tcp': 'stopped' })
+
+    // The show was not interrupted: the cue that was playing is still playing, and the
+    // free half is still the free half.
+    await expect(page.locator('.running-badge')).toHaveText('1 running')
+    await openSettings(page)
+    await page.getByRole('dialog', { name: 'Settings' })
+      .getByRole('button', { name: 'Network', exact: true })
+      .click()
+    await expect(page.locator('.license-hint')).toContainText('Cuerunner Pro')
+    await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click()
+    await page.locator('.btn-log').click()
+    await expect(page.locator('.log-panel')).toBeVisible()
+  } finally {
+    // The app's socket is still open, so the connections go before the server does or
+    // close() would never settle.
+    for (const socket of connections) socket.destroy()
+    await new Promise<void>(resolve => desk.close(() => resolve()))
+  }
 })
 
 test('an unlicensed window marks each Pro feature once, quietly, where it opens', async () => {
