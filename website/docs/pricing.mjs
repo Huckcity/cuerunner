@@ -10,14 +10,15 @@
 //
 // The routes are declared once for the same reason. Each is the seller's own and live: the
 // card links are the storefront's per-SKU payment links, the address is the inbox a purchase
-// order goes to, and the guard fails by name on a route that is empty, a placeholder or
-// carries markup — the page never ships a checkout or an address that does not exist. The W-9
-// is not a value and needs no fill: it comes back by email, so its route is the words that say
-// so, declared once and rendered from here.
+// order goes to — declared in `website/docs/contact.mjs`, where the trial and support pages
+// take it from too, so the shop front names one address from one place — and the guard fails
+// by name on a route that is empty, a placeholder or carries markup: the page never ships a
+// checkout or an address that does not exist. The W-9 is not a value and needs no fill: it
+// comes back by email, so its route is the words that say so, declared once and rendered from
+// here.
+import { attr } from './attr.mjs'
+import { ORDER_EMAIL } from './contact.mjs'
 import { table } from './table.mjs'
-
-/** A route as it may sit in an attribute: the characters markup would read, escaped. */
-const attr = text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
  * The card routes, one live Stripe payment link per SKU, declared once and interpolated by the
@@ -35,17 +36,6 @@ export const CARD_LINKS = {
   rentalDay: 'https://buy.stripe.com/8x24gz3tf5MQ99w0Ad5ZC03',
   rental90: 'https://buy.stripe.com/bJe28r0h3b7a2L85Ux5ZC04'
 }
-
-/**
- * The one inbox a purchase order goes to, and the only address this page names. Venue,
- * education and purchase-order buyers are stated as the route that exists — a person answering
- * — rather than dressed as a checkout that cannot serve them (AD-24's vocabulary).
- *
- * Live: Cloudflare Email Routing on `cuerunner.app` forwards this address to the person who
- * answers it, so an order sent here reaches a human. The guard holds it to one live address —
- * an empty value, a placeholder and a markup-bearing one all fail by name.
- */
-export const ORDER_EMAIL = 'orders@cuerunner.app'
 
 /**
  * The W-9, declared once: an institution asks for one and the completed form comes back by

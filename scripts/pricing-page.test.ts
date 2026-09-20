@@ -34,11 +34,12 @@ import { fileURLToPath } from 'node:url'
 import {
   BY_CONVERSATION,
   CARD_LINKS,
-  ORDER_EMAIL,
   PRICED_SKUS,
   PRICING,
   W9_ROUTE
 } from '../website/docs/pricing.mjs'
+// @ts-ignore — js file, no type declarations
+import { ORDER_EMAIL } from '../website/docs/contact.mjs'
 // @ts-ignore — js file, no type declarations
 import { NAV, renderPage } from '../website/build-docs.mjs'
 
@@ -98,6 +99,8 @@ interface Bullet {
  */
 interface Route {
   name: string
+  /** The page module that declares it — the address this page names is declared beside the reply, in `contact.mjs`. */
+  file: string
   value: string
   what: string
   want: string
@@ -248,11 +251,13 @@ const CARD_ROUTE_WHAT: Record<string, string> = {
 /**
  * The routes the page declares, in the order a buyer meets them: one live card link per SKU,
  * the inbox a purchase order goes to, and the words that say how the W-9 comes back. A failure
- * names the constant a row draws the route from, so it says which line of the module to fix.
+ * names the constant a row draws the route from and the module that holds it, so it says which
+ * line of which file to fix.
  */
 const ROUTES: Route[] = [
   ...Object.entries(CARD_LINKS).map(([key, value]) => ({
     name: `CARD_LINKS.${key}`,
+    file: 'website/docs/pricing.mjs',
     value,
     what: CARD_ROUTE_WHAT[key] ?? `the card route "${key}"`,
     want: 'a live https:// link to the storefront',
@@ -260,6 +265,7 @@ const ROUTES: Route[] = [
   })),
   {
     name: 'ORDER_EMAIL',
+    file: 'website/docs/contact.mjs',
     value: ORDER_EMAIL,
     what: 'the purchase-order address',
     want: 'one email address',
@@ -267,6 +273,7 @@ const ROUTES: Route[] = [
   },
   {
     name: 'W9_ROUTE',
+    file: 'website/docs/pricing.mjs',
     value: W9_ROUTE,
     what: 'the W-9 route',
     want: 'the words that say how the form comes back',
@@ -574,7 +581,7 @@ function routeProblems(reading: Reading): string[] {
   return reading.routes.flatMap(route => {
     if (route.value.trim() === '') {
       return [
-        `website/docs/pricing.mjs declares no value for ${route.name} (${route.what}): fill it with ${route.want} — while it is empty the page offers no way to buy`
+        `${route.file} declares no value for ${route.name} (${route.what}): fill it with ${route.want} — while it is empty the page offers no way to buy`
       ]
     }
     if (PLACEHOLDER.test(route.value)) {
@@ -896,7 +903,7 @@ describe('the page the checks exist to refuse', () => {
     ])
     const address = LIVE.routes.map(route => (route.name === 'ORDER_EMAIL' ? { ...route, value: '' } : route))
     expect(routeProblems({ ...LIVE, routes: address })).toEqual([
-      expect.stringContaining('website/docs/pricing.mjs declares no value for ORDER_EMAIL (the purchase-order address)')
+      expect.stringContaining('website/docs/contact.mjs declares no value for ORDER_EMAIL (the purchase-order address)')
     ])
   })
 

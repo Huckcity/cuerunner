@@ -28,6 +28,8 @@ export const NAV = [
   ['reference/index.html', 'Reference'],
   ['pro.html', 'Free and Pro'],
   ['pricing.html', 'Pricing'],
+  ['trial.html', 'Trial'],
+  ['support.html', 'Support'],
   ['interop.html', 'Other programs'],
   ['reliability.html', 'Reliability']
 ]
