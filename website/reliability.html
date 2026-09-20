@@ -107,6 +107,12 @@
 
     <section id="last-run" class="panel reveal delay-3 run-panel">
       <h2>Last run</h2>
+      <p class="note">
+        The soak is nightly, and a result is shown here only while it stands for now: one dated at
+        most 48 hours ago, and not ahead of this page's own clock, is rendered in full below. Past
+        that, or with a date this page cannot read, it says it has no current result and names the
+        date of the last run it holds, rather than presenting that run's numbers as the latest.
+      </p>
       <p id="run-absent" class="note">
         No nightly result published yet. The nightly soak writes <code>soak-latest.json</code> next
         to this page when it finishes; until that file is here, this page reports no numbers.
@@ -177,8 +183,10 @@
   <script>
     // The numbers on this page are never typed in. They come from ./soak-latest.json, the
     // file the nightly soak workflow publishes next to this page, and are rendered exactly
-    // as written there. If the file is absent or unreadable the page says so, rather than
-    // falling back to zeroes that would read as measurements.
+    // as written there — but only while the run is current: outside the 48-hour bound stated
+    // above, or with a date the page cannot read, it renders none of that run's figures and
+    // names the date of the last run it holds instead. If the file is absent or unreadable the
+    // page says so, rather than falling back to zeroes that would read as measurements.
     (async () => {
       const element = (id) => document.getElementById(id)
       const absent = element('run-absent')
@@ -195,9 +203,15 @@
         value.totals !== null &&
         typeof value.totals === 'object'
 
-      const timestamp = (value) => {
-        if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return null
-        return new Intl.DateTimeFormat('en-GB', {
+      /** The instant a result states it ran, or null when it states none this page can read. */
+      const ranAt = (value) => {
+        if (typeof value !== 'string') return null
+        const at = Date.parse(value)
+        return Number.isNaN(at) ? null : at
+      }
+
+      const timestamp = (at) =>
+        new Intl.DateTimeFormat('en-GB', {
           day: 'numeric',
           month: 'long',
           year: 'numeric',
@@ -205,8 +219,7 @@
           minute: '2-digit',
           hour12: false,
           timeZone: 'UTC'
-        }).format(new Date(value))
-      }
+        }).format(new Date(at))
 
       const metric = (valueId, noteId, value, note) => {
         element(valueId).textContent = value
@@ -242,6 +255,23 @@
         return
       }
 
+      // A result stands for the nights around it, not for ever. The soak is nightly, so one inside
+      // the bound is at most a day old, and one outside it means the numbers are not this night's:
+      // the page renders none of that run's figures, naming the date of the last run it holds
+      // rather than presenting it as the latest. A result whose date cannot be read cannot be shown
+      // to be current, and one dated ahead of this page's clock is not a run that has happened, so
+      // both are answered the same way.
+      const STALE_AFTER_HOURS = 48
+      const at = ranAt(report.generatedAt)
+      const ageHours = at === null ? null : (Date.now() - at) / 3600000
+      if (ageHours === null || ageHours < 0 || ageHours > STALE_AFTER_HOURS) {
+        absent.textContent =
+          at === null
+            ? 'The nightly result this page holds does not say when it ran, so this page has no current result and shows none of its numbers.'
+            : `This page has no current result: the last nightly soak it holds is dated ${timestamp(at)} UTC, outside the ${STALE_AFTER_HOURS} hours a result stands for here. None of that run's numbers are shown.`
+        return
+      }
+
       const totals = report.totals
       const shards = Array.isArray(report.shards) ? report.shards : []
       const passed = report.passed === true
@@ -257,8 +287,7 @@
       if (shardsPassed !== null && shardsTotal !== null) {
         stampParts.push(`${shardsPassed} of ${shardsTotal} shards`)
       }
-      const when = timestamp(report.generatedAt)
-      if (when !== null) stampParts.push(`run of ${when} UTC`)
+      stampParts.push(`run of ${timestamp(at)} UTC`)
       stamp.textContent = stampParts.join(' · ')
 
       const run = report.run !== null && typeof report.run === 'object' ? report.run : {}
