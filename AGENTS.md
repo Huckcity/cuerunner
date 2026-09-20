@@ -23,7 +23,7 @@ Electron + React + TypeScript show control for live performance, a QLab alternat
 - `npm run test:e2e` builds first, then runs Playwright under Xvfb via `scripts/run-e2e.js`; `xvfb-run` must be on PATH on Linux and `--headed` is the deliberate opt-out. Run e2e on the self-hosted runners, not in a dev session — a macOS run takes the desktop over.
 - `npm run test:native` is ten Node scripts, not vitest, ending in `matrix-bench`, which exits non-zero below the 2x realtime floor; on Linux its pre-hook downloads and builds the pinned FFmpeg (needs network, `make`, a C++ compiler).
 - `npm run test:integration` skips the vendor tests unless `EOS_TARGET` or `EOS_REPLAY` is set. `npm run soak` runs 2 minutes unless `--minutes` says otherwise.
-- Node 24 (CI builds on 24, exercises 26); there is no `engines` field. Run `actionlint` before editing `.github/workflows/`.
+- Node: `engines.node` declares the floor; `scripts/published-floors.test.ts` holds it to the README's prerequisite line and to the majors CI's lanes pin. Run `actionlint` before editing `.github/workflows/`.
 - Operator-visible changes update `website/docs/guides.mjs` or `reference.mjs` and run `node website/build-docs.mjs` in the same commit; UI changes also need `npm run screenshots`.
 
 ## Conventions that differ from defaults
