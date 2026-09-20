@@ -20,16 +20,16 @@ import { table } from './table.mjs'
 const attr = text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
- * The storefront that carries every self-serve SKU — the licence, a renewal and a rental. One
- * link, declared once, interpolated by every row that sells by card, so a moved link is one
- * edit here and the guard can hold the rendered page to the declaration.
+ * The card route, declared once and interpolated by every row that sells by card, so a moved
+ * link is one edit here and the guard can hold the rendered page to the declaration.
  *
- * The seller supplies it once the page exists. While it holds no value the page has no card
- * route, and scripts/pricing-page.test.ts fails naming this constant: a live `https://` link
- * is the only thing that satisfies it, and a placeholder is refused by name — this is not a
- * case to silence.
+ * Live: the Stripe payment link for the $249 licence. It sells that one thing, so it is the
+ * licence row's route alone — the renewal and the rental are conversations until they have
+ * links of their own, because a checkout that cannot serve a row is a route that does not
+ * exist. The guard holds it to a live `https://` link: an empty value, a placeholder and a
+ * markup-bearing one all fail by name.
  */
-export const CARD_LINK = ''
+export const CARD_LINK = 'https://buy.stripe.com/dRm5kD1l7gru2L8ciV5ZC01'
 
 /**
  * The one inbox a purchase order goes to, and the only address this page names. Venue,
@@ -84,16 +84,16 @@ export const PRICED_SKUS = [
     record: '$49/yr',
     figures: ['$49/yr'],
     includes: `Optional. A licence does not stop when its year of updates does, and nothing in the app checks a renewal date — renewing adds the next 12 months to it.`,
-    route: CARD_LINK,
-    conversation: false
+    route: ORDER_EMAIL,
+    conversation: true
   },
   {
     label: 'A rental',
     record: '$12/day',
     figures: ['$12/day', '$99/90 days'],
     includes: `The same Pro half for a run or a season. Every dollar spent on a rental credits to a licence.`,
-    route: CARD_LINK,
-    conversation: false
+    route: ORDER_EMAIL,
+    conversation: true
   },
   {
     label: 'A venue or a campus',

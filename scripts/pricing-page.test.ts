@@ -696,8 +696,10 @@ describe('the page the checks exist to refuse', () => {
 
   it('names a self-serve row routed to the purchase-order address', () => {
     const misrouted = supplied(LIVE)
-    expect(rowRouteProblems(withRow(misrouted, 'A rental', { route: 'orders@cuerunner.app' }))).toEqual([
-      expect.stringContaining('the page\'s "A rental" row is self-serve and offers "orders@cuerunner.app" instead of the card link')
+    const row = misrouted.skus.find(sku => !sku.conversation)
+    if (row === undefined) throw new Error('the page declares no self-serve row for this case to misroute')
+    expect(rowRouteProblems(withRow(misrouted, row.label, { route: 'orders@cuerunner.app' }))).toEqual([
+      expect.stringContaining(`the page's "${row.label}" row is self-serve and offers "orders@cuerunner.app" instead of the card link`)
     ])
   })
 
@@ -740,10 +742,13 @@ describe('the page the checks exist to refuse', () => {
 
   it('names a row whose conversation the rendered page stops declaring', () => {
     const silent = LIVE.rendered.replaceAll(`<td>${BY_CONVERSATION} —`, '<td>Buy now —')
-    expect(rowRenderProblems({ ...LIVE, rendered: silent })).toEqual([
-      expect.stringContaining('the page\'s "A venue or a campus" row takes a conversation and the rendered row does not say so'),
-      expect.stringContaining('the page\'s "Education" row takes a conversation and the rendered row does not say so')
-    ])
+    expect(rowRenderProblems({ ...LIVE, rendered: silent })).toEqual(
+      LIVE.skus
+        .filter(sku => sku.conversation)
+        .map(sku =>
+          expect.stringContaining(`the page's "${sku.label}" row takes a conversation and the rendered row does not say so`)
+        )
+    )
   })
 
   it('names a route the seller has not supplied yet, and the fill that clears it', () => {
