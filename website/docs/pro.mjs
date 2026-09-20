@@ -11,6 +11,7 @@
 // free there, every one a Pro column names classed Pro, and every Pro class the record holds
 // named by some row. A class this page leaves out, or sells the wrong way round, fails the
 // build rather than the buyer.
+import { table } from './table.mjs'
 
 /**
  * The phrase a claim carries where nothing in this project has exercised it: a claim is only
@@ -172,25 +173,6 @@ export const PRO_ROWS = [
     }
   }
 ]
-
-/**
- * One table as the page serves it: the header row and the rows it was handed, each as a list
- * of cells. Both tables come through here, so the markup is written once.
- */
-function table(headers, rows) {
-  const head = `<tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>`
-  const body = rows
-    .map(cells => `            <tr>${cells.map(cell => `<td>${cell}</td>`).join('')}</tr>`)
-    .join('\n')
-  return `      <div class="table-wrap">
-        <table>
-          <thead>${head}</thead>
-          <tbody>
-${body}
-          </tbody>
-        </table>
-      </div>`
-}
 
 export const PRO = [
   {

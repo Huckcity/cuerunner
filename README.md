@@ -777,6 +777,29 @@ directory of its own under `~/.cuerunner-dev`, so the license your normal `npm r
 never read, written or shown. E2E specs that need the Pro surfaces launch with
 `launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the gate itself.
 
+### Fulfilling an order
+
+Every order is worked the same three steps, whether it came through the storefront's card
+link or as a purchase order to the address on the
+[pricing page](https://huckcity.github.io/cuerunner/pricing.html). None of them needs the
+app, and nothing between them needs a server:
+
+1. **Mint the key** for the sale, using the order's own id so the key can be matched back to
+   it later:
+
+   ```bash
+   npm run license:issue -- --name "Theatre X" --id CRN-ABC123
+   ```
+
+   A key that ends — a rental or a trial — adds `--expires YYYY-MM-DD`, the last day it is
+   good.
+2. **Deliver it by email.** The buyer enters it in *Cuerunner ▾ → Settings… → License*; the
+   key is checked on the machine and nothing is sent anywhere, so the email arriving is the
+   whole of the delivery and the machine unlocks offline, exactly like any other.
+3. **Record the row** in the ledger described above. The expiry column is the sale's own
+   date: for a licence, the day the 12 months of updates end — the key keeps working past it
+   — and for a rental or a trial, the same last day that went into `--expires`.
+
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/Huckcity/cuerunner/issues)
