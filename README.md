@@ -38,18 +38,16 @@ bundled into one `.cuerunnerx`. One key, checked offline on the machine; see
 ### What it needs to run
 
 The audio engine is the part with a deadline: it has to render faster than the audio it plays.
-Measured on a Ryzen 7 5800X, one core, 44.1 kHz sources into a 48 kHz device
-(`node native/audio/tests/matrix-bench.mjs`):
+`node native/audio/tests/matrix-bench.mjs` renders the heaviest supported mix — 24 voices ×
+32 outputs × 64 crosspoints, resampling live, 44.1 kHz sources into a 48 kHz device — through the
+same offline engine the acceptance suite drives, and exits non-zero below 2x realtime. That floor
+is a gate rather than a result: the benchmark runs on every pull request, so a machine that cannot
+keep up fails the build, while the multiple any one machine reaches is the benchmark's own output
+and is not published here.
 
-| The shape | Cost on one core | What that means |
-| --- | --- | --- |
-| The largest mix the engine supports — 24 voices × 32 outputs × 64 crosspoints, resampling live | 8.7x realtime | about **a quarter of one modern core** holds the 2x floor CI enforces |
-| A typical musical — 8 voices × 4 outputs × 4 crosspoints | 43x realtime | about **a twentieth of one core** |
-
-- **CPU**: any 64-bit machine from the last decade, two cores or more. The heaviest supported
-  show fits in a quarter of one modern core and a typical one in a twentieth, so what playback
-  depends on is one core's throughput rather than core count. Four cores is comfortable, and is
-  what this project is tested on.
+- **CPU**: any 64-bit machine from the last decade, two cores or more. What playback depends on
+  is one core's throughput rather than core count. Four cores is comfortable, and is what this
+  project is tested on.
 - **Memory**: 8 GB. The decoded-audio cache is bounded by design — 512 MB, 100 files, and any
   single file whose decoded form would exceed 32 MB (about 90 seconds of stereo at 48 kHz)
   streams from disk instead of being held — so memory does not grow with file length.
