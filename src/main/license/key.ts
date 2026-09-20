@@ -2,7 +2,7 @@ import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto'
 import type { LicensePayload } from '../../shared/license'
 
 /**
- * License keys are signed offline and verified against a public key built into the app.
+ * License keys are signed offline and verified against the public keys compiled into the build.
  *
  * The text is `CRN1-` followed by base32 of the payload, a NUL, and the Ed25519
  * signature over those payload bytes. Base32 rather than base64 because a key is

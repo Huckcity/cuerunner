@@ -695,8 +695,8 @@ carries the operator-facing half of this list, in the words an operator would lo
 The Pro features listed above ship in the same app. A license key turns them on, and
 keys are verified on the machine they are entered on:
 
-- **Nothing is sent anywhere.** The key is signed by the issuer and checked against a
-  public key compiled into the app, so a venue machine with no internet unlocks exactly
+- **Nothing is sent anywhere.** The key is signed by the issuer and checked against the
+  public keys compiled into the app, so a venue machine with no internet unlocks exactly
   like any other, and using a key tells nobody that it was used.
 - **Enter it once**: *Cuerunner ▾ → Settings… → License*. The license is kept beside the
   app's other settings in the user-data directory (`license.key`); it belongs to the
@@ -734,7 +734,7 @@ and must never be committed; it lives on the issuer's machine at
 npm run license:keygen                                  # once: write a pair, print the public half
 npm run license:issue -- --name "Theatre X" \
   --expires 2027-09-12 --id CRN-ABC123                  # mint a key for a customer
-npm run license:verify -- "CRN1-…"                      # check a key against the shipped public key
+npm run license:verify -- "CRN1-…"                    # check a key against the shipped public keys
 ```
 
 **What the flags decide.** `--name` is the licensee as it will be shown to them; `--expires`
@@ -771,12 +771,12 @@ their public key stays in the list. A key's text is base32 in groups of eight, c
 who it is for, an id to match it to a sale, and an optional last day (UTC, good through
 the end of it).
 
-**Development and E2E** mint their own keys: `CUERUNNER_LICENSE_PUBLIC_KEY` overrides the
-trusted key, and it is honoured only when the app is running from a source tree
-(`!app.isPackaged`). A packaged build ignores it. `npm run dev:pro` does all of that for a
-working session — a throwaway pair, a key signed with it, and a user-data directory of its
-own under `~/.cuerunner-dev`, so the license your normal `npm run dev` is using is never
-read, written or shown. E2E specs that need the Pro surfaces launch with
+**Development and E2E** mint their own keys: `CUERUNNER_LICENSE_PUBLIC_KEY` replaces the
+trusted set with one key of its own, and it is honoured only when the app is running from
+a source tree (`!app.isPackaged`). A packaged build ignores it. `npm run dev:pro` does all
+of that for a working session — a throwaway pair, a key signed with it, and a user-data
+directory of its own under `~/.cuerunner-dev`, so the license your normal `npm run dev` is
+never read, written or shown. E2E specs that need the Pro surfaces launch with
 `launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the gate itself.
 
 ## Support

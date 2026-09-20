@@ -3,7 +3,7 @@
 //
 //   npm run license:keygen                       write a new pair, print the public half
 //   npm run license:issue -- --name "Theatre X"  mint a key from the pair on disk
-//   npm run license:verify -- "CRN1-…"           check a key against the shipped key
+//   npm run license:verify -- "CRN1-…"           check a key against the shipped keys
 //
 // Node runs the TypeScript directly (type stripping), so the tooling and the app share
 // one implementation of the format. Nothing here is imported by the app.
@@ -117,8 +117,9 @@ export function runCli(
     chmodSync(filePath, 0o600)
     out(`Private key written to ${filePath} — back it up somewhere offline.`)
     out('')
-    out('Public key. Replace PRODUCT_PUBLIC_KEYS in src/main/license/publicKey.ts with this,')
-    out('then release: every build verifies licenses against what is in that file.')
+    out('Public key. Add it to PRODUCT_PUBLIC_KEYS in src/main/license/publicKey.ts — add, never')
+    out('replace: every key already sold was signed under a key in that set, and dropping one would')
+    out('refuse the licenses issued with it. Then release; every build verifies against the whole set.')
     out('')
     out(publicKey.export({ type: 'spki', format: 'pem' }).toString().trim())
     return
@@ -150,7 +151,7 @@ export function runCli(
     if (text === undefined) throw new Error('verify needs a key: npm run license:verify -- "CRN1-…"')
     const verified = verifyLicense(text, publicKeys)
     if (!verified.ok) throw new Error(`Refused: ${describeRefusal(verified.reason)}`)
-    out(`Signed by the key this build ships, for ${verified.payload.licensee} (${verified.payload.id}).`)
+    out(`Signed by one of the keys this build ships, for ${verified.payload.licensee} (${verified.payload.id}).`)
     out(verified.payload.expires === undefined
       ? 'It does not expire.'
       : `It is good through ${verified.payload.expires}.`)
@@ -162,7 +163,7 @@ export function runCli(
   out('  npm run license:keygen                        write a new key pair (once)')
   out('  npm run license:issue -- --name "Theatre X"   mint a key from that pair')
   out('  npm run license:issue -- --name "…" --expires 2027-09-12 --id CRN-ABC123')
-  out('  npm run license:verify -- "CRN1-…"            check a key against the shipped key')
+  out('  npm run license:verify -- "CRN1-…"            check a key against the shipped keys')
 }
 
 /** The public half of a private key, for the check `issue` prints after minting. */
