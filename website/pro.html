@@ -54,9 +54,9 @@
           <thead><tr><th>What you get</th><th>Details</th></tr></thead>
           <tbody>
             <tr><td>The cue stack</td><td>Eleven cue types — audio, MIDI, OSC, MSC, network, script, wait, fade, stop, group and devamp — with playlist, random, sequence and timeline groups, pre- and post-waits, auto-advance, arm and disarm, colour, and undo.</td></tr>
-            <tr><td>The engine</td><td>Every output the interface has, one device at a time: WASAPI shared and exclusive, ASIO, Core Audio, ALSA and JACK. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.</td></tr>
+            <tr><td>The engine</td><td>Every output the interface has, one device at a time, hosting a real driver (not yet proved on real hardware): WASAPI shared and exclusive, ASIO, Core Audio, ALSA and JACK. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.</td></tr>
             <tr><td>The waveform</td><td>Zoom, onset detection, split, vamps and devamps, and trim silence at the edges — measured from the file itself.</td></tr>
-            <tr><td>Cueing it</td><td>OSC, MIDI and show-control messages that fire a cue, whether they come from a desk, a footswitch, a pad or another program; <a href="reference/control.html">the messages</a> Cuerunner sends; the Monitor, which shows what arrived; and panic.</td></tr>
+            <tr><td>Cueing it</td><td>OSC, MIDI and show-control messages (not yet proved on real hardware) that fire a cue, whether they come from a desk, a footswitch, a pad or another program; <a href="reference/control.html">the messages</a> Cuerunner sends; the Monitor, which shows what arrived; and panic.</td></tr>
             <tr><td>The showfile</td><td><code>.cuerunner</code>, byte-for-byte the same for the same show, with its own history — who saved it, when, which cues moved — plus autosave, recovery and the demo show.</td></tr>
             <tr><td>The log</td><td>What fired, what failed and why, filterable, alongside the show's own events.</td></tr>
           </tbody>
@@ -74,36 +74,12 @@
         <table>
           <thead><tr><th>Capability</th><th>Free</th><th>Pro</th></tr></thead>
           <tbody>
-            <tr>
-              <td>Scenes and the desk</td>
-              <td>—</td>
-              <td>The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis as one of its own steps, and the desk link that lets the desk's keys walk the show.</td>
-            </tr>
-            <tr>
-              <td>Radio mics</td>
-              <td>—</td>
-              <td>Every transmitter's battery and RF level in the Monitor and the mic plot, alarms when a pack or an aerial misbehaves, and the session report afterwards. Reads the receivers over a telemetry document or, on the bench, the demo rack.</td>
-            </tr>
-            <tr>
-              <td>The script</td>
-              <td>Script cues — JavaScript, with the show's own helpers.</td>
-              <td>The script panel beside the cue stack, and the read-only tablet view over the local network for the person calling the show.</td>
-            </tr>
-            <tr>
-              <td>The second machine</td>
-              <td>—</td>
-              <td>Redundant playback: a live and a standby machine, a heartbeat over the network, and a takeover that keeps the position — with the licence that lets both machines run.</td>
-            </tr>
-            <tr>
-              <td>The showfile</td>
-              <td>Its own history, readable anywhere.</td>
-              <td>Comparing this show with another version of it, merging two people's copies, and the <code>.cuerunnerx</code> bundle that carries the show and its media as one file.</td>
-            </tr>
-            <tr>
-              <td>The network</td>
-              <td>—</td>
-              <td>Finding the devices that announce themselves — Dante endpoints among them — and warning when one drops off.</td>
-            </tr>
+            <tr><td>Scenes and the desk</td><td>A one-off message to the desk, when you send it yourself.</td><td>The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis (not yet proved on real hardware) as one of its own steps, and the desk link that lets the desk's keys walk the show.</td></tr>
+            <tr><td>Radio mics</td><td>—</td><td>Every transmitter's battery and RF level in the Monitor and the mic plot, alarms when a pack or an aerial misbehaves, and the session report afterwards. Reads the receivers over a telemetry document or, on the bench, the demo rack.</td></tr>
+            <tr><td>The script</td><td>Script cues — JavaScript, with the show's own helpers.</td><td>The script panel beside the cue stack, and the read-only tablet view over the local network for the person calling the show.</td></tr>
+            <tr><td>The second machine</td><td>—</td><td>Redundant playback: a live and a standby machine, a heartbeat over the network, and a takeover that keeps the position — with the licence that lets both machines run.</td></tr>
+            <tr><td>The showfile</td><td>Its own history, readable anywhere.</td><td>Comparing this show with another version of it, merging two people's copies, and the <code>.cuerunnerx</code> bundle that carries the show and its media as one file.</td></tr>
+            <tr><td>The network</td><td>—</td><td>Finding the devices that announce themselves (not yet proved on real hardware) — Dante endpoints among them — and warning when one drops off.</td></tr>
           </tbody>
         </table>
       </div>

@@ -3,7 +3,195 @@
 // Generated like the rest of the site so there is one place to keep it true. The app's own
 // gates are the authority — ShowService.pro in the main process, and the ProLock surfaces
 // in the window — and this page follows them; when the line moves, it moves here in the
-// same change (CLAUDE.md §Cuerunner Pro).
+// same change.
+//
+// The two tables are declared rows rather than markup: a row carries the words a buyer reads
+// and the record's own identifiers behind them, and scripts/pro-page.test.ts reads that
+// declaration against `capability-catalog.md` — every identifier a free column names classed
+// free there, every one a Pro column names classed Pro, and every Pro class the record holds
+// named by some row. A class this page leaves out, or sells the wrong way round, fails the
+// build rather than the buyer.
+
+/**
+ * The phrase a claim carries where nothing in this project has exercised it: a claim is only
+ * as strong as the lane that ran (AD-24), and this page makes four that no lane does — hosting
+ * a real driver, the Allen & Heath desks, show control end to end, and live discovery. Each
+ * one says so in its own wording, inline, rather than in a section or a badge, and they all
+ * say it with this one string.
+ *
+ * A row that states such a claim declares it in `notYetProved` — the words the phrase has to
+ * sit behind — and the guard holds the declaration to the phrase.
+ */
+export const NOT_YET_PROVED = '(not yet proved on real hardware)'
+
+/**
+ * The cue types the free app runs, in the order the page names them. The page's sentence is
+ * built from this list, so a type that moves across the line moves the words with it, and the
+ * guard reads the list against `CUE_TYPES` minus `PRO_CUE_TYPES`.
+ */
+const FREE_CUES = ['audio', 'MIDI', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp']
+
+/** How a count reads at the head of a sentence: "Eleven cue types". Past the last word, the numeral stands. */
+const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
+
+/**
+ * The cue stack's sentence: how many types the free app has, said as a reader says a list, and
+ * the group behaviour beside them. The count and the list both come off `cues` — written out
+ * by hand, either would be the copy that stays behind when the list moves — and it stays a
+ * sentence with one type and with none. Exported so the guard can hold the count word it opens
+ * with and read it against the cue types the code declares.
+ */
+export function cueSentence(cues) {
+  const count = COUNT[cues.length] ?? String(cues.length)
+  const types = cues.length === 1 ? 'cue type' : 'cue types'
+  const listed = cues.length > 1 ? `${cues.slice(0, -1).join(', ')} and ${cues[cues.length - 1]}` : cues[0] ?? ''
+  const named = listed === '' ? '' : ` — ${listed}`
+  return `${count[0].toUpperCase()}${count.slice(1)} ${types}${named} — with playlist, random, sequence and timeline groups, pre- and post-waits, auto-advance, arm and disarm, colour, and undo.`
+}
+
+/**
+ * The free half of the page: one row per capability, each naming the words a buyer reads in
+ * the Details column and what they stand on — the record's boundary-table identifiers
+ * (services by id, channels by literal) and the cue types the row names. The table is the
+ * free half, so every identifier and cue type here is held to a free class.
+ */
+export const FREE_ROWS = [
+  {
+    label: 'The cue stack',
+    free: {
+      cues: FREE_CUES,
+      prose: cueSentence(FREE_CUES)
+    }
+  },
+  {
+    label: 'The engine',
+    free: {
+      notYetProved: 'hosting a real driver',
+      prose: `Every output the interface has, one device at a time, hosting a real driver ${NOT_YET_PROVED}: WASAPI shared and exclusive, ASIO, Core Audio, ALSA and JACK. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.`
+    }
+  },
+  {
+    label: 'The waveform',
+    free: {
+      prose: `Zoom, onset detection, split, vamps and devamps, and trim silence at the edges — measured from the file itself.`
+    }
+  },
+  {
+    label: 'Cueing it',
+    free: {
+      identifiers: ['osc-in', 'midi-in', 'osc:send', 'midi:send'],
+      cues: ['MSC'],
+      notYetProved: 'show-control messages',
+      prose: `OSC, MIDI and show-control messages ${NOT_YET_PROVED} that fire a cue, whether they come from a desk, a footswitch, a pad or another program; <a href="reference/control.html">the messages</a> Cuerunner sends; the Monitor, which shows what arrived; and panic.`
+    }
+  },
+  {
+    label: 'The showfile',
+    free: {
+      prose: `<code>.cuerunner</code>, byte-for-byte the same for the same show, with its own history — who saved it, when, which cues moved — plus autosave, recovery and the demo show.`
+    }
+  },
+  {
+    label: 'The log',
+    free: {
+      prose: `What fired, what failed and why, filterable, alongside the show's own events.`
+    }
+  }
+]
+
+/**
+ * What a key turns on: one row per capability, in the three columns a buyer reads. The free
+ * cell is what stays free beside the Pro column — a class the record holds free, or a line to
+ * say there is nothing of this capability without a key.
+ */
+export const PRO_ROWS = [
+  {
+    label: 'Scenes and the desk',
+    free: {
+      identifiers: ['midi:sendTcp'],
+      prose: `A one-off message to the desk, when you send it yourself.`
+    },
+    pro: {
+      identifiers: ['midi-tcp'],
+      cues: ['scene'],
+      notYetProved: 'Allen &amp; Heath SQ or Avantis',
+      prose: `The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis ${NOT_YET_PROVED} as one of its own steps, and the desk link that lets the desk's keys walk the show.`
+    }
+  },
+  {
+    label: 'Radio mics',
+    free: {
+      prose: '—'
+    },
+    pro: {
+      identifiers: ['rf'],
+      prose: `Every transmitter's battery and RF level in the Monitor and the mic plot, alarms when a pack or an aerial misbehaves, and the session report afterwards. Reads the receivers over a telemetry document or, on the bench, the demo rack.`
+    }
+  },
+  {
+    label: 'The script',
+    free: {
+      identifiers: ['script:readFile'],
+      cues: ['script'],
+      prose: `Script cues — JavaScript, with the show's own helpers.`
+    },
+    pro: {
+      identifiers: ['script:readDocument', 'script:pickFile', 'companion'],
+      prose: `The script panel beside the cue stack, and the read-only tablet view over the local network for the person calling the show.`
+    }
+  },
+  {
+    label: 'The second machine',
+    free: {
+      prose: '—'
+    },
+    pro: {
+      identifiers: ['redundancy', 'redundancy:configure'],
+      prose: `Redundant playback: a live and a standby machine, a heartbeat over the network, and a takeover that keeps the position — with the licence that lets both machines run.`
+    }
+  },
+  {
+    label: 'The showfile',
+    free: {
+      prose: `Its own history, readable anywhere.`
+    },
+    pro: {
+      identifiers: ['workspace:compare', 'workspace:merge', 'workspace:exportBundle', 'workspace:importBundle'],
+      prose: `Comparing this show with another version of it, merging two people's copies, and the <code>.cuerunnerx</code> bundle that carries the show and its media as one file.`
+    }
+  },
+  {
+    label: 'The network',
+    free: {
+      prose: '—'
+    },
+    pro: {
+      identifiers: ['presence'],
+      notYetProved: 'the devices that announce themselves',
+      prose: `Finding the devices that announce themselves ${NOT_YET_PROVED} — Dante endpoints among them — and warning when one drops off.`
+    }
+  }
+]
+
+/**
+ * One table as the page serves it: the header row and the rows it was handed, each as a list
+ * of cells. Both tables come through here, so the markup is written once.
+ */
+function table(headers, rows) {
+  const head = `<tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>`
+  const body = rows
+    .map(cells => `            <tr>${cells.map(cell => `<td>${cell}</td>`).join('')}</tr>`)
+    .join('\n')
+  return `      <div class="table-wrap">
+        <table>
+          <thead>${head}</thead>
+          <tbody>
+${body}
+          </tbody>
+        </table>
+      </div>`
+}
+
 export const PRO = [
   {
     path: 'pro.html',
@@ -26,19 +214,7 @@ export const PRO = [
         No key, no account, no expiry, on as many of your own machines as you like.
         Nothing is taken away from it later, and the file it writes opens anywhere.
       </p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>What you get</th><th>Details</th></tr></thead>
-          <tbody>
-            <tr><td>The cue stack</td><td>Eleven cue types — audio, MIDI, OSC, MSC, network, script, wait, fade, stop, group and devamp — with playlist, random, sequence and timeline groups, pre- and post-waits, auto-advance, arm and disarm, colour, and undo.</td></tr>
-            <tr><td>The engine</td><td>Every output the interface has, one device at a time: WASAPI shared and exclusive, ASIO, Core Audio, ALSA and JACK. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.</td></tr>
-            <tr><td>The waveform</td><td>Zoom, onset detection, split, vamps and devamps, and trim silence at the edges — measured from the file itself.</td></tr>
-            <tr><td>Cueing it</td><td>OSC, MIDI and show-control messages that fire a cue, whether they come from a desk, a footswitch, a pad or another program; <a href="reference/control.html">the messages</a> Cuerunner sends; the Monitor, which shows what arrived; and panic.</td></tr>
-            <tr><td>The showfile</td><td><code>.cuerunner</code>, byte-for-byte the same for the same show, with its own history — who saved it, when, which cues moved — plus autosave, recovery and the demo show.</td></tr>
-            <tr><td>The log</td><td>What fired, what failed and why, filterable, alongside the show's own events.</td></tr>
-          </tbody>
-        </table>
-      </div>
+${table(['What you get', 'Details'], FREE_ROWS.map(row => [row.label, row.free.prose]))}
     </section>
 
     <section class="panel reveal delay-2">
@@ -47,43 +223,7 @@ export const PRO = [
         Pro is what a production needs once there is more than one person, more than one
         machine, or a radio mic in the room.
       </p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Capability</th><th>Free</th><th>Pro</th></tr></thead>
-          <tbody>
-            <tr>
-              <td>Scenes and the desk</td>
-              <td>—</td>
-              <td>The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis as one of its own steps, and the desk link that lets the desk's keys walk the show.</td>
-            </tr>
-            <tr>
-              <td>Radio mics</td>
-              <td>—</td>
-              <td>Every transmitter's battery and RF level in the Monitor and the mic plot, alarms when a pack or an aerial misbehaves, and the session report afterwards. Reads the receivers over a telemetry document or, on the bench, the demo rack.</td>
-            </tr>
-            <tr>
-              <td>The script</td>
-              <td>Script cues — JavaScript, with the show's own helpers.</td>
-              <td>The script panel beside the cue stack, and the read-only tablet view over the local network for the person calling the show.</td>
-            </tr>
-            <tr>
-              <td>The second machine</td>
-              <td>—</td>
-              <td>Redundant playback: a live and a standby machine, a heartbeat over the network, and a takeover that keeps the position — with the licence that lets both machines run.</td>
-            </tr>
-            <tr>
-              <td>The showfile</td>
-              <td>Its own history, readable anywhere.</td>
-              <td>Comparing this show with another version of it, merging two people's copies, and the <code>.cuerunnerx</code> bundle that carries the show and its media as one file.</td>
-            </tr>
-            <tr>
-              <td>The network</td>
-              <td>—</td>
-              <td>Finding the devices that announce themselves — Dante endpoints among them — and warning when one drops off.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+${table(['Capability', 'Free', 'Pro'], PRO_ROWS.map(row => [row.label, row.free.prose, row.pro.prose]))}
     </section>
 
     <section class="panel reveal delay-3">
