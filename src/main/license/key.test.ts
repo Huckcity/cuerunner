@@ -4,7 +4,6 @@ import {
   canonicalLicense,
   createLicense,
   describeRefusal,
-  licenseExpired,
   licenseExpiry,
   verifyLicense,
   type LicenseDraft,
@@ -127,13 +126,6 @@ describe('expiry', () => {
   it('treats a key without dates as one that never expires', () => {
     const payload = { ...PAYLOAD, v: 1 as const }
     expect(licenseExpiry(payload)).toBeNull()
-    expect(licenseExpired(payload, Date.parse('2099-01-01T00:00:00Z'))).toBe(false)
-  })
-
-  it('holds through the whole of the last day, in UTC', () => {
-    const payload = { ...PAYLOAD, v: 1 as const, expires: '2026-09-12' }
-    expect(licenseExpired(payload, Date.parse('2026-09-12T23:59:59.000Z'))).toBe(false)
-    expect(licenseExpired(payload, Date.parse('2026-09-13T00:00:00.001Z'))).toBe(true)
   })
 })
 

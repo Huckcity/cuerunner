@@ -140,12 +140,32 @@ function midiModuleLoader(): MidiModuleLoader | undefined {
   return undefined
 }
 
-// The license this machine holds, read once at startup and written only when the
-// operator enters or removes a key. Everything Pro is gated on it from here, in the
-// process that owns the sockets: a window can explain a lock, but only this can be one.
+/**
+ * The dev-only harness that reaches a key's own boundary: the E2E suite launches with an
+ * offset from the system clock, so a key ending tonight ends seconds after launch instead
+ * of at whatever hour the run happens to start. An offset rather than an instant, because
+ * the manager waits for that boundary with a real timer — a frozen clock would arm a wait
+ * that nothing could ever cross. A packaged build never takes this branch, and an offset
+ * that is not a number is no offset at all.
+ */
+function testClockOffset(): number {
+  if (app.isPackaged) return 0
+  const raw = process.env['CUERUNNER_TEST_CLOCK_OFFSET_MS']
+  if (raw === undefined) return 0
+  const offset = Number(raw)
+  return Number.isFinite(offset) ? offset : 0
+}
+
+// The license this machine holds, read from disk once at startup and written only when
+// the operator enters or removes a key, with the clock consulted whenever anything asks
+// what it is worth. Everything Pro is gated on it from here, in the process that owns the
+// sockets: a window can explain a lock, but only this can be one.
+const clockOffset = testClockOffset()
 const license = createLicenseManager({
   filePath: path.join(app.getPath('userData'), 'license.key'),
-  publicKeys: trustedPublicKeys(app.isPackaged, process.env)
+  publicKeys: trustedPublicKeys(app.isPackaged, process.env),
+  // `0` is the shipped answer: nothing but the dev-gated harness above moves the clock.
+  ...(clockOffset === 0 ? {} : { now: () => Date.now() + clockOffset })
 })
 
 // The last settings the window sent. Kept so a key entered mid-session can start the

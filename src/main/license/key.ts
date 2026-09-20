@@ -191,11 +191,6 @@ export function licenseExpiry(payload: LicensePayload): number | null {
   return Number.isNaN(end) ? null : end
 }
 
-export function licenseExpired(payload: LicensePayload, now: number): boolean {
-  const expiry = licenseExpiry(payload)
-  return expiry !== null && now > expiry
-}
-
 /** What the operator is told when a key is refused. Terse, and never a stack trace. */
 export function describeRefusal(reason: LicenseRefusal): string {
   switch (reason) {
