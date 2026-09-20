@@ -182,15 +182,26 @@ jobs:
           npm run dist:mac
 
       # Same reason as the Windows step: the check lives in the shell, not in an `if:`.
-      - name: Verify the signature and the notarisation ticket
+      - name: Verify the floor, the signature and the notarisation ticket
         env:
           SIGNING_LINK: ${{ secrets.MAC_CSC_LINK }}
         run: |
+          APP=$(find dist -maxdepth 3 -name '*.app' -type d | head -1)
+          # The floor the package declares has to be the floor the bundle carries: this key is
+          # what macOS reads to refuse to launch the app on an older system. It gates launching,
+          # not installation, and it is checked before the certificate guard because it has
+          # nothing to do with signing — an unsigned build still has a floor, and this step is
+          # the only place the packaged plist is ever read.
+          EXPECTED=$(node -p "require('./package.json').build.mac.minimumSystemVersion")
+          ACTUAL=$(plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist" 2>/dev/null || true)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::$APP carries LSMinimumSystemVersion '$ACTUAL', not the '$EXPECTED' package.json declares"
+            exit 1
+          fi
           if [ -z "$SIGNING_LINK" ]; then
             echo 'No certificate configured; nothing to verify.'
             exit 0
           fi
-          APP=$(find dist -maxdepth 3 -name '*.app' -type d | head -1)
           echo "verifying $APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
           # Gatekeeper's own assessment: this is what a venue machine runs, and it fails
