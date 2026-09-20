@@ -95,14 +95,16 @@ export function classOf(cell: string): GateClass {
 
 /**
  * The record as text, or a failure. The free/Pro checks have no other input, and an empty
- * one would let every class through, so a record that cannot be opened is loud.
+ * one would let every class through, so a record that cannot be opened is loud. `at` is the
+ * record's own path unless a caller asks for another — the guard proves the loudness against
+ * a path that holds nothing.
  */
-export function readRecord(): string {
+export function readRecord(at: string = recordPath): string {
   try {
-    return readFileSync(recordPath, 'utf-8')
+    return readFileSync(at, 'utf-8')
   } catch (error) {
     throw new Error(
-      `the published record could not be read at ${recordPath} (${error instanceof Error ? error.message : String(error)}): the classification checks read the record, so a run that cannot open it must not pass`
+      `the published record could not be read at ${at} (${error instanceof Error ? error.message : String(error)}): the classification checks read the record, so a run that cannot open it must not pass`
     )
   }
 }

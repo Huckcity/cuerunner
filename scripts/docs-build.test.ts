@@ -5,6 +5,9 @@
 // ships the old words, and nothing said so. The renderer and the page list are exported for
 // this: render every page in PAGES and compare it with the committed file, which is the
 // same-commit rule the generated pages are supposed to hold to.
+//
+// The comparison is a function of the pages and the renderer, so the second case below can
+// hand it a page the build no longer writes and get the failure back by name.
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -26,13 +29,26 @@ function committed(page: string): string {
   }
 }
 
+/** The pages whose committed file is not what `render` produces, each named with the fix. */
+function stalePages(pages: Array<{ path: string }>, render: (page: unknown) => string): string[] {
+  return pages
+    .filter(page => render(page) !== committed(page.path))
+    .map(
+      page =>
+        `website/${page.path} is not what website/docs renders from it: run \`node website/build-docs.mjs\` and commit the page`
+    )
+}
+
 describe('the committed site pages', () => {
   it('are what the docs build renders, page for page', () => {
-    expect(
-      PAGES.filter(page => renderPage(page) !== committed(page.path)).map(
-        page =>
-          `website/${page.path} is not what website/docs renders from it: run \`node website/build-docs.mjs\` and commit the page`
-      )
-    ).toEqual([])
+    expect(stalePages(PAGES, renderPage)).toEqual([])
+  })
+
+  it('names a page the build no longer renders into the committed file', () => {
+    const page = PAGES.find((entry: { path: string }) => entry.path === 'pro.html')
+    const edited = [{ ...page, body: `${page.body}\n    <p>An edit nobody rebuilt.</p>` }]
+    expect(stalePages(edited, renderPage)).toEqual([
+      expect.stringContaining('website/pro.html is not what website/docs renders from it')
+    ])
   })
 })

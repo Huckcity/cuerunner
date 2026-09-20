@@ -8,11 +8,15 @@
 // Pro column, and the free cue types are the ones `CUE_TYPES` minus `PRO_CUE_TYPES` declares —
 // and can hold the claims no lane in this project can prove to the phrase the page carries
 // for them (AD-24).
+//
+// Every check is a pure function of what it reads, so the second describe can hand it a page
+// the repository would never commit and get the failure back by name. The failure paths are
+// what hold the page; a passing run on its own says only that nothing has drifted yet.
 
 import { describe, expect, it } from 'vitest'
 import { CUE_TYPES, PRO_CUE_TYPES } from '../src/shared/cue'
-import { boundaryItems, readRecord } from '../src/main/license/catalog'
-import type { GateClass } from '../src/main/license/catalog'
+import { BOUNDARY_HEADER, boundaryItems, classOf, readRecord, recordPath, tableRows } from '../src/main/license/catalog'
+import type { BoundaryItem, GateClass } from '../src/main/license/catalog'
 
 // @ts-ignore — js file, no type declarations
 import { FREE_ROWS, NOT_YET_PROVED, PRO, PRO_ROWS } from '../website/docs/pro.mjs'
@@ -52,90 +56,218 @@ const CELLS: Cell[] = [
   ...PRO_ROWS.flatMap(row => [cell(row.label, 'free', row.free), cell(row.label, 'pro', row.pro)])
 ]
 
-const record = boundaryItems(readRecord())
-const rendered: string = renderPage(PRO[0])
+/** Everything the checks read, in one value: a case below hands them a mutation of it. */
+interface Reading {
+  cells: Cell[]
+  record: BoundaryItem[]
+  cueTypes: ReadonlySet<string>
+  proCueTypes: ReadonlySet<string>
+  rendered: string
+}
 
-/** The cue types the code has, and the ones it refuses without a licence. */
-const cueTypes = new Set<string>(CUE_TYPES)
-const proCueTypes = new Set<string>(PRO_CUE_TYPES)
+/** The page as the repository holds it, and the record as the code holds it. */
+const LIVE: Reading = {
+  cells: CELLS,
+  record: boundaryItems(readRecord()),
+  cueTypes: new Set<string>(CUE_TYPES),
+  proCueTypes: new Set<string>(PRO_CUE_TYPES),
+  rendered: renderPage(PRO[0])
+}
 
-/**
- * The cue types each class of column names, lower-cased back to the identifiers the code uses:
- * a column says "MSC" where the code says `msc`.
- */
-const CUE_NAMES: Record<GateClass, Set<string>> = {
-  free: new Set(CELLS.filter(entry => entry.class === 'free').flatMap(entry => entry.cues.map(name => name.toLowerCase()))),
-  pro: new Set(CELLS.filter(entry => entry.class === 'pro').flatMap(entry => entry.cues.map(name => name.toLowerCase())))
+/** The cells of one class, which is the column they sit in. */
+function cellsOfClass(reading: Reading, className: GateClass): Cell[] {
+  return reading.cells.filter(entry => entry.class === className)
+}
+
+/** The Pro classes the record and the code hold that no Pro column on the page names. */
+function missingProClasses(reading: Reading): string[] {
+  const pro = cellsOfClass(reading, 'pro')
+  const identifiers = new Set(pro.flatMap(entry => entry.identifiers))
+  const named = new Set(pro.flatMap(entry => entry.cues.map(name => name.toLowerCase())))
+  return [
+    ...reading.record
+      .filter(item => item.class === 'pro' && !identifiers.has(item.identifier))
+      .map(
+        item =>
+          `the record classes \`${item.identifier}\` Pro and no Pro column on the page names it: the page needs the row that carries it ("${item.item}")`
+      ),
+    ...[...reading.proCueTypes]
+      .filter(type => !named.has(type))
+      .map(type => `the code declares the cue type "${type}" Pro and no Pro column on the page names it`)
+  ]
+}
+
+/** Every identifier a column names, held to the class the record gives it. */
+function identifierClassProblems(reading: Reading): string[] {
+  return reading.cells.flatMap(entry =>
+    entry.identifiers.flatMap(identifier => {
+      const item = reading.record.find(candidate => candidate.identifier === identifier)
+      if (item === undefined) {
+        return [
+          `the page's "${entry.row}" row names \`${identifier}\` as ${entry.class}, and the record's boundary table does not name it at all`
+        ]
+      }
+      return item.class === entry.class
+        ? []
+        : [`the page's "${entry.row}" row names \`${identifier}\` as ${entry.class}, and the record classes it ${item.class}`]
+    })
+  )
+}
+
+/** Every cue type a column names, held to the class the code declares. */
+function cueClassProblems(reading: Reading): string[] {
+  return reading.cells.flatMap(entry =>
+    entry.cues.flatMap(name => {
+      const type = name.toLowerCase()
+      if (!reading.cueTypes.has(type)) {
+        return [`the page's "${entry.row}" row names the cue type "${name}", which the code does not have`]
+      }
+      const declared: GateClass = reading.proCueTypes.has(type) ? 'pro' : 'free'
+      return declared === entry.class
+        ? []
+        : [`the page's "${entry.row}" row names the cue type "${name}" as ${entry.class}, and the code declares it ${declared}`]
+    })
+  )
+}
+
+/** The free cue types the code declares, held both ways to the ones the page names as free. */
+function freeCueListProblems(reading: Reading): string[] {
+  const named = new Set(cellsOfClass(reading, 'free').flatMap(entry => entry.cues.map(name => name.toLowerCase())))
+  const declared = [...reading.cueTypes].filter(type => !reading.proCueTypes.has(type))
+  return [
+    ...declared
+      .filter(type => !named.has(type))
+      .map(type => `the code declares the cue type "${type}" free and no free column on the page names it`),
+    ...[...named]
+      .filter(type => !declared.includes(type))
+      .map(type => `the page names "${type}" as a free cue type and the code does not declare it free`)
+  ]
+}
+
+/** The claims no lane can prove, each held to the shared phrase at the claim and to nowhere else. */
+function phraseProblems(reading: Reading): string[] {
+  const claims = reading.cells.filter(entry => entry.notYetProved !== undefined)
+  const carried = reading.rendered.split(NOT_YET_PROVED).length - 1
+  return [
+    ...claims
+      .filter(entry => !reading.rendered.includes(`${entry.notYetProved} ${NOT_YET_PROVED}`))
+      .map(
+        entry =>
+          `the page states "${entry.notYetProved}" in its "${entry.row}" row and the phrase is not at the claim: ${NOT_YET_PROVED}`
+      ),
+    ...(carried === claims.length
+      ? []
+      : [
+          `the page carries the phrase ${carried} time(s) for the ${claims.length} claim(s) its rows declare: a row that lost the phrase, or one that carries it without declaring the claim`
+        ])
+  ]
 }
 
 describe('the free-versus-Pro page', () => {
   it('names every Pro class the record holds, in a Pro column', () => {
-    const identifiers = new Set(CELLS.filter(entry => entry.class === 'pro').flatMap(entry => entry.identifiers))
-    const cueNames = CUE_NAMES.pro
-    expect([
-      ...record
-        .filter(item => item.class === 'pro' && !identifiers.has(item.identifier))
-        .map(
-          item =>
-            `the record classes \`${item.identifier}\` Pro and no Pro column on the page names it: the page needs the row that carries it ("${item.item}")`
-        ),
-      ...[...PRO_CUE_TYPES]
-        .filter(type => !cueNames.has(type))
-        .map(type => `the code declares the cue type "${type}" Pro and no Pro column on the page names it`)
-    ]).toEqual([])
+    expect(missingProClasses(LIVE)).toEqual([])
   })
 
   it('holds every identifier a column names to the class the record gives it', () => {
-    expect(
-      CELLS.flatMap(entry =>
-        entry.identifiers.flatMap(identifier => {
-          const item = record.find(candidate => candidate.identifier === identifier)
-          if (item === undefined) {
-            return [
-              `the page's "${entry.row}" row names \`${identifier}\` as ${entry.class}, and the record's boundary table does not name it at all`
-            ]
-          }
-          return item.class === entry.class
-            ? []
-            : [`the page's "${entry.row}" row names \`${identifier}\` as ${entry.class}, and the record classes it ${item.class}`]
-        })
-      )
-    ).toEqual([])
+    expect(identifierClassProblems(LIVE)).toEqual([])
   })
 
   it('holds every cue type a column names to the class the code declares', () => {
-    expect(
-      CELLS.flatMap(entry =>
-        entry.cues.flatMap(name => {
-          const type = name.toLowerCase()
-          if (!cueTypes.has(type)) {
-            return [`the page's "${entry.row}" row names the cue type "${name}", which the code does not have`]
-          }
-          const declared: GateClass = proCueTypes.has(type) ? 'pro' : 'free'
-          return declared === entry.class
-            ? []
-            : [`the page's "${entry.row}" row names the cue type "${name}" as ${entry.class}, and the code declares it ${declared}`]
-        })
-      )
-    ).toEqual([])
+    expect(cueClassProblems(LIVE)).toEqual([])
   })
 
   it('names the free cue types the code declares, all of them', () => {
-    expect([...CUE_NAMES.free].sort()).toEqual(CUE_TYPES.filter(type => !proCueTypes.has(type)).sort())
+    expect(freeCueListProblems(LIVE)).toEqual([])
   })
 
   it('carries the shared phrase at every claim nothing here has proved', () => {
-    const claims = CELLS.filter(entry => entry.notYetProved !== undefined)
-    const carried = rendered.split(NOT_YET_PROVED).length - 1
-    expect([
-      ...claims
-        .filter(entry => !rendered.includes(`${entry.notYetProved} ${NOT_YET_PROVED}`))
-        .map(entry => `the page states "${entry.notYetProved}" in its "${entry.row}" row and the phrase is not at the claim: ${NOT_YET_PROVED}`),
-      ...(carried === claims.length
-        ? []
-        : [
-            `the page carries the phrase ${carried} time(s) for the ${claims.length} claim(s) its rows declare: a row that lost the phrase, or one that carries it without declaring the claim`
-          ])
-    ]).toEqual([])
+    expect(phraseProblems(LIVE)).toEqual([])
+  })
+})
+
+/**
+ * The page the repository would never commit, one failure at a time: each case changes one
+ * thing in the live reading and asserts the check names it. These are the states the checks
+ * exist to refuse — the drifting row, the class sold the wrong way, the phrase dropped — and
+ * nothing else in the suite exercises them.
+ */
+describe('the page the checks exist to refuse', () => {
+  it('names a Pro class the page stops carrying', () => {
+    const dropped = CELLS.map(entry =>
+      entry.row === 'The network' && entry.class === 'pro' ? { ...entry, identifiers: [] } : entry
+    )
+    expect(missingProClasses({ ...LIVE, cells: dropped })).toEqual([
+      expect.stringContaining('the record classes `presence` Pro and no Pro column on the page names it')
+    ])
+  })
+
+  it('names both sides when a Pro column declares a free identifier', () => {
+    const sold = CELLS.map(entry =>
+      entry.row === 'Scenes and the desk' && entry.class === 'pro'
+        ? { ...entry, identifiers: [...entry.identifiers, 'midi:sendTcp'] }
+        : entry
+    )
+    expect(identifierClassProblems({ ...LIVE, cells: sold })).toEqual([
+      expect.stringContaining('the page\'s "Scenes and the desk" row names `midi:sendTcp` as pro, and the record classes it free')
+    ])
+  })
+
+  it('names both sides when a column declares a cue type the code classes the other way', () => {
+    const crossed = CELLS.map(entry =>
+      entry.row === 'The script' && entry.class === 'free' ? { ...entry, cues: [...entry.cues, 'scene'] } : entry
+    )
+    expect(cueClassProblems({ ...LIVE, cells: crossed })).toEqual([
+      expect.stringContaining('the page\'s "The script" row names the cue type "scene" as free, and the code declares it pro')
+    ])
+  })
+
+  it('names a free cue type the page stops carrying', () => {
+    const stale = CELLS.map(entry =>
+      entry.row === 'The cue stack' && entry.class === 'free'
+        ? { ...entry, cues: entry.cues.filter(type => type !== 'devamp') }
+        : entry
+    )
+    expect(freeCueListProblems({ ...LIVE, cells: stale })).toEqual([
+      expect.stringContaining('the code declares the cue type "devamp" free and no free column on the page names it')
+    ])
+  })
+
+  it('names the row whose phrase is gone, and the count that no longer matches it', () => {
+    const missing = LIVE.rendered.replace(`hosting a real driver ${NOT_YET_PROVED}`, 'hosting a real driver')
+    expect(phraseProblems({ ...LIVE, rendered: missing })).toEqual([
+      expect.stringContaining('the page states "hosting a real driver" in its "The engine" row and the phrase is not at the claim'),
+      expect.stringContaining('the page carries the phrase 3 time(s) for the 4 claim(s)')
+    ])
+  })
+
+  it('fails a phrase a row carries without declaring the claim', () => {
+    const undeclared = LIVE.rendered.replace('<td>The waveform</td>', `<td>${NOT_YET_PROVED} The waveform</td>`)
+    expect(phraseProblems({ ...LIVE, rendered: undeclared })).toEqual([
+      expect.stringContaining('the page carries the phrase 5 time(s) for the 4 claim(s)')
+    ])
+  })
+})
+
+/**
+ * The guard reads the record, and a record it cannot read is a failure rather than an empty
+ * pass: a class compared against nothing is the vacuous run the record exists to prevent.
+ * classification.test.ts holds the same reader for the code-side guard.
+ */
+describe('the record the guard reads', () => {
+  it('fails loudly when the record is not at the path it names', () => {
+    expect(() => readRecord(`${recordPath}.moved`)).toThrow('the published record could not be read at')
+  })
+
+  it('fails loudly on a record it cannot parse', () => {
+    expect(() => tableRows('# nothing to read here', BOUNDARY_HEADER)).toThrow(
+      'carries no "Item | Kind | Identifier | Class" table'
+    )
+    expect(() => classOf('enterprise')).toThrow('states the class "enterprise", which is neither free nor Pro')
+    const rogue = [
+      '| Item | Kind | Identifier | Class |',
+      '| --- | --- | --- | --- |',
+      '| Scenes view | surface | `scenes` | Pro |'
+    ].join('\n')
+    expect(() => boundaryItems(rogue)).toThrow('names "scenes" with kind "surface"')
   })
 })
