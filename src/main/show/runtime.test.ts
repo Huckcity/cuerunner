@@ -243,6 +243,46 @@ describe('createShowRuntime', () => {
     expect(service.stops).toBe(1)
   })
 
+  it('carries the state a commanded service reports, and leaves the record alone when it reports none', async () => {
+    // A command is a request, not an assignment: the host passes it through and the
+    // service answers — including by saying what it is doing now — so the record is the
+    // service's own answer. That is why a command never writes it: one that reports a
+    // state puts that state where every panel reads it, and one that reports nothing
+    // leaves the record exactly where `start` left it.
+    vi.useFakeTimers()
+    let context: ServiceContext | null = null
+    const service: ShowService = {
+      id: 'fake',
+      label: 'Fake service',
+      settingsSections: [],
+      start: (given: ServiceContext): void => {
+        context = given
+        given.setState('running', 'ready')
+      },
+      stop: (): void => {},
+      command: (action: string): unknown => {
+        if (action === 'rescan') context?.setState('running', 'did rescan')
+        return { ok: true }
+      }
+    }
+    const runtime = createShowRuntime([service])
+    await runtime.configure(defaultShowSettings())
+
+    const quiet = await runtime.command('fake', 'ping')
+
+    expect(quiet).toEqual({ ok: true, result: { ok: true } })
+    expect(runtime.snapshot().services).toEqual([
+      expect.objectContaining({ id: 'fake', state: 'running', detail: 'ready' })
+    ])
+
+    await runtime.command('fake', 'rescan')
+
+    expect(runtime.snapshot().services).toEqual([
+      expect.objectContaining({ id: 'fake', state: 'running', detail: 'did rescan' })
+    ])
+    runtime.close()
+  })
+
   it('does not ask about the licence before it is given settings', () => {
     // This factory runs at module load, before the manager that answers exists, so an
     // eager question here is a crash on the first launch — and only a real window would
