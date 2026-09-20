@@ -36,10 +36,11 @@ export const CARD_LINK = ''
  * education and purchase-order buyers are stated as the route that exists — a person answering
  * — rather than dressed as a checkout that cannot serve them (AD-24's vocabulary).
  *
- * The seller supplies it once the page exists, like `CARD_LINK`: while it is empty the guard
- * fails by name, and an address is what fills it.
+ * Live: Cloudflare Email Routing on `cuerunner.app` forwards this address to the person who
+ * answers it, so an order sent here reaches a human. The guard holds it to one live address —
+ * an empty value, a placeholder and a markup-bearing one all fail by name.
  */
-export const ORDER_EMAIL = ''
+export const ORDER_EMAIL = 'orders@cuerunner.app'
 
 /**
  * The W-9, declared once: an institution asks for one and the completed form comes back by
