@@ -4,7 +4,7 @@
 //   node website/build-docs.mjs
 //
 // Every page on the site shares a header, a footer and a shell; writing that shell into
-// twenty files by hand is twenty places for the navigation to go stale. The pages carry
+// every page by hand is a place per page for the navigation to go stale. The pages carry
 // their own content and nothing else, and this writes them out.
 //
 // The renderer is exported and the writing is not: scripts/docs-build.test.ts renders every
@@ -18,11 +18,16 @@ import { PAGES } from './docs/pages.mjs'
 
 const site = path.dirname(fileURLToPath(import.meta.url))
 
-/** The links across the top of every page. */
-const NAV = [
+/**
+ * The links across the top of every page. Exported beside the renderer so a guard can read the
+ * list the pages were rendered from: a page whose header loses the price page's link is a page
+ * a buyer cannot buy from.
+ */
+export const NAV = [
   ['guide.html', 'Guides'],
   ['reference/index.html', 'Reference'],
   ['pro.html', 'Free and Pro'],
+  ['pricing.html', 'Pricing'],
   ['interop.html', 'Other programs'],
   ['reliability.html', 'Reliability']
 ]
