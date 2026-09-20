@@ -19,7 +19,7 @@ import { BOUNDARY_HEADER, boundaryItems, classOf, readRecord, recordPath, tableR
 import type { BoundaryItem, GateClass } from '../src/main/license/catalog'
 
 // @ts-ignore — js file, no type declarations
-import { FREE_ROWS, NOT_YET_PROVED, PRO, PRO_ROWS } from '../website/docs/pro.mjs'
+import { FREE_ROWS, NOT_YET_PROVED, PRO, PRO_ROWS, cueSentence } from '../website/docs/pro.mjs'
 // @ts-ignore — js file, no type declarations
 import { renderPage } from '../website/build-docs.mjs'
 
@@ -65,13 +65,19 @@ interface Reading {
   rendered: string
 }
 
+/** The page this guard reads, found by its own path rather than by where it sits in the list. */
+const PRO_PAGE = PRO.find((page: { path: string }) => page.path === 'pro.html')
+if (PRO_PAGE === undefined) {
+  throw new Error('website/docs/pro.mjs no longer declares pro.html: this guard reads the buyer page by its path')
+}
+
 /** The page as the repository holds it, and the record as the code holds it. */
 const LIVE: Reading = {
   cells: CELLS,
   record: boundaryItems(readRecord()),
   cueTypes: new Set<string>(CUE_TYPES),
   proCueTypes: new Set<string>(PRO_CUE_TYPES),
-  rendered: renderPage(PRO[0])
+  rendered: renderPage(PRO_PAGE)
 }
 
 /** The cells of one class, which is the column they sit in. */
@@ -163,6 +169,23 @@ function phraseProblems(reading: Reading): string[] {
   ]
 }
 
+/** The words a count is written in at the head of the sentence, read back as the number they state. */
+const COUNT_WORDS: Record<string, number> = {
+  no: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12
+}
+
 describe('the free-versus-Pro page', () => {
   it('names every Pro class the record holds, in a Pro column', () => {
     expect(missingProClasses(LIVE)).toEqual([])
@@ -182,6 +205,22 @@ describe('the free-versus-Pro page', () => {
 
   it('carries the shared phrase at every claim nothing here has proved', () => {
     expect(phraseProblems(LIVE)).toEqual([])
+  })
+
+  it('opens the cue stack with the count of free cue types the code declares', () => {
+    // The count is the one word in that sentence the list does not produce: a COUNT table off
+    // by one would ship "Ten cue types" over an eleven-type list with every other check green.
+    const declared = CUE_TYPES.filter(type => !LIVE.proCueTypes.has(type)).length
+    const stated = /<td>The cue stack<\/td><td>(\w+) cue type/.exec(LIVE.rendered)?.[1] ?? ''
+    const said = stated === '' ? Number.NaN : COUNT_WORDS[stated.toLowerCase()] ?? Number(stated)
+    expect(said, `the cue stack row opens with "${stated}", which is not the count of free cue types this guard reads`).toBe(
+      declared
+    )
+  })
+
+  it('stays a sentence when the free cue list is one type or none', () => {
+    expect(cueSentence(['audio'])).toMatch(/^One cue type — audio — /)
+    expect(cueSentence([])).toMatch(/^No cue types — /)
   })
 })
 

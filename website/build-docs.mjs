@@ -4,7 +4,7 @@
 //   node website/build-docs.mjs
 //
 // Every page on the site shares a header, a footer and a shell; writing that shell into
-// fifteen files by hand is fifteen places for the navigation to go stale. The pages carry
+// twenty files by hand is twenty places for the navigation to go stale. The pages carry
 // their own content and nothing else, and this writes them out.
 //
 // The renderer is exported and the writing is not: scripts/docs-build.test.ts renders every
@@ -91,10 +91,23 @@ ${crumb}${page.body.trimEnd()}
 `
 }
 
-// The command line writes every page; an import renders without writing. `process.argv[1]`
-// is the file node was asked to run, so the loop below belongs to it and to nothing else.
+/**
+ * Whether a path is this file, however the path was reached: a symlink to the script is the
+ * script, and a candidate that resolves to nothing — or to no path at all — is not.
+ */
+function sameFile(candidate) {
+  try {
+    return fs.realpathSync(candidate) === fs.realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+// The command line writes every page; an import renders without writing. `process.argv[1]` is
+// the file node was asked to run, and the two sides are compared as real paths so the CLI is
+// recognised however it was reached — a symlinked invocation is still this program.
 const invoked = process.argv[1]
-const asProgram = invoked !== undefined && path.resolve(invoked) === fileURLToPath(import.meta.url)
+const asProgram = invoked !== undefined && sameFile(path.resolve(invoked))
 
 if (asProgram) {
   let written = 0

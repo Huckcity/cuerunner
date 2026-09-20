@@ -37,11 +37,16 @@ const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 /**
  * The cue stack's sentence: how many types the free app has, said as a reader says a list, and
  * the group behaviour beside them. The count and the list both come off `cues` — written out
- * by hand, either would be the copy that stays behind when the list moves.
+ * by hand, either would be the copy that stays behind when the list moves — and it stays a
+ * sentence with one type and with none. Exported so the guard can hold the count word it opens
+ * with and read it against the cue types the code declares.
  */
-function cueSentence(cues) {
+export function cueSentence(cues) {
   const count = COUNT[cues.length] ?? String(cues.length)
-  return `${count[0].toUpperCase()}${count.slice(1)} cue types — ${cues.slice(0, -1).join(', ')} and ${cues[cues.length - 1]} — with playlist, random, sequence and timeline groups, pre- and post-waits, auto-advance, arm and disarm, colour, and undo.`
+  const types = cues.length === 1 ? 'cue type' : 'cue types'
+  const listed = cues.length > 1 ? `${cues.slice(0, -1).join(', ')} and ${cues[cues.length - 1]}` : cues[0] ?? ''
+  const named = listed === '' ? '' : ` — ${listed}`
+  return `${count[0].toUpperCase()}${count.slice(1)} ${types}${named} — with playlist, random, sequence and timeline groups, pre- and post-waits, auto-advance, arm and disarm, colour, and undo.`
 }
 
 /**
