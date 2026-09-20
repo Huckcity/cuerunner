@@ -5,12 +5,16 @@
 // every key already sold depends on.
 import { describe, expect, it } from 'vitest'
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { issueKey, parseArgs, runCli } from './license-keygen.ts'
 import { verifyLicense } from '../src/main/license/key.ts'
 import { PRODUCT_PUBLIC_KEYS } from '../src/main/license/publicKey.ts'
+
+/** The advice a rotation is followed by hand, so the test resolves what it names from here. */
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const { privateKey, publicKey } = generateKeyPairSync('ed25519')
 const PRIVATE_PEM = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
@@ -145,7 +149,7 @@ describe('issue from the command line', () => {
 
   it('refuses a key that the shipped build would not accept', () => {
     // The check support runs before answering a customer: signed by anything other than
-    // the key this build trusts, it is not a key this build will take.
+    // the keys this build trusts, it is not a key this build will take.
     const { error } = run(['verify', issueKey({ licensee: 'Theatre X', issued: ISSUED }, PRIVATE_PEM)])
 
     expect(error?.message).toContain('not issued by Cuerunner')
@@ -158,8 +162,8 @@ describe('issue from the command line', () => {
       run(['keygen', '--key', keyPath])
       const privateKeyPem = readFileSync(keyPath, 'utf-8')
       const signed = issueKey({ licensee: 'Theatre X', issued: ISSUED, expires: '2027-01-31' }, privateKeyPem)
-      // The shipped keys are what a released build carries; a rotated build would hold
-      // this pair's public half instead, which is what the check has to work against.
+      // The shipped keys are what a released build carries; a rotated build carries this pair's
+      // public half added to them, which is what the check has to work against.
       const publicKeyPem = createPublicKey(createPrivateKey(privateKeyPem))
         .export({ type: 'spki', format: 'pem' })
         .toString()
@@ -186,6 +190,67 @@ describe('parseArgs', () => {
 
   it('says what it is missing rather than reading the next flag as a value', () => {
     expect(() => parseArgs(['issue', '--name'])).toThrow(/needs a value/)
+  })
+})
+
+// A rotation adds a public key and releases; it never replaces the set, because every key already
+// sold was signed under a key that has to keep verifying. These hold the tool's advice and the
+// verification together, over the set rather than by inspection.
+describe('rotation', () => {
+  it('tells the issuer to add the key to the set, and why replacing it would strand a sale', () => {
+    const dir = tempDir()
+    try {
+      const { lines } = run(['keygen', '--key', join(dir, 'issuer.pem')])
+      const printed = lines.join('\n')
+
+      expect(printed).toContain('src/main/license/publicKey.ts')
+      expect(printed).toMatch(/\badd\b/i)
+      // The instruction the issuer follows is the one this holds: paste it into that set. Reading
+      // `Replace PRODUCT_PUBLIC_KEYS … with this` there again is the defect, not a wording choice.
+      expect(printed).not.toMatch(/replace PRODUCT_PUBLIC_KEYS/i)
+      expect(printed).toMatch(/already sold/i)
+      // And the path it names has to be a file, or the instruction cannot be followed.
+      const named = /src\/[A-Za-z0-9_./-]+\.ts/.exec(printed)?.[0]
+      expect(named).toBeDefined()
+      expect(existsSync(join(repoRoot, named ?? ''))).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps an existing key verifying when the printed public key is added to the set', () => {
+    const dir = tempDir()
+    try {
+      const keyPath = join(dir, 'issuer.pem')
+      const { lines } = run(['keygen', '--key', keyPath])
+      const printed = lines.join('\n')
+      // What the tool tells the issuer to paste in, and the pair behind it.
+      const addedPem = printed.slice(printed.indexOf('-----BEGIN PUBLIC KEY-----')).trim()
+      const addedPrivatePem = readFileSync(keyPath, 'utf-8')
+
+      // A key sold before the rotation: signed by a pair the shipped set holds. No private half of
+      // the shipped keys is in this repository, so the pair these tests own stands in for that one
+      // and the real compiled-in set rides along in the same list.
+      const sold = issueKey({ licensee: 'Theatre X', issued: ISSUED }, PRIVATE_PEM)
+      const before = verifyLicense(sold, [PUBLIC_PEM, ...PRODUCT_PUBLIC_KEYS])
+      expect(before.ok).toBe(true)
+
+      // The release the advice describes: the new public key added, nothing dropped.
+      expect(verifyLicense(sold, [PUBLIC_PEM, ...PRODUCT_PUBLIC_KEYS, addedPem])).toEqual(before)
+      // Position is not part of the contract, so a read of the first key alone fails here.
+      expect(verifyLicense(sold, [addedPem, PUBLIC_PEM, ...PRODUCT_PUBLIC_KEYS])).toEqual(before)
+
+      // And the addition is real: the new pair's own keys verify against the grown set, and did
+      // not verify against it before the addition.
+      const minted = issueKey({ licensee: 'Theatre Y', issued: ISSUED }, addedPrivatePem)
+      expect(verifyLicense(minted, [PUBLIC_PEM, ...PRODUCT_PUBLIC_KEYS])).toEqual({
+        ok: false,
+        reason: 'signature'
+      })
+      expect(verifyLicense(minted, [PUBLIC_PEM, ...PRODUCT_PUBLIC_KEYS, addedPem]).ok).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
