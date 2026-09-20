@@ -82,11 +82,22 @@ describe('Inspector', () => {
     // not a Pro surface, and a show with no key can still be driven.
     openTab('Triggers')
     expect(container.querySelector('.pro-lock')).toBeNull()
+    // The free type's own tab is not the one the class locks.
+    const waitTab = [...container.querySelectorAll('.inspector-tab')]
+      .find(tab => tab.textContent?.startsWith('Wait'))!
+    expect(waitTab.getAttribute('data-locked')).not.toBe('true')
 
     const scene = cue('scene')
     show([scene], scene)
     openTab('Scene')
     expect(container.querySelector('.pro-lock[data-feature="Scene cues"]')).not.toBeNull()
+    // And the tab that locks is marked where the operator chooses it, not only where its
+    // content renders: the type's class is read, so a type added to `PRO_CUE_TYPES` is
+    // marked here too.
+    const sceneTab = [...container.querySelectorAll('.inspector-tab')]
+      .find(tab => tab.textContent?.startsWith('Scene'))!
+    expect(sceneTab.getAttribute('data-locked')).toBe('true')
+    expect(sceneTab.querySelector('.pro-mark')).not.toBeNull()
   })
 
   it('asks for a timeline offset only inside a timeline group, and in seconds', () => {
