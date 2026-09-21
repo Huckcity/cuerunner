@@ -9,7 +9,11 @@
     "src/renderer/src/utils/waveform.ts",
     "e2e/**/*",
     "integration/**/*",
-    "scripts/**/*"
+    "scripts/**/*",
+    // The show control codec, read by the integration specs: the hardware lane builds the
+    // command it expects a console to send from the same table the trigger matches against
+    // (integration/specs/desk-hardware.spec.ts).
+    "src/renderer/src/utils/msc.ts"
   ],
   "compilerOptions": {
     "composite": true,

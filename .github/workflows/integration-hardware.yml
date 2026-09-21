@@ -1,0 +1,156 @@
+name: Integration (hardware)
+
+# The lane that checks a peer against a real desk: an SQ or an Avantis on a network the
+# runner can reach, and — when a console is on a cable — the one end-to-end MIDI Show
+# Control case no peer here can carry (INTEGRATION-HARNESS.md §2, §3 G2, §10 M3).
+#
+# Nothing schedules this, and deliberately: a desk is not on a runner, so a run names the one
+# it is about and somebody is standing in front of it. That is also what the two cases that
+# need a hand rely on — a key press and a console's GO are events, not settings — and it is
+# why the lane is dispatched rather than nightly.
+#
+# The spec skips itself without `DESK_HOST`/`DESK_PROFILE` and the console case skips without
+# `MSC_HOST`, so a run that is not provisioned reports skipped with its reasons rather than
+# passed. The step below is the other half of that honesty: a run that names a desk nobody can
+# reach fails here, with the address and what to check, instead of in a spec twenty minutes
+# later (compare the console check `integration-vendor.yml` makes for the same reason).
+on:
+  workflow_dispatch:
+    inputs:
+      desk_host:
+        description: 'The desk to test against, as host:port — an SQ and an Avantis both serve their MIDI on 51325'
+        required: true
+      desk_profile:
+        description: 'Which range is at that address'
+        type: choice
+        options: [sq, avantis]
+        default: sq
+      desk_channel:
+        description: 'The desk’s own MIDI channel, 1–16 as its Utility screen shows it; blank takes the range’s own default (1 for an SQ, 12 for an Avantis)'
+        default: ''
+      msc_host:
+        description: 'The MIDI input port a console transmitting MIDI Show Control appears as on this machine; blank leaves the show control case skipped'
+        default: ''
+
+concurrency:
+  group: integration-hardware
+  cancel-in-progress: false
+
+jobs:
+  hardware:
+    # The machine the desk is on, or one that can reach it. A desk somewhere else is a run on
+    # a runner that can see it, and this label is the only thing that changes.
+    runs-on: [self-hosted, linux, x64, ubox]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install ALSA dev headers
+        # The console's cable is a MIDI input of this machine, and that is ALSA here.
+        run: |
+          dpkg -s libasound2-dev >/dev/null 2>&1 ||
+            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: The desk this run names answers
+        env:
+          DESK_HOST: ${{ inputs.desk_host }}
+        run: |
+          # A run names the desk it is about, so a run that cannot open the desk's own MIDI
+          # socket is a mis-addressed run rather than a failing one: it fails here, with the
+          # address and what to check, rather than twenty minutes into a spec that was never
+          # going to reach the desk. Exit codes are set rather than `process.exit`ed, because
+          # a pipe on Windows can cut the message off on the way out.
+          node -e "
+            const { createConnection } = require('node:net')
+            const said = process.env.DESK_HOST ?? ''
+            const cut = said.lastIndexOf(':')
+            const host = cut > 0 ? said.slice(0, cut) : ''
+            const saidPort = cut > 0 ? said.slice(cut + 1) : ''
+            const port = Number(saidPort)
+            if (host === '' || !/^[0-9]+$/.test(saidPort) || !(port > 0 && port < 65536)) {
+              console.error('::error::desk_host must be host:port — an SQ and an Avantis both serve their MIDI on 51325 — and this run was given ' + JSON.stringify(said))
+              process.exitCode = 1
+            } else {
+              const socket = createConnection({ host, port })
+              const fail = (message) => { console.error('::error::' + message); process.exitCode = 1; socket.destroy() }
+              socket.once('connect', () => { console.log('the desk at ' + host + ':' + port + ' answered'); socket.destroy() })
+              socket.once('error', (error) => fail('nothing answered at ' + host + ':' + port + ' (' + error.message + ') — the desk has to be on a network this runner is on, with its MIDI-over-TCP service up (INTEGRATION-HARNESS.md §10 M3)'))
+              socket.setTimeout(10000, () => fail('nothing answered at ' + host + ':' + port + ' in 10 s — the desk has to be on a network this runner is on, with its MIDI-over-TCP service up (INTEGRATION-HARNESS.md §10 M3)'))
+            }
+          "
+
+      - name: The console this run names is a port on this machine
+        env:
+          MSC_HOST: ${{ inputs.msc_host }}
+        run: |
+          # A console is named only when a run means to carry the show control case, and the
+          # cable it transmits on has to be a port this machine has: without this the case would
+          # spend two minutes waiting for a console nobody can hear. The port list comes from
+          # the app's own MIDI module, which is why this runs after `npm ci`.
+          node -e "
+            if (!process.env.MSC_HOST) {
+              console.log('no console named — the show control case reports itself skipped')
+            } else {
+              let midi
+              try {
+                midi = require('midi')
+              } catch (error) {
+                console.error('::error::the console cable is named but the native MIDI module did not load (' + error.message + ') — npm ci builds it, which needs libasound2-dev on this runner')
+                process.exitCode = 1
+              }
+              if (midi) {
+                let names
+                try {
+                  const input = new midi.Input()
+                  names = Array.from({ length: input.getPortCount() }, (_, index) => input.getPortName(index))
+                  input.closePort()
+                } catch (error) {
+                  console.error('::error::the MIDI port list could not be read (' + error.message + '), and msc_host is set, so the console it names cannot be found')
+                  process.exitCode = 1
+                }
+                if (names) {
+                  if (!names.includes(process.env.MSC_HOST)) {
+                    console.error('::error::no MIDI input port named ' + JSON.stringify(process.env.MSC_HOST) + ' on this runner — it has ' + JSON.stringify(names) + '. A console transmits on a cable, so msc_host has to be the port that cable appears as (INTEGRATION-HARNESS.md §10 M3).')
+                    process.exitCode = 1
+                  } else {
+                    console.log('found the console cable ' + process.env.MSC_HOST)
+                  }
+                }
+              }
+            }
+          "
+
+      - name: Integration (hardware)
+        env:
+          DESK_HOST: ${{ inputs.desk_host }}
+          DESK_PROFILE: ${{ inputs.desk_profile }}
+          # The desk's own channel, where the run was told one; blank leaves the show the
+          # range's own default.
+          DESK_MIDI_CHANNEL: ${{ inputs.desk_channel }}
+          MSC_HOST: ${{ inputs.msc_host }}
+          # What the console transmits, for a run that means to carry the show control case.
+          # Every one of these is a setting on the console, so a run that needs them sets them
+          # as repository variables; the defaults are the all-call and the all-types, which is
+          # what a console nobody has addressed sends.
+          MSC_DEVICE_ID: ${{ vars.MSC_DEVICE_ID || '127' }}
+          MSC_FORMAT: ${{ vars.MSC_FORMAT || 'all' }}
+          MSC_COMMAND: ${{ vars.MSC_COMMAND || 'go' }}
+          MSC_CUE: ${{ vars.MSC_CUE || '' }}
+          MSC_CUE_LIST: ${{ vars.MSC_CUE_LIST || '' }}
+        # The tag is quoted, and for the reason `integration-vendor.yml` says: a shell that
+        # reads `@hardware` as a splat would never pass it to the test runner.
+        run: npm run test:integration -- --grep "@hardware"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-hardware-results
+          path: test-results/
+          retention-days: 14
