@@ -633,7 +633,8 @@ Desk and console integration:
   own. A DCA the profile cannot address (an SQ has eight, an Avantis sixteen) is reported
   rather than going quiet. The harness found the difference (`INTEGRATION-HARNESS.md` §7) and
   `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each
-  desk does with the bytes rather than to what the app sent
+  desk does with the bytes rather than to what the app sent — on the peers lane, whose
+  counterpart is the harness's desk peer rather than a desk
 - **A show run from the desk's own buttons.** A console reports a key press only when the key
   has been assigned to a console function, so the buttons a show runs from are spare **mute
   groups**: Show Settings → Channels says which group the operator's GO and BACK keys are,
@@ -649,7 +650,8 @@ Desk and console integration:
   connection, and `Learn` writes the trigger from what arrives. A lighting console's own show
   control command is an `msc` trigger, matched on every field it carries, and the codes are held
   to the vendors' worked examples; `integration/specs/msc.spec.ts` drives a Show Control cue into
-  an SQ's cue list and a key at the desk into a cue here
+  the desk peer's SQ cue list and a key at that peer into a cue here — the peers lane, with a
+  console on a cable left to the hardware lane
 
 Redundant playback:
 

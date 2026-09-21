@@ -144,6 +144,11 @@ desk does, or that firmware X behaves like firmware Y. Those are the vendor and 
 lanes' claims, and if they go quiet for long enough the peers should be treated as
 unvalidated rather than as evidence.
 
+This section decides what a lane may claim; which of those claims the lanes carry today, with
+each one's status and evidence, is the record's to state — its "Lanes and claims" tables in
+`_bmad-output/specs/spec-cuerunner/quality-and-proof.md`, which `scripts/lane-claims.test.ts`
+holds to these workflows and to the copy the pages serve.
+
 ---
 
 ## 3. What Cuerunner speaks today
