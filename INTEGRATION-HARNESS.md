@@ -392,6 +392,42 @@ port and a byte-level format and differ in every table above it.
   ([magichao326/allen-heath-sq-midi-control, PROTOCOL.md](https://github.com/magichao326/allen-heath-sq-midi-control/blob/main/PROTOCOL.md)) —
   hence the fixture, and hence a test.
 
+**What the desk does with a second client (measured, not read out of a document).** An SQ's
+MIDI-over-TCP service serves one connection at a time. On an SQ-6 running firmware 1.6.1
+(2026-09-21) the first connection is served and a second is accepted at the TCP level and reset
+at once — before it sends anything, and whether or not it sends anything — so the rule is the
+number of connections rather than the traffic on them, and what a losing client sees is a bare
+`ECONNRESET`. A console is a single-user surface and a second MIDI client is not a thing it
+serves; nothing in the documents says so, which is why the measurement is here. What the
+measurement separates is one host's second connection from the first: whether the desk would
+serve a client on another machine while this one is connected was not tested, so the rule this
+rests on is "a second connection from the same host is refused", and the wording everywhere else
+says the same.
+
+Everything a lane needs from the desk at the same time therefore reaches it through
+`integration/deskRelay.ts`: the relay holds the desk's single connection, the app's show is
+pointed at the relay's address and so is the spec's own wire, bytes from a client go to the desk
+as they arrived, and every byte the desk sends goes to every client attached. It answers
+nothing of its own, and `specs/harness-desk-relay.spec.ts` holds it to that — including against
+a peer told to refuse a second client exactly as the desk does, so the case fails without the
+relay. This is the one place the desk peer is knowingly wider than the desk: it answers several
+clients by default, because the app lane stands in for the desk's side of a conversation rather
+than for its connection rule, and `DeskPeerOptions.singleClient` says which of the two a spec
+means.
+
+**The desk's other services (measured on the same run).** The same SQ-6 exposes a second TCP
+service on **51326** that accepts several clients at once and answers neither a MIDI get nor a
+universal SysEx identity request: it is not a second MIDI endpoint and no lane uses it. Its
+being separate is what makes a control application compatible with Cuerunner's desk link:
+TheatreMix 3.6, running under Wine, held 51326 while a get on 51325 was answered in 3 ms, so the
+one-client rule belongs to the MIDI service rather than to the desk. The desk also answers
+discovery: `SQ Find` sent to **UDP 51320** comes back from the desk's own 51320 with its model
+name as NUL-terminated ASCII (`SQ-6`), which is how a third-party application finds and names it
+with nothing configured. The whole set the observed client sent, from source port 32323 and once
+per range, was `SQ Find`, `Qu-567 Find`, `GLD Find`, `Bridge Find`, `TLD Find` — one string per
+A&H range, so a range that is not at that address has nothing to answer with. No lane here sends
+or reads any of it, so the record's `Live discovery` stays unclaimed.
+
 **SQ profile** (SQ MIDI Protocol Issue 5, firmware V1.5+; SQ+ documents differ, and the
 issue number goes in the fixture's provenance):
 
@@ -764,10 +800,13 @@ connect, GO and BACK walking the scenes, the DCA mute that must not be read as a
 duplicate delivery that is one step. What no lane here has is a desk to press the key on — the
 hardware lane is where the message a key really sends is checked, and it is checked by a hand:
 the operator assigns the show's GO group to a key and presses it.
-*Acceptance*: met when a run happens, and no run has happened yet — so what this milestone
-carries today is the machinery, not a result. The same assertions that pass against the peer are
-the ones pointed at the desk, with only the host changing; the desk cases report skipped without
-`DESK_HOST` named, and the two hand cases report the hand they are waiting for.
+*Acceptance*: met when a run happens. **A developer run against an SQ-6 (firmware 1.6.1) on
+2026-09-21 passed all three cases a desk can carry** — the desk's own read-back, the scene recall
+moving its DCA 1 (read back off the desk, through the relay), and a key press at the surface
+running the show — and the console case reported skipped for want of a console. What has *not*
+happened is the **job**: `integration-hardware.yml` has never been dispatched, so the lane has no
+report of its own, and a report is what the record's rows are evidence of. The desk has to be
+reachable from the runner for that, which is a cable rather than a change.
 *Stays open*: **the recorded desk fixture.** Nothing has been captured from a desk, so there is
 no desk recording for the Linux lane to replay — the desk peer has no recorder and no session has
 been taken from one. That half of the milestone is where it was, and this is the line that says so
@@ -799,9 +838,24 @@ unproven (§11).
    account of what it sent. The two hand-driven cases are the exception, and say so: a press and
    a console's GO arrive from outside, so what they assert is the app's log line — which names
    the desk or the console it came from — and, on an SQ, the desk's own value moving with it.
-   **No run has happened yet**, so the peer's model of the desk, the vendor lane's "MIDI bytes
-   are MIDI bytes" assumption and the message a real key press sends stay unproven — exactly
-   where they were — and the lane reports skipped, never passed, without a desk named.
+   **A run has now happened, and the job has not.** A developer run against an SQ-6 (firmware
+   1.6.1) on 2026-09-21 passed the desk's own read-back, a scene recall moving its DCA 1 as the
+   desk's own value reports it, and a key press at the surface running the show — so the message a
+   real key press sends is measured rather than assumed, and the peer's read-back and scene shapes
+   are held against a desk instead of only against its documents. Still unproven: the **job**
+   (`integration-hardware.yml` has never been dispatched, so the lane has no report of its own),
+   the vendor lane's "MIDI bytes are MIDI bytes" assumption, which belongs to the bridge, and the
+   console case, which has no console. The lane reports skipped, never passed, without a desk
+   named, and each claim's row moves only on the report that names it.
+   **The desk is reached through a relay, and the checklist said otherwise until it was
+   measured** (§6): an SQ's MIDI service refuses a second connection, resetting it the moment it
+   is accepted, so a run that pointed both the app and this spec's own wire at the desk's address
+   could not have passed whatever the desk was set to — the app's connection was the one being
+   reset, and its scene recalls never reached the desk at all. `integration/deskRelay.ts` holds
+   the desk's single connection and both clients connect there; its own spec
+   (`specs/harness-desk-relay.spec.ts`, in the peers lane, so it runs on every pull request) holds
+   it to being a relay rather than a desk. What the lane asserts is still the desk's own bytes —
+   relayed verbatim, one hop that belongs to the harness rather than to the desk.
 3. **Where the vendor lane runs. — answered: `win-ci`, with a fallback.** ETCnomad is
    installed there (§9), and the machine is Windows with a logged-in session, which is what
    a GUI application needs. The caveats that came with the guest — Server 2025 outside

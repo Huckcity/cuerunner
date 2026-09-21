@@ -54,6 +54,18 @@ export interface DeskPeerOptions {
   controlPort?: number
   /** Report the desk's state as soon as a client connects, as a real SQ does. */
   connectBurst?: boolean
+  /**
+   * Refuse a second client the way a real SQ's MIDI service does: accept the connection and
+   * reset it at once, before anything on it is read, whatever the new client sends or does not
+   * send. Measured on an SQ-6, firmware 1.6.1 (2026-09-21) — the desk ahead of a hardware run
+   * refuses a second connection, which is why that lane relays (`INTEGRATION-HARNESS.md` §6).
+   *
+   * Off by default, because this peer's own model is a desk that answers several: the app lane
+   * stands in for the desk's side of a conversation, and the client count is wider here than on
+   * the desk. A spec that is standing in for the desk's *service* — the relay's, in
+   * `harness-desk-relay.spec.ts`, or a lane that wants the desk's own refusal — says so with this.
+   */
+  singleClient?: boolean
   /** How many decoded messages `received` keeps before dropping the oldest. */
   receivedLimit?: number
 }
@@ -214,14 +226,20 @@ export interface DeskPeer {
   received: DeskReceived[]
   /** One desk: a second client sees the same scene, mutes, faders and names. */
   state: DeskState
+  /**
+   * How many clients are attached now. Wider than the desk's own MIDI service, which refuses a
+   * second connection — `DeskPeerOptions.singleClient` models the desk's rule, and
+   * `INTEGRATION-HARNESS.md` §6 has the measurement.
+   */
   clients: number
   /** Recall a scene as the desk's own screen would, desk state included. */
   recallScene(scene: number): void
   /**
-   * Mute on/off as the desk's own mute key would. `channel` is the MIDI channel of the
-   * status byte, `note` the addressed element (Avantis CH, SQ parameter LSB). `page` is
-   * SQ's parameter MSB, needed only for DCAs (02) and mute groups (04), whose LSBs collide
-   * with the inputs'; input, group, aux, LR and matrix mutes default to page 00.
+   * Mute on/off as the desk's own mute key would. `channel` is the status byte's channel
+   * **nibble** — the desk's own channel 1 is 0, where `midiChannel` above is the 1-based
+   * setting a Utility screen shows — and `note` the addressed element (Avantis CH, SQ parameter
+   * LSB). `page` is SQ's parameter MSB, needed only for DCAs (02) and mute groups (04), whose
+   * LSBs collide with the inputs'; input, group, aux, LR and matrix mutes default to page 00.
    */
   setMute(channel: number, note: number, on: boolean, page?: number): void
   /** Move a fader as the desk's own surface would: `note` is the addressed channel. */
@@ -1038,6 +1056,14 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
   /* --------------------------------------------------------------- connection */
 
   const server: Server = createServer((socket) => {
+    // The desk's own rule, measured on hardware rather than read out of a document: the second
+    // connection is accepted at the TCP level and reset at once, without a byte of it being
+    // read. A client sees ECONNRESET, not a refusal, which is what the app's own error path
+    // describes as "did not answer" (`INTEGRATION-HARNESS.md` §6).
+    if (options.singleClient === true && connections.size > 0) {
+      socket.resetAndDestroy()
+      return
+    }
     socket.setNoDelay(true)
     const connection: Connection = {
       socket,
