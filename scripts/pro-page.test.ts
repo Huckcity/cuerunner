@@ -272,9 +272,15 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names the row whose phrase is gone, and the count that no longer matches it', () => {
-    const missing = LIVE.rendered.replace(`hosting a real driver ${NOT_YET_PROVED}`, 'hosting a real driver')
+    // The words are the module's own: the engine row's claim is the one that moves when a lane
+    // behind it changes, so this case reads what the module declares rather than a copy of it.
+    const engine = CELLS.find(entry => entry.row === 'The engine' && entry.notYetProved !== undefined)
+    if (engine === undefined) {
+      throw new Error('website/docs/pro.mjs declares no claim on the engine row: this case edits the row whose phrase it drops')
+    }
+    const missing = LIVE.rendered.replace(`${engine.notYetProved} ${NOT_YET_PROVED}`, `${engine.notYetProved}`)
     expect(phraseProblems({ ...LIVE, rendered: missing })).toEqual([
-      expect.stringContaining('the page states "hosting a real driver" in its "The engine" row and the phrase is not at the claim'),
+      expect.stringContaining(`the page states "${engine.notYetProved}" in its "The engine" row and the phrase is not at the claim`),
       expect.stringContaining('the page carries the phrase 3 time(s) for the 4 claim(s)')
     ])
   })

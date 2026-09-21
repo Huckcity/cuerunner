@@ -11,15 +11,37 @@
  * what the driver says, reconfigures it, pans it, plays it, and silences it.
  *
  *   node native/audio/tests/asio-smoke.mjs [--device <driver name>] [--require]
+ *                                          [--report <path>] [--no-driver <state>]
  *
  * A machine with no driver exits 0 with a note: that is the honest state of a runner with
  * no interface attached, and a test that pretended otherwise would be a test that could
  * never be green. `--require` turns the note into a failure, for a machine that is expected
  * to have one.
+ *
+ * Every path out of this script also states the claim's status *for this run*: `ASIO hosting:
+ * unproven` with the machine's state as the reason where nothing was hosted, and `proved` only
+ * when the driver smoke played through a driver. The record's `proved` for `ASIO hosting` is a
+ * standing fact about the lane; this note is what today's machine actually did, so a runner
+ * with no interface never reads as proof of hosting (AD-24). `--report <path>` leaves the same
+ * status behind as JSON, and `GITHUB_STEP_SUMMARY` gets it too when the environment names one.
+ *
+ * `--no-driver <state>` is for a caller that already knows the machine could not have hosted a
+ * driver and can say why — the Windows lane's no-SDK branch, where the engine is built without
+ * ASIO — so the status is stated from that state rather than from a driver list it never had.
  */
 import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import {
+  appendSummary,
+  asioEntry,
+  laneLine,
+  reportOf,
+  smokeOutcome,
+  summaryBlock,
+  writeReport
+} from '../../../scripts/lane-status.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
@@ -34,40 +56,82 @@ function argValue(name, fallback) {
 
 const wanted = argValue('--device', null)
 const required = process.argv.includes('--require')
+const reportPath = argValue('--report', null)
+const statedState = argValue('--no-driver', null)
+
+/**
+ * The next step a reader takes, carried by the notes that leave nothing to smoke — including the
+ * machine's own advice rather than repeating it at each of them.
+ */
+const GUIDANCE = "install an interface's driver, or Steinberg's built-in one, to run this"
+
+/**
+ * The lane's status for this machine, said once and left where it was asked for: the note, the
+ * report and the job summary all come from here, so the three cannot disagree.
+ */
+function leave(claimStatus, reason, driver = null) {
+  const entry = asioEntry({ claimStatus, reason, driver, machine: process.platform })
+  const report = reportOf('native', [entry])
+  console.log(`asio smoke — ${laneLine(entry)}`)
+  if (reportPath !== null) {
+    writeReport(reportPath, report)
+    console.log(`asio smoke — the status is in ${reportPath}`)
+  }
+  appendSummary(summaryBlock(report.lanes, report.run))
+}
+
+/**
+ * A machine that hosted no driver, with the state that says why. `--require` turns the note into
+ * a failure for a machine that is supposed to have one; the exit code changes, the status never
+ * does — nothing was hosted, so nothing was proved.
+ */
+function leaveUnproven(note, help = '') {
+  if (required) console.error(`asio smoke — ${note}, and --require was asked for`)
+  else console.log(`asio smoke — ${note}; skipped${help === '' ? '' : ` (${help})`}`)
+  leave('unproven', note)
+  process.exit(required ? 1 : 0)
+}
+
+/**
+ * A machine the lane could not even ask — no engine to run, a refusal, a device list it cannot
+ * read, a driver that is not there. The lane failed, and the claim is unproven for this run all
+ * the same: nothing was hosted here either, so the note says so before the exit code does.
+ */
+function leaveUnanswered(note) {
+  console.error(`asio smoke — ${note}`)
+  leave('unproven', note)
+  process.exit(1)
+}
+
+// A caller that knows the machine could not host a driver states it here, and that state is the
+// reason: the engine's ASIO backend may not even be in the build.
+if (statedState !== null) {
+  leaveUnproven(statedState)
+}
 
 if (process.platform !== 'win32') {
-  console.log(`asio smoke — not Windows (${process.platform}): ASIO is a Windows backend here; skipped`)
-  process.exit(0)
+  leaveUnproven(`not Windows (${process.platform}): ASIO is a Windows backend here`)
 }
 
 const listed = spawnSync(binary, ['--list-devices', '--backend', 'asio'], { encoding: 'utf8' })
 if (listed.error) {
-  console.error(`asio smoke — could not run the engine at ${binary}: ${listed.error.message}`)
-  process.exit(1)
+  leaveUnanswered(`could not run the engine at ${binary}: ${listed.error.message}`)
 }
 if (listed.status !== 0) {
-  console.error(`asio smoke — the engine refused to enumerate ASIO drivers (status ${listed.status}):`)
-  console.error((listed.stderr || '').trim())
-  process.exit(1)
+  if ((listed.stderr || '').trim() !== '') console.error((listed.stderr || '').trim())
+  leaveUnanswered(`the engine refused to enumerate ASIO drivers (status ${listed.status})`)
 }
 
 let devices = []
 try {
   devices = JSON.parse(listed.stdout).devices ?? []
 } catch (error) {
-  console.error(`asio smoke — the engine's device list was not JSON: ${error.message}`)
-  console.error(listed.stdout.trim())
-  process.exit(1)
+  if (listed.stdout.trim() !== '') console.error(listed.stdout.trim())
+  leaveUnanswered(`the engine's device list was not JSON: ${error.message}`)
 }
 
 if (devices.length === 0) {
-  const note = 'no ASIO driver is installed on this machine'
-  if (required) {
-    console.error(`asio smoke — ${note}, and --require was asked for`)
-    process.exit(1)
-  }
-  console.log(`asio smoke — ${note}; skipped (install an interface's driver, or Steinberg's built-in one, to run this)`)
-  process.exit(0)
+  leaveUnproven('no ASIO driver is installed on this machine', GUIDANCE)
 }
 
 const device = wanted !== null
@@ -76,18 +140,11 @@ const device = wanted !== null
   // zero-channel first driver cannot pass the lane without hosting anything.
   : devices.find((entry) => entry.channels > 0)
 if (wanted !== null && device === undefined) {
-  console.error(`asio smoke — no such ASIO driver: ${wanted}`)
-  console.error(`installed: ${devices.map((entry) => entry.id).join(', ')}`)
-  process.exit(1)
+  console.error(`asio smoke — installed: ${devices.map((entry) => entry.id).join(', ')}`)
+  leaveUnanswered(`no such ASIO driver: ${wanted}`)
 }
 if (device === undefined) {
-  const note = 'no ASIO driver with outputs is installed on this machine'
-  if (required) {
-    console.error(`asio smoke — ${note}, and --require was asked for`)
-    process.exit(1)
-  }
-  console.log(`asio smoke — ${note}; skipped (install an interface's driver, or Steinberg's built-in one, to run this)`)
-  process.exit(0)
+  leaveUnproven('no ASIO driver with outputs is installed on this machine', GUIDANCE)
 }
 
 // A driver with no outputs has nothing to play through, and that is the machine's state
@@ -97,16 +154,11 @@ if (device === undefined) {
 // play a tone into a device that has no outputs, so it says so and stops. `--require` turns
 // the note into a failure for a machine that is supposed to have an output.
 if (!(device.channels > 0)) {
-  const note = `the ASIO driver "${device.id}" is listed with no channels on this machine`
-  if (required) {
-    console.error(`asio smoke — ${note}, and --require was asked for`)
-    process.exit(1)
-  }
-  console.log(`asio smoke — ${note}; skipped. An ASIO driver plays through the machine's own`)
-  console.log('             endpoints: with none attached (an interface, a working display-audio')
-  console.log('             output) the driver has no outputs and there is nothing to smoke.')
-  console.log('             The driver was still enumerated and instantiated by the engine.')
-  process.exit(0)
+  console.log("asio smoke — an ASIO driver plays through the machine's own endpoints: with none")
+  console.log('             attached (an interface, a working display-audio output) the driver has')
+  console.log('             no outputs and there is nothing to smoke. The driver was still')
+  console.log('             enumerated and instantiated by the engine.')
+  leaveUnproven(`the ASIO driver "${device.id}" is listed with no channels on this machine`)
 }
 
 // The smoke plays to eight channels on its acceptance sink; an interface has however many
@@ -125,4 +177,7 @@ const smoke = spawnSync(
   ],
   { stdio: 'inherit', env: { ...process.env, CUERUNNER_AUDIO_BIN: binary } }
 )
-process.exit(smoke.status ?? 1)
+const status = smoke.status ?? 1
+const outcome = smokeOutcome(device.id, status)
+leave(outcome.claimStatus, outcome.reason, outcome.driver)
+process.exit(status)

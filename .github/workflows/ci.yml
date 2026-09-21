@@ -233,15 +233,21 @@ jobs:
       # The one half of ASIO that no other lane can reach: hosting a real driver. It needs
       # a build with the SDK (the step above) and a driver the machine has installed —
       # an interface's own, or Steinberg's built-in ASIO driver, which drives whatever
-      # Windows endpoint the machine has. With no driver it says so and passes: that is
-      # the honest state of a runner with no interface attached, and nothing here claims
-      # ASIO works on such a machine.
+      # Windows endpoint the machine has. With no driver it says so, reports `ASIO hosting:
+      # unproven` for this run, and passes: that is the honest state of a runner with no
+      # interface attached, and nothing here claims ASIO works on such a machine. The no-SDK
+      # branch states the same claim from the state it knows — the engine was built without
+      # ASIO, so nothing could be hosted — and `--report` leaves it in a file either way.
       - name: ASIO device smoke
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          if "%CUERUNNER_ASIO_SDK%"=="" (echo ::notice::No ASIO SDK on this runner - the engine is built without ASIO, so there is nothing to smoke & exit /b 0)
-          npm run test:native:asio
+          if "%CUERUNNER_ASIO_SDK%"=="" (
+            echo ::notice::No ASIO SDK on this runner - the engine is built without ASIO, so this run hosted no driver and ASIO hosting is unproven for it
+            node native/audio/tests/asio-smoke.mjs --report test-results/asio-lane.json --no-driver "no ASIO SDK on this runner: the engine is built without ASIO" || exit /b 1
+            exit /b 0
+          )
+          npm run test:native:asio -- --report test-results/asio-lane.json
 
       - name: Upload test results
         if: failure()
@@ -249,6 +255,18 @@ jobs:
         with:
           name: e2e-results-${{ matrix.label }}
           path: test-results/
+          retention-days: 7
+
+      # What this lane said about the claim, kept whether or not the lane went red: a green run
+      # that hosted a driver is the evidence the record rests on, and a run with no driver is
+      # the one a reader most needs to see. Only the Windows lane writes it, hence the ignore.
+      - name: Upload the lane status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lane-status-${{ matrix.label }}
+          path: test-results/asio-lane.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # The harness: Cuerunner talking to a peer that stands in for the console and the desk.
@@ -311,4 +329,16 @@ jobs:
         with:
           name: integration-results
           path: test-results/
+          retention-days: 7
+
+      # The suite's own report, kept on a green run too: this is the job whose lanes a reader
+      # asks about — the peers lane ran, the desk lanes skipped for want of a desk — and the
+      # statuses are the answer, whether or not anything failed.
+      - name: Upload the lane status
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lane-status
+          path: test-results/lane-status.json
+          if-no-files-found: ignore
           retention-days: 7
