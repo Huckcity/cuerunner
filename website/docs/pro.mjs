@@ -15,13 +15,16 @@ import { table } from './table.mjs'
 
 /**
  * The phrase a claim carries where nothing in this project has exercised it: a claim is only
- * as strong as the lane that ran (AD-24), and this page makes four that no lane does — hosting
- * a real driver, the Allen & Heath desks, show control end to end, and live discovery. Each
- * one says so in its own wording, inline, rather than in a section or a badge, and they all
- * say it with this one string.
+ * as strong as the lane that ran (AD-24). This page makes four that no lane does — hosting a
+ * real driver, the Allen & Heath desks, show control end to end, and live discovery — and each
+ * one says so in its own wording, inline, rather than in a section or a badge.
  *
- * A row that states such a claim declares it in `notYetProved` — the words the phrase has to
- * sit behind — and the guard holds the declaration to the phrase.
+ * The string is shared rather than this page's own: `website/docs/interop.mjs` imports it for
+ * the A&H and MSC claims its Lighting bullet makes, and both pages' claims are declared beside
+ * them (`website/docs/pro.mjs`'s rows here, `website/docs/lane-claims.mjs` for `interop.html`),
+ * which is what keeps a claim marked in more than one place marked with the same words. A row
+ * that states such a claim declares it in `notYetProved` — the words the phrase has to sit
+ * behind — and the guards hold each declaration to the phrase.
  */
 export const NOT_YET_PROVED = '(not yet proved on real hardware)'
 

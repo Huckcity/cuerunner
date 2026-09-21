@@ -1,5 +1,12 @@
 // Where Cuerunner stops and the rest of the rig starts. A buyer asks the video question
 // before they ask anything else, and the answer is a page rather than a reply.
+//
+// Two claims here stand on lanes with nothing to point at yet — A&H desk acceptance and the
+// end-to-end MSC case — so they carry the phrase `pro.mjs` exports, immediately behind their
+// words: one string, never a second copy of it. `website/docs/lane-claims.mjs` declares both
+// claims, and `scripts/lane-claims.test.ts` holds this page and the record together.
+import { NOT_YET_PROVED } from './pro.mjs'
+
 export const INTEROP = [
   {
     path: 'interop.html',
@@ -36,12 +43,13 @@ export const INTEROP = [
     <section class="panel reveal delay-2">
       <h2>Lighting</h2>
       <ul>
-        <li>An ETC Eos desk, or an Allen &amp; Heath SQ or Avantis, is driven directly: the
+        <li>An ETC Eos desk, or an Allen &amp; Heath SQ or Avantis
+          ${NOT_YET_PROVED}, is driven directly: the
           <a href="guides/desk.html">desk guide</a> covers the scenes and the cues that move
           it, and the show's GO is what moves it.</li>
         <li>Any console that speaks MSC takes <a href="reference/cue-types.html">show-control
-          cues</a> — go, stop, resume, load, reset, to the format and the device id the
-          console expects.</li>
+          cues</a> ${NOT_YET_PROVED} — go, stop, resume, load, reset, to the
+          format and the device id the console expects.</li>
         <li>The traffic runs both ways. A desk's keys can fire Cuerunner cues through the
           <a href="reference/control.html">messages a cue answers to</a>, so the desk can
           walk the show instead of Cuerunner walking the desk.</li>
