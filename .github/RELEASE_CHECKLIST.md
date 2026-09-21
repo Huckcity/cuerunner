@@ -2,8 +2,18 @@
 
 A release is deliberate: `release.yml` runs from `workflow_dispatch` only, so a merge to
 `main` publishes nothing. Walk this list, then dispatch *Actions → Release → Run workflow*
-from `main`. `semantic-release` cuts the version from the commits since the last tag and
-`build.yml` picks the published release up and uploads the installers.
+from `main`. `semantic-release` cuts the version from the commits since the last tag, and
+`release.yml` then dispatches `build.yml` for the tag it cut — a release published with the
+repository's own token starts no workflow of its own, which is how releases came to carry no
+installers at all — and that packaging run is what uploads them. A release with no installers
+means that dispatch did not happen or failed.
+
+Half of what this list used to assert, the pipeline now enforces and prints: each packaging job
+records what it built — from the secrets that gate signing and from its own ASIO probe — the
+`release` job composes that into the release notes, and a build that linked Steinberg's SDK with
+no recorded agreement withholds its installer. Nothing publishes from a ref that is not a tag.
+Read that section of the notes against the run page; it is the release's own statement of what
+its artifacts are.
 
 - [ ] `main` is green in `ci.yml` (typecheck, unit, native, and the three E2E lanes) and
       the working tree is clean.
@@ -21,27 +31,54 @@ from `main`. `semantic-release` cuts the version from the commits since the last
       Every entry the diff left true stays as it is; every entry the diff made false is
       rewritten or deleted before dispatching, and the new wording names the behaviour the
       code now has. No release ships a limitation its own commits removed.
-- [ ] **The installers are signed — and, on macOS, notarised.**
-      `build.yml` signs from repository secrets and verifies its own work: Windows uses
-      `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` and checks the result with
+- [ ] **Read what the release notes say each installer is — and act on it rather than
+      restating it.** `build.yml` signs from repository secrets and verifies its own work:
+      Windows uses `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` and checks the result with
       `Get-AuthenticodeSignature`; macOS uses `MAC_CSC_LINK` / `MAC_CSC_KEY_PASSWORD` and
-      notarises with `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, then
-      checks with `codesign`, `spctl` and `stapler validate`. A build with no
-      certificates is *not* failed — it logs a `::warning::` and produces unsigned
-      installers — so look for that warning on the run page before announcing anything.
-      An unsigned binary will not be installed on a venue machine, whatever the release
-      notes say.
-- [ ] **If the Windows installer contains ASIO, the Steinberg agreement is signed.**
+      notarises with `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, then checks
+      with `codesign`, `spctl` and `stapler validate`. A build with no certificates is *not*
+      failed: it logs a `::warning::`, produces unsigned installers, and the `release` job's
+      section names them — signed, signed and notarised, or unsigned, every artifact the
+      release page carries and the mirror serves. An unsigned binary will not be installed on
+      a venue machine, whatever this list says, so an unsigned release is one to announce as
+      unsigned or not to announce.
+- [ ] **The Steinberg agreement is signed before any ASIO-linked installer is published.**
       The engine hosts ASIO drivers only when Steinberg's ASIO SDK was present at build time
       (`CUERUNNER_ASIO_SDK`; see *Packaging prerequisites* in `README.md`), and the SDK's
       proprietary licence — the one a closed-source application uses — permits *building*
       against it but permits *publishing* a build that links it only under the License
-      Agreement signed by Steinberg. So before a release that ships ASIO either the signed
-      agreement is on file and the binary is the one that was tested with it, or the release
-      is built without the SDK (the default: no `CUERUNNER_ASIO_SDK` in the build environment,
-      the log line says `native-audio: ASIO off`, and no ASIO device is offered anywhere).
-      Check the `build-windows` job's log for which of the two it was; a build that silently
-      gained ASIO is the failure this item exists to catch.
-- [ ] Dispatch **Release** from `main` and watch it finish.
-- [ ] Confirm `build.yml` ran against the published release and the Windows, macOS and Linux
-      installers are on the release page.
+      Agreement signed by Steinberg. `build-windows` enforces that rather than trusting this
+      list: when its probe found an SDK and `native/audio/third_party/ASIO-AGREEMENT.md` is
+      not committed, the job warns, uploads nothing, and the notes name the installer
+      withheld — nothing reaches the release page or the download mirror. A build with no SDK
+      publishes its exe as usual, and the notes say it hosts no ASIO driver.
+      **Signing the agreement is the human half**, and the record is the proof of it: when the
+      agreement is signed, commit `native/audio/third_party/ASIO-AGREEMENT.md` — its date and
+      the parties, no legal text — in the same commit that says it was signed. Never commit it
+      as a placeholder: an empty record is the one thing that would let an unpublishable
+      installer through, and no pipeline can tell the two apart.
+- [ ] Dispatch **Release** from `main` and watch it finish. It cuts the tag and then starts the
+      packaging run for that tag.
+- [ ] **Watch for the packaging run against the tag that was just cut** — `Actions → Build`, or
+      `gh run list --workflow=build.yml --limit 2`. If no run appears for the tag, start one by
+      hand: `gh workflow run build.yml --ref <tag>`. The tag is the ref the publishing jobs
+      admit, so a run started that way publishes exactly what the dispatch would have published.
+- [ ] Confirm the packaging run went against that tag, that the notes' section names every
+      installer's state, and that the Windows, macOS and Linux installers on the release page and
+      in `latest/` are exactly the files that section accounts for.
+- [ ] **Check that the mirror the site's cards point at serves them.** `pub.winslabapp.com` is
+      the buyer-facing host, and nothing in the pipeline can see it from the inside:
+
+      ```bash
+      curl -sI https://pub.winslabapp.com/latest/Cuerunner-Setup.exe
+      curl -sI https://pub.winslabapp.com/latest/Cuerunner.dmg
+      curl -sI https://pub.winslabapp.com/latest/Cuerunner.AppImage
+      ```
+
+      Each has to answer `200`. A `404` after a green packaging run points at the R2 bucket or
+      its public hostname — the `R2_*` secrets and Cloudflare's side — rather than at this
+      pipeline, and is to be reported rather than worked around.
+- [ ] **A release page with no assets means no packaging run happened, or the one that ran
+      failed.** Check `gh run list --workflow=build.yml --limit 2` for a run against the tag
+      before announcing anything, and read a red run as the cause: a packaging run that failed
+      leaves the release page and `latest/` exactly as they were.

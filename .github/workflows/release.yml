@@ -2,8 +2,13 @@ name: Release
 
 # Deliberate, never automatic: pushing to main no longer publishes anything. Run this
 # workflow from main (Actions → Release → Run workflow) when the release is wanted —
-# semantic-release then cuts the version from the commits since the last tag, and
-# build.yml picks it up from the published release. A run dispatched from any other ref
+# semantic-release then cuts the version from the commits since the last tag, and this
+# workflow dispatches `build.yml` for the tag it just cut, which is what uploads the
+# installers. The dispatch is here rather than left to build.yml's own `release: published`
+# trigger because a release published with the repository's own `GITHUB_TOKEN` creates no
+# workflow run: that trigger has never fired, which is why v0.11.0, v0.12.0 and v0.13.0
+# carry no installers at all and the site's download cards point at 404s. The trigger stays
+# for the path a human or a token-holding App takes. A run dispatched from any other ref
 # fails semantic-release's own branch check rather than publishing. It runs on the homelab
 # runner like the rest of the pipeline (provisioning: ~/homelab/ci/).
 on:
@@ -14,6 +19,9 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  # The packaging dispatch below: the workflow-dispatch endpoint is an `actions: write`
+  # call, and the job's token is the one that makes it.
+  actions: write
 
 jobs:
   release:
@@ -37,6 +45,15 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      # The newest tag before this run, so the step after the release can tell which tag
+      # semantic-release cut — and start the packaging run for that tag and no other. The
+      # ref this workflow was started from is `main`, which publishes nothing.
+      - name: Note the tag this run starts from
+        id: tags
+        run: |
+          before=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,3 +62,33 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
         run: npx semantic-release
+
+      # The packaging run, started for the tag semantic-release just cut. Nothing else starts
+      # one: a release published with the repository's `GITHUB_TOKEN` creates no workflow run,
+      # so `build.yml`'s `release: published` trigger never fires. The ref dispatched is the
+      # tag — never `github.ref_name`, which is `main` here — and `build.yml`'s publishing
+      # jobs admit a tag ref and nothing else, so this dispatch is what publishes the
+      # installers and fills the download mirror. The REST route is spelled out rather than
+      # shelled through the `gh` CLI because the homelab runner is not promised one.
+      - name: Start the packaging run for the tag just cut
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEFORE: ${{ steps.tags.outputs.before }}
+        run: |
+          tag=$(git describe --tags --abbrev=0)
+          if [ "$tag" = "$BEFORE" ]; then
+            echo "::notice::semantic-release cut no tag this run, so there is no packaging run to start"
+            exit 0
+          fi
+          echo "semantic-release cut $tag; starting the packaging run for it"
+          status=$(curl -sS -o "$RUNNER_TEMP/dispatch.json" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/dispatches" \
+            -d "{\"ref\":\"$tag\"}")
+          if [ "$status" != '204' ]; then
+            echo "::error::dispatching build.yml for $tag answered HTTP $status: $(cat "$RUNNER_TEMP/dispatch.json")"
+            exit 1
+          fi
+          echo "::notice::build.yml is on its way for $tag — $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/build.yml"

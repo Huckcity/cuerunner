@@ -367,9 +367,14 @@ processes and the engine speak.
 
   **Before shipping a build with ASIO in it**, the Steinberg ASIO License Agreement has to be
   signed — the SDK's proprietary licence is the one a closed-source application needs, and
-  it is what permits publishing a binary built against the SDK. That is a release-checklist
-  item, not a build-time one: an unsigned build can be built, tested and used internally,
-  but not published.
+  it is what permits publishing a binary built against the SDK. The pipeline enforces that
+  rather than trusting a checklist: `build-windows` records whether its probe found an SDK,
+  and withholds the installer — no upload, no release page, no mirror — when the build linked
+  the SDK and `native/audio/third_party/ASIO-AGREEMENT.md` is not committed. That file is the
+  record of the agreement being signed, written with its date and the parties when it is
+  signed; its absence is the "not recorded" state the gate reads, and it is never committed
+  as a placeholder. An unsigned build can still be built, tested and used internally; it is
+  published only with the record in place.
 - Source pins and licences for everything vendored live in
   `native/audio/third_party/DEPENDENCIES.json`; the FFmpeg helper's notice and licence
   texts sit next to the binary.
@@ -571,10 +576,26 @@ GitHub Actions workflows in `.github/workflows/`:
     desk (no vendor software, no hardware)
 - **`build.yml`**: Runs when a release is published, or manually
   - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
-  - Uploads to R2 (Cloudflare) and GitHub Releases
+  - Normally started by `release.yml`, which dispatches it for the tag it just cut; if a release
+    ends up with no packaging run, start one by hand — `gh workflow run build.yml --ref <tag>` —
+    because a release page with no assets means neither happened
+  - Each packaging job records what it built — whether a certificate signed it, whether the
+    Windows build linked Steinberg's ASIO SDK — and the `release` job composes that into the
+    release notes, appended to `semantic-release`'s own body: the notes name every installer
+    signed, signed and notarised, or unsigned, and say that a venue machine refuses an
+    unsigned one
+  - Nothing publishes from a ref that is not a tag: a dispatch from a branch packages and
+    stops there. A build that linked the SDK with no recorded agreement withholds its
+    installer (`native/audio/third_party/ASIO-AGREEMENT.md`), and the same list the notes are
+    composed from is what the release page carries and what the R2 mirror copies
+  - Uploads that list to R2 (Cloudflare) and GitHub Releases: the `pub.winslabapp.com/latest/`
+    files the site's download cards point at
 - **`release.yml`**: Semantic versioning with `semantic-release` — run it by hand from
   `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
-  own, so a release happens only when it is meant to.
+  own, so a release happens only when it is meant to. Cutting the tag is not enough on its
+  own: a release published with the repository's own token starts no workflow, so this
+  workflow dispatches `build.yml` for the tag it cut, which is what uploads the installers
+  and fills the mirror — a release with no installers means that dispatch did not happen.
 
 [`RELEASE_CHECKLIST.md`](./.github/RELEASE_CHECKLIST.md) is what a release engineer walks
 before that dispatch, including the check that keeps this file's limitations honest.
