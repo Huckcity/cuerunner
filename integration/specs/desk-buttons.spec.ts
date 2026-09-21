@@ -3,7 +3,13 @@
 // A console reports a key press only when the key has been assigned to a console function —
 // which is why a show's GO and BACK keys are spare mute groups: the group is assigned to a key
 // at the desk, the key toggles it, and the desk transmits the mute message the group would have
-// sent if a hand had muted it. The operator sets two fields and touches nothing else.
+// sent if a hand had muted it. The operator sets four fields and touches nothing else.
+//
+// A key that latches is not what every press means, so the same show names two MIDI notes
+// beside its groups: an SQ's soft key set to MIDI Note transmits note on at 7F while it is held
+// and note off at 00 when it is let go, so that press steps the show once and leaves nothing
+// lit at the desk. Both routes run the one show, and a note writes nothing back — a latch is
+// the desk's to own.
 //
 // What is asserted is the *desk* moving — the mute the peer records, and the desk's own state —
 // from messages it sends the way a hand on the surface sends them, never from the app's account
@@ -13,7 +19,7 @@ import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
-import { BACK_GROUP, CHANNEL, GO_GROUP, writeDeskButtonsShow } from './deskButtonsFixture'
+import { BACK_GROUP, BACK_NOTE, CHANNEL, GO_GROUP, GO_NOTE, writeDeskButtonsShow } from './deskButtonsFixture'
 
 /** The SQ's mute-group page: page 04, parameter <group - 1>, absolute form. */
 const MUTE_GROUP_PAGE = 0x04
@@ -135,4 +141,68 @@ test('the same state arriving twice is one step, not two', async () => {
   await expect.poll(() => recalls('Desk GO')).toBe(before + 1)
   await page.waitForTimeout(400)
   expect(await recalls('Desk GO')).toBe(before + 1)
+})
+
+test('a soft key on the BACK note stands the show back, and the release does nothing', async () => {
+  // The same walk from the desk's other kind of button: a soft key set to MIDI Note
+  // transmits note on at 7F while it is held and note off at 00 when it is let go. The
+  // show is on the last scene, so this is a step rather than a refusal — and the press is
+  // sent on its own so the release can be shown to be silent rather than assumed.
+  const before = await recalls('Desk BACK')
+  const writesBefore = peer.received.length
+
+  peer.emit([0x90, BACK_NOTE, 0x7f])
+
+  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk BACK' }).last())
+    .toContainText('Scene "Wedding"')
+  // The desk is where the scene says, which is the app's own DCA message — the note press
+  // writes nothing to the desk's own groups, so no latch is set and none has to be cleared.
+  await expect.poll(dcaMute).toBe(true)
+
+  // The hand comes off: the release is half of the same event, so it adds no line of its own.
+  peer.emit([0x80, BACK_NOTE, 0x00])
+  await page.waitForTimeout(400)
+  expect(await recalls('Desk BACK')).toBe(before + 1)
+  expect(peer.received.slice(writesBefore)
+    .filter(message => message.kind === 'mute' && message.page === MUTE_GROUP_PAGE)).toEqual([])
+})
+
+test('a soft key on the GO note moves the show on', async () => {
+  const before = await recalls('Desk GO')
+
+  peer.pressSoftKey(1)
+
+  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk GO' }).last())
+    .toContainText('Scene "Interval"')
+  await expect.poll(dcaMute).toBe(false)
+  await expect.poll(() => recalls('Desk GO')).toBe(before + 1)
+})
+
+test('a note held down is one press, not a repeat', async () => {
+  // A key that is held repeats its note-on; the desk transmits on every one of them, and
+  // the show must not walk two scenes on one press. The show is on the last scene, so this
+  // BACK is a step to the first — and a second press there would have nowhere to go, which
+  // it would say in a line of its own rather than quietly.
+  const before = await recalls('Desk BACK')
+
+  peer.emit([0x90, BACK_NOTE, 0x7f])
+  peer.emit([0x90, BACK_NOTE, 0x7f])
+
+  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk BACK' }).last())
+    .toContainText('Scene "Wedding"')
+  await page.waitForTimeout(400)
+  expect(await recalls('Desk BACK')).toBe(before + 1)
+
+  peer.emit([0x80, BACK_NOTE, 0x00])
+})
+
+test('a note nobody assigned is silent', async () => {
+  // A soft key set to another number, a note some other program on the wire sends: the
+  // reader reports it like any MIDI message, and the show has no action for it.
+  const before = await recalls('Desk GO') + await recalls('Desk BACK')
+
+  peer.emit([0x90, GO_NOTE + 8, 0x7f])
+
+  await page.waitForTimeout(400)
+  expect(await recalls('Desk GO') + await recalls('Desk BACK')).toBe(before)
 })

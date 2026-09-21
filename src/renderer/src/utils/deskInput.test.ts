@@ -1,8 +1,11 @@
-// What the desk's own buttons look like on the wire, per range. A button is a *change*: the
+// What the desk's own buttons look like on the wire, per range. A group is a *change*: the
 // desk reports its state when a client connects, so the first sighting of a group primes and
 // only a movement is a press — a case below opens on a muted group and shows that a show does
-// not recall a scene by itself. The other half is what must never read as a press: the app's
-// own DCA mutes, which is what a scene recall sounds like coming back off the desk.
+// not recall a scene by itself. A note is momentary instead: an SQ's soft key transmits while
+// it is held, so its note-on is the press, its note-off the release, and a repeat is not a
+// second press. The other half is what must never read as a press: the app's own DCA mutes,
+// which is what a scene recall sounds like coming back off the desk, and a note on either
+// desk whose own traffic is notes.
 import { describe, it, expect } from 'vitest'
 import { DeskButtons, MUTE_GROUP_COUNT, muteGroupGet } from './deskInput'
 import type { DeskButton } from './deskInput'
@@ -135,6 +138,70 @@ describe('an Avantis’s mute groups read as buttons', () => {
     expect(press(reader, 'avantis', [{ kind: 'noteOn', channel: 16, note: 0x46, velocity: 0x3f }])).toBeNull()
     expect(press(reader, 'avantis', [{ kind: 'noteOn', channel: 16, note: 0x46, velocity: 0x7f }]))
       .toMatchObject({ number: 1, on: true })
+  })
+})
+
+describe('an SQ’s soft key notes read as buttons', () => {
+  const note = (number: number, velocity: number, channel = 1): MidiMessageKind =>
+    ({ kind: 'noteOn', channel, note: number, velocity })
+  const release = (number: number, channel = 1): MidiMessageKind =>
+    ({ kind: 'noteOff', channel, note: number, velocity: 0 })
+
+  it('presses on the note, where a group’s first sighting would only prime', () => {
+    const reader = new DeskButtons()
+
+    // No get exists for a soft key and the desk transmits only while the key is held, so
+    // the first note-on is a press rather than a state to be primed away.
+    expect(press(reader, 'sq', [note(0x30, 0x7f)]))
+      .toEqual({ device: DEVICE, control: 'note', number: 0x30 })
+  })
+
+  it('lets the release end the key, and the next press is a press again', () => {
+    const reader = new DeskButtons()
+
+    expect(press(reader, 'sq', [note(0x30, 0x7f)])?.control).toBe('note')
+    // The pair is the one event: the note-off — which a velocity-0 note-on is decoded as —
+    // says nothing, and the key is ready to be pressed again.
+    expect(press(reader, 'sq', [release(0x30)])).toBeNull()
+    expect(press(reader, 'sq', [note(0x30, 0x7f)]))
+      .toEqual({ device: DEVICE, control: 'note', number: 0x30 })
+  })
+
+  it('is one press while the key is held, however often the note-on repeats', () => {
+    const reader = new DeskButtons()
+
+    expect(press(reader, 'sq', [note(0x30, 0x7f)])?.control).toBe('note')
+    expect(press(reader, 'sq', [note(0x30, 0x7f)])).toBeNull()
+    press(reader, 'sq', [release(0x30)])
+    expect(press(reader, 'sq', [note(0x30, 0x7f)])?.control).toBe('note')
+  })
+
+  it('keeps two channels apart, so they cannot read as one key', () => {
+    const reader = new DeskButtons()
+
+    expect(press(reader, 'sq', [note(0x30, 0x7f, 1)])?.control).toBe('note')
+    // The read does not require a channel — the device is the filter — but the latch
+    // remembers which one the key was on.
+    expect(press(reader, 'sq', [note(0x30, 0x7f, 2)])?.control).toBe('note')
+    expect(press(reader, 'sq', [note(0x30, 0x7f, 1)])).toBeNull()
+  })
+
+  it('forgets a held note when the show is reset, so a lost release cannot swallow a press', () => {
+    const reader = new DeskButtons()
+
+    expect(press(reader, 'sq', [note(0x30, 0x7f)])?.control).toBe('note')
+    reader.reset()
+    expect(press(reader, 'sq', [note(0x30, 0x7f)])?.control).toBe('note')
+  })
+
+  it('is not a button on a desk whose own traffic is notes', () => {
+    // The app's DCA mutes are notes on a `note` desk and on an Avantis — 0x36 is the first
+    // note of that desk's DCA block — so a note there could be its own echo; the SQ mutes
+    // with NRPN, so a note on it cannot be the desk echoing the app back.
+    const reader = new DeskButtons()
+
+    expect(press(reader, 'note', [note(0x30, 0x7f)])).toBeNull()
+    expect(press(reader, 'avantis', [note(0x36, 0x7f)])).toBeNull()
   })
 })
 

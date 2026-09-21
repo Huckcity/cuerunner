@@ -1,10 +1,12 @@
 // The show the desk-button spec drives: two scenes over one mic, and a desk whose mute groups
-// 5 and 6 have been assigned to the operator's GO and BACK keys.
+// 5 and 6 have been assigned to the operator's GO and BACK keys — and whose soft keys 1 and 2
+// are set to transmit notes 48 and 49. Both routes run the show's scenes from the surface; the
+// notes are the keys that do not latch.
 //
 // Written as a workspace file rather than typed into the view, because the desk's address is
 // the peer's ephemeral port — and because the buttons are what a show file carries, which is
-// the point: the operator sets two fields, assigns the groups to keys at the desk, and the
-// show's scenes are run from the surface.
+// the point: the operator sets four fields, assigns the groups to keys and sets two soft keys
+// to MIDI Note at the desk, and the show's scenes are run from the surface.
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -12,6 +14,10 @@ import { join } from 'node:path'
 /** The mute groups the show runs from, as the desk's own panel numbers them. */
 export const GO_GROUP = 5
 export const BACK_GROUP = 6
+
+/** The notes the desk's soft keys transmit: soft key 1 is C3, 0x30, and they run upward. */
+export const GO_NOTE = 0x30
+export const BACK_NOTE = 0x31
 
 /** The channel the desk is set to, and the one the show is told it is. */
 export const CHANNEL = 1
@@ -45,7 +51,7 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
         port: 8000,
         tcpPort: port,
         address: '/dca/{n}/on',
-        buttons: { go: GO_GROUP, back: BACK_GROUP }
+        buttons: { go: GO_GROUP, back: BACK_GROUP, goNote: GO_NOTE, backNote: BACK_NOTE }
       },
       cast: {
         channels: [{ id: 'ch-1', name: 'Ruth', dcaId: 'dca-1' }],

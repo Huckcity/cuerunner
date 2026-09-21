@@ -12,7 +12,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { DeskProfile } from '../../src/shared/show'
+import type { DeskButtons, DeskProfile } from '../../src/shared/show'
 import type { MscCommand, MscFormat } from '../../src/shared/cue'
 
 /** Where a peer on this machine is. A real desk is named by its own address. */
@@ -47,11 +47,11 @@ interface DeskShowCommon {
    */
   deskScene?: number
   /**
-   * The mute groups an operator has assigned to the show's GO and BACK keys at the desk.
-   * With them the show carries the second scene a walk needs, so a key pressed at the
-   * desk has somewhere to move the show to.
+   * The buttons an operator has assigned at the desk. The lanes that pass this assign the
+   * mute groups only — the note route has its own fixture (`deskButtonsFixture.ts`) — but
+   * the shape is the show's own, so a field added to it cannot go missing here.
    */
-  buttons?: { go: number; back: number }
+  buttons?: Partial<DeskButtons>
   /**
    * A console on a MIDI cable: the MIDI input port its cable appears as on this machine,
    * and the show control command it transmits. The show listens on that port and carries

@@ -120,6 +120,69 @@ test('the desk’s own buttons are assigned by mute group, and only on a desk th
   await settings.locator('.show-settings-done').click()
 })
 
+test('the desk’s own note keys are assigned beside the groups, on the desk that sends them', async () => {
+  await openShowSettings(page)
+  const settings = page.locator('.show-settings-dialog')
+
+  // The desk this show drives takes a note on and a note off of its own accord, so a note
+  // read off it could be the app's own DCA mute: there is nothing to assign, and the row is
+  // not drawn.
+  await expect(settings.locator('.desk-notes')).toHaveCount(0)
+
+  // An SQ's soft key set to MIDI Note transmits while it is held, which is a button that
+  // does not latch. What to assign at the desk and which route to choose are said where the
+  // operator is looking: the path is in the hint, the SQ's own note range in the field.
+  await settings.locator('.desk-profile').selectOption('sq')
+  await expect(settings.locator('.desk-note-go')).toHaveValue('')
+  await expect(settings.locator('.desk-note-back')).toHaveValue('')
+  await expect(settings.locator('.desk-note-go'))
+    .toHaveAttribute('title', /Setup → Surface → Soft Controls → MIDI Note/)
+  await expect(settings.locator('.desk-note-hint')).toHaveText(
+    'Set the key in Setup → Surface → Soft Controls → MIDI Note for a key that does not stay lit; ' +
+    'a mute group is for one that should.'
+  )
+
+  // The number is the desk's own setting — an SQ's soft keys send 48–63 — so the field
+  // takes the whole range and the write is witnessed by the field itself.
+  await settings.locator('.desk-note-go').fill('48')
+  await settings.locator('.desk-note-go').blur()
+  await expect(settings.locator('.desk-note-go')).toHaveAttribute('data-saved', 'true')
+  await expect(settings.locator('.desk-note-go')).toHaveValue('48')
+
+  await settings.locator('.desk-note-back').fill('49')
+  await settings.locator('.desk-note-back').blur()
+  await expect(settings.locator('.desk-note-back')).toHaveValue('49')
+
+  // Written beside the groups rather than over them: the two routes share one row of fields
+  // and one show, so what the groups were is what they still are.
+  await expect(settings.locator('.desk-button-go')).toHaveValue('5')
+  await expect(settings.locator('.desk-button-back')).toHaveValue('6')
+
+  // One note cannot be both: the row says so rather than leaving a show that steps forward
+  // and back on the same press.
+  await settings.locator('.desk-note-back').fill('48')
+  await settings.locator('.desk-note-back').blur()
+  await expect(settings.locator('.desk-gap')).toHaveText('One note cannot be both buttons.')
+
+  // A number outside the MIDI range is refused by the field rather than written, as a port
+  // or a DCA number is; the show keeps the value it had.
+  await settings.locator('.desk-note-go').fill('128')
+  await settings.locator('.desk-note-go').blur()
+  await expect(settings.locator('.desk-note-go')).toHaveAttribute('data-refused', 'true')
+  await expect(settings.locator('.desk-note-go')).toHaveValue('128')
+
+  // A desk whose own mute groups are notes keeps the group row only — the route is not
+  // offered where the app's own DCA mutes are notes and a read could be its own echo — and
+  // the refusal goes with it, rather than standing over fields that are no longer drawn.
+  await settings.locator('.desk-profile').selectOption('avantis')
+  await expect(settings.locator('.desk-notes')).toHaveCount(0)
+  await expect(settings.locator('.desk-gap')).toHaveCount(0)
+  await settings.locator('.desk-profile').selectOption('note')
+  await expect(settings.locator('.desk-notes')).toHaveCount(0)
+  await expect(settings.locator('.desk-gap')).toHaveCount(0)
+  await settings.locator('.show-settings-done').click()
+})
+
 test('a show written before the desk had a socket opens on the port the desks use', async () => {
   // The file is what an operator's workspace looks like after the upgrade: a desk pointed
   // over the network, and no MIDI-over-TCP port, because the field did not exist when it

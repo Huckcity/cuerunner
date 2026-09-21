@@ -663,16 +663,27 @@ Desk and console integration:
   `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each
   desk does with the bytes rather than to what the app sent — on the peers lane, whose
   counterpart is the harness's desk peer rather than a desk
-- **A show run from the desk's own buttons.** A console reports a key press only when the key
-  has been assigned to a console function, so the buttons a show runs from are spare **mute
-  groups**: Show Settings → Channels says which group the operator's GO and BACK keys are,
-  those two groups are assigned to keys at the desk, and pressing them walks the show's scenes
-  — GO to the next, BACK to the one before, in the order the Scenes view shows them. No MIDI
-  note is set up anywhere. The desk's message is read by `utils/deskInput.ts`; the desk's own
-  report of its state primes the app rather than moving it — a show opened onto a desk with a
-  group already muted must not recall a scene by itself — and a DCA's own mute deliberately is
-  not read as a press, so a scene recall coming back off the desk cannot run the show.
-  `integration/specs/desk-buttons.spec.ts` drives all of it against the peer
+- **A show run from the desk's own buttons, two ways.** A console reports a key press only
+  when the key has been assigned to a console function, so the buttons a show runs from are
+  spare **mute groups** — and, where a key that latches is not what a press means, **MIDI
+  notes** beside them: Show Settings → Channels names which groups the operator's GO and BACK
+  keys are and which notes two soft keys transmit. A group key toggles its group and the desk
+  sends the mute, so the indicator latches; a key set to a note sends note on at `7F` while it
+  is held and note off at `00` when it is let go, so a press that only means "next cue" leaves
+  nothing lit. Either way one press is one step — GO to the next scene, BACK to the one before,
+  in the order the Scenes view shows them — a key held down is not a repeat, and nothing is
+  written back to the desk's own groups, because a latch is the desk's to own. A note that is
+  also a cue's MIDI trigger does both — the cue fires and the show steps — since one message
+  is two surfaces at once; that pairing is the operator's to make knowingly. The desk's
+  messages are read by `utils/deskInput.ts`; the desk's report of its groups primes the app
+  rather than moving it — a show opened onto a desk with a group already muted must not recall
+  a scene by itself — a note has no get to prime it and is a press the first time, and a DCA's
+  own mute deliberately is not read as a press, so a scene recall coming back off the desk
+  cannot run the show. The note route is offered where the **desk's own traffic** cannot be a
+  note — an SQ, which mutes with NRPN — and not on an Avantis or a `note` desk, where the
+  app's DCA mutes are notes and a read could be its own echo; it does not promise a note came
+  from a hand, since a cue can put that note on the desk link too.
+  `integration/specs/desk-buttons.spec.ts` drives both routes against the peer
 - **Or any control that sends something.** A soft key assigned to a MIDI note, a footswitch, a
   scene recalled at the desk — whatever the desk transmits is a MIDI trigger on its own
   connection, and `Learn` writes the trigger from what arrives. A lighting console's own show

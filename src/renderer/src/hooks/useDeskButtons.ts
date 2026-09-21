@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { recallScene } from '../engine/scenes'
 import { sendDeskMessage } from '../engine/deskSend'
 import { deskMidi } from '../utils/desk'
-import { DeskButtons, muteGroupGet } from '../utils/deskInput'
+import { DeskButtons, muteGroupGet, type DeskButton } from '../utils/deskInput'
 import { sceneStep } from '../utils/scenes'
 import { useStore, usePro } from '../store'
 import { deskLinkName } from '../../../shared/deskLink'
@@ -25,16 +25,26 @@ export function deskDevice(desk: DeskSettings): string | null {
 
 /**
  * What a button on the desk does on this show, or null when the show listens to no button of
- * that number. GO first: a show that has somehow assigned one group to both is a show that
- * moves on, and the settings panel says the same thing about that assignment.
+ * that number on that route. The press says which route it is: a note and a mute group are
+ * separate spaces, so a show may name group 5 and note 5 and each press runs its own
+ * action. Within a space GO comes first: a show that has somehow assigned both buttons the
+ * same number is a show that moves on, and the settings panel says the same thing.
  */
-export function deskButtonAction(buttons: DeskButtonMap, group: number): 'go' | 'back' | null {
-  if (buttons.go === group) return 'go'
-  if (buttons.back === group) return 'back'
+export function deskButtonAction(buttons: DeskButtonMap, press: DeskButton): 'go' | 'back' | null {
+  if (press.control === 'note') {
+    if (buttons.goNote === press.number) return 'go'
+    if (buttons.backNote === press.number) return 'back'
+    return null
+  }
+  if (buttons.go === press.number) return 'go'
+  if (buttons.back === press.number) return 'back'
   return null
 }
 
-/** The groups this show listens to, so a desk is only asked about those. */
+/**
+ * The mute groups this show listens to, so a desk is only asked about those. A note is not
+ * asked about: no get exists for a soft key, which is why a note primes on its own press.
+ */
 export function watchedGroups(desk: DeskSettings): number[] {
   const groups = [desk.buttons.go, desk.buttons.back]
     .filter((group): group is number => group !== null)
@@ -46,12 +56,15 @@ export function watchedGroups(desk: DeskSettings): number[] {
 /**
  * Runs the show's scenes from the desk's own buttons.
  *
- * A key press makes the desk transmit a mute group's message, this reads it off the same
- * event river the triggers read, and the group the show assigned moves the scenes one step on
- * or back. The desk reports its own state — when a client connects and in answer to a get —
- * so the reader treats a first sighting as no press and only a change as one, and the app asks
- * about the groups it listens to when it starts and whenever the desk comes back: a show that
- * opened onto a desk with a group already muted must not recall a scene by itself.
+ * A key press makes the desk transmit a mute group's message — or, on a key assigned to a
+ * MIDI note, the note itself — this reads it off the same event river the triggers read, and
+ * the button the show assigned moves the scenes one step on or back. The desk reports its own
+ * state — when a client connects and in answer to a get — so the reader treats a group's first
+ * sighting as no press and only a change as one, and the app asks about the groups it listens
+ * to when it starts and whenever the desk comes back: a show that opened onto a desk with a
+ * group already muted must not recall a scene by itself. A note is the other way round: the
+ * desk has no get for a soft key and transmits only while the key is held, so its note-on is
+ * the press, its note-off the release, and a repeat while it is down says nothing new.
  *
  * What stands in front of a press is the desk's own state rather than the firing window the
  * triggers use: the window would read a fast hand as a bounce, and the toggle in the message
@@ -99,7 +112,7 @@ export function useDeskButtons(): void {
 
         const pressed = buttons.read(current.profile, event)
         if (pressed === null || pressed.device !== device) continue
-        const action = deskButtonAction(current.buttons, pressed.number)
+        const action = deskButtonAction(current.buttons, pressed)
         if (action === null) continue
         stepScenes(action)
       }
