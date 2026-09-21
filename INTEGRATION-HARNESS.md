@@ -800,12 +800,13 @@ connect, GO and BACK walking the scenes, the DCA mute that must not be read as a
 duplicate delivery that is one step. What no lane here has is a desk to press the key on — the
 hardware lane is where the message a key really sends is checked, and it is checked by a hand:
 the operator assigns the show's GO group to a key and presses it.
-*Acceptance*: met when a run happens, and no run has happened yet — so what this milestone
-carries today is the machinery, not a result. The same assertions that pass against the peer are
-the ones pointed at the desk, and the address is not the only thing that changes: the desk's MIDI
-service refuses a second connection (§6), so the run holds it through `integration/deskRelay.ts`
-and both the app and the spec's own wire connect there. The desk cases report skipped without
-`DESK_HOST` named, and the two hand cases report the hand they are waiting for.
+*Acceptance*: met when a run happens. **A developer run against an SQ-6 (firmware 1.6.1) on
+2026-09-21 passed all three cases a desk can carry** — the desk's own read-back, the scene recall
+moving its DCA 1 (read back off the desk, through the relay), and a key press at the surface
+running the show — and the console case reported skipped for want of a console. What has *not*
+happened is the **job**: `integration-hardware.yml` has never been dispatched, so the lane has no
+report of its own, and a report is what the record's rows are evidence of. The desk has to be
+reachable from the runner for that, which is a cable rather than a change.
 *Stays open*: **the recorded desk fixture.** Nothing has been captured from a desk, so there is
 no desk recording for the Linux lane to replay — the desk peer has no recorder and no session has
 been taken from one. That half of the milestone is where it was, and this is the line that says so
@@ -837,9 +838,15 @@ unproven (§11).
    account of what it sent. The two hand-driven cases are the exception, and say so: a press and
    a console's GO arrive from outside, so what they assert is the app's log line — which names
    the desk or the console it came from — and, on an SQ, the desk's own value moving with it.
-   **No run has happened yet**, so the peer's model of the desk, the vendor lane's "MIDI bytes
-   are MIDI bytes" assumption and the message a real key press sends stay unproven — exactly
-   where they were — and the lane reports skipped, never passed, without a desk named.
+   **A run has now happened, and the job has not.** A developer run against an SQ-6 (firmware
+   1.6.1) on 2026-09-21 passed the desk's own read-back, a scene recall moving its DCA 1 as the
+   desk's own value reports it, and a key press at the surface running the show — so the message a
+   real key press sends is measured rather than assumed, and the peer's read-back and scene shapes
+   are held against a desk instead of only against its documents. Still unproven: the **job**
+   (`integration-hardware.yml` has never been dispatched, so the lane has no report of its own),
+   the vendor lane's "MIDI bytes are MIDI bytes" assumption, which belongs to the bridge, and the
+   console case, which has no console. The lane reports skipped, never passed, without a desk
+   named, and each claim's row moves only on the report that names it.
    **The desk is reached through a relay, and the checklist said otherwise until it was
    measured** (§6): an SQ's MIDI service refuses a second connection, resetting it the moment it
    is accepted, so a run that pointed both the app and this spec's own wire at the desk's address
