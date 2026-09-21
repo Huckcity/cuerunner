@@ -18,6 +18,7 @@
     "test:integration": "electron-vite build && node scripts/run-e2e.js --config integration/playwright.config.ts",
     "peer:eos": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/peers/eos.ts",
     "peer:desk": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/peers/desk.ts",
+    "relay:desk": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/deskRelay.ts",
     "dist": "electron-vite build && electron-builder",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac",

@@ -12,7 +12,11 @@
 //
 // What is asserted is the desk's own reply, read on this spec's own socket (`deskReadBack.ts`:
 // an SQ answers a get with the parameter's current value in the NRPN form that sets it, an
-// Avantis answers a name get in its own SysEx header). The app's log is read for the two things
+// Avantis answers a name get in its own SysEx header). That socket reaches the desk through the
+// relay (`../deskRelay.ts`), because the desk's MIDI service serves one connection at a time —
+// measured on an SQ-6, firmware 1.6.1: a second connection is accepted and reset before it can
+// send anything (`INTEGRATION-HARNESS.md` §6) — and this lane needs two: the app that drives the
+// desk, and this spec that asks it for its own value. The app's log is read for the two things
 // only the app can say — that a key press moved the show, and that the console's command fired
 // the cue that answers it — and the desk's or the console's own device is named in the line it
 // fired from. Nothing here reads the app's account of what it sent.
@@ -23,6 +27,8 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
+import { startDeskRelay } from '../deskRelay.ts'
+import type { DeskRelay } from '../deskRelay.ts'
 import { writeDeskShow } from './deskFixture'
 import { BACK_GROUP, GO_GROUP } from './deskButtonsFixture'
 import {
@@ -122,7 +128,7 @@ function checklist(): string {
     `  2. MIDI over TCP is on: an SQ and an Avantis both serve it on 51325, so ${deskPortNamed} is the desk's own port.`,
     `  3. Its MIDI channel is ${CHANNEL} (Utility > General > MIDI on an SQ), which is what the show is told.`,
     '  4. On an SQ, NRPN RX/TX is on — its mutes, and this spec’s get, are NRPN.',
-    '  5. The desk accepts a second client: the app is connected, and this spec asks for itself.',
+    '  5. Nothing else holds the desk’s MIDI socket: it serves one connection at a time, and this run’s relay is it — the app and this spec both reach the desk through it (`../deskRelay.ts`).',
     '  6. This machine can open a TCP connection to the desk (no firewall in the way).',
     `The reply this spec waits for is the read-back §6 of INTEGRATION-HARNESS.md documents${
       PROFILE === 'sq' ? ' — select the parameter, then the increment message carrying 7F.' : ' — a name get, answered in the range’s own header.'}`,
@@ -148,6 +154,7 @@ let app: ElectronApplication
 let page: Page
 let userDataDir: string
 let wire: DeskWire
+let relay: DeskRelay | undefined
 
 /** What the desk's own value says about DCA 1, or null when it has not answered in time. */
 async function dcaValue(): Promise<boolean | null> {
@@ -161,14 +168,17 @@ test.beforeAll(async () => {
     throw new Error(`This run cannot drive a desk as it stands:\n  ${MISADDRESSED.join('\n  ')}\n\n${checklist()}`)
   }
   try {
-    wire = await openDeskWire(deskHost, deskPort)
+    // The desk's MIDI service takes one client, and both of this lane's clients have to share
+    // it: the relay holds the desk, and the show below and this spec's own wire connect here.
+    relay = await startDeskRelay({ desk: { host: deskHost, port: deskPort } })
+    wire = await openDeskWire(relay.host, relay.port)
   } catch (error) {
     throw new Error(`${(error as Error).message}\n\n${checklist()}`)
   }
   const show = writeDeskShow({
     kind: 'midi-tcp',
-    host: deskHost,
-    port: deskPort,
+    host: relay.host,
+    port: relay.port,
     channel: CHANNEL,
     profile: PROFILE,
     buttons: { go: GO_GROUP, back: BACK_GROUP },
@@ -191,6 +201,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await closeApp(app)
   wire?.close()
+  await relay?.close()
 })
 
 test('the desk answers for itself', { tag: '@hardware' }, async () => {
