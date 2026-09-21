@@ -187,6 +187,12 @@ test.describe('the show the fixture writes', () => {
     const settings = page.locator('.show-settings-dialog')
     await expect(settings.locator('.desk-button-go')).toHaveValue(String(GO_GROUP))
     await expect(settings.locator('.desk-button-back')).toHaveValue(String(BACK_GROUP))
+    // The file names no notes — it was written before the route existed — and the
+    // normaliser fills them empty rather than leaving the field undefined, which would
+    // read back as a value and draw the "both buttons" line on two unassigned fields.
+    await expect(settings.locator('.desk-note-go')).toHaveValue('')
+    await expect(settings.locator('.desk-note-back')).toHaveValue('')
+    await expect(settings.locator('.desk-gap')).toHaveCount(0)
     await settings.locator('.show-settings-done').click()
 
     // And the cue that answers the console is there, armed, carrying the command's own

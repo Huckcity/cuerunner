@@ -748,6 +748,32 @@ export const GUIDES = [
         everything", and it is never what anyone meant.
       </div>
     </section>
+
+    <section class="panel reveal delay-3">
+      <h2>5. Run it from the desk’s own keys</h2>
+      <p>
+        A console only reports a key press when the key is assigned to something the console
+        can name, so Cuerunner reads GO and BACK from two <strong>mute groups</strong> — or
+        from two <strong>MIDI notes</strong> beside them on the same Show Settings → Channels
+        tab. Assign the groups to two spare keys at the desk and pressing them walks the
+        show’s scenes — GO to the next, BACK to the one before, in the order the Scenes view
+        shows them.
+      </p>
+      <p>
+        A group’s key toggles the group, so the desk’s indicator stays lit — which is what
+        you want when the light itself is the cue that the show has moved. Where a press
+        only ever means “next cue”, set a soft key to <strong>MIDI Note</strong> instead
+        (<em>Setup → Surface → Soft Controls</em> on an SQ) and enter the number it
+        transmits as the <strong>GO note</strong>. That key sends the note only while it is
+        held, so the press steps the show once, the release does nothing, and nothing is
+        left lit at the desk. An SQ’s soft keys transmit from 48 upward, one per key.
+      </p>
+      <div class="note">
+        The note fields are offered on an SQ, whose own desk traffic Cuerunner cannot mistake
+        for a hand on a key. On an Avantis the mute groups <em>are</em> notes and its surface
+        keys latch, so the group route is the one to use there.
+      </div>
+    </section>
 `
   },
 

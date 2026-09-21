@@ -33,6 +33,17 @@ function hasMuteGroups(desk: DeskSettings): boolean {
   return (desk.kind === 'midi' || desk.kind === 'midi-tcp') && desk.profile !== 'note'
 }
 
+/**
+ * Whether this desk has a key that transmits a MIDI note. An SQ's soft keys do — a key set
+ * to MIDI Note sends note on while it is held — and the desk's own traffic there is NRPN,
+ * so a note cannot be that desk echoing the app's DCA mutes back. An Avantis's mute groups
+ * *are* notes and its surface keys latch, and the app's DCA mutes are notes on both it and
+ * a `note` desk, so a note read there could be the app's own echo.
+ */
+function hasNoteKeys(desk: DeskSettings): boolean {
+  return (desk.kind === 'midi' || desk.kind === 'midi-tcp') && desk.profile === 'sq'
+}
+
 /** The group a select is standing on, or null for the option that assigns none. */
 function muteGroupOf(value: string): number | null {
   return value === '' ? null : Number(value)
@@ -41,6 +52,11 @@ function muteGroupOf(value: string): number | null {
 /** Whether one group has been given both buttons, which would run the show both ways. */
 function sameButton(desk: DeskSettings): boolean {
   return desk.buttons.go !== null && desk.buttons.go === desk.buttons.back
+}
+
+/** Whether one note has been given both buttons, which would run the show both ways. */
+function sameNote(desk: DeskSettings): boolean {
+  return desk.buttons.goNote !== null && desk.buttons.goNote === desk.buttons.backNote
 }
 
 /** Every mute group the desk has, and the option that assigns none. */
@@ -309,6 +325,49 @@ export function ChannelsTab() {
           <div className="desk-hint">
             GO recalls the next scene, BACK the one before it, in the order the Scenes view
             shows them.
+          </div>
+        )}
+
+        {/* A key that sends a MIDI note instead of toggling a group: an SQ's soft key set
+            to MIDI Note transmits while it is held, so a press steps the show and nothing
+            is left lit at the desk. The number is the desk's own setting, so the field
+            takes the whole range and the steps to set it are its title. */}
+        {hasNoteKeys(desk) && !gap && (
+          <div className="desk-row desk-notes">
+            <label className="desk-label" htmlFor="desk-note-go">GO note</label>
+            <NumberField
+              id="desk-note-go"
+              className="desk-note desk-note-go"
+              value={desk.buttons.goNote}
+              min={0}
+              max={127}
+              aria-label="Desk GO note"
+              title="The note your GO key transmits — at the desk: Setup → Surface → Soft Controls → MIDI Note. An SQ’s soft keys send 48–63."
+              onValue={goNote => updateDeskSettings({ buttons: { ...desk.buttons, goNote } })}
+            />
+
+            <label className="desk-label" htmlFor="desk-note-back">BACK note</label>
+            <NumberField
+              id="desk-note-back"
+              className="desk-note desk-note-back"
+              value={desk.buttons.backNote}
+              min={0}
+              max={127}
+              aria-label="Desk BACK note"
+              title="The note your BACK key transmits — at the desk: Setup → Surface → Soft Controls → MIDI Note. An SQ’s soft keys send 48–63."
+              onValue={backNote => updateDeskSettings({ buttons: { ...desk.buttons, backNote } })}
+            />
+          </div>
+        )}
+        {hasNoteKeys(desk) && !gap && sameNote(desk) && (
+          <div className="desk-preview desk-gap">
+            One note cannot be both buttons.
+          </div>
+        )}
+        {hasNoteKeys(desk) && !gap && !sameNote(desk) && (
+          <div className="desk-note-hint">
+            Set the key in Setup → Surface → Soft Controls → MIDI Note for a key that does
+            not stay lit; a mute group is for one that should.
           </div>
         )}
 

@@ -188,8 +188,10 @@
 .desk-tcp-host { flex: 1 1 140px; }
 .desk-tcp-port { flex: 0 0 80px; }
 .desk-tcp-channel { flex: 0 0 70px; }
+.desk-note { flex: 0 0 70px; }
 
-.desk-hint {
+.desk-hint,
+.desk-note-hint {
   font-size: var(--text-base);
   color: var(--fg-subtle);
 }

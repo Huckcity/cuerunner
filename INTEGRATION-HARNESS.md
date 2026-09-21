@@ -178,7 +178,7 @@ runs in no workflow.
 | Desk/scene messages | `utils/desk.ts` → a per-desk arrangement (a note pair, or an SQ's NRPN mute) | yes |
 | Show control out | `MscCue` → `midi:send` / `midi:sendTcp`, `utils/msc.ts` | yes — an SQ's cue list answers MSC |
 | Show control in | `engine/triggers.ts`, `msc` triggers | a console that transmits one (Eos does; the sound desks do not — G2) |
-| A desk's own buttons | a spare mute group assigned to a key → `utils/deskInput.ts` → GO / BACK | yes — the message a key press makes the desk send |
+| A desk's own buttons | a spare mute group assigned to a key, or an SQ soft key set to a MIDI note → `utils/deskInput.ts` → GO / BACK | yes — the message a key press makes the desk send |
 
 Three gaps stood between that and the harness, in the order they bit. What became of each:
 
@@ -234,6 +234,9 @@ What a sound desk is heard through instead is its own controls, and how far that
   send note on/off messages when a Soft Key is pressed unless the Soft Key is set to a MIDI note
   on/off function", one sequential note per key from C3 (0x30). A plain MIDI trigger listens to
   it, and `msc.spec.ts` holds that path: a key pressed at the desk fires the cue bound to it.
+  The same note runs the show's scenes when a show names it for GO or BACK (below), so one key
+  can be both a trigger and a button — the operator assigns both knowingly, and no guard is
+  added between them.
 - **A scene recalled on the desk** transmits its bank and program change, which is the desk-originated
   case the desk specs already drive.
 - **A mute group key is the button a show runs from**, and it is read: a console reports a key
@@ -244,6 +247,18 @@ What a sound desk is heard through instead is its own controls, and how far that
   the show reads it in `utils/deskInput.ts`: page 04's groups on an SQ, the mute-group notes on
   an Avantis, and a DCA's own mute is deliberately *not* one of them, or a show would run itself
   when a scene moved the desk. `desk-buttons.spec.ts` drives it end to end.
+- **A soft key set to a MIDI note is the button that does not latch** — a press that only means
+  "next cue" leaves the desk alone. A show names a note for GO and another for BACK beside its
+  groups; the reader takes the note-on as the press, the note-off as the release, and a repeat
+  while the key is down as neither. **Offered only on an SQ**: the desk's own traffic there is
+  NRPN, so a note cannot be that desk echoing the app back, while an Avantis's mute groups *are*
+  notes and its surface keys latch, and on a `note` desk the notes are the app's own DCA mutes —
+  a note route on either could read the app's own echo. What an Avantis should do instead is out
+  of scope and unguessed. `desk-buttons.spec.ts` drives both routes in one show;
+  the desk's own state and its mute page are what the cases assert, never the app's self-report.
+  The *hardware* lane's key-press case stays the mute-group one (`desk-hardware.spec.ts`), run
+  with a group assigned, so the note route is carried by the peers lane alone and no desk
+  acceptance is claimed for it.
 
 **G3 — triggers match OSC addresses literally.** `matchesTrigger` is an exact string
 compare, by an explicit decision ("patterns and wildcards belong to the sender", held by
@@ -559,6 +574,14 @@ first slice, not the ceiling.
 5. A group nobody assigned does nothing.
 6. The same state arriving twice steps once: the desk's own toggle is what tells one press from
    two, so the window the triggers use is not needed here.
+7. A soft key on the show's **BACK note** stands the show back: the press is sent as its own
+   `90 <note> 7F`, the release as its own `80 <note> 00`, and the step is counted once — with no
+   mute-group message written to the desk, because nothing is latched and nothing has to be.
+8. A soft key on the **GO note** moves the show on, sent as the whole tap the peer's own
+   `pressSoftKey` makes.
+9. A note **held down** repeats its note-on, and the repeat is not a second press: the show
+   moves one scene, where a second press would have nowhere to go and would say so.
+10. A note **nobody assigned** is silent, like a group nobody assigned.
 
 **Show control, and a key assigned to a MIDI note** (`msc.spec.ts`)
 
@@ -794,12 +817,17 @@ cue from a soft key the operator assigned. What the *desk* does not do is transm
 so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane: the
 show listens on the MIDI input port the cable appears as (`MSC_HOST`) and the case is unproven
 without a console transmitting.
-**The desk's own buttons are read as mute groups**, which is how a show is run from the surface
-without assigning anything as a MIDI note: `desk-buttons.spec.ts` holds the desk's report at
-connect, GO and BACK walking the scenes, the DCA mute that must not be read as a press, and the
-duplicate delivery that is one step. What no lane here has is a desk to press the key on — the
-hardware lane is where the message a key really sends is checked, and it is checked by a hand:
-the operator assigns the show's GO group to a key and presses it.
+**The desk's own buttons are read two ways**, so a show can be run from the surface whether the
+key should latch or not: `desk-buttons.spec.ts` holds the desk's report at connect, GO and BACK
+walking the scenes, the DCA mute that must not be read as a press, the duplicate delivery that is
+one step, and — in the same show — two soft keys whose notes step it, with the release silent, a
+held key not repeating and an unassigned note ignored. The mute-group route is the one the desk
+assigns a key to; the note route is for a press that only ever means "next cue", and it is
+offered only where the app's own traffic cannot be a note. What no lane here has is a desk to
+press the key on — the hardware lane is where the message a key really sends is checked, and it
+is checked by a hand: the operator assigns the show's GO group to a key and presses it. That case
+stays the group one, so the note route is carried by the peer's model of the desk and nothing
+wider.
 *Acceptance*: met when a run happens. **A developer run against an SQ-6 (firmware 1.6.1) on
 2026-09-21 passed all three cases a desk can carry** — the desk's own read-back, the scene recall
 moving its DCA 1 (read back off the desk, through the relay), and a key press at the surface

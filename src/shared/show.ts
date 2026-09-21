@@ -223,7 +223,7 @@ export type DeskKind = 'none' | 'midi' | 'osc' | 'midi-tcp'
 export type DeskProfile = 'note' | 'sq' | 'avantis'
 
 /**
- * The desk's own buttons, as the desk numbers its mute groups.
+ * The desk's own buttons, as the desk numbers its mute groups and its notes.
  *
  * A console reports a key press only when the key does something the console can name, so
  * the buttons a show runs from are mute groups: one is assigned to a key at the desk, the
@@ -231,13 +231,24 @@ export type DeskProfile = 'note' | 'sq' | 'avantis'
  * group is what a theatre show has spare — the muting is done with DCAs — so a show pays
  * nothing for it, and the operator presses a button on the desk with no MIDI setup at all.
  *
- * Both are null on a desk nobody has set up, and on a show run from the window.
+ * A key that latches is not always what a GO means, though: an SQ's soft key set to a MIDI
+ * note transmits note on at `7F` and note off at `00` while the key is held, so a press
+ * steps the show and nothing is left lit at the desk. The notes are the same fields one
+ * route over: a number is a mute group where the key toggles one, and a MIDI note where the
+ * key sends one. A note is only offered on a desk whose own traffic cannot be a note — the
+ * app's DCA mutes are notes on an Avantis and on a `note` desk, and NRPN on an SQ.
+ *
+ * All four are null on a desk nobody has set up, and on a show run from the window.
  */
 export interface DeskButtons {
   /** The mute group assigned to the desk's GO button. */
   go: number | null
   /** The mute group assigned to the desk's BACK button. */
   back: number | null
+  /** The MIDI note the desk's GO key transmits, where the key sends one. */
+  goNote: number | null
+  /** The MIDI note the desk's BACK key transmits. */
+  backNote: number | null
 }
 
 /**
@@ -615,8 +626,8 @@ export function defaultDeskSettings(): DeskSettings {
     tcpPort: DEFAULT_DESK_TCP_PORT,
     address: DEFAULT_DESK_ADDRESS,
     // A desk nobody has assigned a button on: the show runs from the window until the
-    // operator says which mute group their GO key is.
-    buttons: { go: null, back: null }
+    // operator says which mute group or note their GO key is.
+    buttons: { go: null, back: null, goNote: null, backNote: null }
   }
 }
 
@@ -706,7 +717,9 @@ export function normalizeShowSettings(settings: Partial<ShowSettings> | undefine
       ...defaults.desk,
       ...settings?.desk,
       // A desk section written before a desk could be run from has no buttons, and one
-      // half-filled by hand gets the other half: a button nobody assigned is null.
+      // half-filled by hand gets the other half: a button nobody assigned is null. The
+      // note route came later the same way — a file written before it has groups and no
+      // notes, which is exactly what it was running from.
       buttons: { ...defaults.desk.buttons, ...settings?.desk?.buttons }
     },
     rf: {
