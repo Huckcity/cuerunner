@@ -17,7 +17,7 @@
  *   node scripts/build-native-audio.mjs [--debug] [--clean]
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -84,6 +84,37 @@ export function findOnPath(name, pathEnv = process.env.PATH ?? '', platform = pr
     }
   }
   return null
+}
+
+/**
+ * The flags a macOS engine is built with — and the reason it is one binary rather than
+ * two: the dmg is universal, both app stagings carry this same file, and
+ * `@electron/universal` refuses to merge them unless the path is declared
+ * architecture-independent (`build.mac.x64ArchFiles` in package.json). That declaration
+ * is only honest while the engine really does contain both architectures, and clang
+ * takes several `-arch` in one invocation, so it is compiled once, fat. The deployment
+ * floor is the one the bundle declares, so the engine cannot outlive its own app.
+ */
+export function darwinBuildFlags(minimumSystemVersion) {
+  return ['-arch', 'x86_64', '-arch', 'arm64', `-mmacosx-version-min=${minimumSystemVersion}`]
+}
+
+/**
+ * The floor `package.json` declares for the macOS bundle. Read from there rather than
+ * repeated here, because that file is what the packaging workflow's own check reads and
+ * the two must be the same number.
+ */
+function macMinimumSystemVersion() {
+  const declared = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))?.build?.mac
+    ?.minimumSystemVersion
+  if (typeof declared !== 'string' || declared === '') {
+    console.error(
+      'native-audio: package.json declares no build.mac.minimumSystemVersion, and the macOS\n' +
+        '  engine is compiled for exactly that floor.'
+    )
+    process.exit(1)
+  }
+  return declared
 }
 
 function run(command, args) {
@@ -192,7 +223,10 @@ function main() {
     const cxx = process.env.CXX ?? (hasCommand('g++') ? 'g++' : 'clang++')
     const cc = process.env.CC ?? (hasCommand('gcc') ? 'gcc' : 'clang')
     const optimisation = debug ? ['-O0', '-g'] : ['-O2']
-    const compileFlags = ['-std=c++17', ...optimisation, '-Wall', '-Wextra', '-Wno-unused-parameter', '-pthread']
+    // Both architectures on macOS, nothing anywhere else. These ride on every compile and
+    // on the link, because a fat executable is only fat if its objects were.
+    const darwinFlags = process.platform === 'darwin' ? darwinBuildFlags(macMinimumSystemVersion()) : []
+    const compileFlags = ['-std=c++17', ...optimisation, ...darwinFlags, '-Wall', '-Wextra', '-Wno-unused-parameter', '-pthread']
     const objects = []
     for (const name of sources) {
       const object = join(objectDir, objectName(name))
@@ -201,7 +235,7 @@ function main() {
     }
     for (const source of cSources) {
       const object = join(objectDir, objectName(source))
-      run(cc, ['-std=c11', ...optimisation, '-Wall', '-Wno-unused-function', `-I${thirdPartyDir}`, '-c', source, '-o', object])
+      run(cc, ['-std=c11', ...optimisation, ...darwinFlags, '-Wall', '-Wno-unused-function', `-I${thirdPartyDir}`, '-c', source, '-o', object])
       objects.push(object)
     }
     const linkFlags = ['-pthread']

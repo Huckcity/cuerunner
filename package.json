@@ -103,7 +103,9 @@
       ],
       "icon": "resources/icon.icns",
       "category": "public.app-category.music",
-      "minimumSystemVersion": "12.0"
+      "minimumSystemVersion": "12.0",
+      "// x64ArchFiles": "The universal dmg carries one app staging per architecture, and the engine is the same fat binary in both (it is compiled with both -arch flags on macOS). @electron/universal refuses to merge a file that is identical on both sides unless its path is declared here, so this names the directory the engine is packaged into — and nothing under Contents/MacOS, which must stay per-architecture.",
+      "x64ArchFiles": "Contents/Resources/audio/**"
     },
     "nsis": {
       "oneClick": false,

@@ -375,6 +375,13 @@ processes and the engine speak.
   signed; its absence is the "not recorded" state the gate reads, and it is never committed
   as a placeholder. An unsigned build can still be built, tested and used internally; it is
   published only with the record in place.
+- **macOS universal dmg**: the dmg carries one app per architecture, and the engine is one
+  binary for both — `-arch x86_64 -arch arm64`, compiled at the floor
+  `build.mac.minimumSystemVersion` declares — so `build.mac.x64ArchFiles` names
+  `Contents/Resources/audio/**` as architecture-independent. That declaration is what lets
+  `@electron/universal` merge the two stagings; without it packaging dies with
+  `Detected file "Contents/Resources/audio/cuerunner-audio" ... not covered by the
+  x64ArchFiles rule`, which is how the first packaging run of v0.14.0 failed.
 - Source pins and licences for everything vendored live in
   `native/audio/third_party/DEPENDENCIES.json`; the FFmpeg helper's notice and licence
   texts sit next to the binary.
