@@ -111,6 +111,26 @@ function universalProblems(reading: UniversalReading): string[] {
   const archs = targets.flatMap((target) => target.arch ?? [])
   if (!archs.includes('universal')) return problems
 
+  // electron-builder validates `build` against its own schema and refuses an unknown
+  // property, so a `//`-style comment key — the JSON convention this repository uses in
+  // tsconfig, and which nothing here reads — fails every `npm run dist:*` on every
+  // platform before a file is written. It cost a release run: "configuration.mac has an
+  // unknown property '// x64ArchFiles'". Explanations belong in the README.
+  const comments: string[] = []
+  const walk = (value: unknown, path: string): void => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return
+    for (const [key, child] of Object.entries(value)) {
+      if (key.startsWith('//')) comments.push(`${path}.${key}`)
+      walk(child, `${path}.${key}`)
+    }
+  }
+  walk(reading.pkg?.build ?? {}, 'build')
+  for (const comment of comments) {
+    problems.push(
+      `package.json's \`${comment}\` is a comment key inside electron-builder's config, which is schema-validated: every \`npm run dist:*\` fails with "has an unknown property" — the explanation belongs in the README`
+    )
+  }
+
   const resources = (reading.pkg?.build?.extraResources ?? []).find(
     (entry: { to?: string }) => entry.to === 'audio'
   )
@@ -212,6 +232,13 @@ describe('the universal macOS dmg', () => {
     const buildScript = LIVE.buildScript.replace(/darwinBuildFlags\(/g, 'someOtherFlags(')
     const problems = universalProblems({ ...LIVE, buildScript })
     expect(problems[0]).toContain('no longer builds the engine with darwinBuildFlags')
+  })
+
+  it('names a comment key that would fail electron-builder\'s schema', () => {
+    const mac = { ...LIVE.pkg.build.mac }
+    mac['// x64ArchFiles'] = 'an explanation in the wrong place'
+    const problems = universalProblems({ ...LIVE, pkg: { build: { ...LIVE.pkg.build, mac } } })
+    expect(problems[0]).toContain('is a comment key inside electron-builder')
   })
 
   it('names packaging notes that stopped saying how the dmg gets both architectures', () => {
