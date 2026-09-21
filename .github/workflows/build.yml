@@ -6,6 +6,12 @@ on:
   workflow_dispatch:
 
 
+# One run per ref at a time: a re-dispatch for a tag that is still packaging would otherwise
+# interleave its release body, its asset uploads and its `latest/` writes with the first run's.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # A release runs entirely on the homelab machines, like every other workflow here:
   # Linux and the packaging on ubox, the macOS half on the Mac mini, the Windows installer
@@ -42,6 +48,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The whole vitest run, and with it the two guards the release path waits on:
+      # `scripts/docs-build.test.ts` holds every page the docs build generates to what the
+      # renderer writes, and `scripts/published-numbers.test.ts` holds a published figure to
+      # the run that produced it. Each packaging job below `needs` this one, so a release
+      # cannot publish pages the render drifted from or numbers no run produced.
       - name: Unit tests
         run: npm test
 
@@ -67,6 +78,15 @@ jobs:
   build-windows:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, windows, x64, win-ci]
+    # What this build is, for the release job's notes and for the file list the release page
+    # and the mirror are composed from: the installer it published — empty when it published
+    # none — whether a certificate signed it, and whether it linked the ASIO SDK. Every one
+    # of them is recorded from the environment that produced it, the secret that gates signing
+    # and the SDK probe, never written into the notes by hand.
+    outputs:
+      installer: ${{ steps.publish.outputs.installer }}
+      certificate: ${{ steps.publish.outputs.certificate }}
+      asio: ${{ steps.publish.outputs.asio }}
     steps:
       - uses: actions/checkout@v7
 
@@ -100,12 +120,14 @@ jobs:
       # the only place the path is decided: the variable a provisioned runner sets by
       # hand, then the documented default location.
       - name: Locate the ASIO SDK
+        id: asio
         shell: cmd
         run: |
           set "ASIO=%CUERUNNER_ASIO_SDK%"
           if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
-          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & echo found=no>>"%GITHUB_OUTPUT%" & exit /b 0)
           echo CUERUNNER_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          echo found=yes>>"%GITHUB_OUTPUT%"
           echo Using the ASIO SDK at %ASIO%
 
       # The engine is a separate binary; a build that ships one the user cannot identify
@@ -114,14 +136,19 @@ jobs:
       # `WIN_CSC_KEY_PASSWORD` — and electron-builder skips it, without failing, when
       # they are empty: its Windows signer checks for the empty string, which is why this
       # job needs none of `scripts/signing-env.sh`.
+      #
+      # `shell: pwsh` is spelled out because it is what a Windows runner defaults to:
+      # the POSIX `if [ -z ... ]` this step used to carry would die at its first line
+      # there, and this is the step that builds the installer the release publishes.
       - name: Build and package
+        shell: pwsh
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          if [ -z "$WIN_CSC_LINK" ]; then
-            echo "::warning::No Windows certificate is configured (WIN_CSC_LINK); the installer will be unsigned."
-          fi
+          if (-not $env:WIN_CSC_LINK) {
+            Write-Host '::warning::No Windows certificate is configured (WIN_CSC_LINK); the installer will be unsigned.'
+          }
           npm run dist:win
 
       # `secrets` is not available to a step's `if:` — GitHub rejects the whole workflow
@@ -143,16 +170,59 @@ jobs:
             throw "the installer is not validly signed: $($signature.Status)"
           }
 
+      # What this installer is, recorded for the release notes rather than described to them:
+      # the certificate state comes from the secret that gates signing, the ASIO half from the
+      # probe above. The probe answers whether it found an SDK with `yes`/`no` — its own
+      # contract — and the state this job publishes is the engine's own word for it, `on`/`off`,
+      # which is what the release notes' composer and the build log both speak; the mapping
+      # happens here and nowhere else. Steinberg's agreement is an external input this repository
+      # cannot supply, so `native/audio/third_party/ASIO-AGREEMENT.md` is the record of it being
+      # signed: its absence is the honest "not recorded" state this gate reads, and so is a file
+      # that carries nothing, because the record the README and the checklist describe holds a
+      # date and the parties. A build that links the SDK without a recorded agreement withholds
+      # its installer — the job passes, the warning names the missing record, and nothing is
+      # uploaded for a release to publish or a mirror to copy.
+      - name: Record what this installer is
+        id: publish
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          ASIO: ${{ steps.asio.outputs.found }}
+        run: |
+          $installer = Get-ChildItem dist\*.exe | Select-Object -First 1
+          if (-not $installer) { throw 'no installer was built in dist\' }
+          $certificate = if ($env:WIN_CSC_LINK) { 'yes' } else { 'no' }
+          $asio = if ($env:ASIO -eq 'yes') { 'on' } else { 'off' }
+          $agreement = Get-Item native/audio/third_party/ASIO-AGREEMENT.md -ErrorAction SilentlyContinue
+          $recorded = $null -ne $agreement -and $agreement.Length -gt 0
+          $withheld = $asio -eq 'on' -and -not $recorded
+          if ($withheld) {
+            Write-Host "::warning::$($installer.Name) links Steinberg's ASIO SDK and native/audio/third_party/ASIO-AGREEMENT.md records no signed agreement: the installer is withheld from the release."
+          }
+          $published = if ($withheld) { '' } else { $installer.Name }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "installer=$published"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "certificate=$certificate"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "asio=$asio"
+
       - name: Upload installer
+        if: steps.publish.outputs.installer != ''
         uses: actions/upload-artifact@v7
         with:
           name: Cuerunner-windows
-          path: dist/*.exe
+          path: dist/${{ steps.publish.outputs.installer }}
+          if-no-files-found: error
           retention-days: 30
 
   build-mac:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, macos, arm64, mac-mini]
+    # The same recording as the Windows job's: the dmg this job published, and the two facts
+    # the notes need — whether a certificate signed it, and whether the Apple credentials
+    # notarised it. Both are read from the secrets that gate that work.
+    outputs:
+      dmg: ${{ steps.publish.outputs.dmg }}
+      certificate: ${{ steps.publish.outputs.certificate }}
+      notarised: ${{ steps.publish.outputs.notarised }}
     steps:
       - uses: actions/checkout@v7
 
@@ -210,16 +280,58 @@ jobs:
           DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
           xcrun stapler validate "$DMG"
 
+      # The recording the Windows job does, from this platform's own secrets: `MAC_CSC_LINK`
+      # decides whether the app is signed at all, and the three Apple credentials decide
+      # whether it is also notarised — the state the notes must name, because an app that is
+      # signed but not notarised is the one Gatekeeper refuses. Notarisation is derived with
+      # the certificate rather than beside it, so a build with no certificate cannot record
+      # itself notarised: nothing was submitted for a signature nobody had. A certificate with
+      # no notarisation half never reaches this step — the verification above fails the job on
+      # `spctl` and `stapler validate`, and nothing is uploaded.
+      - name: Record what this build is
+        id: publish
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
+          if [ -z "$DMG" ]; then
+            echo "::error::no dmg was built in dist/"
+            exit 1
+          fi
+          if [ -z "$MAC_CSC_LINK" ]; then
+            certificate='no'
+          else
+            certificate='yes'
+          fi
+          if [ "$certificate" = 'yes' ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            notarised='yes'
+          else
+            notarised='no'
+          fi
+          {
+            echo "dmg=$(basename "$DMG")"
+            echo "certificate=$certificate"
+            echo "notarised=$notarised"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload dmg
         uses: actions/upload-artifact@v7
         with:
           name: Cuerunner-mac
-          path: dist/*.dmg
+          path: dist/${{ steps.publish.outputs.dmg }}
+          if-no-files-found: error
           retention-days: 30
 
   build-linux:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, linux, x64, ubox]
+    # The one artifact with no signature to record: this pipeline has no Linux signing step —
+    # and adds none — so the AppImage is named as what it is in the release job's notes.
+    outputs:
+      appimage: ${{ steps.publish.outputs.appimage }}
     steps:
       - uses: actions/checkout@v7
 
@@ -245,16 +357,43 @@ jobs:
       - name: Build and package
         run: npm run dist:linux
 
+      # The AppImage is the artifact this pipeline cannot sign: there is no Linux signing step
+      # above, and this story adds none — so there is no secret to read a state from, and the
+      # release job's notes name this file unsigned on that ground. What keeps the sentence true
+      # is `scripts/release-path.test.ts`, which holds this job to naming no signing tool or
+      # secret at all — `CSC_LINK`, `codesign`, `spctl`, `stapler`, `notarytool`, `cosign`,
+      # `gpg`, `sigstore`, `osslsigncode`, a `--sign` flag — with the comments in it left out of
+      # that reading, so explaining the absence of a step does not fail it.
+      - name: Record what this build is
+        id: publish
+        run: |
+          APPI=$(find dist -maxdepth 1 -name '*.AppImage' | head -1)
+          if [ -z "$APPI" ]; then
+            echo "::error::no AppImage was built in dist/"
+            exit 1
+          fi
+          echo "appimage=$(basename "$APPI")" >> "$GITHUB_OUTPUT"
+
       - name: Upload AppImage
         uses: actions/upload-artifact@v7
         with:
           name: Cuerunner-linux
-          path: dist/*.AppImage
+          path: dist/${{ steps.publish.outputs.appimage }}
+          if-no-files-found: error
           retention-days: 30
 
   release:
     needs: [ build-windows, build-mac, build-linux ]
+    # Nothing publishes from a ref that is not a tag: a dispatch from a branch may package —
+    # that is how this path is exercised without publishing — but it can neither manufacture a
+    # release nor overwrite `latest/`. `success()` stays in the condition on purpose: a
+    # packaging job that failed leaves its recording unset, and a release composed without one
+    # would be a page its own notes cannot describe.
+    if: github.ref_type == 'tag' && success()
     runs-on: [self-hosted, linux, x64, ubox]
+    # The list the release page and the R2 mirror both read, composed once, below.
+    outputs:
+      files: ${{ steps.notes.outputs.files }}
     permissions:
       contents: write
     steps:
@@ -262,12 +401,144 @@ jobs:
         with:
           path: artifacts
 
-      - uses: softprops/action-gh-release@v3
+      # The notes and the file list are composed together, from what each packaging job
+      # recorded: whether a certificate signed an installer comes from the secret that gated
+      # signing, and whether the Windows build linked the SDK comes from its probe — never
+      # from text written here. One recording decides what this page carries, what the notes
+      # say about it and what the mirror copies, so the three cannot disagree.
+      - name: Compose the state section and the file list
+        id: notes
+        env:
+          WINDOWS_INSTALLER: ${{ needs.build-windows.outputs.installer }}
+          WINDOWS_CERTIFICATE: ${{ needs.build-windows.outputs.certificate }}
+          WINDOWS_ASIO: ${{ needs.build-windows.outputs.asio }}
+          MAC_DMG: ${{ needs.build-mac.outputs.dmg }}
+          MAC_CERTIFICATE: ${{ needs.build-mac.outputs.certificate }}
+          MAC_NOTARISED: ${{ needs.build-mac.outputs.notarised }}
+          LINUX_APPIMAGE: ${{ needs.build-linux.outputs.appimage }}
+        run: |
+          set -eu
+
+          # This run's own files, created rather than appended to: a reused self-hosted workspace
+          # can still hold the previous run's notes and list, and what is published has to be
+          # what this run recorded.
+          : > release-notes.md
+          : > release-files.txt
+
+          # The path the download step left a recorded file at. A name no artifact holds is a
+          # failure rather than a missing line: one recording decides the notes, the release
+          # page and the mirror, and a list that quietly drops an artifact is how the three
+          # start saying different things.
+          located() {
+            found=$(find artifacts -type f -name "$1" -print -quit)
+            if [ -z "$found" ]; then
+              # stderr, not stdout: this function is called with its standard output going
+              # into the file list, and an error message must not become a line of it.
+              echo "::error::$2 recorded the file $1, and the artifacts this run downloaded hold no file by that name" >&2
+              exit 1
+            fi
+            printf '%s\n' "$found"
+          }
+
+          # One artifact: the sentence the notes carry about it, and the path the release page
+          # and the mirror take it from — added together, so neither can name what the other
+          # does not, and the notes cannot describe a file this release does not carry.
+          publish() {
+            printf -- '- %s\n' "$2" >> release-notes.md
+            located "$1" "$3" >> release-files.txt
+          }
+
+          # The section itself, appended to semantic-release's body: it says where the states
+          # below come from and which run wrote it — a second dispatch appends a second section,
+          # and a reader has to be able to tell which described which artifacts.
+          cat >> release-notes.md <<SECTION
+
+          ---
+
+          ### What each installer is
+
+          Composed by the run that built these files —
+          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — from what its jobs
+          recorded: the certificate secrets that gate signing, and the ASIO SDK probe. So an
+          installer nobody signed says so here, and the files this page carries, and the ones the
+          download mirror serves, are exactly the list below.
+
+          SECTION
+
+          if [ -n "$WINDOWS_INSTALLER" ]; then
+            case "$WINDOWS_CERTIFICATE" in
+              yes) windows='signed with the certificate in `WIN_CSC_LINK`, and verified by the build with `Get-AuthenticodeSignature`' ;;
+              no) windows='unsigned: no Windows certificate is configured, so Windows warns about this installer and a venue machine will refuse it' ;;
+              *)
+                echo "::error::build-windows recorded the certificate state \"$WINDOWS_CERTIFICATE\", which is neither yes nor no; the notes are composed from that recording and cannot be written from one they do not understand"
+                exit 1
+                ;;
+            esac
+            case "$WINDOWS_ASIO" in
+              on) windows="$windows. It links Steinberg's ASIO SDK, which the signed agreement \`native/audio/third_party/ASIO-AGREEMENT.md\` records." ;;
+              off) windows="$windows. It was built without Steinberg's ASIO SDK, so it hosts no ASIO driver." ;;
+              *)
+                echo "::error::build-windows recorded the ASIO state \"$WINDOWS_ASIO\", which is neither on nor off"
+                exit 1
+                ;;
+            esac
+            publish "$WINDOWS_INSTALLER" "**Windows**: \`$WINDOWS_INSTALLER\` — $windows" 'build-windows'
+          elif [ "$WINDOWS_ASIO" = 'on' ]; then
+            withheld="- **Windows**: no installer is published. This build linked Steinberg's ASIO SDK and \`native/audio/third_party/ASIO-AGREEMENT.md\` records no signed agreement, which is what publishing a build against the SDK requires — so the installer is withheld from this page and from the download mirror."
+            printf -- '%s\n' "$withheld" >> release-notes.md
+          else
+            echo '::error::build-windows published no installer without the ASIO SDK being on, and nothing in this run explains that: no release is composed from a recording that contradicts itself'
+            exit 1
+          fi
+
+          case "$MAC_CERTIFICATE:$MAC_NOTARISED" in
+            no:*)
+              mac='unsigned: no macOS certificate is configured, so the app is neither signed nor notarised and Gatekeeper refuses it on a machine that has not seen it.'
+              ;;
+            yes:yes)
+              mac='signed and notarised with the certificate and the Apple credentials in the release secrets, verified with `codesign`, `spctl` and `stapler validate`.'
+              ;;
+            yes:no)
+              echo '::error::build-mac recorded a certificate with no notarisation credentials: an app that is signed but not notarised is the one Gatekeeper refuses, and that job fails such a build at verification rather than uploading it'
+              exit 1
+              ;;
+            *)
+              echo "::error::build-mac recorded the certificate state \"$MAC_CERTIFICATE\" and the notarisation state \"$MAC_NOTARISED\", which are not states this pipeline reads"
+              exit 1
+              ;;
+          esac
+          publish "$MAC_DMG" "**macOS**: \`$MAC_DMG\` — $mac" 'build-mac'
+
+          publish "$LINUX_APPIMAGE" "**Linux**: \`$LINUX_APPIMAGE\` — unsigned: this pipeline has no Linux signing step, so nothing signs the AppImage and nothing here claims otherwise." 'build-linux'
+
+          if [ ! -s release-files.txt ]; then
+            echo '::error::no artifact was published, so there is no release to describe and nothing to mirror'
+            exit 1
+          fi
+
+          {
+            printf 'body=release-notes.md\n'
+            printf 'files<<RELEASE_FILES\n'
+            cat release-files.txt
+            printf 'RELEASE_FILES\n'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v3
         with:
-          files: artifacts/**/*
+          # Appended, not written: semantic-release owns the body — the commits since the last
+          # tag — and this adds what the run recorded to it.
+          body_path: ${{ steps.notes.outputs.body }}
+          append_body: true
+          # The composed list: the page carries the artifacts the notes describe and no others.
+          files: ${{ steps.notes.outputs.files }}
+          fail_on_unmatched_files: true
 
   upload-r2:
     needs: release
+    # The same gate as the release job's, for the same reason: `latest/` is what the site's
+    # download cards point at, and a branch dispatch must not overwrite it.
+    if: github.ref_type == 'tag' && success()
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
       - uses: actions/download-artifact@v8
@@ -282,15 +553,27 @@ jobs:
           R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
           TAG: ${{ github.ref_name }}
+          FILES: ${{ needs.release.outputs.files }}
         run: |
-          EXE=$(find artifacts -name "*.exe" | head -1)
-          # One universal dmg now: every Mac takes the same file, and the stapler
-          # validates the file that ships rather than one architecture of two.
-          DMG=$(find artifacts -name "*.dmg" | head -1)
-          APPI=$(find artifacts -name "*.AppImage" | head -1)
-          aws s3 cp "$EXE" "s3://$R2_BUCKET/versions/$TAG/Cuerunner-Setup.exe" --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$DMG" "s3://$R2_BUCKET/versions/$TAG/Cuerunner.dmg"       --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$APPI" "s3://$R2_BUCKET/versions/$TAG/Cuerunner.AppImage"  --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$EXE" "s3://$R2_BUCKET/latest/Cuerunner-Setup.exe"        --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$DMG" "s3://$R2_BUCKET/latest/Cuerunner.dmg"              --endpoint-url "$R2_ENDPOINT"
-          aws s3 cp "$APPI" "s3://$R2_BUCKET/latest/Cuerunner.AppImage"        --endpoint-url "$R2_ENDPOINT"
+          set -eu
+          # The list the notes were composed from, copied file by file. There is no search
+          # here on purpose: a `find artifacts -name '*.exe'` would be a second list, and a
+          # second list is how the mirror comes to carry an installer the release withheld.
+          #
+          # The site's download cards name these three files, so the mirror keeps its own names
+          # whatever the build called them; one universal dmg, because the stapler validates
+          # the file that ships rather than one architecture of two.
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            case "$file" in
+              *.exe) name=Cuerunner-Setup.exe ;;
+              *.dmg) name=Cuerunner.dmg ;;
+              *.AppImage) name=Cuerunner.AppImage ;;
+              *)
+                echo "::error::$file is published under a name this mirror cannot place"
+                exit 1
+                ;;
+            esac
+            aws s3 cp "$file" "s3://$R2_BUCKET/versions/$TAG/$name" --endpoint-url "$R2_ENDPOINT"
+            aws s3 cp "$file" "s3://$R2_BUCKET/latest/$name" --endpoint-url "$R2_ENDPOINT"
+          done <<< "$FILES"
