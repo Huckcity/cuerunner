@@ -385,7 +385,11 @@ describe('the suite reporter, driven by a real Playwright run', () => {
       ]
     })
     expect(lanes.get('peers')).toMatchObject({ lane: 'peers', status: 'passed', passed: 1 })
-  })
+    // The runner boots a real Playwright process, so the default 5 s budget measures this
+    // machine's load rather than the reporter: a loaded runner reports a slow run as a
+    // failure. 60 s is headroom over the seconds this takes on an idle machine, and the
+    // case still fails, by name, on the assertions above.
+  }, 60_000)
 })
 
 describe('the native lane, run as the workflow runs it', () => {
