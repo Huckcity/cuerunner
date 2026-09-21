@@ -214,9 +214,11 @@ h3 {
   letter-spacing: 0;
 }
 
+/* Text fills the block it sits in. The measure used to be capped at 68ch here, which left
+   every paragraph short of its panel — the panel is the visible container, so the line is
+   its width, not a narrower column behind it. */
 p {
   margin: 0 0 12px;
-  max-width: 68ch;
   color: var(--fg-secondary);
 }
 
@@ -530,6 +532,26 @@ figure.figure {
   background: var(--bg-base);
 }
 
+/* The window shot on the home page sits on the layout grid itself, so the figure's own
+   margin would be added to the grid's gap. */
+.window-shot {
+  margin: 0;
+}
+
+/* Promotion shots live in a card grid: same reason, and they are pictures rather than
+   reading matter, so the caption is the only text. */
+.figure.promo {
+  margin: 0;
+  align-content: start;
+}
+
+/* A figure that opens the full-size screenshot: the picture is the link, so it carries no
+   underline of its own. */
+.figure a {
+  text-decoration: none;
+  display: block;
+}
+
 .figure figcaption {
   color: var(--fg-muted);
   font-size: 13px;
@@ -802,7 +824,6 @@ code {
 .doc-lede {
   font-size: 17px;
   color: var(--fg-secondary);
-  max-width: 62ch;
 }
 
 /* A card that is a link to another page, rather than a box of text. */

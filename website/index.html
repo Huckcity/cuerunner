@@ -9,7 +9,7 @@
   <meta property="og:title" content="Cuerunner — show control for Windows, macOS and Linux" />
   <meta property="og:description" content="A cue stack for live shows: audio, MIDI, OSC, MSC and script cues, a native audio engine and sample-accurate timing. Free on Windows, macOS and Linux, with Cuerunner Pro for the desk, the radios, the tablet and the second machine." />
   <meta property="og:url" content="https://huckcity.github.io/cuerunner/" />
-  <meta property="og:image" content="https://huckcity.github.io/cuerunner/assets/logo-horizontal.svg" />
+  <meta property="og:image" content="https://huckcity.github.io/cuerunner/assets/guide/01-window.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Cuerunner — QLab-style show control for Windows &amp; macOS" />
   <meta name="twitter:description" content="Cross-platform QLab alternative: a free cue stack for audio, MIDI, OSC, fades and groups, with Cuerunner Pro for the show services and scenes. Built for live theatre and events." />
@@ -44,9 +44,8 @@
       <img src="./assets/logo-horizontal.svg" alt="Cuerunner logo" class="hero-logo" />
       <h1>Professional show control, built for Windows first.</h1>
       <p>
-        A cue stack that runs the sound, drives the rig and fires from anything — a keyboard,
-        a footswitch, a desk or another program. Sample-accurate, honest about its timing,
-        and the same showfile on Windows, macOS and Linux.
+        A cue stack that runs the sound and drives the rig, fired from a keyboard, a footswitch,
+        a desk or another program — with the same showfile on Windows, macOS and Linux.
       </p>
       <div class="hero-actions">
         <a class="action action-primary" href="#download">Download for Windows</a>
@@ -55,7 +54,54 @@
       <p class="hero-note">The cue stack is free and stays free. <a href="./pro.html">Cuerunner Pro</a> is the desk, the radios, the tablet and the second machine.</p>
     </section>
 
-    <section id="download" class="panel reveal delay-1">
+    <figure class="figure window-shot reveal delay-1">
+      <a href="./assets/guide/01-window.png" target="_blank" rel="noreferrer">
+        <img src="./assets/guide/01-window.png" alt="The Cuerunner window with the demo show open: cue list, cue inspector, timeline and the GO transport" />
+      </a>
+      <figcaption>The demo show, ready to run: the cue list, the inspector for the selected cue, and GO.</figcaption>
+    </figure>
+
+    <section class="panel reveal delay-2">
+      <h2>What it does</h2>
+      <div class="cards three-col">
+        <article class="card">
+          <h3>Cue stack</h3>
+          <p>Audio, MIDI, OSC, show control, network, script, fade, wait, stop, group and devamp cues — with timelines, triggers and advance modes.</p>
+        </article>
+        <article class="card">
+          <h3>Timing</h3>
+          <p>Playback runs in a native engine, so the sound outlives the window: a renderer can die mid-show and the show keeps playing. The soak's own numbers are on the <a href="./reliability.html">reliability page</a>.</p>
+        </article>
+        <article class="card">
+          <h3>Showfile</h3>
+          <p>Deterministic saves with history in the file, compare and three-way merge between two people's copies, and one bundle that carries the media.</p>
+        </article>
+      </div>
+      <p class="note">
+        Every cue type, with its fields, is in the <a href="./reference/cue-types.html">reference</a>;
+        <a href="./guides/first-show.html">Your first show</a> builds one from nothing.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>The dock</h2>
+      <div class="cards two-col">
+        <figure class="figure promo">
+          <a href="./assets/guide/13-wireless.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/13-wireless.png" alt="The wireless panel: twelve packs with names, battery and RF bars, sorted with the pack in trouble at the top." />
+          </a>
+          <figcaption>Radio mics and packs: names, battery, RF — and the pack in trouble at the top.</figcaption>
+        </figure>
+        <figure class="figure promo">
+          <a href="./assets/guide/17-report.png" target="_blank" rel="noreferrer">
+            <img src="./assets/guide/17-report.png" alt="The wireless report: each pack with its lowest battery, worst RF and any swaps during the session." />
+          </a>
+          <figcaption>The report the session leaves behind: lowest battery, worst RF, every swap.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="download" class="panel reveal delay-3">
       <h2>Download</h2>
       <div class="cards two-col">
         <article class="card download-card">
@@ -78,62 +124,15 @@
         </article>
       </div>
       <p class="note">
-        Runs on any 64-bit Windows 10+, macOS 12+ or Linux machine with two cores and 8 GB of
-        memory. The 64-bit AppImage for Linux is published alongside every release:
+        Windows 10+ (64-bit) or macOS 12+; Linux is a 64-bit AppImage, experimental:
         <a href="https://pub.winslabapp.com/latest/Cuerunner.AppImage">Download .AppImage</a>.
       </p>
-    </section>
-
-    <section id="quickstart" class="panel reveal delay-1">
-      <h2>Quick Start</h2>
-      <ol class="steps">
-        <li>Launch Cuerunner and create a workspace from Cuerunner > New.</li>
-        <li>Add cues from the toolbar: Audio, Group, Fade, Wait, Stop, or More for MIDI / OSC / Network / Script.</li>
-        <li>For audio, drag files directly into the cue list to auto-create cues.</li>
-        <li>Select a cue to edit it in the Inspector panel.</li>
-        <li>Press GO to run the selected cue and advance through your show.</li>
-      </ol>
-      <p style="margin-top: 12px">
-        That is the short version. <a href="./guides/first-show.html">Your first show</a>
-        walks it through properly, the rest of the <a href="./guide.html">guides</a> cover
-        building and running a show, and the <a href="./reference/index.html">reference</a>
-        has every cue type, setting and shortcut.
-      </p>
-    </section>
-
-    <section id="cue-types" class="panel reveal delay-3">
-      <h2>Cue Types</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Use Case</th>
-              <th>Key Fields</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Audio</td><td>Play sound files</td><td>file, level, pan, fades, loop</td></tr>
-            <tr><td>MIDI</td><td>Send MIDI messages</td><td>port, message list</td></tr>
-            <tr><td>Show Control</td><td>Tell a lighting console or automation to go, stop, load or reset</td><td>command, format, device ID, cue number and list, where it sends</td></tr>
-            <tr><td>OSC</td><td>Control network devices/apps</td><td>host, port, address, args</td></tr>
-            <tr><td>Wait</td><td>Pause timeline progression</td><td>duration</td></tr>
-            <tr><td>Fade</td><td>Ramp target cue parameter</td><td>target cue, property, value, duration</td></tr>
-            <tr><td>Stop</td><td>Stop all audio</td><td>—</td></tr>
-            <tr><td>Group</td><td>Organize and trigger children</td><td>mode, child cues</td></tr>
-            <tr><td>Network</td><td>HTTP style trigger cues</td><td>method, URL, headers, body, timeout</td></tr>
-            <tr><td>Script</td><td>Custom scripted action</td><td>language, script body</td></tr>
-            <tr><td>Devamp</td><td>Release a cue that is vamping its section</td><td>target cue</td></tr>
-            <tr><td>Scene <span class="pro">Pro</span></td><td>Recall a scene, so GO moves the desk with the show</td><td>scene</td></tr>
-          </tbody>
-        </table>
-      </div>
     </section>
 
   </main>
 
   <footer class="site-footer">
-    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="./guide.html">Guides</a> · <a href="./reference/index.html">Reference</a> · <a href="./pro.html">Free and Pro</a></p>
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="./guide.html">Guides</a> · <a href="./reference/index.html">Reference</a> · <a href="./pro.html">Free and Pro</a> · <a href="./pricing.html">Pricing</a> · <a href="./trial.html">Trial</a> · <a href="./support.html">Support</a></p>
   </footer>
 
 </body>
