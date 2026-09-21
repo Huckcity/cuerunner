@@ -35,5 +35,39 @@ export const COPY_CLAIMS = [
     claim: 'The MSC end-to-end case',
     lane: 'hardware',
     words: 'Any console that speaks MSC takes show-control cues'
+  },
+  // The buyer page's four, each on the row that states its status in the record: the engine
+  // row splits its sentence so the phrase sits behind the backends no lane runs and not behind
+  // ASIO, which the `asio` lane hosts. The two rows no lane carries declare `—`, the record's
+  // own mark for a claim with no lane behind it.
+  {
+    page: 'pro.html',
+    claim: 'ASIO hosting',
+    lane: 'asio',
+    words: "ASIO, through the interface's own driver — proved in CI against a real driver"
+  },
+  {
+    page: 'pro.html',
+    claim: 'Hosting a real driver on the other backends',
+    lane: '—',
+    words: 'WASAPI shared and exclusive, Core Audio, ALSA and JACK'
+  },
+  {
+    page: 'pro.html',
+    claim: 'A&H desk acceptance',
+    lane: 'hardware',
+    words: 'an Allen &amp; Heath SQ or Avantis'
+  },
+  {
+    page: 'pro.html',
+    claim: 'The MSC end-to-end case',
+    lane: 'hardware',
+    words: 'show-control messages'
+  },
+  {
+    page: 'pro.html',
+    claim: 'Live discovery',
+    lane: '—',
+    words: 'the devices that announce themselves'
   }
 ]

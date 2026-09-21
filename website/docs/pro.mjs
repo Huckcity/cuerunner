@@ -14,10 +14,14 @@
 import { table } from './table.mjs'
 
 /**
- * The phrase a claim carries where nothing in this project has exercised it: a claim is only
- * as strong as the lane that ran (AD-24). This page makes four that no lane does — hosting a
- * real driver, the Allen & Heath desks, show control end to end, and live discovery — and each
- * one says so in its own wording, inline, rather than in a section or a badge.
+ * The phrase a claim carries where no run has proved it: a claim is only as strong as the lane
+ * that ran (AD-24). This page makes four that no run does — hosting a real driver on WASAPI, Core
+ * Audio, ALSA and JACK, the Allen &amp; Heath desks, show control end to end, and live discovery —
+ * and each one says so in its own wording, inline, rather than in a section or a badge: two of the
+ * four stand on the hardware lane and are unproved for want of a run, and the other two are
+ * carried by no lane at all. ASIO is deliberately not one of them: the Windows lane hosts the
+ * machine's own driver, so the phrase sits behind the backends no lane runs rather than behind the
+ * engine row's whole sentence, and the clause that names ASIO is declared as a claim of its own.
  *
  * The string is shared rather than this page's own: `website/docs/interop.mjs` imports it for
  * the A&H and MSC claims its Lighting bullet makes, and both pages' claims are declared beside
@@ -70,8 +74,8 @@ export const FREE_ROWS = [
   {
     label: 'The engine',
     free: {
-      notYetProved: 'hosting a real driver',
-      prose: `Every output the interface has, one device at a time, hosting a real driver ${NOT_YET_PROVED}: WASAPI shared and exclusive, ASIO, Core Audio, ALSA and JACK. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.`
+      notYetProved: 'WASAPI shared and exclusive, Core Audio, ALSA and JACK',
+      prose: `Every output the interface has, one device at a time: ASIO, through the interface's own driver — proved in CI against a real driver; WASAPI shared and exclusive, Core Audio, ALSA and JACK ${NOT_YET_PROVED}. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.`
     }
   },
   {

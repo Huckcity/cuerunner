@@ -18,7 +18,10 @@ export default defineConfig({
   // Electron launch, and the app-driving specs do all three in one test.
   timeout: 45_000,
   retries: process.env.CI ? 1 : 0,
-  reporter: [['list']],
+  // `list` says what each test did; the lane reporter says what the run's lanes did — which of
+  // them ran, which skipped and why — because a green job's list lines are the only other place
+  // a skip is visible (`lane-status.reporter.ts`, AD-24).
+  reporter: [['list'], ['./lane-status.reporter.ts', {}]],
   // One at a time on CI, for the same reason the E2E lane is: several Electron instances
   // (and several peers on loopback ports) starve each other on a shared runner.
   workers: process.env.CI ? 1 : undefined,

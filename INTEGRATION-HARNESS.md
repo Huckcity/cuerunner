@@ -147,7 +147,21 @@ unvalidated rather than as evidence.
 This section decides what a lane may claim; which of those claims the lanes carry today, with
 each one's status and evidence, is the record's to state — its "Lanes and claims" tables in
 `_bmad-output/specs/spec-cuerunner/quality-and-proof.md`, which `scripts/lane-claims.test.ts`
-holds to these workflows and to the copy the pages serve.
+holds to these workflows and to the copy the pages serve. Each run leaves its own lanes'
+statuses behind as well: the suite's reporter (`integration/lane-status.reporter.ts`) reports
+every lane the run saw — `passed` when everything of that lane the job selected ran and passed,
+`skipped` when it did not run — with the counts and the skip annotations' own reasons, in the
+job summary and in `test-results/lane-status.json`, and the ASIO step's own note states whether
+that machine hosted a driver, so a skipped lane is read as skipped and the claim it would carry
+stays exactly where the record left it.
+
+The native lane is the fourth, and it is not an integration with another system at all: the
+Windows half of `ci.yml`'s `e2e` job runs `npm run test:native:asio`
+(`native/audio/tests/asio-smoke.mjs`), whose counterpart is the machine's own installed driver —
+Steinberg's built-in one or an interface's. It carries ASIO hosting and nothing wider: the
+conversion and buffer-size rules run on every platform as `asio-rules`, and hosting a real driver
+on WASAPI, Core Audio, ALSA or JACK is carried by no lane, because `npm run test:native:device`
+runs in no workflow.
 
 ---
 
