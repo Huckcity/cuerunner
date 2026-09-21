@@ -16,8 +16,13 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
+import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
 import { writeDeskShow } from './deskFixture'
+import { BACK_GROUP, GO_GROUP } from './deskButtonsFixture'
+import { openDeskWire, sqDcaGet, sqMuteValue } from './deskReadBack'
+// The app's own reading of a show control command, so the text this case expects is what the
+// app composes rather than a wording typed here.
+import { describeMsc } from '../../src/renderer/src/utils/msc'
 
 /** The channel the desk is set to, and the one the show is told it is. */
 const CHANNEL = 1
@@ -119,4 +124,80 @@ test('a desk that goes away is reported, and the next recall reaches it when it 
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     return peer.received.length
   }, { timeout: 15_000 }).toBeGreaterThan(0)
+})
+
+test('the desk answers a get, and its own answer reads back as the value it holds', async () => {
+  // The decode the hardware lane leans on, held where a lane that runs on every pull request
+  // can answer it: the get is the one §3.7 of the SQ document describes, and what it is read
+  // back against is the peer's own state — so a decoder that drifts from the document fails
+  // here rather than on the one lane that needs a desk in the room.
+  const wire = await openDeskWire('127.0.0.1', peer.port)
+  try {
+    peer.setMute(CHANNEL, 0, true, 0x02)
+    const open = await wire.ask(sqDcaGet(CHANNEL))
+    expect(open, 'the peer said nothing to a get').not.toBeNull()
+    expect(sqMuteValue(open ?? [])).toBe(true)
+
+    peer.setMute(CHANNEL, 0, false, 0x02)
+    const closed = await wire.ask(sqDcaGet(CHANNEL))
+    expect(closed, 'the peer said nothing to a get').not.toBeNull()
+    expect(sqMuteValue(closed ?? [])).toBe(false)
+  } finally {
+    wire.close()
+  }
+})
+
+/**
+ * The show file the fixture writes, read back by the app.
+ *
+ * The hardware lane's show names a desk, carries the desk's own keys and can carry a console's
+ * cable — and none of that runs on a machine without a desk. The shapes are held here instead:
+ * the app has to read the buttons the file names and the extra cue that answers a console, or
+ * the lane that needs a desk would be the first to find out (INTEGRATION-HARNESS.md §10 M3).
+ */
+test.describe('the show the fixture writes', () => {
+  const CONSOLE_PORT = 'Console Cable Test'
+  /** What the file says the console transmits — the trigger reads it back field for field. */
+  const CONSOLE_COMMAND = {
+    deviceId: 1,
+    format: 'lighting',
+    command: 'go',
+    cueNumber: '12',
+    cueList: '2'
+  } as const
+
+  test.beforeAll(async () => {
+    // This case needs a show of its own, and the instance above is done with its one.
+    await closeApp(app)
+    const show = writeDeskShow({
+      port: peer.port,
+      channel: CHANNEL,
+      profile: 'sq',
+      buttons: { go: GO_GROUP, back: BACK_GROUP },
+      msc: { port: CONSOLE_PORT, ...CONSOLE_COMMAND }
+    })
+    ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+    await openFromRecent(page, userDataDir, show)
+  })
+
+  test('the desk’s keys and the console’s cue are in the show the app opens', async () => {
+    // The groups the file names are the show's own fields, so they read back where an
+    // operator sets them.
+    await openShowSettings(page, 'channels')
+    const settings = page.locator('.show-settings-dialog')
+    await expect(settings.locator('.desk-button-go')).toHaveValue(String(GO_GROUP))
+    await expect(settings.locator('.desk-button-back')).toHaveValue(String(BACK_GROUP))
+    await settings.locator('.show-settings-done').click()
+
+    // And the cue that answers the console is there, armed, carrying the command's own
+    // fields: every one of them is identity, so what the file says is what a console has to
+    // send for the cue to fire. The text is the app's own reading of the command, so a
+    // wording the app changes does not have to be chased here.
+    await expect(page.locator('.cue-row')).toHaveCount(2)
+    await expect(page.locator('.cue-row').nth(1)).toHaveAttribute('data-armed', 'true')
+    await page.locator('.cue-row').nth(1).click()
+    await page.locator('.inspector-tab', { hasText: 'Triggers' }).click()
+    await expect(page.locator('.trigger-row[data-kind="msc"] .trigger-text'))
+      .toHaveText(`Show Control ${describeMsc(CONSOLE_COMMAND)} from "${CONSOLE_PORT}"`)
+  })
 })

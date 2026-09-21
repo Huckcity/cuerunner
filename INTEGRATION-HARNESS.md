@@ -7,7 +7,9 @@ a mixer on the bench, and without a human clicking in either app.
 Merged as `d8e2137`. The transport of §3 G1 is in the tree with its unit and E2E tests, the
 peers and the lanes above are built and green, and M2's acceptance has been met against real
 hardware. The milestones at the end say what each lane still needs, and §11 records the
-decisions — the first of them taken, in the direction this document recommended.
+decisions — all of them now taken, in the direction this document recommended: the hardware
+lane, the A&H vendor job and the end-to-end MSC case are built and unrun, and each of them
+reports skipped rather than passed until its counterpart is there.
 
 Since then, B4's two halves have landed. The desk is told in its own arrangement (§3, below):
 `DeskSettings.profile` names the range, and an SQ's mute is the NRPN sequence its document
@@ -106,8 +108,10 @@ CI citizen than a licensed desktop app anyway.
 - **Eos**: the vendor software is the counterpart. Test against the real thing, in CI,
   on the Windows runner.
 - **Allen & Heath**: the counterpart is a peer we write from the published protocol, and
-  the thing that keeps the peer honest is a hardware lane (a desk, when one is available)
-  — not the vendor's desktop apps.
+  the thing that keeps the peer honest is the hardware lane — a real desk, on demand, §10
+  M3 — not the vendor's desktop apps. What *is* testable about the vendor route is the
+  bridge operators actually use: MIDI Control's virtual port, on the vendor lane's A&H job
+  (§8, §9). The desktop apps themselves remain nothing to test against.
 
 ---
 
@@ -118,14 +122,22 @@ Nothing is "covered" by one lane; the honesty is in saying which lane claims wha
 | Lane | Where | Counterpart | Proves |
 |---|---|---|---|
 | **peers** | every PR, Linux (`ubox`) | `integration/peers/*` — an Eos OSC peer and an SQ/Avantis MIDI-TCP peer, both written from the vendor documents | Cuerunner still emits the bytes and still reacts correctly to the bytes; the fixture contract has not moved |
-| **vendor** | nightly + on demand, `win-ci` (and the Mac mini if it earns a slot) | real ETCnomad, real A&H MIDI Control | the fixtures are still what the real software does; Eos is not just a peer we invented |
-| **hardware** | on demand only, wherever a desk is | a real SQ or Avantis on the LAN | the peer is a fair model of the desk, and the vendor lane's assumption (MIDI bytes are MIDI bytes) holds |
+| **vendor** | nightly + on demand, `win-ci` (and the Mac mini if it earns a slot) | real ETCnomad (`eos-windows`), and A&H MIDI Control's virtual port joined to the desk peer (`ah-windows`) | the fixtures are still what the real software does; Eos is not just a peer we invented; and the bridge a desk is really driven through passes bytes both ways |
+| **hardware** | on demand only, wherever a desk is (`integration-hardware.yml`, `desk_host`) | a real SQ or Avantis on the network — and, when a console is on a cable, the console itself (`msc_host`) | the peer is a fair model of the desk, the vendor lane's assumption (MIDI bytes are MIDI bytes) holds, and an `msc` trigger fires end to end from a console that transmits one (G2) |
+
+All three are built. What is not true of any of them yet is that they have **run**: the
+hardware lane and the A&H job have no run against their counterparts to point at, so what
+each one would prove stays unproven, and each reports skipped — with the name of what is
+missing — rather than passing on a machine that cannot carry it. §11 holds the decisions and
+says, per lane, what remains unproven as a consequence.
 
 Fixtures flow **from** the real thing **to** the fast lane: a `--record` run against real
-Eos or a real desk writes captures into `integration/fixtures/`, and the peers replay
-them. A capture carries its provenance in the file that holds it — device, firmware,
-document issue, date, and which lane recorded it — because a fixture whose origin is
-unknown is a fixture nobody can trust or retire.
+Eos writes captures into `integration/fixtures/`, and the peers replay them. A capture carries
+its provenance in the file that holds it — device, firmware, document issue, date, and which
+lane recorded it — because a fixture whose origin is unknown is a fixture nobody can trust or
+retire. The desk half has no recorder: nothing has been captured from a desk, so there is no
+desk recording for the Linux lane to replay, and §10's M3 says so rather than leaving the
+`--record` above to imply one.
 
 The Linux PR lane deliberately does **not** claim: that Eos accepts the message, that a
 desk does, or that firmware X behaves like firmware Y. Those are the vendor and hardware
@@ -172,8 +184,12 @@ in the app:
 - `midi:sendTcp` carries a scene's messages from the renderer, and the desk row in Show
   Settings → Channels is where an operator points it at the room.
 
-A&H MIDI Control stays supported and stays exercised on the vendor lane, because it is
-still how anyone with a virtual port is driving their desk today.
+A&H MIDI Control stays supported, and the vendor lane is where the desk path through it is
+exercised, because it is still how anyone with a virtual port is driving their desk today:
+`ah-windows` runs that path through MIDI Control's own virtual port, against the harness's
+desk peer standing in for the desk (§8, §9). It is the one place the bridge is measured at
+all, and until a run happens the bridge is an expectation rather than a measurement — §11
+says so, and says what that leaves unproven.
 
 **G2 — no MSC. Built.** The SQ's cue list answers MSC `GO`/`LOAD`/`RESET`, and Eos transmits
 and receives it; Cuerunner now does both directions — a Show Control cue out, an `msc` trigger
@@ -187,7 +203,11 @@ something the cue list *accepts*, and this was written down here as a doubt ("no
 says an SQ sends a command when its own GO is pressed") before a peer method existed to make it
 concrete — the method is gone. So an `msc` trigger is for a console that transmits one, which is
 a lighting console on a MIDI path (Eos does; §1), and the *hardware* lane is the only place it
-can be driven end to end, because no peer here is a console on a cable.
+can be driven end to end, because no peer here is a console on a cable. **That case is built**:
+`desk-hardware.spec.ts` has the show listen on the MIDI input port the console's cable appears
+as (`MSC_HOST`) and waits for the console's own command to fire the cue that answers it. Without
+a desk named and a console transmitting it reports skipped, and the end-to-end path stays
+unproven — a console's cable is the one counterpart this harness cannot supply.
 
 What a sound desk is heard through instead is its own controls, and how far that reaches:
 
@@ -235,6 +255,11 @@ integration/
                               a recording of one — and it skips itself when neither is named
     desk-sq.spec.ts           Cuerunner ↔ the SQ peer
     desk-avantis.spec.ts      Cuerunner ↔ the Avantis peer
+    desk-midi-control.spec.ts @ah: Cuerunner ↔ the SQ/Avantis peer through A&H MIDI Control's
+                              virtual port — the bridge route, on the vendor lane
+    desk-hardware.spec.ts     @hardware: Cuerunner ↔ a real SQ or Avantis named by `DESK_HOST`,
+                              and a console on a cable transmitting MSC (`MSC_HOST`); it skips
+                              itself when neither is named
     eosFixture.ts             the console show: three cues, one of which answers
     deskFixture.ts            the one-mic show the desk specs drive
   fixtures/vendor/            recordings from the vendor lane, each carrying its provenance
@@ -500,6 +525,39 @@ first slice, not the ceiling.
 asserted in §5 and §6 against the documented examples, with no application running. This is
 what lets a peer be handed to someone else as a tool.
 
+**The hardware lane** (`desk-hardware.spec.ts`, `@hardware`) — pointed at a real SQ or Avantis
+by `DESK_HOST`/`DESK_PROFILE`, and at a console's cable by `MSC_HOST`:
+
+1. The desk answers for itself. The spec asks on a socket of its own the get its document
+   describes — an SQ's value for DCA 1, an Avantis's name reply — and the shape of the answer
+   is what the desk said rather than what the app believes it sent. The failure message is the
+   desk's own settings checklist, because a desk that does not answer is a desk setting.
+2. A scene recall moves the desk, and the desk's own value says so: the open and the close,
+   each read back with a fresh get, on an SQ (an Avantis publishes no mute read-back, and the
+   case reports itself skipped there).
+3. A key pressed at the desk runs the show, and the desk moves with it. The operator assigns a
+   spare mute group to the key and presses it; the show's walk lands on the scene, and the
+   desk's own value changes with it. It needs a hand, and its failure message is the
+   instruction.
+4. A console transmitting show control fires the cue that answers it. The show listens on the
+   MIDI input port the cable appears as and waits for the console's own command, which the run
+   names field by field (device ID, format, command, cue) because a show control trigger
+   compares each of them exactly. It needs a hand on the console's GO, and it is the one case
+   here with no wire view to read: the app's log line naming the command and the port it came
+   from is the only report there is.
+
+**The A&H lane, through the bridge** (`desk-midi-control.spec.ts`, `@ah`) — the desk
+conversation over MIDI Control's virtual port instead of the desk's socket, with the peer
+listening where the bridge dials:
+
+1. A scene recall reaches the desk as the bytes it takes: the peer's own view of the wire says
+   the profile's message arrived, and the peer's state says the DCA moved. Nothing arriving
+   fails with the bridge checklist — MIDI Control running, the port named, the address it
+   bridges to.
+2. The close is the same message with the other value, and the desk comes back down.
+3. The desk's own scene recall comes back through the bridge and fires the cue, which is the
+   half that says the bridge carries both directions.
+
 ---
 
 ## 8. CI
@@ -507,9 +565,15 @@ what lets a peer be handed to someone else as a tool.
 | Where | Job | What runs |
 |---|---|---|
 | `ci.yml`, `[self-hosted, linux, x64, ubox]` | `integration` | `npm run test:integration` — peers only, no vendor software, no hardware. Failure uploads `test-results/`. |
-| new `integration-vendor.yml`, schedule + `workflow_dispatch` | `eos-windows` on `[self-hosted, windows, x64, win-ci]` | the Eos spec with `--grep @vendor` against the installed ETCnomad; recording mode available as an input |
-| the same workflow, optional | `ah-macos` or `ah-windows` | the desk specs through A&H MIDI Control, proving the vendor-bridge route users actually take |
-| `workflow_dispatch` only, `desk_host` input | `hardware` | `desk-hardware.spec.ts` against a real desk on the LAN, on whichever runner can reach it |
+| `integration-vendor.yml`, schedule + `workflow_dispatch` | `eos-windows` on `[self-hosted, windows, x64, win-ci]` | the Eos spec with `--grep @vendor` against the installed ETCnomad; recording mode available as an input |
+| the same workflow, same triggers, gated on `vars.AH_MIDI_PORT` | `ah-windows` on `[self-hosted, windows, x64, win-ci]` | the desk specs with `--grep @ah` through A&H MIDI Control's virtual port, against the harness's desk peer at the address the bridge dials — the vendor-bridge route users actually take. MIDI Control is provisioned by hand, so a runner that has not been provisioned **reports this job skipped** rather than failing the nightly; a run that has the variable does get the refusal below if the machine cannot produce the port |
+| `integration-hardware.yml`, `workflow_dispatch` only — `desk_host`, `desk_profile`, `desk_channel`, `msc_host` | `hardware` on `[self-hosted, linux, x64, ubox]` — the label is the runner that can reach the desk, and it is the one thing a desk somewhere else changes | `desk-hardware.spec.ts` with `--grep @hardware` against a real desk, and the console's own show control when a cable is named. Steps fail the run, with the address or the port and what to check, when the named desk does not answer or the named cable is not one of this machine's MIDI inputs |
+
+The hardware lane is dispatched rather than scheduled, because a desk is not on a runner and
+nothing here pretends one is: a run names the desk it is about, and two of its cases need a hand
+at the desk while it goes. Where the other lanes report their own skips in the test output, this
+one also fails early — the guard step above — so a run against a desk nobody can reach says so
+in a step rather than in a spec twenty minutes later.
 
 The nightly workflow follows the shape `soak.yml` already uses — schedule plus
 `workflow_dispatch`, artifacts on failure, a report job, and `if: github.ref ==
@@ -574,9 +638,34 @@ The workflow refuses to pretend: a run on a runner without the software fails in
 that checks for it (`C:\Program Files\ETC\EosFamily\v3\Eos\Eos.exe`), not in a spec twenty
 minutes later.
 
-For A&H there is nothing to install for the peer lane. The vendor lane's A&H job exists only
-to exercise MIDI Control's bridge, so the app-side path users take is tested at least once
-somewhere.
+### A&H MIDI Control, and the bridge it carries
+
+For the peer lane there is nothing to install. The vendor lane's A&H job exists for one
+reason: the bridge is the route an operator actually drives a desk through — MIDI Control
+puts a virtual port on this machine and joins it to the desk's own TCP endpoint — and it is
+worth measuring once (§2, §11). The peer stands in for the desk, so what the job measures
+is the bridge rather than a desk: this machine's bytes going out through the virtual port and a
+desk's answers coming back in.
+
+MIDI Control is installed and started **by hand** on `win-ci`, for the same reason ETCnomad is:
+it is a desktop application, and the port it creates is named by the machine rather than by
+anything a workflow can set. What a run must have is that name — repository variable
+`AH_MIDI_PORT` — and the address the bridge dials, `AH_DESK_TARGET` (`127.0.0.1:51325` by
+default, where the job's own peer listens in the desk's place):
+
+1. Install A&H MIDI Control on the runner and start it; it creates the virtual port while it
+   runs.
+2. Bridge that port to `127.0.0.1:51325` — the peer stands in for a desk.
+3. Read the port's name off this machine's MIDI port list and set `AH_MIDI_PORT`; set
+   `AH_DESK_TARGET` too if the bridge was pointed somewhere else.
+
+The job is gated on that variable, so a runner nobody has provisioned reports it **skipped** —
+which is what any lane without its counterpart does (§2) — and the nightly does not go red over
+a machine that has not been set up yet. A run that does have the variable refuses to pretend:
+the port has to be in *both* of the machine's MIDI lists, because the app sends to it and
+listens on it, and the step that checks says which list is missing it, what it read instead and
+what to do about it. **No run has happened yet**: the bridge is an expectation, not a
+measurement, and §11 records what that leaves unproven.
 
 ---
 
@@ -634,19 +723,38 @@ eos-ubox-win.json`, 2.8 KB, its provenance naming Eos `3.3.9.25` read from the c
 session replays on Linux.
 
 **M3 — hardware, and MSC when the product has it.**
-`desk-hardware.spec.ts` pointed at a real SQ or Avantis by `desk_host`; fixtures recorded
-from the desk and replayed on Linux.
+**Built.** `desk-hardware.spec.ts`, tagged `@hardware`, pointed at a real SQ or Avantis by
+`DESK_HOST` and `DESK_PROFILE`, on demand through `integration-hardware.yml` (§8). The show it
+opens is the desk show with the counterpart's address changed, plus — because two of its cases
+need them — the desk's own keys and, where a run names one, a console's cable; nothing else
+about it changes. What the cases assert is the desk's own reply, read on the spec's own socket:
+an SQ answers a get with the parameter's value in the NRPN form that sets it, an Avantis answers
+a name get in its own header. Two cases need a hand at the desk while the run goes — a key
+pressed on the surface, and the console's GO below — and their failure message is the
+instruction; those two read the app's log line, which names the desk or the console it came
+from, because a hand is the one thing no wire view can see. Against an SQ the key case also
+reads the desk's own value moving, which is the app's message for the recalled scene arriving.
 **MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and fires a
 cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
-so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane.
+so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane: the
+show listens on the MIDI input port the cable appears as (`MSC_HOST`) and the case is unproven
+without a console transmitting.
 **The desk's own buttons are read as mute groups**, which is how a show is run from the surface
 without assigning anything as a MIDI note: `desk-buttons.spec.ts` holds the desk's report at
 connect, GO and BACK walking the scenes, the DCA mute that must not be read as a press, and the
 duplicate delivery that is one step. What no lane here has is a desk to press the key on — the
-hardware lane is where the message a key really sends is checked.
-*Acceptance*: the same assertions that pass against the peer pass against the desk, with
-only the host changing; a recorded desk fixture is committed with its provenance and the
-Linux lane replays it.
+hardware lane is where the message a key really sends is checked, and it is checked by a hand:
+the operator assigns the show's GO group to a key and presses it.
+*Acceptance*: met when a run happens, and no run has happened yet — so what this milestone
+carries today is the machinery, not a result. The same assertions that pass against the peer are
+the ones pointed at the desk, with only the host changing; the desk cases report skipped without
+`DESK_HOST` named, and the two hand cases report the hand they are waiting for.
+*Stays open*: **the recorded desk fixture.** Nothing has been captured from a desk, so there is
+no desk recording for the Linux lane to replay — the desk peer has no recorder and no session has
+been taken from one. That half of the milestone is where it was, and this is the line that says so
+rather than leaving it to look done. Until a desk run happens, the peer's model of the desk, the
+vendor lane's "MIDI bytes are MIDI bytes" assumption and the message a real key press sends stay
+unproven (§11).
 
 ---
 
@@ -660,15 +768,48 @@ Linux lane replays it.
    runners — was not taken because it would have left the desk path untested on the lane
    that runs on every pull request, and because it leaves a vendor application in the way of
    every operator with a network cable.
-2. **A desk to validate against.** The hardware lane is the only thing that keeps a peer
-   honest over time, and it needs an SQ or Avantis reachable from a runner for a few
-   hours, occasionally. Without one this is planned and untested.
+2. **A desk to validate against. — taken: yes, on demand.** `desk-hardware.spec.ts` and
+   `integration-hardware.yml` are in the tree (§8, §10 M3): a dispatch-only run that names the
+   desk it is about (`desk_host`, `desk_profile`) and, when a console is on a cable, the MIDI
+   input port its cable appears as (`msc_host`). It is the only thing that keeps a peer honest
+   over time, and it needs an SQ or Avantis reachable from a runner for a few hours,
+   occasionally — so nothing schedules against hardware nobody has, and a run is dispatched with
+   somebody in front of the desk, because two of its cases need a hand: a key pressed on the
+   surface and a console's GO. Its first case is a self-test whose failure message is the desk's
+   own settings checklist, and its desk cases assert the desk's own replies, never the app's
+   account of what it sent. The two hand-driven cases are the exception, and say so: a press and
+   a console's GO arrive from outside, so what they assert is the app's log line — which names
+   the desk or the console it came from — and, on an SQ, the desk's own value moving with it.
+   **No run has happened yet**, so the peer's model of the desk, the vendor lane's "MIDI bytes
+   are MIDI bytes" assumption and the message a real key press sends stay unproven — exactly
+   where they were — and the lane reports skipped, never passed, without a desk named.
 3. **Where the vendor lane runs. — answered: `win-ci`, with a fallback.** ETCnomad is
    installed there (§9), and the machine is Windows with a logged-in session, which is what
    a GUI application needs. The caveats that came with the guest — Server 2025 outside
    ETC's supported list, display and 3D below Eos's stated minimums — are the guest's, and
    the NUC is inside both. It has been green in CI since 2026-09-15; if it will not come
    up, the guest is the fallback, and the Mac mini is the machine after that.
+4. **The A&H job. — taken: yes, as a sibling of `eos-windows`.** `ah-windows` runs the desk
+   specs through A&H MIDI Control's virtual port, with the harness's desk peer where the bridge
+   dials (§8, §9), because that bridge is the route an operator actually drives a desk through
+   and no A&H desktop application is a desk (§1). MIDI Control is installed and started by hand
+   on `win-ci`, and the job is gated on the variable that names the port — so a runner nobody
+   has provisioned reports it skipped rather than failing the nightly, and a run that has the
+   variable refuses to run without the port in both of the machine's MIDI lists. **No run has
+   happened yet**: the bridge is an expectation
+   rather than a measurement, and what that leaves unproven is that MIDI Control hands an
+   application's bytes to a socket and a desk's answers back — mid-way traffic, and nothing about
+   the desk itself. Desk acceptance for SQ and Avantis stays with the hardware lane; the peer
+   lane still claims only the wire format.
+5. **The end-to-end MSC lane. — taken: yes, riding the hardware lane.** §3 G2 makes a console
+   on a cable its only home, so the case is in `desk-hardware.spec.ts`: the show listens on the
+   MIDI input port the console's cable appears as (`msc_host`) and waits for the console's own
+   command to fire the cue that answers it. A console's message arrives on a cable this machine
+   owns, so there is no wire view to read it from and the app's log line — which names the
+   command and the device it came from — is the only report there is; the case says so rather
+   than borrowing a peer's evidence. Without a desk named and a console transmitting it reports
+   skipped, and an `msc` trigger's end-to-end path stays unproven — no peer here is a console on
+   a cable, and the desk ranges do not transmit MSC at all.
 
 **Risks**
 
@@ -683,12 +824,16 @@ Linux lane replays it.
   to a build instead of to Cuerunner.
 - **A peer is not a desk.** The Eos peer is a model of a console we wrote from a manual;
   its value is regression detection, not truth. The fixtures are what keep it near the
-  truth, and the hardware lane is what the fixtures are checked against.
-- **The A&H MIDI Control lane is assumed to bridge to a peer.** MIDI Control is a virtual
-  port joined to a TCP endpoint, and nothing in it should care whether the far end is a
-  desk or `desk.ts` — but that is an expectation, not a measurement. If it refuses a
-  non-desk target, the lane records from a real desk instead and the bridge route is
-  covered by hand; the peer lane is unaffected either way.
+  truth, and the hardware lane is what the fixtures are checked against — built and **not yet
+  run**, so nothing here says the model is right until a desk run happens (§10 M3, §11 decision
+  2).
+- **The A&H MIDI Control lane is assumed to bridge to a peer. — answered by the job, not yet
+  measured.** MIDI Control is a virtual port joined to a TCP endpoint, and nothing in it should
+  care whether the far end is a desk or `desk.ts` — but that is an expectation, and `ah-windows`
+  (`--grep @ah`, against the peer listening where the bridge dials) is the measurement. Until a
+  run happens the bridge stays an expectation, and if it refuses a non-desk target the lane
+  records that, a real desk is what the hardware lane is for, and the peer lane is unaffected
+  either way.
 - **Vendor-software licensing.** Installers are downloaded onto runners and never
   committed; the harness's own code is ours. The fixture showfiles are cue data we wrote.
 - **The test that looks like a test.** A spec that asserts Cuerunner sent what Cuerunner's own

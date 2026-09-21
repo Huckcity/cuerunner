@@ -1,19 +1,31 @@
 // The show the desk specs drive, written as a workspace file rather than typed into the
-// view. Two reasons: the desk's address is the peer's ephemeral port, which no form can be
-// told to use, and the connection is what these specs are about — the form that sets it has
-// its own spec (e2e/desk-tcp.spec.ts).
+// view. Two reasons: the desk's address is the counterpart's — the peer's ephemeral port
+// here, a real desk's own address on the hardware lane (`host`) — which no form can be told
+// to use, and the connection is what these specs are about: the form that sets it has its
+// own spec (e2e/desk-tcp.spec.ts).
 //
-// One channel, one DCA, one scene, and one cue that answers to the desk. That is the whole
-// show: a scene recall on a one-mic show is a handful of messages, so what went on the wire
-// can be read at a glance instead of fished out of a sweep of twelve.
+// One channel, one DCA and one cue that answers to the desk — plus, where a lane asks for
+// them, a second scene for the desk's own keys to walk to and a cue that answers a console's
+// show control command. That is the whole show: a scene recall on a one-mic show is a handful
+// of messages, so what went on the wire can be read at a glance instead of fished out of a
+// sweep of twelve.
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { DeskProfile } from '../../src/shared/show'
+import type { MscCommand, MscFormat } from '../../src/shared/cue'
 
-export interface DeskShowOptions {
-  /** The peer's port: where the show's desk is. */
-  port: number
+/** Where a peer on this machine is. A real desk is named by its own address. */
+const LOOPBACK = '127.0.0.1'
+
+/** What every desk show has in common, whichever way the show reaches its desk. */
+interface DeskShowCommon {
+  /**
+   * Where the desk is: loopback when the counterpart is a peer running here, and the
+   * desk's own address when a real one is named. That address is the only thing the
+   * hardware lane changes about the show (INTEGRATION-HARNESS.md §10, M3).
+   */
+  host?: string
   /**
    * The MIDI channel both ends are set to: the desk's own, 1–16 as its Utility screen
    * shows it. Where its DCAs answer is derived from that by the profile.
@@ -34,16 +46,86 @@ export interface DeskShowOptions {
    * program 6.
    */
   deskScene?: number
+  /**
+   * The mute groups an operator has assigned to the show's GO and BACK keys at the desk.
+   * With them the show carries the second scene a walk needs, so a key pressed at the
+   * desk has somewhere to move the show to.
+   */
+  buttons?: { go: number; back: number }
+  /**
+   * A console on a MIDI cable: the MIDI input port its cable appears as on this machine,
+   * and the show control command it transmits. The show listens on that port and carries
+   * one more cue that answers the command — the only place an `msc` trigger can be driven
+   * end to end, because no peer here is a console on a cable (INTEGRATION-HARNESS.md §3,
+   * G2, and §10's M3).
+   */
+  msc?: MscInput
+}
+
+/**
+ * The show the desk specs drive. A desk is reached one of two ways, and the fields that name
+ * it are the ones that way needs: the desk's own MIDI socket, or a MIDI port of this machine —
+ * which is the route an operator with A&H MIDI Control's virtual port takes (`AH_MIDI_PORT` on
+ * the vendor lane).
+ */
+export type DeskShowOptions =
+  | (DeskShowCommon & {
+      kind?: 'midi-tcp'
+      /** The counterpart's port: where the show's desk is on the network. */
+      port: number
+    })
+  | (DeskShowCommon & {
+      kind: 'midi'
+      /**
+       * The MIDI port the show drives its desk through — and, because a bridge carries both
+       * directions, the port the show listens on for the desk's own messages.
+       */
+      midiPort: string
+    })
+
+/** A console's own show control command, as the run then tells the show to expect it. */
+export interface MscInput {
+  /** The port name the console's cable appears as, as the machine's MIDI list reports it. */
+  port: string
+  /**
+   * What the console transmits with. A show control trigger compares the device ID, the
+   * format, the command and the cue exactly, so this is the console's own setting rather than
+   * a device this end can address: a console set to another ID fires nothing.
+   */
+  deviceId: number
+  /** What the console addresses its command to. */
+  format: MscFormat
+  command: MscCommand
+  /** The cue it names, and its cue list; empty means whatever the console has open. */
+  cueNumber: string
+  cueList: string
 }
 
 /** What the show is called, so a spec's failure names something an operator would say. */
 export const DESK_SHOW_NAME = 'Desk Show'
 
 export function writeDeskShow(options: DeskShowOptions): string {
-  const { port, channel, profile, dcaNote, deskScene = 7 } = options
+  const { host = LOOPBACK, channel, profile, dcaNote, buttons, msc, deskScene = 7 } = options
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-desk-'))
   const path = join(root, `${DESK_SHOW_NAME}.cuerunner`)
-  const device = `127.0.0.1:${port}`
+  // What the desk's own messages arrive as: a socket's `host:port`, or the name of the port
+  // the show drives it through.
+  const device = options.kind === 'midi' ? options.midiPort : `${host}:${options.port}`
+  // A show driven through a MIDI port listens on the same port — a virtual port is the one
+  // thing an operator has, and the desk's answers come back the way its instructions went out.
+  // A console's cable is a port of its own, and a show can be listening to both.
+  const inputs = [
+    ...(options.kind === 'midi' ? [options.midiPort] : []),
+    ...(msc === undefined ? [] : [msc.port])
+  ]
+  // A show the desk's own keys walk needs a second scene to walk to; a show the specs
+  // recall by hand has the one, and the peer lane asserts on that one.
+  const scenes = buttons === undefined
+    ? [{ id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' }]
+    : [
+        { id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' },
+        { id: 's-2', name: 'Interval', live: [], ensembles: [], excluded: [], notes: '' }
+      ]
 
   writeFileSync(path, `${JSON.stringify({
     version: 1,
@@ -53,15 +135,20 @@ export function writeDeskShow(options: DeskShowOptions): string {
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
     showSettings: {
+      // What the show listens to is its own decision: the desk's own socket needs no setting,
+      // a port the desk is driven through is listened on for its answers, and a console's
+      // cable is a port of its own.
+      ...(inputs.length === 0 ? {} : { midiIn: { enabled: true, portNames: inputs } }),
       desk: {
-        kind: 'midi-tcp',
+        kind: options.kind ?? 'midi-tcp',
         profile,
-        midiPort: '',
         midiChannel: channel,
-        host: '127.0.0.1',
-        port: 8000,
-        tcpPort: port,
-        address: '/dca/{n}/on'
+        address: '/dca/{n}/on',
+        // Where the desk is, in the fields that way of reaching it uses.
+        ...(options.kind === 'midi'
+          ? { midiPort: options.midiPort }
+          : { midiPort: '', host, port: 8000, tcpPort: options.port }),
+        ...(buttons === undefined ? {} : { buttons })
       },
       cast: {
         channels: [{ id: 'ch-1', name: 'Ruth', dcaId: 'dca-1' }],
@@ -71,11 +158,7 @@ export function writeDeskShow(options: DeskShowOptions): string {
         ensembles: [],
         dcas: [{ id: 'dca-1', label: 'DCA 1', note: dcaNote ?? null, address: null }]
       },
-      scenes: {
-        list: [
-          { id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' }
-        ]
-      }
+      scenes: { list: scenes }
     },
     cues: [
       {
@@ -101,7 +184,38 @@ export function writeDeskShow(options: DeskShowOptions): string {
             message: { kind: 'programChange', channel, program: deskScene - 1 }
           }
         ]
-      }
+      },
+      ...(msc === undefined ? [] : [{
+        id: 'w-2',
+        number: '2',
+        name: 'Console said go',
+        type: 'wait',
+        colorLabel: 'none',
+        preWait: 0,
+        postWait: 0,
+        timelineOffset: 0,
+        duration: 50,
+        advance: 'none',
+        isArmed: true,
+        refire: 'ignore',
+        parentId: null,
+        notes: '',
+        // Every field of a show control command is identity, including the cue number: a
+        // console going to cue 12 is not a console going to the next one. What the console
+        // transmits is a setting on the console, so the run is what tells the show.
+        triggers: [
+          {
+            id: 't-msc',
+            kind: 'msc',
+            device: msc.port,
+            deviceId: msc.deviceId,
+            format: msc.format,
+            command: msc.command,
+            cueNumber: msc.cueNumber,
+            cueList: msc.cueList
+          }
+        ]
+      }])
     ]
   }, null, 2)}\n`)
 

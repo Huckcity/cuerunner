@@ -6,6 +6,11 @@ name: Integration (vendor)
 # runs nightly and on demand, and its job is twofold: prove the peer still behaves the way
 # the console does, and record what the console actually said so the peer lane can replay a
 # real session on Linux.
+#
+# The workflow's other job is the A&H desk path: MIDI Control's virtual port, bridged to the
+# harness's peer standing in for a desk. ETCnomad is the console itself, so that half is
+# configuration-by-artifact once it is done once; no A&H desktop application is a desk, so
+# the bridge route operators take is what the desk half measures (§2, §11).
 on:
   schedule:
     # Before the soak, which owns the small hours.
@@ -126,4 +131,94 @@ jobs:
           path: |
             test-results/
             integration/fixtures/vendor/
+          retention-days: 14
+
+  # The A&H half of the vendor lane: the desk path users actually take — MIDI Control's
+  # virtual port bridged to a desk's TCP endpoint — measured against this harness's peer
+  # standing in for the desk (INTEGRATION-HARNESS.md §2, §9, §11). The Eos job above is the
+  # other half, and the two share nothing but the trigger and the runner: ETCnomad *is* a
+  # console, and no A&H desktop application is a desk, so the bridge is what an operator with
+  # a network cable goes through.
+  #
+  # The job is gated on the repository variable that names the virtual port, because MIDI
+  # Control is installed by hand: a runner that has not been provisioned reports the job
+  # skipped rather than failing the nightly, the way any lane without its counterpart does
+  # (§2). A run that has the variable does get the refusal below if the machine cannot produce
+  # the port.
+  ah-windows:
+    if: ${{ vars.AH_MIDI_PORT != '' }}
+    runs-on: [self-hosted, windows, x64, win-ci]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: npm ci --legacy-peer-deps
+
+      # A&H MIDI Control is installed and run by hand, once, and so is the bridge it carries:
+      # the virtual port it creates is named whatever the machine names it, and the address
+      # it dials is typed into its own window. What the workflow can do is refuse to pretend
+      # either exists (INTEGRATION-HARNESS.md §9) — and the port lists are how it checks: the
+      # app sends to the port and listens on it (the bridge is two-way), so the name has to be
+      # in both lists, and each list is reported when it is not.
+      #
+      # This step is after `npm ci` because the port lists come from the app's own MIDI module.
+      - name: A&H MIDI Control and its virtual port are provisioned on this runner
+        shell: pwsh
+        env:
+          AH_MIDI_PORT: ${{ vars.AH_MIDI_PORT || '' }}
+          AH_DESK_TARGET: ${{ vars.AH_DESK_TARGET || '127.0.0.1:51325' }}
+        run: |
+          if (-not $env:AH_MIDI_PORT) {
+            throw "no virtual port named — install A&H MIDI Control on this runner, bridge its virtual port to the desk's own TCP endpoint, note the port's name in this machine's MIDI port list, and set it as the repository variable AH_MIDI_PORT. INTEGRATION-HARNESS.md §9 has the walkthrough."
+          }
+          node -e 'let midi; try { midi = require("midi") } catch (error) { console.error("::error::the native MIDI module did not load (" + error.message + "), and it is what reads the port lists — npm ci builds it, which needs the C++ tools this runner has. INTEGRATION-HARNESS.md section 9 is the walkthrough."); process.exitCode = 1 } if (midi) { const output = new midi.Output(); const outputs = Array.from({ length: output.getPortCount() }, (_, i) => output.getPortName(i)); output.closePort(); const input = new midi.Input(); const inputs = Array.from({ length: input.getPortCount() }, (_, i) => input.getPortName(i)); input.closePort(); const missing = []; if (!outputs.includes(process.env.AH_MIDI_PORT)) missing.push("output"); if (!inputs.includes(process.env.AH_MIDI_PORT)) missing.push("input"); if (missing.length > 0) { console.error("::error::no MIDI " + missing.join(" or ") + " port named " + JSON.stringify(process.env.AH_MIDI_PORT) + " on this runner — output ports: " + JSON.stringify(outputs) + ", input ports: " + JSON.stringify(inputs) + ". The app sends to the port and listens on it, so both lists have to carry it. A&H MIDI Control creates the virtual port while it is running; INTEGRATION-HARNESS.md section 9 has the walkthrough."); process.exitCode = 1 } else { console.log("found the virtual port " + process.env.AH_MIDI_PORT + " in the output and input lists, bridged to " + process.env.AH_DESK_TARGET) } }'
+
+      # The test step builds the native engine first, which on Windows needs the developer
+      # environment imported — the same block the Eos job and ci.yml’s e2e lane carry.
+      - name: Set up MSVC
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
+      - name: Locate the ASIO SDK
+        shell: cmd
+        run: |
+          set "ASIO=%CUERUNNER_ASIO_SDK%"
+          if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo CUERUNNER_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          echo Using the ASIO SDK at %ASIO%
+
+      - name: Integration (A&H through MIDI Control)
+        env:
+          AH_MIDI_PORT: ${{ vars.AH_MIDI_PORT || '' }}
+          # The address the bridge dials, which the peer takes: it stands in for the desk, so
+          # MIDI Control has to have been configured to reach it — 51325 is what both ranges
+          # serve their own MIDI on.
+          AH_DESK_TARGET: ${{ vars.AH_DESK_TARGET || '127.0.0.1:51325' }}
+          AH_PROFILE: ${{ vars.AH_PROFILE || 'sq' }}
+          # Left as the variable holds it, empty or not: the spec takes the range's own default
+          # (1 for an SQ, 12 for an Avantis) unless a run has told it the desk is set otherwise.
+          AH_MIDI_CHANNEL: ${{ vars.AH_MIDI_CHANNEL }}
+        # Quoted for the reason the Eos job’s tag is: under `shell: pwsh` a bare `@ah` would
+        # be read as a splat and the step would die before any test ran.
+        run: npm run test:integration -- --grep "@ah"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-ah-results
+          path: test-results/
           retention-days: 14
