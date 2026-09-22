@@ -289,6 +289,9 @@ integration/
                               a recording of one — and it skips itself when neither is named
     desk-sq.spec.ts           Cuerunner ↔ the SQ peer
     desk-avantis.spec.ts      Cuerunner ↔ the Avantis peer
+    desk-held-socket.spec.ts  Cuerunner ↔ the SQ peer while a socket of its own holds the
+                              desk's one connection: the recall's accepted-then-reset
+                              sentence, then the link re-dialling once the holder lets go
     desk-midi-control.spec.ts @ah: Cuerunner ↔ the SQ/Avantis peer through A&H MIDI Control's
                               virtual port — the bridge route, on the vendor lane
     desk-hardware.spec.ts     @hardware: Cuerunner ↔ a real SQ or Avantis named by `DESK_HOST`,
@@ -557,6 +560,27 @@ first slice, not the ceiling.
 8. Duplicate delivery: the peer sends the same scene recall twice. Assert one scene move.
 9. Timing: a scene recall reaches the wire within the post-wait budget the cue claims.
    Assert the measured interval, not just the state.
+
+**A socket already holds the desk** (`desk-held-socket.spec.ts`) — the one-client rule of §6,
+driven through the app rather than through a socket of the spec's own:
+
+1. A recall at a held desk fails in the desk's own terms. The holder is attached *before* the
+   app launches — the app dials at show load, and it is the second connection the desk resets —
+   and the link's own report of the connection ("taken or reset") is waited for before the
+   recall, so what the operator reads comes from a link the app already knows is down. The
+   assertion is the recall's own log line: the desk accepted the connection and then reset it,
+   and **not** the sentence that sends them to check an address and a MIDI-over-TCP setting that
+   are both right. The peer's view is asserted empty: the desk reads nothing off a connection it
+   is about to reset. What the engine answers is not fixed by the show's state — the desk's reset
+   lands either side of this client reading its own connection event, and a write into a socket
+   the desk has already reset succeeds locally, so that attempt answers `ok` — so the lane
+   recalls the two scenes in turn until the sentence appears, and asserts on every attempt that
+   the address is not blamed.
+2. The holder lets go and the link comes back by itself. Nothing is touched in the app: the
+   desk's own device row says online again and the peer's client list says the app is attached,
+   both waited for *before* the recall — so the bytes that arrive are the link the app brought
+   back rather than a dial the click started — and the desk's own mute state is what says they
+   were the recall the show asked for rather than a frame the app believes it sent.
 
 **The desk's own buttons** (`desk-buttons.spec.ts`)
 

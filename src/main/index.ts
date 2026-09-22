@@ -305,5 +305,12 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // The window-less application is macOS's own convention and this guard is where the
+  // decision to keep it lives, not a defect to be filed: a quit the unsaved-changes prompt
+  // interrupts closes the window here without ever reaching `will-quit`, and the app is left
+  // running in the Dock with nothing to do — which is what macOS does with every
+  // application whose last window closes. Resuming that quit is deliberately not built;
+  // `e2e/show-monitor.spec.ts` asserts each platform's own outcome rather than accepting
+  // either, so the difference is stated where it is read.
   if (process.platform !== 'darwin') app.quit()
 })

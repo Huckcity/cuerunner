@@ -99,12 +99,25 @@ export function useDeskButtons(): void {
       const current = useStore.getState().showSettings.desk
       const device = deskDevice(current)
       if (device === null) return
+      // Which of the show's device rows is the desk's own. The spellings are the services':
+      // an input port is published as `midi-in:<port name>` (`MidiInputService.ts`), the
+      // desk's own socket as `midi-tcp:<host:port>` (`MidiTcpService.ts`) — and which one a
+      // desk arrives under is its kind, because a desk reached through a cable is a port of
+      // this machine rather than a socket.
+      const deskId = current.kind === 'midi' ? `midi-in:${device}` : `midi-tcp:${device}`
 
       for (const event of events) {
         // A desk that went away and came back reports its state again: what it says is news
         // about the room, not a hand on a key, so the reader starts over and is told to ask
         // rather than waiting for a press that would prime it instead of acting.
-        if (event.kind === 'device' && event.device.id === `midi-tcp:${device}`) {
+        //
+        // Both edges reset. A port that has gone down is a port that can no longer send the
+        // note-off a key it was holding would have sent, so a reader that kept the latch
+        // would read the operator's next press as the repeat of a key nobody is holding —
+        // and the edge detection for the groups is wedged by a message that never arrived
+        // in exactly the same way. Only the return asks: a port that has just left has no
+        // desk behind it to answer.
+        if (event.kind === 'device' && event.device.id === deskId) {
           buttons.reset()
           if (event.device.online) askWhereTheGroupsStand()
           continue

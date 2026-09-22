@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import { isRefusal, Refusal } from '../ipc/refusal'
-import type { Workspace } from '../../shared/workspace'
+import { hasCueList, type Workspace } from '../../shared/workspace'
 import type { FileFingerprint } from './WorkspaceManager'
 
 /** The largest snapshot this app reads back: the same ceiling a workspace file gets. */
@@ -91,9 +91,11 @@ export async function readRecovery(): Promise<RecoverySnapshot | null> {
     throw new Refusal(`that file is not a show — ${filePath} is not JSON`)
   }
   // A snapshot whose show is not a show this build can walk is nothing to offer either,
-  // and saying so is the difference between a bar and a thrown TypeError with no bar.
-  const workspace = (parsed as RecoverySnapshot | null)?.workspace as { cues?: unknown } | undefined
-  if (typeof workspace !== 'object' || workspace === null || !Array.isArray(workspace.cues)) {
+  // and saying so is the difference between a bar and a thrown TypeError with no bar. The
+  // shape check is the one the two load funnels share, so a document that is a show for
+  // one of them is a show for all three.
+  const workspace: unknown = (parsed as RecoverySnapshot | null)?.workspace
+  if (!hasCueList(workspace)) {
     throw new Refusal(`that file is not a show — ${filePath} holds no snapshot to bring back`)
   }
   return parsed as RecoverySnapshot

@@ -223,6 +223,33 @@ describe('a refusal is a value', () => {
     await expect(handler(WORKSPACE_CHANNELS.open)('event')).resolves.toEqual({ ok: true, opened: null })
   })
 
+  it('answers a document that is JSON but holds no cue list, naming the file', async () => {
+    // Bytes that parse are not therefore a show: a hand edit, another tool's export, a
+    // download that is JSON because the proxy's error page is. The migration's first read
+    // is the cue list, so this document used to reach the operator as V8's own `Cannot
+    // read properties of undefined (reading 'find')` — which names neither the file nor
+    // the fact. The sentence in full is what says so, and the answer being a value at all
+    // is what says the fault did not reach the window.
+    const file = join(ends.userData.path, 'no-cues.cuerunner')
+    writeFileSync(file, '{"version":1}')
+
+    const result = await handler(WORKSPACE_CHANNELS.openPath)('event', file)
+
+    expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} holds no cue list` })
+  })
+
+  it('answers a cue list of the wrong kind the same way, and not as a fault', async () => {
+    // The other half of the same shape: a key with the right name and the wrong kind is still
+    // not a show, and the migration's first read of it — `workspace.cues.find` — is not a
+    // function on an object, so the operator would get that text and no sentence at all.
+    const file = join(ends.userData.path, 'cues-not-a-list.cuerunner')
+    writeFileSync(file, '{"version":1,"cues":{"0":{"id":"c1","type":"wait"}}}')
+
+    const result = await handler(WORKSPACE_CHANNELS.openPath)('event', file)
+
+    expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} holds no cue list` })
+  })
+
   it('answers a snapshot it cannot read with its refusal arm', async () => {
     // The snapshot is a file like any other, and a session that died on a newer build
     // leaves one this build cannot bring forward.

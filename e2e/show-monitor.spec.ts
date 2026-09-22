@@ -187,31 +187,92 @@ test('a cancelled quit leaves the show services listening', async () => {
 })
 
 /**
- * The window closing, watched from before the quit is asked for. What that looks like is a
- * platform fact: on Linux and Windows the last window closed quits the app, so the process
- * is gone; on macOS the app stays up with no windows — `window-all-closed` does not quit
- * there — and the window list is what says so. Both are read from main, because
- * `app.evaluate` cannot be called once the process is going, and a window that never
- * closes is a failed close rather than a test that hangs.
+ * What a quit's answer left behind: the platform's own outcome, and the only one.
+ *
+ * These are not two ways of saying "closed". Off darwin the last window closed *is* the
+ * quit running — `window-all-closed` calls `app.quit()` — so the process goes. On macOS the
+ * guard at `window-all-closed` keeps the application running with no window: a quit the
+ * unsaved-changes prompt interrupts closes the window and is never resumed, which is that
+ * platform's convention and a decision recorded at the guard, not a defect. An oracle that
+ * accepted either arm as one outcome could not tell a quit that worked from one that was
+ * never resumed, and it was exactly that ambiguity the divergence hid behind.
  */
-async function whenWindowClosed(): Promise<boolean> {
+interface QuitOutcome {
+  /** The process is gone. */
+  exited: boolean
+  /** How many windows main still reported, or null before it could be asked. */
+  windows: number | null
+}
+
+/** The window list's own poll interval, and the settle that follows it on macOS. */
+const QUIT_POLL_MS = 100
+/**
+ * How long the macOS arm keeps watching the process once the window has gone. There the
+ * application staying up *is* the outcome, and a value read a millisecond after the window
+ * closed cannot tell that from a quit that resumes a beat later: a resumed quit exits inside
+ * this window, and the watch is what catches it.
+ */
+const QUIT_SETTLE_MS = 2000
+
+/**
+ * The quit's outcome, watched from before the quit is asked for and read from main, which is
+ * the only place it can be read: `app.evaluate` cannot be called once the process is going.
+ * The watch ends when this platform's own outcome has arrived — the process going, or, on
+ * macOS, the window list emptying and then staying that way past `QUIT_SETTLE_MS` — and
+ * reports the last thing it saw at the deadline, because a window that never closes is a
+ * failed close rather than a test that hangs.
+ */
+async function whenWindowClosed(): Promise<QuitOutcome> {
   const proc = app.process()
+  const gone = (): boolean => proc.exitCode !== null || proc.signalCode !== null
   const deadline = Date.now() + 15_000
+  let windows: number | null = null
+  // When the settle ends, taken from the first reading of an empty window list: until then
+  // the platform's outcome is still undecided on macOS.
+  let settledAt: number | null = null
   for (;;) {
-    if (proc.exitCode !== null || proc.signalCode !== null) return true
+    // Checked on every turn, the settle's included: a process that goes inside it is a
+    // failure there, and the outcome the lane asserts on carries it.
+    if (gone()) return { exited: true, windows }
     try {
-      if (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length) === 0) {
-        return true
-      }
+      windows = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
     } catch {
       // The app is on its way out: the exit flags above are the answer, read on the next
       // turn of this loop.
     }
-    if (Date.now() > deadline) return false
+    // Off darwin the empty window list is the beginning of the quit rather than its end: the
+    // process going is the outcome, so the loop keeps to the exit flags above.
+    if (windows === 0 && process.platform === 'darwin') {
+      // On macOS it is the other way round. The window going is what a quit looks like there,
+      // and what the lane has to rule out is the quit being resumed behind it — so the
+      // process is watched until the settle is out, and only then is staying up the answer.
+      // The settle is the loop's own bound here, so the deadline below cannot cut it short.
+      settledAt ??= Date.now() + QUIT_SETTLE_MS
+      if (Date.now() >= settledAt) return { exited: false, windows }
+    } else if (Date.now() > deadline) {
+      return { exited: gone(), windows }
+    }
     const { promise: tick, resolve: tock } = Promise.withResolvers<void>()
-    setTimeout(tock, 100)
+    setTimeout(tock, QUIT_POLL_MS)
     await tick
   }
+}
+
+/**
+ * The platform's own outcome, held to as that outcome rather than as either arm of it: off
+ * darwin the process exits, and on darwin no window remains while the application runs on.
+ */
+function expectQuitOutcome(outcome: QuitOutcome, what: string): void {
+  if (process.platform === 'darwin') {
+    // First, because it decides whether the window count means anything: an application that
+    // quit cannot be asked what it has open, and on macOS quitting here is the failure. The
+    // flag is read after the settle the watch applies, so a quit resumed behind the closed
+    // window — the divergence this platform's convention is recorded against — fails here.
+    expect(outcome.exited, `${what}: the application must still be running on macOS`).toBe(false)
+    expect(outcome.windows, `${what}: no window may be left open`).toBe(0)
+    return
+  }
+  expect(outcome.exited, `${what}: the process did not exit`).toBe(true)
 }
 
 /** A show on disk, opened the way an operator opens one: from the File menu's recent list. */
@@ -249,7 +310,8 @@ test('a quit answered Don’t Save closes the window and leaves the file alone',
 
     // The close is allowed through the pair's accept path (`app:confirm-close`), which is
     // what actually takes the window down; the answer was not Cancel, so nothing may wait.
-    expect(await closed, 'the window did not close when the close was answered').toBe(true)
+    // What the quit then leaves is this platform's own outcome, not either arm of it.
+    expectQuitOutcome(await closed, 'the window did not close when the close was answered')
     // And discarding the session is not writing it.
     expect(fs.readFileSync(file, 'utf-8')).toBe(onDisk)
   } finally {
@@ -274,7 +336,7 @@ test('a quit answered Save writes the show through the dialog and then closes', 
 
     const closed = whenWindowClosed()
     await app.evaluate(({ app }) => app.quit())
-    expect(await closed, 'the window did not close after the save was answered').toBe(true)
+    expectQuitOutcome(await closed, 'the window did not close after the save was answered')
 
     // The show was really written before the window went: the cue the operator added is in
     // the file, which is what the close prompt's Save promised.
