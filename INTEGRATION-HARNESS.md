@@ -458,17 +458,17 @@ A DCA assignment — the reason this was captured — is one frame per (channel,
 | `f7 07 07 1d <channel-1> <dca-1> 01 00` | assign that input to that DCA |
 | `f7 07 07 1d <channel-1> <dca-1> 00 00` | clear it |
 | `f7 07 07 0c <channel-1> 00 01 00` | the per-channel "rides a DCA" flag (`00 00` = none) |
-| `7f 08 0e 000000 18 18 0c <channel-1> 00 00 <ascii> 00` | the strip's own name, which a client also uses to label it with its group |
+| `7f 08 0e 000000 18 18 0c <channel-1> 00 00 <ascii> 00` | the strip's own name: the desk pushes its names in this form, and a client writes one to label a strip with its group |
 
 The capture is `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken through
 `integration/sqCapture.mjs` against a show whose assignments are known — inputs 1 and 3 on DCA 1,
-inputs 8 and 9 on DCA 4 — and the four `1d` frames it holds are exactly those pairs, with every
-other pair written `00 00`. **No lane uses it yet**, and two things are deliberately noted as
-unmeasured: the **read form** (what the desk reports when asked, or pushes when a pair changes at
-its own surface), so a client that writes these frames knows only what it sent; and the desk's
-**controlling-client rule** — it reports a controlling client, and a client that dies without
-leaving (`BYE.`, on the range's own port 51321) leaves 51326 accepting TCP and answering the
-hello with nothing until the desk is reset or power-cycled. The desk also answers
+inputs 8 and 9 on DCA 4 — and it holds the whole 16-input × 8-DCA matrix: four `1d` frames carrying
+`01 00`, exactly those pairs, and the other 124 written `00 00`. **No lane uses it yet**, and two
+things are deliberately noted as unmeasured: the **read form** (what the desk reports when asked, or
+pushes when a pair changes at its own surface), so a client that writes these frames knows only what
+it sent; and the desk's **controlling-client rule** — it reports a controlling client, and a client
+that dies without leaving (`BYE.`, on the range's own port 51321) leaves 51326 accepting TCP and
+answering the hello with nothing until the desk is reset or power-cycled. The desk also answers
 discovery: `SQ Find` sent to **UDP 51320** comes back from the desk's own 51320 with its model
 name as NUL-terminated ASCII (`SQ-6`), which is how a third-party application finds and names it
 with nothing configured. The whole set the observed client sent, from source port 32323 and once
