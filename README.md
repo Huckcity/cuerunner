@@ -594,9 +594,16 @@ GitHub Actions workflows in `.github/workflows/`:
   - Nothing publishes from a ref that is not a tag: a dispatch from a branch packages and
     stops there. A build that linked the SDK with no recorded agreement withholds its
     installer (`native/audio/third_party/ASIO-AGREEMENT.md`), and the same list the notes are
-    composed from is what the release page carries and what the R2 mirror copies
+    composed from is what the release page carries and what the R2 mirror copies — the mirror
+    removes every `latest/` name it writes that this release did not publish, so a withheld
+    installer's card answers `404` rather than an earlier release's file under this release's
+    name
+  - Each surface publishes the digests of what it carries, composed from those bytes rather
+    than typed: the release page attaches a `SHA256SUMS` beside the assets the notes list, and
+    the mirror writes its own as it copies, at `pub.winslabapp.com/latest/SHA256SUMS`. A sums
+    file is a way to check a download, not a signature
   - Uploads that list to R2 (Cloudflare) and GitHub Releases: the `pub.winslabapp.com/latest/`
-    files the site's download cards point at
+    files the site's download cards point at, with the digests the cards link beside them
 - **`release.yml`**: Semantic versioning with `semantic-release` — run it by hand from
   `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
   own, so a release happens only when it is meant to. Cutting the tag is not enough on its

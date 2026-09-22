@@ -130,9 +130,17 @@ export const GUIDES = [
         </article>
       </div>
       <p>
-        Cuerunner is not signed for the app stores, so the first launch warns about an
-        unidentified developer. Downloads come from <code>pub.winslabapp.com</code>. A
-        Linux AppImage is published too, and is experimental.
+        Cuerunner is distributed outside the app stores: the
+        <a href="https://github.com/Huckcity/cuerunner/releases/latest">release notes</a> name
+        whether a build is signed. Windows warns when an unsigned installer is run, and macOS
+        warns about an unidentified developer at first launch. Downloads come from
+        <code>pub.winslabapp.com</code>, and these links are the newest release's files. A Linux
+        AppImage is published too, and is experimental.
+      </p>
+      <p>
+        <a href="https://pub.winslabapp.com/latest/SHA256SUMS">SHA256SUMS</a> carries the
+        SHA-256 digest of each file the release serves, so a download can be checked against
+        the release that describes it.
       </p>
     </section>
 

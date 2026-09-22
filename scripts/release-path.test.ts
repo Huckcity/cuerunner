@@ -28,6 +28,7 @@
 // says only that nothing has drifted yet.
 import { describe, expect, it } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -53,6 +54,14 @@ const DEPENDENCIES = 'native/audio/third_party/DEPENDENCIES.json'
 const VITEST = 'vitest.config.ts'
 const DOCS_GUARD = 'scripts/docs-build.test.ts'
 const NUMBERS_GUARD = 'scripts/published-numbers.test.ts'
+
+/** The two surfaces that link the mirror, one hand-written and one rendered from `docs/`. */
+const INDEX = 'website/index.html'
+const GUIDES = 'website/docs/guides.mjs'
+
+/** The host the download links point at, and the release notes' own address. */
+const DOWNLOADS = 'https://pub.winslabapp.com/latest/'
+const RELEASE_NOTES = 'https://github.com/Huckcity/cuerunner/releases/latest'
 
 /** The jobs that package, the job that runs the two guards they wait on, and the mirror. */
 const PACKAGING = ['build-windows', 'build-mac', 'build-linux']
@@ -126,7 +135,8 @@ const CERTIFICATE_SECRETS: Record<string, string> = {
   'build-mac': 'MAC_CSC_LINK'
 }
 
-/** The whole reading the checks are functions of: two workflows and the prose held to them. */
+/** The whole reading the checks are functions of: two workflows, the prose held to them, and the
+ *  two surfaces that link the mirror. */
 interface Reading {
   build: string
   release: string
@@ -135,6 +145,8 @@ interface Reading {
   proof: string
   vitest: string
   dependencies: string
+  index: string
+  guides: string
 }
 
 const LIVE: Reading = {
@@ -144,7 +156,9 @@ const LIVE: Reading = {
   readme: read(README),
   proof: read(PROOF),
   vitest: read(VITEST),
-  dependencies: read(DEPENDENCIES)
+  dependencies: read(DEPENDENCIES),
+  index: read(INDEX),
+  guides: read(GUIDES)
 }
 
 /**
@@ -773,9 +787,9 @@ function notesProblems(reading: Reading): string[] {
         )
       }
     }
-    if (!/body=/.test(compose.run) || !/files<</.test(compose.run)) {
+    if (!/body=/.test(compose.run) || !/files<</.test(compose.run) || !/mirror<</.test(compose.run)) {
       problems.push(
-        `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step publishes no \`body=\` and \`files<<\` outputs, so the release step has neither notes nor a list to publish`
+        `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step publishes no \`body=\`, \`files<<\` and \`mirror<<\` outputs, so the release step has neither notes nor a list to publish and the mirror has none to copy`
       )
     }
     if (!/GITHUB_RUN_ID/.test(compose.run)) {
@@ -783,10 +797,11 @@ function notesProblems(reading: Reading): string[] {
         `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step's section names no run, so a page carrying two appended sections cannot be read back to the run that wrote either`
       )
     }
-    const created = [': > release-notes.md', ': > release-files.txt'].filter((line) => compose.run.includes(line))
-    if (created.length !== 2) {
+    const owned = ['release-notes.md', 'release-files.txt', 'SHA256SUMS']
+    const missing = owned.filter((file) => !compose.run.includes(`: > ${file}`))
+    if (missing.length !== 0) {
       problems.push(
-        `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step does not create ${['release-notes.md', 'release-files.txt'].filter((file) => !compose.run.includes(`: > ${file}`)).join(' and ')}, so a reused self-hosted workspace would carry the previous run's lines into the published section and list`
+        `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step does not create ${missing.join(' and ')}, so a reused self-hosted workspace would carry the previous run's lines into the published section, list and digests`
       )
     }
     if (!compose.run.includes(recordOf(reading.build))) {
@@ -795,9 +810,15 @@ function notesProblems(reading: Reading): string[] {
       )
     }
   }
-  if ((jobMapping(job, 'outputs').files ?? '') !== '${{ steps.notes.outputs.files }}') {
+  const outputs = jobMapping(job, 'outputs')
+  if ((outputs.files ?? '') !== '${{ steps.notes.outputs.files }}') {
     problems.push(
-      `${BUILD}:${job.line}'s \`release\` job publishes no \`files\` output composed by the notes step, so the mirror has no list to copy and would have to search for one`
+      `${BUILD}:${job.line}'s \`release\` job publishes no \`files\` output composed by the notes step, so the release page carries no list the notes were composed from`
+    )
+  }
+  if ((outputs.mirror ?? '') !== '${{ steps.notes.outputs.mirror }}') {
+    problems.push(
+      `${BUILD}:${job.line}'s \`release\` job publishes no \`mirror\` output composed by the notes step, so the mirror has no list to copy and would have to search for one`
     )
   }
   const publish = stepOrNull(job, PUBLISH_STEP)
@@ -1068,8 +1089,10 @@ function asioProblems(reading: Reading): string[] {
 /**
  * The mirror copies the release job's composed list and searches for nothing: a `find` over the
  * downloaded artifacts would be a second list, and a second list is how `latest/` comes to carry
- * an installer the notes called withheld. The names it writes are the ones the site's download
- * cards point at.
+ * an installer the notes called withheld. It reads the *mirror* list and not the release page's,
+ * which names the sums file the mirror composes for itself under the names it writes; and what it
+ * copies, what it writes as digests and what it removes are read off a stub CLI by the cases
+ * below rather than asserted from this step's text.
  */
 function mirrorProblems(reading: Reading): string[] {
   const problems: string[] = []
@@ -1088,15 +1111,97 @@ function mirrorProblems(reading: Reading): string[] {
     problems.push(`${BUILD}:${job.line}'s \`upload-r2\` job runs no \`${MIRROR_STEP}\` step, so nothing fills the download host`)
     return problems
   }
-  if (upload.env.FILES !== '${{ needs.release.outputs.files }}') {
+  if (upload.env.FILES !== '${{ needs.release.outputs.mirror }}') {
     problems.push(
-      `${BUILD}:${upload.line}'s \`${MIRROR_STEP}\` step does not read the composed list (\`FILES: ${upload.env.FILES || '(none)'}\`), so the mirror and the release page read different lists`
+      `${BUILD}:${upload.line}'s \`${MIRROR_STEP}\` step does not read the mirror list (\`FILES: ${upload.env.FILES || '(none)'}\`), so it would copy the release page's list instead: that list names the sums file, which no suffix places, and the two surfaces would name files the other does not serve`
     )
   }
   if (/\bfind\b/.test(commands(upload.run)) || /artifacts\//.test(commands(upload.run))) {
     problems.push(
       `${BUILD}:${upload.line}'s \`${MIRROR_STEP}\` step searches the downloaded artifacts for files to copy: that is a second list, and it would mirror an installer the release withheld`
     )
+  }
+  return problems
+}
+
+/**
+ * The names the mirror writes, read off the one map the step declares them in: `NAMES`, a
+ * space-separated list of `suffix=name` pairs. Read from the workflow rather than written here,
+ * because the site's links have to name what the mirror actually writes; a step whose map this
+ * guard cannot read is a loud failure, not a pass with nothing to hold the cards to.
+ */
+function mirrorNames(reading: Reading): string[] {
+  const job = jobOrNull(reading.build, BUILD, 'upload-r2')
+  const step = job === null ? null : stepOrNull(job, MIRROR_STEP)
+  if (step === null) {
+    throw new Error(
+      `release path: ${BUILD}'s \`upload-r2\` job runs no \`${MIRROR_STEP}\` step, so the names it writes cannot be read and the site's links cannot be held to them`
+    )
+  }
+  const declared = /(?:^|\n)\s*NAMES='([^']*)'/.exec(step.run)?.[1] ?? ''
+  const names = declared
+    .split(/\s+/)
+    .filter((pair) => pair !== '')
+    .map((pair) => /^[^=]+=(.+)$/.exec(pair)?.[1] ?? '')
+  if (names.length === 0 || names.some((name) => name === '')) {
+    throw new Error(
+      `release path: ${BUILD}'s \`${MIRROR_STEP}\` step declares \`NAMES='${declared}'\`, which this guard does not read as a space-separated \`suffix=name\` map: the names the mirror writes are what the site's links are held to, so there has to be something to read`
+    )
+  }
+  return names
+}
+
+/**
+ * The two surfaces that hand a buyer a file, held to what the mirror writes. Every `latest/` href
+ * one of them carries has to be a name the mirror's own map produces — or the sums file the
+ * mirror composes and uploads — and between them they have to account for every name the mirror
+ * writes, so a rename on either side fails here rather than at a download. Each has to name the
+ * release notes as well: the signature state lives in the notes, so a page that states one of its
+ * own would be stating a release it cannot see.
+ */
+function cardProblems(reading: Reading): string[] {
+  const problems: string[] = []
+  const published = [...mirrorNames(reading), 'SHA256SUMS']
+  const linked = new Set<string>()
+  for (const [file, text] of [
+    [INDEX, reading.index],
+    [GUIDES, reading.guides]
+  ] as Array<[string, string]>) {
+    const found = [...text.matchAll(/https:\/\/pub\.winslabapp\.com\/latest\/([\w.-]+)/g)].map((link) => link[1])
+    if (found.length === 0) {
+      problems.push(
+        `${file} links no \`${DOWNLOADS}…\` file, so a buyer is handed nothing to download and the mirror's names are held to nothing`
+      )
+    }
+    for (const name of found) {
+      linked.add(name)
+      if (!published.includes(name)) {
+        problems.push(
+          `${file} links \`${DOWNLOADS}${name}\`, which is not a name ${BUILD}'s \`${MIRROR_STEP}\` writes (it writes ${published.map((each) => `\`${each}\``).join(', ')}): the card points at a file the mirror never fills, or the name changed on one side only`
+        )
+      }
+    }
+    if (!text.includes(RELEASE_NOTES)) {
+      problems.push(
+        `${file} names no release notes (\`${RELEASE_NOTES}\`), which is where the files' state is stated: the download surface itself claims nothing about a release`
+      )
+    }
+    // The decision both surfaces are held to: they name where the state is stated rather than
+    // rendering one. A page deployed on a `website/**` push is built beside no release, so a
+    // rendered state is either a fetch to the mirror — CORS this repository cannot set — or a
+    // line that goes stale against the release it describes.
+    if (/<script\b|fetch\s*\(/.test(text)) {
+      problems.push(
+        `${file} carries a script or a \`fetch(\`, so the download surface renders a state it cannot know: the release notes state it, and this page ships on a \`website/**\` push rather than beside a release`
+      )
+    }
+  }
+  for (const name of published) {
+    if (!linked.has(name)) {
+      problems.push(
+        `no card links \`${DOWNLOADS}${name}\`, and the mirror writes it: a published file no buyer can reach — the digest file is only reachable because a card links it`
+      )
+    }
   }
   return problems
 }
@@ -1146,6 +1251,11 @@ function releaseStatements(reading: Reading): Statement[] {
     },
     {
       file: CHECKLIST,
+      says: 'the mirror check reads a withheld installer\'s card as the 404 the notes explain, and checks the digest file beside the files it copied',
+      patterns: [/404/, /SHA256SUMS/]
+    },
+    {
+      file: CHECKLIST,
       says: 'dispatching, the limitations re-read and signing the agreement itself stay human',
       patterns: [/dispatch/i, /Known Limitations/, /signing the agreement is the human half/i]
     },
@@ -1177,6 +1287,16 @@ function releaseStatements(reading: Reading): Statement[] {
     },
     {
       file: README,
+      says: 'the mirror serves only what the release published: it removes the `latest/` names this release did not publish, so a withheld installer\'s card is a 404 the notes explain',
+      patterns: [/removes every `latest\/`/, /404/]
+    },
+    {
+      file: README,
+      says: 'each surface publishes digests composed from the bytes it carries — beside the release\'s assets, and `latest/SHA256SUMS` on the mirror',
+      patterns: [/SHA256SUMS/, /latest\/SHA256SUMS/]
+    },
+    {
+      file: README,
       says: 'the download host the site\'s cards point at is `pub.winslabapp.com`',
       patterns: [/pub\.winslabapp\.com/]
     },
@@ -1193,8 +1313,13 @@ function releaseStatements(reading: Reading): Statement[] {
     },
     {
       file: PROOF,
-      says: 'a build linking the SDK with no recorded agreement has its installer withheld',
-      patterns: [new RegExp(record), /withh(e|o)ld/i]
+      says: 'a build linking the SDK with no recorded agreement has its installer withheld, and the mirror removes the name its card points at',
+      patterns: [new RegExp(record), /withh(e|o)ld/i, /404/]
+    },
+    {
+      file: PROOF,
+      says: 'each release publishes digests composed from the bytes it carries, on the release page and at `latest/SHA256SUMS`',
+      patterns: [/SHA256SUMS/, /latest\/SHA256SUMS/]
     },
     {
       file: PROOF,
@@ -1273,12 +1398,41 @@ function composerScript(reading: Reading): string {
   return step.run
 }
 
-/** What the composer wrote: the section it composed, the list it published, and how it exited. */
+/** What the composer wrote: the section it composed, the outputs it published, its digests, and
+ *  how it exited. The two lists are read from the `$GITHUB_OUTPUT` file the workflow consumes. */
 interface Composed {
   notes: string
+  /** The `files` output: what the release page carries, the sums file last. */
   files: string[]
+  /** The `mirror` output: what the mirror copies, and no sums file. */
+  mirror: string[]
+  /** The lines of the `SHA256SUMS` written beside the notes. */
+  sums: string[]
   status: number
   errors: string
+}
+
+/**
+ * The bytes a fixture artifact holds, so the digests composed from it can be predicted: the file
+ * carries a line naming itself, which keeps every artifact's digest distinct.
+ */
+function fixtureBytes(file: string): string {
+  return `${file}\n`
+}
+
+/** The digest a `SHA256SUMS` line must carry for one fixture artifact: coreutils' own value. */
+function digestOf(file: string): string {
+  return createHash('sha256').update(fixtureBytes(file)).digest('hex')
+}
+
+/** One `name<<MARKER` heredoc of a `$GITHUB_OUTPUT` file, as the lines between its markers. A
+ *  composer that never got that far publishes none, which the cases read as an empty list. */
+function outputLines(output: string, name: string): string[] {
+  const match = new RegExp(`(?:^|\\n)${name}<<([^\\n]*)\\n([\\s\\S]*?)\\n\\1(?:\\n|$)`).exec(output)
+  if (match === null) return []
+  const lines = match[2].split('\n')
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+  return lines
 }
 
 /**
@@ -1295,8 +1449,9 @@ function compose(script: string, scenario: Scenario): Composed {
     ['Cuerunner-linux', scenario.carried?.linux ?? scenario.linuxAppimage]
   ] as Array<[string, string | undefined]>) {
     if (name === undefined || name === '') continue
+    const relative = ['artifacts', artifact, name].join('/')
     fs.mkdirSync(path.join(directory, 'artifacts', artifact), { recursive: true })
-    fs.writeFileSync(path.join(directory, 'artifacts', artifact, name), '')
+    fs.writeFileSync(path.join(directory, 'artifacts', artifact, name), fixtureBytes(relative))
   }
   const output = path.join(directory, 'github-output.txt')
   fs.writeFileSync(output, '')
@@ -1304,6 +1459,7 @@ function compose(script: string, scenario: Scenario): Composed {
   // composer publishes has to be this run's, so every case below runs against them.
   fs.writeFileSync(path.join(directory, 'release-notes.md'), 'a previous run wrote this line\n')
   fs.writeFileSync(path.join(directory, 'release-files.txt'), 'artifacts/a-previous-run.exe\n')
+  fs.writeFileSync(path.join(directory, 'SHA256SUMS'), 'a previous run wrote this line\n')
   const run = spawnSync('bash', ['compose.sh'], {
     cwd: directory,
     encoding: 'utf-8',
@@ -1325,8 +1481,10 @@ function compose(script: string, scenario: Scenario): Composed {
   const wrote = (name: string): string => fs.readFileSync(path.join(directory, name), 'utf-8')
   const composed: Composed = {
     notes: fs.existsSync(path.join(directory, 'release-notes.md')) ? wrote('release-notes.md') : '',
-    files: fs.existsSync(path.join(directory, 'release-files.txt'))
-      ? wrote('release-files.txt').split('\n').filter((line) => line !== '')
+    files: outputLines(wrote('github-output.txt'), 'files'),
+    mirror: outputLines(wrote('github-output.txt'), 'mirror'),
+    sums: fs.existsSync(path.join(directory, 'SHA256SUMS'))
+      ? wrote('SHA256SUMS').split('\n').filter((line) => line !== '')
       : [],
     status: run.status ?? 1,
     errors: `${run.stdout ?? ''}${run.stderr ?? ''}`
@@ -1347,32 +1505,48 @@ function mirrorScript(reading: Reading): string {
   return step.run
 }
 
-/** What the mirror copied, as the `aws s3 cp` pairs it ran. */
+/** What the mirror did, as the `aws s3` calls it ran and the sums file it left behind. */
 interface Mirrored {
   status: number
   copies: Array<{ from: string; to: string }>
+  removals: string[]
+  sums: string[]
   errors: string
 }
 
 /**
- * The mirror, run against a stub `aws`, so what it would copy is read rather than assumed: the
- * files the composed list names are written where the download step would have left them, and
- * every command the step issues is logged. A withheld installer is absent from the list, so a
- * mirror that copies the list cannot carry it.
+ * The mirror, run against a stub `aws`, so what it would copy, digest and remove is read rather
+ * than assumed: the files the list names are written where the download step would have left
+ * them, with bytes of their own so the digests it composes can be predicted, and every command
+ * the step issues is logged. A withheld installer is absent from the list, so a mirror that
+ * copies the list cannot carry it. A call whose argument matches `refuse` exits nonzero the way
+ * a refused CLI call does — logged first, because the step's `set -eu` is what has to stop it.
  */
-function mirror(script: string, files: string[]): Mirrored {
+function mirror(script: string, files: string[], refuse = ''): Mirrored {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'release-path-r2-'))
   fs.writeFileSync(path.join(directory, 'mirror.sh'), script, 'utf-8')
   fs.mkdirSync(path.join(directory, 'bin'))
   fs.writeFileSync(
     path.join(directory, 'bin', 'aws'),
-    '#!/bin/sh\nfor argument in "$@"; do printf "%s\\n" "$argument" >> "$AWS_LOG"; done\nprintf -- "---\\n" >> "$AWS_LOG"\n',
+    '#!/bin/sh\n' +
+      'for argument in "$@"; do printf "%s\\n" "$argument" >> "$AWS_LOG"; done\n' +
+      'printf -- "---\\n" >> "$AWS_LOG"\n' +
+      'if [ -n "$AWS_REFUSE" ]; then\n' +
+      '  for argument in "$@"; do\n' +
+      '    case "$argument" in\n' +
+      '      $AWS_REFUSE) echo "stub aws: refused $argument" >&2; exit 1 ;;\n' +
+      '    esac\n' +
+      '  done\n' +
+      'fi\n',
     { mode: 0o755 }
   )
   for (const file of files) {
     fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true })
-    fs.writeFileSync(path.join(directory, file), '')
+    fs.writeFileSync(path.join(directory, file), fixtureBytes(file))
   }
+  // The previous run's sums, as a reused workspace would still hold them: what the mirror writes
+  // has to be this run's digests, so every case below runs against them.
+  fs.writeFileSync(path.join(directory, 'SHA256SUMS'), 'a previous run wrote this line\n')
   const log = path.join(directory, 'aws.log')
   fs.writeFileSync(log, '')
   const run = spawnSync('bash', ['mirror.sh'], {
@@ -1381,6 +1555,7 @@ function mirror(script: string, files: string[]): Mirrored {
     env: {
       PATH: `${path.join(directory, 'bin')}:${process.env.PATH ?? ''}`,
       AWS_LOG: log,
+      AWS_REFUSE: refuse,
       FILES: files.join('\n'),
       R2_BUCKET: 'bucket',
       R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
@@ -1388,11 +1563,19 @@ function mirror(script: string, files: string[]): Mirrored {
     }
   })
   const copies: Array<{ from: string; to: string }> = []
+  const removals: string[] = []
   for (const call of fs.readFileSync(log, 'utf-8').split('---\n')) {
     const [tool, verb, from, to] = call.split('\n').filter((line) => line !== '')
     if (tool === 's3' && verb === 'cp') copies.push({ from, to })
+    if (tool === 's3' && verb === 'rm') removals.push(from)
   }
-  const mirrored: Mirrored = { status: run.status ?? 1, copies, errors: `${run.stdout ?? ''}${run.stderr ?? ''}` }
+  const mirrored: Mirrored = {
+    status: run.status ?? 1,
+    copies,
+    removals,
+    sums: fs.readFileSync(path.join(directory, 'SHA256SUMS'), 'utf-8').split('\n').filter((line) => line !== ''),
+    errors: `${run.stdout ?? ''}${run.stderr ?? ''}`
+  }
   fs.rmSync(directory, { recursive: true, force: true })
   return mirrored
 }
@@ -1454,6 +1637,10 @@ describe('the release path the repository holds', () => {
     expect(mirrorProblems(LIVE)).toEqual([])
   })
 
+  it('holds the site\'s download links to the names the mirror writes', () => {
+    expect(cardProblems(LIVE)).toEqual([])
+  })
+
   it('states, in the prose a release engineer reads, what the workflow implements', () => {
     expect(proseProblems(LIVE)).toEqual([])
   })
@@ -1463,15 +1650,29 @@ describe('the notes the composer writes', () => {
   const script = composerScript(LIVE)
 
   it('names the repository\'s own installers unsigned, and never as signed', () => {
-    const { notes, files, status } = compose(script, UNSIGNED)
+    const { notes, files, mirror, sums, status } = compose(script, UNSIGNED)
     expect(status, `the composer exited ${status}: ${notes}`).toBe(0)
     expect(files).toEqual([
       'artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe',
       'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
+      'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
+      'SHA256SUMS'
+    ])
+    expect(mirror, 'the mirror list carries a file the mirror composes for itself').toEqual([
+      'artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe',
+      'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
       'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage'
+    ])
+    // The digests the release page carries, under the names the page carries the files by —
+    // composed from the bytes this run located, so a line cannot outlive the file it names.
+    expect(sums).toEqual([
+      `${digestOf('artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe')}  Cuerunner Setup 0.14.0.exe`,
+      `${digestOf('artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg')}  Cuerunner-0.14.0.dmg`,
+      `${digestOf('artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage')}  Cuerunner-0.14.0.AppImage`
     ])
     expect(notes).toContain('Cuerunner Setup 0.14.0.exe')
     expect(notes).toContain('Cuerunner-0.14.0.dmg')
+    expect(notes, 'the notes do not name the sums file they are attached with').toContain('SHA256SUMS')
     expect(notes).toContain('https://github.com/owner/repo/actions/runs/4242')
     expect(notes, 'the section carries a line from the previous run').not.toContain('a previous run wrote this line')
     expect(notes).toMatch(/no Windows certificate is configured/)
@@ -1490,12 +1691,19 @@ describe('the notes the composer writes', () => {
   })
 
   it('publishes no exe and names it withheld when the SDK is linked and nothing is recorded', () => {
-    const { notes, files, status } = compose(script, { ...UNSIGNED, windowsInstaller: '', windowsAsio: 'on' })
+    const { notes, files, mirror, sums, status } = compose(script, { ...UNSIGNED, windowsInstaller: '', windowsAsio: 'on' })
     expect(status).toBe(0)
     expect(files.some((file) => file.endsWith('.exe'))).toBe(false)
-    expect(files).toHaveLength(2)
+    expect(files).toHaveLength(3)
+    expect(mirror.some((file) => file.endsWith('.exe'))).toBe(false)
+    expect(mirror).toHaveLength(2)
+    expect(sums.map((line) => line.slice(line.indexOf('  ') + 2))).toEqual([
+      'Cuerunner-0.14.0.dmg',
+      'Cuerunner-0.14.0.AppImage'
+    ])
     expect(notes).toMatch(/no installer is published/)
     expect(notes).toContain(recordOf(LIVE.build))
+    expect(notes, 'the withheld installer\'s card is left unexplained').toMatch(/404/)
     expect(notes, 'a withheld installer is still described as published').not.toContain('Cuerunner Setup 0.14.0.exe')
   })
 
@@ -1512,9 +1720,12 @@ describe('the notes the composer writes', () => {
     const missing = compose(script, { ...UNSIGNED, carried: { windows: 'Cuerunner Setup 0.13.0.exe' } })
     expect(missing.status).not.toBe(0)
     expect(missing.errors).toMatch(/hold no file by that name/)
-    expect(missing.files, 'the failed composer still published a list').not.toContain(
-      'artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe'
-    )
+    // A list that quietly dropped the file would be how the notes, the release page and the
+    // mirror start saying different things: the composer publishes no list at all, and no short
+    // sums file either.
+    expect(missing.files, 'the failed composer still published a list').toEqual([])
+    expect(missing.mirror, 'the failed composer still published a mirror list').toEqual([])
+    expect(missing.sums, 'the failed composer still wrote a sums file').toEqual([])
   })
 
   it('composes the notes from the words each recorder actually writes', () => {
@@ -1561,7 +1772,7 @@ describe('the mirror the composed list fills', () => {
 
   it('copies exactly the files the notes were composed from, under the names the site links', () => {
     const composed = compose(composerScript(LIVE), UNSIGNED)
-    const { status, copies, errors } = mirror(script, composed.files)
+    const { status, copies, removals, errors } = mirror(script, composed.mirror)
     expect(status, `the mirror exited ${status}: ${errors}`).toBe(0)
     expect(copies.map((copy) => copy.to)).toEqual([
       's3://bucket/versions/v0.14.0/Cuerunner-Setup.exe',
@@ -1569,7 +1780,8 @@ describe('the mirror the composed list fills', () => {
       's3://bucket/versions/v0.14.0/Cuerunner.dmg',
       's3://bucket/latest/Cuerunner.dmg',
       's3://bucket/versions/v0.14.0/Cuerunner.AppImage',
-      's3://bucket/latest/Cuerunner.AppImage'
+      's3://bucket/latest/Cuerunner.AppImage',
+      's3://bucket/latest/SHA256SUMS'
     ])
     expect(copies.map((copy) => copy.from)).toEqual([
       'artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe',
@@ -1577,16 +1789,69 @@ describe('the mirror the composed list fills', () => {
       'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
       'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
       'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
-      'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage'
+      'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
+      'SHA256SUMS'
+    ])
+    expect(removals, 'a release that published all three names still removed one').toEqual([])
+  })
+
+  it('writes the digests of the bytes it copied, under the names it wrote them by', () => {
+    const composed = compose(composerScript(LIVE), UNSIGNED)
+    const { status, sums, errors } = mirror(script, composed.mirror)
+    expect(status, `the mirror exited ${status}: ${errors}`).toBe(0)
+    // The buyer's file: the bytes a card hands out, digested under the name the card links —
+    // `Cuerunner-Setup.exe` rather than the build's `Cuerunner Setup 0.14.0.exe` — in coreutils'
+    // own `<digest>  <name>` form, and with nothing of an earlier run's sums left in it.
+    expect(sums).toEqual([
+      `${digestOf('artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe')}  Cuerunner-Setup.exe`,
+      `${digestOf('artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg')}  Cuerunner.dmg`,
+      `${digestOf('artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage')}  Cuerunner.AppImage`
     ])
   })
 
-  it('mirrors no installer the notes name withheld', () => {
+  it('mirrors no installer the notes name withheld, and removes the name its card points at', () => {
     const withheld = compose(composerScript(LIVE), { ...UNSIGNED, windowsInstaller: '', windowsAsio: 'on' })
-    const { status, copies } = mirror(script, withheld.files)
+    const { status, copies, removals } = mirror(script, withheld.mirror)
     expect(status).toBe(0)
     expect(copies.some((copy) => copy.to.endsWith('Cuerunner-Setup.exe'))).toBe(false)
-    expect(copies).toHaveLength(4)
+    expect(copies).toHaveLength(5)
+    expect(removals).toEqual(['s3://bucket/latest/Cuerunner-Setup.exe'])
+  })
+
+  it('removes every name the list it was handed does not carry', () => {
+    const { status, copies, removals } = mirror(script, ['artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage'])
+    expect(status).toBe(0)
+    expect(copies.map((copy) => copy.to)).toEqual([
+      's3://bucket/versions/v0.14.0/Cuerunner.AppImage',
+      's3://bucket/latest/Cuerunner.AppImage',
+      's3://bucket/latest/SHA256SUMS'
+    ])
+    expect(removals).toEqual(['s3://bucket/latest/Cuerunner-Setup.exe', 's3://bucket/latest/Cuerunner.dmg'])
+  })
+
+  it('stops at a refused removal, rather than reading a refusal as a removal that happened', () => {
+    // The token that refuses `DeleteObject`: the step fails, and the names after the refused one
+    // are left alone rather than reported as removed — which is what `set -eu` and the docs'
+    // "a refusal fails the step" rest on.
+    const { status, removals, errors } = mirror(
+      script,
+      ['artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage'],
+      's3://bucket/latest/Cuerunner-Setup.exe'
+    )
+    expect(status, `the mirror exited ${status}: ${errors}`).not.toBe(0)
+    expect(removals).toEqual(['s3://bucket/latest/Cuerunner-Setup.exe'])
+  })
+
+  it('publishes no sums file when a copy failed', () => {
+    // The sums upload runs after every copy, so a copy the CLI refuses has to leave
+    // `latest/SHA256SUMS` unwritten rather than carrying a short list of digests.
+    const composed = compose(composerScript(LIVE), UNSIGNED)
+    const { status, copies, errors } = mirror(script, composed.mirror, 's3://bucket/latest/Cuerunner.AppImage')
+    expect(status, `the mirror exited ${status}: ${errors}`).not.toBe(0)
+    expect(copies.map((copy) => copy.to), 'the refused copy was never attempted').toContain(
+      's3://bucket/latest/Cuerunner.AppImage'
+    )
+    expect(copies.map((copy) => copy.to)).not.toContain('s3://bucket/latest/SHA256SUMS')
   })
 
   it('refuses a file it cannot place under a name the site links', () => {
@@ -1640,8 +1905,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names a publishing gate that would skip the run this repository starts', () => {
     const eventGated = doctored(
       LIVE,
-      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The list the release page",
-      "    if: github.ref_type == 'tag' && github.event_name == 'release' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The list the release page"
+      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page",
+      "    if: github.ref_type == 'tag' && github.event_name == 'release' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page"
     )
     expect(publishGateProblems(eventGated)).toEqual([
       expect.stringContaining('gates on `github.event_name`')
@@ -1707,11 +1972,22 @@ describe('the release path the checks exist to refuse', () => {
   it('names a release job that publishes no list for the mirror to copy', () => {
     const unexported = doctored(
       LIVE,
-      '    outputs:\n      files: ${{ steps.notes.outputs.files }}\n    permissions:',
-      '    outputs:\n    permissions:'
+      '    outputs:\n      files: ${{ steps.notes.outputs.files }}\n      mirror: ${{ steps.notes.outputs.mirror }}\n',
+      '    outputs:\n      mirror: ${{ steps.notes.outputs.mirror }}\n'
     )
     expect(notesProblems(unexported)).toEqual([
       expect.stringContaining('publishes no `files` output composed by the notes step')
+    ])
+  })
+
+  it('names a release job that publishes no mirror list', () => {
+    const unexported = doctored(
+      LIVE,
+      '    outputs:\n      files: ${{ steps.notes.outputs.files }}\n      mirror: ${{ steps.notes.outputs.mirror }}\n',
+      '    outputs:\n      files: ${{ steps.notes.outputs.files }}\n'
+    )
+    expect(notesProblems(unexported)).toEqual([
+      expect.stringContaining('publishes no `mirror` output composed by the notes step')
     ])
   })
 
@@ -1730,8 +2006,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names publication that no longer waits on the tag ref', () => {
     const onBranch = doctored(
       LIVE,
-      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The list the release page",
-      "    if: github.ref_type == 'branch' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The list the release page"
+      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page",
+      "    if: github.ref_type == 'branch' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page"
     )
     expect(publishGateProblems(onBranch)).toEqual([
       expect.stringContaining("which does not test `github.ref_type == 'tag'`")
@@ -1741,8 +2017,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names a gate that dropped the jobs it needs by testing the ref', () => {
     const forgotten = doctored(
       LIVE,
-      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The list the release page",
-      "    if: github.ref_type == 'tag'\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The list the release page"
+      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page",
+      "    if: github.ref_type == 'tag'\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page"
     )
     expect(publishGateProblems(forgotten)).toEqual([expect.stringContaining('drops `success()`')])
   })
@@ -1781,10 +2057,75 @@ describe('the release path the checks exist to refuse', () => {
   it('names a mirror that copies a list of its own', () => {
     const own = doctored(
       LIVE,
-      '          FILES: ${{ needs.release.outputs.files }}',
+      '          FILES: ${{ needs.release.outputs.mirror }}',
       '          FILES: /tmp/files.txt'
     )
-    expect(mirrorProblems(own)).toEqual([expect.stringContaining('does not read the composed list')])
+    expect(mirrorProblems(own)).toEqual([expect.stringContaining('does not read the mirror list')])
+  })
+
+  it('names a mirror handed the release page\'s list, which names its own sums file', () => {
+    const pages = doctored(
+      LIVE,
+      '          FILES: ${{ needs.release.outputs.mirror }}',
+      '          FILES: ${{ needs.release.outputs.files }}'
+    )
+    expect(mirrorProblems(pages)).toEqual([expect.stringContaining('does not read the mirror list')])
+  })
+
+  it('names a card that links a file the mirror does not write', () => {
+    const renamed = doctored(
+      LIVE,
+      'https://pub.winslabapp.com/latest/Cuerunner.dmg',
+      'https://pub.winslabapp.com/latest/Cuerunner-universal.dmg',
+      'guides'
+    )
+    expect(cardProblems(renamed)).toEqual([
+      expect.stringContaining('links `https://pub.winslabapp.com/latest/Cuerunner-universal.dmg`')
+    ])
+  })
+
+  it('names a mirror name the cards stopped linking', () => {
+    const renamed = doctored(LIVE, 'AppImage=Cuerunner.AppImage', 'AppImage=Cuerunner-test.AppImage', 'build')
+    expect(cardProblems(renamed)).toEqual([
+      expect.stringContaining('links `https://pub.winslabapp.com/latest/Cuerunner.AppImage`'),
+      expect.stringContaining('no card links `https://pub.winslabapp.com/latest/Cuerunner-test.AppImage`')
+    ])
+  })
+
+  it('names a mirror whose names this guard cannot read', () => {
+    const unreadable = doctored(
+      LIVE,
+      "NAMES='exe=Cuerunner-Setup.exe dmg=Cuerunner.dmg AppImage=Cuerunner.AppImage'",
+      "NAMES='Cuerunner-Setup.exe Cuerunner.dmg'"
+    )
+    expect(() => cardProblems(unreadable)).toThrow(/does not read as a space-separated/)
+  })
+
+  it('names a download surface that renders a state of its own', () => {
+    const scripted = doctored(
+      LIVE,
+      '        Cuerunner is distributed outside the app stores: the',
+      '        <script>fetch("https://pub.winslabapp.com/latest/SHA256SUMS")</script>\n        Cuerunner is distributed outside the app stores: the',
+      'guides'
+    )
+    expect(cardProblems(scripted)).toEqual([expect.stringContaining('carries a script or a `fetch(`')])
+  })
+
+  it('names a download surface that stopped naming the release notes', () => {
+    const silent = doctored(LIVE, 'https://github.com/Huckcity/cuerunner/releases/latest', 'https://github.com/Huckcity/cuerunner/releases', 'index')
+    expect(cardProblems(silent)).toEqual([
+      expect.stringContaining('names no release notes')
+    ])
+  })
+
+  it('names a download surface that would render a state it cannot know', () => {
+    const rendered = doctored(
+      LIVE,
+      '<section id="download" class="panel reveal delay-3">',
+      '<section id="download" class="panel reveal delay-3"><script>fetch(\'./release.json\')</script>',
+      'index'
+    )
+    expect(cardProblems(rendered)).toEqual([expect.stringContaining('carries a script')])
   })
 
   it('names a mirror that does not wait on the release it copies', () => {
