@@ -327,10 +327,26 @@ p {
   border-color: color-mix(in srgb, var(--state-panic) 75%, #fff 25%);
 }
 
+/* A table wider than its wrapper scrolls, and nothing says so: at a phone's width the buy cell
+   sits past the right edge and a reader has to find it by swiping. The wrapper carries the mark
+   that the table continues — a cover that scrolls with the content (`local`) over a shadow pinned
+   to the wrapper (`scroll`), so a shadow shows exactly while there is content beyond that edge and
+   none once the table fits. Both are plain bands rather than radial blobs, so the mark reads the
+   same down a long table; the header row's own cells paint over it, so what a reader sees is the
+   band down the table's body, where the rows are what continues. CSS only: no listener, no markup
+   change, and every wrapped table on the site gets it. */
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border-input);
   border-radius: 4px;
+  background:
+    linear-gradient(to right, var(--bg-surface) 55%, transparent) left center,
+    linear-gradient(to left, var(--bg-surface) 55%, transparent) right center,
+    linear-gradient(to right, color-mix(in srgb, var(--bg-base) 55%, #000), transparent) left center,
+    linear-gradient(to left, color-mix(in srgb, var(--bg-base) 55%, #000), transparent) right center;
+  background-repeat: no-repeat;
+  background-size: 48px 100%, 48px 100%, 18px 100%, 18px 100%;
+  background-attachment: local, local, scroll, scroll;
 }
 
 table {
@@ -749,6 +765,12 @@ code {
   .card {
     background: #ffffff;
     border-color: #000000;
+  }
+
+  /* The scroll mark is about a wrapper that can be swiped, which a printed page cannot: the
+     covers and shadows would print as grey bands down a white page. */
+  .table-wrap {
+    background: none;
   }
 
   h1,

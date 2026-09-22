@@ -181,6 +181,95 @@ export const PRO_ROWS = [
   }
 ]
 
+/**
+ * Every Pro statement the served tree carries, one entry per `class="pro"` chip: the page under
+ * `website/`, the words the chip sits on, and the record's own identifiers — or the Pro cue types
+ * — those words claim. A chip is what a buyer reads ("this is Pro") and the ids are what makes it
+ * checkable: scripts/pro-page.test.ts walks the served tree, holds this list and the walk to each
+ * other both ways, and reads every claim against `capability-catalog.md`, so a chip added, dropped
+ * or moved onto a free feature fails the build rather than shipping.
+ *
+ * The marks outlive the page that renders them — `website/redundancy.html` is hand-written and no
+ * module generates it — so the pairing of words with class is written down here, where both the
+ * generated and the hand-written pages answer for it.
+ */
+export const PRO_MARKS = [
+  {
+    page: 'guides/cue-list.html',
+    words: 'Scene',
+    cues: ['scene']
+  },
+  {
+    page: 'guides/desk.html',
+    words: 'Scenes and the desk',
+    identifiers: ['midi-tcp'],
+    cues: ['scene']
+  },
+  {
+    page: 'guides/script.html',
+    words: 'Following the script',
+    identifiers: ['script:readDocument', 'script:pickFile']
+  },
+  {
+    page: 'guides/showfile.html',
+    words: 'Versions and handover',
+    identifiers: ['workspace:compare', 'workspace:merge', 'workspace:exportBundle', 'workspace:importBundle']
+  },
+  {
+    page: 'guides/wireless.html',
+    words: 'Watching the radio mics',
+    identifiers: ['rf']
+  },
+  {
+    page: 'redundancy.html',
+    words: 'Redundant playback',
+    identifiers: ['redundancy']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Scene cue',
+    cues: ['scene']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Scene',
+    cues: ['scene']
+  },
+  {
+    page: 'reference/formats.html',
+    words: 'The bundle file',
+    identifiers: ['workspace:exportBundle', 'workspace:importBundle']
+  },
+  {
+    page: 'reference/settings.html',
+    words: 'Find devices',
+    identifiers: ['presence']
+  },
+  {
+    page: 'reference/settings.html',
+    words: 'Tablet view',
+    identifiers: ['companion']
+  },
+  {
+    page: 'reference/settings.html',
+    words: 'Wireless',
+    identifiers: ['rf']
+  }
+]
+
+/**
+ * The four things the hero note names as Cuerunner Pro, each with the record's identifier behind
+ * it: "Cuerunner Pro is the desk, the radios, the tablet and the second machine." The note states
+ * the free/Pro line on the landing page, and `website/index.html` is hand-written, so the words
+ * and the classes they stand on are declared here and the guard holds the note to them.
+ */
+export const HERO_NOUNS = [
+  { noun: 'the desk', identifier: 'midi-tcp' },
+  { noun: 'the radios', identifier: 'rf' },
+  { noun: 'the tablet', identifier: 'companion' },
+  { noun: 'the second machine', identifier: 'redundancy' }
+]
+
 export const PRO = [
   {
     path: 'pro.html',

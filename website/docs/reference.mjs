@@ -3,6 +3,86 @@
 // Tables, field by field, with defaults. No walkthroughs — a page here answers "what does
 // this field do" and "what exactly does it send", and links back to the guide that shows
 // it being used.
+//
+// The settings page is the one page here that documents another window, so the two sides are
+// declared rather than left to drift: `SETTINGS_SECTIONS` names the settings tab each section
+// answers to, and `LICENSE_ROWS`/`LICENSE_KEY_ROWS` state the License tab's rows. Both are read
+// back by `scripts/reference-page.test.ts` — the sections against the app's own `SETTINGS_TABS`,
+// the rows against the labels `LicenseSection.tsx` prints — so a tab the app adds, a section that
+// answers to no tab, and a row label that moves all fail the build.
+import { table } from './table.mjs'
+
+/**
+ * The settings page's sections, one per tab of the app's Settings dialog, in the order the dialog
+ * shows them: the tab's own id, and the anchor this page gives its section. Each section's heading
+ * is the tab's own label — `SettingsDialog.tsx`'s `SETTINGS_TABS` — and the guard holds the two
+ * lists both ways, so a tab with no section and a section answering to a tab the app does not
+ * declare are both failures. The Show Settings block further down is not in this list: it
+ * documents the show's own dialog, which is not a tab of the settings dialog.
+ */
+export const SETTINGS_SECTIONS = [
+  { tab: 'general', anchor: 'general' },
+  { tab: 'audio', anchor: 'audio' },
+  { tab: 'midi', anchor: 'midi' },
+  { tab: 'network', anchor: 'network' },
+  { tab: 'wireless', anchor: 'wireless' },
+  { tab: 'redundancy', anchor: 'backup' },
+  { tab: 'license', anchor: 'license' }
+]
+
+/**
+ * The tab's own blurb, as the app writes it beside the tab's name (`TAB_BLURB.license` in
+ * `SettingsDialog.tsx`): the reader this page is written for reads exactly that line under the
+ * sidebar, so the section opens with it and `scripts/reference-page.test.ts` holds the two to
+ * each other.
+ */
+export const LICENSE_BLURB = 'Cuerunner Pro on this machine.'
+
+/**
+ * The License tab on a licensed machine: the rows `LicenseSection.tsx` prints, in the order it
+ * prints them, with what each one is reading. The labels are the app's own words for those rows —
+ * the guard reads each back out of the component — so the page a reader is sent to documents the
+ * rows they will find, named as the tab names them.
+ */
+export const LICENSE_ROWS = [
+  {
+    label: 'License',
+    prose: `Who the key is licensed to, as the issuer wrote it.`
+  },
+  {
+    label: 'Key id',
+    prose: `The key's own id, as the issuer minted it — what a question about this key is answered by.`
+  },
+  {
+    label: 'Issued',
+    prose: `The day the key was issued.`
+  },
+  {
+    label: 'Expires',
+    prose: `The last day it runs, or <code>never</code> for a key with no end date.`
+  },
+  {
+    label: 'Deactivate',
+    prose: `A button that takes the key off this machine: it goes back to the free half, and the shows are untouched.`
+  }
+]
+
+/**
+ * The License tab before a key is entered: the field, and the button that checks what is in it. A
+ * key that has run out leaves the Pro half off until a renewed one is entered, which is the state
+ * the tab says out loud — the cue stack and the shows keep working either way.
+ */
+export const LICENSE_KEY_ROWS = [
+  {
+    label: 'License key',
+    prose: `The field a key is pasted into. It is checked on this machine, so a show computer never needs the internet.`
+  },
+  {
+    label: 'Activate',
+    prose: `Checks what is in the field and turns the Pro half on the spot. A key that is refused says why, under the field.`
+  }
+]
+
 export const REFERENCE = [
   {
     path: 'reference/index.html',
@@ -305,6 +385,22 @@ export const REFERENCE = [
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="license">
+      <h2>License</h2>
+      <p>
+        ${LICENSE_BLURB} The first table is what a machine is carrying once a key is on it, and
+        the second is how a key is entered. Nothing on the tab is needed to run the free half,
+        and nothing is asked of the network — the key is checked on the machine it is entered on,
+        so a venue with no internet unlocks exactly like any other.
+      </p>
+${table(['Row', 'What it shows'], LICENSE_ROWS.map(row => [row.label, row.prose]))}
+      <p>
+        A key that has run out leaves the Pro half off until a renewed one is entered, and the
+        tab says which day it ran out. The cue stack and the shows keep working either way.
+      </p>
+${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.prose]))}
     </section>
 
     <section class="panel reveal delay-3" id="show">
