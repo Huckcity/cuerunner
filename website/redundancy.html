@@ -96,7 +96,7 @@
     <section id="setup" class="panel reveal delay-1">
       <h2>1. Setting the pair up</h2>
       <p>
-        Each machine is configured on its own, in <em>Settings → Redundancy</em>. The settings
+        Each machine is configured on its own, in <em>Settings → Backup machine</em>. The settings
         belong to the machine rather than to the show — both machines open the same workspace
         file, so a role written into the show would be read as the same answer by both of them —
         and they are kept beside the license key, in <code>redundancy.json</code>, not in the
@@ -323,7 +323,7 @@
       <h2>Rigging it on the night</h2>
       <ol class="steps">
         <li>Install the same version of Cuerunner on both machines and open the same workspace file on each.</li>
-        <li>On the machine that will drive: <em>Settings → Redundancy</em>, switch it on, set the role to <em>Live</em>, name it, give it a port, and put in the other machine's address and port.</li>
+        <li>On the machine that will drive: <em>Settings → Backup machine</em>, switch it on, set the role to <em>Live</em>, name it, give it a port, and put in the other machine's address and port.</li>
         <li>On the machine that will stand by: the same, with the role set to <em>Standby</em>, its own port, and this machine's address as its partner.</li>
         <li>Set the same access code on both, and decide what should happen when the partner goes quiet.</li>
         <li>Check the status on both: each one should name the other and say <em>In sync</em>. If it says the cue lists differ, save the show on the machine that has the edits.</li>
