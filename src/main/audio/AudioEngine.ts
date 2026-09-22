@@ -628,10 +628,14 @@ export class NativeAudioEngine {
 
   private handleEvent(event: Record<string, unknown>): void {
     // Recognition is by declaration: a field is known when the declaration names it for
-    // this event's type. An undeclared one is named and reported — the shared interfaces
-    // are flat, so the top-level names are the whole check — and the event still goes on
-    // as it is: a field this build does not carry must not cost the show a line it does
-    // understand.
+    // this event's type — and every field the declaration names for that type is
+    // required. `normalizeEvent` below fills a default in for one that is absent, so a
+    // line missing a field would otherwise read as a fact it never carried: an `ended`
+    // with no reason reads as a natural completion, a `state` with no `active` as
+    // nothing playing. Both directions are reported, and the event still goes on as it
+    // is: neither a field this build does not carry nor one the engine left out must
+    // cost the show a line the rest of which it does understand. The shared interfaces
+    // are flat, so the top-level names are the whole check.
     const fields = declaredEventFields(event.type)
     if (fields !== null) {
       const type = event.type as string
@@ -640,6 +644,13 @@ export class NativeAudioEngine {
         reportMainError(
           `[main] audio engine sent an unrecognised field '${field}' on event type '${type}'`,
           `audio-event-field:${type}.${field}`
+        )
+      }
+      for (const field of fields) {
+        if (Object.hasOwn(event, field)) continue
+        reportMainError(
+          `[main] audio engine sent an event of type '${type}' with no '${field}'`,
+          `audio-event-field-missing:${type}.${field}`
         )
       }
     }

@@ -141,3 +141,25 @@ test('unsaved work is offered back after a session that ended without saving', a
 
   fs.rmSync(dir, { recursive: true, force: true })
 })
+
+test('a snapshot this build cannot read is said rather than swallowed', async () => {
+  // The session before this one ended without saving, so there is work to offer back — and
+  // the snapshot on disk is not one this build can bring forward. The operator's only sight
+  // of it is the bar, which has to say so: silently offering nothing reads as a session that
+  // never autosaved.
+  await closeApp(app)
+  fs.writeFileSync(path.join(userDataDir, 'recovery.cuerunner'), '{"workspace":{"cues":[')
+  ;({ app, page } = await launchApp({ userDataDir }))
+
+  const bar = page.locator('.app-notice[data-kind="recovery"]')
+  await expect(bar).toBeVisible()
+  await expect(bar).toContainText('Could not bring the unsaved work back')
+  // The file it could not read is named, and V8's parse text is not what the operator reads.
+  await expect(bar).toContainText('recovery.cuerunner')
+  await expect(bar).not.toContainText('Unexpected token')
+  // Nothing to decide about a snapshot that is not offerable: no Recover, no Discard.
+  await expect(bar.locator('.app-notice-action')).toHaveCount(0)
+
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toContainText('Could not bring the unsaved work back')
+})

@@ -11,9 +11,36 @@ import type {
 import { AUDIO_PROTOCOL_VERSION } from '../shared/audio'
 import type { CuerunnerBridge } from '../shared/ipc'
 import type { RedundancyConfigureResult } from '../shared/ipc/redundancy'
-import type { WorkspaceCompareResult, WorkspaceExportResult, WorkspaceImportResult, WorkspaceMergeResult } from '../shared/ipc/workspace'
+import type {
+  RelinkedWorkspace,
+  WorkspaceCompareResult,
+  WorkspaceExportResult,
+  WorkspaceImportResult,
+  WorkspaceMergeResult,
+  WorkspaceOpenPathResult,
+  WorkspaceOpenResult
+} from '../shared/ipc/workspace'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { ScriptDocument } from '../shared/show'
+import type { Workspace } from '../shared/workspace'
+
+/**
+ * The least a declared answer can carry: a show with no cues and none of the optional
+ * sections, and no files missing. The three members below answer with it because their
+ * callers read the shape rather than call counts, and a test that cares what the answer
+ * holds hands its own to `mockResolvedValue`.
+ */
+function emptyWorkspace(): Workspace {
+  return {
+    version: 1,
+    id: 'test-workspace',
+    name: 'Test Show',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    audioSettings: { outputDeviceId: 'default' },
+    midiSettings: { outputPortName: '' },
+    cues: []
+  }
+}
 
 /**
  * The engine's own record, as the mock reports it. `info()` and a `configure()` that took
@@ -177,10 +204,26 @@ Object.defineProperty(window, 'cuerunner', {
       shell: vi.fn(() => Promise.resolve({ stdout: '', stderr: '', code: 0, signal: null }))
     },
     workspace: {
-      open: vi.fn(() => Promise.resolve({ ok: true as const, opened: null })),
-      openPath: vi.fn(),
-      openDemo: vi.fn(),
-      relink: vi.fn(),
+      open: vi.fn((): Promise<WorkspaceOpenResult> => Promise.resolve({ ok: true, opened: null })),
+      // These three answer with the shape their channel declares rather than nothing at
+      // all: a test's handle on them is then checked against the answer the window reads,
+      // not against the member's name, and one that forgets to stub still reads a show.
+      openPath: vi.fn((): Promise<WorkspaceOpenPathResult> => Promise.resolve({
+        ok: true,
+        opened: {
+          // A path main could have produced: an empty one would let a caller that reads the
+          // path pass on a value no read can answer with.
+          path: 'Test Show.cuerunner',
+          workspace: emptyWorkspace(),
+          missingMedia: [],
+          loadNotes: []
+        }
+      })),
+      openDemo: vi.fn((): Promise<Workspace> => Promise.resolve(emptyWorkspace())),
+      relink: vi.fn((): Promise<RelinkedWorkspace> => Promise.resolve({
+        workspace: emptyWorkspace(),
+        missingMedia: []
+      })),
       save: vi.fn(() => Promise.resolve(null)),
       saveAs: vi.fn(() => Promise.resolve(null)),
       compare: vi.fn((): Promise<WorkspaceCompareResult> => Promise.resolve({ ok: true, comparison: null })),

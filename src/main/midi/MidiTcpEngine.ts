@@ -35,6 +35,16 @@ function defaultConnect(host: string, port: number): Socket {
 }
 
 /**
+ * Why a link is not up, as the panel and its alarm read it: a dial nothing answered, or a
+ * connection that came up and was then ended by the desk. The second is what a desk whose
+ * MIDI port another client holds does to every client that follows — it accepts the
+ * connection and resets it — and an operator sent to check an address that is correct is
+ * being sent to look at the wrong thing. The engine is the only place that knows which of
+ * the two happened, so it is passed on rather than left to be re-read from a sentence.
+ */
+export type DeskLinkCause = 'unreachable' | 'reset'
+
+/**
  * One recall's bytes while they wait for a socket, and whether they have gone out. The
  * flag is what lets a recall answer for *its own* bytes: a failure on the link takes the
  * queue with it, and a recall whose bytes are in that queue has to be told it was not
@@ -63,6 +73,14 @@ interface Link {
    * nobody reads — so only the change from one state to the other is reported.
    */
   online: boolean | null
+  /**
+   * Whether the connection this link last held came up and was then ended by the desk —
+   * the fact the close handler already sees. The sentence a following `send()` returns is
+   * written after that socket is gone, so the fact has to outlive it; anything that proves
+   * the peer is answering now — a connection that comes up, a dial that reaches nothing at
+   * all — clears it, and with it the claim that the address is not the thing to check.
+   */
+  reset: boolean
 }
 
 /**
@@ -82,7 +100,7 @@ export class MidiTcpEngine {
   onMessage: ((device: string, message: MidiMessageKind) => void) | null = null
 
   /** Called when a link comes up or goes down, so the panel can say which it is. */
-  onStatus: ((device: string, online: boolean, detail?: string) => void) | null = null
+  onStatus: ((device: string, online: boolean, detail?: string, cause?: DeskLinkCause) => void) | null = null
 
   /**
    * The dial and the retry interval are the two things a test has to be able to stand in
@@ -159,7 +177,12 @@ export class MidiTcpEngine {
         link.pending = link.pending.filter(entry => entry !== queued)
         return {
           ok: false,
-          error: `The desk at ${deskLinkName(host, port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
+          // A connection that came up and was then reset is not a desk that did not
+          // answer: the desk answered, so the address and its setting are the two things
+          // that are right, and something else holding the desk is what to look at.
+          error: link.reset
+            ? `The desk at ${deskLinkName(host, port)} accepted the connection and then reset it — something else may be holding its MIDI port`
+            : `The desk at ${deskLinkName(host, port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
         }
       }
     }
@@ -208,7 +231,8 @@ export class MidiTcpEngine {
       pending: [],
       retry: null,
       wanted: false,
-      online: null
+      online: null,
+      reset: false
     }
     this.links.set(name, link)
     return link
@@ -217,6 +241,11 @@ export class MidiTcpEngine {
   private dial(link: Link): Promise<void> {
     const name = deskLinkName(link.host, link.port)
     if (link.dialling) return link.dialling
+
+    // Whatever the connection before this one did is settled by this attempt: the fact the
+    // sentence a failure is written from belongs to the dial that produced it, and an
+    // attempt that reaches nothing must not be answered with the last one's fate.
+    link.reset = false
 
     // A socket that failed but has not closed yet is no longer the link's socket. Letting
     // go of it here releases the descriptor now, and the handlers below refuse to write
@@ -252,15 +281,25 @@ export class MidiTcpEngine {
       })
 
       socket.once('error', (error: Error) => {
-        // The dial failed: the caller reports it, and the retry below keeps the link
-        // alive for the next cue. `error` also ends the socket, so the close handler
-        // does not have to do the bookkeeping twice.
+        // The dial failed — or the peer reset a connection away, which is what a desk whose
+        // MIDI port somebody else holds does: it takes the connection and ends it. That
+        // reaches here either way, and a reset can even arrive before this client has read
+        // its own connection event, so the code answers as well as the state: a connection
+        // that had come up, or an RST answered the handshake. `error` also ends the socket,
+        // so the close handler does not have to do the bookkeeping twice.
         if (link.socket === socket) {
+          const wasConnected = link.connected
+          const taken = wasConnected || (error as NodeJS.ErrnoException).code === 'ECONNRESET'
           link.connected = false
           link.dialling = null
+          // Whether the peer was holding the port: what a following `send()` returns is
+          // written from this. A dial that reached nothing is the one thing that rules it
+          // out, and its own message is what the panel is told.
+          link.reset = taken
           if (link.online !== false) {
             link.online = false
-            this.onStatus?.(name, false, error.message)
+            if (taken) this.onStatus?.(name, false, 'the connection was taken or reset', 'reset')
+            else this.onStatus?.(name, false, error.message, 'unreachable')
           }
         }
         settle()
@@ -280,9 +319,16 @@ export class MidiTcpEngine {
           link.connected = false
           link.dialling = null
           link.socket = null
+          if (wasConnected) {
+            // A connection that came up and was then ended by the desk without a reset —
+            // a graceful close, which the error handler above does not see. The fact is
+            // kept the same way: a send after this one has no socket to write to, and the
+            // sentence it returns is written from what is kept here.
+            link.reset = true
+          }
           if (wasConnected && link.online !== false) {
             link.online = false
-            this.onStatus?.(name, false, 'the connection closed')
+            this.onStatus?.(name, false, 'the connection was taken or reset', 'reset')
           }
           this.scheduleRetry(link)
         }

@@ -2,15 +2,19 @@
 // reaches the app. Everything here is the part of a show that is not the cue stack.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createSocket } from 'dgram'
-import { closeApp, launchApp, mintLicense, oscPortOfItsOwn, sendOsc } from './helpers'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import { closeApp, launchApp, mintLicense, openFromRecent, oscPortOfItsOwn, sendOsc } from './helpers'
 
 let app: ElectronApplication
 let page: Page
+let userDataDir: string
 
 test.beforeEach(async () => {
   // The show services, the scenes view, the panels that read them: everything this spec
   // is about is the licensed half of the app.
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
 })
 
 test.afterEach(async () => {
@@ -180,4 +184,104 @@ test('a cancelled quit leaves the show services listening', async () => {
   await page.locator('.btn-log').click()
   await expect(page.locator('.log-panel .log-event[data-kind="osc"]').first())
     .toContainText('/show/after-cancel')
+})
+
+/**
+ * The window closing, watched from before the quit is asked for. What that looks like is a
+ * platform fact: on Linux and Windows the last window closed quits the app, so the process
+ * is gone; on macOS the app stays up with no windows — `window-all-closed` does not quit
+ * there — and the window list is what says so. Both are read from main, because
+ * `app.evaluate` cannot be called once the process is going, and a window that never
+ * closes is a failed close rather than a test that hangs.
+ */
+async function whenWindowClosed(): Promise<boolean> {
+  const proc = app.process()
+  const deadline = Date.now() + 15_000
+  for (;;) {
+    if (proc.exitCode !== null || proc.signalCode !== null) return true
+    try {
+      if (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length) === 0) {
+        return true
+      }
+    } catch {
+      // The app is on its way out: the exit flags above are the answer, read on the next
+      // turn of this loop.
+    }
+    if (Date.now() > deadline) return false
+    const { promise: tick, resolve: tock } = Promise.withResolvers<void>()
+    setTimeout(tock, 100)
+    await tick
+  }
+}
+
+/** A show on disk, opened the way an operator opens one: from the File menu's recent list. */
+async function openSavedShow(dir: string, name: string): Promise<string> {
+  const file = path.join(dir, `${name}.cuerunner`)
+  fs.writeFileSync(file, `${JSON.stringify({
+    version: 1,
+    id: 'w-quit',
+    name,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    audioSettings: { outputDeviceId: 'default' },
+    midiSettings: { outputPortName: '' },
+    cues: []
+  }, null, 2)}\n`)
+  await openFromRecent(page, userDataDir, file)
+  await expect(page.locator('.workspace-name')).toContainText(name)
+  return file
+}
+
+test('a quit answered Don’t Save closes the window and leaves the file alone', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-quit-discard-'))
+  try {
+    const file = await openSavedShow(dir, 'Unsaved Show')
+    const onDisk = fs.readFileSync(file, 'utf-8')
+
+    // An edit, so the close has something to ask about, and the answer is Don't Save.
+    await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
+    await expect(page.locator('.workspace-name')).toContainText('●')
+    await app.evaluate(({ dialog }) => {
+      dialog.showMessageBox = (async () => ({ response: 1, checkboxChecked: false })) as typeof dialog.showMessageBox
+    })
+
+    const closed = whenWindowClosed()
+    await app.evaluate(({ app }) => app.quit())
+
+    // The close is allowed through the pair's accept path (`app:confirm-close`), which is
+    // what actually takes the window down; the answer was not Cancel, so nothing may wait.
+    expect(await closed, 'the window did not close when the close was answered').toBe(true)
+    // And discarding the session is not writing it.
+    expect(fs.readFileSync(file, 'utf-8')).toBe(onDisk)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a quit answered Save writes the show through the dialog and then closes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-quit-save-'))
+  try {
+    // A session nobody has saved yet, so the Save the operator answers with has to ask
+    // where to put the show: the dialog is stubbed to answer with a file in this test's
+    // own directory, which is where the app then writes it.
+    await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
+    await expect(page.locator('.workspace-name')).toContainText('●')
+
+    const file = path.join(dir, 'Quitting Show.cuerunner')
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: target })) as typeof dialog.showSaveDialog
+      dialog.showMessageBox = (async () => ({ response: 0, checkboxChecked: false })) as typeof dialog.showMessageBox
+    }, file)
+
+    const closed = whenWindowClosed()
+    await app.evaluate(({ app }) => app.quit())
+    expect(await closed, 'the window did not close after the save was answered').toBe(true)
+
+    // The show was really written before the window went: the cue the operator added is in
+    // the file, which is what the close prompt's Save promised.
+    const saved = JSON.parse(fs.readFileSync(file, 'utf-8')) as { name: string; cues: Array<{ type: string }> }
+    expect(saved.name).toBe('Untitled')
+    expect(saved.cues.map(cue => cue.type)).toEqual(['wait'])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })

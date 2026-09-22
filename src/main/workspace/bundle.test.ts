@@ -319,4 +319,18 @@ describe('unpacking a bundle', () => {
     ])
     await expect(readBundle(mediaOnly)).rejects.toThrow('carries no show')
   })
+
+  it('refuses a bundle whose show is not JSON, naming the bundle', async () => {
+    // A bundle can arrive damaged, and a showfile that will not parse is the same ordinary
+    // state as an archive that will not open: the sentence names the file the operator
+    // picked and what is wrong with it, never V8's parse text.
+    const brokenShow = join(dir, 'half.cuerunner')
+    writeFileSync(brokenShow, '{"version":1,"cues":[')
+    const brokenBundle = join(dir, 'half.cuerunnerx')
+    await writeZip(brokenBundle, [{ name: 'show.cuerunner', file: brokenShow }])
+
+    await expect(readBundle(brokenBundle)).rejects.toThrow(Refusal)
+    await expect(readBundle(brokenBundle))
+      .rejects.toThrow(`that bundle carries no show — ${brokenBundle}’s show.cuerunner entry is not JSON`)
+  })
 })

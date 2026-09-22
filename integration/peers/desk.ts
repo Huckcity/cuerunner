@@ -1058,8 +1058,9 @@ export async function startDeskPeer(options: DeskPeerOptions = {}): Promise<Desk
   const server: Server = createServer((socket) => {
     // The desk's own rule, measured on hardware rather than read out of a document: the second
     // connection is accepted at the TCP level and reset at once, without a byte of it being
-    // read. A client sees ECONNRESET, not a refusal, which is what the app's own error path
-    // describes as "did not answer" (`INTEGRATION-HARNESS.md` §6).
+    // read. A client sees ECONNRESET, not a refusal, which the app tells apart from a dial
+    // nobody answered and says so where the recall failed (`MidiTcpEngine`); a lane that wants
+    // that sentence points a show at this peer (`INTEGRATION-HARNESS.md` §6).
     if (options.singleClient === true && connections.size > 0) {
       socket.resetAndDestroy()
       return

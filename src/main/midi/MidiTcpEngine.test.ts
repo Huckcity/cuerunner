@@ -55,6 +55,35 @@ async function startDesk(port = 0): Promise<Desk> {
   return { port: address.port, host: '127.0.0.1', sockets, received, close: () => closeServer(server, sockets) }
 }
 
+/**
+ * A port somebody else already holds: every connection is taken and reset at once, without
+ * a byte of one being read. That is what a desk does when a different client is on its MIDI
+ * service — an SQ-6 measured on 2026-09-21 does exactly this to a second client
+ * (INTEGRATION-HARNESS.md §6) — and it is modelled here for every connection rather than
+ * for the second one, because what the app has to tell apart is a port that is held from a
+ * port nothing answers at.
+ */
+async function startHeldDesk(): Promise<Desk> {
+  const sockets: Socket[] = []
+  const server: Server = createServer(socket => {
+    sockets.push(socket)
+    socket.resetAndDestroy()
+  })
+  const { promise, resolve } = Promise.withResolvers<void>()
+  server.listen(0, '127.0.0.1', resolve)
+  await promise
+
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('the desk has no port')
+  return {
+    port: address.port,
+    host: '127.0.0.1',
+    sockets,
+    received: [],
+    close: () => closeServer(server, sockets)
+  }
+}
+
 /** A port nobody is listening on, which is what a desk that is switched off looks like. */
 async function deadPort(): Promise<number> {
   const desk = await startDesk()
@@ -80,14 +109,17 @@ function dials(): { connect: (host: string, port: number) => Socket; count: () =
 }
 
 /**
- * A dial the test opens by hand, for the cases that are about what the queue does while a
- * connection is in flight rather than about TCP itself: `arrive()` is the desk accepting.
- * The cast is the price of standing in for a socket with only the surface the engine uses
- * (write, destroy, and the events it subscribes to).
+ * A dial the test opens by hand, for the cases that are about what the queue or the link's
+ * own history does while a connection is in flight rather than about TCP itself: `arrive()`
+ * is the desk accepting, `reset()` is the desk refusing a second client — which Node
+ * reports as an error and then a close, the way a real socket does. The cast is the price
+ * of standing in for a socket with only the surface the engine uses (write, destroy, and
+ * the events it subscribes to).
  */
 function heldDial(): {
   connect: (host: string, port: number) => Socket
   arrive: () => void
+  reset: () => void
   writes: number[][]
 } {
   const writes: number[][] = []
@@ -102,6 +134,12 @@ function heldDial(): {
   return {
     connect: () => socket as unknown as Socket,
     arrive: () => socket.emit('connect'),
+    reset: () => {
+      const reset = new Error('read ECONNRESET') as NodeJS.ErrnoException
+      reset.code = 'ECONNRESET'
+      socket.emit('error', reset)
+      socket.emit('close')
+    },
     writes
   }
 }
@@ -181,11 +219,68 @@ describe('sending to a desk', () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toContain(`127.0.0.1:${port}`)
+    // A dial nothing answered is a desk that did not answer: this is the sentence to keep.
+    expect(result.error).toContain('did not answer — check its address')
     // The deadline that ends the wait is the engine's own timer: a recall timing out must
     // not be what keeps the app alive on quit.
     const deadlines = armed.filter(timer => timer.ms === CONNECT_DEADLINE_MS)
     expect(deadlines).toHaveLength(1)
     expect(deadlines[0].handle.hasRef()).toBe(false)
+  })
+
+  it('says the connection was reset, not that the address is wrong, when the desk takes and then drops one', async () => {
+    // A desk whose MIDI port another client holds takes every connection and resets it, and
+    // the recall that follows fails on the dial it makes itself — so the sentence has to be
+    // written from that dial's own fate. The dial is held open by the test, because what is
+    // under test is the link's own bookkeeping: the connection comes up, the desk resets it
+    // (an error and then a close, as a real socket reports one), and the recall's own dial
+    // is reset in its turn.
+    vi.useFakeTimers()
+    try {
+      const held = heldDial()
+      const link = engine(20, held.connect)
+
+      link.open('127.0.0.1', 51325)
+      held.arrive()
+      held.reset()
+
+      const result = link.send('127.0.0.1', 51325, [NOTE_ON])
+      held.reset()
+
+      expect(await result).toEqual({
+        ok: false,
+        error: 'The desk at 127.0.0.1:51325 accepted the connection and then reset it'
+          + ' — something else may be holding its MIDI port'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the address line for a dial that reaches nothing after an earlier reset', async () => {
+    // The fact belongs to the dial that produced it. A desk that answered once and is gone
+    // now is a desk that did not answer, and answering this recall from the earlier reset
+    // would send the operator looking for another client that is not there.
+    vi.useFakeTimers()
+    try {
+      const held = heldDial()
+      const link = engine(20, held.connect)
+
+      link.open('127.0.0.1', 51325)
+      held.arrive()
+      held.reset()
+
+      // This recall's dial reaches nothing at all, and the deadline answers for it.
+      const result = link.send('127.0.0.1', 51325, [NOTE_ON])
+      await vi.advanceTimersByTimeAsync(CONNECT_DEADLINE_MS)
+
+      expect(await result).toEqual({
+        ok: false,
+        error: 'The desk at 127.0.0.1:51325 did not answer — check its address, and that MIDI over TCP is on at the desk'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not deliver a recall it reported as failed', async () => {
@@ -292,17 +387,24 @@ describe('the state of the link', () => {
   it('reports the connection coming up, and the drop when it goes', async () => {
     const deskUnderTest = await desk()
     const link = engine()
-    const statuses: Array<[string, boolean]> = []
-    link.onStatus = (device, online) => statuses.push([device, online])
+    const statuses: Array<[string, boolean, string | undefined, string | undefined]> = []
+    link.onStatus = (device, online, detail, cause) => statuses.push([device, online, detail, cause])
 
     link.open(deskUnderTest.host, deskUnderTest.port)
     await until(() => statuses.length === 1)
-    expect(statuses).toEqual([[`127.0.0.1:${deskUnderTest.port}`, true]])
+    expect(statuses).toEqual([[`127.0.0.1:${deskUnderTest.port}`, true, undefined, undefined]])
 
-    // The desk is powered off mid-show: the socket ends, and that is reported.
+    // The desk is powered off mid-show: the socket ends, and that is reported — with what
+    // the panel and its alarm read, because a connection that came up and was then taken
+    // away is not a desk that never answered.
     deskUnderTest.sockets[0].destroy()
     await until(() => statuses.length === 2)
-    expect(statuses[1]).toEqual([`127.0.0.1:${deskUnderTest.port}`, false])
+    expect(statuses[1]).toEqual([
+      `127.0.0.1:${deskUnderTest.port}`,
+      false,
+      'the connection was taken or reset',
+      'reset'
+    ])
   })
 
   it('alarms once for an outage while it keeps dialling, with every retry unref’d', async () => {
@@ -326,6 +428,32 @@ describe('the state of the link', () => {
     const retries = armed.filter(timer => timer.ms === 20)
     expect(retries.length).toBeGreaterThanOrEqual(2)
     for (const retry of retries) expect(retry.handle.hasRef()).toBe(false)
+  })
+
+  it('reports a desk that takes and resets every connection as offline, with that cause', async () => {
+    // The desk's own rule, against a real socket: another client holds the port, so every
+    // connection is accepted and reset, and nothing on it is ever read. The outage is one
+    // report, carrying the cause the panel and its alarm branch on — never a dial that
+    // nothing answered.
+    const held = await startHeldDesk()
+    desks.push(held)
+    const link = engine()
+    const offline: Array<[string, string | undefined, string | undefined]> = []
+    link.onStatus = (device, online, detail, cause) => {
+      if (!online) offline.push([device, detail, cause])
+    }
+
+    const result = await link.send(held.host, held.port, [NOTE_ON])
+
+    await until(() => offline.length >= 1)
+    expect(offline[0]).toEqual([`127.0.0.1:${held.port}`, 'the connection was taken or reset', 'reset'])
+    // And when the send is answered as a failure — the reset can land either side of this
+    // client reading its own connection event — the sentence is the one built from that
+    // same fact, never an address to go and check.
+    if (!result.ok) {
+      expect(result.error).toContain('accepted the connection and then reset it')
+      expect(result.error).not.toContain('check its address')
+    }
   })
 
   it('comes back on its own when the desk does', async () => {

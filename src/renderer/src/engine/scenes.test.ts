@@ -303,11 +303,14 @@ describe('recallScene', () => {
 
     const result = await recallScene('s-1')
 
-    expect(result.failures).toEqual(['DCA 2 — Ensemble: noteOff ch1 → "Yamaha"'])
+    // The engine's own sentence travels with the change it was for: what failed and why
+    // are the two halves of one fact.
+    expect(result.failures).toEqual(['DCA 2 — Ensemble: noteOff ch1 → "Yamaha" — no such port'])
     expect(useStore.getState().deskState).toEqual({ 'dca-1': true })
+    // The log names the change and then the reason, once.
     expect(logMessages()).toEqual([
       'Scene "Wedding" — 1 opened, 1 closed',
-      'Could not reach the desk: DCA 2 — Ensemble: noteOff ch1 → "Yamaha"'
+      'Could not reach the desk: DCA 2 — Ensemble: noteOff ch1 → "Yamaha"; why: no such port'
     ])
   })
 
@@ -335,24 +338,30 @@ describe('recallScene', () => {
     expect(midiSend).not.toHaveBeenCalled()
   })
 
-  it('reports a desk on the network that did not take the message, naming where it is', async () => {
+  it('reports a desk on the network that did not take the message, naming where it is and why', async () => {
     seed({}, null, cast(), { ...defaultDeskSettings(), kind: 'midi-tcp', host: '10.0.0.5' })
     tcpSend.mockResolvedValue({
       ok: false,
-      error: 'The desk at 10.0.0.5:51325 did not answer'
+      error: 'The desk at 10.0.0.5:51325 accepted the connection and then reset it'
+        + ' — something else may be holding its MIDI port'
     })
 
     const result = await recallScene('s-1')
 
+    // The bytes, the address, and the engine's own account of what happened to them: the
+    // last is what tells a desk somebody else is holding from an address nobody is at.
     expect(result.failures).toEqual([
-      'DCA 1 — Principals: noteOn ch1 → 10.0.0.5:51325',
-      'DCA 2 — Ensemble: noteOff ch1 → 10.0.0.5:51325'
+      'DCA 1 — Principals: noteOn ch1 → 10.0.0.5:51325 — The desk at 10.0.0.5:51325 accepted the connection and then reset it — something else may be holding its MIDI port',
+      'DCA 2 — Ensemble: noteOff ch1 → 10.0.0.5:51325 — The desk at 10.0.0.5:51325 accepted the connection and then reset it — something else may be holding its MIDI port'
     ])
     // Nothing is remembered as done: the next recall tries the whole difference again.
     expect(useStore.getState().deskState).toEqual({})
+    // Two changes, one reason: the log carries the reason once, not twice.
     expect(logMessages()).toEqual([
       'Scene "Wedding" — 1 opened, 1 closed',
-      'Could not reach the desk: DCA 1 — Principals: noteOn ch1 → 10.0.0.5:51325, DCA 2 — Ensemble: noteOff ch1 → 10.0.0.5:51325'
+      'Could not reach the desk: DCA 1 — Principals: noteOn ch1 → 10.0.0.5:51325, '
+      + 'DCA 2 — Ensemble: noteOff ch1 → 10.0.0.5:51325; '
+      + 'why: The desk at 10.0.0.5:51325 accepted the connection and then reset it — something else may be holding its MIDI port'
     ])
   })
 })

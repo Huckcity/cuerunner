@@ -316,7 +316,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Tab</th><th>What is on it</th></tr></thead>
           <tbody>
-            <tr><td>Channels</td><td>The desk connection — OSC, MIDI or MIDI over TCP, with its address — the channel strips, and the DCA each rides. The line under the connection reads back exactly what will be sent.</td></tr>
+            <tr><td>Channels</td><td>The desk connection — OSC, MIDI or MIDI over TCP, with its address — the channel strips, and the DCA each rides. The line under the connection reads back exactly what will be sent. A recall that fails says which failure it was: nothing answered at that address, or the desk took the connection and reset it. The second is what a desk whose MIDI port another program is holding does, and there the address is right.</td></tr>
             <tr><td>Cast</td><td>Performers, their parts, the channel each is on, and ensembles for opening a section at once.</td></tr>
             <tr><td>Mic plot</td><td>Packs, the channel each is patched to, and who is wearing it. Changing a performer on a pack records a swap.</td></tr>
           </tbody>

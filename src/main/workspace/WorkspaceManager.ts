@@ -932,8 +932,11 @@ export async function readWorkspaceFile(
   let parsed: Workspace
   try {
     parsed = JSON.parse(text) as Workspace
-  } catch (error) {
-    throw asRefusal(error)
+  } catch {
+    // A file the operator picked that is not a show: V8's own parse text names neither
+    // the file nor the fact, so the two are said here — this is the only place that has
+    // the path, and the File menu's route reaches the window without one.
+    throw new Refusal(`that file is not a show — ${filePath} is not JSON`)
   }
   const workspace = migrateWorkspace(parsed, notes)
   // Recorded only once the read has produced a workspace: a file this build refuses is not
