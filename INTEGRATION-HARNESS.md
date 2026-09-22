@@ -438,7 +438,37 @@ service on **51326** that accepts several clients at once and answers neither a 
 universal SysEx identity request: it is not a second MIDI endpoint and no lane uses it. Its
 being separate is what makes a control application compatible with Cuerunner's desk link:
 TheatreMix 3.6, running under Wine, held 51326 while a get on 51325 was answered in 3 ms, so the
-one-client rule belongs to the MIDI service rather than to the desk. The desk also answers
+one-client rule belongs to the MIDI service rather than to the desk.
+
+**What 51326 speaks, and how a DCA assignment is written (measured 2026-09-22, SQ-6 firmware
+1.6.1).** The service is the desk's own control protocol, unpublished for SQ, and the frames are
+a `7f` family — `7f <command> <length: 4 bytes little-endian> <payload>` — beside a second
+family of eight-byte frames beginning `f7`. A client opens a session (`7f 00 02 …`), identifies
+itself (`7f 01`, answered `7f 02 …` carrying the model and `01 06 01` for firmware 1.6.1), reads
+the desk's descriptor (`7f 14`, answered `7f 15`), pushes its layout (one 8192-byte `7f 0a`,
+byte-identical between sessions of the same show), settles the session (`7f 0b 02 …`, `7f 11`,
+`f7 02 02 20 …`, `7f 03`), and keeps it alive with an `f7 05 …` datagram to **UDP 51324** every
+second and a `7f 00 02 …` ping on the socket every three. The desk answers the ping and pushes
+state as `7f 08 …` and `7f 0e …` frames.
+
+A DCA assignment — the reason this was captured — is one frame per (channel, DCA) pair:
+
+| frame | meaning |
+| --- | --- |
+| `f7 07 07 1d <channel-1> <dca-1> 01 00` | assign that input to that DCA |
+| `f7 07 07 1d <channel-1> <dca-1> 00 00` | clear it |
+| `f7 07 07 0c <channel-1> 00 01 00` | the per-channel "rides a DCA" flag (`00 00` = none) |
+| `7f 08 0e 000000 18 18 0c <channel-1> 00 00 <ascii> 00` | the strip's own name, which a client also uses to label it with its group |
+
+The capture is `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken through
+`integration/sqCapture.mjs` against a show whose assignments are known — inputs 1 and 3 on DCA 1,
+inputs 8 and 9 on DCA 4 — and the four `1d` frames it holds are exactly those pairs, with every
+other pair written `00 00`. **No lane uses it yet**, and two things are deliberately noted as
+unmeasured: the **read form** (what the desk reports when asked, or pushes when a pair changes at
+its own surface), so a client that writes these frames knows only what it sent; and the desk's
+**controlling-client rule** — it reports a controlling client, and a client that dies without
+leaving (`BYE.`, on the range's own port 51321) leaves 51326 accepting TCP and answering the
+hello with nothing until the desk is reset or power-cycled. The desk also answers
 discovery: `SQ Find` sent to **UDP 51320** comes back from the desk's own 51320 with its model
 name as NUL-terminated ASCII (`SQ-6`), which is how a third-party application finds and names it
 with nothing configured. The whole set the observed client sent, from source port 32323 and once
@@ -859,12 +889,16 @@ running the show — and the console case reported skipped for want of a console
 happened is the **job**: `integration-hardware.yml` has never been dispatched, so the lane has no
 report of its own, and a report is what the record's rows are evidence of. The desk has to be
 reachable from the runner for that, which is a cable rather than a change.
-*Stays open*: **the recorded desk fixture.** Nothing has been captured from a desk, so there is
-no desk recording for the Linux lane to replay — the desk peer has no recorder and no session has
-been taken from one. That half of the milestone is where it was, and this is the line that says so
-rather than leaving it to look done. Until a desk run happens, the peer's model of the desk, the
-vendor lane's "MIDI bytes are MIDI bytes" assumption and the message a real key press sends stay
-unproven (§11).
+*Partly closed*: **the recorded desk fixture.** A session from an SQ-6 (firmware 1.6.1) was
+captured on 2026-09-22 — `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken
+through `integration/sqCapture.mjs`, its provenance naming the device, the firmware read from the
+desk's own identify answer, and the show's four known assignments (§6). What it captured is the
+desk's **native** service on 51326, and nothing replays it yet: the desk peer models the MIDI
+service, no recorder takes a session from the desk's MIDI side, and the native protocol has no
+peer at all. So the *MIDI* half of this milestone is where it was — the native capture above is the
+first bytes from a desk in this repository rather than the replay this line was waiting for. Until a
+desk run happens, the peer's model of the desk, the vendor lane's "MIDI bytes are MIDI bytes"
+assumption and the message a real key press sends stay unproven (§11).
 
 ---
 
@@ -935,6 +969,18 @@ unproven (§11).
    than borrowing a peer's evidence. Without a desk named and a console transmitting it reports
    skipped, and an `msc` trigger's end-to-end path stays unproven — no peer here is a console on
    a cable, and the desk ranges do not transmit MSC at all.
+6. **DCA assignments are written over the desk's native service on 51326. — taken: yes, and
+   measured before it was promised.** The frames are in §6 and the capture is
+   `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`: assignment is
+   `f7 07 07 1d <channel-1> <dca-1> 01 00`, clearing is the same frame with `00 00`, and the
+   per-channel flag `f7 07 07 0c <channel-1> 00 01 00` follows. Three things stay open, which is
+   why this is a decision rather than a claim: the **read form** is unmeasured, so until it is,
+   the base a recall diffs against is what Cuerunner itself last sent rather than the desk's own
+   answer (which is what AD-22 assumes, and its wording is corrected for this); the desk's
+   **controlling-client rule** — it reports one owner, and a client that dies without its goodbye
+   leaves the service mute — has to be respected by the app's connect and disconnect paths; and
+   the **peer** has no model of this protocol, so nothing in the fast lane holds these frames
+   against anything but this fixture until one is written.
 
 **Risks**
 
@@ -959,6 +1005,12 @@ unproven (§11).
   run happens the bridge stays an expectation, and if it refuses a non-desk target the lane
   records that, a real desk is what the hardware lane is for, and the peer lane is unaffected
   either way.
+- **The desk's native service can be left mute. — measured 2026-09-22.** An SQ whose client
+  stopped without sending its goodbye accepts TCP on 51326 and answers the hello with nothing
+  until the desk is reset or power-cycled; the desk reports a controlling client, and a client
+  that comes second can see who holds it. A capture rig or a lane that talks to 51326 has to
+  leave by the door the desk expects, and one that cannot — a killed client, a crash — is fixed
+  at the desk and not from here.
 - **Vendor-software licensing.** Installers are downloaded onto runners and never
   committed; the harness's own code is ours. The fixture showfiles are cue data we wrote.
 - **The test that looks like a test.** A spec that asserts Cuerunner sent what Cuerunner's own
