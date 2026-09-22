@@ -30,7 +30,7 @@ import {
   defaultShowSettings,
   normalizeShowSettings
 } from '../../shared/show'
-import { normalizeTriggerGuard } from '../../shared/workspace'
+import { hasCueList, normalizeTriggerGuard } from '../../shared/workspace'
 import { savedShape } from '../../shared/workspaceSections'
 
 /**
@@ -937,6 +937,14 @@ export async function readWorkspaceFile(
     // the file nor the fact, so the two are said here — this is the only place that has
     // the path, and the File menu's route reaches the window without one.
     throw new Refusal(`that file is not a show — ${filePath} is not JSON`)
+  }
+  // Bytes that parse are still not necessarily a show — a hand edit, another tool's export,
+  // a download that is JSON because the proxy's error page is. The migration's first read is
+  // the cue list, so a document without one is answered with V8's own
+  // `Cannot read properties of undefined (reading 'find')` unless the shape is refused here,
+  // and the sentence says which file it was.
+  if (!hasCueList(parsed)) {
+    throw new Refusal(`that file is not a show — ${filePath} holds no cue list`)
   }
   const workspace = migrateWorkspace(parsed, notes)
   // Recorded only once the read has produced a workspace: a file this build refuses is not

@@ -122,3 +122,32 @@ export interface Workspace {
   triggerGuard?: TriggerGuardSettings
   cues: Cue[]
 }
+
+/**
+ * Whether a document an operator picked is a show at all: it carries a cue list, and the
+ * cue list is a list.
+ *
+ * The three load funnels that hand a parsed document to `migrateWorkspace` are the callers —
+ * a `.cuerunner`, a bundle's show entry, and the app's own recovery snapshot — and each has
+ * the bytes parsed by the time it can ask. The migration is called with documents that were
+ * not read this way too (`openDemoWorkspace`, the save's `historyForSave` and
+ * `compareWithFile` all parse a value they built or were handed), and those callers are not
+ * this check's business.
+ *
+ * What the migration does with a document that is not a show is dereference the cue list
+ * first — `workspace.cues.find` — and throw V8's own text about it: `Cannot read properties
+ * of undefined (reading 'find')` where the key is absent, `… is not a function` where it is
+ * there and holds something that is not a list. Neither names the file; a refusal written
+ * here does.
+ *
+ * The check is the cue list alone. It is the key every reader of a workspace walks first,
+ * so a document without one is not a show whichever of its other keys happen to be there,
+ * and it is the one key this build cannot invent: a file saved by any build this app has
+ * ever shipped carries it, legacy `childIds` shows included. Whether the rest of the shape
+ * is a show is the migration's business, and its refusals are its own.
+ */
+export function hasCueList(value: unknown): value is { cues: unknown[] } {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('cues' in value)) return false
+  return Array.isArray(value.cues)
+}

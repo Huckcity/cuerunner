@@ -26,7 +26,7 @@ import { Refusal } from '../ipc/refusal'
 import { migrateWorkspace, rememberFile, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../shared/cue'
-import type { LoadNote, Workspace } from '../../shared/workspace'
+import { hasCueList, type LoadNote, type Workspace } from '../../shared/workspace'
 
 export const BUNDLE_EXTENSION = 'cuerunnerx'
 
@@ -237,6 +237,12 @@ export async function readBundle(bundlePath: string): Promise<ReadBundle> {
     parsed = JSON.parse(bytes.toString('utf8')) as Workspace
   } catch {
     throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry is not JSON`)
+  }
+  // The same hole as the plain load funnel's: the bytes parse and are not a show, and the
+  // migration's first read would otherwise be the cue list's `find` — V8's text, naming
+  // neither the bundle nor its entry. Said in the sentence family above it.
+  if (!hasCueList(parsed)) {
+    throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry holds no cue list`)
   }
   // Import is a load path too: the showfile inside the bundle goes through the same
   // migration, and the repair it makes must reach the window like any other load's.
