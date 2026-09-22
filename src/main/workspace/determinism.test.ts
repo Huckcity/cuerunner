@@ -6,12 +6,13 @@
 // show's state and the folder it is saved into, and nothing else. No wall clock, no map
 // iteration order, no field that comes out differently the second time. A file this
 // version wrote, opened and saved without editing, is the same file; a file an older
-// version wrote is migrated once and then left alone.
+// version wrote converges on one shape at its first save and is left alone after that.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { openWorkspaceFromPath, saveWorkspace } from './WorkspaceManager'
+import { DEFAULT_TRIGGER_GUARD } from '../../shared/workspace'
 
 vi.mock('electron', async () => {
   const { mkdtempSync } = await import('fs')
@@ -28,7 +29,9 @@ vi.mock('electron', async () => {
 /**
  * A show as an older version wrote it: no `triggers` on the cues, no show-services
  * section, media stored relative to the folder — plus a field this version does not
- * know, which is what a *newer* version's file looks like coming the other way.
+ * know, which is what a *newer* version's file looks like coming the other way. Every key
+ * at the top level is one this build declares and every cue type is one it knows, so the
+ * file loads: what it misses is the app's own bookkeeping, not a shape this build refuses.
  */
 const LEGACY_SHOW = `{
   "version": 1,
@@ -158,19 +161,24 @@ async function openAndSave(): Promise<string> {
 }
 
 describe('the showfile on disk', () => {
-  it('migrates an older file once, and then leaves it alone', async () => {
-    const migrated = await openAndSave()
-    // The migration itself is a real change: the show-services section and the per-cue
-    // triggers arrive.
-    expect(JSON.parse(migrated).showSettings).toBeDefined()
-    expect(JSON.parse(migrated).cues[0].triggers).toEqual([])
+  it('reads an older file as it stands, fills nothing in, and is a fixed point from there', async () => {
+    const first = await openAndSave()
+    // Nothing arrives on that save beyond the one thing a load still completes: a show with
+    // no trigger guard gets the default window. No other section is filled in, no cue field
+    // is defaulted, and the route the file came with is kept — the pair names the file this
+    // session resolved, so its absolute half stays the file's own record rather than this
+    // machine's path.
+    expect(JSON.parse(first)).toEqual({
+      ...JSON.parse(LEGACY_SHOW),
+      triggerGuard: { ...DEFAULT_TRIGGER_GUARD }
+    })
 
-    // Nothing after that. This is the property a version control history needs: an
-    // upgrade costs one diff, not one diff per save.
+    // And nothing after that. This is the property a version control history needs: one
+    // diff, not one diff per save.
     const second = await openAndSave()
     const third = await openAndSave()
-    expect(second).toBe(migrated)
-    expect(third).toBe(migrated)
+    expect(second).toBe(first)
+    expect(third).toBe(first)
   })
 
   it('leaves a file this version wrote byte-for-byte alone', async () => {

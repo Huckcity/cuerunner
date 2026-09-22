@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useStore } from '../store'
-import { importShowBundle, useWorkspace } from './useWorkspace'
+import { importShowBundle, openDemoWorkspace, useWorkspace } from './useWorkspace'
 import type { Cue } from '../../../shared/cue'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { LoadNote, Workspace } from '../../../shared/workspace'
@@ -131,6 +131,28 @@ describe('useWorkspace — a file that is not a show', () => {
     expect(state.notice).not.toContain('Unexpected token')
     // And the session log carries the same sentence, which is what outlives the notice.
     expect(state.log.map(entry => entry.message)).toContain(state.notice)
+  })
+
+  it('reports a refused demo the same way, and loads nothing in its place', async () => {
+    // The demo is the app's own file and answers the same arm every other load does: the
+    // sentence reaches the notice and the log, and the session keeps the show it had.
+    const demo = '/app/resources/demo/Demo Show.cuerunner'
+    vi.mocked(window.cuerunner.workspace.openDemo).mockResolvedValue({
+      ok: false,
+      error: `that show says version 2 and this build writes version 1 — ${demo} was probably saved by another build`
+    })
+
+    await act(async () => { await openDemoWorkspace() })
+
+    const state = useStore.getState()
+    expect(state.notice).toBe(
+      `Could not open the demo workspace: that show says version 2 and this build writes version 1` +
+      ` — ${demo} was probably saved by another build`
+    )
+    expect(state.log.map(entry => entry.message)).toContain(state.notice)
+    // Nothing was loaded in its place: the session is still the untitled show it was.
+    expect(state.workspaceName).toBe('Untitled')
+    expect(state.cues).toEqual([])
   })
 })
 

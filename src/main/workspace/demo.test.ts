@@ -1,17 +1,36 @@
 // The demo ships as data, so nothing type-checks the shipped .cuerunner and no compiler
 // catches a cue that points at a missing parent or an audio file that is not in the
-// folder. Electron is not available here, so the loader is imported with it stubbed.
+// folder. Electron is not available here, so the loader is imported with it stubbed — with
+// a real temporary user-data folder and a packaged flag a test can turn on, because the
+// demo's own path is the one part of it that depends on where the app was installed.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
-import { existsSync } from 'fs'
+import { copyFileSync, existsSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { isAbsolute, join } from 'path'
-import { materialiseDemoAssets } from './demo'
-import { migrateWorkspace } from './WorkspaceManager'
-import type { AudioCue } from '../../shared/cue'
-import type { Workspace } from '../../shared/workspace'
+import { materialiseDemoAssets, openDemoWorkspace } from './demo'
+import { migrateWorkspace, saveWorkspace } from './WorkspaceManager'
+import type { AudioCue, ScriptCue } from '../../shared/cue'
+import type { LoadNote, Workspace } from '../../shared/workspace'
 
-vi.mock('electron', () => ({ app: {}, dialog: {}, BrowserWindow: {} }))
+const ends = vi.hoisted(() => ({ userData: { path: '' }, packaged: { on: false } }))
+
+vi.mock('electron', async () => {
+  const { mkdtempSync } = await import('fs')
+  const { tmpdir } = await import('os')
+  const { join } = await import('path')
+  ends.userData.path = mkdtempSync(join(tmpdir(), 'cuerunner-demo-userdata-'))
+  return {
+    app: {
+      getPath: () => ends.userData.path,
+      get isPackaged() {
+        return ends.packaged.on
+      }
+    },
+    dialog: {},
+    BrowserWindow: {}
+  }
+})
 
 // Vitest runs from the repository root, as the E2E helpers also assume.
 const demoDir = join(process.cwd(), 'resources/demo')
@@ -56,8 +75,8 @@ function workspaceWith(cues: AudioCue[]): Workspace {
   }
 }
 
-function loadDemo(raw: string): Workspace {
-  return migrateWorkspace(JSON.parse(raw) as Workspace)
+function loadDemo(raw: string, notes?: LoadNote[]): Workspace {
+  return migrateWorkspace(JSON.parse(raw) as Workspace, join(demoDir, 'Demo Show.cuerunner'), notes)
 }
 
 function readDemo(): Promise<string> {
@@ -116,10 +135,13 @@ describe('materialiseDemoAssets', () => {
 })
 
 describe('the bundled demo workspace', () => {
-  it('loads, with every reference inside it resolving', async () => {
-    const workspace = loadDemo(await readDemo())
+  it('loads with nothing to repair, and every reference inside it resolving', async () => {
+    const notes: LoadNote[] = []
+    const workspace = loadDemo(await readDemo(), notes)
 
     expect(workspace.name).toBe('Demo Show')
+    // A file this build writes needs no repair: the demo opens with nothing to report.
+    expect(notes).toEqual([])
     expect(workspace.cues.length).toBeGreaterThan(0)
 
     const ids = new Set(workspace.cues.map(cue => cue.id))
@@ -148,5 +170,75 @@ describe('the bundled demo workspace', () => {
     expect([...types].sort()).toEqual(
       ['audio', 'fade', 'group', 'midi', 'network', 'osc', 'script', 'stop', 'wait']
     )
+  })
+
+  it('refuses a demo file that is JSON and not a show, naming the file', async () => {
+    // The demo is the app's own file and it goes through the same funnel, so the guard the
+    // other load funnels put in front of it belongs here too: without it the funnel's first
+    // read of the cue list throws V8's own text, which reaches the window as a fault where
+    // the demo channel declares a refusal.
+    const notAShow = join(workDir, 'no-cues.cuerunner')
+    await writeFile(notAShow, '{"version":1}')
+
+    await expect(openDemoWorkspace(notAShow)).rejects.toThrow(
+      `that file is not a show — ${notAShow} holds no cue list`
+    )
+  })
+
+  it('carries the cue fields this build writes, with the legacy routing gone', async () => {
+    const workspace = loadDemo(await readDemo())
+
+    for (const cue of workspace.cues) {
+      if (cue.type !== 'audio') continue
+      // The old shape carried a list of outputs whose first entry was the only one that
+      // ever played; this build writes a master level and pan on the cue, and the routing
+      // as crosspoints or nothing at all. Nothing fills that in at load any more, so the
+      // demo's own cues have to carry it.
+      expect(typeof cue.volume, cue.name).toBe('number')
+      expect(typeof cue.pan, cue.name).toBe('number')
+      expect(cue.outputs, cue.name).toBeNull()
+      expect((cue as unknown as Record<string, unknown>).media).toEqual({
+        path: cue.filePath,
+        // No last-known absolute: the demo's audio ships beside the show on every machine,
+        // and a path recorded here would only be the machine that regenerated the file.
+        originalPath: ''
+      })
+    }
+
+    const script = workspace.cues.find((cue): cue is ScriptCue => cue.type === 'script')
+    expect(typeof script?.timeout).toBe('number')
+  })
+
+  it('opens with nothing to repair and saves back the bytes it was opened with', async () => {
+    // The demo as the File menu opens it: read out of the app's resources, its audio copied
+    // into userData, and each cue re-pointed at the copy. The save writes the pair's route
+    // back unchanged — it names the file the session resolved, so nothing about where the
+    // show points moved — and the file it writes is the file it opened, byte for byte.
+    // `demoSourceDir` reads the packaged build's extra-resource folder, so the packaged
+    // branch is the one driven here, with `process.resourcesPath` put back as it was found.
+    const resources = join(workDir, 'resources')
+    const shippedDir = join(resources, 'demo')
+    await mkdir(shippedDir, { recursive: true })
+    const shippedShow = join(shippedDir, 'Demo Show.cuerunner')
+    copyFileSync(join(demoDir, 'Demo Show.cuerunner'), shippedShow)
+    copyFileSync(join(demoDir, 'walk-in.wav'), join(shippedDir, 'walk-in.wav'))
+    const shipped = readFileSync(shippedShow, 'utf-8')
+
+    const runtimePaths = process as unknown as { resourcesPath?: string }
+    const hadResourcesPath = Object.prototype.hasOwnProperty.call(process, 'resourcesPath')
+    const wasPackaged = runtimePaths.resourcesPath
+    runtimePaths.resourcesPath = resources
+    ends.packaged.on = true
+    try {
+      const opened = await openDemoWorkspace()
+      const target = join(ends.userData.path, 'demo', 'Demo Show.cuerunner')
+      await saveWorkspace({} as never, opened, target)
+
+      expect(readFileSync(target, 'utf-8')).toBe(shipped)
+    } finally {
+      ends.packaged.on = false
+      if (hadResourcesPath) runtimePaths.resourcesPath = wasPackaged
+      else delete runtimePaths.resourcesPath
+    }
   })
 })

@@ -260,8 +260,8 @@ export interface DeskSettings {
   kind: DeskKind
   /**
    * What the desk takes as an open and a close. A workspace saved before profiles existed
-   * has none, and the migration fills in `note` — which is what that show was already
-   * sending, so an update moves nothing on the desk.
+   * has none, and this build reads no such file: a desk section is read as it was written,
+   * and `note` is what `defaultDeskSettings` gives a show that has never had one.
    */
   profile: DeskProfile
   /** MIDI output port, when the show drives the desk over MIDI. */
@@ -289,7 +289,8 @@ export interface DeskSettings {
   address: string
   /**
    * The desk's own buttons. Optional on disk: a workspace saved before a desk could be run
-   * from has none, and the migration fills in a show with no buttons — which is what it had.
+   * from has none, and nothing fills one in — a show with no buttons is run from the
+   * window, which is what that show was doing already.
    */
   buttons: DeskButtons
 }
@@ -665,6 +666,7 @@ export function defaultCastSettings(): CastSettings {
   return { channels: startingChannels(dcas), performers: [], ensembles: [], dcas }
 }
 
+/** What a show with nothing configured carries: one section per setting, each at its default. */
 export function defaultShowSettings(): ShowSettings {
   return {
     oscIn: { enabled: true, port: DEFAULT_OSC_IN_PORT },
@@ -679,6 +681,18 @@ export function defaultShowSettings(): ShowSettings {
     scenes: defaultScenesSettings(),
     cast: defaultCastSettings()
   }
+}
+
+/**
+ * The settings a document is read as: the sections it carries, over this build's defaults for
+ * the ones it leaves out — which is the document the window holds, because no load fills a
+ * section in and the window is where a file without one is completed. What compares or blends
+ * two documents reads both sides through here, so a file that has never written a section is
+ * not spelled as that whole section changing, and a document a merge builds carries the
+ * sections this build declares rather than an empty settings object it would refuse.
+ */
+export function heldShowSettings(settings: ShowSettings | undefined): ShowSettings {
+  return { ...defaultShowSettings(), ...settings }
 }
 
 export function defaultScriptSettings(): ScriptSettings {
@@ -702,56 +716,5 @@ export function defaultPresenceSettings(): PresenceSettings {
     enabled: false,
     services: ['_netaudio-arc._udp.local', '_netaudio-cmc._udp.local'],
     goneAfterSeconds: 30
-  }
-}
-
-/** Fills in a section a workspace saved by an older build never wrote. */
-export function normalizeShowSettings(settings: Partial<ShowSettings> | undefined): ShowSettings {
-  const defaults = defaultShowSettings()
-  const rf = settings?.rf
-  const cast = settings?.cast
-  return {
-    oscIn: { ...defaults.oscIn, ...settings?.oscIn },
-    midiIn: { ...defaults.midiIn, ...settings?.midiIn },
-    desk: {
-      ...defaults.desk,
-      ...settings?.desk,
-      // A desk section written before a desk could be run from has no buttons, and one
-      // half-filled by hand gets the other half: a button nobody assigned is null. The
-      // note route came later the same way — a file written before it has groups and no
-      // notes, which is exactly what it was running from.
-      buttons: { ...defaults.desk.buttons, ...settings?.desk?.buttons }
-    },
-    rf: {
-      plot: { ...defaults.rf.plot, ...rf?.plot },
-      sources: rf?.sources ?? defaults.rf.sources,
-      swaps: rf?.swaps ?? defaults.rf.swaps,
-      thresholds: { ...defaults.rf.thresholds, ...rf?.thresholds }
-    },
-    presence: { ...defaults.presence, ...settings?.presence },
-    script: { ...defaults.script, ...settings?.script },
-    companion: { ...defaults.companion, ...settings?.companion },
-    scenes: {
-      // A scene written before ensembles existed has an empty excluded list and no
-      // ensembles applied — which reads exactly as it behaved.
-      list: (settings?.scenes?.list ?? defaults.scenes.list).map(scene => ({
-        ...scene,
-        ensembles: scene.ensembles ?? [],
-        excluded: scene.excluded ?? []
-      }))
-    },
-    cast: {
-      channels: cast?.channels ?? defaults.cast.channels,
-      performers: cast?.performers ?? defaults.cast.performers,
-      ensembles: cast?.ensembles ?? defaults.cast.ensembles,
-      // A DCA written before overrides existed carries the messages it sent; the
-      // migration reads those into the connection and these two fields.
-      dcas: (cast?.dcas ?? defaults.cast.dcas).map(dca => ({
-        id: dca.id,
-        label: dca.label,
-        note: dca.note ?? null,
-        address: dca.address ?? null
-      }))
-    }
   }
 }

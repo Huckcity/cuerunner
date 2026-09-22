@@ -239,16 +239,19 @@ export async function readBundle(bundlePath: string): Promise<ReadBundle> {
     throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry is not JSON`)
   }
   // The same hole as the plain load funnel's: the bytes parse and are not a show, and the
-  // migration's first read would otherwise be the cue list's `find` — V8's text, naming
+  // funnel's first read would otherwise be the cue list's `find` — V8's text, naming
   // neither the bundle nor its entry. Said in the sentence family above it.
   if (!hasCueList(parsed)) {
     throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry holds no cue list`)
   }
   // Import is a load path too: the showfile inside the bundle goes through the same
-  // migration, and the repair it makes must reach the window like any other load's.
+  // funnel, and the repair it makes must reach the window like any other load's. What the
+  // refusal sentences name is the entry, not just the archive: a bundle is one file and
+  // the show inside it is another, and the operator has to know which of the two is the
+  // one this build cannot read.
   const loadNotes: LoadNote[] = []
   return {
-    workspace: migrateWorkspace(parsed, loadNotes),
+    workspace: migrateWorkspace(parsed, `${bundlePath}’s ${SHOW_ENTRY} entry`, loadNotes),
     show: bytes,
     media: entries.filter(entry => entry.name.startsWith(`${MEDIA_DIR}/`)),
     loadNotes

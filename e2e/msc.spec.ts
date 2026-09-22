@@ -11,6 +11,7 @@ import type { ElectronApplication, Page } from '@playwright/test'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { defaultShowSettings } from '../src/shared/show'
 import {
   addCueFromMoreMenu,
   closeApp,
@@ -62,6 +63,10 @@ async function openTab(name: string): Promise<void> {
  */
 function writeTriggerShow(): string {
   const showPath = path.join(root, 'Show Control Triggers.cuerunner')
+  // Every section this build declares, then what this show says about them: the load funnel
+  // refuses a settings object that leaves one out, so a fixture carrying a hand-picked few
+  // would be a file this build cannot read at all.
+  const settings = defaultShowSettings()
   fs.writeFileSync(showPath, `${JSON.stringify({
     version: 1,
     id: 'w-msc-e2e',
@@ -70,7 +75,9 @@ function writeTriggerShow(): string {
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
     showSettings: {
+      ...settings,
       desk: {
+        ...settings.desk,
         kind: 'midi-tcp',
         profile: 'sq',
         midiPort: '',

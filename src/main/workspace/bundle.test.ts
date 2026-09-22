@@ -336,7 +336,7 @@ describe('unpacking a bundle', () => {
 
   it('refuses a bundle whose show is JSON but is not a show, naming its entry', async () => {
     // The same hole as the plain load funnel's: bytes that parse and are still not a show.
-    // The migration's first read is the cue list, and the sentence names the entry the
+    // The funnel's first read is the cue list, and the sentence names the entry the
     // document came out of rather than V8's `Cannot read properties of undefined`.
     const notAShow = join(dir, 'no-cues.cuerunner')
     writeFileSync(notAShow, '{"version":1}')

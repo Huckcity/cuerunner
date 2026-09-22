@@ -14,6 +14,7 @@ import type { RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import type {
   RelinkedWorkspace,
   WorkspaceCompareResult,
+  WorkspaceDemoResult,
   WorkspaceExportResult,
   WorkspaceImportResult,
   WorkspaceMergeResult,
@@ -219,7 +220,8 @@ Object.defineProperty(window, 'cuerunner', {
           loadNotes: []
         }
       })),
-      openDemo: vi.fn((): Promise<Workspace> => Promise.resolve(emptyWorkspace())),
+      openDemo: vi.fn((): Promise<WorkspaceDemoResult> =>
+        Promise.resolve({ ok: true, workspace: emptyWorkspace() })),
       relink: vi.fn((): Promise<RelinkedWorkspace> => Promise.resolve({
         workspace: emptyWorkspace(),
         missingMedia: []

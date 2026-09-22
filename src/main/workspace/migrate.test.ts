@@ -1,20 +1,25 @@
-// Migration runs in the main process on every workspace load. Electron is not
-// available in the test environment, so the module is imported with it stubbed.
+// The load funnel runs in the main process on every workspace load, and what it does
+// now is check a file's shape rather than migrate one: what this build wrote, it reads;
+// what it does not know, it refuses by name. Electron is not available in the test
+// environment, so the module is imported with it stubbed.
 import { describe, it, expect, vi } from 'vitest'
-import type { StopCue, AudioCue, ScriptCue } from '../../shared/cue'
+import type { AudioCue, Cue } from '../../shared/cue'
 import type { LoadNote, Workspace } from '../../shared/workspace'
-import { CHANNEL_START_COUNT } from '../../shared/show'
+import { defaultShowSettings } from '../../shared/show'
 import { Refusal } from '../ipc/refusal'
 import { migrateWorkspace, serialiseWorkspace } from './WorkspaceManager'
 
 // Hoisted above the import above, so WorkspaceManager never loads the real Electron.
 vi.mock('electron', () => ({ app: {}, dialog: {}, BrowserWindow: {} }))
 
+/** The file a fixture's bytes are said to have come from, as a refusal names it. */
+const SHOW = '/shows/Press Night.cuerunner'
+
 function workspaceWith(cues: unknown[]): Workspace {
   return {
     version: 1,
     id: 'w1',
-    name: 'Legacy show',
+    name: 'Press Night',
     createdAt: '2024-01-01T00:00:00.000Z',
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
@@ -22,18 +27,29 @@ function workspaceWith(cues: unknown[]): Workspace {
   }
 }
 
+/** A workspace with no version key at all: the literal this build writes is never absent. */
+function workspaceWithMissingVersion(): Workspace {
+  const workspace = workspaceWith([]) as unknown as Record<string, unknown>
+  delete workspace.version
+  return workspace as unknown as Workspace
+}
+
 describe('migrateWorkspace', () => {
   it('refuses a cue type this build does not know rather than losing the window to it', () => {
     // A file from a newer build, or a hand edit: the row renders its icon from the type,
     // and an unknown one takes the whole window down. Dropping the cue quietly would be
     // worse — a show saved back without it is a show with a cue missing. It is a marked
-    // refusal rather than a plain error, so the load channels answer it as a value.
+    // refusal rather than a plain error, so the load channels answer it as a value, and the
+    // sentence says which file it came out of.
     const fromANewerBuild = workspaceWith([
       { id: 'w1', type: 'wait', duration: 1000 },
       { id: 'v1', type: 'video', filePath: 'clip.mp4' }
     ])
-    expect(() => migrateWorkspace(fromANewerBuild)).toThrow(Refusal)
-    expect(() => migrateWorkspace(fromANewerBuild)).toThrow('does not know (video)')
+    expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(
+      'that show has a cue this version of WinsLab does not know (video)' +
+      ` — ${SHOW} was probably saved by a newer version`
+    )
   })
 
   it('accepts every cue type this build does know', () => {
@@ -41,353 +57,111 @@ describe('migrateWorkspace', () => {
       { id: 'w1', type: 'wait', duration: 1000 },
       { id: 'a1', type: 'audio', filePath: '' },
       { id: 'g1', type: 'group', mode: 'sequence' }
-    ]))).not.toThrow()
+    ]), SHOW)).not.toThrow()
+  })
+})
+
+describe('the shape check', () => {
+  it('refuses a top-level section this build does not declare', () => {
+    // A file from a newer build — or another tool's export — with a section this build has
+    // never heard of. Reading it would keep the section invisible or drop it on the next
+    // save, so the file is refused instead.
+    const fromANewerBuild = { ...workspaceWith([]), futureSection: { cues: [] } } as unknown as Workspace
+
+    expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(
+      'that show has a section this version of WinsLab does not know (futureSection)' +
+      ` — ${SHOW} was probably saved by a newer version`
+    )
   })
 
-  it('gives a stop cue the wait-for-fade default it predates', () => {
-    const stop = migrateWorkspace(workspaceWith([
-      { id: 's1', type: 'stop', targetCueId: 'all', fadeOut: true, fadeOutDuration: 500 }
-    ])).cues[0] as StopCue
+  it('refuses a settings section this build does not declare', () => {
+    const settings = { ...defaultShowSettings(), plot: {} } as unknown as Workspace['showSettings']
 
-    expect(stop.waitForFade).toBe(false)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have a section this version of WinsLab does not know (plot)' +
+      ` — ${SHOW} was probably saved by a newer version`
+    )
   })
 
-  it('keeps an explicit wait-for-fade', () => {
-    const stop = migrateWorkspace(workspaceWith([
-      { id: 's1', type: 'stop', targetCueId: 'all', fadeOut: true, fadeOutDuration: 500, waitForFade: true }
-    ])).cues[0] as StopCue
+  it('refuses settings that leave out a section this build writes, naming the one', () => {
+    // The load no longer fills a section in. A file that carries settings and is missing
+    // one of them is a file this build cannot read, and the sentence says which is absent
+    // — "desk" is the first the declaration names without one.
+    const settings = {
+      oscIn: { enabled: true, port: 53000 },
+      midiIn: { enabled: false, portNames: [] }
+    } as unknown as Workspace['showSettings']
 
-    expect(stop.waitForFade).toBe(true)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have no desk section, which this version of WinsLab writes' +
+      ` — ${SHOW} was probably saved by an older build`
+    )
   })
 
-  it('gives a script cue the timeout it predates, and keeps one that is set', () => {
-    const [legacy, explicit] = migrateWorkspace(workspaceWith([
-      { id: 'sc1', type: 'script', language: 'javascript', script: 'console.log(1)' },
-      { id: 'sc2', type: 'script', language: 'javascript', script: 'console.log(2)', timeout: 0 }
-    ])).cues as ScriptCue[]
+  it('refuses settings that are not a section per setting at all', () => {
+    // A `showSettings` that is there and is not an object took the check down with V8's own
+    // text — `Object.keys(null)`, or the `in` operator on a number — which the window answers
+    // as a fault rather than the sentence every load refusal is. Each value is named, so the
+    // operator can see what the file carried there.
+    for (const carried of [null, 7, true, 'oscIn', ['oscIn']]) {
+      const document = { ...workspaceWith([]), showSettings: carried } as unknown as Workspace
 
-    expect(legacy.timeout).toBe(60000)
-    expect(explicit.timeout).toBe(0)
-  })
-
-  it('migrates a legacy outputs list to the cue master level and pan', () => {
-    const audio = migrateWorkspace(workspaceWith([
-      {
-        id: 'a1',
-        type: 'audio',
-        filePath: '',
-        loopCount: 0,
-        playbackRate: 1,
-        trim: 1,
-        outputs: [{ deviceId: 'hw1', channelPair: [3, 4], volume: 0.5, pan: -0.2 }]
-      }
-    ])).cues[0] as AudioCue
-
-    // Only the first legacy output ever reached the audio graph, so that is what the
-    // cue's master level and pan become, and the dead device routing is dropped.
-    expect(audio.volume).toBe(0.5)
-    expect(audio.pan).toBe(-0.2)
-    expect(audio.outputs).toBeNull()
-  })
-
-  it('reads a legacy empty outputs list as automatic routing, not silence', () => {
-    const audio = migrateWorkspace(workspaceWith([
-      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: [] }
-    ])).cues[0] as AudioCue
-
-    expect(audio.volume).toBe(1)
-    expect(audio.pan).toBe(0)
-    expect(audio.outputs).toBeNull()
-  })
-
-  it('reads a cue saved before silence trimming as not trimming', () => {
-    const audio = migrateWorkspace(workspaceWith([
-      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: null }
-    ])).cues[0] as AudioCue
-
-    expect(audio.trimSilence).toBe(false)
-    // Nothing measured the file a show was written before this existed with, and a load
-    // does not start reading files on somebody's behalf.
-    expect(audio.soundRegion).toBeUndefined()
-  })
-
-  it('keeps a cue that was saved trimming its silence, and the measurement with it', () => {
-    const soundRegion = { startMs: 400, endMs: 3100, durationMs: 9000, silent: false }
-    const audio = migrateWorkspace(workspaceWith([
-      { id: 'a1', type: 'audio', filePath: '', loopCount: 0, playbackRate: 1, trim: 1, outputs: null, trimSilence: true, soundRegion }
-    ])).cues[0] as AudioCue
-
-    expect(audio.trimSilence).toBe(true)
-    expect(audio.soundRegion).toEqual(soundRegion)
-  })
-
-  it('turns a legacy childIds list into parent pointers in that order', () => {
-    const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'sequence', childIds: ['c2', 'c1'] },
-      { id: 'c1', type: 'wait', duration: 1000 },
-      { id: 'c2', type: 'wait', duration: 2000 }
-    ])).cues
-
-    expect(cues.map(c => c.id)).toEqual(['g1', 'c2', 'c1'])
-    expect(cues.slice(1).map(c => c.parentId)).toEqual(['g1', 'g1'])
-    expect((cues[0] as unknown as Record<string, unknown>).childIds).toBeUndefined()
-  })
-
-  it('gives a workspace that predates the show services their listener defaults', () => {
-    const workspace = migrateWorkspace(workspaceWith([]))
-
-    // Without this, a workspace saved before the services existed would hand each of
-    // them `undefined` instead of a port to listen on and a plot to alarm against.
-    expect(workspace.showSettings?.oscIn).toEqual({ enabled: true, port: 53000 })
-    expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
-    expect(workspace.showSettings?.rf.sources).toEqual([])
-    expect(workspace.showSettings?.rf.thresholds.batteryCritical).toBe(10)
-  })
-
-  it('keeps the show ports a workspace already carries, and fills the gaps around them', () => {
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: { oscIn: { enabled: false } } as Workspace['showSettings']
-    })
-
-    expect(workspace.showSettings?.oscIn).toEqual({ enabled: false, port: 53000 })
-    expect(workspace.showSettings?.midiIn).toEqual({ enabled: false, portNames: [] })
-  })
-
-  it('carries a performer over from the plot, patched to the strip that now holds their DCA', () => {
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: {
-        rf: {
-          plot: {
-            performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '' }],
-            packs: [
-              { id: 'pack1', label: 'Pack 1', channelId: 'ch1', performerId: 'p1', notes: '', deskChannelId: 'dca1' }
-            ]
-          }
-        },
-        scenes: {
-          channels: [{ id: 'dca1', label: 'DCA 1', mute: null, unmute: null }],
-          list: []
-        }
-      } as unknown as Workspace['showSettings']
-    })
-
-    const cast = workspace.showSettings?.cast
-    // The desk routing the performer carried is now their channel strip: a strip named
-    // after them, assigned to the DCA that used to be on the performer.
-    expect(cast?.performers).toEqual([
-      { id: 'p1', name: 'Ada', role: 'Lead', notes: '', channelId: cast?.channels[0].id }
-    ])
-    expect(cast?.channels[0]).toMatchObject({ name: 'Ada', dcaId: 'dca1' })
-    // ...and the rest of the console comes with it, so the show lands set up rather than
-    // half set up.
-    expect(cast?.channels).toHaveLength(CHANNEL_START_COUNT)
-    expect(cast?.channels.slice(1).every(channel => channel.dcaId === null && channel.name === ''))
-      .toBe(true)
-    expect(cast?.dcas.map(dca => dca.id)).toEqual(['dca1'])
-    expect(cast?.ensembles).toEqual([])
-    // The old homes are gone, not left behind empty for the next load to trip over.
-    expect((workspace.showSettings?.rf.plot as unknown as Record<string, unknown>).performers)
-      .toBeUndefined()
-    expect((workspace.showSettings?.scenes as unknown as Record<string, unknown>).channels)
-      .toBeUndefined()
-    expect((workspace.showSettings?.rf.plot.packs[0] as unknown as Record<string, unknown>).deskChannelId)
-      .toBeUndefined()
-  })
-
-  it("turns a scene's open packs into the performers who were wearing them, dropping a spare", () => {
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: {
-        rf: {
-          plot: {
-            performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '' }],
-            packs: [
-              { id: 'pack1', label: 'Pack 1', channelId: 'ch1', performerId: 'p1', notes: '' },
-              { id: 'pack2', label: 'Pack 2', channelId: 'ch2', performerId: null, notes: '' }
-            ]
-          }
-        },
-        scenes: {
-          channels: [],
-          list: [{ id: 's1', name: 'Opening', live: ['pack1', 'pack2'], notes: '' }]
-        }
-      } as unknown as Workspace['showSettings']
-    })
-
-    // Pack 2 was nobody's, so the scene it was open in only remembers Pack 1's wearer —
-    // and a scene that predates ensembles has none applied and closes none of them.
-    expect(workspace.showSettings?.scenes.list).toEqual([
-      { id: 's1', name: 'Opening', live: ['p1'], ensembles: [], excluded: [], notes: '' }
-    ])
-  })
-
-  it('moves desk routing off performers and ensembles onto the strips that carry it', () => {
-    // The shape the previous build wrote: the DCA was on the performer, or on the
-    // ensemble they were a member of, and membership was a pointer on each performer.
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: {
-        cast: {
-          groups: [
-            { id: 'dca1', label: 'DCA 1 — Principals', mute: null, unmute: null },
-            { id: 'dca2', label: 'DCA 2 — Chorus', mute: null, unmute: null }
-          ],
-          performers: [
-            { id: 'p1', name: 'Ada', role: 'Lead', notes: '', ensembleId: null, deskChannelId: 'dca1' },
-            { id: 'p2', name: 'Nell', role: 'Chorus', notes: '', ensembleId: 'e1', deskChannelId: null },
-            { id: 'p3', name: 'Sam', role: 'Swing', notes: '', ensembleId: null, deskChannelId: null }
-          ],
-          ensembles: [{ id: 'e1', name: 'Chorus', deskChannelId: 'dca2' }]
-        },
-        scenes: { list: [] }
-      } as unknown as Workspace['showSettings']
-    })
-
-    const cast = workspace.showSettings?.cast
-    expect(cast?.dcas.map(dca => dca.id)).toEqual(['dca1', 'dca2'])
-    // The chorus's DCA came across on the members it was carrying, not on the ensemble.
-    expect(cast?.channels.map(channel => [channel.name, channel.dcaId])).toEqual([
-      ['Ada', 'dca1'],
-      ['Nell', 'dca2'],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null],
-      ['', null]
-    ])
-    expect(cast?.performers.map(performer => performer.channelId)).toEqual([
-      cast?.channels[0].id, cast?.channels[1].id, null
-    ])
-    expect(cast?.ensembles).toEqual([{ id: 'e1', name: 'Chorus', members: ['p2'] }])
-    expect((cast as unknown as Record<string, unknown>).groups).toBeUndefined()
-    // A show that had DCAs and drove none of them is left driving none: the derived
-    // messages are the default for a show that has never been told otherwise.
-    expect(workspace.showSettings?.desk.kind).toBe('none')
-  })
-
-  it('reads the desk connection back off the DCAs an older build patched', () => {
-    // One connection per show now, so the pattern comes from the first patched DCA — its
-    // own number swapped for {n} — and every one of them keeps what it sent as an
-    // override: a show does not start sending somewhere else because the app changed.
-    const osc = (address: string) => ({
-      kind: 'osc', host: '10.0.0.5', port: 9000, address, args: [1]
-    })
-    const closed = (address: string) => ({
-      kind: 'osc', host: '10.0.0.5', port: 9000, address, args: [0]
-    })
-
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: {
-        cast: {
-          dcas: [
-            { id: 'dca1', label: 'DCA 1', unmute: osc('/dca/1/mute'), mute: closed('/dca/1/mute') },
-            { id: 'dca2', label: 'DCA 2', unmute: osc('/show/interval'), mute: closed('/show/interval') }
-          ],
-          performers: [],
-          ensembles: [],
-          channels: []
-        },
-        scenes: { list: [] }
-      } as unknown as Workspace['showSettings']
-    })
-
-    expect(workspace.showSettings?.desk).toMatchObject({
-      kind: 'osc',
-      host: '10.0.0.5',
-      port: 9000,
-      address: '/dca/{n}/mute'
-    })
-    expect(workspace.showSettings?.cast.dcas.map(dca => dca.address))
-      .toEqual(['/dca/1/mute', '/show/interval'])
-    // The messages themselves are gone: what a DCA sends is derived or overridden, never
-    // carried as a pair.
-    expect((workspace.showSettings?.cast.dcas[0] as unknown as Record<string, unknown>).unmute)
-      .toBeUndefined()
-  })
-
-  it('reads a MIDI show’s port and channel back the same way', () => {
-    const note = (kind: 'noteOn' | 'noteOff', note: number) => ({
-      kind: 'midi', portName: 'Yamaha', message: { kind, channel: 3, note, velocity: 0 }
-    })
-
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: {
-        cast: {
-          dcas: [
-            { id: 'dca1', label: 'DCA 1', unmute: note('noteOn', 60), mute: note('noteOff', 60) },
-            { id: 'dca2', label: 'DCA 2', unmute: note('noteOn', 2), mute: note('noteOff', 2) }
-          ],
-          performers: [],
-          ensembles: [],
-          channels: []
-        },
-        scenes: { list: [] }
-      } as unknown as Workspace['showSettings']
-    })
-
-    expect(workspace.showSettings?.desk).toMatchObject({
-      kind: 'midi',
-      midiPort: 'Yamaha',
-      midiChannel: 3
-    })
-    expect(workspace.showSettings?.cast.dcas.map(dca => dca.note)).toEqual([60, 2])
-  })
-
-  it('leaves a console that has already been set up exactly as it was found', () => {
-    // A show whose operator removed every strip is a console with nothing on it, not a
-    // show that has not been set up yet: the twelve a new show starts with must not
-    // come back on the next load.
-    const workspace = migrateWorkspace({
-      ...workspaceWith([]),
-      showSettings: {
-        cast: {
-          channels: [],
-          performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '', channelId: null }],
-          ensembles: [],
-          dcas: []
-        },
-        scenes: { list: [] }
-      } as unknown as Workspace['showSettings']
-    })
-
-    expect(workspace.showSettings?.cast.channels).toEqual([])
-    expect(workspace.showSettings?.cast.dcas).toEqual([])
-  })
-
-  it('migrates an older cast once, and leaves an already-migrated one alone', () => {
-    const legacy = {
-      ...workspaceWith([]),
-      showSettings: {
-        rf: {
-          plot: {
-            performers: [{ id: 'p1', name: 'Ada', role: 'Lead', notes: '' }],
-            packs: [{ id: 'pack1', label: 'Pack 1', channelId: null, performerId: 'p1', notes: '', deskChannelId: 'dca1' }]
-          }
-        },
-        scenes: { channels: [{ id: 'dca1', label: 'DCA 1', mute: null, unmute: null }], list: [] }
-      } as unknown as Workspace['showSettings']
+      expect(() => migrateWorkspace(document, SHOW), String(carried)).toThrow(Refusal)
+      expect(() => migrateWorkspace(document, SHOW)).toThrow(
+        'that show’s settings are not the sections this version of WinsLab writes'
+      )
+      expect(() => migrateWorkspace(document, SHOW)).toThrow(SHOW)
     }
+    expect(() => migrateWorkspace(
+      { ...workspaceWith([]), showSettings: null } as unknown as Workspace,
+      SHOW
+    )).toThrow(`${SHOW} carries nothing instead`)
+  })
 
-    const once = migrateWorkspace(legacy)
-    const twice = migrateWorkspace(once)
+  it('refuses a version literal other than the one this build writes, naming its value', () => {
+    const newer = { ...workspaceWith([]), version: 2 } as unknown as Workspace
+    const aString = { ...workspaceWith([]), version: '1' } as unknown as Workspace
 
-    expect(twice.showSettings?.cast).toEqual(once.showSettings?.cast)
+    expect(() => migrateWorkspace(newer, SHOW)).toThrow(
+      `that show says version 2 and this build writes version 1 — ${SHOW} was probably saved by another build`
+    )
+    // Named as JSON, so the number this build writes is told from the string a hand edit
+    // may leave: `"1"` is not the literal, and a file with neither says "nothing".
+    expect(() => migrateWorkspace(aString, SHOW)).toThrow('says version "1"')
+    expect(() => migrateWorkspace(workspaceWithMissingVersion(), SHOW)).toThrow('says version nothing')
+  })
+
+  it('reads a file whose top level is this build’s own shape, settings or none', () => {
+    const withSettings = migrateWorkspace(
+      { ...workspaceWith([]), showSettings: defaultShowSettings() },
+      SHOW
+    )
+
+    expect(withSettings.showSettings).toEqual(defaultShowSettings())
+    // Nothing is filled in: a workspace with no settings section comes back without one,
+    // and the window's own defaults are what stand in for it.
+    expect(migrateWorkspace(workspaceWith([]), SHOW).showSettings).toBeUndefined()
+  })
+
+  it('leaves a cue the fields the file gave it, and invents none', () => {
+    // The other half of "no fill": the cue comes back with exactly the keys it carried.
+    // The fields the deleted pass used to default — `advance`, `triggers`, `refire` — are
+    // not added, so a show that is not this build's shape is refused above rather than
+    // quietly completed here.
+    const cue = { id: 'w1', type: 'wait', duration: 1000, parentId: null } as unknown as Cue
+    const loaded = migrateWorkspace(workspaceWith([cue]), SHOW)
+
+    expect(Object.keys(loaded.cues[0]).sort()).toEqual(['duration', 'id', 'parentId', 'type'])
   })
 })
 
 // The grouping repair: array order is the running order, a group's children belong
 // contiguously behind it, and a cue whose group is not in the file must still fire with
-// the show. What the migration changed is reported through the notes out-array, and a
-// file that needed nothing is untouched.
+// the show. What the load repaired is reported through the notes out-array, and a file
+// that needed nothing is untouched.
 describe('migrateWorkspace — cue grouping', () => {
   it('leaves a well-formed file exactly as it is, with no notes', () => {
     const cues = migrateWorkspace(workspaceWith([
@@ -395,14 +169,14 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
       { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
       { id: 'x1', type: 'wait', duration: 3000 }
-    ])).cues
+    ]), SHOW).cues
 
     expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'x1'])
 
     // The fixed point: a repaired (here, already healthy) workspace re-normalises to
     // nothing, so a silent second repair cannot happen.
     const notes: LoadNote[] = []
-    const again = migrateWorkspace({ ...workspaceWith([]), cues }, notes)
+    const again = migrateWorkspace({ ...workspaceWith([]), cues }, SHOW, notes)
     expect(again.cues).toEqual(cues)
     expect(notes).toEqual([])
   })
@@ -414,7 +188,7 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
       { id: 'x1', type: 'wait', duration: 1000 },
       { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'x1'])
     expect(notes).toEqual([{
@@ -432,7 +206,7 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'c1', type: 'wait', duration: 1000 },
       { id: 'c2', type: 'wait', duration: 2000, parentId: 'g2' },
       { id: 'c3', type: 'wait', duration: 3000, parentId: 'g1' }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     expect(cues.map(c => c.id)).toEqual(['g1', 'g2', 'c2', 'c3', 'c1'])
     expect(notes.map(note => [note.kind, note.cueId])).toEqual([
@@ -449,7 +223,7 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
       { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
       { id: 'x1', type: 'wait', duration: 1000 }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     // The orphan was between c1 and c2; the gathered block goes where it now belongs, so
     // the orphan lands behind it, before x1. What is kept is the relative order of the
@@ -469,7 +243,7 @@ describe('migrateWorkspace — cue grouping', () => {
     const cues = migrateWorkspace(workspaceWith([
       { id: 'w1', type: 'wait', duration: 1000 },
       { id: 'c1', type: 'wait', duration: 1000, parentId: 'w1' }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     expect(cues.map(c => [c.id, c.parentId])).toEqual([['w1', null], ['c1', null]])
     expect(notes).toEqual([{
@@ -485,7 +259,7 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'a', type: 'group', mode: 'sequence', parentId: 'b' },
       { id: 'b', type: 'group', mode: 'sequence', parentId: 'a' },
       { id: 'c', type: 'wait', duration: 1000, parentId: 'b' }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     // Both loop members return to the top level; the cue hanging under b was never in
     // the loop and keeps its parent.
@@ -502,7 +276,7 @@ describe('migrateWorkspace — cue grouping', () => {
     const cues = migrateWorkspace(workspaceWith([
       { id: 'g1', type: 'group', mode: 'sequence', parentId: 'g1' },
       { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     expect(cues.map(c => [c.id, c.parentId])).toEqual([['g1', null], ['c1', 'g1']])
     expect(notes.map(note => [note.kind, note.cueId])).toEqual([['cycle', 'g1']])
@@ -515,7 +289,7 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'c2', type: 'audio', filePath: '', timelineOffset: 5000, parentId: 'g1' },
       { id: 'x1', type: 'wait', duration: 1000 },
       { id: 'c1', type: 'audio', filePath: '', timelineOffset: 0, parentId: 'g1' }
-    ]), notes).cues
+    ]), SHOW, notes).cues
 
     // Array order is kept exactly as it was — the gather never sorts by timelineOffset,
     // which is the timeline's own authority.
@@ -525,18 +299,6 @@ describe('migrateWorkspace — cue grouping', () => {
     expect(notes.map(note => note.kind)).toEqual(['reordered'])
   })
 
-  it('converts a legacy childIds file without calling the healthy tree damage', () => {
-    const notes: LoadNote[] = []
-    const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'sequence', childIds: ['c2', 'c1'] },
-      { id: 'c1', type: 'wait', duration: 1000 },
-      { id: 'c2', type: 'wait', duration: 2000 }
-    ]), notes).cues
-
-    expect(cues.map(c => c.id)).toEqual(['g1', 'c2', 'c1'])
-    expect(notes).toEqual([])
-  })
-
   it('keeps every cue of a file whose id repeats, on load and on save', () => {
     const notes: LoadNote[] = []
     const workspace = migrateWorkspace(workspaceWith([
@@ -544,7 +306,7 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
       { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
       { id: 'g1', type: 'group', mode: 'playlist' }
-    ]), notes)
+    ]), SHOW, notes)
 
     // The gather emits by cue identity: the repeated id is neither dropped nor re-emitted
     // under the second occurrence, so the count survives — and no repair is claimed for a
@@ -566,14 +328,14 @@ describe('migrateWorkspace — cue grouping', () => {
       { id: 'x1', type: 'wait', duration: 1000 },
       { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
     ])
-    const repaired = migrateWorkspace(damaged, loading)
+    const repaired = migrateWorkspace(damaged, SHOW, loading)
     expect(loading.map(note => note.kind)).toEqual(['reordered'])
 
     // What a save writes is a healthy file: the next open has nothing to say about it,
     // and writing it again puts the same bytes back.
     const first = serialiseWorkspace(repaired, '/shows')
     const reopened: LoadNote[] = []
-    const again = migrateWorkspace(JSON.parse(first) as Workspace, reopened)
+    const again = migrateWorkspace(JSON.parse(first) as Workspace, SHOW, reopened)
     expect(reopened).toEqual([])
     expect(serialiseWorkspace(again, '/shows')).toBe(first)
   })
@@ -589,8 +351,8 @@ describe('migrateWorkspace — cue grouping', () => {
     ]))
     const first: LoadNote[] = []
     const second: LoadNote[] = []
-    migrateWorkspace(JSON.parse(bytes) as Workspace, first)
-    migrateWorkspace(JSON.parse(bytes) as Workspace, second)
+    migrateWorkspace(JSON.parse(bytes) as Workspace, SHOW, first)
+    migrateWorkspace(JSON.parse(bytes) as Workspace, SHOW, second)
 
     expect(second).toEqual(first)
     expect(first.map(note => [note.kind, note.cueId])).toEqual([['reordered', 'g1']])

@@ -27,6 +27,7 @@
 //   the show.
 
 import type { Cue } from './cue'
+import { heldShowSettings } from './show'
 import type { Workspace } from './workspace'
 import { WORKSPACE_SECTIONS } from './workspaceSections'
 import {
@@ -313,8 +314,14 @@ function mergeSettings(
       // The show's own settings, one key at a time: the services, the plot, the cast, the
       // scenes. A section this show never had and the other one did is a section this show
       // gains, which is what a merge is for.
+      //
+      // Every side is read as the window holds it — the sections it carries, over this
+      // build's defaults for the ones it leaves out. A file that has never written the
+      // settings section at all is a document the window reads as the defaults, and without
+      // that reading the merge would build a settings object with no sections in it, which
+      // this build refuses to open.
       const asRecord = (workspace: Workspace): Record<string, unknown> =>
-        (workspace[section.key] ?? {}) as Record<string, unknown>
+        heldShowSettings(workspace.showSettings) as unknown as Record<string, unknown>
       const base = asRecord(ancestor)
       const myValue = asRecord(mine)
       const theirValue = asRecord(yours)

@@ -24,10 +24,16 @@ vi.mock('electron', async () => {
 })
 
 const { compareWithFile, openWorkspaceFromPath, saveWorkspace } = await import('./WorkspaceManager')
+import { defaultShowSettings } from '../../shared/show'
 import type { AudioCue, Cue, WaitCue } from '../../shared/cue'
 import type { Workspace } from '../../shared/workspace'
 
-/** A show as an old build wrote it: no show-services section, no per-cue triggers. */
+/**
+ * A show as an old build wrote it: no show-services section, no per-cue triggers, and a
+ * cue whose file it names by its bare path. Every top-level key is one this build
+ * declares and the cue's type is one it knows, so this is a file the funnel reads — what
+ * it lacks is the app's own bookkeeping rather than a shape this build does not know.
+ */
 const LEGACY_SHOW = `{
   "version": 1,
   "id": "w-legacy",
@@ -89,8 +95,8 @@ function cue(id: string, name: string): Cue {
     loopCount: 1,
     playbackRate: 1,
     trim: 0,
-    // The shape this build writes: a file missing these is an old one, and the
-    // migration fills them in — which is a change to the file, but not to the show.
+    // The shape this build writes, written out in full: a file that carries these is this
+    // build's own, which is what a history comparison has to see when nothing was edited.
     triggers: [],
     refire: 'ignore',
     trimSilence: false
@@ -202,17 +208,64 @@ describe('a save writes what it changed into the file', () => {
     expect(historyOnDisk()).toEqual(first)
   })
 
-  it('does not report an upgrade of the format as an edit', async () => {
+  it('does not report the app’s own bookkeeping as an edit', async () => {
     writeFileSync(file, LEGACY_SHOW)
     writeFileSync(join(dir, 'walk-in.wav'), Buffer.alloc(44))
 
     const { workspace: opened } = await openWorkspaceFromPath(file)
     await saveWorkspace({} as never, opened, file)
 
-    // The file really did change — the show-services section and the per-cue triggers
-    // arrived — but nobody edited the show, and the history says nothing happened.
+    // The file really did change: a cue whose file the old build named by its bare path
+    // gained the pair this build writes — the route, and where the file was last seen —
+    // and nothing was filled in around it. Nobody edited the show, so the history says
+    // nothing happened.
+    const written = JSON.parse(readFileSync(file, 'utf-8'))
+    expect(written.cues[0].media).toEqual({
+      path: 'walk-in.wav',
+      originalPath: join(dir, 'walk-in.wav')
+    })
+    expect(written.showSettings).toBeUndefined()
+    expect(written.cues[0].triggers).toBeUndefined()
+    expect(historyOnDisk()).toBeUndefined()
+  })
+
+  it('does not report the settings the window stands in for as an edit', async () => {
+    // A file with no settings section, as the window received it: the store keeps its own
+    // defaults for a section the file does not carry, so the save writes a section the
+    // file never had. That is the app's bookkeeping, not the operator's change — the
+    // comparison reads the file as the window did, with the same defaults.
+    writeFileSync(file, JSON.stringify({
+      ...workspace([cue('a', 'Walk-in')]),
+      showSettings: undefined
+    }))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+    expect(opened.showSettings).toBeUndefined()
+
+    await saveWorkspace({} as never, { ...opened, showSettings: defaultShowSettings() }, file)
+
     expect(JSON.parse(readFileSync(file, 'utf-8')).showSettings).toBeDefined()
     expect(historyOnDisk()).toBeUndefined()
+  })
+
+  it('reports a setting changed inside the window’s defaults as the edit it is', async () => {
+    // The other side of the same rule: the section appearing is not an edit, but what
+    // somebody changed inside it is — a history that swallowed it would be one nobody
+    // could trust.
+    writeFileSync(file, JSON.stringify({
+      ...workspace([cue('a', 'Walk-in')]),
+      showSettings: undefined
+    }))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+    const defaults = defaultShowSettings()
+
+    await saveWorkspace({} as never, {
+      ...opened,
+      showSettings: { ...defaults, desk: { ...defaults.desk, host: '10.0.0.9' } }
+    }, file)
+
+    const history = historyOnDisk()
+    expect(history).toHaveLength(1)
+    expect(history?.[0].settings).toEqual(['show.desk.host'])
   })
 
   it('carries the show’s own history into a file it is saved as', async () => {
@@ -299,8 +352,8 @@ describe('a comparison against a file', () => {
     const { workspace: opened } = await openWorkspaceFromPath(file)
 
     // The window's show once the pass has answered, against the file it was loaded from.
-    // The comparison puts the window through the same serialiser and migration a save
-    // does, so this is the whole way round — and nothing about the show changed.
+    // The comparison puts the window through the same serialiser and funnel a save does, so
+    // this is the whole way round — and nothing about the show changed.
     const measured = {
       ...opened,
       cues: opened.cues.map(entry => (entry.id === 'a' ? { ...entry, duration: 3000 } : entry))
@@ -316,5 +369,30 @@ describe('a comparison against a file', () => {
       cues: measured.cues.map(entry => (entry.id === 'w' ? { ...entry, duration: 2500 } : entry))
     }
     expect((await compareWithFile(typed, file)).diff.changed.map(change => change.id)).toEqual(['w'])
+  })
+
+  it('reads a file that carries no settings as the window reads it, with the defaults in', async () => {
+    // The window holds this build's defaults for a settings section the file does not carry,
+    // so the section it never wrote is not a difference: what a comparison reports is what a
+    // person typed. The window's side here is the document the window actually holds, that
+    // section included.
+    writeFileSync(file, JSON.stringify(workspace([cue('a', 'Walk-in')])))
+    const { workspace: opened } = await openWorkspaceFromPath(file)
+    expect(opened.showSettings).toBeUndefined()
+    const asTheWindowHoldsIt = { ...opened, showSettings: defaultShowSettings() }
+
+    const { diff } = await compareWithFile(asTheWindowHoldsIt, file)
+
+    expect(diff.settings.filter(setting => setting.path.startsWith('show'))).toEqual([])
+    expect(diff.empty).toBe(true)
+
+    // What somebody changed inside those defaults is still the edit it is.
+    const defaults = defaultShowSettings()
+    const changed = {
+      ...opened,
+      showSettings: { ...defaults, desk: { ...defaults.desk, host: '10.0.0.9' } }
+    }
+    expect((await compareWithFile(changed, file)).diff.settings.map(setting => setting.path))
+      .toEqual(['show.desk.host'])
   })
 })

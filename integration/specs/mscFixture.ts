@@ -7,6 +7,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { defaultShowSettings } from '../../src/shared/show'
 
 /** The soft key the show listens to — a button somebody assigned at the desk. */
 export const SOFT_KEY = 3
@@ -30,6 +31,10 @@ export function writeMscShow(options: MscShowOptions): string {
   const { port, cue } = options
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-msc-'))
   const path = join(root, `${MSC_SHOW_NAME}.cuerunner`)
+  // Every section this build declares, then what this show says about them: the load funnel
+  // refuses a settings object that leaves one out, so a fixture carrying a hand-picked few
+  // would be a file this build cannot read at all.
+  const settings = defaultShowSettings()
 
   writeFileSync(path, `${JSON.stringify({
     version: 1,
@@ -39,7 +44,9 @@ export function writeMscShow(options: MscShowOptions): string {
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
     showSettings: {
+      ...settings,
       desk: {
+        ...settings.desk,
         kind: 'midi-tcp',
         profile: 'sq',
         midiPort: '',

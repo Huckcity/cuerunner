@@ -592,13 +592,15 @@ describe('demo', () => {
       { name: 'Demo Show' }
     )
     // A cue naming a group that is not in the file: the demo is a load path, and the
-    // migration's repair has to run on the way in.
+    // grouping repair has to run on the way in.
     loaded.cues[1].parentId = 'gone'
     writeFileSync(shippedShow, JSON.stringify(loaded, null, 2))
     const before = readFileSync(shippedShow)
 
     runtimePaths.resourcesPath = resources
     try {
+      // The loader throws a marked `Refusal` for a file this build cannot read, which is
+      // the value the demo channel answers with — see `handlers.ts`'s refusal arm.
       const demo = await openDemoWorkspace()
       expect(demo.name).toBe('Demo Show')
       // The dangling parent was repaired on the way in, and the cue points at the copy

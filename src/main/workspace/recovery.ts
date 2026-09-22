@@ -32,7 +32,11 @@ export interface RecoverySnapshot {
 
 // Autosave writes here, not over the operator's file: a recovery snapshot is offered
 // back on the next launch instead of being applied behind their back.
-function recoveryFilePath(): string {
+//
+// Exported because it is also the source a refusal about the snapshot names: the funnel
+// that reads one back is in `WorkspaceManager`, and this is the only place that knows
+// which file the snapshot came from.
+export function recoveryFilePath(): string {
   return join(app.getPath('userData'), 'recovery.cuerunner')
 }
 
@@ -82,7 +86,7 @@ export async function readRecovery(): Promise<RecoverySnapshot | null> {
   }
   // The bytes are there; now they have to be a snapshot. A file an operator's own tools
   // have been through can parse and hold something else entirely, and a workspace with no
-  // cue list would take the migration down inside the channel, where a fault renders no
+  // cue list would take the funnel down inside the channel, where a fault renders no
   // bar at all — so the parse and the shape are both checked before the value is returned.
   let parsed: unknown
   try {

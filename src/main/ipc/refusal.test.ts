@@ -17,7 +17,7 @@
 // pinned beside their modules.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { rmSync, truncateSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { dialog } from 'electron'
 import { AUDIO_CHANNELS } from '../../shared/audio'
@@ -40,7 +40,9 @@ const ends = vi.hoisted(() => {
   const appOn: Array<{ event: string; listener: () => unknown }> = []
   /** Where `app.getPath('userData')` points; the factory fills it in. */
   const userData = { path: '' }
-  return { handlers, appOn, userData }
+  /** Whether the app reports itself packaged: the demo's resource folder depends on it. */
+  const packaged = { on: false }
+  return { handlers, appOn, userData, packaged }
 })
 
 /**
@@ -70,7 +72,9 @@ vi.mock('electron', async () => {
   return {
     app: {
       getPath: () => ends.userData.path,
-      isPackaged: false,
+      get isPackaged() {
+        return ends.packaged.on
+      },
       on: (event: string, listener: () => unknown) => {
         ends.appOn.push({ event, listener })
       }
@@ -165,9 +169,11 @@ describe('a refusal is a value', () => {
 
     expect(result.ok).toBe(false)
     // The sentence the throw carried, word for word: the window's notice must not change.
+    // It names the file the bytes came from beside the cue type, because this is the only
+    // place that knows which file was refused.
     expect(result.error).toBe(
       'that show has a cue this version of WinsLab does not know (hologram)' +
-      ' — it was probably saved by a newer version'
+      ` — ${file} was probably saved by a newer version`
     )
   })
 
@@ -217,6 +223,44 @@ describe('a refusal is a value', () => {
     expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} is not JSON` })
   })
 
+  it('answers a demo this build cannot read with its refusal arm, naming the file it ships as', async () => {
+    // The demo is the app's own file, and it goes through the same funnel every other load
+    // does: a shape this build does not write is an answer here too, rather than a show the
+    // window cannot draw. `demoSourceDir` reads the packaged build's extra-resource folder,
+    // so the packaged branch is the one driven — with `process.resourcesPath` put back as it
+    // was, and the app un-packaged again, whatever the test does to either.
+    const runtimePaths = process as unknown as { resourcesPath?: string }
+    const hadResourcesPath = Object.prototype.hasOwnProperty.call(process, 'resourcesPath')
+    const shipped = runtimePaths.resourcesPath
+    const resources = join(ends.userData.path, 'resources')
+    const demoDir = join(resources, 'demo')
+    mkdirSync(demoDir, { recursive: true })
+    const demoFile = join(demoDir, 'Demo Show.cuerunner')
+    writeFileSync(demoFile, JSON.stringify({
+      version: 2,
+      id: 'demo',
+      name: 'Demo Show',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      audioSettings: { outputDeviceId: 'default' },
+      midiSettings: { outputPortName: '' },
+      cues: []
+    }))
+    runtimePaths.resourcesPath = resources
+    ends.packaged.on = true
+    try {
+      const result = await handler(WORKSPACE_CHANNELS.openDemo)('event') as { ok: boolean; error?: string }
+
+      expect(result.ok).toBe(false)
+      expect(result.error).toBe(
+        `that show says version 2 and this build writes version 1 — ${demoFile} was probably saved by another build`
+      )
+    } finally {
+      ends.packaged.on = false
+      if (hadResourcesPath) runtimePaths.resourcesPath = shipped
+      else delete runtimePaths.resourcesPath
+    }
+  })
+
   it('answers a cancelled dialog as the null inside the success arm', async () => {
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
 
@@ -225,8 +269,8 @@ describe('a refusal is a value', () => {
 
   it('answers a document that is JSON but holds no cue list, naming the file', async () => {
     // Bytes that parse are not therefore a show: a hand edit, another tool's export, a
-    // download that is JSON because the proxy's error page is. The migration's first read
-    // is the cue list, so this document used to reach the operator as V8's own `Cannot
+    // download that is JSON because the proxy's error page is. The funnel's first read is
+    // the cue list, so this document used to reach the operator as V8's own `Cannot
     // read properties of undefined (reading 'find')` — which names neither the file nor
     // the fact. The sentence in full is what says so, and the answer being a value at all
     // is what says the fault did not reach the window.
@@ -240,7 +284,7 @@ describe('a refusal is a value', () => {
 
   it('answers a cue list of the wrong kind the same way, and not as a fault', async () => {
     // The other half of the same shape: a key with the right name and the wrong kind is still
-    // not a show, and the migration's first read of it — `workspace.cues.find` — is not a
+    // not a show, and the funnel's first read of it — `workspace.cues.find` — is not a
     // function on an object, so the operator would get that text and no sentence at all.
     const file = join(ends.userData.path, 'cues-not-a-list.cuerunner')
     writeFileSync(file, '{"version":1,"cues":{"0":{"id":"c1","type":"wait"}}}')

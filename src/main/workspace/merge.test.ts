@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { defaultShowSettings } from '../../shared/show'
 import type { Workspace } from '../../shared/workspace'
 
 vi.mock('electron', async () => {
@@ -25,7 +26,7 @@ vi.mock('electron', async () => {
 })
 
 const { dialog } = await import('electron')
-const { mergeShow } = await import('./WorkspaceManager')
+const { mergeShow, openWorkspaceFromPath } = await import('./WorkspaceManager')
 
 const showSaveDialog = vi.mocked(dialog.showSaveDialog)
 
@@ -86,7 +87,7 @@ describe('mergeShow', () => {
   it('names the grouping repairs its input files needed, and writes them into the merged show', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cuerunner-merge-repair-'))
     // The other person's copy is damaged two ways: a cue naming a group that is not in
-    // the file, and two groups inside each other. The migration repairs both as the merge
+    // the file, and two groups inside each other. The funnel repairs both as the merge
     // reads it, and the merge report must say so rather than go quiet about the move.
     const theirs = writeShow(dir, 'theirs.cuerunner', [
       { id: 'o1', type: 'wait', duration: 1000, number: '3', name: 'Walk-in', parentId: 'gone' },
@@ -117,6 +118,24 @@ describe('mergeShow', () => {
     expect(parents.get('g1')).toBeNull()
     expect(parents.get('g2')).toBeNull()
     expect(parents.get('c1')).toBe('g2')
+  })
+
+  it('writes a merged document this build can open when an input has no settings section', async () => {
+    // Three documents where the settings section is not there at all — the shape a file
+    // written before the show services existed has, and a document the window reads as its
+    // own defaults. The merge blends that reading in, so what it writes is a document this
+    // build opens rather than a settings object with no sections in it.
+    const dir = mkdtempSync(join(tmpdir(), 'cuerunner-merge-settings-'))
+    const theirs = writeShow(dir, 'theirs.cuerunner')
+    const ancestor = writeShow(dir, 'ancestor.cuerunner')
+    const mergedPath = join(dir, 'merged.cuerunner')
+    showSaveDialog.mockResolvedValue({ canceled: false, filePath: mergedPath })
+
+    const merged = await mergeShow({} as never, show(), null, 'ours', { theirs, ancestor })
+    expect(merged).not.toBeNull()
+
+    const reopened = await openWorkspaceFromPath(mergedPath)
+    expect(reopened.workspace.showSettings).toEqual(defaultShowSettings())
   })
 
   it('names which input file each repair came from when both needed the same repairs', async () => {

@@ -6,6 +6,7 @@
 // to the person reading it, so each one is asserted here rather than in the app.
 import { describe, it, expect } from 'vitest'
 import type { AudioCue, Cue, GroupCue } from './cue'
+import { defaultShowSettings } from './show'
 import type { Workspace } from './workspace'
 import { mergeWorkspaces } from './showfileMerge'
 
@@ -313,6 +314,24 @@ describe('two people changing the same thing', () => {
     // This show's values stand, as they do for every setting conflict.
     expect(merged.workspace.showSettings).toMatchObject({ rf: { plot: ['a', 'b'] } })
     expect(merged.workspace.triggerGuard).toEqual({ windowMs: 500 })
+  })
+
+  it('blends a document with no settings section as the window reads it', () => {
+    // A file that has never written the settings section is a document the window reads as
+    // this build's defaults for every section, and the merge has to blend it that way: read
+    // as "nothing configured", two documents without the section would merge into a settings
+    // object with no sections in it at all — a document this build refuses to open.
+    const theirs = workspace([], { showSettings: { desk: { kind: 'none' } } as Workspace['showSettings'] })
+
+    const merged = mergeWorkspaces(workspace([]), workspace([]), theirs)
+
+    expect(merged.workspace.showSettings).toEqual({
+      ...defaultShowSettings(),
+      desk: { kind: 'none' }
+    })
+    // Nothing was changed by either side, so the report says nothing: the section each file
+    // never wrote is the same on both sides of the comparison.
+    expect(merged.notes).toEqual([])
   })
 
   it('takes the settings only one side changed', () => {

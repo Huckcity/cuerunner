@@ -69,6 +69,7 @@ import {
   type RelinkedWorkspace,
   type SavedWorkspace,
   type WorkspaceCompareResult,
+  type WorkspaceDemoResult,
   type WorkspaceExportPayload,
   type WorkspaceExportResult,
   type WorkspaceImportResult,
@@ -293,7 +294,7 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(WORKSPACE_CHANNELS.open),
     openPath: (filePath: string): Promise<WorkspaceOpenPathResult> =>
       invoke(WORKSPACE_CHANNELS.openPath, filePath),
-    openDemo: (): Promise<Workspace> =>
+    openDemo: (): Promise<WorkspaceDemoResult> =>
       invoke(WORKSPACE_CHANNELS.openDemo),
     /**
      * Points one cue's missing media at a file the operator picked. The dialog is shown

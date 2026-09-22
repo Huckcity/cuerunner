@@ -18,7 +18,12 @@
 // blends it the way its behaviour says. The walk test
 // (`src/main/workspace/savedShape.test.ts`) fails on a section that reaches only some of
 // them, and on a section of the workspace that this declaration does not carry.
+//
+// The show's own settings are a shape of their own inside `showSettings`, so they are
+// declared here too: `SHOW_SETTINGS_SECTIONS` is what the load funnel's shape check reads,
+// and the same walk test holds it total against `ShowSettings`.
 
+import type { ShowSettings } from './show'
 import type { Workspace } from './workspace'
 
 /**
@@ -68,6 +73,32 @@ export const WORKSPACE_SECTIONS = [
 
 /** Every key of the saved form, from the declaration itself. */
 export type WorkspaceKey = (typeof WORKSPACE_SECTIONS)[number]['key']
+
+/**
+ * The sections a show's settings carry, in the order `ShowSettings` declares them and
+ * `defaultShowSettings` builds them. This is the list the load funnel's shape check reads:
+ * a file that carries a `showSettings` has to carry exactly these — one this build does not
+ * declare is a refusal, and one it leaves out is a refusal too. Loading no longer fills a
+ * section in, so a file that is missing one is a file this build cannot read rather than
+ * one it quietly completes.
+ *
+ * Like `WORKSPACE_SECTIONS`, the `satisfies` holds each entry to a key of `ShowSettings`;
+ * that the list carries every key — and no key twice — is what the walk test holds.
+ */
+export const SHOW_SETTINGS_SECTIONS = [
+  'oscIn',
+  'midiIn',
+  'desk',
+  'rf',
+  'presence',
+  'script',
+  'companion',
+  'scenes',
+  'cast'
+] as const satisfies readonly (keyof ShowSettings)[]
+
+/** A section of a show's settings, from the declaration itself. */
+export type ShowSettingsSection = (typeof SHOW_SETTINGS_SECTIONS)[number]
 
 /**
  * The values a saved form is built from, keyed by the declaration: the type is `Pick`ed

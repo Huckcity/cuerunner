@@ -11,8 +11,7 @@ import {
   type MergeNote,
   type MergeTally
 } from '../../shared/showfileMerge'
-import { readRecovery, writeFileAtomically } from './recovery'
-import { migrateLegacyAudioRouting } from '../../shared/audioRouting'
+import { readRecovery, recoveryFilePath, writeFileAtomically } from './recovery'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import {
   appendHistory,
@@ -25,13 +24,13 @@ import {
 import type { LoadNote, Workspace } from '../../shared/workspace'
 import type { AudioCue, Cue } from '../../shared/cue'
 import { CUE_TYPES } from '../../shared/cue'
-import {
-  CHANNEL_START_COUNT,
-  defaultShowSettings,
-  normalizeShowSettings
-} from '../../shared/show'
+import { heldShowSettings } from '../../shared/show'
 import { hasCueList, normalizeTriggerGuard } from '../../shared/workspace'
-import { savedShape } from '../../shared/workspaceSections'
+import {
+  savedShape,
+  SHOW_SETTINGS_SECTIONS,
+  WORKSPACE_SECTIONS
+} from '../../shared/workspaceSections'
 
 /**
  * The largest workspace file this app opens: 64 MiB of JSON is already far past a
@@ -39,290 +38,10 @@ import { savedShape } from '../../shared/workspaceSections'
  */
 const MAX_WORKSPACE_BYTES = 64 * 1024 * 1024
 
-// Cues come out of a JSON file, so they can still carry fields a previous version
-// wrote and this one no longer knows about. Read and delete those through here.
+// A cue on disk carries fields the runtime cue type does not declare — `media` is the
+// one left — so they are read through the cast, through here.
 function legacyFields(value: object): Record<string, unknown> {
   return value as unknown as Record<string, unknown>
-}
-
-function migrateCue(cue: Cue & Record<string, unknown>): Cue {
-  if (cue.advance === undefined) cue.advance = 'none'
-  if (cue.preWait === undefined) cue.preWait = 0
-  if (cue.postWait === undefined) cue.postWait = 0
-  if (cue.timelineOffset === undefined) cue.timelineOffset = 0
-  if (cue.colorLabel === undefined) cue.colorLabel = 'none'
-  if (cue.isArmed === undefined) cue.isArmed = true
-  if (cue.notes === undefined) cue.notes = ''
-  if (cue.parentId === undefined) cue.parentId = null
-  if (cue.triggers === undefined) cue.triggers = []
-  // A cue saved before the policy existed restarts when it is re-fired, which is what
-  // the app did unconditionally; what the show wants is the other one.
-  if (cue.refire === undefined) cue.refire = 'ignore'
-  if (cue.type === 'audio') {
-    if (cue.playbackRate === undefined) cue.playbackRate = 1.0
-    if (cue.trim === undefined) cue.trim = 1.0
-    // A cue saved before silence trimming existed is not trimming anything, and a scan
-    // started on somebody's show unasked is not a migration, it is a surprise.
-    if (cue.trimSilence === undefined) cue.trimSilence = false
-    // Per-cue device and channel-pair routing was never wired to the audio graph: only
-    // the first output was ever audible, which is what the routing migration keeps.
-    const routing = migrateLegacyAudioRouting(legacyFields(cue))
-    cue.volume = routing.volume
-    cue.pan = routing.pan
-    cue.outputs = routing.outputs
-  }
-  if (cue.type === 'stop' && cue.waitForFade === undefined) cue.waitForFade = false
-  if (cue.type === 'script' && cue.timeout === undefined) cue.timeout = 60000
-  delete cue.autoContinue
-  delete cue.autoFollow
-  return cue
-}
-
-interface LegacyPack {
-  id: string
-  performerId?: string | null
-  deskChannelId?: string | null
-}
-
-interface LegacyPerformer {
-  id: string
-  name?: string
-  role?: string
-  notes?: string
-  ensembleId?: string | null
-  deskChannelId?: string | null
-  channelId?: string | null
-}
-
-interface LegacyEnsemble {
-  id: string
-  name?: string
-  deskChannelId?: string | null
-  members?: string[]
-}
-
-interface LegacyCast {
-  groups?: unknown[]
-  dcas?: LegacyDca[]
-  channels?: unknown[]
-  performers?: LegacyPerformer[]
-  ensembles?: LegacyEnsemble[]
-}
-
-/** A DCA as an earlier build wrote it: both of its messages, one field at a time. */
-interface LegacyDca {
-  id: string
-  label?: string
-  mute?: LegacyMessage | null
-  unmute?: LegacyMessage | null
-  note?: number | null
-  address?: string | null
-}
-
-type LegacyMessage =
-  | { kind: 'midi'; portName?: string; message?: { kind?: string; channel?: number; note?: number } }
-  | { kind: 'osc'; host?: string; port?: number; address?: string }
-
-/**
- * Performers and desk groups used to live under the plot and the scenes section, keyed
- * to packs: a pack carried the desk group it fed, and a scene named the packs open in
- * it. Both moved up a level onto the cast — onto the performer, or the ensemble that
- * grouped them — so a workspace saved before that move is rewritten in place, once. The
- * pass after this one carries that routing the rest of the way, onto the channel strips
- * that hold it now.
- *
- * A file already in the new shape has no `rf.plot.performers` or `scenes.channels` left
- * to find, which is what makes this safe to run unconditionally on every load.
- */
-function migratePlotCast(showSettings: Record<string, unknown>): void {
-  const rf = showSettings.rf as Record<string, unknown> | undefined
-  const plot = rf?.plot as Record<string, unknown> | undefined
-  const scenes = showSettings.scenes as Record<string, unknown> | undefined
-  const legacyPerformers = plot?.performers as
-    Array<Record<string, unknown>> | undefined
-  const legacyChannels = scenes?.channels as unknown[] | undefined
-  if (legacyPerformers === undefined && legacyChannels === undefined) return
-
-  const packs = ((plot?.packs as LegacyPack[] | undefined) ?? [])
-  const performers: Array<Record<string, unknown>> = (legacyPerformers ?? []).map(
-    (performer: Record<string, unknown>) => ({
-      ...performer,
-      ensembleId: null,
-      deskChannelId: null as string | null
-    })
-  )
-
-  // A performer's desk group used to live on whichever pack they wore. The first pack
-  // found wearing them is what they carry forward — the same "only the first legacy
-  // value survives" rule the audio-routing migration above already uses.
-  for (const pack of packs) {
-    if (!pack.deskChannelId || !pack.performerId) continue
-    const performer = performers.find(candidate => candidate.id === pack.performerId)
-    if (performer && performer.deskChannelId === null) performer.deskChannelId = pack.deskChannelId
-  }
-
-  const cast = (showSettings.cast as Record<string, unknown> | undefined) ?? {}
-  cast.performers = performers
-  cast.groups = legacyChannels ?? []
-  cast.ensembles = cast.ensembles ?? []
-  showSettings.cast = cast
-
-  if (plot) delete plot.performers
-  if (scenes) delete scenes.channels
-  for (const pack of packs) delete (pack as unknown as Record<string, unknown>).deskChannelId
-
-  // A scene's live list named packs; what it means now is who was wearing them. A pack
-  // nobody was wearing drops out rather than leaving a dangling id nothing can show.
-  const wornBy = new Map(packs.map(pack => [pack.id, pack.performerId ?? null]))
-  const list = (scenes?.list as Array<Record<string, unknown>> | undefined) ?? []
-  for (const scene of list) {
-    const live = (scene.live as string[] | undefined) ?? []
-    scene.live = [...new Set(
-      live.map(packId => wornBy.get(packId) ?? null).filter((id): id is string => id !== null)
-    )]
-  }
-}
-
-/**
- * The second move, and the shape this build writes: a performer's desk routing left the
- * performer for their channel strip, an ensemble became membership rather than a pointer
- * on each of its members, and the desk's groups are the DCAs the show drives.
- *
- * What is preserved is what the desk was told: a performer who had a DCA — their own, or
- * the one their ensemble carried for them — is given the channel strip that now carries
- * it, named after them, which is the strip an operator would have made by hand. Nobody
- * routed gets no strip, which is the state a new performer starts in.
- */
-function migrateChannelRouting(showSettings: Record<string, unknown>): void {
-  const cast = showSettings.cast as LegacyCast | undefined
-  if (!cast) return
-  if (cast.channels !== undefined && cast.dcas !== undefined) return
-
-  const performers = cast.performers ?? []
-  const ensembles = cast.ensembles ?? []
-  const dcas = (cast.dcas ?? cast.groups ?? []) as LegacyDca[]
-
-  const ensembleDca = new Map(ensembles.map(ensemble => [ensemble.id, ensemble.deskChannelId ?? null]))
-  const channels: Array<{ id: string; name: string; dcaId: string | null }> = []
-  const migrated = performers.map(performer => {
-    const dcaId = performer.deskChannelId
-      ?? (performer.ensembleId ? ensembleDca.get(performer.ensembleId) ?? null : null)
-    // The strip's id is its position, not a fresh one: migrating the same file twice —
-    // on two machines, or twice on one — has to give the same bytes, or the same old
-    // show becomes two different files the moment both copies are saved.
-    const channelId = dcaId === null ? null : `channel-${channels.length + 1}`
-    if (channelId !== null) {
-      channels.push({ id: channelId, name: performer.name ?? '', dcaId })
-    }
-    return {
-      id: performer.id,
-      name: performer.name ?? '',
-      role: performer.role ?? '',
-      notes: performer.notes ?? '',
-      channelId
-    }
-  })
-
-  // A show whose performers were never routed keeps no strips here: an empty list reads
-  // as "not set up yet", and the defaults give it the twelve a new show starts with.
-  if (channels.length > 0) {
-    while (channels.length < CHANNEL_START_COUNT) {
-      channels.push({ id: `channel-${channels.length + 1}`, name: '', dcaId: null })
-    }
-    cast.channels = channels
-  } else {
-    delete cast.channels
-  }
-
-  // A strip used to carry whether it was in tonight's patch. One gesture answers that
-  // now — it is there or it is not — so the field goes with the shape that had it.
-  for (const channel of (cast.channels ?? []) as Array<Record<string, unknown>>) {
-    delete channel.enabled
-  }
-
-  cast.performers = migrated
-  cast.ensembles = ensembles.map(ensemble => ({
-    id: ensemble.id,
-    name: ensemble.name ?? '',
-    members: performers.filter(candidate => candidate.ensembleId === ensemble.id).map(candidate => candidate.id)
-  }))
-  cast.dcas = dcas
-  delete cast.groups
-}
-
-/**
- * The third move: a DCA used to carry both of its messages, one field at a time, and a
- * show had no connection of its own. What a DCA sends is now derived from its number
- * through the show's connection, so the connection is read back off the DCAs that were
- * patched — the pattern from the address of the first one, with its own number swapped
- * for `{n}` — and every one of those DCAs keeps what it was sending as an override. A
- * show does not start sending somewhere new because the app was updated; the derived
- * messages are the default for a show that has never been told otherwise.
- *
- * A show that had DCAs and drove none of them is left driving none.
- */
-function migrateDesk(showSettings: Record<string, unknown>): void {
-  const cast = showSettings.cast as LegacyCast | undefined
-  const dcas = cast?.dcas
-  if (dcas === undefined || showSettings.desk !== undefined) return
-
-  const unmuteOf = (dca: LegacyDca): LegacyMessage | null => dca.unmute ?? dca.mute ?? null
-  const patched = dcas.map(unmuteOf)
-  if (patched.every(message => message === null)) {
-    if (dcas.length > 0) showSettings.desk = { ...defaultShowSettings().desk, kind: 'none' }
-    return
-  }
-
-  const firstOsc = patched.find((message): message is Extract<LegacyMessage, { kind: 'osc' }> =>
-    message?.kind === 'osc')
-  const firstMidi = patched.find((message): message is Extract<LegacyMessage, { kind: 'midi' }> =>
-    message?.kind === 'midi')
-
-  if (firstOsc !== undefined) {
-    const pattern = addressPattern(firstOsc.address ?? '', 1)
-    showSettings.desk = {
-      ...defaultShowSettings().desk,
-      kind: 'osc',
-      host: firstOsc.host ?? '127.0.0.1',
-      port: firstOsc.port ?? 8000,
-      address: pattern
-    }
-  } else if (firstMidi !== undefined) {
-    showSettings.desk = {
-      ...defaultShowSettings().desk,
-      kind: 'midi',
-      midiPort: firstMidi.portName ?? '',
-      midiChannel: firstMidi.message?.channel ?? 1
-    }
-  }
-
-  const kind = (showSettings.desk as { kind: string } | undefined)?.kind
-  dcas.forEach((dca, index) => {
-    const message = patched[index]
-    if (message === null) return
-    if (kind === 'osc' && message.kind === 'osc') dca.address = message.address ?? null
-    if (kind === 'midi' && message.kind === 'midi') dca.note = message.message?.note ?? index + 1
-    delete dca.mute
-    delete dca.unmute
-  })
-}
-
-/**
- * The address pattern a show was driving its DCAs with: the DCA whose own number sat in
- * `/dca/7/mute` becomes `/dca/{n}/mute`, and an address with no number in it comes back
- * unchanged — which leaves every DCA carrying its address as an override, since none of
- * them is the pattern.
- */
-function addressPattern(address: string, number: number): string {
-  const token = new RegExp(`(?<![0-9])${number}(?![0-9])`)
-  return token.test(address) ? address.replace(token, '{n}') : address
-}
-
-function migrateCast(showSettings: Record<string, unknown> | undefined): void {
-  if (!showSettings) return
-  migratePlotCast(showSettings)
-  migrateChannelRouting(showSettings)
-  migrateDesk(showSettings)
 }
 
 // ─── Cue grouping ─────────────────────────────────────────────────────────────
@@ -332,8 +51,8 @@ function migrateCast(showSettings: Record<string, unknown> | undefined): void {
 // or damaged file can disagree with both — children scattered through the list, a cue
 // naming a group that is not there, groups that lead back into each other — and then a
 // walk either mis-fires on a child where it does not sit or never reaches a cue at all.
-// The damage is repaired as the file is read, by one normaliser in the migration funnel,
-// rather than worked around in every walk. What it moved is reported through the
+// The damage is repaired as the file is read, by one normaliser in the load funnel, rather
+// than worked around in every walk. What it moved is reported through the
 // optional out-array, the way media resolution reports the files it could not find.
 
 /** The one-line wording of each repair on the load, read by the bar's dialog. */
@@ -348,12 +67,14 @@ const LOAD_REPAIR_DETAIL: Record<LoadNote['kind'], string> = {
 /**
  * Repairs a cue list's grouping and returns the running order the walks expect, in three
  * passes: dissolve parents that name nothing (or a cue that is not a group), dissolve
- * parent loops, then gather every group's subtree into one block behind it. Sibling and
- * top-level relative order is preserved, and the rebuild of an already well-formed array
- * is that array — the repair is a fixed point. The gather works on cue objects and
- * carries an emitted guard, so a file with a repeated id neither drops nor duplicates a
- * cue. Nothing but `parentId` and the order is touched; inside a timeline group the
- * offsets stay authoritative and are left exactly as they were.
+ * parent loops, then gather every group's subtree into one block behind it. A cue whose
+ * `parentId` is absent names no parent at all: the key is set and nothing is reported,
+ * because a repair nobody's file needed is not a repair. Sibling and top-level relative
+ * order is preserved, and the rebuild of an already well-formed array is that array — the
+ * repair is a fixed point. The gather works on cue objects and carries an emitted guard, so
+ * a file with a repeated id neither drops nor duplicates a cue. Nothing but `parentId` and
+ * the order is touched; inside a timeline group the offsets stay authoritative and are left
+ * exactly as they were.
  */
 function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
   const note = (cueId: string, kind: LoadNote['kind']): void => {
@@ -374,6 +95,14 @@ function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
   // returns to the top level, keeping its place among the top-level cues, and fires with
   // the show.
   for (const cue of cues) {
+    // A cue with no `parentId` key at all names nothing, so there is no repair to report:
+    // it is a top-level cue already, and only the key is set. This build always writes one
+    // — a hand-made file that leaves it out is not damage, and a load must not claim it
+    // repaired something nobody wrote wrong.
+    if (cue.parentId === undefined) {
+      cue.parentId = null
+      continue
+    }
     if (cue.parentId === null) continue
     const parent = byId.get(cue.parentId)
     if (parent !== undefined && parent.type === 'group') continue
@@ -485,7 +214,100 @@ function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
   return ordered
 }
 
-export function migrateWorkspace(workspace: Workspace, notes?: LoadNote[]): Workspace {
+/** Every section the saved form declares, as a file's own top level is read with it. */
+const DECLARED_SECTIONS: Record<string, true> = Object.fromEntries(
+  WORKSPACE_SECTIONS.map(section => [section.key, true])
+)
+
+/** Every section a show's settings carry, from the one declaration of them. */
+const DECLARED_SHOW_SECTIONS: Record<string, true> = Object.fromEntries(
+  SHOW_SETTINGS_SECTIONS.map(section => [section, true])
+)
+
+/**
+ * Refuses a document whose shape this build does not write. Two levels are checked: the
+ * file's own top level, where a section this build does not declare is the fact, and a
+ * `showSettings` the file does carry, which has to carry exactly the declared sections —
+ * one this build does not declare, or one it leaves out, refuses rather than being filled
+ * in. A `showSettings` that is there and is not a set of sections is refused the same way,
+ * so the operator gets a sentence rather than the fault `Object.keys` throws at a null or
+ * the `in` operator at a number.
+ *
+ * What is absent and legal is not checked. The keys such a document omits split in two: a
+ * workspace with no history and no guard is this build's own write, and a workspace with no
+ * settings section is one it reads — this build's saves always carry one, and a file that
+ * does not is completed by the window's own defaults, not by anything here. Either way the
+ * check is what the document carries, so a declared key it omits stays fine.
+ *
+ * The sentence names the source the bytes came from — a path, or the bundle entry a
+ * showfile came out of, handed in by the caller — because the operator has to know which
+ * file to look at, and the funnel is the only place that knows what the fact is.
+ */
+function refuseUnknownShape(workspace: Workspace, source: string): void {
+  if (workspace.version !== 1) {
+    // What is checked is the format's own literal — declared once, on the `Workspace` type,
+    // and written by every writer — not a choice this build makes: a document that says
+    // anything else speaks a format this build has no shape for. Named as JSON, so a number
+    // is told from a string, and a key the file did not carry at all is said as nothing
+    // rather than as `undefined`.
+    const version = workspace.version === undefined ? 'nothing' : JSON.stringify(workspace.version)
+    throw new Refusal(
+      `that show says version ${version} and this build writes version 1` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+  for (const key of Object.keys(workspace)) {
+    if (DECLARED_SECTIONS[key] === true) continue
+    throw new Refusal(
+      `that show has a section this version of WinsLab does not know (${key})` +
+      ` — ${source} was probably saved by a newer version`
+    )
+  }
+  const settings = workspace.showSettings as unknown
+  if (settings === undefined) return
+  if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
+    const carried = settings === null ? 'nothing' : JSON.stringify(settings)
+    throw new Refusal(
+      `that show’s settings are not the sections this version of WinsLab writes` +
+      ` — ${source} carries ${carried} instead`
+    )
+  }
+  const sections = settings as Record<string, unknown>
+  for (const key of Object.keys(sections)) {
+    if (DECLARED_SHOW_SECTIONS[key] === true) continue
+    throw new Refusal(
+      `that show’s settings have a section this version of WinsLab does not know (${key})` +
+      ` — ${source} was probably saved by a newer version`
+    )
+  }
+  for (const section of SHOW_SETTINGS_SECTIONS) {
+    if (section in sections) continue
+    throw new Refusal(
+      `that show’s settings have no ${section} section, which this version of WinsLab writes` +
+      ` — ${source} was probably saved by an older build`
+    )
+  }
+}
+
+/** A document as the window holds it: its settings read with this build's defaults in. */
+const asHeld = (workspace: Workspace): Workspace => ({
+  ...workspace,
+  showSettings: heldShowSettings(workspace.showSettings)
+})
+
+/**
+ * The funnel every set of workspace bytes goes through: what this build wrote, it
+ * reads; what it does not know, it refuses — naming the source it came from and the fact,
+ * as a `Refusal` value, with the file on disk untouched. There is no migration here: an
+ * older file refusing to load is the accepted outcome, not a regression, because the
+ * alternative is silently reinterpreting a show nobody wrote.
+ *
+ * What a load does normalise is the grouping repair alone — a file this build wrote and
+ * something damaged — reported through the notes out-array beside missing media. Nothing
+ * wider is repaired, and loading never writes a file.
+ */
+export function migrateWorkspace(workspace: Workspace, source: string, notes?: LoadNote[]): Workspace {
+  refuseUnknownShape(workspace, source)
   // A cue type this build has never heard of — a file from a newer build, or a hand
   // edit — cannot be drawn: the row renders its icon from the type and the whole window
   // goes down with it. Nothing is thrown away quietly either, because a show saved back
@@ -496,52 +318,11 @@ export function migrateWorkspace(workspace: Workspace, notes?: LoadNote[]): Work
   if (unknown !== undefined) {
     throw new Refusal(
       `that show has a cue this version of WinsLab does not know (${String(unknown.type)})` +
-      ' — it was probably saved by a newer version'
+      ` — ${source} was probably saved by a newer version`
     )
   }
 
-  // Pass 1: normalize all cues
-  const cues = workspace.cues.map(c => migrateCue(c as Cue & Record<string, unknown>))
-
-  // Pass 2: convert legacy childIds → parentId
-  // Groups that still have childIds haven't been converted yet
-  const needsConversion = cues.filter(
-    c => c.type === 'group' && Array.isArray(legacyFields(c).childIds)
-  )
-
-  for (const group of needsConversion) {
-    const childIds: string[] = legacyFields(group).childIds as string[]
-    // Mark children with this parentId
-    for (const cue of cues) {
-      if (childIds.includes(cue.id)) cue.parentId = group.id
-    }
-    // Reorder: pull children out and re-insert immediately after the group
-    const children = childIds
-      .map(id => cues.find(c => c.id === id))
-      .filter((c): c is Cue => c !== undefined)
-    // Remove children from wherever they sit
-    for (const child of children) {
-      const i = cues.indexOf(child)
-      if (i > -1) cues.splice(i, 1)
-    }
-    // Re-insert after group (group index may have shifted)
-    const newGroupIdx = cues.findIndex(c => c.id === group.id)
-    cues.splice(newGroupIdx + 1, 0, ...children)
-    // Remove the now-obsolete childIds field
-    delete legacyFields(group).childIds
-  }
-
-  // The grouping is repaired last, so it sees the tree the legacy conversion built:
-  // childIds already became parent pointers and the children already follow their group.
-  workspace.cues = normalizeGrouping(cues, notes)
-  // Pass 3: the show's setup is brought forward to this build's shape — from the plot
-  // and the scenes section onto the cast, and from desk routing on performers and
-  // ensembles onto the channel strips that carry it now — before defaulting fills in a
-  // shape that already agrees with the new one.
-  migrateCast(workspace.showSettings as Record<string, unknown> | undefined)
-  // A workspace written before the show services existed has no port settings; the
-  // defaults bring it up listening where a new one would.
-  workspace.showSettings = normalizeShowSettings(workspace.showSettings)
+  workspace.cues = normalizeGrouping(workspace.cues, notes)
   // A workspace saved before the firing guard existed has none: it gets the default,
   // which is the window that keeps a bounced trigger from truncating a cue.
   workspace.triggerGuard = normalizeTriggerGuard(workspace.triggerGuard)
@@ -727,14 +508,31 @@ export function storedMediaPath(absolutePath: string, workspaceDir: string): str
  * A cue whose own path the stored pair does not name has no route of its own to keep —
  * the session was pointed at another file after that pair was read — so one is derived
  * from the path the cue holds now, exactly as for a cue that never carried a pair.
+ *
+ * The pair wins over the resolution when the pair's own route names the very file this
+ * session resolved: the show still points where it pointed, so the absolute half is the
+ * file's record rather than this machine's path — which is what keeps a show that ships
+ * beside its media byte-identical on every machine it is opened on, the demo included.
+ * That is only so while the pair's route is the route this save would write; a pair naming
+ * an absolute path for a file the folder being saved into holds is not written back, because
+ * `storedMediaPath` has the portable answer for exactly that file.
  */
 function savedMedia(cue: AudioCue, workspaceDir: string): MediaReference {
   const held = cue.filePath
+  const stored = storedPairOf(cue)
   if (isAbsolute(held)) {
     const route = storedMediaPath(held, workspaceDir)
-    if (route !== held) return { path: route, originalPath: held }
+    if (route !== held) {
+      // A pair whose own route names the very file this session resolved is kept — the pair
+      // is the show's record, which is what keeps a show that ships beside its media
+      // byte-identical on every machine — but only when that route is already the route this
+      // save would write. A pair recording an absolute path for a file the folder being saved
+      // into holds is not: `storedMediaPath` has the portable answer for that file, and
+      // writing the pair back would turn it into one machine's path.
+      if (stored && stored.path === route && resolve(workspaceDir, stored.path) === held) return stored
+      return { path: route, originalPath: held }
+    }
   }
-  const stored = storedPairOf(cue)
   if (stored && (held === stored.path || held === stored.originalPath)) return stored
   const absolutePath = isAbsolute(held) ? held : resolve(workspaceDir, held)
   return { path: storedMediaPath(absolutePath, workspaceDir), originalPath: absolutePath }
@@ -887,7 +685,8 @@ async function fileChangedOnDisk(filePath: string): Promise<boolean> {
 }
 
 /**
- * A showfile as it is on disk, migrated but not resolved: the stored form, which is what
+ * A showfile as it is on disk — read through the funnel, so this build knows the shape and
+ * has repaired a damaged grouping — but not resolved: the stored form, which is what
  * a comparison between two files has to look at — a diff of resolved workspaces would
  * compare this machine's paths with this machine's paths.
  *
@@ -904,7 +703,7 @@ export async function readWorkspaceFile(
   //
   // The file being unreadable, oversize or not JSON is an ordinary state of a file the
   // operator picked, so each is a refusal — a marked error the channels answer as a
-  // value — while the migration below keeps its own refusals and its bugs keep throwing.
+  // value — while the funnel below keeps its own refusals and its bugs keep throwing.
   let text: string
   // Only a session's own read wants an identity, and it is taken from the bytes as they
   // come off the disk — not from the decoded text, which a file that is not valid UTF-8
@@ -946,7 +745,7 @@ export async function readWorkspaceFile(
   if (!hasCueList(parsed)) {
     throw new Refusal(`that file is not a show — ${filePath} holds no cue list`)
   }
-  const workspace = migrateWorkspace(parsed, notes)
+  const workspace = migrateWorkspace(parsed, filePath, notes)
   // Recorded only once the read has produced a workspace: a file this build refuses is not
   // one a session was established over, and the identity describes the bytes a session is
   // built from — what the next save checks the disk against.
@@ -981,8 +780,10 @@ function whoSaved(): { by: string; machine?: string } {
  * with the file rather than with the window's memory of it: a caller that never asked
  * what was written must not be able to drop it by saving again.
  *
- * The comparison is against the file that is about to be replaced, migrated the way a
- * load migrates it, so an upgrade of the format is not reported as an edit. A file that
+ * The comparison is against the file that is about to be replaced, read through the same
+ * funnel a load uses, so the app's own bookkeeping — where a cue's media sits on this
+ * machine, and the settings section the window stands in for when a file carries none —
+ * is not reported as an edit. A file that
  * cannot be read is not an error here: there is simply nothing to compare against, and a
  * history entry is not worth failing a save for.
  */
@@ -1004,7 +805,18 @@ async function historyForSave(
   if (previous.id !== workspace.id) return carried
 
   const base = previous.history ?? []
-  const diff = diffWorkspaces(previous, migrateWorkspace(JSON.parse(contents) as Workspace))
+  // The window stands its own defaults in for a settings section a file does not carry, so a
+  // file's first save writes one it never had. That section is the app's, not the operator's:
+  // both sides are compared as the window holds them — `heldShowSettings`, the one place that
+  // rule lives — so the defaults are what such a file already meant, while a setting somebody
+  // changed inside them is still the change it is.
+  // `contents` is this build's own serialisation, so the funnel has nothing to refuse here;
+  // the file being replaced went through it above, where a refusal is the
+  // nothing-to-compare-against answer.
+  const diff = diffWorkspaces(
+    { ...previous, showSettings: heldShowSettings(previous.showSettings) },
+    asHeld(migrateWorkspace(JSON.parse(contents) as Workspace, filePath))
+  )
   const { by, machine } = whoSaved()
   const entry = historyEntry(diff, new Date().toISOString(), by, machine)
   return entry ? appendHistory(base, entry) : base
@@ -1193,7 +1005,7 @@ export async function openWorkspace(
   if (result.canceled || !result.filePaths[0]) return null
 
   const filePath = result.filePaths[0]
-  // The same read, cap and migration every other load path uses: File→Open is the way
+  // The same read, cap and funnel every other load path uses: File→Open is the way
   // most shows arrive, and a 500 MB one must be refused here too — as the ordinary state
   // it is, so the channel can answer it instead of logging a stack.
   const loadNotes: LoadNote[] = []
@@ -1230,11 +1042,11 @@ export async function openRecovery(): Promise<{
 } | null> {
   const snapshot = await readRecovery()
   if (!snapshot) return null
-  // A session that died on an older build leaves an older snapshot: it comes back
-  // through the same migration every other file does, or a pre-parentId one would
-  // return groups with no children and a show section whose panels cannot be read.
+  // A session that died on another build leaves a snapshot this one may not know: it goes
+  // through the same funnel every other file does, and a shape this build does not write
+  // is refused by name like any other file's.
   const loadNotes: LoadNote[] = []
-  const workspace = migrateWorkspace(snapshot.workspace, loadNotes)
+  const workspace = migrateWorkspace(snapshot.workspace, recoveryFilePath(), loadNotes)
   // The file this session was built from gets its identity back before the session is on
   // screen: the snapshot's own record of it speaks for a crash that left no process
   // behind, so a file changed while the app was dead is a change the recovered save can
@@ -1372,10 +1184,17 @@ export async function compareWithFile(
   otherPath: string
 ): Promise<WorkspaceComparison> {
   const other = await readWorkspaceFile(otherPath)
+  // Both sides go through the one funnel, which is what makes a comparison honest; the
+  // window's side is this build's own serialisation, so there is nothing there to refuse.
   const mine = migrateWorkspace(
-    JSON.parse(serialiseWorkspace(workspace, dirname(otherPath))) as Workspace
+    JSON.parse(serialiseWorkspace(workspace, dirname(otherPath))) as Workspace,
+    otherPath
   )
-  return { path: otherPath, diff: diffWorkspaces(other, mine) }
+  // And both sides are compared as the window holds them: a document that has never written
+  // a settings section is read as this build's defaults for the sections it leaves out, so a
+  // file that has not got one is not reported as that whole section changing. What is
+  // reported is what a person typed — the comparison's own promise.
+  return { path: otherPath, diff: diffWorkspaces(asHeld(other), asHeld(mine)) }
 }
 
 /**
@@ -1411,7 +1230,7 @@ const MERGE_REPAIR_DETAIL: Record<LoadNote['kind'], (source: string) => string> 
 /**
  * The notes a read repaired one of the merge's input files with, as rows of the merge's
  * own report: the cue is named by the file it came from, and the wording says which file.
- * Without this the repair would have happened silently — the migration nulls a dangling
+ * Without this the repair would have happened silently — the funnel nulls a dangling
  * parent before the merge's own parent repair ever sees it.
  */
 function repairRows(notes: LoadNote[], file: Workspace, source: string): MergeNote[] {

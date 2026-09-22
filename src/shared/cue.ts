@@ -90,7 +90,7 @@ export interface CueBase {
   notes: string
   /**
    * What fires this cue besides GO. Optional on disk: a workspace saved before triggers
-   * existed has none, and the migration fills the list in.
+   * existed has none, and nothing fills it in — a cue with no list answers to GO alone.
    */
   triggers?: CueTrigger[]
   /**

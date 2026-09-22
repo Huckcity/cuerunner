@@ -9,6 +9,208 @@
   "midiSettings": {
     "outputPortName": ""
   },
+  "showSettings": {
+    "oscIn": {
+      "enabled": true,
+      "port": 53000
+    },
+    "midiIn": {
+      "enabled": false,
+      "portNames": []
+    },
+    "desk": {
+      "kind": "osc",
+      "profile": "note",
+      "midiPort": "",
+      "midiChannel": 1,
+      "host": "127.0.0.1",
+      "port": 8000,
+      "tcpPort": 51325,
+      "address": "/dca/{n}/on",
+      "buttons": {
+        "go": null,
+        "back": null,
+        "goNote": null,
+        "backNote": null
+      }
+    },
+    "rf": {
+      "plot": {
+        "packs": []
+      },
+      "sources": [],
+      "swaps": [],
+      "thresholds": {
+        "batteryWarning": 25,
+        "batteryCritical": 10,
+        "rfWarningDbm": -75,
+        "offlineAfterSeconds": 6
+      }
+    },
+    "presence": {
+      "enabled": false,
+      "services": [
+        "_netaudio-arc._udp.local",
+        "_netaudio-cmc._udp.local"
+      ],
+      "goneAfterSeconds": 30
+    },
+    "script": {
+      "path": "",
+      "fontSize": 13
+    },
+    "companion": {
+      "enabled": false,
+      "port": 53100,
+      "token": ""
+    },
+    "scenes": {
+      "list": []
+    },
+    "cast": {
+      "channels": [
+        {
+          "id": "channel-1",
+          "name": "",
+          "dcaId": "dca-1"
+        },
+        {
+          "id": "channel-2",
+          "name": "",
+          "dcaId": "dca-2"
+        },
+        {
+          "id": "channel-3",
+          "name": "",
+          "dcaId": "dca-3"
+        },
+        {
+          "id": "channel-4",
+          "name": "",
+          "dcaId": "dca-4"
+        },
+        {
+          "id": "channel-5",
+          "name": "",
+          "dcaId": "dca-5"
+        },
+        {
+          "id": "channel-6",
+          "name": "",
+          "dcaId": "dca-6"
+        },
+        {
+          "id": "channel-7",
+          "name": "",
+          "dcaId": "dca-7"
+        },
+        {
+          "id": "channel-8",
+          "name": "",
+          "dcaId": "dca-8"
+        },
+        {
+          "id": "channel-9",
+          "name": "",
+          "dcaId": "dca-9"
+        },
+        {
+          "id": "channel-10",
+          "name": "",
+          "dcaId": "dca-10"
+        },
+        {
+          "id": "channel-11",
+          "name": "",
+          "dcaId": "dca-11"
+        },
+        {
+          "id": "channel-12",
+          "name": "",
+          "dcaId": "dca-12"
+        }
+      ],
+      "performers": [],
+      "ensembles": [],
+      "dcas": [
+        {
+          "id": "dca-1",
+          "label": "DCA 1",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-2",
+          "label": "DCA 2",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-3",
+          "label": "DCA 3",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-4",
+          "label": "DCA 4",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-5",
+          "label": "DCA 5",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-6",
+          "label": "DCA 6",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-7",
+          "label": "DCA 7",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-8",
+          "label": "DCA 8",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-9",
+          "label": "DCA 9",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-10",
+          "label": "DCA 10",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-11",
+          "label": "DCA 11",
+          "note": null,
+          "address": null
+        },
+        {
+          "id": "dca-12",
+          "label": "DCA 12",
+          "note": null,
+          "address": null
+        }
+      ]
+    }
+  },
+  "triggerGuard": {
+    "windowMs": 300
+  },
   "cues": [
     {
       "id": "5c6446b6-7aab-4969-aff6-2c2c7ff27378",
@@ -28,10 +230,16 @@
       "startTime": 0,
       "endTime": null,
       "fadeInDuration": 800,
-      "outputs": [{ "volume": 0.8, "pan": 0 }],
+      "volume": 0.8,
+      "pan": 0,
+      "outputs": null,
       "loopCount": 0,
       "playbackRate": 1,
-      "trim": 1
+      "trim": 1,
+      "media": {
+        "path": "walk-in.wav",
+        "originalPath": ""
+      }
     },
     {
       "id": "3210b2e4-ea73-40dd-a6de-fa974471a083",
@@ -79,7 +287,13 @@
       "isArmed": true,
       "notes": "Sends a program change. No port is set on this cue, so it uses the default port from Settings — pick one on the MIDI tab.",
       "portName": "",
-      "messages": [{ "kind": "programChange", "channel": 1, "program": 12 }]
+      "messages": [
+        {
+          "kind": "programChange",
+          "channel": 1,
+          "program": 12
+        }
+      ]
     },
     {
       "id": "e3a4b760-7d38-41d0-acb6-87f67ae226c9",
@@ -99,8 +313,14 @@
       "port": 53000,
       "address": "/lx/12",
       "args": [
-        { "type": "i", "value": 12 },
-        { "type": "f", "value": 3.5 }
+        {
+          "type": "i",
+          "value": 12
+        },
+        {
+          "type": "f",
+          "value": 3.5
+        }
       ]
     },
     {
@@ -120,7 +340,10 @@
       "method": "POST",
       "url": "http://127.0.0.1:8080/scene",
       "body": "{\"scene\": 3}",
-      "headers": { "Content-Type": "application/json", "X-Show": "demo" },
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Show": "demo"
+      },
       "timeout": 5000
     },
     {
@@ -141,10 +364,16 @@
       "startTime": 0,
       "endTime": null,
       "fadeInDuration": 300,
-      "outputs": [{ "volume": 0.6, "pan": -0.3 }],
+      "volume": 0.6,
+      "pan": -0.3,
+      "outputs": null,
       "loopCount": 0,
       "playbackRate": 1,
-      "trim": 1
+      "trim": 1,
+      "media": {
+        "path": "walk-in.wav",
+        "originalPath": ""
+      }
     },
     {
       "id": "489ef687-a8f7-4953-a71e-a262e29495bb",
@@ -181,7 +410,8 @@
       "isArmed": true,
       "notes": "JavaScript at a cue point. The script is an async function body, so await works; output goes to the log panel.",
       "language": "javascript",
-      "script": "console.log('house lights → warm')\nconst r = await shell('echo dimmer 80%')\nconsole.log(r.stdout.trim())"
+      "script": "console.log('house lights → warm')\nconst r = await shell('echo dimmer 80%')\nconsole.log(r.stdout.trim())",
+      "timeout": 60000
     },
     {
       "id": "0a27d824-c36e-47b8-936b-d9735c742b15",
@@ -232,10 +462,16 @@
       "startTime": 0,
       "endTime": null,
       "fadeInDuration": 500,
-      "outputs": [{ "volume": 0.7, "pan": 0 }],
+      "volume": 0.7,
+      "pan": 0,
+      "outputs": null,
       "loopCount": 0,
       "playbackRate": 1,
-      "trim": 1
+      "trim": 1,
+      "media": {
+        "path": "walk-in.wav",
+        "originalPath": ""
+      }
     },
     {
       "id": "438df1ee-efd1-4ee3-a7a7-2d18c02d2cb9",
@@ -270,10 +506,16 @@
       "startTime": 0,
       "endTime": null,
       "fadeInDuration": 200,
-      "outputs": [{ "volume": 0.7, "pan": 0 }],
+      "volume": 0.7,
+      "pan": 0,
+      "outputs": null,
       "loopCount": 0,
       "playbackRate": 1,
-      "trim": 1
+      "trim": 1,
+      "media": {
+        "path": "walk-in.wav",
+        "originalPath": ""
+      }
     },
     {
       "id": "04a08b8f-8a58-4de5-b4ff-7d3df9faa2dd",
