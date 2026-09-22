@@ -187,22 +187,31 @@ test('a cancelled quit leaves the show services listening', async () => {
 })
 
 /**
- * The app's exit, watched from before the quit is asked for. Reached only through the
- * process itself: `app.evaluate` cannot be called once the app is gone, and it is the only
- * way to read the window count.
+ * The window closing, watched from before the quit is asked for. What that looks like is a
+ * platform fact: on Linux and Windows the last window closed quits the app, so the process
+ * is gone; on macOS the app stays up with no windows — `window-all-closed` does not quit
+ * there — and the window list is what says so. Both are read from main, because
+ * `app.evaluate` cannot be called once the process is going, and a window that never
+ * closes is a failed close rather than a test that hangs.
  */
-function whenExited(): Promise<boolean> {
-  const { promise, resolve } = Promise.withResolvers<boolean>()
+async function whenWindowClosed(): Promise<boolean> {
   const proc = app.process()
-  // A window that never closes is a failed close, not a test that hangs.
-  const deadline = setTimeout(() => resolve(false), 15_000)
-  const exited = (): void => {
-    clearTimeout(deadline)
-    resolve(true)
+  const deadline = Date.now() + 15_000
+  for (;;) {
+    if (proc.exitCode !== null || proc.signalCode !== null) return true
+    try {
+      if (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length) === 0) {
+        return true
+      }
+    } catch {
+      // The app is on its way out: the exit flags above are the answer, read on the next
+      // turn of this loop.
+    }
+    if (Date.now() > deadline) return false
+    const { promise: tick, resolve: tock } = Promise.withResolvers<void>()
+    setTimeout(tock, 100)
+    await tick
   }
-  if (proc.exitCode !== null || proc.signalCode !== null) exited()
-  else proc.once('exit', exited)
-  return promise
 }
 
 /** A show on disk, opened the way an operator opens one: from the File menu's recent list. */
@@ -235,12 +244,12 @@ test('a quit answered Don’t Save closes the window and leaves the file alone',
       dialog.showMessageBox = (async () => ({ response: 1, checkboxChecked: false })) as typeof dialog.showMessageBox
     })
 
-    const exited = whenExited()
+    const closed = whenWindowClosed()
     await app.evaluate(({ app }) => app.quit())
 
     // The close is allowed through the pair's accept path (`app:confirm-close`), which is
     // what actually takes the window down; the answer was not Cancel, so nothing may wait.
-    expect(await exited, 'the window did not close when the close was answered').toBe(true)
+    expect(await closed, 'the window did not close when the close was answered').toBe(true)
     // And discarding the session is not writing it.
     expect(fs.readFileSync(file, 'utf-8')).toBe(onDisk)
   } finally {
@@ -263,9 +272,9 @@ test('a quit answered Save writes the show through the dialog and then closes', 
       dialog.showMessageBox = (async () => ({ response: 0, checkboxChecked: false })) as typeof dialog.showMessageBox
     }, file)
 
-    const exited = whenExited()
+    const closed = whenWindowClosed()
     await app.evaluate(({ app }) => app.quit())
-    expect(await exited, 'the window did not close after the save was answered').toBe(true)
+    expect(await closed, 'the window did not close after the save was answered').toBe(true)
 
     // The show was really written before the window went: the cue the operator added is in
     // the file, which is what the close prompt's Save promised.
