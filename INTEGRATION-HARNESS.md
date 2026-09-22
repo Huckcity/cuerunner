@@ -192,9 +192,11 @@ application, which is Windows/macOS-only and not automatable on the Linux runner
 in the app:
 
 - `DeskSettings.kind` gains `midi-tcp` with `tcpPort` beside the host it shares with the
-  OSC kind, and `DeskMessage` gains the matching variant; an older workspace is filled in
-  by the same `normalizeShowSettings` spread that fills every other new field, and the E2E
-  spec opens a file written without the field to prove it.
+  OSC kind, and `DeskMessage` gains the matching variant. Nothing fills a section in at
+  load any more: the shape is declared and checked, and a workspace whose settings carry one
+  section and not the rest is refused, naming the file and the section it has not got. The
+  E2E spec opens exactly that file and holds the refusal to the notice, to the path and to
+  the section's name, with the session left as the show it had.
 - `MidiTcpEngine` owns one socket per desk, frame it with `stream.ts`
   (running status, split messages, SysEx to `F7`) and encodes with the same `encode.ts`
   the port-based engine uses — one encoder, one framer, both unit-tested.

@@ -91,7 +91,9 @@ covered: a sequence group, a timeline group, audio with fades, MIDI, OSC, a netw
 script, and a stop cue. Open it from **Cuerunner ▾ → Open Demo Workspace**, or from the button in
 an empty cue list. It opens as an unsaved example (so Save asks where to put your copy, and
 never writes over the bundled file) and its audio is copied into the app's user data folder on
-open, which is where its cues read it from.
+open, which is where its cues read it from. That file is the serialiser's own output rather
+than a hand-written example: `src/main/workspace/demo.test.ts` records the recipe that produces
+it there, and holds a save of the freshly opened demo to the bytes it was opened with.
 
 ### Development Commands
 
@@ -517,9 +519,10 @@ Two properties of this file are load-bearing, and both are held by tests
   live in version control without every save being a diff.
 - **`history` records what a save changed, and only when it changed something.** Each entry
   names the cues added, removed, edited and moved and the settings that changed — not the old
-  values, which are in the file the save replaced. An unedited save appends nothing; bringing
-  an older file up to this version's shape is a change to the file rather than to the show and
-  is not recorded as an edit.
+  values, which are in the file the save replaced. An unedited save appends nothing, and no
+  edit is a conversion: show files are not converted, so a save has nothing of that kind to
+  record. The shape is declared and checked, and a file this build does not know is refused as
+  it opens, by name, with nothing on disk touched.
 
 An `.cuerunnerx` bundle is a zip holding `show.cuerunner` and a `media/` folder, with the showfile's media
 paths relative to the archive root. Entries are stored uncompressed in name order with fixed
@@ -528,17 +531,40 @@ the way out. A bundle carries up to about 4 GB of media — the format's limit w
 extension, which this app does not write — and a show bigger than that is refused with a
 sentence rather than written as an archive whose directory lies about its own offsets.
 
-`WorkspaceManager` (main process) handles I/O and auto-migrates legacy fields on load: old
-`childIds` arrays become `parentId` pointers, missing timing fields are filled with defaults,
-the pre-`advance` `autoContinue`/`autoFollow` flags are dropped, a stop cue without
-`waitForFade` gains `false`, and the retired per-output `deviceId` and `channelPair` fields are
-dropped.
+`WorkspaceManager` (main process) handles I/O. The shape is declared once, in
+`src/shared/workspaceSections.ts` — the top-level sections and the sections a show's settings
+carry — and every set of workspace bytes goes through one call that checks it, wherever a file
+is read: a show opened from the recent list or the dialog, a bundle's show entry, a
+comparison's other side, a recovery snapshot, the demo. A file this build does not know is
+refused — naming the file and the fact, with what is on disk untouched — and a show file is
+never converted, so an older file refusing to load is the accepted outcome rather than a
+regression. One read is the exception, and it is the save's own: a save about to replace a file
+it cannot read keeps the history it already had and replaces the file anyway.
+
+A file is unknown when it is not JSON, when it carries no cue list, when its `version` is not
+1, when it has a top-level section this build does not declare, when a cue type is outside the
+declared set, when its settings carry a section this build does not declare, when its settings
+leave out a section this build writes — which is what a show saved by an older build meets —
+or when what sits under `showSettings` is not a set of sections at all. What is absent is not
+checked, because the check reads what the document carries: a file that omits `history`,
+`audioSettings`, `midiSettings`, `showSettings` or `triggerGuard` reads, with the window standing
+its own defaults in for the sections a file has not got and a load completing the one gate a file
+carries none of, `triggerGuard`. A `showSettings` that is there is different, though: it has to be
+exactly the declared sections, and one this build does not declare, or one the file leaves out,
+is a refusal rather than a default. Loading repairs a damaged cue grouping and reports it as a
+note beside missing media, and it writes no file.
+
+The shape is held by tests — `src/main/workspace/migrate.test.ts` for the refusals and what a
+load still does, `src/main/workspace/funnel.test.ts` for one case per entry point,
+`e2e/desk-tcp.spec.ts` for a refused file reaching the window with the session left as it was —
+and the sentences here, among the sites `scripts/showfile-prose.test.ts` reads.
 
 ## Testing
 
 - **Unit Tests**: `npm test` (Vitest, jsdom environment)
   - Covers: CueRunner sequencing, store actions, audio playback, utilities
-  - Location: `src/**/*.test.ts`
+  - Location: `src/**/*.test.ts`, and the repository guards beside them in `scripts/**/*.test.ts`
+    — `scripts/showfile-prose.test.ts` holds the workspace-format sentences above
   - Fakes timers for deterministic timing tests
 - **E2E Tests**: `npm run test:e2e` (Playwright, requires build)
   - Tests UI interactions, drag/drop, playback flow

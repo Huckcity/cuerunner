@@ -3,6 +3,27 @@
 // folder. Electron is not available here, so the loader is imported with it stubbed — with
 // a real temporary user-data folder and a packaged flag a test can turn on, because the
 // demo's own path is the one part of it that depends on where the app was installed.
+//
+// The shipped bytes are the serialiser's output for the show they hold, and this is the
+// recipe that produces them, run inside that stubbed harness because every module it names
+// reaches Electron through its own imports:
+//
+//   1. Read `resources/demo/Demo Show.cuerunner` and parse it.
+//   2. Stand this build's defaults in through `heldShowSettings` (`src/shared/show.ts`) —
+//      the object the window holds, which is the object the serialiser writes. For the file as
+//      it ships the step changes nothing: its settings carry every declared section, it carries
+//      its `triggerGuard`, and the one declared key it goes without is `history`, which a show
+//      earns with the first save that changes something. The step is here for what that means:
+//      the recipe writes the window's object, so it stays the recipe if a section ever leaves
+//      the file or a default moves.
+//   3. Write it back with `serialiseWorkspace` (`./WorkspaceManager`), in the folder the show
+//      lives in: that folder is the route its audio cues are written against, which is what
+//      keeps them workspace-relative.
+//
+// No tool regenerates the file — the recipe is here to be followed by hand — and the last
+// case holds the equivalence it promises: the demo opened through `openDemoWorkspace` and
+// saved through `saveWorkspace` writes the bytes it was opened with, so the shipped file,
+// the loader, the serialiser and a save of the freshly opened demo cannot drift apart.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { copyFileSync, existsSync, readFileSync } from 'fs'
