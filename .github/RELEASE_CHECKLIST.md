@@ -65,7 +65,8 @@ its artifacts are.
       admit, so a run started that way publishes exactly what the dispatch would have published.
 - [ ] Confirm the packaging run went against that tag, that the notes' section names every
       installer's state, and that the Windows, macOS and Linux installers on the release page and
-      in `latest/` are exactly the files that section accounts for.
+      in `latest/` are exactly the files that section accounts for, with the `SHA256SUMS` the
+      section names sitting beside them on the page.
 - [ ] **Check that the mirror the site's cards point at serves them.** `pub.winslabapp.com` is
       the buyer-facing host, and nothing in the pipeline can see it from the inside:
 
@@ -73,12 +74,37 @@ its artifacts are.
       curl -sI https://pub.winslabapp.com/latest/Cuerunner-Setup.exe
       curl -sI https://pub.winslabapp.com/latest/Cuerunner.dmg
       curl -sI https://pub.winslabapp.com/latest/Cuerunner.AppImage
+      curl -sI https://pub.winslabapp.com/latest/SHA256SUMS
       ```
 
-      Each has to answer `200`. A `404` after a green packaging run points at the R2 bucket or
-      its public hostname — the `R2_*` secrets and Cloudflare's side — rather than at this
-      pipeline, and is to be reported rather than worked around.
+      The four names are the mirror's, not the notes' build names: the cards link these, and a
+      release whose Windows installer the ASIO gate withheld has no
+      `latest/Cuerunner-Setup.exe` at all. Each of the three file names has to answer `200` when
+      the notes list its installer as published, and `404` when they list it as withheld — not a
+      `200` with an earlier release's file behind it, which is the state the mirror now rules out
+      by deleting each name it writes that this release did not copy. `latest/SHA256SUMS` always
+      answers `200`: it is the one file the mirror composes rather than copies, naming the digest
+      of each file it wrote under the name the cards link. Check the served bytes against it:
+
+      ```bash
+      curl -s https://pub.winslabapp.com/latest/Cuerunner.dmg | sha256sum
+      ```
+
+      The digest that prints has to be the one `latest/SHA256SUMS` carries for `Cuerunner.dmg`;
+      the release page attaches a `SHA256SUMS` of its own, and that one names the assets as that
+      page carries them (`Cuerunner Setup 0.14.0.exe` and the like), so the two files are not
+      interchangeable — check a download against the list that sits beside it. Deleting needs
+      the R2 token to permit delete: a red `upload-r2` whose log shows a refused `aws s3 rm`
+      means the token lost that permission, and the earlier release's file is still standing at
+      the name a card serves until the token is granted it again and the job is re-run. A `404`
+      for a published name, a `200` for a withheld one, or a missing `SHA256SUMS` after a green
+      packaging run points at the R2 bucket or its public hostname — the `R2_*` secrets and
+      Cloudflare's side — rather than at this pipeline, and is to be reported rather than worked
+      around.
 - [ ] **A release page with no assets means no packaging run happened, or the one that ran
-      failed.** Check `gh run list --workflow=build.yml --limit 2` for a run against the tag
-      before announcing anything, and read a red run as the cause: a packaging run that failed
-      leaves the release page and `latest/` exactly as they were.
+      failed before its publishing jobs.** Check `gh run list --workflow=build.yml --limit 2` for
+      a run against the tag before announcing anything, and read a red run as the cause: a run
+      that failed before `release` and `upload-r2` leaves the release page and `latest/` exactly
+      as they were. A run that reached the mirror and failed in it is the other case — the page
+      may already carry the release while `latest/` holds part of it — so re-run that job (or
+      dispatch `build.yml` for the tag again) rather than assuming nothing landed.

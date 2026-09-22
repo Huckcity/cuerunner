@@ -135,7 +135,7 @@
         <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
         <li>The tablet view is read-only by design.</li>
-        <li>Cuerunner is not code-signed for the app stores, so the first launch warns about an unidentified developer.</li>
+        <li>Cuerunner is distributed outside the app stores, and the release notes say whether a build is signed: Windows warns when an unsigned installer is run, and macOS warns about an unidentified developer at first launch — Gatekeeper refuses such an app on a machine that has not seen it. Each release publishes its digests twice: a <code>SHA256SUMS</code> beside the assets on its release page, naming the files that page carries, and <code>latest/SHA256SUMS</code> on the download host, naming the files the cards link.</li>
         <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>
       </ul>
     </section>

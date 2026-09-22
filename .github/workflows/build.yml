@@ -391,9 +391,10 @@ jobs:
     # would be a page its own notes cannot describe.
     if: github.ref_type == 'tag' && success()
     runs-on: [self-hosted, linux, x64, ubox]
-    # The list the release page and the R2 mirror both read, composed once, below.
+    # The lists the release page and the R2 mirror each read, composed once, below.
     outputs:
       files: ${{ steps.notes.outputs.files }}
+      mirror: ${{ steps.notes.outputs.mirror }}
     permissions:
       contents: write
     steps:
@@ -401,11 +402,11 @@ jobs:
         with:
           path: artifacts
 
-      # The notes and the file list are composed together, from what each packaging job
-      # recorded: whether a certificate signed an installer comes from the secret that gated
-      # signing, and whether the Windows build linked the SDK comes from its probe — never
-      # from text written here. One recording decides what this page carries, what the notes
-      # say about it and what the mirror copies, so the three cannot disagree.
+      # The notes, the file list and the digests are composed together, from what each packaging
+      # job recorded: whether a certificate signed an installer comes from the secret that gated
+      # signing, and whether the Windows build linked the SDK comes from its probe — never from
+      # text written here. One recording decides what this page carries, what the notes say
+      # about it, what the mirror copies and what the digests name, so they cannot disagree.
       - name: Compose the state section and the file list
         id: notes
         env:
@@ -420,10 +421,11 @@ jobs:
           set -eu
 
           # This run's own files, created rather than appended to: a reused self-hosted workspace
-          # can still hold the previous run's notes and list, and what is published has to be
-          # what this run recorded.
+          # can still hold the previous run's notes, list and digests, and what is published has
+          # to be what this run recorded.
           : > release-notes.md
           : > release-files.txt
+          : > SHA256SUMS
 
           # The path the download step left a recorded file at. A name no artifact holds is a
           # failure rather than a missing line: one recording decides the notes, the release
@@ -440,12 +442,19 @@ jobs:
             printf '%s\n' "$found"
           }
 
-          # One artifact: the sentence the notes carry about it, and the path the release page
-          # and the mirror take it from — added together, so neither can name what the other
-          # does not, and the notes cannot describe a file this release does not carry.
+          # One artifact: the sentence the notes carry about it, the path the release page and
+          # the mirror take it from, and its digest — added together, so neither surface can
+          # name what the other does not, the notes cannot describe a file this release does not
+          # carry, and the sums file cannot name bytes this run never published.
           publish() {
             printf -- '- %s\n' "$2" >> release-notes.md
-            located "$1" "$3" >> release-files.txt
+            found=$(located "$1" "$3")
+            printf '%s\n' "$found" >> release-files.txt
+            # `sha256sum` writes coreutils' own `<digest>  <name>` line for the file in its own
+            # directory, under the basename the release page carries it by: the digest is read
+            # from the bytes this run located, never typed, and a reader can check the file they
+            # downloaded against the line attached beside the notes.
+            (cd "$(dirname "$found")" && sha256sum "$(basename "$found")") >> SHA256SUMS
           }
 
           # The section itself, appended to semantic-release's body: it says where the states
@@ -461,7 +470,8 @@ jobs:
           $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — from what its jobs
           recorded: the certificate secrets that gate signing, and the ASIO SDK probe. So an
           installer nobody signed says so here, and the files this page carries, and the ones the
-          download mirror serves, are exactly the list below.
+          download mirror serves, are exactly the list below — the \`SHA256SUMS\` attached beside
+          them carries each file's digest, so a download can be checked against this page.
 
           SECTION
 
@@ -484,7 +494,7 @@ jobs:
             esac
             publish "$WINDOWS_INSTALLER" "**Windows**: \`$WINDOWS_INSTALLER\` — $windows" 'build-windows'
           elif [ "$WINDOWS_ASIO" = 'on' ]; then
-            withheld="- **Windows**: no installer is published. This build linked Steinberg's ASIO SDK and \`native/audio/third_party/ASIO-AGREEMENT.md\` records no signed agreement, which is what publishing a build against the SDK requires — so the installer is withheld from this page and from the download mirror."
+            withheld="- **Windows**: no installer is published. This build linked Steinberg's ASIO SDK and \`native/audio/third_party/ASIO-AGREEMENT.md\` records no signed agreement, which is what publishing a build against the SDK requires — so the installer is withheld from this page, and the download mirror removes the name the Windows card points at: that card answers 404 until a release carries the file again."
             printf -- '%s\n' "$withheld" >> release-notes.md
           else
             echo '::error::build-windows published no installer without the ASIO SDK being on, and nothing in this run explains that: no release is composed from a recording that contradicts itself'
@@ -516,11 +526,20 @@ jobs:
             exit 1
           fi
 
+          # Two lists off the one recording: what the release page carries — the located files
+          # and the sums file composed from them — and what the mirror copies, the located files
+          # alone. The mirror is handed its own list because it writes its own names and composes
+          # its own sums under them, and because a list naming a file no suffix places is how a
+          # mirror comes to carry something the release page does not.
           {
             printf 'body=release-notes.md\n'
             printf 'files<<RELEASE_FILES\n'
             cat release-files.txt
+            printf '%s\n' SHA256SUMS
             printf 'RELEASE_FILES\n'
+            printf 'mirror<<RELEASE_MIRROR\n'
+            cat release-files.txt
+            printf 'RELEASE_MIRROR\n'
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
@@ -553,7 +572,7 @@ jobs:
           R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
           TAG: ${{ github.ref_name }}
-          FILES: ${{ needs.release.outputs.files }}
+          FILES: ${{ needs.release.outputs.mirror }}
         run: |
           set -eu
           # The list the notes were composed from, copied file by file. There is no search
@@ -562,18 +581,53 @@ jobs:
           #
           # The site's download cards name these three files, so the mirror keeps its own names
           # whatever the build called them; one universal dmg, because the stapler validates
-          # the file that ships rather than one architecture of two.
+          # the file that ships rather than one architecture of two. The names are declared once,
+          # as suffix→name pairs: the copy loop's `case` resolves a file through them and the
+          # removals below read the same pairs, so a rename cannot land on one half alone.
+          NAMES='exe=Cuerunner-Setup.exe dmg=Cuerunner.dmg AppImage=Cuerunner.AppImage'
+
+          # This run's own sums file, created rather than appended to: a reused workspace can
+          # still hold the previous run's digests, and what a buyer checks has to be what this
+          # run copied.
+          : > SHA256SUMS
+
+          published=''
           while IFS= read -r file; do
             [ -n "$file" ] || continue
-            case "$file" in
-              *.exe) name=Cuerunner-Setup.exe ;;
-              *.dmg) name=Cuerunner.dmg ;;
-              *.AppImage) name=Cuerunner.AppImage ;;
-              *)
-                echo "::error::$file is published under a name this mirror cannot place"
-                exit 1
-                ;;
-            esac
+            name=''
+            for pair in $NAMES; do
+              case "$file" in
+                *."${pair%%=*}") name="${pair#*=}" ;;
+              esac
+            done
+            if [ -z "$name" ]; then
+              echo "::error::$file is published under a name this mirror cannot place"
+              exit 1
+            fi
             aws s3 cp "$file" "s3://$R2_BUCKET/versions/$TAG/$name" --endpoint-url "$R2_ENDPOINT"
             aws s3 cp "$file" "s3://$R2_BUCKET/latest/$name" --endpoint-url "$R2_ENDPOINT"
+            # The buyer's digests, composed from the bytes just copied and under the name this
+            # mirror wrote them by: the file a card hands out is the file these lines name, and a
+            # file the copy did not reach fails here rather than leaving a short list.
+            digest=$(sha256sum "$file")
+            printf '%s  %s\n' "${digest%% *}" "$name" >> SHA256SUMS
+            published="$published $name"
           done <<< "$FILES"
+
+          aws s3 cp SHA256SUMS "s3://$R2_BUCKET/latest/SHA256SUMS" --endpoint-url "$R2_ENDPOINT"
+
+          # Every name this mirror writes that the list did not carry stops being served here: a
+          # release that withheld an installer must not leave an earlier release's file standing
+          # under this release's name for a card to hand out, and the 404 is what the notes
+          # explain. A key this step does not write — an older name the bucket still holds — is
+          # neither copied nor removed. S3's DELETE answers success for a key that is not there,
+          # so this needs no listing and a name no release ever published is not an error; the
+          # token has to permit delete, and a refusal fails the step rather than leaving the
+          # earlier release's file in place.
+          for pair in $NAMES; do
+            name="${pair#*=}"
+            case " $published " in
+              *" $name "*) continue ;;
+            esac
+            aws s3 rm "s3://$R2_BUCKET/latest/$name" --endpoint-url "$R2_ENDPOINT"
+          done
