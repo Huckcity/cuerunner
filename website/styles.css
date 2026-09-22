@@ -616,11 +616,28 @@ figure.figure {
   white-space: nowrap;
 }
 
+/* The site's other scroll container. A sample is written in lines, and lines are what a reader
+   reads it in, so the box keeps them (`pre`); a line wider than the box then runs past the right
+   edge, which is the same edge `.table-wrap` marks — the box carries the same band, in the colour
+   its own text sits on (`--bg-raised`) where the table's wrapper sits on the panel's surface. */
 .code {
   margin: 10px 0 0;
   padding: 10px 12px;
   overflow-x: auto;
-  background: var(--bg-raised);
+  white-space: pre;
+  /* The surface on its own, first: the shadows below are mixed with `color-mix()`, and a browser
+     that cannot parse one of those layers drops the whole shorthand — the box would then paint
+     nothing at all rather than a plain surface, which is what this declaration is here for. */
+  background-color: var(--bg-raised);
+  background:
+    linear-gradient(to right, var(--bg-raised) 55%, transparent) left center,
+    linear-gradient(to left, var(--bg-raised) 55%, transparent) right center,
+    linear-gradient(to right, color-mix(in srgb, var(--bg-base) 55%, #000), transparent) left center,
+    linear-gradient(to left, color-mix(in srgb, var(--bg-base) 55%, #000), transparent) right center,
+    var(--bg-raised);
+  background-repeat: no-repeat;
+  background-size: 48px 100%, 48px 100%, 18px 100%, 18px 100%;
+  background-attachment: local, local, scroll, scroll;
   border: 1px solid var(--border-input);
   border-radius: 4px;
 }
@@ -773,6 +790,12 @@ code {
     background: none;
   }
 
+  /* Nor can the table be wider than the column it is printed in: the width the screen's tables
+     ask for (`min-width: 560px`) is what a printed one would be clipped by, so it goes. */
+  table {
+    min-width: 0;
+  }
+
   h1,
   h2,
   h3,
@@ -799,8 +822,13 @@ code {
     border-color: #000000;
   }
 
+  /* A printed page cannot be swiped either, so a sample prints whole: its lines wrap rather
+     than run past the edge (`pre-wrap`), and a word too long for the column breaks rather than
+     being clipped (`anywhere`), on white with no band painted over it. */
   .code {
     background: #ffffff;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .code code,
@@ -817,6 +845,22 @@ code {
   .cheat-sheet p,
   .cheat-sheet li {
     color: #000000;
+  }
+}
+
+/* The widest table the site prints is `website/reliability.html`'s eight-column one, which needs
+   566 px of column for its own words — its min-content, measured in Chromium, 2026-09-22 — and
+   dropping the fixed width is not enough below that. A print query matches the page box: not the
+   viewport the page was read at, and not the column either — the column is the page box less the
+   40 px the panel's padding and the two borders spend — so the query answers for the page box that
+   column needs, 606 px. (At 566 px, the column figure, a page box of 570–600 px still laid the
+   table out at 566 px and clipped a cell.) A cell that breaks `anywhere` lowers the width its
+   table is laid out at, which `break-word` does not, so a narrow page prints whole; paper is
+   wider than this and prints a table as it always did. */
+@media print and (max-width: 606px) {
+  th,
+  td {
+    overflow-wrap: anywhere;
   }
 }
 

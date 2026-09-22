@@ -279,7 +279,7 @@ export const REFERENCE = [
     <section class="panel reveal">
       <h1>Settings</h1>
       <p class="doc-lede">
-        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or Cuerunner ▾ → Settings. The sidebar
+        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or Cuerunner ▾ → Settings…, whose sidebar
         splits them by where they are kept: <strong>this show</strong> travels in the
         <code>.cuerunner</code> file, <strong>this computer</strong> stays on the machine.
       </p>
@@ -406,7 +406,8 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
     <section class="panel reveal delay-3" id="show">
       <h2>Show Settings</h2>
       <p>
-        Cuerunner ▾ → Show Settings. These are the show's own, and travel in the file.
+        The settings under Cuerunner ▾ → Show Settings… are the show's own, and travel in
+        the file.
       </p>
       <div class="table-wrap">
         <table>
@@ -460,8 +461,8 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>N</kbd></td><td>New workspace</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>O</kbd></td><td>Open workspace</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd></td><td>Save</td></tr>
-            <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Save As</td></tr>
-            <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd></td><td>Settings</td></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td><td>Save As…</td></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd></td><td>Settings…</td></tr>
           </tbody>
         </table>
       </div>

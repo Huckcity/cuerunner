@@ -150,7 +150,7 @@ export const GUIDES = [
         <strong>Cuerunner ▾ → Open Demo Workspace</strong>. It is a real show: audio, a
         group with a count-in, MIDI and OSC cues, a network cue, a script cue and a fade,
         with its own sound files. Nothing you do to it touches a file of yours — it opens
-        unsaved, so Save As makes it yours if you want to keep it.
+        unsaved, so Save As… makes it yours if you want to keep it.
       </p>
       <figure class="figure">
         <a href="../assets/guide/01-window.png" target="_blank" rel="noreferrer">
@@ -691,7 +691,7 @@ export const GUIDES = [
     <section class="panel reveal delay-1">
       <h2>1. Tell Cuerunner about the desk</h2>
       <p>
-        <strong>Cuerunner ▾ → Show Settings → Channels</strong>. Pick how the desk is
+        <strong>Cuerunner ▾ → Show Settings… → Channels</strong>. Pick how the desk is
         reached — OSC, MIDI, or MIDI over TCP — and the address or port it answers on. The
         line under it reads back exactly what Cuerunner will send, so you can check it
         against the console's own documentation before anything is live.
