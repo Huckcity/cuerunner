@@ -22,6 +22,14 @@
 // is read back for the hrefs its buy cell carries and nothing else. Every page the site serves
 // is read back for the price page's link in its primary nav.
 //
+// The page also repeats four words the app owns — the toolbar's brand and its caret, the File
+// menu's `Settings…` and the `License` tab — in the sentence that sends a reader to the control
+// a key is entered in. Those are declared labels now (website/docs/pricing.mjs) and this guard
+// reads each one out of the file the app declares it in (`Toolbar.tsx`, `fileMenu.ts`,
+// `SettingsDialog.tsx`), holds the module's word to the app's, and holds the rendered sentence
+// to the labels composed in that order: an app rename fails naming the app's word and the
+// page's, and a page whose sentence moves off the path fails too.
+//
 // Every check is a pure function of what it reads, so the second describe can hand it a page
 // the repository would never commit and get the failure back by name. The failure paths are
 // what hold the page; a passing run on its own says only that nothing has drifted yet.
@@ -32,10 +40,14 @@ import { fileURLToPath } from 'node:url'
 
 // @ts-ignore — js file, no type declarations
 import {
+  BRAND,
+  BRAND_CARET,
   BY_CONVERSATION,
   CARD_LINKS,
+  LICENSE_TAB,
   PRICED_SKUS,
   PRICING,
+  SETTINGS_ITEM,
   W9_ROUTE
 } from '../website/docs/pricing.mjs'
 // @ts-ignore — js file, no type declarations
@@ -281,6 +293,81 @@ const ROUTES: Route[] = [
   }
 ]
 
+/** The file the toolbar's brand and its caret are drawn in. */
+const TOOLBAR = 'src/renderer/src/components/layout/Toolbar.tsx'
+/** The file the File menu's items are declared in, `Settings…` among them. */
+const FILE_MENU = 'src/shared/fileMenu.ts'
+/** The file the settings dialog's tabs are declared in, the `License` tab among them. */
+const SETTINGS_DIALOG = 'src/renderer/src/components/layout/SettingsDialog.tsx'
+
+/** How a label is read out of its source: the file's text in, the word the app carries out. */
+type Reader = (source: string) => string | undefined
+
+/** One word the page states in the app's own voice, which the guard reads out of the app. */
+interface Fact {
+  what: string
+  file: string
+  read: Reader
+  stated: string
+}
+
+/**
+ * The file's text with its own line wrapping taken out — a phrase a JSX comment or a JSDoc wraps
+ * across two lines reads as the one phrase it is, and a JSDoc's `*` prefixes go with the breaks —
+ * so a label is read as the operator meets it in the app.
+ */
+const unwrapped = (source: string): string => source.replace(/\n\s*\*\s?/g, ' ')
+
+/** The first capture group of a pattern, read against the file with its wrapping taken out. */
+const group = (pattern: RegExp): Reader => source => {
+  const found = pattern.exec(unwrapped(source))
+  return found === null ? undefined : found[1].replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * The four labels the page's sentence states, each read out of the file the app declares it in:
+ * the words are the app's, so a rename shows up as the app's word against the page's rather than
+ * as a route to a control that has moved. The toolbar's two are read from the caret span outward —
+ * the brand is the text its button carries, the caret is the span that follows it — and the menu
+ * item and the tab are read from their own declarations.
+ */
+const FACTS: Fact[] = [
+  {
+    what: 'the toolbar brand',
+    file: TOOLBAR,
+    // The brand is the button's own text, read from the caret span outward, so the two may sit on
+    // one line or on two: a reflow is not a rename, and `[^\n<>{}]` keeps the match inside the
+    // text the button carries rather than reaching back into its markup.
+    read: group(/(?:^|\n)\s*([^\n<>{}]*\S)\s*<span className="toolbar-brand-caret">/),
+    stated: BRAND
+  },
+  {
+    what: "the brand's caret",
+    file: TOOLBAR,
+    read: group(/<span className="toolbar-brand-caret">\s*([^<]+?)\s*<\/span>/),
+    stated: BRAND_CARET
+  },
+  {
+    what: 'the Settings… menu item',
+    file: FILE_MENU,
+    read: group(/\{\s*action:\s*'settings',\s*label:\s*'([^']+)'/),
+    stated: SETTINGS_ITEM
+  },
+  {
+    what: 'the License tab',
+    file: SETTINGS_DIALOG,
+    read: group(/\{\s*id:\s*'license',\s*label:\s*'([^']+)'/),
+    stated: LICENSE_TAB
+  }
+]
+
+/**
+ * The path the page's sentence walks a reader through, composed here from the same four labels the
+ * facts hold to the app, in the order a reader follows them. The arrow is the page's own word; the
+ * steps are the app's, so the sentence has to be the app's words in the app's order.
+ */
+const KEY_PATH = [`${BRAND} ${BRAND_CARET}`, SETTINGS_ITEM, LICENSE_TAB].join(' → ')
+
 /** Everything the checks read, in one value: a case below hands them a mutation of it. */
 interface Reading {
   skus: Sku[]
@@ -293,6 +380,11 @@ interface Reading {
   pages: Array<{ file: string; text: string }>
   /** The links across the top of every generated page. */
   nav: string[][]
+  /** The app's own labels the page states, and the files they are read from. */
+  facts: Fact[]
+  files: Record<string, string>
+  /** The path the page's sentence walks, composed from the labels the module declares. */
+  path: string
 }
 
 /** The page this guard reads, found by its own path rather than by where it sits in the list. */
@@ -322,6 +414,26 @@ function servedPages(): Array<{ file: string; text: string }> {
   })
 }
 
+/** The text of one source file, or a failure: a label read out of a file that cannot be read holds nothing. */
+function readSource(relative: string): string {
+  try {
+    return fs.readFileSync(path.join(root, relative), 'utf-8')
+  } catch (cause) {
+    throw new Error(
+      `the price page states the app's own labels, read out of ${relative}, which cannot be read — ${(cause as Error).message}: the sentence would otherwise point at a control nothing checks`
+    )
+  }
+}
+
+/** Every source the facts are named from, read once, each file under the name the failures use. */
+function sources(): Record<string, string> {
+  const files: Record<string, string> = {}
+  for (const fact of FACTS) {
+    if (files[fact.file] === undefined) files[fact.file] = readSource(fact.file)
+  }
+  return files
+}
+
 /** The page as the repository holds it, the record as the record states it. */
 const LIVE: Reading = {
   skus: PRICED_SKUS,
@@ -333,7 +445,10 @@ const LIVE: Reading = {
   })),
   rendered: renderPage(PRICE_PAGE),
   pages: servedPages(),
-  nav: NAV
+  nav: NAV,
+  facts: FACTS,
+  files: sources(),
+  path: KEY_PATH
 }
 
 /** The rows that sell through card links, so a case names a kind of purchase rather than a label. */
@@ -645,6 +760,41 @@ function navProblems(reading: Reading): string[] {
   )
 }
 
+/**
+ * The page's labels, each held to the app both ways: the file has to carry the control, and the
+ * word the module declares has to be the word the file carries. A page that keeps the app's old
+ * words when the app has moved on fails naming both strings, and a file that no longer carries
+ * the control fails naming the file rather than passing with nothing to read.
+ */
+function factProblems(reading: Reading): string[] {
+  return reading.facts.flatMap(fact => {
+    const source = reading.files[fact.file]
+    if (source === undefined) {
+      return [`the page states ${fact.what}, read from ${fact.file}, and the guard has no reading of that file`]
+    }
+    const said = fact.read(source)
+    if (said === undefined) {
+      return [
+        `${fact.file} no longer carries ${fact.what}: the price page sends a reader to it, so the file the app declares the control in has to say it ("website/docs/pricing.mjs" and ${fact.file} have to agree)`
+      ]
+    }
+    return said === fact.stated
+      ? []
+      : [
+          `website/docs/pricing.mjs states "${fact.stated}" for ${fact.what}, and ${fact.file} says "${said}": the page renders the app's own words`
+        ]
+  })
+}
+
+/** The sentence that sends a reader to a key, held to the labels it is composed from. */
+function pathProblems(reading: Reading): string[] {
+  return reading.rendered.includes(reading.path)
+    ? []
+    : [
+        `website/pricing.html does not carry the path to a key as website/docs/pricing.mjs composes it from the app's labels ("${reading.path}"): the sentence and the labels have to move together`
+      ]
+}
+
 describe('the price page', () => {
   it('states the bullet it prices: its figures, with their units, and its terms', () => {
     expect(priceProblems(LIVE)).toEqual([])
@@ -672,6 +822,14 @@ describe('the price page', () => {
 
   it('links the price page from every page the site serves', () => {
     expect(navProblems(LIVE)).toEqual([])
+  })
+
+  it('states the app\'s own labels for the way to a key', () => {
+    expect(factProblems(LIVE)).toEqual([])
+  })
+
+  it('sends a reader to a key along the path the labels compose', () => {
+    expect(pathProblems(LIVE)).toEqual([])
   })
 })
 
@@ -990,6 +1148,46 @@ describe('the page the checks exist to refuse', () => {
     const without = LIVE.nav.filter(([href]) => href !== 'pricing.html')
     expect(navProblems({ ...LIVE, nav: without })).toEqual([
       expect.stringContaining("NAV carries no ['pricing.html', 'Pricing'] entry")
+    ])
+  })
+
+  it('names the app\'s word and the page\'s when a control is renamed', () => {
+    const renamed = LIVE.facts.map(fact => (fact.what === 'the License tab' ? { ...fact, stated: 'Licence' } : fact))
+    expect(factProblems({ ...LIVE, facts: renamed })).toEqual([
+      expect.stringContaining(
+        `website/docs/pricing.mjs states "Licence" for the License tab, and ${SETTINGS_DIALOG} says "License"`
+      )
+    ])
+  })
+
+  it('names the file when a control it declares is gone', () => {
+    const moved = { ...LIVE.files, [FILE_MENU]: "export const MAIN_ITEMS = [{ action: 'quit', label: 'Quit' }]" }
+    expect(factProblems({ ...LIVE, files: moved })).toEqual([
+      expect.stringContaining(`${FILE_MENU} no longer carries the Settings… menu item`)
+    ])
+  })
+
+  it('reads the toolbar brand on one line or on two', () => {
+    const original = LIVE.files[TOOLBAR]
+    const reflowed = original.replace(
+      '            Cuerunner\n            <span className="toolbar-brand-caret">',
+      '            Cuerunner <span className="toolbar-brand-caret">'
+    )
+    // A reflow that matched nothing would make this case pass without reading anything.
+    expect(reflowed).not.toBe(original)
+    expect(factProblems({ ...LIVE, files: { ...LIVE.files, [TOOLBAR]: reflowed } })).toEqual([])
+  })
+
+  it('fails loudly when a file the labels are read from cannot be read', () => {
+    expect(() => readSource('src/renderer/src/components/layout/NotAFile.tsx')).toThrow(
+      'the price page states the app\'s own labels, read out of src/renderer/src/components/layout/NotAFile.tsx, which cannot be read'
+    )
+  })
+
+  it('names a sentence that moves off the path the labels compose', () => {
+    const reworded = LIVE.rendered.replace(LIVE.path, 'Cuerunner → Preferences → Licence')
+    expect(pathProblems({ ...LIVE, rendered: reworded })).toEqual([
+      expect.stringContaining('website/pricing.html does not carry the path to a key as website/docs/pricing.mjs composes it from the app\'s labels')
     ])
   })
 

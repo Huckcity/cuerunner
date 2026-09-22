@@ -16,6 +16,12 @@
 // checkout or an address that does not exist. The W-9 is not a value and needs no fill: it
 // comes back by email, so its route is the words that say so, declared once and rendered from
 // here.
+//
+// The app's own labels are declared here for the same reason: the sentence that sends a reader to
+// the control a key is entered in names four words the app owns — the toolbar's brand and its
+// caret, the File menu's item and the License tab — so it is composed from those labels rather
+// than typed, and scripts/pricing-page.test.ts reads each one out of the file that declares it. An
+// app rename fails the guard rather than leaving the page pointing at a control that moved.
 import { attr } from './attr.mjs'
 import { ORDER_EMAIL } from './contact.mjs'
 import { table } from './table.mjs'
@@ -112,6 +118,26 @@ export const PRICED_SKUS = [
 ]
 
 /**
+ * The app's own labels for the way to a key, in the order the page's sentence walks them: the
+ * toolbar's brand, the caret that opens its menu, the File menu's item and the tab a key is
+ * entered on. They are the app's words —
+ * `src/renderer/src/components/layout/Toolbar.tsx`, `src/shared/fileMenu.ts` and
+ * `src/renderer/src/components/layout/SettingsDialog.tsx` — and the guard reads each one out of
+ * the file that declares it, so this page states them rather than remembering them.
+ */
+export const BRAND = 'Cuerunner'
+export const BRAND_CARET = '▾'
+export const SETTINGS_ITEM = 'Settings…'
+export const LICENSE_TAB = 'License'
+
+/**
+ * The path as the page states it: the labels above, joined in the order a reader follows them. The
+ * arrow is the page's own — the app has no such word — and the sentence is composed from the
+ * labels, so a label that moves moves the sentence with it.
+ */
+const KEY_PATH = [`${BRAND} ${BRAND_CARET}`, SETTINGS_ITEM, LICENSE_TAB].join(' → ')
+
+/**
  * One row's buy cell: the card rows' links, each with the words a buyer reads on it, joined by
  * a separator; the conversation rows' single address behind the phrase that says a person
  * answers. A route is escaped where it goes into `href` — a live link can carry an ampersand,
@@ -175,7 +201,7 @@ ${table(['What you buy', 'Price', 'What it includes', 'How to buy'], PRICED_SKUS
       <p>
         We email your key after the payment or the purchase order is settled — nothing to
         activate online, and no account to make first. Enter it once in
-        <strong>Cuerunner ▾ → Settings… → License</strong>: the key is checked on the machine it
+        <strong>${KEY_PATH}</strong>: the key is checked on the machine it
         is entered on, and using it tells nobody that it was used, so a venue machine with no
         internet unlocks exactly like any other. A key is not bound to one computer, and the
         free half keeps working whatever happens to it.
