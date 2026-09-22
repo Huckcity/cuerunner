@@ -22,7 +22,7 @@ import { mkdir, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
 import type { ZipEntry, ZipSource } from './zip'
 import { extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
-import { asRefusal, Refusal } from '../ipc/refusal'
+import { Refusal } from '../ipc/refusal'
 import { migrateWorkspace, rememberFile, resolveWorkspaceMedia, serialiseWorkspace } from './WorkspaceManager'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../shared/cue'
@@ -230,12 +230,13 @@ export async function readBundle(bundlePath: string): Promise<ReadBundle> {
   }
   const bytes = await readZipEntry(bundlePath, show, MAX_BUNDLE_SHOW_BYTES)
   // A show the bundle carries but cannot parse is a damaged bundle — the same ordinary
-  // state as the archive checks above, so it refuses the same way.
+  // state as the archive checks above, so it refuses the same way, and the sentence says
+  // what the bytes are rather than repeating V8's parse text at the operator.
   let parsed: Workspace
   try {
     parsed = JSON.parse(bytes.toString('utf8')) as Workspace
-  } catch (error) {
-    throw asRefusal(error)
+  } catch {
+    throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry is not JSON`)
   }
   // Import is a load path too: the showfile inside the bundle goes through the same
   // migration, and the repair it makes must reach the window like any other load's.

@@ -1,4 +1,4 @@
-import { midiTcp } from '../midi/MidiTcpEngine'
+import { midiTcp, type DeskLinkCause } from '../midi/MidiTcpEngine'
 import { deskLinkName } from '../../shared/deskLink'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import type { MidiMessageKind } from '../../shared/cue'
@@ -12,7 +12,11 @@ export interface DeskLink {
   open(host: string, port: number): void
   closeAll(): void
   onMessage: ((device: string, message: MidiMessageKind) => void) | null
-  onStatus: ((device: string, online: boolean, detail?: string) => void) | null
+  /**
+   * A link coming up or going down, with why when it goes: `reset` is a connection the
+   * desk ended, which is a different thing to report from a dial nothing answered.
+   */
+  onStatus: ((device: string, online: boolean, detail?: string, cause?: DeskLinkCause) => void) | null
 }
 
 /**
@@ -53,7 +57,7 @@ export class MidiTcpService implements ShowService {
     this.engine.onMessage = (from, message) => {
       context.bus.publish({ kind: 'midi', at: Date.now(), device: from, message })
     }
-    this.engine.onStatus = (from, online, detail) => {
+    this.engine.onStatus = (from, online, detail, cause) => {
       this.device = `midi-tcp:${from}`
       context.bus.device({
         id: this.device,
@@ -68,9 +72,17 @@ export class MidiTcpService implements ShowService {
         return
       }
       // The engine reports a change of state rather than every failed dial, so this is
-      // one alarm per outage — which is what an alarm is for.
+      // one alarm per outage — which is what an alarm is for. A connection the desk took
+      // and reset is not a desk that is not answering: the desk answered, so the alarm
+      // says what happened rather than sending the operator to look at the address.
       context.setState('degraded', detail ? `${from}: ${detail}` : `not connected to ${from}`)
-      context.bus.alert('warning', this.id, `Desk ${from} is not answering`)
+      context.bus.alert(
+        'warning',
+        this.id,
+        cause === 'reset'
+          ? `Desk ${from}: the connection was taken or reset`
+          : `Desk ${from} is not answering`
+      )
     }
 
     context.setState('starting', `dialling ${device}`)

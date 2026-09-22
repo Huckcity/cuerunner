@@ -5,7 +5,7 @@
 // Electron is not available here, so it is stubbed with a real temporary directory —
 // these tests exercise the actual filesystem.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -26,6 +26,7 @@ vi.mock('electron', async () => {
 const { app } = await import('electron')
 const { clearRecovery, readRecovery, writeFileAtomically, writeRecovery } = await import('./recovery')
 const { saveWorkspace } = await import('./WorkspaceManager')
+import { Refusal } from '../ipc/refusal'
 import type { Workspace } from '../../shared/workspace'
 
 const userData = app.getPath('userData')
@@ -127,10 +128,57 @@ describe('recovery snapshots', () => {
     expect(snapshot?.selectedCueId).toBeUndefined()
   })
 
-  it('reads nothing from a snapshot that was half-written when the process died', async () => {
+  it('refuses a snapshot whose bytes are not JSON rather than reading nothing from it', async () => {
+    // The autosave writes through the atomic path, so a snapshot that is there is one this
+    // build wrote: bytes that will not parse are a file to say something about, not the
+    // same "nothing to offer" a session that never autosaved gives.
     mkdirSync(userData, { recursive: true })
-    writeFileSync(join(userData, 'recovery.cuerunner'), '{"workspace":{"cues":[', 'utf-8')
+    const file = join(userData, 'recovery.cuerunner')
+    writeFileSync(file, '{"workspace":{"cues":[', 'utf-8')
 
+    await expect(readRecovery()).rejects.toThrow(Refusal)
+    await expect(readRecovery()).rejects.toThrow(`that file is not a show — ${file} is not JSON`)
+  })
+
+  it('refuses a snapshot that parses but carries no show', async () => {
+    mkdirSync(userData, { recursive: true })
+    const file = join(userData, 'recovery.cuerunner')
+    writeFileSync(file, JSON.stringify({ savedAt: 1 }), 'utf-8')
+    await expect(readRecovery()).rejects.toThrow('holds no snapshot to bring back')
+
+    // A show that is not one this build can walk takes the migration down inside the
+    // channel, where a fault renders no bar at all: it is refused here instead.
+    writeFileSync(file, JSON.stringify({ workspace: 'x', savedAt: 1 }), 'utf-8')
+    await expect(readRecovery()).rejects.toThrow('holds no snapshot to bring back')
+
+    writeFileSync(file, JSON.stringify({ workspace: { id: 'w1' }, savedAt: 1 }), 'utf-8')
+    await expect(readRecovery()).rejects.toThrow('holds no snapshot to bring back')
+  })
+
+  it('refuses a snapshot past the cap this app reads, naming it', async () => {
+    // The cap the app's own load paths use, applied to a file this app wrote: one byte past
+    // it is a snapshot this build will not read, said rather than dropped the way a
+    // malformed one used to be. Sparse, so proving the refusal costs no 64 MiB.
+    mkdirSync(userData, { recursive: true })
+    const file = join(userData, 'recovery.cuerunner')
+    writeFileSync(file, '')
+    truncateSync(file, 64 * 1024 * 1024 + 1)
+
+    await expect(readRecovery()).rejects.toThrow(Refusal)
+    await expect(readRecovery())
+      .rejects.toThrow(`that snapshot file is larger than this app will open — ${file}`)
+  })
+
+  it('refuses a snapshot that is there but cannot be read, and offers nothing for an absent one', async () => {
+    // Absence is the ordinary "nothing to offer" and only absence is: a path this process
+    // cannot read — here a directory wearing the snapshot's name — is work that cannot be
+    // brought forward, said rather than passed off as a session that never autosaved.
+    mkdirSync(userData, { recursive: true })
+    const file = join(userData, 'recovery.cuerunner')
     expect(await readRecovery()).toBeNull()
+
+    mkdirSync(file)
+    await expect(readRecovery()).rejects.toThrow(Refusal)
+    await expect(readRecovery()).rejects.toThrow(`that file is not a show — ${file} could not be read`)
   })
 })

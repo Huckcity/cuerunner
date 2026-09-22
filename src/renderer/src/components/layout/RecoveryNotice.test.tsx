@@ -169,9 +169,10 @@ describe('RecoveryNotice', () => {
     expect(container.querySelector('.app-notice')).toBeNull()
   })
 
-  it('offers nothing when the snapshot is one this build cannot read', async () => {
-    // The refusal arm: an ordinary state, so it is branched on rather than caught, and
-    // the window simply has nothing to offer.
+  it('says a snapshot this build cannot bring forward rather than offering nothing', async () => {
+    // The refusal arm: an ordinary state, but the operator's only sight of a snapshot this
+    // build cannot read. The bar is the recovery lane's own — a snapshot that will not come
+    // back is not a failure the session had — and the log carries the same sentence.
     ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
       ok: false,
       error: 'that show has a cue this version of WinsLab does not know (video)'
@@ -179,7 +180,34 @@ describe('RecoveryNotice', () => {
 
     await act(async () => { root.render(<RecoveryNotice />) })
 
+    const notice = container.querySelector('.app-notice')
+    expect(notice?.getAttribute('data-kind')).toBe('recovery')
+    expect(notice?.textContent).toContain('Could not bring the unsaved work back')
+    expect(notice?.textContent).toContain('does not know (video)')
+    // Nothing to decide about a snapshot that is not offerable: no Recover, no Discard.
+    expect(container.querySelector('.app-notice-action')).toBeNull()
+    expect(useStore.getState().log.map(entry => entry.message)).toEqual([
+      'Could not bring the unsaved work back: that show has a cue this version of WinsLab does not know (video)'
+    ])
+
+    // Dismissed like any other bar, and the file stays where it is: this build cannot read
+    // it, and nothing here has decided to throw it away.
+    const dismiss = container.querySelector('.app-notice-dismiss') as HTMLButtonElement
+    await act(async () => { dismiss.click() })
     expect(container.querySelector('.app-notice')).toBeNull()
+    expect(window.cuerunner.workspace.clearRecovery).not.toHaveBeenCalled()
+  })
+
+  it('carries the file the refusal names onto the bar', async () => {
+    // A snapshot whose bytes are not a snapshot: the renderer has no path for the file, so
+    // main writes it into the sentence, and the bar has to show the whole of it.
+    const named = 'that file is not a show — /home/adam/.config/cuerunner/recovery.cuerunner is not JSON'
+    ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({ ok: false, error: named })
+
+    await act(async () => { root.render(<RecoveryNotice />) })
+
+    expect(container.querySelector('.app-notice-text')?.textContent)
+      .toBe(`Could not bring the unsaved work back: ${named}`)
   })
 
   it('discards the snapshot on request, and clears it off the disk', async () => {

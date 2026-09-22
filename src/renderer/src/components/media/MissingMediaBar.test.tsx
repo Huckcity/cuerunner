@@ -2,7 +2,7 @@
 // at a file that is not there. What matters is that it says which cues, that one pick
 // puts every file it accounts for back into the session in one edit, and that a file the
 // pick did not account for keeps its location and stays visible.
-import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, type MockInstance } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MissingMediaBar } from './MissingMediaBar'
@@ -76,7 +76,10 @@ describe('MissingMediaBar', () => {
     vi.clearAllMocks()
   })
 
-  const relink = (): Mock => window.cuerunner.workspace.relink as unknown as Mock
+  // The mock is typed to what the channel declares, so these stubs are checked against the
+  // answer the bar reads: a member that stopped resolving a show would fail here.
+  const relink = (): MockInstance<typeof window.cuerunner.workspace.relink> =>
+    vi.mocked(window.cuerunner.workspace.relink)
 
   async function render(): Promise<void> {
     await act(async () => { root.render(<MissingMediaBar />) })

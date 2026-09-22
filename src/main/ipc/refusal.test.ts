@@ -193,6 +193,30 @@ describe('a refusal is a value', () => {
     expect(result).toMatchObject({ ok: false, error: 'that workspace file is larger than this app will open' })
   })
 
+  it('answers a file that is not JSON with a sentence naming it, not the parse text', async () => {
+    // Bytes an operator picked may be anything: a text file with the extension, a download
+    // that stopped halfway. V8's own parse text names neither the file nor the fact that it
+    // is not a show, and that text is what the window's notice would carry.
+    const file = join(ends.userData.path, 'half.cuerunner')
+    writeFileSync(file, '{"version":1,"cues":[')
+
+    const result = await handler(WORKSPACE_CHANNELS.openPath)('event', file)
+
+    expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} is not JSON` })
+  })
+
+  it('names the file when the same bytes arrive through the dialog', async () => {
+    // File→Open hands the window no path, so the sentence is the only place the operator
+    // can read which file was refused.
+    const file = join(ends.userData.path, 'half-open.cuerunner')
+    writeFileSync(file, '{"version":1,"cues":[')
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [file] })
+
+    const result = await handler(WORKSPACE_CHANNELS.open)('event')
+
+    expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} is not JSON` })
+  })
+
   it('answers a cancelled dialog as the null inside the success arm', async () => {
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
 
@@ -220,6 +244,18 @@ describe('a refusal is a value', () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toContain('does not know (hologram)')
+  })
+
+  it('answers a snapshot whose bytes are not a snapshot, rather than reading nothing from it', async () => {
+    // The snapshot is the app's own file in the user-data folder, so bytes that will not
+    // parse are a fact the operator is owed: the session before this one did not save, and
+    // this build cannot bring that work forward.
+    const file = join(ends.userData.path, 'recovery.cuerunner')
+    writeFileSync(file, '{"workspace":{"cues":[')
+
+    const result = await handler(WORKSPACE_CHANNELS.recovery)()
+
+    expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} is not JSON` })
   })
 
   it('answers a missing include with its refusal arm, and leaves the sentence alone', async () => {

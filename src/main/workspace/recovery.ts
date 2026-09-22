@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { randomUUID } from 'crypto'
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
+import { isRefusal, Refusal } from '../ipc/refusal'
 import type { Workspace } from '../../shared/workspace'
 import type { FileFingerprint } from './WorkspaceManager'
 
@@ -56,20 +57,46 @@ export async function writeRecovery(
 }
 
 export async function readRecovery(): Promise<RecoverySnapshot | null> {
+  const filePath = recoveryFilePath()
+  let text: string
   try {
-    const filePath = recoveryFilePath()
-    // The same cap the app's other load paths use: a snapshot this app wrote is a show,
-    // and one far past this is not something to read into main's memory on the strength
-    // of a filename.
     const { size } = await stat(filePath)
-    if (size > MAX_RECOVERY_BYTES) return null
-    const snapshot = JSON.parse(await readFile(filePath, 'utf-8')) as RecoverySnapshot
-    return snapshot?.workspace ? snapshot : null
-  } catch {
-    // No snapshot, or one that was truncated by a dying process: either way there is
-    // nothing to offer.
-    return null
+    // Past the cap the app's other load paths use, the file is not read into main's memory
+    // on the strength of a filename — and it is said rather than dropped, for the same
+    // reason a snapshot that will not parse is.
+    if (size > MAX_RECOVERY_BYTES) {
+      throw new Refusal(`that snapshot file is larger than this app will open — ${filePath}`)
+    }
+    text = await readFile(filePath, 'utf-8')
+  } catch (error) {
+    // A refusal raised above is already the answer.
+    if (isRefusal(error)) throw error
+    // Absence alone is the ordinary "nothing to offer": a process that died before the
+    // first autosave leaves no snapshot at all. A snapshot that is there and cannot be read
+    // — a path that is a directory, a file this process has no permission for, a disk that
+    // failed — is work that cannot be brought forward, and the operator is owed the
+    // sentence rather than the same silence an absent snapshot gives.
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return null
+    throw new Refusal(`that file is not a show — ${filePath} could not be read (${code ?? 'unreadable'})`)
   }
+  // The bytes are there; now they have to be a snapshot. A file an operator's own tools
+  // have been through can parse and hold something else entirely, and a workspace with no
+  // cue list would take the migration down inside the channel, where a fault renders no
+  // bar at all — so the parse and the shape are both checked before the value is returned.
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Refusal(`that file is not a show — ${filePath} is not JSON`)
+  }
+  // A snapshot whose show is not a show this build can walk is nothing to offer either,
+  // and saying so is the difference between a bar and a thrown TypeError with no bar.
+  const workspace = (parsed as RecoverySnapshot | null)?.workspace as { cues?: unknown } | undefined
+  if (typeof workspace !== 'object' || workspace === null || !Array.isArray(workspace.cues)) {
+    throw new Refusal(`that file is not a show — ${filePath} holds no snapshot to bring back`)
+  }
+  return parsed as RecoverySnapshot
 }
 
 export async function clearRecovery(): Promise<void> {

@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type { BrowserWindow } from 'electron'
 import { APP_CHANNELS, type RendererCrash } from '../../shared/ipc/app'
+import { MIDI_CHANNELS } from '../../shared/ipc/midi'
 import { CHANNEL_TABLES, EVENT_CHANNELS } from '../../shared/ipc'
 import { registerIpcHandlers } from './handlers'
 import { registerWindowIpcHandlers, type WindowHandlerDeps } from './windowHandlers'
@@ -214,6 +215,48 @@ const DECLARED_EVENTS: readonly string[] = EVENT_CHANNELS
 const DECLARED_INVOKES = DECLARED_CHANNELS.filter(channel => !DECLARED_EVENTS.includes(channel))
 
 /**
+ * The table key a declared channel is held under, and the namespace its value names. Read
+ * from `CHANNEL_TABLES`, so the entry is found by the channel it holds rather than by a
+ * second list of keys here.
+ */
+function declaredKey(channel: string): { namespace: string; key: string } | null {
+  const namespace = channel.slice(0, channel.indexOf(':'))
+  for (const table of CHANNEL_TABLES) {
+    for (const [key, value] of Object.entries(table)) {
+      if (value === channel) return { namespace, key }
+    }
+  }
+  return null
+}
+
+/** `namespace.member`, as the window reads it, in two pieces. */
+function splitMember(member: string): [namespace: string, name: string] {
+  const dot = member.indexOf('.')
+  return [member.slice(0, dot), member.slice(dot + 1)]
+}
+
+/**
+ * The calls whose member is not addressing the channel its own name is the key of, each as
+ * the `member -> channel` line a failure names. The set comparisons cannot see this: a swap
+ * between two verbs of one namespace keeps every channel declared, registered and invoked —
+ * just by the wrong member — so the naming convention is the only thing that holds it.
+ */
+function misaddressed(records: readonly BridgeCall[]): string[] {
+  return records
+    .filter(call => {
+      const declared = declaredKey(call.channel)
+      if (declared === null) return true
+      const [namespace, name] = splitMember(call.member)
+      if (namespace !== declared.namespace) return true
+      const expected = call.kind === 'invoke'
+        ? declared.key
+        : `on${declared.key.slice(0, 1).toUpperCase()}${declared.key.slice(1)}`
+      return name !== expected
+    })
+    .map(call => `${call.member} -> ${call.channel}`)
+}
+
+/**
  * A window and its two callbacks, with the calls recorded: the pair closes over the window
  * and the crash, so the spies are what make the registration's shape readable.
  */
@@ -318,6 +361,31 @@ describe('the two ends of the IPC contract', () => {
 
   it('unbinds the channel every subscription member subscribed', () => {
     expect(unsubscribed, 'subscription members whose unsubscribe left the channel bound').toEqual([])
+  })
+
+  it('addresses, from each member, the channel its own name is the key of', () => {
+    // The set comparisons below hold as long as every channel is addressed by something:
+    // they say nothing about *which* member addresses which channel, so two verbs of one
+    // namespace can be wired to each other's channels and every set still matches. The
+    // naming convention is what closes that, and it is the one the preload already keeps:
+    // an invoke member is named after its table key, and a subscription is `on` plus that
+    // key capitalized, both inside the member's own namespace.
+    expect(
+      misaddressed(calls),
+      'bridge members addressing a channel their own name does not hold'
+    ).toEqual([])
+  })
+
+  it('names the member and the channel when one addresses its sibling’s channel', () => {
+    // The gate's own failure mode, on the record a same-namespace swap produces —
+    // `midi.sendTcp` wired to `midi:send`: every set comparison above stays equal, because
+    // that channel is declared, handled and invoked by *a* member, and this is the check
+    // that names the member and where it actually went.
+    const swapped: BridgeCall[] = [
+      { member: 'midi.sendTcp', kind: 'invoke', channel: MIDI_CHANNELS.send }
+    ]
+
+    expect(misaddressed(swapped)).toEqual([`midi.sendTcp -> ${MIDI_CHANNELS.send}`])
   })
 
   it('registers a handler for every declared invoke channel, and for nothing else', () => {

@@ -44,6 +44,25 @@ async function engineEvents(app: ElectronApplication): Promise<AudioEngineEvent[
   return app.evaluate(() => globalThis.__cuerunnerDevHarness?.engineEvents() ?? [])
 }
 
+/**
+ * The crash banner as the reloaded window renders it, read through the window's own
+ * webContents: Playwright's page handle stays marked as crashed after the renderer has
+ * been replaced, so the page cannot be asked. Every read is raced against a deadline —
+ * `executeJavaScript` issued while a renderer is being torn down never settles — and null
+ * means "not yet", which is what the poll wants.
+ */
+async function crashBanner(app: ElectronApplication): Promise<string | null> {
+  return app.evaluate(async ({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0]?.webContents
+    if (!contents || contents.isCrashed() || contents.isDestroyed()) return null
+    const read = contents
+      .executeJavaScript("document.querySelector('.app-notice[data-kind=\"crash\"]')?.textContent ?? null")
+      .catch(() => null)
+    const deadline = new Promise(resolve => setTimeout(() => resolve(null), 2000))
+    return Promise.race([read, deadline]) as Promise<string | null>
+  })
+}
+
 /** The menu item's own click, from the main process — a synthesized key never reaches it. */
 async function clickMenu(app: ElectronApplication, id: string): Promise<void> {
   await app.evaluate(({ Menu, BrowserWindow }, itemId) => {
@@ -284,6 +303,9 @@ test('the menu silences the engine and cancels what the renderer still holds', a
 })
 
 test('a crashed renderer mid-playback is silenced from main before it is brought back', async ({}, testInfo) => {
+  // The crash, the reload and the window's React boot on a shared runner: the panic path
+  // alone is quick, and the banner this lane reads is only on screen after the reload.
+  test.setTimeout(60_000)
   const { app, capturePath } = await startCapturedRun(testInfo)
   try {
     // The renderer is the only thing that could have stopped the cue, and it is gone.
@@ -312,6 +334,17 @@ test('a crashed renderer mid-playback is silenced from main before it is brought
     // Chromium picks the word per platform — a crashed renderer reports 'crashed' on
     // Linux and 'killed' on macOS — so what is pinned is the line the operator reads.
     expect(state?.lastPanic?.reason).toMatch(/^renderer stopped \(/)
+
+    // And the window comes back saying so: `app:renderer-crash` is what the reloaded window
+    // reads on mount, and the banner is the only place that tells the operator the show was
+    // reset while the file on disk was left alone. Without the pair's registration the crash
+    // is known to main and to nobody else.
+    await expect.poll(() => crashBanner(app), { timeout: 30_000 })
+      .toContain('The interface stopped unexpectedly')
+    // And what it says about the show: the banner is the only place the operator reads
+    // that the session was reset while the file on disk was left alone.
+    await expect.poll(() => crashBanner(app), { timeout: 10_000 })
+      .toContain('The workspace file on disk is untouched')
   } finally {
     await closeApp(app)
   }

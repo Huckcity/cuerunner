@@ -42,7 +42,10 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
 
   const changes = sceneChanges(state.showSettings, scene, state.deskState)
 
-  const failures: string[] = []
+  /** One failed change: what it was and where it was addressed, and why it did not go. */
+  const failed: Array<{ described: string; cause: string | null }> = []
+  /** The distinct reasons behind those failures, in the order they arrived. */
+  const causes: string[] = []
   const refused: string[] = []
   for (const change of changes) {
     if (change.message === null) {
@@ -59,9 +62,23 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
       // anything again.
       useStore.getState().mergeDeskState({ [change.channelId]: change.live })
     } else {
-      failures.push(`${change.label}: ${describeDeskMessage(change.message)}`)
+      // The change and where it was addressed are one half of a failed recall; why it did
+      // not get there is the other, and the engine is the one that wrote it. A recall
+      // against a desk whose socket somebody else holds fails exactly like one against an
+      // address nobody is at, so dropping that sentence leaves the operator reading an
+      // address that was never the problem. Each change answers for its own failure: two
+      // of them can fail for two different reasons.
+      failed.push({
+        described: `${change.label}: ${describeDeskMessage(change.message)}`,
+        cause: sent.error ?? null
+      })
+      if (sent.error !== undefined && !causes.includes(sent.error)) causes.push(sent.error)
     }
   }
+
+  // What the caller reads back: one line per change, each with the reason it failed for.
+  const failures = failed.map(({ described, cause }) =>
+    cause === null ? described : `${described} — ${cause}`)
 
   // The all-closed scene is a real place the desk can be left, so it is remembered as
   // one: a view that said "nothing recalled" after every mic was closed would be wrong
@@ -87,11 +104,17 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
   }
   if (failures.length > 0) {
     // The state that was remembered above is only the state that got there, so the next
-    // recall will try again for the rest.
+    // recall will try again for the rest. A recall that fails usually fails for one reason
+    // across all of its changes, so the log names the changes and then the distinct reasons
+    // once — the engine's own sentences carry em dashes of their own, which is why the
+    // reasons are led in with a word rather than tacked on beside each change.
+    const listed = failed.map(({ described }) => described).join(', ')
     log([{
       level: 'error',
       label,
-      message: `Could not reach the desk: ${failures.join(', ')}`
+      message: causes.length === 0
+        ? `Could not reach the desk: ${listed}`
+        : `Could not reach the desk: ${listed}; why: ${causes.join('; ')}`
     }])
   }
 

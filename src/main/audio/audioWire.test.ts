@@ -263,4 +263,104 @@ describe('the wire declaration', () => {
       rmSync(workDir, { recursive: true, force: true })
     }
   }, 15_000)
+
+  it('reports a declared field the engine left out, and delivers the event with its default', async () => {
+    // The other half of the declaration's rule: a field the declaration names for a type
+    // is required. `normalizeEvent` fills a default in for an absent one, so without this
+    // a line would read as a fact it never carried — an `ended` with no reason as a
+    // natural completion, a `state` with no active as nothing playing. The event is
+    // reported and still delivered, and a repeat raises the one report's count.
+    const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-wire-short-'))
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\cuerunner-wire-short-${process.pid}`
+        : join(workDir, 'engine.sock')
+    const sockets: Socket[] = []
+    const server: Server = createServer((socket) => {
+      sockets.push(socket)
+      socket.write(
+        `${JSON.stringify({
+          greeting: true,
+          name: 'cuerunner-audio',
+          version: 'test',
+          protocol: AUDIO_PROTOCOL_VERSION
+        })}\n`
+      )
+      socket.on('data', (chunk: Buffer) => {
+        for (const line of chunk.toString('utf8').split('\n')) {
+          if (line.trim() === '') continue
+          const request = JSON.parse(line) as { id?: number; verb?: string }
+          if (typeof request.id !== 'number') continue
+          const result = request.verb === 'info' ? { sessionId: 'feed-session' } : { ok: true, at: 0 }
+          socket.write(`${JSON.stringify({ id: request.id, ok: true, result })}\n`)
+        }
+      })
+    })
+    const { promise: listening, resolve: onListening, reject: onListenError } = Promise.withResolvers<void>()
+    server.once('error', onListenError)
+    server.listen(socketPath, onListening)
+    await listening
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const previousBin = process.env.CUERUNNER_AUDIO_BIN
+    const previousSocket = process.env.CUERUNNER_AUDIO_SOCKET
+    process.env.CUERUNNER_AUDIO_BIN = ensureBinary()
+    process.env.CUERUNNER_AUDIO_SOCKET = socketPath
+    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
+    const engine = new NativeAudioEngine()
+    const events: AudioEngineEvent[] = []
+    // The complete line is the last of the four, and the client reads a socket's lines in
+    // order: its arrival is the signal that the three before it have been read.
+    const { promise: delivered, resolve: onDelivered } = Promise.withResolvers<void>()
+    const off = engine.subscribe(event => {
+      events.push(event)
+      if (event.type === 'panic') onDelivered()
+    })
+    try {
+      await engine.ensureStarted()
+      // Only what this test feeds is its subject.
+      drainMainErrors()
+
+      sockets[0].write(
+        [
+          // Two of `ended`'s seven fields are missing, twice over: the field is one fact
+          // per type, so the second line raises the count rather than adding a report.
+          JSON.stringify({ event: { type: 'ended', cueId: 'c1', runId: 'r1', at: 1, sessionId: 'feed-session' } }),
+          JSON.stringify({ event: { type: 'ended', cueId: 'c1', runId: 'r1', at: 2, sessionId: 'feed-session' } }),
+          // The engine-wide flag `state` is read for: a line without it is not "nothing
+          // playing", which is what the default would make it.
+          JSON.stringify({ event: { type: 'state', at: 3, cueId: null, runId: null, playing: false, state: null, sessionId: 'feed-session' } }),
+          JSON.stringify({ event: { type: 'panic', at: 4, fadeMs: 0, sessionId: 'feed-session' } })
+        ].join('\n') + '\n'
+      )
+      await delivered
+
+      // Every event is delivered, carrying the default its absent field would have been
+      // read as — nothing is dropped for being short.
+      expect(events).toEqual([
+        { type: 'ended', cueId: 'c1', runId: 'r1', at: 1, reason: 'complete', loopsCompleted: 0, sessionId: 'feed-session' },
+        { type: 'ended', cueId: 'c1', runId: 'r1', at: 2, reason: 'complete', loopsCompleted: 0, sessionId: 'feed-session' },
+        { type: 'state', at: 3, active: false, cueId: null, runId: null, playing: false, state: null, sessionId: 'feed-session' },
+        { type: 'panic', at: 4, fadeMs: 0, sessionId: 'feed-session' }
+      ])
+      // One report per type and field, in the declaration's own order; the complete line
+      // reports nothing.
+      expect(drainMainErrors()).toEqual([
+        "[main] audio engine sent an event of type 'ended' with no 'reason' (×2)",
+        "[main] audio engine sent an event of type 'ended' with no 'loopsCompleted' (×2)",
+        "[main] audio engine sent an event of type 'state' with no 'active'"
+      ])
+    } finally {
+      off()
+      await engine.shutdown()
+      consoleError.mockRestore()
+      restoreEnv('CUERUNNER_AUDIO_BIN', previousBin)
+      restoreEnv('CUERUNNER_AUDIO_SOCKET', previousSocket)
+      for (const socket of sockets) socket.destroy()
+      const { promise: closed, resolve: onClosed } = Promise.withResolvers<void>()
+      server.close(() => onClosed())
+      await closed
+      rmSync(workDir, { recursive: true, force: true })
+    }
+  }, 15_000)
 })

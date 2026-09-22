@@ -21,14 +21,38 @@ interface Snapshot {
 // instead of applying it silently.
 export function RecoveryNotice() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
+  const [refusal, setRefusal] = useState<string | null>(null)
 
   useEffect(() => {
     // `recovery: null` is the ordinary "nothing to offer"; a snapshot this build cannot
-    // read is the refusal arm, and is offered as nothing rather than caught.
+    // read is the refusal arm, and it is said rather than offered as nothing. It is said
+    // here, on the recovery lane's own bar, rather than through `reportFailure`: that
+    // helper's notice half would put the same sentence on a second bar, as a failure the
+    // session did not have. The log carries the sentence either way.
     void window.cuerunner.workspace
       .recovery()
-      .then(answer => { if (answer.ok && answer.recovery) setSnapshot(answer.recovery) })
+      .then(answer => {
+        if (answer.ok) {
+          if (answer.recovery) setSnapshot(answer.recovery)
+          return
+        }
+        // Main writes the refusal — a lowercase fragment naming what it could not read —
+        // and this is the action the window attempted, in front of it.
+        const message = `Could not bring the unsaved work back: ${answer.error}`
+        useStore.getState().appendLog([{ level: 'error', message }])
+        setRefusal(message)
+      })
   }, [])
+
+  if (refusal !== null) {
+    // Nothing to decide: the snapshot is not offerable, so the bar is dismissed rather
+    // than answered, and the file on disk is left exactly where it is.
+    return (
+      <NoticeBar kind="recovery" onDismiss={() => setRefusal(null)}>
+        {refusal}
+      </NoticeBar>
+    )
+  }
 
   if (!snapshot) return null
 

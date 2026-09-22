@@ -82,6 +82,58 @@ describe('importShowBundle', () => {
   })
 })
 
+// The picked-file refusal as the operator reads it. Main refuses a file that is not a show
+// with a sentence naming it; what the window has to show is that sentence, prefixed by the
+// action it attempted — never the parse text the JSON reader produced on the way.
+describe('useWorkspace — a file that is not a show', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let openWorkspace: () => Promise<void>
+
+  function Harness(): null {
+    openWorkspace = useWorkspace().openWorkspace
+    return null
+  }
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    useStore.setState({
+      cues: [],
+      isDirty: false,
+      workspaceName: 'Untitled',
+      workspacePath: null,
+      notice: null,
+      log: []
+    })
+    act(() => { root.render(createElement(Harness)) })
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    vi.clearAllMocks()
+  })
+
+  it('names the file and says it is not a show, with no parser text in the notice', async () => {
+    const file = '/shows/Half Show.cuerunner'
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({
+      ok: false,
+      error: `that file is not a show — ${file} is not JSON`
+    })
+
+    await act(async () => { await openWorkspace() })
+
+    const state = useStore.getState()
+    expect(state.notice).toBe(`Could not open the workspace: that file is not a show — ${file} is not JSON`)
+    expect(state.notice).not.toContain('Unexpected token')
+    // And the session log carries the same sentence, which is what outlives the notice.
+    expect(state.log.map(entry => entry.message)).toContain(state.notice)
+  })
+})
+
 // `save` and `saveAs` build their payload before the disk answers. An edit landing while
 // the write is out is not in the bytes, so the round trip's witness has to keep it
 // unsaved; a round trip nothing moved under has to leave the session clean. The bridge

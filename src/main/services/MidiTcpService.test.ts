@@ -98,6 +98,27 @@ describe('MidiTcpService', () => {
     expect(setState).toHaveBeenCalledWith('degraded', '10.0.0.5:51325: connect ECONNREFUSED')
   })
 
+  it('says the connection was taken or reset rather than that the desk is not answering', () => {
+    // The desk took the connection and then dropped it, which is what a desk whose MIDI
+    // port somebody else holds does to every client that follows. "Not answering" sends
+    // the operator to look at an address that answered.
+    const { service, link, context, setState, bus } = harness()
+    service.start(context, settings())
+    if (!link.onStatus) throw new Error('the service did not take the link’s status')
+    link.onStatus('10.0.0.5:51325', true)
+
+    link.onStatus('10.0.0.5:51325', false, 'the connection was taken or reset', 'reset')
+
+    expect(setState).toHaveBeenCalledWith('degraded', '10.0.0.5:51325: the connection was taken or reset')
+    expect(bus.snapshot().alerts).toEqual([
+      expect.objectContaining({
+        level: 'warning',
+        source: 'midi-tcp',
+        message: 'Desk 10.0.0.5:51325: the connection was taken or reset'
+      })
+    ])
+  })
+
   it('puts what the desk sends into the show, under the desk’s own name', () => {
     const { service, link, context, bus } = harness()
     service.start(context, settings())
