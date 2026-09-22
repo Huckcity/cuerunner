@@ -146,7 +146,7 @@ describe('recovery snapshots', () => {
     writeFileSync(file, JSON.stringify({ savedAt: 1 }), 'utf-8')
     await expect(readRecovery()).rejects.toThrow('holds no snapshot to bring back')
 
-    // A show that is not one this build can walk takes the migration down inside the
+    // A show that is not one this build can walk takes the funnel down inside the
     // channel, where a fault renders no bar at all: it is refused here instead.
     writeFileSync(file, JSON.stringify({ workspace: 'x', savedAt: 1 }), 'utf-8')
     await expect(readRecovery()).rejects.toThrow('holds no snapshot to bring back')

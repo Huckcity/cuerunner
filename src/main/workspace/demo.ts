@@ -10,8 +10,9 @@
 import { app } from 'electron'
 import { copyFile, mkdir, readFile } from 'fs/promises'
 import { basename, isAbsolute, join } from 'path'
+import { Refusal } from '../ipc/refusal'
+import { hasCueList, type Workspace } from '../../shared/workspace'
 import { migrateWorkspace } from './WorkspaceManager'
-import type { Workspace } from '../../shared/workspace'
 
 export const DEMO_WORKSPACE_FILE = 'Demo Show.cuerunner'
 
@@ -48,9 +49,27 @@ export async function materialiseDemoAssets(
   return workspace
 }
 
-export async function openDemoWorkspace(): Promise<Workspace> {
+/**
+ * The demo as the window opens it: the shipped file, put through the same funnel every
+ * other file goes through — this one is no more trusted than an operator's, because a
+ * shape this build cannot read is one it cannot read wherever it sits.
+ *
+ * `file` is the show to open instead of the shipped one, for the tests: the shipped file's
+ * own path is what the app passes, and a test hands in a fixture to drive this path with
+ * bytes this build refuses. The audio still comes out of the app's own demo folder.
+ */
+export async function openDemoWorkspace(file?: string): Promise<Workspace> {
   const source = demoSourceDir()
-  const raw = await readFile(join(source, DEMO_WORKSPACE_FILE), 'utf-8')
-  const workspace = migrateWorkspace(JSON.parse(raw) as Workspace)
+  const showFile = file ?? join(source, DEMO_WORKSPACE_FILE)
+  const raw = await readFile(showFile, 'utf-8')
+  const parsed = JSON.parse(raw) as Workspace
+  // The same guard the other three load funnels put in front of the funnel, and for the same
+  // reason: a document that parses and is not a show would otherwise be walked by the
+  // funnel's first read of the cue list and reach the window as V8's own text — a fault,
+  // where the demo channel declares a refusal. The sentence names the file, as theirs do.
+  if (!hasCueList(parsed)) {
+    throw new Refusal(`that file is not a show — ${showFile} holds no cue list`)
+  }
+  const workspace = migrateWorkspace(parsed, showFile)
   return materialiseDemoAssets(workspace, source, join(app.getPath('userData'), 'demo'))
 }

@@ -1,4 +1,5 @@
-// The saved shape is one declaration, and this file walks it.
+// The saved shape is one declaration, and this file walks it. The show's own settings are
+// a shape inside it, declared beside it and walked here too.
 //
 // `src/shared/workspaceSections.ts` names the shape's sections in the order the file's
 // keys are written, the route the settings diff reports each one under, and what a merge
@@ -7,7 +8,9 @@
 // and every section is moved again to see the merge take the change or keep this show's.
 // A section that reaches disk but is never compared or blended — the bug this shape's one
 // declaration exists to prevent — fails here, and so does a workspace key the declaration
-// does not carry.
+// does not carry. The settings list inside it is held to `ShowSettings` the same way: a
+// section the type has and the declaration does not is a section the load funnel would
+// refuse in a file this build itself wrote.
 //
 // The fixture is hand-written on purpose. Fixtures are input, not writers: the rule the
 // declaration holds is about the app's own writers, and the fixture is what they are held
@@ -17,8 +20,13 @@ import { serialiseWorkspace } from './WorkspaceManager'
 import { defaultShowSettings } from '../../shared/show'
 import { diffWorkspaces } from '../../shared/showfile'
 import { mergeWorkspaces } from '../../shared/showfileMerge'
-import { WORKSPACE_SECTIONS, type WorkspaceKey } from '../../shared/workspaceSections'
+import {
+  SHOW_SETTINGS_SECTIONS,
+  WORKSPACE_SECTIONS,
+  type WorkspaceKey
+} from '../../shared/workspaceSections'
 import type { AudioCue } from '../../shared/cue'
+import type { ShowSettings } from '../../shared/show'
 import type { Workspace } from '../../shared/workspace'
 
 vi.mock('electron', () => ({
@@ -182,5 +190,34 @@ describe('the saved shape', () => {
       const expected = section.merge === 'ours' ? fixture[section.key] : theirs[section.key]
       expect(merged[section.key], section.key).toEqual(expected)
     }
+  })
+})
+
+/**
+ * The sections a show's settings carry, pinned the way the saved shape's keys are: the list
+ * in `workspaceSections.ts` is the one the load funnel's shape check reads, and this is
+ * where a section that reached the type but not the list — or the list but not the type —
+ * fails. The type ties each name back to a key of a `ShowSettings`, so a section the type
+ * loses fails to compile before it fails below.
+ */
+const declaredSettings: readonly (keyof ShowSettings)[] = [
+  'oscIn',
+  'midiIn',
+  'desk',
+  'rf',
+  'presence',
+  'script',
+  'companion',
+  'scenes',
+  'cast'
+]
+
+describe('the show-settings shape', () => {
+  it('declares every section a show’s settings carry, and nothing else', () => {
+    expect(SHOW_SETTINGS_SECTIONS).toEqual(declaredSettings)
+    // `defaultShowSettings` is the one value typed as the whole of a `ShowSettings`, and it
+    // builds a section per key: the list has to carry them all, or a file this build wrote
+    // would be refused by the check the list exists for.
+    expect(Object.keys(defaultShowSettings())).toEqual(declaredSettings)
   })
 })

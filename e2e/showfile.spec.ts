@@ -114,8 +114,9 @@ test('saving an unedited show writes the same bytes, and an edit writes differen
   // A real edit, so the save certainly runs (renaming a cue to the name it already has
   // is not an edit: React does not report a change for a value that did not change, and
   // the spec would then be asserting that an unsaved file equals itself). The file is
-  // migrated on this first save — it was written without the show-services section — so
-  // what follows compares this version's output with this version's output.
+  // brought up to this build's shape on this first save — it was written without the
+  // show-services section, which the window's own defaults stand in for — so what follows
+  // compares this version's output with this version's output.
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).click()
   await renameSelectedCue('Walk-in (house to half)')
   await save()

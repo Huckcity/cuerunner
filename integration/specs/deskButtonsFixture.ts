@@ -10,6 +10,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { defaultShowSettings } from '../../src/shared/show'
 
 /** The mute groups the show runs from, as the desk's own panel numbers them. */
 export const GO_GROUP = 5
@@ -33,6 +34,10 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
   const { port } = options
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-desk-buttons-'))
   const path = join(root, `${DESK_BUTTONS_SHOW_NAME}.cuerunner`)
+  // Every section this build declares, then what this show says about them: the load funnel
+  // refuses a settings object that leaves one out, so a fixture carrying a hand-picked few
+  // would be a file this build cannot read at all.
+  const defaults = defaultShowSettings()
 
   writeFileSync(path, `${JSON.stringify({
     version: 1,
@@ -42,7 +47,9 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
     showSettings: {
+      ...defaults,
       desk: {
+        ...defaults.desk,
         kind: 'midi-tcp',
         profile: 'sq',
         midiPort: '',

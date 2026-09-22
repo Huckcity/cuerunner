@@ -58,6 +58,7 @@ import {
   type SavedWorkspace,
   type WorkspaceAutosavePayload,
   type WorkspaceCompareResult,
+  type WorkspaceDemoResult,
   type WorkspaceExportPayload,
   type WorkspaceExportResult,
   type WorkspaceImportResult,
@@ -548,18 +549,20 @@ export function registerIpcHandlers(): void {
   // points at, because a workspace that came from another machine has paths that only
   // mean something there; the result carries what is missing so the window can offer to
   // find it rather than firing a cue at a file that is not there.
-  // The handlers that declare a refusal arm — open, openPath, recovery, and the
+  // The handlers that declare a refusal arm — open, openPath, openDemo, recovery, and the
   // export/import/merge/compare block below — answer it for an ordinary reason: a file
-  // this build cannot draw, an archive that arrived damaged, a folder that already holds
-  // these files. Only a genuine fault rejects. The rest of the namespace keeps the shapes
-  // it had: a cancel is a null inside an `ok` arm, and a save's fs failure is a fault.
+  // this build cannot draw, a demo that is not the shape it ships, an archive that arrived
+  // damaged, a folder that already holds these files. Only a genuine fault rejects. The
+  // rest of the namespace keeps the shapes it had: a cancel is a null inside an `ok` arm,
+  // and a save's fs failure is a fault.
   ipcMain.handle(WORKSPACE_CHANNELS.open, (event): Promise<WorkspaceOpenResult> =>
     refusalValue(async () => ({ ok: true as const, opened: await openWorkspace(getWin(event)) })))
 
   ipcMain.handle(WORKSPACE_CHANNELS.openPath, (_, filePath: string): Promise<WorkspaceOpenPathResult> =>
     refusalValue(async () => ({ ok: true as const, opened: await openWorkspaceFromPath(filePath) })))
 
-  ipcMain.handle(WORKSPACE_CHANNELS.openDemo, async (): Promise<Workspace> => openDemoWorkspace())
+  ipcMain.handle(WORKSPACE_CHANNELS.openDemo, (): Promise<WorkspaceDemoResult> =>
+    refusalValue(async () => ({ ok: true as const, workspace: await openDemoWorkspace() })))
 
   ipcMain.handle(WORKSPACE_CHANNELS.relink, async (
     event, payload: WorkspaceRelinkPayload

@@ -150,6 +150,16 @@ export type WorkspaceRecoveryResult =
   | Refusal
   | { ok: true; recovery: WorkspaceRecovery | null }
 
+/**
+ * What opening the demo answered: the show it read, or why this build cannot read the one
+ * it ships. The demo is the app's own file, and it is still a file: it goes through the
+ * same funnel every other load does, so a shape this build does not write is refused here
+ * like anywhere else rather than reaching the window as an unreadable show.
+ */
+export type WorkspaceDemoResult =
+  | Refusal
+  | { ok: true; workspace: Workspace }
+
 export interface WorkspaceAutosavePayload {
   workspace: Workspace
   sourcePath: string | null
@@ -173,7 +183,8 @@ export interface WorkspaceBridge {
   open(): Promise<WorkspaceOpenResult>
   /** A file a recent entry names, opened without a dialog. */
   openPath(filePath: string): Promise<WorkspaceOpenPathResult>
-  openDemo(): Promise<Workspace>
+  /** The demo show, or the refusal of the file it ships as. */
+  openDemo(): Promise<WorkspaceDemoResult>
   /** Points one cue's missing media at a file the operator picked. */
   relink(workspace: Workspace, workspacePath: string | null, cueId: string): Promise<RelinkedWorkspace>
   save(workspace: Workspace, existingPath: string | null): Promise<SavedWorkspace | null>

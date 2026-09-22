@@ -389,6 +389,28 @@ describe('saving and reopening a show folder', () => {
     expect((reopened.workspace.cues[0] as AudioCue).filePath).toBe(media)
   })
 
+  it('writes the route the session resolved when the pair’s own route no longer names it', async () => {
+    const showDir = join(dir, 'show')
+    const saved = join(showDir, 'Tour Show.cuerunner')
+    mkdirSync(join(showDir, 'media'), { recursive: true })
+    // The pair says the file lives beside the showfile; it has since been moved into
+    // `media`, and the cue points at where it is now. The pair's route names nothing that
+    // resolves to that file, so it is not the record to keep: the save writes the route
+    // this session resolved and the absolute it was found at.
+    const moved = write(join(showDir, 'media'), 'walk-in.wav')
+    const cue = {
+      ...audioCue('a1', moved),
+      media: { path: 'walk-in.wav', originalPath: '' }
+    } as unknown as Cue
+
+    await saveWorkspace({} as never, workspaceWith([cue]), saved)
+
+    const onDisk = JSON.parse(readFileSync(saved, 'utf-8')) as Workspace
+    const written = onDisk.cues[0] as unknown as { filePath: string; media: Record<string, string> }
+    expect(written.filePath).toBe(join('media', 'walk-in.wav'))
+    expect(written.media).toEqual({ path: join('media', 'walk-in.wav'), originalPath: moved })
+  })
+
   it('writes no media for a blank audio cue, and leaves its path empty', async () => {
     const showDir = join(dir, 'show')
     const media = write(join(showDir, 'media'), 'walk-in.wav')
@@ -483,7 +505,7 @@ describe('saving and reopening a show folder', () => {
   })
 
   it('reports the grouping a recovered snapshot needed repaired, beside its missing media', async () => {
-    // The snapshot is read through the same migration every file is, so a damaged
+    // The snapshot is read through the same funnel every file is, so a damaged
     // grouping comes back repaired — and like the missing-media report, the repair has
     // to reach the window rather than being applied silently.
     const damaged = {
@@ -502,27 +524,6 @@ describe('saving and reopening a show folder', () => {
     expect(recovered?.loadNotes.map(note => [note.kind, note.cueId])).toEqual([
       ['missing-group', 'o1'],
       ['reordered', 'g1']
-    ])
-  })
-
-  it('migrates a snapshot left by an older build, the way it migrates a file', async () => {
-    // A session that died on an older build leaves an older snapshot: without the
-    // migration its groups come back with no children, because the children are still
-    // named by the `childIds` field this build no longer reads.
-    const legacy = {
-      ...workspaceWith([]),
-      cues: [
-        { id: 'g1', type: 'group', mode: 'sequence', name: 'Act 1', childIds: ['c1'] },
-        { id: 'c1', type: 'wait', name: 'Top of act', duration: 1000, parentId: null }
-      ]
-    } as unknown as Workspace
-    await writeRecovery(legacy, join(dir, 'Tour Show.cuerunner'))
-
-    const recovered = await openRecovery()
-
-    expect(recovered?.workspace.cues.map(cue => [cue.id, cue.parentId])).toEqual([
-      ['g1', null],
-      ['c1', 'g1']
     ])
   })
 
@@ -804,13 +805,17 @@ describe('relinkWorkspaceMedia', () => {
 
 describe('the demo folder stays loadable', () => {
   it('has no media references that point outside it', () => {
-    // The demo ships its audio beside its .cuerunner and is materialised on open; the media
-    // fields described here are for saved workspaces and must not have crept into it.
+    // The demo ships its audio beside its .cuerunner and is materialised on open, so nothing
+    // in it may name a location off this machine. Every cue's route is the bare file name
+    // beside the showfile — the route this build's saves write for a file the folder holds —
+    // and the half a save records for the file's last-known absolute stays empty: a path
+    // there would be the machine that regenerated the file, and would mean nothing on any
+    // other.
     const demo = JSON.parse(readFileSync(join(process.cwd(), 'resources/demo/Demo Show.cuerunner'), 'utf-8'))
     for (const cue of demo.cues as Array<Record<string, unknown>>) {
       if (cue.type !== 'audio') continue
       expect(existsSync(join(process.cwd(), 'resources/demo', cue.filePath as string))).toBe(true)
-      expect(cue.media).toBeUndefined()
+      expect(cue.media).toEqual({ path: cue.filePath, originalPath: '' })
     }
   })
 })

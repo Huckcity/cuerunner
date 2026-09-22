@@ -78,15 +78,15 @@ export const SAVED_ARTIFACT_WRITERS: readonly SavedArtifactWriter[] = [
       'The file at the destination path, which is also where the bytes go: before anything '
       + 'is serialised, the changed-on-disk check compares it with the bytes main last read '
       + 'or wrote at that path (a path main holds no identity for is not checked — the save '
-      + 'dialog named it), and `historyForSave` reads it, migrated the way a load migrates '
-      + 'it, to diff the new bytes against. The bytes are built from the window’s document '
+      + 'dialog named it), and `historyForSave` reads it through the load funnel, the way a '
+      + 'load does, to diff the new bytes against. The bytes are built from the window’s document '
       + 'by `serialiseWorkspace`, which rewrites every audio cue’s route against the '
       + 'destination folder — relative when the file lives inside it, absolute when it does '
       + 'not. After the write the identity of the bytes just written is recorded '
       + '(`rememberFile`), which is the baseline the next save checks the disk against.',
     history:
       'The file’s own history is the base: one entry is appended when the diff against the '
-      + 'migrated file is non-empty, and the file’s history is otherwise carried unchanged. '
+      + 'file as the load funnel read it is non-empty, and the file’s history is otherwise carried unchanged. '
       + 'When the file cannot be read, or holds another show (`previous.id !== '
       + 'workspace.id`), the window’s history is carried verbatim — that file has no history '
       + 'of this show’s edits to continue. Capped at 200 entries.',
@@ -124,7 +124,7 @@ export const SAVED_ARTIFACT_WRITERS: readonly SavedArtifactWriter[] = [
       'Ours’ history, carried verbatim: the merge continues the history of the file being '
       + 'merged into, and the other two files’ entries belong to them. The document itself '
       + 'is built from three files — the open show (ours), the other copy (theirs) and the '
-      + 'version the two started from (ancestor), the latter two read through the migration '
+      + 'version the two started from (ancestor), the latter two read through the funnel '
       + 'every load uses. The destination is whatever the save dialog returns, defaulted to '
       + '`<ours name> (merged).cuerunner` beside ours when ours has a path and to the same '
       + 'name in the dialog’s folder when it has none; nothing refuses a destination that is '
@@ -168,14 +168,14 @@ export const SAVED_ARTIFACT_WRITERS: readonly SavedArtifactWriter[] = [
       'No base beyond the artifact itself: the showfile written out is the bundle’s '
       + '`show.cuerunner` entry, byte for byte, and the media entries are extracted under '
       + 'the folder the operator picks. The workspace handed to the window is that showfile '
-      + 'migrated and resolved like any other load.',
+      + 'read through the funnel and resolved like any other load.',
     history:
       'Nothing is appended and nothing is rewritten: the exporting machine’s history '
       + 'arrives verbatim with the bytes, and stays until the first ordinary save replaces '
       + 'them.',
     normalisation:
       'The write does not normalise — the bundle’s bytes are what land — while the returned '
-      + 'session goes through the same migration and grouping repair every load path does, '
+      + 'session goes through the same funnel and grouping repair every load path does, '
       + 'its load notes returned with it. This is the one exception to “bytes are a function '
       + 'of (show, folder)”.'
   },
@@ -195,8 +195,8 @@ export const SAVED_ARTIFACT_WRITERS: readonly SavedArtifactWriter[] = [
       + 'appended.',
     normalisation:
       'None on the way out, and never through `serialiseWorkspace`: the bytes are '
-      + '`JSON.stringify` of the snapshot object. The migration and the grouping repair '
-      + 'happen on the way back in, when the snapshot is read.'
+      + '`JSON.stringify` of the snapshot object. The funnel and the grouping repair happen '
+      + 'on the way back in, when the snapshot is read.'
   },
   {
     id: 'demo',
@@ -205,14 +205,15 @@ export const SAVED_ARTIFACT_WRITERS: readonly SavedArtifactWriter[] = [
     writes: ['materialiseDemoAssets'],
     base:
       'The shipped file `resources/demo/Demo Show.cuerunner` (the packaged build’s `demo` '
-      + 'extra-resource), read and migrated into a session with no path of its own — a '
+      + 'extra-resource), read through the load funnel into a session with no path of its own — a '
       + 'read-only flow that writes no saved artifact. Its audio — and only its audio — is '
       + 'copied into `userData/demo` and the cues are re-pointed at the copies; the show '
       + 'itself is never written.',
     history:
       'None: the demo has no file of its own, and nothing is appended anywhere.',
     normalisation:
-      '`migrateWorkspace` on the way in, like any load; the copies under `userData/demo` '
-      + 'are assets, not a saved artifact, and no showfile is written at all.'
+      '`migrateWorkspace` on the way in, like any load — the shape check every other file '
+      + 'gets, with the refusal this build answers a file it does not know; the copies under '
+      + '`userData/demo` are assets, not a saved artifact, and no showfile is written at all.'
   }
 ]

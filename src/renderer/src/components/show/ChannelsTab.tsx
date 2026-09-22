@@ -51,12 +51,17 @@ function muteGroupOf(value: string): number | null {
 
 /** Whether one group has been given both buttons, which would run the show both ways. */
 function sameButton(desk: DeskSettings): boolean {
-  return desk.buttons.go !== null && desk.buttons.go === desk.buttons.back
+  // Absent and null are the same thing here, as everywhere else a field may be left out:
+  // an older file's section has no `go` key at all, and two absent groups are two
+  // unassigned buttons rather than one group given both.
+  const go = desk.buttons.go ?? null
+  return go !== null && go === (desk.buttons.back ?? null)
 }
 
 /** Whether one note has been given both buttons, which would run the show both ways. */
 function sameNote(desk: DeskSettings): boolean {
-  return desk.buttons.goNote !== null && desk.buttons.goNote === desk.buttons.backNote
+  const go = desk.buttons.goNote ?? null
+  return go !== null && go === (desk.buttons.backNote ?? null)
 }
 
 /** Every mute group the desk has, and the option that assigns none. */

@@ -183,10 +183,10 @@ test('the desk’s own note keys are assigned beside the groups, on the desk tha
   await settings.locator('.show-settings-done').click()
 })
 
-test('a show written before the desk had a socket opens on the port the desks use', async () => {
-  // The file is what an operator's workspace looks like after the upgrade: a desk pointed
-  // over the network, and no MIDI-over-TCP port, because the field did not exist when it
-  // was saved.
+test('a show whose settings carry one section and not the rest is refused, and says which', async () => {
+  // A file written before the show's settings had every section this build declares — a
+  // desk and nothing else. The load refuses it, naming the file and the section it is
+  // missing, rather than filling the others in and handing the window a show nobody wrote.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-desk-tcp-'))
   const showPath = path.join(root, 'Socket Show.cuerunner')
   fs.writeFileSync(showPath, `${JSON.stringify({
@@ -215,32 +215,18 @@ test('a show written before the desk had a socket opens on the port the desks us
   ;({ app, page } = await launchApp({ license: mintLicense(), userDataDir }))
   await openFromRecent(page, userDataDir, showPath)
 
-  await openShowSettings(page)
-  const settings = page.locator('.show-settings-dialog')
-  await expect(settings.locator('.desk-tcp-host')).toHaveValue('10.0.0.5')
-  await expect(settings.locator('.desk-tcp-port')).toHaveValue('51325')
-  // A file written before desks had a profile is sent what it was always sent: the app's
-  // own note arrangement. Nothing moves on the desk because the app was updated.
-  await expect(settings.locator('.desk-profile')).toHaveValue('note')
-  await settings.locator('.show-settings-done').click()
-
-  // Saved, the port is the show's own rather than a value this build filled in on the way
-  // through — the next file carries it. The write is the app's, not this test's, so what is
-  // asserted is the file *becoming* that: a single read after the dirty marker clears is a
-  // race the test wins on a fast machine and loses on a busy one, which is a test bug rather
-  // than a finding.
-  await page.locator('.toolbar-brand').click()
-  await page.locator('.file-menu button[data-action="save"]').click()
-  await expect(page.locator('.workspace-name')).not.toContainText('●')
-
-  await expect
-    .poll(() => {
-      const saved = JSON.parse(fs.readFileSync(showPath, 'utf-8')) as {
-        showSettings: { desk: { host: string; tcpPort: number } }
-      }
-      return saved.showSettings.desk
-    }, { timeout: 15_000 })
-    .toMatchObject({ host: '10.0.0.5', tcpPort: 51325 })
+  const notice = page.locator('.app-notice[data-kind="error"]')
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText('Could not open')
+  // The file, and the fact: the section this build writes that the file has not got.
+  await expect(notice).toContainText(showPath)
+  await expect(notice).toContainText('settings have no oscIn section')
+  // Nothing half-read reached the window: the session is still the show it had.
+  await expect(page.locator('.workspace-name-text')).not.toHaveText('Socket Show')
+  // The notice goes before the next case drives the same window: it is the operator's to
+  // clear, and a bar left up would sit over the desk row the cases below reach for.
+  await page.locator('.app-notice-dismiss').click()
+  await expect(page.locator('.app-notice')).toHaveCount(0)
 })
 
 test('a scene recalled at a desk that is not there says so, and the show carries on', async () => {

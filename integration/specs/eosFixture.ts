@@ -5,6 +5,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { defaultShowSettings } from '../../src/shared/show'
 
 export interface EosShowOptions {
   /** Where the console is: the peer's port, or the port a real console listens on. */
@@ -53,7 +54,11 @@ export function writeEosShow(options: EosShowOptions): string {
     createdAt: '2026-01-01T00:00:00.000Z',
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
+    // Every section this build declares, then what this show says about them: the load
+    // funnel refuses a settings object that leaves one out, so a fixture carrying a
+    // hand-picked few would be a file this build cannot read at all.
     showSettings: {
+      ...defaultShowSettings(),
       oscIn: { enabled: true, port: oscInPort }
     },
     // GO is de-duplicated by the trigger guard, deliberately: two presses inside the window

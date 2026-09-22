@@ -111,13 +111,17 @@ export interface Workspace {
   audioSettings: AudioSettings
   midiSettings: MidiSettings
   /**
-   * Ports and listeners for the show services. Optional: workspaces saved before the
-   * services existed carry no such section, and the migration fills it in.
+   * Ports and listeners for the show services. Optional: a workspace saved before the
+   * services existed carries no such section, and no load fills one in — the window's own
+   * defaults stand in for settings a file does not have. A file that does carry one has to
+   * carry exactly the sections this build declares, or it is refused.
    */
   showSettings?: ShowSettings
   /**
    * How long a firing surface stays deaf afterwards. Optional for the same reason: a
-   * workspace saved before the guard existed gets the default on load.
+   * workspace saved before the guard existed has none, and this is the one section a load
+   * still completes — the default, because a show with no guard is a show whose first
+   * bounced key truncates a cue.
    */
   triggerGuard?: TriggerGuardSettings
   cues: Cue[]
@@ -129,12 +133,12 @@ export interface Workspace {
  *
  * The three load funnels that hand a parsed document to `migrateWorkspace` are the callers —
  * a `.cuerunner`, a bundle's show entry, and the app's own recovery snapshot — and each has
- * the bytes parsed by the time it can ask. The migration is called with documents that were
+ * the bytes parsed by the time it can ask. The funnel is called with documents that were
  * not read this way too (`openDemoWorkspace`, the save's `historyForSave` and
  * `compareWithFile` all parse a value they built or were handed), and those callers are not
  * this check's business.
  *
- * What the migration does with a document that is not a show is dereference the cue list
+ * What the funnel does with a document that is not a show is dereference the cue list
  * first — `workspace.cues.find` — and throw V8's own text about it: `Cannot read properties
  * of undefined (reading 'find')` where the key is absent, `… is not a function` where it is
  * there and holds something that is not a list. Neither names the file; a refusal written
@@ -143,8 +147,8 @@ export interface Workspace {
  * The check is the cue list alone. It is the key every reader of a workspace walks first,
  * so a document without one is not a show whichever of its other keys happen to be there,
  * and it is the one key this build cannot invent: a file saved by any build this app has
- * ever shipped carries it, legacy `childIds` shows included. Whether the rest of the shape
- * is a show is the migration's business, and its refusals are its own.
+ * ever shipped carries it. Whether the rest of the shape is a show is the funnel's
+ * business, and its refusals are its own.
  */
 export function hasCueList(value: unknown): value is { cues: unknown[] } {
   if (typeof value !== 'object' || value === null) return false

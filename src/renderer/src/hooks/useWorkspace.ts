@@ -106,8 +106,21 @@ export async function openDemoWorkspace(): Promise<void> {
     // The demo's audio is copied out of the app bundle as it loads, so there is never
     // anything missing to report. It is a template rather than a show someone owns, so
     // it takes a fresh identity: saving it as your own show must not keep the demo's.
-    const demo = await window.cuerunner.workspace.openDemo()
-    loadIntoStore(demo, null, [], [], { id: crypto.randomUUID(), createdAt: new Date().toISOString() })
+    const answer = await window.cuerunner.workspace.openDemo()
+    // A refusal is the answer for a demo this build cannot read — the app's own file, put
+    // through the same funnel as an operator's — so it is branched on rather than caught,
+    // and lands in the notice bar beside every other load's.
+    if (!answer.ok) {
+      reportFailure(`Could not open the demo workspace: ${answer.error}`)
+      return
+    }
+    loadIntoStore(
+      answer.workspace,
+      null,
+      [],
+      [],
+      { id: crypto.randomUUID(), createdAt: new Date().toISOString() }
+    )
   } catch (e) {
     reportFailure(`Could not open the demo workspace: ${message(e)}`)
   }
