@@ -121,7 +121,7 @@ Nothing is "covered" by one lane; the honesty is in saying which lane claims wha
 
 | Lane | Where | Counterpart | Proves |
 |---|---|---|---|
-| **peers** | every PR, Linux (`ubox`) | `integration/peers/*` — an Eos OSC peer and an SQ/Avantis MIDI-TCP peer, both written from the vendor documents | Cuerunner still emits the bytes and still reacts correctly to the bytes; the fixture contract has not moved |
+| **peers** | every PR, Linux (`ubox`) | `integration/peers/*` — an Eos OSC peer and an SQ/Avantis MIDI-TCP peer, both written from the vendor documents, and an SQ control-service peer written from the capture of one | Cuerunner still emits the bytes and still reacts correctly to the bytes; the fixture contract has not moved |
 | **vendor** | nightly + on demand, `win-ci` (and the Mac mini if it earns a slot) | real ETCnomad (`eos-windows`), and A&H MIDI Control's virtual port joined to the desk peer (`ah-windows`) | the fixtures are still what the real software does; Eos is not just a peer we invented; and the bridge a desk is really driven through passes bytes both ways |
 | **hardware** | on demand only, wherever a desk is (`integration-hardware.yml`, `desk_host`) | a real SQ or Avantis on the network — and, when a console is on a cable, the console itself (`msc_host`) | the peer is a fair model of the desk, the vendor lane's assumption (MIDI bytes are MIDI bytes) holds, and an `msc` trigger fires end to end from a console that transmits one (G2) |
 
@@ -276,20 +276,26 @@ matching language.
 
 ```
 integration/
-  playwright.config.ts        per-suite config; testDir 'specs'; CI workers 1, retries 1
+  playwright.config.ts        per-suite config; testDir 'specs'; workers 1 anywhere, retries 1
   peers/
     eos.ts                    the console: an OSC peer over UDP, `--tx-host`/`--tx-port` for
                               where its output goes, `--cue-send-string`, `--control` for a
                               read-only JSON view of what it thinks
     desk.ts                   the desk: MIDI over TCP, `--profile sq|avantis`, `--port`,
                               `--midi-channel`, `--fader-law`, `--control`, `--connect-burst`
+    sqNative.ts               the desk's own control service on 51326: the frames, the answers
+                              and the reader of a peer written from the capture rather than
+                              from a document (one protocol per module, so `desk.ts` stays
+                              the MIDI service's model)
   specs/
     harness-eos.spec.ts       the Eos peer held to ETC's own pages, no app running
-    harness-desk.spec.ts      the desk peers held to the A&H documents, no app running
+    harness-desk.spec.ts      the desk peers held to the A&H documents — and the native one to
+                              its capture — with no app running
     eos.spec.ts               Cuerunner ↔ the Eos peer: fire a cue, answer the console
     eos-vendor.spec.ts        @vendor: the same chain against a real console — or against
                               a recording of one — and it skips itself when neither is named
-    desk-sq.spec.ts           Cuerunner ↔ the SQ peer
+    desk-sq.spec.ts           Cuerunner ↔ the SQ peer and the native peer beside it, on their
+                              own loopback address: a recall's membership and its mics
     desk-avantis.spec.ts      Cuerunner ↔ the Avantis peer
     desk-held-socket.spec.ts  Cuerunner ↔ the SQ peer while a socket of its own holds the
                               desk's one connection: the recall's accepted-then-reset
@@ -300,7 +306,8 @@ integration/
                               and a console on a cable transmitting MSC (`MSC_HOST`); it skips
                               itself when neither is named
     eosFixture.ts             the console show: three cues, one of which answers
-    deskFixture.ts            the one-mic show the desk specs drive
+    deskFixture.ts            the desk show: one channel and one fader by default, or the
+                              controlled set and the placements a lane asks for
   fixtures/vendor/            recordings from the vendor lane, each carrying its provenance
 ```
 
@@ -344,7 +351,8 @@ desk on a socket that any client can point at (QLab over MIDI Control, Bitfocus
 Companion, `protokol`, a colleague's script). That is the "as independent as possible"
 part: the harness's device side is a tool, not a test fixture, and a piece of it can be
 handed to someone integrating for real. `harness.spec.ts` exists so the peers are tested
-against the documents rather than only against Cuerunner.
+against the documents — and the SQ control-service peer against the capture of a desk — rather
+than only against Cuerunner.
 
 ---
 
@@ -437,8 +445,10 @@ means.
 
 **The desk's other services (measured on the same run).** The same SQ-6 exposes a second TCP
 service on **51326** that accepts several clients at once and answers neither a MIDI get nor a
-universal SysEx identity request: it is not a second MIDI endpoint and no lane uses it. Its
-being separate is what makes a control application compatible with Cuerunner's desk link:
+universal SysEx identity request: it is not a second MIDI endpoint — it is the desk's own
+control protocol, and since Story 11.5 a peer models it for the peers lane
+(`integration/peers/sqNative.ts`, below). Its being separate is what makes a control application
+compatible with Cuerunner's desk link:
 TheatreMix 3.6, running under Wine, held 51326 while a get on 51325 was answered in 3 ms, so the
 one-client rule belongs to the MIDI service rather than to the desk.
 
@@ -469,14 +479,22 @@ The capture is `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, t
 `integration/sqCapture.mjs` against a show whose assignments are known — inputs 1 and 3 on DCA 1,
 inputs 8 and 9 on DCA 4 — and it holds the whole 16-input × 8-DCA matrix: four `1d` frames carrying
 `01 00`, exactly those pairs, and the other 124 written `00 00`. **The app writes these frames and
-no peer replays them yet.** Story 11.1's codec is what builds them and Story 11.2 gave it its
-caller: a scene recall sends the *intent* — channel, fader, placed or cleared, and whether the
-channel rides a fader at all — through `show:command` to the `sq-native` service, which holds the
-session on this port and leaves by the desk's own door. The capture is still replayed by nothing:
-the desk peer models the MIDI service and 51326 has no stand-in at all, so `desk-sq.spec.ts`
-asserts the half its link can see — the mic's mute on page 00, and that nothing on the link
-addresses a DCA — and names the membership as the half whose claim stays where the record left it,
-Story 11.5 being the lane that brings the peer. Two things are deliberately noted as unmeasured:
+a peer answers as the capture says the desk answers.** Story 11.5's model,
+`integration/peers/sqNative.ts`, is one protocol per module beside the MIDI peer: it owns its own
+reader and decoder, and every frame a client writes is answered with the capture's own reply where
+the capture holds one — `7f 01` answered `7f 02 …`, `7f 0b` by `7f 0c …`, `7f 11` by `7f 12 …`, and
+the hello in its own form — and with nothing where it holds none. Story 11.1's codec is what builds
+the frames and Story 11.2 gave it its caller: a scene recall sends the *intent* — channel, fader,
+placed or cleared, and whether the channel rides a fader at all — through `show:command` to the
+`sq-native` service, which holds the session on this port and leaves by the desk's own door. So the
+frame half now runs on the peers lane, on every pull request: `desk-sq.spec.ts` drives a recall
+through both peers and asserts the four pairs and flags the capture measures — decoded by the
+native peer and matched against the capture's own bytes — beside the mics of both fader ranges on
+the desk link, and `harness-desk.spec.ts` holds the model itself to the capture with no app
+running. What the model cannot answer is what the *desk* says: the capture holds no assignment
+frame from the desk and no keepalive datagram, so the peer says nothing about a membership read and
+witnesses the keepalive as arrival and width only, and the membership's claim stays where the
+record left it until a desk run. Two things are deliberately noted as unmeasured:
 the **read form** (what the desk reports when asked, or pushes when a pair changes at its own
 surface), so a client that writes these frames knows only what it sent; and the desk's
 **controlling-client rule** — it reports a controlling client, and a client
@@ -592,10 +610,13 @@ first slice, not the ceiling.
    40, the parameter's MSB naming the input and the value carrying `40 + the fader's place` into
    the DCA and the place alone out — and `desk-avantis.spec.ts` asserts the placement, the clear
    and the mic's mutes with the desk's own record as the witness. An SQ's membership is written
-   on the desk's own control service on **51326** (§6), which no peer here stands in for, so
-   `desk-sq.spec.ts` asserts what its link can see — the mic's mute, and that nothing on that
-   link addresses a DCA — and says in its own header that the membership's claim stays where the
-   record left it until Story 11.5's peer replays the capture.
+   on the desk's own control service on **51326** (§6), which Story 11.5 gave a peer of its own
+   (`integration/peers/sqNative.ts`, one protocol per module): `desk-sq.spec.ts` drives a recall
+   through it beside the MIDI peer and asserts the capture's own four pairs and flags from the
+   native record next to the mics of both fader ranges from the desk link, with nothing outside
+   the controlled set on either record. What the desk itself answers about a membership is still
+   unmeasured — the capture holds no such frame — so that half's claim stays where the record
+   left it (AD-24).
 4. Mute semantics: Avantis velocity `00` and note-off are ignored; `40`–`7F` is on,
    `01`–`3F` off. Assert all three, because that is where a "sensible" implementation is
    wrong.
@@ -675,8 +696,10 @@ driven through the app rather than through a socket of the spec's own:
    mutes are, and no trigger kind reads one. G2 says what building that would take.
 
 **The peers, on their own** (`harness-eos.spec.ts`, `harness-desk.spec.ts`) — every shape
-asserted in §5 and §6 against the documented examples, with no application running. This is
-what lets a peer be handed to someone else as a tool.
+asserted in §5 and §6 against the documented examples, with no application running, and — since
+Story 11.5 — the SQ's own control service held to the capture it was measured from instead of to
+a document, driven by hand on an ephemeral port. This is what lets a peer be handed to someone
+else as a tool.
 
 **The hardware lane** (`desk-hardware.spec.ts`, `@hardware`) — pointed at a real SQ or Avantis
 by `DESK_HOST`/`DESK_PROFILE`, and at a console's cable by `MSC_HOST`:
@@ -702,6 +725,15 @@ by `DESK_HOST`/`DESK_PROFILE`, and at a console's cable by `MSC_HOST`:
    compares each of them exactly. It needs a hand on the console's GO, and it is the one case
    here with no wire view to read: the app's log line naming the command and the port it came
    from is the only report there is.
+5. The mic the scene places is open, and the mic that left is silent. An SQ's, so a run that
+   named another range reports it skipped with its reason. The show carries two mics and two
+   scenes that hand one fader between them, and the desk's own value is read for both inputs at
+   either end of that walk — the mic the scene places is open, the mic it places nowhere is
+   silent — so what a recall does to the *mics* is read off the desk. The membership itself
+   does not reach this lane's desk at all: the relay carries the MIDI service, so no frame is
+   written on 51326 and nothing here can fail for one, and its failure message says so — the
+   fader is the operator's to look at, beside the desk's own I/O patch, which no route here
+   writes and which has to be left where the run's operator left it.
 
 **The A&H lane, through the bridge** (`desk-midi-control.spec.ts`, `@ah`) — the desk
 conversation over MIDI Control's virtual port instead of the desk's socket, with the peer
@@ -883,9 +915,10 @@ session replays on Linux.
 **M3 — hardware, and MSC when the product has it.**
 **Built.** `desk-hardware.spec.ts`, tagged `@hardware`, pointed at a real SQ or Avantis by
 `DESK_HOST` and `DESK_PROFILE`, on demand through `integration-hardware.yml` (§8). The show it
-opens is the desk show with the counterpart's address changed, plus — because two of its cases
-need them — the desk's own keys and, where a run names one, a console's cable; nothing else
-about it changes. What the cases assert is the desk's own reply, read on the spec's own socket:
+opens is the desk show with the counterpart's address changed, plus — because its cases need
+them — the desk's own keys, and, where a run names one, a console's cable; and it carries two
+mics and two scenes that hand one fader between them, which is what the case about a mic leaving
+a fader is about. What the cases assert is the desk's own reply, read on the spec's own socket:
 an SQ answers a get with the parameter's value in the NRPN form that sets it — asked at the
 input's own page, which is where a recall writes the mic's mute — and an Avantis answers a name
 get in its own header, for that input's strip. Two cases need a hand at the desk while the run
@@ -894,8 +927,14 @@ instruction; those two read the app's log line, which names the desk or the cons
 from, because a hand is the one thing no wire view can see. Against an SQ the key case also
 reads the desk's own value moving, which is the app's message for the recalled scene arriving.
 The membership is not readable here: an SQ's is written on the desk's own control service on
-51326, which the lane's relay does not carry, and an Avantis publishes no read for an
-assignment — so both stay where §6 and §11 decision 6 leave them.
+51326, which this lane's relay does not carry and which nothing in this lane reaches the peer
+that models it, and an Avantis publishes no read for an assignment — so both stay where §6 and §11
+decision 6 leave them. A fifth case asks the desk for two mics' own values at either end of a
+scene that hands one fader between them, so the mics a recall moves are read off the desk
+itself: the mic the scene places is open and the mic it places nowhere is silent. What a recall
+did to the *fader* is not readable there — the relay carries the MIDI service, so no membership
+frame leaves the runner — and the case's failure message is the walkthrough: the fader is the
+operator's to look at, beside the desk's I/O patch, which has to be left alone.
 **MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and fires a
 cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
 so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane: the
@@ -922,16 +961,21 @@ specs as they stood that day, and the new shape has not yet been in front of a d
 happened is the **job**: `integration-hardware.yml` has never been dispatched, so the lane has no
 report of its own, and a report is what the record's rows are evidence of. The desk has to be
 reachable from the runner for that, which is a cable rather than a change.
-*Partly closed*: **the recorded desk fixture.** A session from an SQ-6 (firmware 1.6.1) was
-captured on 2026-09-22 — `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken
-through `integration/sqCapture.mjs`, its provenance naming the device, the firmware read from the
-desk's own identify answer, and the show's four known assignments (§6). What it captured is the
-desk's **native** service on 51326, and nothing replays it yet: the desk peer models the MIDI
-service, no recorder takes a session from the desk's MIDI side, and the native protocol has no
-peer at all. So the *MIDI* half of this milestone is where it was — the native capture above is the
-first bytes from a desk in this repository rather than the replay this line was waiting for. Until a
-desk run happens, the peer's model of the desk, the vendor lane's "MIDI bytes are MIDI bytes"
-assumption and the message a real key press sends stay unproven (§11).
+**Closed, and running on every pull request** as of Story 11.5: **the recorded desk fixture.** A
+session from an SQ-6 (firmware 1.6.1) was captured on 2026-09-22 —
+`integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken through
+`integration/sqCapture.mjs`, its provenance naming the device, the firmware read from the desk's
+own identify answer, and the show's four known assignments (§6). What it captured is the desk's
+**native** service on 51326, and `integration/peers/sqNative.ts` models that service: its own
+reader and decoder, its answers the capture's own replies and nothing where the capture holds
+none, started by `desk-sq.spec.ts` beside the MIDI peer and — with no app at all — by
+`harness-desk.spec.ts` on an ephemeral port. The suite runs one file at a time, because the app
+dials the desk's fixed port for any SQ show and a peer bound there must belong to the file that
+started it. What no peer carries is still the desk's own side: the capture holds no membership
+read and no keepalive datagram, so the read form stays unmeasured and the claim where the record
+leaves it. Until a desk run happens, the peer's model of the desk, the vendor lane's "MIDI bytes
+are MIDI bytes" assumption, the message a real key press sends and this model's own reading of
+51326 stay unproven (§11).
 
 ---
 
@@ -963,8 +1007,9 @@ assumption and the message a real key press sends stay unproven (§11).
    real key press sends is measured rather than assumed, and the peer's read-back and scene shapes
    are held against a desk instead of only against its documents. (Story 11.2 has since moved what
    those cases are about: the value read back is the mic's own mute at the input's page, and an
-   SQ's membership goes to 51326 where no peer stands in for it — see §6 and decision 6.) Still
-   unproven: the **job**
+   SQ's membership goes to 51326 — which Story 11.5's peer now answers as the capture says the
+   desk answers, on the peers lane, while the desk's own answer stays outside every peer: see §6
+   and decision 6.) Still unproven: the **job**
    (`integration-hardware.yml` has never been dispatched, so the lane has no report of its own),
    the vendor lane's "MIDI bytes are MIDI bytes" assumption, which belongs to the bridge, and the
    console case, which has no console. The lane reports skipped, never passed, without a desk
@@ -1012,19 +1057,22 @@ assumption and the message a real key press sends stay unproven (§11).
    per-channel "rides a DCA" flag follows — `f7 07 07 0c <channel-1> 00 00 00` on a channel that
    rides one and `00 01 00` on a channel that rides none, which is how the capture's own pairing
    reads and the reverse of the polarity this line printed before Story 11.1 wrote the frames.
-   Three things stay open, which is
+   Two things stay open, which is
    why this is a decision rather than a claim: the **read form** is unmeasured, so until it is,
    the base a recall diffs against is what Cuerunner itself last sent rather than the desk's own
-   answer (which is what AD-22 assumes, and its wording is corrected for this); the desk's
+   answer (which is what AD-22 assumes, and its wording is corrected for this); and the desk's
    **controlling-client rule** — it reports one owner, and a client that dies without its goodbye
-   leaves the service mute — has to be respected by the app's connect and disconnect paths; and
-   the **peer** has no model of this protocol, so nothing in the fast lane holds these frames
-   against anything but this fixture until one is written. Story 11.2 is the write's caller: the
-   renderer sends the intent — channel, fader, placed or cleared, and whether the channel rides a
-   fader after the write — through `show:command` to the `sq-native` service, and the frames are
-   built in main from `src/main/desk/frames.ts`. So on a peers-lane run, where nothing answers on
-   51326, a recall reports that the session is not up and the mic's mute still goes — which is
-   what `desk-sq.spec.ts` asserts, alongside the absence of any DCA write on the MIDI link.
+   leaves the service mute — has to be respected by the app's connect and disconnect paths. The
+   **peer** this line was waiting for is Story 11.5's, `integration/peers/sqNative.ts`: it owns
+   its reader and its decoder, answers every frame the capture answers and nothing else, and runs
+   on the peers lane on every pull request — `desk-sq.spec.ts` drives a recall through it beside
+   the MIDI peer, and `harness-desk.spec.ts` holds the model itself to the capture with no app at
+   all. Story 11.2 is the write's caller: the renderer sends the intent — channel, fader, placed
+   or cleared, and whether the channel rides a fader after the write — through `show:command` to
+   the `sq-native` service, and the frames are built in main from `src/main/desk/frames.ts`. What
+   that peer cannot carry is the desk's own side of the read: the capture holds no frame in which
+   the desk reports a membership, so the model says nothing about one and a client still knows
+   only what it sent.
 
 **Risks**
 

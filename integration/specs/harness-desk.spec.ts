@@ -1,19 +1,27 @@
 /**
- * The A&H desk peer held to the vendor documents, with no app and no Electron: every
+ * The A&H desk peers held to what they are written from, with no app and no Electron: every
  * assertion here is either bytes a real client socket saw or the desk's own state.
  *
  * The byte strings are the documents' own worked examples, kept in their notation — "SQ MIDI
  * Protocol" Issue 5, sections 3.1 to 3.7, and "Avantis MIDI TCP/IP Protocol" (V2.0+). Where a
  * document writes a message as `B N, 00, Bank`, the N is the desk's MIDI channel, so the spec
  * says which channel the desk was set to before asserting the byte string.
+ *
+ * The SQ's native control service has no document, so its model (`../peers/sqNative.ts`) is
+ * held to the one measurement there is instead: the capture behind it, read here as the
+ * expectation and driven by hand. It is one protocol per module, which is why the native
+ * service has a peer of its own rather than an option on the MIDI one.
  */
 
 import { expect, test } from '@playwright/test'
+import { createSocket } from 'node:dgram'
 import { once } from 'node:events'
 import { createConnection } from 'node:net'
 import type { Socket } from 'node:net'
 import { encodeMessages, startDeskPeer } from '../peers/desk.ts'
 import type { DeskPeer, DeskPeerOptions, DeskReceived } from '../peers/desk.ts'
+import { readCapture, startSqNativePeer } from '../peers/sqNative.ts'
+import type { SqNativeCapture } from '../peers/sqNative.ts'
 
 /** 'B0 63 00' to bytes, so an assertion reads like the document it came from. */
 const bytes = (notation: string): number[] =>
@@ -605,4 +613,170 @@ test('the peer serves its state as JSON for a human with curl', async () => {
     client.close()
     await peer.close()
   }
+})
+
+/**
+ * The SQ's own control service, as its peer models it — the one model here written from a
+ * capture rather than from a vendor document, and held to that capture instead.
+ *
+ * No app is running: the client is this spec's own socket, the session is the one the wire
+ * shows, and every expectation is the capture's own bytes. What the lane that drives the app
+ * asserts (`desk-sq.spec.ts`) is what the app wrote; what this case asserts is what the model
+ * does with it, which is the half a byte form that moved has to fail on first.
+ */
+test.describe('the SQ’s native control service', () => {
+  const capture: SqNativeCapture = readCapture()
+  const written = capture.exchanges.filter(exchange => exchange.direction === 'to-desk')
+
+  /**
+   * The session the wire shows: the client's own chunks, up to and including the `7f 03` that
+   * ends it. They are sent as they arrived rather than as frames — the capture's chunks are
+   * what TCP delivered, and the push's own chunk carries more than the frame it opens with —
+   * so the peer's reader is what has to find the frames in them.
+   */
+  const session = written.slice(0, written.findIndex(exchange => exchange.bytes === '7f0300000000') + 1)
+
+  /**
+   * The desk's own answers, as the capture wrote them: the four replies it holds, each of them
+   * right after the frame that asked for it. They are here as well as in the fixture, so a
+   * regenerated capture cannot move the peer and its expectation together — the discipline
+   * `frames.test.ts` keeps on the other side of the same file.
+   */
+  const replies = [
+    '7f00020000007cc8',
+    '7f020c000000020106010a13000000040000',
+    '7f0c020000000100',
+    '7f12200000000000000000000000000000000000000000000000000000000000000000000000'
+  ]
+
+  /** The channel and fader a `1d` frame's own bytes name, in the 1-based numbers a show uses. */
+  function pairOf(frame: string): { channel: number; dca: number } {
+    return {
+      channel: Number.parseInt(frame.slice(8, 10), 16) + 1,
+      dca: Number.parseInt(frame.slice(10, 12), 16) + 1
+    }
+  }
+
+  /** The channel a `0c` flag's own bytes name, and whether it says the channel rides a fader. */
+  function flagOf(frame: string): { channel: number; rides: boolean } {
+    return { channel: Number.parseInt(frame.slice(8, 10), 16) + 1, rides: frame.slice(10) === '000000' }
+  }
+
+  test('answers a session as the capture does, and reads the capture’s own assignments', async () => {
+    expect(session, 'the capture holds no `7f 03` to end a session at').toHaveLength(8)
+    // The four pairs the capture places, and the sixteen flags it writes — a `0c` frame per
+    // input, four of them `00 00 00` on the channels the pairs place and twelve `00 01 00`.
+    const placing = written.filter(exchange => exchange.bytes.startsWith('f707071d') && exchange.bytes.endsWith('0100'))
+    const allFlags = written.filter(exchange => exchange.bytes.startsWith('f707070c'))
+    const riding = allFlags.filter(exchange => flagOf(exchange.bytes).rides)
+    expect(placing.map(exchange => pairOf(exchange.bytes)))
+      .toEqual([
+        { channel: 1, dca: 1 },
+        { channel: 3, dca: 1 },
+        { channel: 8, dca: 4 },
+        { channel: 9, dca: 4 }
+      ])
+    expect(allFlags).toHaveLength(16)
+    expect(riding.map(exchange => flagOf(exchange.bytes).channel)).toEqual(placing.map(exchange => pairOf(exchange.bytes).channel))
+
+    const peer = await startSqNativePeer({ port: 0, leavePort: 0, keepalivePort: 0 })
+    const client = await connect(peer.port)
+    try {
+      // The session, chunk for chunk: what comes back is the desk's own four answers, in the
+      // capture's own order. A frame the capture answers nothing to — the descriptor, the
+      // push, the `7f 0d`, the session's own `f7 02 02 20 …` and the settle — is answered
+      // with nothing, which is what a client that reads a membership back gets.
+      for (const chunk of session) client.send(Buffer.from(chunk.bytes, 'hex'))
+      const answered = await client.read(replies.reduce((total, reply) => total + reply.length / 2, 0))
+      expect(Buffer.from(answered).toString('hex')).toBe(replies.join(''))
+
+      // The same chunks, as the peer's own record reads them: the eight `7f` frames the wire
+      // shows — the push's chunk carries two of them — and, between the ping and the settle,
+      // the session's own `f7 02 02 20 …`, which is left raw rather than guessed at.
+      expect(peer.received.map(frame => frame.kind)).toEqual([
+        'session',
+        'session',
+        'session',
+        'session',
+        'session',
+        'session',
+        'session',
+        'raw',
+        'session'
+      ])
+
+      // The capture's own assignments, written by hand: the four `1d … 01 00` frames and the
+      // `0c` flag each of those channels carries where it rides a fader.
+      const pendingBefore = client.pending
+      for (const exchange of [...placing, ...riding]) client.send(Buffer.from(exchange.bytes, 'hex'))
+
+      const pairs = await until(
+        () => (peer.received.filter(frame => frame.kind === 'pair').length === 4 &&
+          peer.received.filter(frame => frame.kind === 'flag').length === riding.length
+          ? peer.received
+          : undefined),
+        'the four assignment frames and their flags'
+      )
+      const decodedPairs = pairs.filter(frame => frame.kind === 'pair')
+      expect(decodedPairs.map(frame => ({ ...pairOf(Buffer.from(frame.bytes).toString('hex')), bytes: frame.bytes })))
+        .toEqual(placing.map(exchange => ({ ...pairOf(exchange.bytes), bytes: [...Buffer.from(exchange.bytes, 'hex')] })))
+      expect(
+        peer.received.filter(frame => frame.kind === 'flag')
+          .map(frame => ({ channel: frame.channel, rides: frame.rides, bytes: frame.bytes }))
+      ).toEqual(riding.map(exchange => ({
+        ...flagOf(exchange.bytes),
+        bytes: [...Buffer.from(exchange.bytes, 'hex')]
+      })))
+
+      // Nothing came back for any of them — and it is asserted after the record is complete,
+      // not before: an answer invented late would have arrived by the time the peer has read
+      // the frames it was asked about. The capture holds no frame from the desk that reports a
+      // membership, so the model has none to answer with.
+      await sleep(30)
+      expect(client.pending).toBe(pendingBefore)
+
+      // And the clear form reads as the capture's own bytes do: the same frame with `00 00`,
+      // which is what a scene that places nobody writes.
+      const clearing = written.find(exchange => exchange.bytes === 'f707071d01000000')
+      if (clearing === undefined) throw new Error('the capture holds no cleared pair to read')
+      client.send(Buffer.from(clearing.bytes, 'hex'))
+      const cleared = await until(
+        () => (peer.received.filter(frame => frame.kind === 'pair').length === 5
+          ? peer.received.filter(frame => frame.kind === 'pair').at(-1)
+          : undefined),
+        'the cleared pair'
+      )
+      expect(cleared).toMatchObject({ ...pairOf(clearing.bytes), placed: false })
+
+      // The range's own door: `BYE.` arrives on the leave port and is read as the goodbye it
+      // is, not as a frame of either family — and it is written in two, because TCP is free to
+      // split a four-byte word and the peer has to read it out of what it accumulates.
+      const leave = await connect(peer.leavePort)
+      try {
+        leave.send(Buffer.from('BY'))
+        leave.send(Buffer.from('E.'))
+        const goodbye = await until(
+          () => peer.received.find(frame => frame.kind === 'goodbye'),
+          'the goodbye on the leave port'
+        )
+        expect(Buffer.from(goodbye.bytes).toString()).toBe('BYE.')
+      } finally {
+        leave.close()
+      }
+
+      // And the keepalive, witnessed as arrival and width alone: the capture holds no
+      // datagram at all, so what the desk makes of its body is nothing this peer says.
+      const datagrams = createSocket('udp4')
+      try {
+        datagrams.send(Buffer.from('f705000000000000', 'hex'), peer.keepalivePort, peer.host)
+        const keepalive = await until(() => peer.keepalives[0], 'the keepalive datagram')
+        expect(keepalive.length).toBe(8)
+      } finally {
+        datagrams.close()
+      }
+    } finally {
+      client.close()
+      await peer.close()
+    }
+  })
 })

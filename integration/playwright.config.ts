@@ -22,9 +22,15 @@ export default defineConfig({
   // them ran, which skipped and why — because a green job's list lines are the only other place
   // a skip is visible (`lane-status.reporter.ts`, AD-24).
   reporter: [['list'], ['./lane-status.reporter.ts', {}]],
-  // One at a time on CI, for the same reason the E2E lane is: several Electron instances
-  // (and several peers on loopback ports) starve each other on a shared runner.
-  workers: process.env.CI ? 1 : undefined,
+  // One file at a time, everywhere, and every lane's desk is on its own loopback address.
+  // Both rules exist because the desk's ports are the *machine's* rather than a worker's:
+  // several Electron instances (and several peers on loopback ports) starve each other on a
+  // shared runner, the app dials 51326 for any SQ show, and the unit job binds the same three
+  // ports on 0.0.0.0 — so a peer bound in one worker could otherwise be reached by another
+  // worker's app, or by an app from a job running beside this one. `desk-sq.spec.ts` therefore
+  // runs its peers and its show on 127.0.0.2, and a file that cannot take a port it needs
+  // reports itself skipped rather than comparing somebody else's frames.
+  workers: 1,
   use: {
     trace: 'on-first-retry'
   }

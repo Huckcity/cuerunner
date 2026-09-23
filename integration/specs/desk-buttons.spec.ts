@@ -49,8 +49,8 @@ function micMuted(): boolean | undefined {
 /**
  * The lines a scene recall wrote, which name the button that caused it. The summary is an info
  * row; a recall that could not write its membership also leaves an error row under the same
- * label on this route — the service on 51326 has no peer here — so what a case counts is the
- * summary, and the scene it names when the case is about where the walk landed.
+ * label on this route — no peer in this lane answers the service on 51326 — so what a case
+ * counts is the summary, and the scene it names when the case is about where the walk landed.
  */
 function recalls(from: string, scene?: string): Promise<number> {
   const summaries = page.locator('.log-panel .log-row[data-level="info"]', { hasText: from })
@@ -103,8 +103,17 @@ test('the desk’s GO key recalls the next scene, and the desk moves with it', a
   pressKey(GO_GROUP, false)
 
   // The first scene's own line: the recall's summary names it, and the refusal that follows on
-  // the same label (the membership needs the service no peer here stands in for) does not.
+  // the same label (the membership needs the service on 51326, which no peer in this lane
+  // answers) does not.
   await expect.poll(() => recalls('Desk GO', 'Wedding')).toBe(before + 1)
+  // And that refusal is a row of its own under the same label — which is the only place this
+  // lane can see it, because the write it is about goes to a service nothing here answers. It
+  // names the write that did not go and the reason, because an operator reading "could not
+  // reach the desk" alone would not know what did not land or what to do about it.
+  const refused = page.locator('.log-panel .log-row[data-level="error"]', { hasText: 'Desk GO' })
+  await expect(refused).toHaveCount(1)
+  await expect(refused).toContainText('SQ assign ch1 onto DCA 1')
+  await expect(refused).toContainText('the SQ session is not up')
   // The desk is where the scene says: the mic open on its own page, which is the app's own
   // message and not a key press — the next GO is what moves the show on.
   await expect.poll(micMuted).toBe(false)

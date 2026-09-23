@@ -4,12 +4,12 @@
 // to use, and the connection is what these specs are about: the form that sets it has its
 // own spec (e2e/desk-tcp.spec.ts).
 //
-// One channel, one fader and one cue that answers to the desk — plus, where a lane asks for
-// them, a second scene for the desk's own keys to walk to and a cue that answers a console's
-// show control command. That is the whole show: the scene owns the assignment, so it places
-// its one channel on the one fader and says nothing else, and a recall of it is a handful of
-// messages — which is what lets what went on the wire be read at a glance instead of fished
-// out of a sweep of twelve.
+// One channel, one fader and one cue that answers to the desk by default — plus, where a lane
+// asks for them, a controlled set of channels, the faders its scenes place them on, a second
+// scene for the desk's own keys to walk to and a cue that answers a console's show control
+// command. That is the whole show: the scene owns the assignment, so it places its channels on
+// its faders and says nothing else, and a recall of it is a handful of messages — which is what
+// lets what went on the wire be read at a glance instead of fished out of a sweep of twelve.
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,6 +19,31 @@ import type { MscCommand, MscFormat } from '../../src/shared/cue'
 
 /** Where a peer on this machine is. A real desk is named by its own address. */
 const LOOPBACK = '127.0.0.1'
+
+/**
+ * A fader a scene places channels on. The id is what a scene names it by, and the desk number
+ * is what the desk is addressed with — null is the number its place derives, which is what the
+ * specs assert.
+ */
+export interface DeskShowFader {
+  id: string
+  label: string
+  deskNumber?: number | null
+}
+
+/**
+ * One scene of the show the fixture writes: what each fader carries in it.
+ *
+ * A channel's number on the desk is its place in the show's own list, so a scene names a
+ * channel by its id — `ch-1` is input 1 — and a fader left out of `places` carries nobody,
+ * which is what makes a scene a close as well as an open.
+ */
+export interface DeskShowScene {
+  id: string
+  name: string
+  /** The channels each fader carries, keyed by the fader's id. */
+  places: Record<string, string[]>
+}
 
 /** What every desk show has in common, whichever way the show reaches its desk. */
 interface DeskShowCommon {
@@ -38,9 +63,29 @@ interface DeskShowCommon {
   /**
    * A DCA number override, for a show that has been told its desk numbers its faders
    * differently. Left out, DCA 1 is addressed the way the profile derives it, which is
-   * what the specs assert: the derivation is under test, not a fixture's arithmetic.
+   * what the specs assert: the derivation is under test, not a fixture's arithmetic. It is
+   * the default fader's number; a show with faders of its own gives each one its own.
    */
   dcaNote?: number
+  /**
+   * The show's controlled set: one entry per channel, in the desk's own order, whose name is
+   * what the strip is called. A channel's number on the desk is its place here, so a show of
+   * nine channels is inputs 1 to 9 and a scene names them by their place (`ch-1` upward).
+   * Left out, the one channel the desk show has always had.
+   */
+  channels?: string[]
+  /**
+   * The faders the show's scenes place channels on. Left out, the one DCA 1 the desk specs
+   * have always driven, numbered by `dcaNote` where a show overrides it.
+   */
+  faders?: DeskShowFader[]
+  /**
+   * The scenes, when a lane needs placements of its own: a show can carry more than the one
+   * the specs recall by hand, and the scenes it does carry are what makes a recall a change.
+   * Left out, the one scene that places the first channel on the first fader — or, where
+   * `buttons` is given, that scene and the one the desk's own keys walk to.
+   */
+  scenes?: DeskShowScene[]
   /**
    * The scene the desk recalls of its own accord in the desk-originated case, and the cue
    * that answers to it. It is transmitted as bank select + program change on the base
@@ -113,6 +158,32 @@ export const DCA_ID = 'dca-1'
 
 export function writeDeskShow(options: DeskShowOptions): string {
   const { host = LOOPBACK, channel, profile, dcaNote, buttons, msc, deskScene = 7 } = options
+  const channels = options.channels ?? ['Ruth']
+  const faders = options.faders ?? [{ id: DCA_ID, label: 'DCA 1', deskNumber: dcaNote ?? null }]
+  // A channel's number on the desk is its place in this list, so the ids are the places.
+  const strips = channels.map((name, index) => ({ id: `ch-${index + 1}`, name }))
+  // A scene names its faders and its channels by id, so an id the show does not declare would
+  // drop a placement silently — and the lane that asked for it would assert against a show
+  // that places nobody. What the show declares is the boundary, and nothing outside it is
+  // written into a file that is then read as though it meant something.
+  if (strips.length === 0) throw new Error('a desk show has at least one channel: `channels` is empty')
+  if (faders.length === 0) throw new Error('a desk show has at least one fader: `faders` is empty')
+  for (const scene of options.scenes ?? []) {
+    for (const [faderId, placed] of Object.entries(scene.places)) {
+      if (!faders.some(fader => fader.id === faderId)) {
+        throw new Error(
+          `scene "${scene.id}" places channels on "${faderId}", which this show declares no fader for (${faders.map(fader => fader.id).join(', ')})`
+        )
+      }
+      for (const channelId of placed) {
+        if (!strips.some(strip => strip.id === channelId)) {
+          throw new Error(
+            `scene "${scene.id}" places "${channelId}", which this show declares no channel for (${strips.map(strip => strip.id).join(', ')})`
+          )
+        }
+      }
+    }
+  }
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-desk-'))
   const path = join(root, `${DESK_SHOW_NAME}.cuerunner`)
   // What the desk's own messages arrive as: a socket's `host:port`, or the name of the port
@@ -127,16 +198,32 @@ export function writeDeskShow(options: DeskShowOptions): string {
   ]
   // A show the desk's own keys walk needs a second scene to walk to; a show the specs
   // recall by hand has the one, and the peer lane asserts on that one. The first scene
-  // places the channel on the fader — which is the membership a recall writes and the
-  // reason the mic is open — and the second places nothing, so a recall of it is a close.
+  // places the first channel on the first fader — which is the membership a recall writes and
+  // the reason the mic is open — and the second places nothing, so a recall of it is a close.
+  // A lane that needs placements of its own names its scenes instead.
   const defaults = defaultShowSettings()
-  const placed = { dcaId: DCA_ID, channels: [CHANNEL_ID], ensembles: [], excluded: [] }
-  const scenes = buttons === undefined
+  const placed = { dcaId: faders[0].id, channels: [CHANNEL_ID], ensembles: [], excluded: [] }
+  const defaultScenes = buttons === undefined
     ? [{ id: 's-1', name: 'Wedding', dcas: [placed], notes: '' }]
     : [
         { id: 's-1', name: 'Wedding', dcas: [placed], notes: '' },
         { id: 's-2', name: 'Interval', dcas: [], notes: '' }
       ]
+  const scenes = options.scenes?.map(scene => ({
+    id: scene.id,
+    name: scene.name,
+    // A fader with nobody on it is left out of the scene rather than written as an empty row,
+    // which is the shape the editor writes and the shape a recall reads.
+    dcas: faders
+      .filter(fader => (scene.places[fader.id] ?? []).length > 0)
+      .map(fader => ({
+        dcaId: fader.id,
+        channels: scene.places[fader.id],
+        ensembles: [],
+        excluded: []
+      })),
+    notes: ''
+  })) ?? defaultScenes
 
   writeFileSync(path, `${JSON.stringify({
     version: 1,
@@ -168,15 +255,20 @@ export function writeDeskShow(options: DeskShowOptions): string {
       },
       cast: {
         // A channel is a name and a number: which fader it rides is the scene's decision and
-        // never the strip's (AD-26), so there is no assignment on the channel at all.
-        channels: [{ id: CHANNEL_ID, name: 'Ruth' }],
+        // never the strip's (AD-26), so there is no assignment on the channel at all. The
+        // number is the channel's place in this list, which is the input's own number.
+        channels: strips,
         performers: [
           { id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: CHANNEL_ID }
         ],
         ensembles: [],
-        // One number for the fader, and null is the number its place derives: an override is
+        // One number for a fader, and null is the number its place derives: an override is
         // the desk's own numbering rather than a second way of writing the place down.
-        dcas: [{ id: DCA_ID, label: 'DCA 1', deskNumber: dcaNote ?? null }]
+        dcas: faders.map(fader => ({
+          id: fader.id,
+          label: fader.label,
+          deskNumber: fader.deskNumber ?? null
+        }))
       },
       // The scenes own the assignment, and the field beside them is not optional on disk:
       // the load funnel reads every declared field, so a file that left it out would be one

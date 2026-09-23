@@ -706,8 +706,11 @@ Desk and console integration:
   or a fader whose desk number points past it, is reported rather than going quiet. The frames are the harness's `§6`, and
   `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each desk
   does with the bytes rather than to what the app sent — on the peers lane, whose counterpart is
-  the harness's desk peer rather than a desk. That peer models the MIDI links: no lane replays
-  the SQ's own control service, so nothing here claims a desk has accepted a membership
+  the harness's desk peers rather than a desk. Those peers model the desk's two services used
+  here: the MIDI links, and — since the SQ's own control service was measured — a model of 51326
+  written from that capture, which reads the frames a recall writes and answers as the capture
+  says the desk answers. What no peer carries is the desk's own answer about a membership, so
+  nothing here claims a desk has accepted one
 - **A show run from the desk's own buttons, two ways.** A console reports a key press only
   when the key has been assigned to a console function, so the buttons a show runs from are
   spare **mute groups** — and, where a key that latches is not what a press means, **MIDI
