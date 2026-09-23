@@ -68,9 +68,11 @@
         saw. A measurement the app took since the file was written — a file's length, the
         audible region inside it — is the one thing that can still change the bytes: it is
         not an edit, so it adds no line, and a show whose media was scanned between two
-        saves compares as unchanged. Bringing an older file up to this version's shape is
-        a change to the file rather than to the show, so it is not recorded as an edit. A
-        file remembers its last two hundred changes and lets the oldest fall off.
+        saves compares as unchanged. Show files are not converted, so no save records one, and
+        a file this build does not know is refused. The shape is declared and checked, and an
+        older file — one that leaves out a settings section this build writes — is refused by
+        name as it opens. A file remembers its last two hundred changes and lets the oldest
+        fall off.
       </p>
       <div class="note">
         The history lives in the <code>.cuerunner</code>, so it survives being copied, emailed

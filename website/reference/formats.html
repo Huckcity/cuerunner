@@ -73,10 +73,13 @@
         grouping.
       </p>
       <div class="note">
-        Older show files are migrated as they open: the settings that were once
-        <code>autoContinue</code> and <code>autoFollow</code> become
-        <strong>Advance</strong>, and groups that listed their children become children
-        that name their parent. Saving writes the current shape.
+        Show files are not converted. The shape is declared and checked, and a file this
+        build does not know is refused — naming the file and the fact, with nothing on disk
+        touched — rather than filled in. An older show file that leaves out a settings section
+        this build writes is refused by name; one that carries every declared section is read
+        like any other. Saving does not convert one either: the show on screen is written as it
+        stands, and a save over a file this build cannot read keeps the history it had and
+        replaces the file all the same.
       </div>
     </section>
 
