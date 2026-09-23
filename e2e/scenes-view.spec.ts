@@ -452,6 +452,79 @@ test('a scene that applies an ensemble to a row rides every member of it', async
   }
 })
 
+test('a member left off an ensemble rides nothing, and a recall closes it', async () => {
+  test.setTimeout(60_000)
+  const desk = await listenOsc(freePort())
+
+  try {
+    await buildDeskShow(page, desk.port)
+
+    // The same two performers the case above groups: one the scene places by hand, one
+    // the ensemble would bring on with it.
+    await openShowSettings(page)
+    const settings = page.locator('.show-settings-dialog')
+    await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
+    const performers = settings.locator('.performer-row')
+    const first = await performers.nth(0).locator('.performer-name').inputValue()
+    const second = await performers.nth(1).locator('.performer-name').inputValue()
+    await settings.locator('.ensemble-add').click()
+    const ensemble = settings.locator('.ensemble-row').first()
+    await ensemble.locator('.member-add').selectOption({ label: first })
+    await ensemble.locator('.member-add').selectOption({ label: second })
+    await expect(ensemble.locator('.member-chip')).toHaveCount(2)
+    await settings.locator('.show-settings-done').click()
+
+    const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
+    await cell.locator('.matrix-ensemble-add').selectOption({ label: 'Ensemble 1' })
+    await expect(cell.locator('.matrix-channel')).toHaveCount(2)
+
+    // Leaving a member off is a press on that member rather than a way of applying the
+    // ensemble, so the member stays on the row and reads left off — while their strip's
+    // chip, the one that says this row carries them, is gone. The group reads partly on:
+    // that is the operator's sign that somebody in it is not riding this row.
+    const leftOff = cell.locator('.matrix-member', { hasText: second })
+    await leftOff.click()
+    await expect(leftOff).toHaveAttribute('data-excluded', 'true')
+    await expect(cell.locator('.matrix-channel')).toHaveCount(1)
+    await expect(cell.locator('.matrix-channel')).toContainText(first)
+    await expect(cell.locator('.matrix-ensemble')).toHaveAttribute('data-applied', 'partial')
+
+    // A recall reads the row as it stands: the member left off is closed by its own
+    // number, and only the strip still carrying the row is opened.
+    const column = page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall')
+    await column.click()
+    await expect.poll(() => desk.received.length).toBe(12)
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
+    expect(desk.received[1]).toEqual({ address: '/dca/2/on', args: [0] })
+    expect(desk.received.slice(2)).toEqual(
+      [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(number => ({ address: `/dca/${number}/on`, args: [0] }))
+    )
+
+    // The exclusion is the scene's state rather than a one-shot: the desk has been told,
+    // so a second press has nothing left to say about the mutes.
+    const recalled = desk.received.length
+    await column.click()
+    await page.waitForTimeout(300)
+    expect(desk.received).toHaveLength(recalled)
+
+    // The press is a toggle, and the member is back on the row. It is an edit, so the
+    // desk hears nothing until a press asks it to.
+    await leftOff.click()
+    await expect(leftOff).toHaveAttribute('data-excluded', 'false')
+    await expect(cell.locator('.matrix-channel')).toHaveCount(2)
+    await expect(cell.locator('.matrix-ensemble')).toHaveAttribute('data-applied', 'on')
+    await page.waitForTimeout(300)
+    expect(desk.received).toHaveLength(recalled)
+
+    // Where the operator reads it: the recall opened the one strip still on the row and
+    // closed the other eleven — a dropped exclusion would read two opened.
+    await openLogPanel(page)
+    await expect(page.locator('.log-panel')).toContainText('Scene "Scene 1" — 1 opened, 11 closed')
+  } finally {
+    await desk.close()
+  }
+})
+
 test('the view opens to run the show: Edit gives it back, and recalling never stops', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())
