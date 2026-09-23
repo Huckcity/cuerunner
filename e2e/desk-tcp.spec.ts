@@ -74,7 +74,8 @@ test('the desk row takes the desk’s own name, and reads back what that desk is
   // the difference between a recall that moves it and one it ignores — so the row says
   // which arrangement is in force rather than leaving it to the wire.
   // An SQ: the mic's mute on this link, and the membership over the desk's own control
-  // service — which is the half no peer models yet, said here as the row's own read-back.
+  // service — which no peer in *this* lane stands in for, and which those specs read as the
+  // row's own read-back of the route rather than as anything on the wire.
   await settings.locator('.desk-profile').selectOption('sq')
   // The channel the desk's own messages are set to is the channel the field above says, so
   // the read-back is asserted by the halves that do not move with it.

@@ -25,6 +25,9 @@ export interface SqAddress {
 /** The first input: parameter 0 of page 00, which is where the reference table puts the inputs. */
 export const SQ_INPUT_1: SqAddress = { page: 0x00, parameter: 0x00 }
 
+/** The second input: the same page, the parameter the next input's own number makes. */
+export const SQ_INPUT_2: SqAddress = { page: 0x00, parameter: 0x01 }
+
 /** The Avantis's own SysEx header (V2.0+), the name get, and the reply that answers it. */
 const AVANTIS_HEADER = [0xf0, 0x00, 0x00, 0x1a, 0x50, 0x10, 0x01, 0x00]
 const AV_NAME_GET = 0x01

@@ -19,15 +19,17 @@
 // before it can send anything (`INTEGRATION-HARNESS.md` §6) — and this lane needs two: the app
 // that drives the desk, and this spec that asks it for its own value. What the relay does not
 // carry is the SQ's own control service on 51326, where an SQ's membership is written: that
-// half of a recall is unreadable here and its claim stays where the record left it. The app's
-// log is read for the two things only the app can say — that a key press moved the show, and
-// that the console's command fired the cue that answers it — and the desk's or the console's
-// own device is named in the line it fired from. Nothing here reads the app's account of what
-// it sent.
+// half of a recall is unreadable here and its claim stays where the record left it — the case
+// that is about a fader's membership says so in its own failure message, which is the operator
+// looking at the desk where this lane cannot. The app's log is read for the two things only the
+// app can say — that a key press moved the show, and that the console's command fired the cue
+// that answers it — and the desk's or the console's own device is named in the line it fired
+// from. Nothing here reads the app's account of what it sent.
 //
 // Until a run happens, the peer's model of the desk, the vendor lane's "MIDI bytes are MIDI
-// bytes" assumption and the message a real key press sends stay unproven, and §11 of the
-// harness records that this lane is where they are checked — not that they have been.
+// bytes" assumption, the message a real key press sends and the native peer's model of 51326
+// stay unproven, and §11 of the harness records that this lane is where they are checked — not
+// that they have been.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
@@ -43,7 +45,9 @@ import {
   sqMuteGet,
   sqMuteValue,
   SQ_INPUT_1,
-  type DeskWire
+  SQ_INPUT_2,
+  type DeskWire,
+  type SqAddress
 } from './deskReadBack'
 // The app's own vocabulary for a show control command and the values it takes, so what this
 // lane expects a console to send is the same list the trigger matches against.
@@ -167,11 +171,32 @@ let userDataDir: string
 let wire: DeskWire
 let relay: DeskRelay | undefined
 
-/** What the desk's own value says about the mic, or null when it has not answered in time. */
-async function micValue(): Promise<boolean | null> {
-  const answer = await wire.ask(sqMuteGet(CHANNEL, SQ_INPUT_1))
-  return answer === null ? null : sqMuteValue(answer, SQ_INPUT_1)
+/** What the desk's own value says about one input, or null when it has not answered in time. */
+async function inputValue(address: SqAddress): Promise<boolean | null> {
+  const answer = await wire.ask(sqMuteGet(CHANNEL, address))
+  return answer === null ? null : sqMuteValue(answer, address)
 }
+
+/**
+ * The failure message of the case about a scene's mics: a walkthrough, because two of the
+ * things a recall writes are outside every socket this lane has — the membership goes over
+ * 51326, which this relay does not carry, and the desk's I/O patch is the desk's own.
+ */
+const MIC_WALKTHROUGH = [
+  'The desk’s own value for a mic disagreed with the scene, or did not come. Two things this',
+  'lane cannot read, and neither is a setting here:',
+  '  1. The membership. Which input rides which fader is written on the desk’s own control',
+  '     service on 51326, and this lane’s relay carries the MIDI service on 51325 only — so no',
+  '     membership frame leaves this runner at all, and nothing below can fail for one. The',
+  '     fader has to be looked at by hand: at the desk, DCA 1 should carry input 1 after the',
+  '     first recall and input 2 after the second, with the fader’s own position where the',
+  '     operator left it, because a recall moves a membership and never a level. Carrying the',
+  '     route through the relay is the work that would make that half readable here.',
+  '  2. The I/O patch. Nothing this app writes patches a desk. The two mics this case is about',
+  '     have to be patched to input 1 and input 2 as the show’s channels are, and left where the',
+  '     run’s operator left them: a mic patched elsewhere answers at another input, and every',
+  '     value below is the desk’s own answer at the input the show’s channel is.'
+].join('\n')
 
 test.beforeAll(async () => {
   if (DESK === undefined || PROFILE === undefined) return
@@ -192,6 +217,14 @@ test.beforeAll(async () => {
     port: relay.port,
     channel: CHANNEL,
     profile: PROFILE,
+    // Two mics and two scenes that hand the fader from one to the other: the fifth case is
+    // about a mic leaving a fader, which needs a mic for it to leave to. Everything else about
+    // the show is the desk show the other cases drive.
+    channels: ['Ruth', 'Ada'],
+    scenes: [
+      { id: 's-1', name: 'Wedding', places: { 'dca-1': ['ch-1'] } },
+      { id: 's-2', name: 'Interval', places: { 'dca-1': ['ch-2'] } }
+    ],
     buttons: { go: GO_GROUP, back: BACK_GROUP },
     ...(MSC_PORT === undefined ? {} : {
       msc: {
@@ -250,16 +283,17 @@ test('a scene recall moves the desk, and the desk’s own value says so', { tag:
   // The scene places the mic on the fader, so the recall opens it — and what is asked about is
   // the mic's own mute, on the input's page, because that is the fact a recall writes: a DCA
   // is a control group, and the assignment is written over the desk's own control service on
-  // 51326 instead, which no peer here stands in for and this relay does not carry (Story
-  // 11.5). Here the desk is the one speaking: the get is its own answer about where the
+  // 51326 instead, which this lane's relay does not carry and which nothing here reads back
+  // (Story 11.5). Here the desk is the one speaking: the get is its own answer about where the
   // parameter stands, and the poll asks again until it says so.
   await page.locator(OPENING_SCENE).click()
-  await expect.poll(micValue, { timeout: 10_000 }).toBe(false)
+  await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(false)
 
-  // And the half that never worked before the profile: the close is the same sequence with
-  // the other fine byte, and the desk says so.
+  // And the half that never worked before the profile: the mic comes off the fader with the
+  // same sequence and the other fine byte, and the desk says so. The scene that takes it off
+  // places the show's other mic instead, which the case about a fader's membership is about.
   await page.locator(CLOSING_SCENE).click()
-  await expect.poll(micValue, { timeout: 10_000 }).toBe(true)
+  await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(true)
 })
 
 test('a key pressed at the desk runs the show, and the desk moves with it', { tag: '@hardware' }, async () => {
@@ -285,7 +319,7 @@ test('a key pressed at the desk runs the show, and the desk moves with it', { ta
   // behind it rather than "already at the last scene".
   await page.locator(OPENING_SCENE).click()
   if (PROFILE === 'sq') {
-    await expect.poll(micValue, { timeout: 10_000 }).toBe(false)
+    await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(false)
   }
 
   await openLogPanel(page)
@@ -306,7 +340,7 @@ test('a key pressed at the desk runs the show, and the desk moves with it', { ta
   // so. On an Avantis the log line above is all this case carries — its document has no
   // read-back for a mute to ask.
   if (PROFILE === 'sq') {
-    await expect.poll(micValue, { timeout: 10_000 }).toBe(true)
+    await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(true)
   }
 })
 
@@ -350,5 +384,36 @@ test('a console transmitting show control fires the cue that answers it', { tag:
     await expect(page.locator('.log-panel')).toContainText(expected, { timeout: 120_000 })
   } catch (error) {
     throw new Error(`${(error as Error).message}\n\n${transmit}`)
+  }
+})
+
+test('the mic the scene places is open, and the mic that left is silent', { tag: '@hardware' }, async () => {
+  // An SQ's, and only an SQ's: what this case reads is the desk's own mute values, and the
+  // value form they come back in is the SQ document's. A run with no desk named has the whole
+  // file skipped with its own reason; a run that named another range is told why this case is
+  // not its.
+  test.skip(
+    PROFILE !== 'sq',
+    PROFILE === undefined
+      ? `this case is an SQ's, and the run named no profile — set DESK_PROFILE=sq for the desk at ${deskAddress}, whose mutes this spec reads back in the SQ document's value form`
+      : `DESK_PROFILE is "${process.env.DESK_PROFILE}", which is not sq — this case is an SQ's: it reads the desk's own mute values, and the name reply above is all an Avantis publishes`
+  )
+
+  // Two recalls, and the desk's own answer at each end of them: the first scene places the
+  // first mic, the second hands the fader to the second. So the first fact is that the mic the
+  // scene placed is open — and the mic it did not place is silent — and the second is that the
+  // mic which left the fader is silent while the other is open. Every one of the four is the
+  // desk speaking, read on this spec's own socket; what the recall did to the *fader* is not
+  // readable here at all, which is what the walkthrough below says.
+  try {
+    await page.locator(OPENING_SCENE).click()
+    await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(false)
+    await expect.poll(() => inputValue(SQ_INPUT_2), { timeout: 10_000 }).toBe(true)
+
+    await page.locator(CLOSING_SCENE).click()
+    await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(true)
+    await expect.poll(() => inputValue(SQ_INPUT_2), { timeout: 10_000 }).toBe(false)
+  } catch (error) {
+    throw new Error(`${(error as Error).message}\n\n${MIC_WALKTHROUGH}`)
   }
 })

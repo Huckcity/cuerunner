@@ -12,10 +12,10 @@
 // an input (AD-26). What is asserted is the wire and the desk's own state, so what the app
 // sends is judged by the desk that receives it.
 //
-// This is also the one lane where the membership itself is on the link, so both facts a
-// recall writes are readable here — the assignment first, then the mic's mute — which is
-// what the SQ lane cannot assert at all: an SQ's membership goes over its own control service
-// on 51326, where no peer stands in for it yet (Story 11.5).
+// This is also the only lane where both facts of a recall are on the same link, so both are
+// read off one wire here — the assignment first, then the mic's mute. An SQ's membership is
+// not on this link at all: it goes over the desk's own control service on 51326, which has a
+// peer of its own, started by the SQ lane (Story 11.5), and no desk run has answered it.
 //
 // The cases run in order and leave the mic open, closed, closed and open again: the state each
 // recall writes, which is what makes the next one a change that sends. The last case changes
