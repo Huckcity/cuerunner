@@ -12,7 +12,7 @@ import { useStore, type ShowSettingsTab } from '../../store'
 import { TEST_LICENSE } from '../../../../test/license'
 import { defaultShowSettings } from '../../../../shared/show'
 import type {
-  CastSettings, Dca, Ensemble, MicScene, Performer, RfPack, RfPlot, RfSwap, ShowChannel
+  CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, RfPack, RfPlot, RfSwap, ShowChannel
 } from '../../../../shared/show'
 
 function showChannel(id: string, name: string): ShowChannel {
@@ -71,6 +71,7 @@ describe('ShowSettings', () => {
 
   interface DialogState {
     cast?: Partial<CastSettings>
+    desk?: Partial<DeskSettings>
     scenes?: MicScene[]
     plot?: RfPlot
     swaps?: RfSwap[]
@@ -89,6 +90,7 @@ describe('ShowSettings', () => {
       useStore.setState({
         showSettings: {
           ...defaults,
+          desk: { ...defaults.desk, ...state.desk },
           cast: { ...defaults.cast, ...state.cast },
           scenes: { list: state.scenes ?? [], allowDuplicateAssignment: true },
           rf: { ...defaults.rf, plot: state.plot ?? { packs: [] }, swaps: state.swaps ?? [] }
@@ -446,7 +448,7 @@ describe('ShowSettings', () => {
         .toBe('Sends note 1 … 12 to 10.0.0.5:51325, on and off — a recall writes 12 channel mutes and takes no assignment')
     })
 
-    it('sets how many faders the show drives, and the rows it keeps', async () => {
+    it('sets how many faders the show drives, and drops the scenes’ rows for the places that go', async () => {
       await show({
         tab: 'channels',
         cast: { channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', 'Bea')], dcas: [] }
@@ -461,12 +463,183 @@ describe('ShowSettings', () => {
       expect([...container.querySelectorAll<HTMLInputElement>('.dca-label')].map(input => input.value))
         .toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
 
+      // A scene that places a strip on the fader the shrink is about to take.
+      const third = cast().dcas[2].id
+      await act(async () => {
+        useStore.getState().updateScenesSettings({
+          list: [scene('s-1', 'Opening', [
+            { dcaId: third, channels: ['ch-1'], ensembles: [], excluded: [] }
+          ])]
+        })
+      })
+
       await choose(field<HTMLSelectElement>('.dca-count-select'), '2')
 
       expect(cast().dcas.map(entry => entry.label)).toEqual(['DCA 1', 'DCA 2'])
-      // The strips stay: a fader cut drops nobody's strip, and a scene that placed a
-      // channel on a fader that is gone keeps the entry where the row comes back.
+      // The strips stay — a fader cut drops nobody's strip — and the scene's row for the
+      // place that went goes with it, so a fader grown back comes back empty.
       expect(cast().channels.map(entry => entry.name)).toEqual(['Ruth', 'Bea'])
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
+
+      await choose(field<HTMLSelectElement>('.dca-count-select'), '3')
+      expect(cast().dcas).toHaveLength(3)
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
+    })
+
+    it('sizes the console from its own count, and a shrink takes everything that named the strips that went', async () => {
+      await show({
+        tab: 'channels',
+        cast: {
+          channels: [
+            showChannel('ch-1', 'Ruth'),
+            showChannel('ch-2', 'Bea'),
+            showChannel('ch-3', 'Nell')
+          ],
+          performers: [performer({ channelId: 'ch-3' })]
+        },
+        scenes: [scene('s-1', 'Opening', [
+          { dcaId: 'dca-1', channels: ['ch-2', 'ch-3'], ensembles: [], excluded: [] },
+          { dcaId: 'dca-2', channels: [], ensembles: [], excluded: ['ch-3'] }
+        ])]
+      })
+
+      expect(field<HTMLSelectElement>('.channel-count-select').value).toBe('3')
+
+      await choose(field<HTMLSelectElement>('.channel-count-select'), '4')
+
+      expect(cast().channels).toHaveLength(4)
+      expect(container.querySelectorAll('.channel-row')).toHaveLength(4)
+      // What was there is the same strip: a count appends.
+      expect(cast().channels.slice(0, 3).map(entry => entry.name)).toEqual(['Ruth', 'Bea', 'Nell'])
+      // Nothing was dropped, so no scene moved and nobody was unpatched.
+      expect(cast().performers[0].channelId).toBe('ch-3')
+      expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels)
+        .toEqual(['ch-2', 'ch-3'])
+
+      await choose(field<HTMLSelectElement>('.channel-count-select'), '2')
+
+      expect(cast().channels.map(entry => entry.name)).toEqual(['Ruth', 'Bea'])
+      expect(container.querySelectorAll('.channel-row')).toHaveLength(2)
+      // The mic on the strip that went is patched to nothing, its placement is off the row
+      // and its exclusion is gone too — a row left saying nothing goes with them.
+      expect(cast().performers[0].channelId).toBeNull()
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+        { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }
+      ])
+
+      // One edit, so one undo puts the count, the placements and the patch back together.
+      await act(async () => { useStore.getState().undo() })
+      expect(cast().channels).toHaveLength(4)
+      expect(cast().performers[0].channelId).toBe('ch-3')
+      expect(useStore.getState().showSettings.scenes.list[0].dcas[1].excluded).toEqual(['ch-3'])
+    })
+
+    it('stops the count at the desk model’s own ceiling, and reports a set larger than it', async () => {
+      const many = Array.from({ length: 52 }, (_, index) => showChannel(`ch-${index + 1}`, ''))
+      await show({ tab: 'channels', cast: { channels: many } })
+
+      // No desk model is in force yet, so there is no ceiling to offer past the dial's own
+      // cap — and with an OSC desk there never is one.
+      const counts = (): string[] =>
+        [...field<HTMLSelectElement>('.channel-count-select').options].map(option => option.value)
+      expect(counts()[counts().length - 1]).toBe('96')
+
+      await choose(field<HTMLSelectElement>('.desk-kind'), 'midi-tcp')
+      await choose(field<HTMLSelectElement>('.desk-profile'), 'sq')
+
+      // The options stop at the number the profile states, and a show that is larger keeps
+      // its own whole range — so the count it has, and every size between it and the desk's
+      // number, stay reachable rather than the hatch being one value wide.
+      expect(counts()).toContain('48')
+      expect(counts()).toContain('49')
+      expect(counts()).toContain('51')
+      expect(counts()[counts().length - 1]).toBe('52')
+      expect(counts()).toHaveLength(53)
+      expect(container.querySelectorAll('.channel-row')).toHaveLength(52)
+
+      // The gap is the preview's, named with the number it exceeded — and the fader list
+      // keeps its own clause beside it, since this show drives twelve faders and the SQ
+      // has eight.
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends an SQ’s channel mutes — NRPN page 00 on channel 1 — to 127.0.0.1:51325, and its assignment over the desk’s own control service — a recall writes 52 channels and nothing else; the desk has 48 inputs, so 4 channels are past its last one; the desk has 8, so 4 of the show’s DCAs are not sent')
+    })
+
+    it('stops the dial at the desk model’s number for a show inside it', async () => {
+      // A show the desk can take: the options end at the desk's own number, so the dial
+      // never offers a size the profile says it cannot be told about.
+      await show({
+        tab: 'channels',
+        cast: { channels: Array.from({ length: 12 }, (_, index) => showChannel(`ch-${index + 1}`, '')) },
+        desk: { kind: 'midi-tcp', host: '10.0.0.5', profile: 'sq' }
+      })
+
+      const counts = [...field<HTMLSelectElement>('.channel-count-select').options]
+        .map(option => option.value)
+      expect(counts).toHaveLength(49)
+      expect(counts[counts.length - 1]).toBe('48')
+      expect(container.querySelector('.desk-preview')).not.toBeNull()
+      expect(container.querySelector('.desk-preview')?.textContent).not.toContain('inputs')
+    })
+
+    it('counts one channel over the line in the singular', async () => {
+      const many = Array.from({ length: 49 }, (_, index) => showChannel(`ch-${index + 1}`, ''))
+      await show({
+        tab: 'channels',
+        cast: { channels: many, dcas: [] },
+        desk: { kind: 'midi-tcp', host: '10.0.0.5', profile: 'sq' }
+      })
+
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toContain('the desk has 48 inputs, so 1 channel is past its last one')
+    })
+
+    it('names an Avantis’s own inputs the same way', async () => {
+      // A hundred strips on the widest profile here: the Avantis's ceiling is what is
+      // exceeded, and it is named beside the model that stated it.
+      const many = Array.from({ length: 100 }, (_, index) => showChannel(`ch-${index + 1}`, ''))
+      await show({
+        tab: 'channels',
+        cast: { channels: many, dcas: [] },
+        desk: { kind: 'midi-tcp', host: '10.0.0.5', profile: 'avantis', midiChannel: 12 }
+      })
+
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends an Avantis’s channel mutes — note-on, 7F on and 3F off, on channel 12 — to 10.0.0.5:51325, and its assignment as NRPN 40 on the same channel — a recall writes 100 channels and nothing else; the desk has 96 inputs, so 4 channels are past its last one')
+    })
+
+    it('keeps the dial open where no desk model is in force, whatever the profile field holds', async () => {
+      // The profile is a fact about a MIDI desk. A show reached over OSC that still carries
+      // an SQ from an earlier setup is bounded by nothing the profile says — reading the
+      // field anyway would hide every option above 48 from an OSC show.
+      const many = Array.from({ length: 52 }, (_, index) => showChannel(`ch-${index + 1}`, ''))
+      await show({
+        tab: 'channels',
+        cast: { channels: many },
+        desk: { kind: 'osc', host: '10.0.0.5', profile: 'sq' }
+      })
+
+      const counts = [...field<HTMLSelectElement>('.channel-count-select').options]
+        .map(option => option.value)
+      expect(counts).toContain('49')
+      expect(counts[counts.length - 1]).toBe('96')
+    })
+
+    it('turns the one-fader-per-channel rule off from the faders it is about', async () => {
+      await show({ tab: 'channels' })
+
+      const rule = container.querySelector<HTMLInputElement>('.dca-duplicates')!
+      // On by default: a chorus master on one fader and its members spread across others
+      // is how a show is usually built.
+      expect(rule.checked).toBe(true)
+      const before = useStore.getState().past.length
+
+      await act(async () => { rule.click() })
+
+      expect(useStore.getState().showSettings.scenes.allowDuplicateAssignment).toBe(false)
+      expect(useStore.getState().past).toHaveLength(before + 1)
+
+      await act(async () => { useStore.getState().undo() })
+      expect(useStore.getState().showSettings.scenes.allowDuplicateAssignment).toBe(true)
     })
 
     it('adds a strip, and removing one unpatches whoever was on it and clears its placements', async () => {

@@ -78,6 +78,12 @@ export const SQ_CHANNEL_PAGE = 0x00
 export const SQ_DCA_COUNT = 8
 
 /**
+ * The inputs an SQ states: 48, the width of its own input list. Like the other ceilings in
+ * this file it is the profile's number rather than a measurement — see `channelLimit`.
+ */
+export const SQ_INPUT_COUNT = 48
+
+/**
  * An Avantis assigns an input to a DCA with NRPN `40` on the strip's own NRPN: the
  * parameter's MSB names the input, `40` is the assignment, and the value carries `40 + the
  * fader's place` into the DCA and the place alone out of it. It goes on the desk's own
@@ -93,6 +99,12 @@ export const SQ_DCA_COUNT = 8
 export const AVANTIS_ASSIGN_NRPN = 0x40
 export const AVANTIS_DCA_FIRST_NOTE = 0x36
 export const AVANTIS_DCA_COUNT = 16
+
+/**
+ * The inputs an Avantis states: 96, the width of its own input list, and the widest any
+ * profile here states — which is why `CHANNEL_LIMIT` is this number.
+ */
+export const AVANTIS_INPUT_COUNT = 96
 export const AVANTIS_CHANNEL_OFFSET = 4
 export const AVANTIS_MUTE_ON = 0x7f
 export const AVANTIS_MUTE_OFF = 0x3f
@@ -118,6 +130,23 @@ export function dcaChannel(profile: DeskProfile, midiChannel: number): number {
 export function dcaLimit(profile: DeskProfile): number | null {
   if (profile === 'sq') return SQ_DCA_COUNT
   if (profile === 'avantis') return AVANTIS_DCA_COUNT
+  return null
+}
+
+/**
+ * How many inputs the desk states — the ceiling a show's channel set is read against, and
+ * the number the desk connection names when a show is larger than it.
+ *
+ * These are the profiles' own published channel counts, taken as statements rather than
+ * measured: no desk has been asked, and a profile that states one wrongly reports a gap
+ * for a set the desk could take. That is why nothing here refuses: the count control's
+ * options stop at the number, and a show that is already larger is reported and sent
+ * exactly as it was sent before. Null is a profile that states none — the app's own note
+ * convention, and any desk reached over OSC.
+ */
+export function channelLimit(profile: DeskProfile): number | null {
+  if (profile === 'sq') return SQ_INPUT_COUNT
+  if (profile === 'avantis') return AVANTIS_INPUT_COUNT
   return null
 }
 

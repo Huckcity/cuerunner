@@ -17,13 +17,20 @@ import {
   removeChannel,
   removeEnsemble,
   removePerformerFromCast,
+  setChannelCount,
   setDcaCount,
   updateChannel,
   updateDca,
   updateEnsemble,
   updatePerformer
 } from './cast'
-import { DCA_LIMIT, defaultCastSettings, startingChannels, startingDcas } from '../../../shared/show'
+import {
+  CHANNEL_LIMIT,
+  DCA_LIMIT,
+  defaultCastSettings,
+  startingChannels,
+  startingDcas
+} from '../../../shared/show'
 import type { CastSettings, Performer } from '../../../shared/show'
 
 function empty(): CastSettings {
@@ -155,6 +162,75 @@ describe('channels', () => {
     expect(channelLabel(cast.channels, 'ch-1')).toBe('Ch 1 · Ruth')
     expect(channelLabel(cast.channels, null)).toBe('')
   })
+
+  it('grows to the count asked for, minting strips the way one added by hand is', () => {
+    const cast = wired()
+    const grown = setChannelCount(cast, 5)
+
+    expect(grown.channels).toHaveLength(5)
+    // What survives the count is the same strip: same order, same names, same ids.
+    expect(grown.channels.slice(0, 3)).toEqual(cast.channels)
+    expect(grown.channels.slice(3).map(channel => channel.name)).toEqual(['', ''])
+    // A strip a count adds is a new entity, exactly as `+ Channel` makes one.
+    const added = grown.channels[3]
+    expect(added.id).not.toBe('')
+    expect(new Set(grown.channels.map(channel => channel.id)).size).toBe(5)
+  })
+
+  it('drops the tail when the count shrinks, and leaves the rest of the cast alone', () => {
+    const cast = wired()
+    const next = setChannelCount(cast, 2)
+
+    expect(next.channels.map(channel => channel.id)).toEqual(['ch-1', 'ch-2'])
+    expect(next.dcas).toEqual(cast.dcas)
+    expect(next.performers).toEqual(cast.performers)
+    // Who was patched to a strip that went, and what the scenes placed on it, are the
+    // store action's consequences — not something a pure resize decides on its own.
+    expect(setChannelCount(cast, 0).channels).toEqual([])
+  })
+
+  it('is not moved by a count it already has', () => {
+    const cast = wired()
+    expect(setChannelCount(cast, 3)).toBe(cast)
+  })
+
+  it('leaves a show that is already past the cap the size it is', () => {
+    // A show grows past the dial's cap by hand — `+ Channel`, and a performer minting a
+    // strip when every one is taken — and the dial then offers it back its own count. That
+    // count is not an instruction to trim: the cap bounds growth, and a show asked for the
+    // size it has is the show it already was.
+    const cast: CastSettings = {
+      ...empty(),
+      channels: Array.from({ length: CHANNEL_LIMIT + 4 }, (_, index) => ({
+        id: `ch-${index + 1}`,
+        name: ''
+      })),
+      performers: [patchTo(`ch-${CHANNEL_LIMIT + 4}`)]
+    }
+
+    expect(setChannelCount(cast, cast.channels.length)).toBe(cast)
+    expect(setChannelCount(cast, 500)).toBe(cast)
+    expect(cast.performers[0].channelId).toBe(`ch-${CHANNEL_LIMIT + 4}`)
+    // It still shrinks when it is asked to, mic and all.
+    expect(setChannelCount(cast, 2).channels).toHaveLength(2)
+    expect(setChannelCount(cast, 2).performers[0].channelId).toBeNull()
+  })
+
+  it('stays inside the range the dial can offer', () => {
+    expect(setChannelCount(empty(), 200).channels).toHaveLength(CHANNEL_LIMIT)
+    expect(setChannelCount(wired(), -3).channels).toEqual([])
+    expect(setChannelCount(empty(), 2.6).channels).toHaveLength(3)
+  })
+
+  it('drops the tail’s mics with the strips, the way removing one strip does', () => {
+    const cast: CastSettings = { ...wired(), performers: [patchTo('ch-3')] }
+    const next = setChannelCount(cast, 2)
+
+    expect(next.performers[0].channelId).toBeNull()
+    // A strip that survives keeps its mic: nobody moves who was not standing on the tail.
+    expect(setChannelCount({ ...cast, performers: [patchTo('ch-1')] }, 2).performers[0].channelId)
+      .toBe('ch-1')
+  })
 })
 
 describe('ensembles', () => {
@@ -215,10 +291,10 @@ describe('DCAs', () => {
   })
 
   it('leaves the strips exactly as they were when the list shrinks', () => {
-    // The count is the show's list of faders, and nothing else moves with it: a scene that
-    // placed a channel on a fader that is gone keeps the entry — it names a fader the show
-    // no longer has, so no row and no recall reads it, and the place comes back if the
-    // fader does. A strip has no assignment of its own to fall back to, and none to lose.
+    // The count is the show's list of faders, and nothing else moves with it here: what
+    // happens to the scenes that named the faders that went is the store action's, which
+    // drops those rows in the same edit. A strip has no assignment of its own to fall back
+    // to, and none to lose.
     const cast = wired()
     const next = setDcaCount(cast, 1)
 
@@ -231,6 +307,24 @@ describe('DCAs', () => {
   it('is not moved by a count it already has', () => {
     const cast = wired()
     expect(setDcaCount(cast, 2)).toBe(cast)
+  })
+
+  it('keeps a fader list already past the cap at the size it is', () => {
+    // A file can carry more faders than the dial offers and the DCAs section offers that
+    // count back. Taking it is not an instruction to trim the list — the cap bounds what
+    // the show is asked to grow to, never what it holds.
+    const cast: CastSettings = {
+      ...empty(),
+      dcas: Array.from({ length: DCA_LIMIT + 3 }, (_, index) => ({
+        id: `dca-${index + 1}`,
+        label: `DCA ${index + 1}`,
+        deskNumber: null
+      }))
+    }
+
+    expect(setDcaCount(cast, cast.dcas.length)).toBe(cast)
+    expect(setDcaCount(cast, 500)).toBe(cast)
+    expect(setDcaCount(cast, 1).dcas).toHaveLength(1)
   })
 
   it('stays inside the range a desk can be asked for', () => {

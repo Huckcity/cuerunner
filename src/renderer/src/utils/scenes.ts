@@ -300,8 +300,19 @@ export function setMemberExcluded(
   })
 }
 
-/** Takes a channel out of every scene: it has left the console, so nothing can carry it. */
-export function removeChannelFromScenes(settings: ScenesSettings, channelId: string): ScenesSettings {
+/**
+ * Takes channels out of every scene: each has left the console, so nothing can carry it.
+ *
+ * A set at a time rather than a channel, because a count's shrink drops several strips in
+ * one edit: each of them leaves every row's placements and exclusions, and a row left
+ * saying nothing goes with them rather than staying as a shell.
+ */
+export function removeChannelsFromScenes(
+  settings: ScenesSettings,
+  channelIds: string[]
+): ScenesSettings {
+  if (channelIds.length === 0) return settings
+  const gone = new Set(channelIds)
   return {
     ...settings,
     list: settings.list.map(scene => ({
@@ -309,10 +320,27 @@ export function removeChannelFromScenes(settings: ScenesSettings, channelId: str
       dcas: scene.dcas
         .map(row => ({
           ...row,
-          channels: row.channels.filter(id => id !== channelId),
-          excluded: row.excluded.filter(id => id !== channelId)
+          channels: row.channels.filter(id => !gone.has(id)),
+          excluded: row.excluded.filter(id => !gone.has(id))
         }))
         .filter(row => !isEmptyRow(row))
+    }))
+  }
+}
+
+/**
+ * Takes the rows of the faders that went out of every scene. A row is the scene's word
+ * about one place on the desk, so a place the show no longer has leaves no row behind —
+ * nothing to read, nothing to revive, and a fader grown back is a new place.
+ */
+export function removeDcasFromScenes(settings: ScenesSettings, dcaIds: string[]): ScenesSettings {
+  if (dcaIds.length === 0) return settings
+  const gone = new Set(dcaIds)
+  return {
+    ...settings,
+    list: settings.list.map(scene => ({
+      ...scene,
+      dcas: scene.dcas.filter(row => !gone.has(row.dcaId))
     }))
   }
 }

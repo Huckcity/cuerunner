@@ -1,4 +1,4 @@
-import { DCA_LIMIT } from '../../../shared/show'
+import { CHANNEL_LIMIT, DCA_LIMIT } from '../../../shared/show'
 import type {
   CastSettings,
   Dca,
@@ -107,6 +107,20 @@ export function updateChannel(
 }
 
 /**
+ * Unpatches every mic that was standing on a strip that has gone: a performer pointed at a
+ * channel the show no longer has is a mic that opens nothing, and the numbers after it
+ * close up, so the patch goes rather than pointing at whatever took its place. Both ways a
+ * strip leaves — one at a time, and a count's tail — are made of this one rule.
+ */
+function unpatchPerformers(performers: Performer[], gone: Set<string>): Performer[] {
+  if (gone.size === 0) return performers
+  return performers.map(performer =>
+    performer.channelId !== null && gone.has(performer.channelId)
+      ? { ...performer, channelId: null }
+      : performer)
+}
+
+/**
  * Removes a channel and unpatches whoever was on it, as one edit: a performer pointed at
  * a channel that is gone is a mic that opens nothing, and the numbers after it close up
  * because a strip's number is its place in the list.
@@ -115,9 +129,34 @@ export function removeChannel(cast: CastSettings, channelId: string): CastSettin
   return {
     ...cast,
     channels: cast.channels.filter(channel => channel.id !== channelId),
-    performers: cast.performers.map(performer =>
-      performer.channelId === channelId ? { ...performer, channelId: null } : performer)
+    performers: unpatchPerformers(cast.performers, new Set([channelId]))
   }
+}
+
+/**
+ * How many strips the console has. The list is resized to match: growing appends strips
+ * minted the way a strip added by hand is, and shrinking takes the last ones off, which
+ * unpatches their mics the way removing one strip does. Each list keeps its names, its
+ * order and the ids of what remains, so a strip that survives a count is the same strip.
+ *
+ * The cap bounds what the show is asked to grow to, never what it already has: a show can
+ * pass it by hand — `+ Channel`, and a performer on a full console minting a strip — and a
+ * count it already carries must leave it alone rather than trim it and its placements.
+ *
+ * What the scenes say about the strips that went is the store action's business, which
+ * makes that change in the same edit as this one.
+ */
+export function setChannelCount(cast: CastSettings, count: number): CastSettings {
+  const ceiling = Math.max(CHANNEL_LIMIT, cast.channels.length)
+  const wanted = Math.max(0, Math.min(ceiling, Math.round(count)))
+  if (wanted === cast.channels.length) return cast
+
+  const channels = cast.channels.slice(0, wanted)
+  while (channels.length < wanted) {
+    channels.push({ id: crypto.randomUUID(), name: '' })
+  }
+  const gone = new Set(cast.channels.slice(wanted).map(channel => channel.id))
+  return { ...cast, channels, performers: unpatchPerformers(cast.performers, gone) }
 }
 
 /** The channel a performer's mic is patched to, or null while they are patched to none. */
@@ -192,14 +231,19 @@ export function updateDca(
 
 /**
  * How many faders the show drives. The list is resized to match: growing appends DCAs that
- * label and address themselves, and shrinking takes the last ones off.
+ * label and address themselves, and shrinking takes the last ones off. Each list keeps its
+ * labels, its order and the ids of what remains, so a fader that survives a count is the
+ * same fader.
  *
- * Nothing else moves. A scene that placed a channel on a fader that is gone keeps the entry
- * — it names a fader the show no longer has, so no row and no recall reads it, and the place
- * comes back if the fader does.
+ * The cap bounds growth alone, the same way the strips' does: a show a file carries more
+ * faders than are offerable keeps its own count selectable, and asking for it back must
+ * leave the list alone. What happens to the scenes that named the faders that went is the
+ * store action's business, which drops those rows in the same edit — so a fader grown back
+ * is a new fader, with a new id, and it comes back empty.
  */
 export function setDcaCount(cast: CastSettings, count: number): CastSettings {
-  const wanted = Math.max(0, Math.min(DCA_LIMIT, Math.round(count)))
+  const ceiling = Math.max(DCA_LIMIT, cast.dcas.length)
+  const wanted = Math.max(0, Math.min(ceiling, Math.round(count)))
   if (wanted === cast.dcas.length) return cast
 
   const dcas = cast.dcas.slice(0, wanted)

@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
 import type { AudioCue } from '../../../shared/cue'
-import { defaultShowSettings } from '../../../shared/show'
-import { setDcaCount } from '../utils/cast'
+import { defaultShowSettings, startingChannels } from '../../../shared/show'
 import { rowChannels, setChannelPlaced } from '../utils/scenes'
 import type {
   AlertEvent,
@@ -857,26 +856,142 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.scenes.list[0].dcas[0].ensembles).toEqual(['ens-1'])
   })
 
-  it('undo after resizing the DCAs puts the list back and leaves the rest of the show alone', () => {
-    // The count is the show's list of faders, and nothing else moves with it: a strip has
-    // no assignment of its own to fall back to, and a scene's placement names a fader the
-    // show happens not to have — no row and no recall reads it, and the place comes back
-    // if the fader does.
+  it('undo after resizing the DCAs puts the list back with the rows that named it', () => {
+    // One rule for both counts: a fader that leaves the show takes every scene's row for
+    // its place with it, in the same edit — so no scene names a place that is gone, and one
+    // undo puts the faders and the rows back together.
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: { ...defaults, cast: castWith(), scenes: { ...defaults.scenes, list: [NUMBER] } }
     })
 
     const cast = useStore.getState().showSettings.cast
-    useStore.getState().updateCastSettings(setDcaCount(cast, 0))
+    useStore.getState().setDcaCount(0)
 
     expect(useStore.getState().showSettings.cast.dcas).toEqual([])
     expect(useStore.getState().showSettings.cast.channels).toEqual(cast.channels)
-    expect(useStore.getState().showSettings.scenes.list).toEqual([NUMBER])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
 
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.dcas).toEqual([DCA])
     expect(useStore.getState().showSettings.cast.channels).toEqual(cast.channels)
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual(NUMBER.dcas)
+  })
+
+  it('a fader grown back after a shrink is a new place, and comes back empty', () => {
+    // The row left behind would name an id nothing mints again, so a placement no row reads
+    // is not kept for a revival that can never happen.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith(), scenes: { ...defaults.scenes, list: [NUMBER] } }
+    })
+
+    useStore.getState().setDcaCount(0)
+    useStore.getState().setDcaCount(1)
+
+    expect(useStore.getState().showSettings.cast.dcas).toHaveLength(1)
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
+  })
+
+  it('a strip’s shrink leaves every scene and patch that named it, as one edit', () => {
+    // The count is the show's set of strips, and a strip that goes takes its placements and
+    // its mic with it — one history entry, because the halves of that are one decision.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({ channels: [CHANNEL, { id: 'ch-2', name: 'Bea' }] }),
+        scenes: {
+          ...defaults.scenes,
+          list: [
+            NUMBER,
+            { id: 's2', name: 'Bows again', dcas: [{ dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }], notes: '' }
+          ]
+        }
+      },
+      isDirty: false
+    })
+    const before = useStore.getState().past.length
+
+    useStore.getState().setChannelCount(1)
+
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.channels.map(channel => channel.id)).toEqual(['ch-1'])
+    expect(settings.cast.performers[0].channelId).toBe('ch-1')
+    // The row whose only content was the strip that went is gone; the other one stays.
+    expect(settings.scenes.list[0].dcas).toEqual(NUMBER.dcas)
+    expect(settings.scenes.list[1].dcas).toEqual([])
+    expect(useStore.getState().past).toHaveLength(before + 1)
+    expect(useStore.getState().isDirty).toBe(true)
+
+    useStore.getState().undo()
+    const back = useStore.getState().showSettings
+    expect(back.cast.channels.map(channel => channel.name)).toEqual(['Ada', 'Bea'])
+    expect(back.cast.performers[0].channelId).toBe('ch-1')
+    expect(back.scenes.list[1].dcas[0].channels).toEqual(['ch-2'])
+  })
+
+  it('a count grown appends strips and leaves every scene and patch alone', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith(), scenes: { ...defaults.scenes, list: [NUMBER] } }
+    })
+    const scenes = useStore.getState().showSettings.scenes
+
+    useStore.getState().setChannelCount(3)
+
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.channels).toHaveLength(3)
+    expect(settings.cast.channels[0]).toEqual(CHANNEL)
+    expect(settings.cast.performers[0].channelId).toBe('ch-1')
+    // Nothing was dropped, so the scene list is not even a new object.
+    expect(settings.scenes).toBe(scenes)
+  })
+
+  it('a count re-chosen at its own value is not an edit at all', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith(), scenes: { ...defaults.scenes, list: [NUMBER] } },
+      isDirty: false
+    })
+    const settings = useStore.getState().showSettings
+    const before = useStore.getState().past.length
+
+    useStore.getState().setChannelCount(1)
+    useStore.getState().setDcaCount(1)
+
+    expect(useStore.getState().showSettings).toBe(settings)
+    expect(useStore.getState().past).toHaveLength(before)
+    expect(useStore.getState().isDirty).toBe(false)
+  })
+
+  it('a show past the dial’s cap keeps every strip when its own count is chosen', () => {
+    // The count the dial offers a 99-strip show is 99. Taking it must not trim the show,
+    // its placements or its patches — the cap is what growth is asked for, not a size the
+    // show is held to.
+    const defaults = defaultShowSettings()
+    const channels = startingChannels().concat(
+      Array.from({ length: 87 }, (_, index) => ({ id: `extra-${index + 1}`, name: '' })))
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({ channels }),
+        scenes: {
+          ...defaults.scenes,
+          list: [{ id: 's1', name: 'Bows', dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }], notes: '' }]
+        }
+      },
+      isDirty: false
+    })
+    const before = useStore.getState().past.length
+
+    useStore.getState().setChannelCount(channels.length)
+
+    expect(useStore.getState().showSettings.cast.channels).toHaveLength(channels.length)
+    expect(useStore.getState().showSettings.cast.performers[0].channelId).toBe('ch-1')
+    expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels).toEqual(['ch-1'])
+    expect(useStore.getState().past).toHaveLength(before)
+    expect(useStore.getState().isDirty).toBe(false)
   })
 
   it('undo after pointing the show at another desk puts the address back', () => {
