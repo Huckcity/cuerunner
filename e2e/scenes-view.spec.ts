@@ -231,38 +231,60 @@ test('deleting a scene leaves the view where it is, and undo puts it back', asyn
   await buildDeskShow(page, freePort())
   const columns = page.locator('.matrix-scene:not([data-all-closed])')
 
-  // Fifteen numbers, one of them named for what it does and with a mic of its own.
+  // Fifteen numbers, one of them named for what it does and with a mic of its own. It is the
+  // second scene because this test deletes it, which is also why the press has to be one the
+  // operator can make without moving the grid — the delete below says why.
   for (let i = 0; i < 14; i++) {
     await page.locator('.scenes-add').click()
     const field = columns.last().locator('.scene-name-field')
     await field.fill(`Number ${i + 2}`)
     await field.blur()
   }
-  const vows = columns.nth(2).locator('.scene-name-field')
+  const vows = columns.nth(1).locator('.scene-name-field')
   await vows.fill('Vows')
   await vows.blur()
-  // Vows places a strip on the seventh fader: the third cell of that row is the third
+  // Vows places a strip on the seventh fader: the second cell of that row is the second
   // scene, because the all-closed column is a blank in the row rather than a cell.
-  const vowsCell = page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(2)
+  const vowsCell = page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(1)
   await vowsCell.locator('.matrix-place').selectOption({ label: 'Ch 1 · Ruth' })
   await expect(vowsCell).toHaveAttribute('data-placed', 'true')
 
-  // The show reaches the fifteenth through the cue stack.
+  // The show reaches the fifteenth through the cue stack. The cue is armed here; the press
+  // that fires it belongs to the view the show is run from, so the grid is left where an
+  // operator watching the top of the show would have it, and the show is left to move it.
   await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
   await addCueFromMoreMenu(page, 'Scene')
   await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
   await page.locator('#scene-cue-select').selectOption({ label: 'Number 15' })
-  await page.locator('.btn-go').click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+  const scroll = page.locator('.matrix-scroll')
+  await scroll.evaluate(el => { el.scrollLeft = 0 })
+
+  // GO, and the view follows the show: the desk is on the last scene, which following takes
+  // as far right as the grid goes. Waited for, and the wait is only unambiguous because the
+  // box was just put at the top by hand. The follow is a passive effect — queued in the
+  // commit that flips `data-current`, flushed on a task the browser is free to run after the
+  // next call from here — so until it has run the view is still on its way, and a scroll of
+  // ours at that moment races the show rather than the delete.
+  await page.locator('.btn-go').click()
   await expect(columns.nth(14)).toHaveAttribute('data-current', 'true')
+  const rightEnd = await scroll.evaluate(el => el.scrollWidth - el.clientWidth)
+  await expect.poll(() => scroll.evaluate(el => el.scrollLeft)).toBe(rightEnd)
 
   // The operator scrolls back to the top of the show and deletes a scene they do not want.
   // That is an edit: the desk has not moved, so the view must not either — it used to snap
-  // back to wherever the show was, as though the delete had been a recall.
-  await page.locator('.matrix-scroll').evaluate(el => { el.scrollLeft = 0 })
-  await columns.nth(2).locator('.matrix-scene-remove').click()
+  // back to wherever the show was, as though the delete had been a recall. The second scene
+  // is the one that goes because its ✕ is on screen from the top of the show: a control that
+  // is not on screen is scrolled into view before it is pressed, and that scroll would be the
+  // harness's own hand inside the measurement made below. The line before the press holds
+  // that to the layout, so a ✕ pushed off the side fails there, where the reason is, rather
+  // than three lines later at a scroll assertion.
+  const remove = columns.nth(1).locator('.matrix-scene-remove')
+  await scroll.evaluate(el => { el.scrollLeft = 0 })
+  await expect(remove).toBeInViewport({ ratio: 1 })
+  await remove.click()
   await expect(columns).toHaveCount(14)
-  expect(await page.locator('.matrix-scroll').evaluate(el => el.scrollLeft)).toBe(0)
+  expect(await scroll.evaluate(el => el.scrollLeft)).toBe(0)
   await expect(columns.last()).not.toBeInViewport()
 
   // Undo returns it where it was, with the mic it opens.
@@ -272,9 +294,9 @@ test('deleting a scene leaves the view where it is, and undo puts it back', asyn
       ?.click(undefined, BrowserWindow.getAllWindows()[0])
   })
   await expect(columns).toHaveCount(15)
-  await expect(columns.nth(2).locator('.scene-name-field')).toHaveValue('Vows')
+  await expect(columns.nth(1).locator('.scene-name-field')).toHaveValue('Vows')
   // With the placement it had: the cell names the strip again.
-  await expect(page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(2))
+  await expect(page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(1))
     .toHaveAttribute('data-placed', 'true')
 })
 
