@@ -65,69 +65,58 @@
       "token": ""
     },
     "scenes": {
-      "list": []
+      "list": [],
+      "allowDuplicateAssignment": true
     },
     "cast": {
       "channels": [
         {
           "id": "channel-1",
-          "name": "",
-          "dcaId": "dca-1"
+          "name": ""
         },
         {
           "id": "channel-2",
-          "name": "",
-          "dcaId": "dca-2"
+          "name": ""
         },
         {
           "id": "channel-3",
-          "name": "",
-          "dcaId": "dca-3"
+          "name": ""
         },
         {
           "id": "channel-4",
-          "name": "",
-          "dcaId": "dca-4"
+          "name": ""
         },
         {
           "id": "channel-5",
-          "name": "",
-          "dcaId": "dca-5"
+          "name": ""
         },
         {
           "id": "channel-6",
-          "name": "",
-          "dcaId": "dca-6"
+          "name": ""
         },
         {
           "id": "channel-7",
-          "name": "",
-          "dcaId": "dca-7"
+          "name": ""
         },
         {
           "id": "channel-8",
-          "name": "",
-          "dcaId": "dca-8"
+          "name": ""
         },
         {
           "id": "channel-9",
-          "name": "",
-          "dcaId": "dca-9"
+          "name": ""
         },
         {
           "id": "channel-10",
-          "name": "",
-          "dcaId": "dca-10"
+          "name": ""
         },
         {
           "id": "channel-11",
-          "name": "",
-          "dcaId": "dca-11"
+          "name": ""
         },
         {
           "id": "channel-12",
-          "name": "",
-          "dcaId": "dca-12"
+          "name": ""
         }
       ],
       "performers": [],
@@ -136,74 +125,62 @@
         {
           "id": "dca-1",
           "label": "DCA 1",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-2",
           "label": "DCA 2",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-3",
           "label": "DCA 3",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-4",
           "label": "DCA 4",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-5",
           "label": "DCA 5",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-6",
           "label": "DCA 6",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-7",
           "label": "DCA 7",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-8",
           "label": "DCA 8",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-9",
           "label": "DCA 9",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-10",
           "label": "DCA 10",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-11",
           "label": "DCA 11",
-          "note": null,
-          "address": null
+          "deskNumber": null
         },
         {
           "id": "dca-12",
           "label": "DCA 12",
-          "note": null,
-          "address": null
+          "deskNumber": null
         }
       ]
     }

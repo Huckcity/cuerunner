@@ -9,26 +9,20 @@ import type {
 
 /**
  * The show's setup: the channels on the console, the cast and where their mics are
- * patched, the ensembles that group them, and the DCAs those channels open.
+ * patched, the ensembles that group them, and the faders the desk has.
  *
  * Every operation here is pure and works on the whole cast, so the store can write one
  * edit at a time and an undo can put back exactly what an edit destroyed.
+ *
+ * Nothing here says which fader a channel rides: a strip is a name and a number, and the
+ * placement belongs to the scene that makes it (AD-26).
  */
-
-/**
- * The DCA a strip in this place drives by default: the one with the same number. A show
- * is set up from the desk's own numbering — strip 4 on fader 4 — and a group sharing a
- * fader (the chorus, the band) is the exception somebody chose.
- */
-function dcaForPlace(dcas: Dca[], place: number): string | null {
-  return dcas[place]?.id ?? null
-}
 
 // ── Performers ─────────────────────────────────────────────────────────────
 
 /**
  * Adds a performer on the first strip nobody is on, or on a new strip when every one is
- * taken: a performer with no strip is a row that can never be open in a scene, and the
+ * taken: a performer with no strip is a row that can never be named on the desk, and the
  * strip they land on is where their mic is patched. It is left unnamed — naming the
  * performer names the strip, and until then "Ch 7" is what the desk calls it.
  */
@@ -42,11 +36,7 @@ export function addPerformer(
   const free = cast.channels.find(channel => !taken.has(channel.id))
   const channelId = free?.id ?? crypto.randomUUID()
   const channels = free === undefined
-    ? [...cast.channels, {
-        id: channelId,
-        name: '',
-        dcaId: dcaForPlace(cast.dcas, cast.channels.length)
-      }]
+    ? [...cast.channels, { id: channelId, name: '' }]
     : cast.channels
 
   const performer: Performer = { id: crypto.randomUUID(), name, role, notes, channelId }
@@ -98,13 +88,9 @@ export function removePerformerFromCast(cast: CastSettings, performerId: string)
 
 // ── Channels ───────────────────────────────────────────────────────────────
 
-/** Adds a strip after the last one, driving the DCA of its own number. */
+/** Adds a strip after the last one. Where it rides is the scene's to say, not the strip's. */
 export function addChannel(cast: CastSettings, name = ''): CastSettings {
-  const channel: ShowChannel = {
-    id: crypto.randomUUID(),
-    name,
-    dcaId: dcaForPlace(cast.dcas, cast.channels.length)
-  }
+  const channel: ShowChannel = { id: crypto.randomUUID(), name }
   return { ...cast, channels: [...cast.channels, channel] }
 }
 
@@ -150,14 +136,6 @@ export function channelLabel(channels: ShowChannel[], channelId: string | null):
   if (index === -1) return ''
   const name = channels[index].name.trim()
   return name === '' ? `Ch ${index + 1}` : `Ch ${index + 1} · ${name}`
-}
-
-/**
- * The DCA a performer's mic opens: the one their channel drives, or nothing when the
- * strip is patched to no fader at all.
- */
-export function performerDcaId(performer: Performer, channels: ShowChannel[]): string | null {
-  return performerChannel(performer, channels)?.dcaId ?? null
 }
 
 // ── Ensembles ──────────────────────────────────────────────────────────────
@@ -213,10 +191,12 @@ export function updateDca(
 }
 
 /**
- * How many DCAs the desk has, which is what the show controls. The list is resized to
- * match: growing appends DCAs that label and drive themselves, and shrinking takes the
- * last ones off — putting every strip that was on one back on the DCA of its own number,
- * which is the one that is certainly still there.
+ * How many faders the show drives. The list is resized to match: growing appends DCAs that
+ * label and address themselves, and shrinking takes the last ones off.
+ *
+ * Nothing else moves. A scene that placed a channel on a fader that is gone keeps the entry
+ * — it names a fader the show no longer has, so no row and no recall reads it, and the place
+ * comes back if the fader does.
  */
 export function setDcaCount(cast: CastSettings, count: number): CastSettings {
   const wanted = Math.max(0, Math.min(DCA_LIMIT, Math.round(count)))
@@ -227,18 +207,8 @@ export function setDcaCount(cast: CastSettings, count: number): CastSettings {
     dcas.push({
       id: crypto.randomUUID(),
       label: `DCA ${dcas.length + 1}`,
-      note: null,
-      address: null
+      deskNumber: null
     })
   }
-
-  const kept = new Set(dcas.map(dca => dca.id))
-  return {
-    ...cast,
-    dcas,
-    channels: cast.channels.map((channel, place) => {
-      if (channel.dcaId === null || kept.has(channel.dcaId)) return channel
-      return { ...channel, dcaId: dcaForPlace(dcas, place) }
-    })
-  }
+  return { ...cast, dcas }
 }

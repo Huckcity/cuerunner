@@ -1,8 +1,8 @@
-/* Scenes is the curtain-up view: the cast down the side, the scenes across the top, one
-   filled cell per performer who is open. Which DCA each performer's mic actually opens is
-   set up in Show Settings — this view only runs it. It is read from a metre away
-   mid-show, so state is a block of colour rather than a word, and the only amber on it is
-   work to do. */
+/* Scenes is the curtain-up view: the show's faders down the side, the scenes across the
+   top, one cell per fader naming the channels it carries. A recall writes that membership
+   and then each mic's mute, and nothing outside the set a scene names. It is read from a
+   metre away mid-show, so state is a block of colour rather than a word, and the only
+   amber on it is work to do. */
 .scenes-view {
   /* The view is a grid item in a minmax(0, 1fr) track; without this its content's
      min-content width would push the window wider instead of scrolling inside. */
@@ -123,7 +123,6 @@
 /* The edits the grid cannot hold: a scene, and an ensemble made from the one the desk is
    on. They read as buttons rather than as state, because that is what they are. */
 .scenes-add,
-.scenes-ensemble,
 .scenes-edit {
   flex: none;
   height: 22px;
@@ -139,19 +138,12 @@
 }
 
 .scenes-add:hover,
-.scenes-ensemble:hover,
 .scenes-edit:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
-/* Grouping the mics that are open needs a scene on the desk to group them from, so the
-   press says so by being unavailable rather than by making an empty ensemble. */
-.scenes-ensemble:disabled {
-  color: var(--fg-subtle);
-  border-color: var(--border-soft);
-  cursor: default;
-}
-
 /* A scene that would move the desk is a thing to do, not a readout: it gets the warning
-   colour and the exact number of messages that would go out. */
+   colour and the exact number of messages that would go out. The resync re-sends the
+   scene the desk is standing on — for when somebody moved a fader by hand — so it reads
+   as a quiet press beside the amber one rather than as a second thing to do. */
 .matrix-apply {
   height: 22px;
   padding: 0 var(--space-2);
@@ -165,15 +157,21 @@
   transition: var(--transition-fast);
 }
 
-.matrix-apply:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-/* Editing is the mode that can change the show, so it is the one that is marked: the
-   press says Done in blue, and a line under the header says what the clicks now do. */
-.scenes-edit[data-editing='true'] {
-  background: var(--accent-blue-glow);
-  border-color: var(--accent-blue-dim);
-  color: var(--accent-blue);
+.matrix-resync {
+  flex: none;
+  height: 22px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
 }
+
+.matrix-resync:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 .scenes-editing-hint {
   flex-shrink: 0;
@@ -214,7 +212,6 @@
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
 }
-
 /* One column per scene. Recalling is never locked out, so the header is always a press. */
 .matrix-scene {
   position: sticky;
@@ -289,23 +286,6 @@
 
 /* An ensemble's name is edited where the ensemble is, same as a scene's: the row is the
    thing, and a second place to look for its name is a second place to get it wrong. */
-.ensemble-name-field {
-  min-width: 0;
-  flex: 1;
-  height: 22px;
-  padding: 0 4px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--fg-body);
-  font-size: var(--text-base);
-  font-family: inherit;
-  outline: none;
-}
-
-.ensemble-name-field:hover { border-color: var(--border-input); }
-.ensemble-name-field:focus { border-color: var(--border-focus); background: var(--bg-input); }
-
 .scene-name-field:disabled {
   background: transparent;
   border-color: transparent;
@@ -361,6 +341,8 @@
 .matrix-scene-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 
+/* The row is a fader: its number is what an operator reaches for at the desk, and the
+   label beside it is what the show calls it. */
 .matrix-mic {
   position: sticky;
   left: 0;
@@ -368,27 +350,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: var(--matrix-cell-height);
-  padding: 0 var(--space-2);
+  min-height: var(--matrix-cell-height);
+  padding: 4px var(--space-2);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-soft);
   border-right: 1px solid var(--border);
 }
 
-/* The strip a mic is patched to, read before the name: a number is what an operator
-   reaches for at the desk, and the name is what the show calls them. */
-.matrix-channel {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-subtle);
-  white-space: nowrap;
-}
-
-/* The row is a name: the performer is what the operator reads down the side of the
-   grid, and it is the only thing about a row that changes at the interval. */
-.matrix-performer {
+.matrix-fader {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -397,90 +366,189 @@
   color: var(--fg-body);
 }
 
-/* ── Ensembles ─────────────────────────────────────────────────────────────────
-   A row of its own above the cast, with a cell per scene: applying one opens every
-   member at once, and a member the scene closes anyway leaves the group reading as
-   partly open rather than as a tick that lies. */
-.matrix-ensemble-row { display: contents; }
-
-.matrix-ensemble-count {
-  flex: none;
-  min-width: 14px;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-subtle);
-  text-align: right;
-}
-
-.matrix-ensemble-row .matrix-mic { background: var(--bg-raised); }
-.matrix-ensemble-row .matrix-performer { color: var(--fg-muted); }
-
-/* An ensemble applied to a scene is an outline rather than a fill: the fill is what says
-   a mic is open, and this says which mics the group is holding open. */
-.matrix-cell[data-applied='on'] {
-  border-color: var(--state-running-fg);
-  box-shadow: inset 0 0 0 1px var(--state-running-fg);
-}
-
-.matrix-cell[data-applied='partial'] {
-  border-color: var(--accent-amber);
-  box-shadow: inset 0 0 0 1px var(--accent-amber);
-  background: var(--accent-amber-bg);
-}
-
-.matrix-cell[data-applied='off'][data-current='true'] { background: var(--bg-playing-row); }
-
-/* The all-closed column takes nobody, so its place in a performer row is a gap rather
-   than a cell: the same box, and nothing that can be pressed. */
-.matrix-cell-blank {
-  height: var(--matrix-cell-height);
-  margin: 2px;
-}
-
-/* A performer who is open in the current scene brightens their whole row: this is the
-   glance the view exists for — the column and the people it opens, read together. */
-.matrix-row[data-on='true'] .matrix-mic { background: var(--bg-card); }
-
-.matrix-row[data-on='true'] .matrix-performer { color: var(--fg-primary); }
-
+/* ── A cell: what one fader carries in one scene ───────────────────────────────
+   A cell names the channels its row carries as chips, and the ensembles applied to the
+   row beside them. An applied ensemble is an outline rather than a fill: the chips are
+   what say a mic is carried, and the outline says which of them the group is holding. */
 .matrix-cell {
-  height: var(--matrix-cell-height);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: var(--matrix-cell-height);
   margin: 2px;
-  padding: 0;
+  padding: 3px 4px;
   background: transparent;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  cursor: pointer;
   transition: var(--transition-fast);
 }
 
-.matrix-cell:hover { border-color: var(--fg-subtle); }
-
-/* A mic that is open is a block of running colour, not a word. */
-.matrix-cell[data-live='true'] {
-  background: var(--state-running-fg);
+/* A row carrying something is a block of running colour's edge rather than its fill: the
+   chips name who is carried, so the cell only has to say that there is someone. */
+.matrix-cell[data-placed='true'] {
   border-color: var(--state-running-fg);
 }
 
 /* ...except down the current column, which is tinted so the scene the desk is in is
    findable without reading a name. */
-.matrix-cell[data-current='true'][data-live='false'] {
+.matrix-cell[data-current='true'] {
   background: var(--bg-playing-row);
-  border-color: var(--border);
 }
 
-/* Pending is amber: the desk has not been told what this group is doing now. The fill
-   stays live's or the column's, so the cell still says whether the mic is open. */
+/* Pending is amber: the desk has not been told what this row is carrying now. */
 .matrix-cell[data-pending='true'] { border-color: var(--accent-amber); }
 
-.matrix-cell[data-pending='true'][data-live='false'] { background: var(--accent-amber-bg); }
+.matrix-cell[data-pending='true'][data-placed='false'] { background: var(--accent-amber-bg); }
 
-/* Locked cells stop being a target but keep saying who is open: the state is what the
-   view is read for, and dimming it below legibility would defeat the lock. */
-.matrix-cell:disabled { cursor: default; }
+/* A channel the row carries: its number, which is its place in the list, and the name
+   beside it when it has one. */
+.matrix-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 2px 1px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-body);
+  white-space: nowrap;
+  overflow: hidden;
+}
 
-.matrix-cell:disabled[data-live='false'] { opacity: 0.5; }
+.matrix-channel-remove {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-subtle);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.matrix-channel-remove:disabled { cursor: default; opacity: 0.5; }
+
+.matrix-channel-remove:focus-visible,
+.matrix-ensemble:focus-visible,
+.matrix-member:focus-visible,
+.matrix-place:focus-visible,
+.matrix-ensemble-add:focus-visible,
+.matrix-ensemble-new:focus-visible,
+.matrix-resync:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* The pickers name what the row does not carry yet: a channel to place, or an ensemble
+   to apply. They read as presses rather than as state, because that is what they are. */
+.matrix-place,
+.matrix-ensemble-add {
+  max-width: 100%;
+  height: 20px;
+  padding: 0 4px;
+  background: transparent;
+  border: 1px dashed var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.matrix-place:hover,
+.matrix-ensemble-add:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* An ensemble applied to the row, and the members left off it: taking the group off
+   leaves whatever was placed by hand as it was, and leaving a member off is a press on
+   the member rather than on the group — which is why the member reads quieter until it
+   is the thing being left off. */
+.matrix-applied {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.matrix-ensemble {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  height: 20px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--state-running-fg);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-ensemble:disabled { cursor: default; }
+
+.matrix-ensemble[data-applied='partial'] {
+  border-color: var(--accent-amber);
+  background: var(--accent-amber-bg);
+}
+
+.matrix-member {
+  height: 20px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--fg-subtle);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-member:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.matrix-member:disabled { cursor: default; }
+
+.matrix-member[data-excluded='true'] {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+  background: var(--accent-amber-bg);
+}
+
+/* Grouping what the row carries into an ensemble, applied here: the other half of
+   building a scene from the people already on a fader. */
+.matrix-ensemble-new {
+  height: 20px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-subtle);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.matrix-ensemble-new:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* The all-closed column places nothing, so its place in a fader row is a gap rather
+   than a cell: the same box, and nothing that can be pressed. */
+.matrix-cell-blank {
+  min-height: var(--matrix-cell-height);
+  margin: 2px;
+}
 
 .matrix-empty {
   flex: 1;

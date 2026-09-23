@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scenes and the desk — Cuerunner</title>
-  <meta name="description" content="Build a scene grid of who is open on stage, recall it from a cue, and let Cuerunner send only the DCA changes." />
+  <meta name="description" content="Build a scene grid of who rides which fader, recall it from a cue, and let Cuerunner write the membership and the mutes it names." />
   <meta property="og:type" content="article" />
   <meta property="og:title" content="Scenes and the desk — Cuerunner" />
-  <meta property="og:description" content="Build a scene grid of who is open on stage, recall it from a cue, and let Cuerunner send only the DCA changes." />
+  <meta property="og:description" content="Build a scene grid of who rides which fader, recall it from a cue, and let Cuerunner write the membership and the mutes it names." />
   <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../styles.css" />
 </head>
@@ -44,8 +44,8 @@
     <section class="panel reveal">
       <h1>Scenes and the desk<span class="pro">Pro</span></h1>
       <p class="doc-lede">
-        Who is open, scene by scene, as a grid you can read from the back of the room —
-        and a cue that moves the desk to match.
+        Who rides which fader, scene by scene, as a grid you can read from the back of the
+        room — and a cue that moves the desk to match.
       </p>
     </section>
 
@@ -59,14 +59,18 @@
       </p>
       <figure class="figure">
         <a href="../assets/guide/19-show-settings.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/19-show-settings.png" alt="Show Settings on its Channels tab: the desk connection, the channel strips, and the DCAs each strip rides." />
+          <img src="../assets/guide/19-show-settings.png" alt="Show Settings on its Channels tab: the desk connection, the channel strips, and the faders the show drives." />
         </a>
-        <figcaption>The desk, the strips, and the DCAs they ride.</figcaption>
+        <figcaption>The desk, the strips on the console, and the faders the show drives.</figcaption>
       </figure>
       <p>
-        Then list the <strong>channels</strong> — the strips on the console — and which
-        <strong>DCA</strong> each one rides. Several channels can share a DCA, which is
-        what a chorus master usually is, and the DCA rows read back who they are carrying.
+        Then list the <strong>channels</strong> — the strips on the console, a name and a
+        number each — and the <strong>faders</strong> the show drives. Which channel rides
+        which fader is not set up here: that is the scene's decision, taken in the grid, so
+        a chorus can ride one fader in one number and be split across the stage in the next.
+        Each fader carries one <strong>desk number</strong>, for a desk that counts its DCAs
+        differently from the show, and the row under it says how many scenes place anything
+        on it.
       </p>
     </section>
 
@@ -84,19 +88,32 @@
       <h2>3. Build the scenes</h2>
       <figure class="figure">
         <a href="../assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/18-scenes.png" alt="The scenes view: a grid of performers down the side and scenes across the top, with cells marking who is open." />
+          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each cell naming the channels that scene puts on that fader." />
         </a>
         <figcaption>The scenes view, mid-build.</figcaption>
       </figure>
       <p>
         Switch the window to <strong>Scenes</strong>, press <strong>Edit</strong>, and add
-        one. Performers run down the side, scenes across the top; click a cell to open that
-        mic in that scene. <strong>Done</strong> when you have finished.
+        one. The show’s <strong>faders</strong> run down the side and the scenes across the
+        top, and each cell says which channels that scene puts on that fader: place one from
+        the cell’s own picker, and take it off with the ✕ beside its name. A channel can ride
+        several faders — a chorus master on one and its members spread across others — so
+        nothing stops you putting the same strip on two rows.
+      </p>
+      <p>
+        An <strong>ensemble</strong> is the other half of building a row: apply one to a
+        fader and every member’s strip rides it, with a member you want left off this row
+        shown beside it to switch off. <strong>+ Group</strong> makes an ensemble out of the
+        strips a cell is already carrying, so the same people are one press next time.
+        <strong>Done</strong> when you have finished.
       </p>
       <p>
         Out of edit mode the grid is for running: press <strong>Recall</strong> on a scene
         and the desk moves. The column the desk is currently on is marked, so the grid
-        always says where you are.
+        always says where you are, and <strong>Recall now</strong> appears above it when the
+        desk has not been told everything the current scene asks for. <strong>Resync</strong>
+        beside it re-sends that scene’s whole set: it is the press for when somebody has
+        moved a fader or muted a mic by hand at the desk, which nothing here can see.
       </p>
     </section>
 

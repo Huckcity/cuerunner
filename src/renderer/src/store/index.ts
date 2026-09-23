@@ -13,7 +13,6 @@ import type {
   DeskSettings,
   DeviceState,
   DeviceEvent,
-  MicScene,
   MidiInSettings,
   OscInSettings,
   PresenceSettings,
@@ -33,14 +32,17 @@ import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
   addEnsemble,
+  removeChannel as removeChannelFromCast,
   removeEnsemble as removeEnsembleFromCast,
   removePerformerFromCast
 } from '../utils/cast'
 import {
+  placementFor,
+  removeChannelFromScenes,
   removeEnsembleFromScenes,
-  removePerformerFromScenes,
-  sceneLiveIds,
-  setEnsembleApplied
+  rowChannels,
+  setRowEnsemble,
+  type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
 import type { LicenseStatus } from '../../../shared/license'
@@ -408,36 +410,48 @@ interface CueListState {
   removeEnsemble: (ensembleId: string) => void
 
   /**
-   * Makes an ensemble out of the performers open in a scene, and applies it to that
-   * scene. One edit rather than two: an ensemble built from a scene and not applied to
-   * it is a grouping that disappears the moment the operator looks away from the grid.
+   * Makes an ensemble out of the performers riding one fader in a scene, and applies it to
+   * that row. One edit rather than two: an ensemble built from a row and not applied to it
+   * is a grouping that disappears the moment the operator looks away from the grid.
+   *
+   * Applying it changes nothing about what the row carries — the ensemble holds exactly the
+   * channels the row held — so the press is a regrouping and not a re-routing.
    */
-  addEnsembleFromScene: (sceneId: string) => void
+  addEnsembleFromRow: (sceneId: string, dcaId: string) => void
   /**
    * Drops a performer from the cast: released from every pack they wore (each a swap of
-   * its own), out of whichever ensembles had them, and off every scene's open list and
-   * list of exclusions — three settings sections changed as one edit, because a
-   * performer half-removed from one of them is a name that no longer means anything in
-   * the others.
+   * its own) and out of whichever ensembles had them. Two settings sections changed as one
+   * edit, because a performer half-removed from one of them is a name that no longer means
+   * anything in the other. What the scenes say is untouched: they name channels, and the
+   * strip stays on the console after the person has left it.
    */
   removePerformer: (performerId: string) => void
+  /**
+   * Drops a strip from the console: out of the cast and out of every scene's placements,
+   * as one edit, because a placement naming a channel that is gone is a cell that can never
+   * be read again.
+   */
+  removeChannel: (channelId: string) => void
 
   // Where the desk was left. Session state, not workspace content: a show that has just
   // loaded has not told the desk anything yet, and saying otherwise would stop the first
-  // recall from sending what it needs to.
-  deskState: Record<string, boolean>
+  // recall from sending what it needs to. Two facts per controlled channel — the mic's mute
+  // and the faders it was written onto — because a recall is a diff against both, and the
+  // desk that would answer for either one does not answer here: the base is what Cuerunner
+  // last sent.
+  deskState: DeskState
   deskSceneId: string | null
-  setDeskState: (deskState: Record<string, boolean>, deskSceneId: string | null) => void
+  setDeskState: (deskState: DeskState, deskSceneId: string | null) => void
 
   /**
-   * Writes the groups one recall actually moved onto the record as it stands, rather
-   * than publishing the whole record it read at the start of the sends: two recalls in
-   * flight at once — two scene cues at one timeline offset, a batch of triggers — would
-   * otherwise lose one another's groups, and a group recorded as closed while it is live
-   * on the desk is never told anything again. The scene id is left alone unless one is
-   * given, so a recall can record its groups as they land and name its scene at the end.
+   * Writes the facts one recall actually moved onto the record as it stands, rather than
+   * publishing the whole record it read at the start of the sends: two recalls in flight at
+   * once — two scene cues at one timeline offset, a batch of triggers — would otherwise lose
+   * one another's writes, and a channel recorded as muted while it is open on the desk is
+   * never told anything again. The scene id is left alone unless one is given, so a recall
+   * can record its facts as they land and name its scene at the end.
    */
-  mergeDeskState: (entries: Record<string, boolean>, deskSceneId?: string | null) => void
+  mergeDeskState: (patch: Partial<DeskState>, deskSceneId?: string | null) => void
 
   /**
    * Whether the Scenes view is being edited. Session state, and off whenever a show is
@@ -485,7 +499,7 @@ const HISTORY_LIMIT = 50
  */
 interface EditSnapshot {
   cues: Cue[]
-  scenes: { list: MicScene[] }
+  scenes: ScenesSettings
   cast: CastSettings
   desk: DeskSettings
   plot: RfPlot
@@ -494,7 +508,7 @@ interface EditSnapshot {
 function snapshotOf(state: CueListState): EditSnapshot {
   return {
     cues: state.cues,
-    scenes: { list: state.showSettings.scenes.list },
+    scenes: state.showSettings.scenes,
     cast: state.showSettings.cast,
     desk: state.showSettings.desk,
     plot: state.showSettings.rf.plot
@@ -505,7 +519,7 @@ function snapshotOf(state: CueListState): EditSnapshot {
 function restoreSettings(showSettings: ShowSettings, snapshot: EditSnapshot): ShowSettings {
   return {
     ...showSettings,
-    scenes: { ...showSettings.scenes, list: snapshot.scenes.list },
+    scenes: snapshot.scenes,
     cast: snapshot.cast,
     desk: snapshot.desk,
     rf: { ...showSettings.rf, plot: snapshot.plot }
@@ -722,7 +736,7 @@ export const useStore = create<CueListState>((set) => ({
   showEvents: [],
   redundancy: null,
   redundancySettings: null,
-  deskState: {},
+  deskState: { mutes: {}, assignments: {} },
   deskSceneId: null,
   scenesEditing: false,
   modals: 0,
@@ -1375,7 +1389,7 @@ export const useStore = create<CueListState>((set) => ({
       // Where the last show's cursor sat says nothing about this one.
       waveformCursor: null,
       // Nothing has been told to this show's desk yet.
-      deskState: {},
+      deskState: { mutes: {}, assignments: {} },
       deskSceneId: null,
       scenesEditing: false,
       past: [],
@@ -1457,12 +1471,13 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
-  // Scenes and who is open in them are the grid's work, so a delete or a stray cell is
-  // one undo away from being back.
+  // Placements and scene names are the grid's work, so a delete or a stray press is one
+  // undo away from being back. The duplicate rule travels with the list rather than beside
+  // it: it decides what an edit does, so half an undo of it would be a lie.
   updateScenesSettings: (patch) => set(s => ({
     showSettings: { ...s.showSettings, scenes: { ...s.showSettings.scenes, ...patch } },
-    past: 'list' in patch ? pushPast(s.past, snapshotOf(s)) : s.past,
-    future: 'list' in patch ? [] : s.future,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: [],
     isDirty: true
   })),
 
@@ -1481,8 +1496,8 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  // Two sections change as one edit: the ensemble goes, and every scene that had it
-  // applied no longer does.
+  // Two sections change as one edit: the ensemble goes, and every row that had it applied
+  // no longer does. Its members' channels keep whatever the rows placed by hand.
   removeEnsemble: (ensembleId) => set(s => ({
     showSettings: {
       ...s.showSettings,
@@ -1494,20 +1509,40 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
-  // Who is in the new ensemble is who is open in the scene it is made from, which is the
-  // one thing the operator is looking at when they press it.
-  addEnsembleFromScene: (sceneId) => set(s => {
+  // The cast and the scenes as one edit: dropping the strip and leaving a placement naming
+  // it behind would be a cell nobody can read again.
+  removeChannel: (channelId) => set(s => ({
+    showSettings: {
+      ...s.showSettings,
+      cast: removeChannelFromCast(s.showSettings.cast, channelId),
+      scenes: removeChannelFromScenes(s.showSettings.scenes, channelId)
+    },
+    past: pushPast(s.past, snapshotOf(s)),
+    future: [],
+    isDirty: true
+  })),
+
+  // Who is in the new ensemble is who rides the row it is made from, which is the one thing
+  // the operator is looking at when they press it.
+  addEnsembleFromRow: (sceneId, dcaId) => set(s => {
+    const cast = s.showSettings.cast
     const scene = s.showSettings.scenes.list.find(candidate => candidate.id === sceneId)
     if (scene === undefined) return s
+    const channels = rowChannels(cast, placementFor(scene, dcaId))
+    const members = cast.performers
+      .filter(performer => performer.channelId !== null && channels.includes(performer.channelId))
+      .map(performer => performer.id)
+    // Strips nobody is patched to are not a group: an ensemble with no members is a row that
+    // opens nothing, and the press that made it is a press that changed nothing.
+    if (members.length === 0) return s
 
-    const members = sceneLiveIds(scene, s.showSettings.cast.ensembles)
-    const cast = addEnsemble(s.showSettings.cast, '', members)
-    const ensemble = cast.ensembles[cast.ensembles.length - 1]
+    const grouped = addEnsemble(cast, '', members)
+    const ensemble = grouped.ensembles[grouped.ensembles.length - 1]
     return {
       showSettings: {
         ...s.showSettings,
-        cast,
-        scenes: setEnsembleApplied(s.showSettings.scenes, sceneId, ensemble, true)
+        cast: grouped,
+        scenes: setRowEnsemble(s.showSettings.scenes, sceneId, dcaId, ensemble, true, grouped)
       },
       past: pushPast(s.past, snapshotOf(s)),
       future: [],
@@ -1515,8 +1550,9 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  // Three sections change as one edit: the pack they wore is released (a swap in its
-  // own right), the cast drops them, and any scene that had them open no longer does.
+  // Two sections change as one edit: the pack they wore is released (a swap in its own
+  // right) and the cast drops them. The scenes are not touched — they name channels, and the
+  // strip stays on the console after the person who was on it has gone.
   removePerformer: (performerId) => set(s => {
     const at = Date.now()
     const release = releasePerformerPacks(
@@ -1540,8 +1576,7 @@ export const useStore = create<CueListState>((set) => ({
           plot: release.plot,
           swaps: recordSwaps(s.showSettings.rf.swaps, release.swaps)
         },
-        cast: removePerformerFromCast(s.showSettings.cast, performerId),
-        scenes: removePerformerFromScenes(s.showSettings.scenes, performerId)
+        cast: removePerformerFromCast(s.showSettings.cast, performerId)
       },
       log,
       past: pushPast(s.past, snapshotOf(s)),
@@ -1552,8 +1587,11 @@ export const useStore = create<CueListState>((set) => ({
 
   setDeskState: (deskState, deskSceneId) => set({ deskState, deskSceneId }),
 
-  mergeDeskState: (entries, deskSceneId) => set(s => ({
-    deskState: { ...s.deskState, ...entries },
+  mergeDeskState: (patch, deskSceneId) => set(s => ({
+    deskState: {
+      mutes: { ...s.deskState.mutes, ...patch.mutes },
+      assignments: { ...s.deskState.assignments, ...patch.assignments }
+    },
     ...(deskSceneId === undefined ? {} : { deskSceneId })
   })),
 

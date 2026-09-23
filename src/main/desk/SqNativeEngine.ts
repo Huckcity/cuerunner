@@ -1,12 +1,16 @@
 import { createConnection, type Socket } from 'node:net'
 import { createSocket, type Socket as DatagramSocket } from 'node:dgram'
 import { reportMainError } from '../errors'
+import type { SqMembershipIntent } from '../../shared/show'
 import {
   GOODBYE,
   NATIVE_KEEPALIVE_PORT,
   NATIVE_LEAVE_PORT,
   NATIVE_TCP_PORT,
+  assignPair,
+  clearPair,
   createFrameReader,
+  dcaFlag,
   helloFrame,
   keepAliveFrame,
   sessionFrames
@@ -170,6 +174,36 @@ export class SqNativeEngine {
       // them and the desk the show is really on would read as one nobody opened.
       this.online = null
     }
+  }
+
+  /**
+   * One membership written to the desk: the pair frame and then the channel's own flag, which
+   * is two frames, and how many of them went out is the answer.
+   *
+   * The flag rides along because the desk keeps it per channel rather than per pair: it says
+   * whether the channel rides any fader at all, so writing it with the pair leaves the desk
+   * told the channel's fact as this write leaves it — the channel placed on its first fader and
+   * the channel taken off its last are each told what is true now, and nothing has to be
+   * remembered from the call before (`frames.ts` holds the polarity the capture fixes).
+   *
+   * Only a session the desk has spoken on is written to. A socket still dialling, a connection
+   * the desk took and said nothing on, and a session that was lost are all desks nobody is
+   * talking to: frames written into one are bytes that go nowhere, so nothing is written and
+   * the answer is 0. Nothing here throws either — a recall writes one membership after another
+   * and reports the ones that did not go, so a 0 is the caller's to name rather than a fault
+   * of this engine's.
+   */
+  sendMembership(intent: SqMembershipIntent): number {
+    const socket = this.up ? this.socket : null
+    const pair = intent.placed ? assignPair(intent.channel, intent.dca) : clearPair(intent.channel, intent.dca)
+    let frames = 0
+    // The pair, then the channel's flag: the capture's own order, and a frame that cannot go
+    // ends the write rather than being written after one that did not.
+    for (const frame of [pair, dcaFlag(intent.channel, intent.rides)]) {
+      if (!this.write(socket, frame)) break
+      frames += 1
+    }
+    return frames
   }
 
   /**

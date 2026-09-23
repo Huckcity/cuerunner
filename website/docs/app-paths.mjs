@@ -206,6 +206,13 @@ export const APP_PATHS = [
     printed: `${prose(SHOW_SETTINGS)} → Channels`,
     names: [{ showTab: 'channels' }]
   },
+  // The formats page's own-file note now sends a reader whose show refused to the tab the cast
+  // and the faders are set up in, so the same path is declared for it.
+  {
+    page: 'reference/formats.html',
+    printed: `${prose(SHOW_SETTINGS)} → Channels`,
+    names: [{ showTab: 'channels' }]
+  },
   {
     page: 'reference/troubleshooting.html',
     printed: `${prose(SETTINGS_ITEM)} → Audio`,

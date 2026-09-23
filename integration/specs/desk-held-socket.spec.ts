@@ -23,8 +23,8 @@ import { writeDeskShow } from './deskFixture'
 
 /** The channel the desk is set to, and the one the show is told it is. */
 const CHANNEL = 1
-/** DCA 1 on an SQ: parameter 0 of NRPN page 02, which is where the reference table puts it. */
-const DCA_KEY = '02:00'
+/** The one mic's own mute, as the peer keys it: the input page 00 at the channel's own number. */
+const MIC_KEY = '00:00'
 /** The link's own sentence for a connection the desk took and then ended. */
 const RESET_SENTENCE = 'accepted the connection and then reset it'
 /** The beat between two recalls at the held desk, so each answer lands before the next. */
@@ -118,10 +118,16 @@ test('a recall at a held desk names the taken connection, and lands once the hol
     message: 'the desk never had the app attached again'
   }).toBe(1)
 
+  // Both columns are recalled, in turn: a recall only sends a change, and which one the app's
+  // own record makes a change is whatever the refused attempts left it as — so asking for both
+  // is what keeps this about the link the app brought back rather than about the bookkeeping.
+  // The first scene is asked for last, so the state the desk ends in is the one asserted below.
+  await recalls[1].click()
   await recalls[0].click()
   await expect.poll(() => peer.received.length, { timeout: RECONNECT_MS }).toBeGreaterThan(0)
 
   // What landed is the recall the show asked for, read on the desk's own state rather than
-  // on the app's account of itself.
-  await expect.poll(() => peer.state.mutes[DCA_KEY]?.on).toBe(true)
+  // on the app's account of itself: the scene places the mic, so the desk has it open — which
+  // is the mute written at the channel's own page, not a DCA's.
+  await expect.poll(() => peer.state.mutes[MIC_KEY]?.on).toBe(false)
 })

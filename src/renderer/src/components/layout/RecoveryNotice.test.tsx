@@ -28,18 +28,23 @@ function snapshot(): {
   loadNotes: LoadNote[]
 } {
   const showSettings = defaultShowSettings()
-  // The show reaches its desk over MIDI, and this DCA is on a note of its own rather than
-  // the one its number derives: what recovery hands back is the connection and the
-  // override, not a patch per fader.
+  // The show reaches its desk over MIDI, and this DCA is addressed by a number the show
+  // gave it rather than the one its place derives: what recovery hands back is the
+  // connection and the number, not a patch per fader. The scene places the strip Ada is on
+  // on that fader, which is the only place a placement lives.
   showSettings.desk = { ...showSettings.desk, kind: 'midi', midiPort: 'Yamaha' }
   showSettings.cast = {
     ...showSettings.cast,
-    dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', note: 36, address: null }]
+    dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', deskNumber: 36 }]
   }
   showSettings.scenes = {
     list: [{
-      id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: ''
-    }]
+      id: 's-1',
+      name: 'Wedding',
+      dcas: [{ dcaId: 'dca-1', channels: ['channel-1'], ensembles: [], excluded: [] }],
+      notes: ''
+    }],
+    allowDuplicateAssignment: true
   }
   showSettings.script = { path: '/shows/act-one.txt', fontSize: 13 }
   return {

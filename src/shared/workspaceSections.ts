@@ -22,7 +22,16 @@
 // The show's own settings are a shape of their own inside `showSettings`, so they are
 // declared here too: `SHOW_SETTINGS_SECTIONS` is what the load funnel's shape check reads,
 // and the same walk test holds it total against `ShowSettings`.
+//
+// Sections are not enough to tell a file this build can read from one it cannot: a
+// settings section is an object whose fields the window dereferences, so the same
+// declaration goes on to name every field inside them — `SHOW_SETTINGS_SHAPE` — and the
+// fields a cue of each type has to carry. What the shape check reads is these two, and
+// nothing else reads them: a field this build does not write is a refusal rather than a
+// value the window finds `undefined` under, which is what a file written before a field
+// existed would otherwise load as.
 
+import type { Cue, CueBase, CueType } from './cue'
 import type { ShowSettings } from './show'
 import type { Workspace } from './workspace'
 
@@ -99,6 +108,166 @@ export const SHOW_SETTINGS_SECTIONS = [
 
 /** A section of a show's settings, from the declaration itself. */
 export type ShowSettingsSection = (typeof SHOW_SETTINGS_SECTIONS)[number]
+
+/**
+ * The keys a value of `T` has to carry, as the types mark them: a key the type declares
+ * `?:` is one a document may leave out, and is the only difference between this and
+ * `keyof T`.
+ */
+export type RequiredKeys<T> = { readonly [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T]
+
+/**
+ * The fields of one object, as the declaration carries them: a name per field of `T`.
+ *
+ * An entry is one of three things. `'leaf'` is a value nothing inside is read — a string, a
+ * number, a boolean, or a list of them: a document that carries the field at all is this
+ * build's. `{ elements }` is a list whose every element is an object with those fields.
+ * Anything else is an object's own fields, declared the same way. A field `T` marks `?:` is
+ * declared `{ absent: true, of: … }` around its shape, because a document without it stays
+ * legal — and `absent` and `elements` are the declaration's own two names, so a settings
+ * field called either one fails to compile here rather than being read as a flag or a list.
+ *
+ * This is the reach of the `satisfies` on the shapes below: it holds the declaration to the
+ * types, at every level — every field of every settings object is named and no name the
+ * type does not carry is accepted, so a field added to `ShowSettings` fails to compile
+ * until it is declared, and so does a field the declaration invents. What no value-level
+ * `satisfies` can hold is that a *document* is read the way the declaration says; that is
+ * the walk test's half (`src/main/workspace/savedShape.test.ts` walks a whole value of the
+ * settings against the declaration), and the funnel tests' half (a document off that shape
+ * refuses).
+ */
+export type ShapeFields<T> = {
+  readonly [K in keyof T]-?: {} extends Pick<T, K>
+    ? { readonly absent: true; readonly of: ShapeNode<T[K]> }
+    : ShapeNode<T[K]>
+} & { readonly absent?: never; readonly of?: never; readonly elements?: never }
+
+/** One field's shape: a leaf, a list of objects, or an object's own fields. */
+export type ShapeNode<T> = T extends readonly (infer E)[]
+  ? [E] extends [object] ? { readonly elements: ShapeFields<E> } : 'leaf'
+  : T extends object ? ShapeFields<T> : 'leaf'
+
+/**
+ * A show's settings, field by field: the one declaration of the field shape the load
+ * funnel's check reads, in the order `ShowSettings` and the types under it declare their
+ * fields. The shape check reads a document with it in both directions — a field it does not
+ * carry is refused, and a declared field the document leaves out is refused too, because a
+ * field a later build added is a field the window dereferences. A field the types mark `?:`
+ * is the one exception, and today none is: every field of `ShowSettings` is a field a
+ * document has to carry. `TelemetryChannel` is the external bridge document's own shape —
+ * what a telemetry source is asked to produce — and it is not part of these settings, so it
+ * is not declared here and a receiver's channel fields are not read.
+ *
+ * The `satisfies` binds each section's fields to that section's type, as `ShapeFields`
+ * describes; that the declaration carries every section's fields — and no others — is
+ * therefore a compile error away. What it cannot reach is the *document*: the walk test
+ * holds the declaration against a value of the whole of `ShowSettings`.
+ */
+export const SHOW_SETTINGS_SHAPE = {
+  oscIn: { enabled: 'leaf', port: 'leaf' },
+  midiIn: { enabled: 'leaf', portNames: 'leaf' },
+  desk: {
+    kind: 'leaf',
+    profile: 'leaf',
+    midiPort: 'leaf',
+    midiChannel: 'leaf',
+    host: 'leaf',
+    port: 'leaf',
+    tcpPort: 'leaf',
+    address: 'leaf',
+    // The desk's own buttons: an object of its own inside the section, which is why the
+    // declaration nests rather than stopping at the section's fields.
+    buttons: { go: 'leaf', back: 'leaf', goNote: 'leaf', backNote: 'leaf' }
+  },
+  rf: {
+    plot: { packs: { elements: { id: 'leaf', label: 'leaf', channelId: 'leaf', performerId: 'leaf', notes: 'leaf' } } },
+    sources: {
+      elements: { id: 'leaf', label: 'leaf', kind: 'leaf', target: 'leaf', pollMs: 'leaf', timeoutMs: 'leaf' }
+    },
+    thresholds: {
+      batteryWarning: 'leaf',
+      batteryCritical: 'leaf',
+      rfWarningDbm: 'leaf',
+      offlineAfterSeconds: 'leaf'
+    },
+    swaps: {
+      elements: { at: 'leaf', packId: 'leaf', packLabel: 'leaf', from: 'leaf', to: 'leaf' }
+    }
+  },
+  presence: { enabled: 'leaf', services: 'leaf', goneAfterSeconds: 'leaf' },
+  script: { path: 'leaf', fontSize: 'leaf' },
+  companion: { enabled: 'leaf', port: 'leaf', token: 'leaf' },
+  scenes: {
+    list: {
+      elements: {
+        id: 'leaf',
+        name: 'leaf',
+        dcas: {
+          elements: { dcaId: 'leaf', channels: 'leaf', ensembles: 'leaf', excluded: 'leaf' }
+        },
+        notes: 'leaf'
+      }
+    },
+    allowDuplicateAssignment: 'leaf'
+  },
+  cast: {
+    channels: { elements: { id: 'leaf', name: 'leaf' } },
+    performers: { elements: { id: 'leaf', name: 'leaf', role: 'leaf', notes: 'leaf', channelId: 'leaf' } },
+    ensembles: { elements: { id: 'leaf', name: 'leaf', members: 'leaf' } },
+    dcas: { elements: { id: 'leaf', label: 'leaf', deskNumber: 'leaf' } }
+  }
+} as const satisfies { readonly [S in ShowSettingsSection]: ShapeFields<ShowSettings[S]> }
+
+/**
+ * The declaration as the check reads it: the value above with the types left out. A field's
+ * entry is what `ShapeFields` says it is — `'leaf'`, `{ elements }`, an object's own fields,
+ * or any of those wrapped as `{ absent: true, of: … }` where the types mark the field `?:`.
+ */
+export type DeclaredFields = { readonly [field: string]: unknown }
+
+/** The fields every cue carries, from `CueBase`: the ones the types do not mark `?:`. */
+const CUE_BASE_FIELDS = [
+  'id',
+  'number',
+  'name',
+  'colorLabel',
+  'parentId',
+  'preWait',
+  'postWait',
+  'timelineOffset',
+  'duration',
+  'advance',
+  'isArmed',
+  'notes'
+] as const satisfies readonly RequiredKeys<CueBase>[]
+
+/**
+ * A cue's declared-required fields, by type: the base every cue shares, the type's own, and
+ * the `type` every cue is read by. The load funnel's check refuses a cue that has not got
+ * one of them — a field the deleted migration pass used to fill in, which is what a file
+ * written before that field existed carries — and stops there: a cue on disk carries fields
+ * the runtime cue type does not declare, `media` being the one left, so a field this build
+ * does not declare is kept rather than refused.
+ *
+ * The fields the types mark `?:` — `triggers`, `refire`, `scriptLine` — are absent from
+ * every list, and a name listed here that stops being required fails to compile: the
+ * `satisfies` holds each name to a required key of that type. That each list carries them
+ * *all* is what the walk test holds, against the build's own cue of each type.
+ */
+export const CUE_SHAPE = {
+  audio: [...CUE_BASE_FIELDS, 'type', 'filePath', 'startTime', 'endTime', 'fadeInDuration', 'volume', 'pan', 'outputs', 'loopCount', 'playbackRate', 'trim'],
+  midi: [...CUE_BASE_FIELDS, 'type', 'portName', 'messages'],
+  osc: [...CUE_BASE_FIELDS, 'type', 'host', 'port', 'address', 'args'],
+  wait: [...CUE_BASE_FIELDS, 'type'],
+  fade: [...CUE_BASE_FIELDS, 'type', 'targetCueId', 'fadeProperty', 'targetValue', 'curve', 'stopTargetWhenDone'],
+  stop: [...CUE_BASE_FIELDS, 'type', 'targetCueId', 'fadeOut', 'fadeOutDuration', 'waitForFade'],
+  group: [...CUE_BASE_FIELDS, 'type', 'mode'],
+  network: [...CUE_BASE_FIELDS, 'type', 'method', 'url', 'body', 'headers', 'timeout'],
+  script: [...CUE_BASE_FIELDS, 'type', 'language', 'script', 'timeout'],
+  scene: [...CUE_BASE_FIELDS, 'type', 'sceneId'],
+  devamp: [...CUE_BASE_FIELDS, 'type', 'targetCueId'],
+  msc: [...CUE_BASE_FIELDS, 'type', 'command', 'format', 'deviceId', 'cueNumber', 'cueList', 'destination', 'portName']
+} as const satisfies { readonly [K in CueType]: readonly RequiredKeys<Extract<Cue, { type: K }>>[] }
 
 /**
  * The values a saved form is built from, keyed by the declaration: the type is `Pick`ed

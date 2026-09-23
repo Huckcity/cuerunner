@@ -1,23 +1,32 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import { recallScene } from '../../engine/scenes'
-import { sceneLiveIds } from '../../utils/scenes'
+import { channelLabel } from '../../utils/cast'
+import { channelDcas, sceneChannelIds } from '../../utils/scenes'
 import type { SceneCue } from '../../../../shared/cue'
 
 /**
- * A scene cue names a scene and nothing else: which groups change and what they are told
- * belongs to the scene, so that a mic moving between performers is edited in one place.
+ * A scene cue names a scene and nothing else: which channels move and what they are told
+ * belongs to the scene, so that a mic moving between faders is edited in one place.
  */
 export function SceneInspector({ cue }: { cue: SceneCue }) {
   const scenes = useStore(s => s.showSettings.scenes.list)
-  const ensembles = useStore(s => s.showSettings.cast.ensembles)
+  const cast = useStore(s => s.showSettings.cast)
   const updateCue = useStore(s => s.updateCue)
   const [recalling, setRecalling] = useState(false)
 
   const scene = scenes.find(candidate => candidate.id === cue.sceneId) ?? null
-  // Who a scene opens is what it names plus the members of the ensembles it applies, so
-  // the count is asked of the scene rather than read off its list.
-  const open = scene === null ? 0 : sceneLiveIds(scene, ensembles).length
+  // What a recall would touch is what the scene places anywhere: the channels it carries
+  // on any fader, named the way the grid names them, and the faders it speaks for. Both
+  // are asked of the scene rather than read off a list, since an ensemble applied to a
+  // row carries channels no list on the scene names directly.
+  const placed = scene === null ? [] : sceneChannelIds(scene, cast)
+  const labels = placed
+    .map(channelId => channelLabel(cast.channels, channelId))
+    .filter(label => label !== '')
+  const faders = new Set(
+    placed.flatMap(channelId => (scene === null ? [] : channelDcas(scene, channelId, cast)))
+  ).size
 
   return (
     <div className="inspector-section">
@@ -47,7 +56,9 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
       ) : (
         <p className="inspector-hint">
           Recalling it tells the desk the difference between “{scene.name}” and where it stands now:
-          {' '}{open} performer{open === 1 ? '' : 's'} open, DCAs already in the right state
+          {' '}{placed.length} channel{placed.length === 1 ? '' : 's'} open
+          {labels.length > 0 ? ` (${labels.join(', ')})` : ''}
+          {' '}on {faders} fader{faders === 1 ? '' : 's'}, anything already in the right state
           left alone.
         </p>
       )}

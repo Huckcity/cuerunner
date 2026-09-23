@@ -13,8 +13,8 @@ import {
 } from '../../../../shared/show'
 import type { SceneCue } from '../../../../shared/cue'
 
-function scene(id: string, name: string, live: string[] = [], ensembles: string[] = []): MicScene {
-  return { id, name, live, ensembles, excluded: [], notes: '' }
+function scene(id: string, name: string, dcas: MicScene['dcas'] = []): MicScene {
+  return { id, name, dcas, notes: '' }
 }
 
 describe('SceneInspector', () => {
@@ -45,23 +45,28 @@ describe('SceneInspector', () => {
     useStore.setState({
       showSettings: {
         ...defaults,
-        // The show reaches its desk over MIDI on the port the other fixtures use, and
-        // this DCA is on a note of its own rather than the one its number derives.
+        // The show reaches its desk over MIDI on the port the other fixtures use; what the
+        // scene places decides what goes, addressed by each channel's own number.
         desk: { ...defaults.desk, kind: 'midi', midiPort: 'Yamaha' },
         cast: {
-          // Ada is patched to the strip that drives DCA 1, so a scene naming her has a
-          // message to send and a person to count.
-          channels: [{ id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }],
+          // Ada is patched to the first strip, so a scene placing her first channel has a
+          // message to send and a name to count.
+          channels: [{ id: 'ch-1', name: 'Ada' }],
           performers: [{
             id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
           }],
           ensembles: [],
-          dcas: [{ id: 'dca-1', label: 'DCA 1', note: 36, address: null }],
+          dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }],
           ...cast
         },
-        scenes: { list: scenes.list ?? [scene('s-1', 'Wedding', ['p-1'])] }
+        scenes: {
+          list: scenes.list ?? [scene('s-1', 'Wedding', [
+            { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+          ])],
+          allowDuplicateAssignment: scenes.allowDuplicateAssignment ?? true
+        }
       },
-      deskState: {},
+      deskState: { mutes: {}, assignments: {} },
       deskSceneId: null,
       log: [],
       cues: [cue]
@@ -103,7 +108,11 @@ describe('SceneInspector', () => {
 
   it('says what firing it will do, and refuses to when nothing is chosen', async () => {
     show(cue('s-1'))
-    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 performer open')
+    // What a recall would touch, named the way the grid names it: the channel and the
+    // fader it speaks for.
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 channel open')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('Ch 1 · Ada')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 fader')
 
     show(cue(''))
     // Still says what it will not do: a scene cue with nothing chosen does nothing,
@@ -113,39 +122,46 @@ describe('SceneInspector', () => {
     expect(container.querySelector<HTMLButtonElement>('.inspector-btn')?.disabled).toBe(true)
   })
 
-  it('counts who an applied ensemble holds open, not just the names in the scene', () => {
-    // Applying an ensemble is how a scene carries a whole section, so the count the
-    // operator reads before pressing GO has to be everyone it opens.
+  it('counts what an ensemble applied to a row carries, and names the set', () => {
+    // Applying an ensemble to a row is how a scene carries a whole section, so the count
+    // the operator reads before pressing GO has to be everyone it places.
     show(
       cue('s-1'),
-      { list: [scene('s-1', 'Wedding', [], ['ens-1'])] },
+      { list: [scene('s-1', 'Wedding', [
+        { dcaId: 'dca-1', channels: [], ensembles: ['ens-1'], excluded: [] }
+      ])] },
       {
+        channels: [{ id: 'ch-1', name: 'Ada' }, { id: 'ch-2', name: 'Bea' }],
         performers: [
-          { id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: null },
-          { id: 'p-2', name: 'Bea', role: 'Chorus', notes: '', channelId: null }
+          { id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1' },
+          { id: 'p-2', name: 'Bea', role: 'Chorus', notes: '', channelId: 'ch-2' }
         ],
         ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }]
       }
     )
 
-    expect(container.querySelector('.inspector-hint')?.textContent).toContain('2 performers open')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('2 channels open')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('Ch 1 · Ada')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('Ch 2 · Bea')
   })
 
   it('recalls the scene by hand, under the cue that will fire it', async () => {
     show(cue('s-1'))
-
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.inspector-btn')!.click()
     })
-    await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
+    await vi.waitFor(() => expect(
+      useStore.getState().log.some(entry => entry.label === '12 · Wedding Scene')
+    ).toBe(true))
 
     expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Yamaha',
-      messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
+      messages: [{ kind: 'noteOn', channel: 1, note: 1, velocity: 127 }]
     })
-    expect(useStore.getState().log[0]).toMatchObject({
-      label: '12 · Wedding Scene',
-      message: 'Scene "Wedding" — 1 opened'
-    })
+    expect(useStore.getState().log.find(entry => entry.label === '12 · Wedding Scene'))
+      .toMatchObject({
+        label: '12 · Wedding Scene',
+        message: 'Scene "Wedding" — 1 opened'
+      })
   })
 })

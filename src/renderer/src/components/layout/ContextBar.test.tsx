@@ -103,7 +103,7 @@ describe('ContextBar', () => {
 
   it('says which scene a scene cue recalls', () => {
     const settings = defaultShowSettings()
-    settings.scenes.list = [{ id: 's1', name: 'Wedding', live: [], ensembles: [], excluded: [], notes: '' }]
+    settings.scenes.list = [{ id: 's1', name: 'Wedding', dcas: [], notes: '' }]
     const sceneCue = { ...cue('scene', '9', 'Into the wedding'), sceneId: 's1' } as SceneCue
     useStore.setState({ cues: [sceneCue], selectedId: sceneCue.id, showSettings: settings })
     render()

@@ -296,13 +296,14 @@ await page.locator('.scenes-view').waitFor()
 // The view opens to run the show; building one is an Edit away.
 await page.locator('.scenes-edit').click()
 
-const openMics = async (column, from, to) => {
-  for (let i = from; i <= to; i++) {
-    await page.locator('.matrix-row').nth(i).locator('.matrix-cell').nth(column).click()
-  }
+// Rows are the show's faders, so placing a channel is choosing it in the cell's picker:
+// the row's cell, then the option for the strip. The grid's first column is the all-closed
+// one, which is not a scene in the file, so a scene's column is found by the id it carries
+// rather than by its place on screen.
+const placeChannel = async (sceneIndex, fader, channel) => {
+  const row = page.locator('.matrix-row', { has: page.locator('.matrix-fader', { hasText: fader }) })
+  await row.locator('.matrix-cell').nth(sceneIndex).locator('.matrix-place').selectOption({ label: channel })
 }
-// The grid's first column is the all-closed one, which is not a scene in the file, so a
-// scene's column is found by the id it carries rather than by its place on screen.
 const nameScene = async (index, name) => {
   const field = page.locator('.matrix-scene[data-scene-id]').nth(index).locator('.scene-name-field')
   await field.fill(name)
@@ -311,25 +312,30 @@ const nameScene = async (index, name) => {
 
 await page.locator('.scenes-add').click()
 await nameScene(0, 'Act One')
-await openMics(0, 0, 3)
+await placeChannel(0, '1 · DCA 1', 'Ch 1')
+await placeChannel(0, '2 · DCA 2', 'Ch 2')
+await placeChannel(0, '3 · DCA 3', 'Ch 3')
+await placeChannel(0, '4 · DCA 4', 'Ch 4')
 await page.locator('.scenes-add').click()
 await nameScene(1, 'Wedding')
-await openMics(1, 4, 7)
+await placeChannel(1, '5 · DCA 5', 'Ch 5')
+await placeChannel(1, '6 · DCA 6', 'Ch 6')
+await placeChannel(1, '7 · DCA 7', 'Ch 7')
+await placeChannel(1, '8 · DCA 8', 'Ch 8')
 
 // The first scene recalled, so the header says where the desk is and what is coming, and
 // the column the desk is on is the one the figure shows lit.
 await page.locator('.matrix-scene[data-scene-id] .matrix-recall').first().click()
 await page.locator('.matrix-scene[data-scene-id][data-current="true"]').waitFor()
 
-// The other half of building a scene: the mics it has open, kept as an ensemble — what a
-// later scene applies with one press instead of a row of them.
-await page.locator('.scenes-ensemble').click()
-const ensembleName = page.locator('.matrix-ensemble-row').first().locator('.ensemble-name-field')
-await ensembleName.fill('Principals')
-await ensembleName.blur()
+// The other half of building a scene: the row's channels, kept as an ensemble applied to
+// it — what a later scene applies with one press instead of a row of picks.
+await page.locator('.matrix-row', { has: page.locator('.matrix-fader', { hasText: '1 · DCA 1' }) })
+  .locator('.matrix-cell').nth(0).locator('.matrix-ensemble-new').click()
+await page.locator('.matrix-ensemble').first().waitFor()
 
 // The grid is taller than the window's default by one row, and a screenshot cannot
-// scroll: the window is grown by that much so all twelve mics are in the figure rather
+// scroll: the window is grown by that much so all twelve faders are in the figure rather
 // than eleven and a caption that claims twelve.
 await app.evaluate(({ BrowserWindow }) => {
   BrowserWindow.getAllWindows()[0].setContentSize(1280, 800)
@@ -339,7 +345,7 @@ await page.waitForTimeout(150)
 await shot('18-scenes.png', '.scenes-view')
 
 // Show Settings on its Channels tab: the desk the show drives, the strips on the console
-// and the DCAs those strips ride. The tab is longer than the box a window of this size
+// and the faders a scene can place them on. The tab is longer than the box a window of this size
 // gives a dialog, so the window is grown to the height the list wants before the shot:
 // the dialog is sized from the window, and a scrolled screenshot would leave either the
 // desk block or the DCAs below the fold.
@@ -362,17 +368,10 @@ await nameChannel(1, 'Sancho')
 await nameChannel(2, 'Cervantes')
 await nameChannel(3, 'Pedro')
 
-// Two faders doing the work of four strips: the leads share DCA 1 and the rest of the
-// quartet share DCA 2, which is what the rows read back as what they are carrying.
-const dcaOption = n => `${n} · DCA ${n}`
-const shareDca = async (index, dca) => {
-  await page.locator('.channel-row').nth(index).locator('.channel-dca')
-    .selectOption({ label: dcaOption(dca) })
-}
-await shareDca(1, 1)
-await shareDca(2, 2)
-await shareDca(3, 2)
-await page.locator('.dca-row').first().locator('.dca-carrying', { hasText: 'Aldonza' }).waitFor()
+// The faders those strips now ride are placed in the Scenes view — a strip is a name and
+// a number, and which fader it rides is the scene's — so the rows read back the scenes
+// that place channels on them rather than a routing chosen here.
+await page.locator('.dca-row').first().locator('.dca-carrying', { hasText: 'place' }).waitFor()
 await shot('19-show-settings.png', '.show-settings-dialog')
 await page.locator('.show-settings-close').click()
 

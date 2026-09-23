@@ -231,9 +231,11 @@
 }
 
 /* ── Channels ───────────────────────────────────────────────────────────────── */
+/* A strip is a name and a number now: which fader it rides is the scene's decision,
+   made in the Scenes view, so the row is the number, the name and the remove. */
 .channel-row {
   display: grid;
-  grid-template-columns: 20px 1fr 200px 26px;
+  grid-template-columns: 20px 1fr 26px;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);

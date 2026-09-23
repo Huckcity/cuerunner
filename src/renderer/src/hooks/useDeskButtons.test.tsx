@@ -41,8 +41,8 @@ const GO_GROUP = 1
 
 /** Two scenes, so a press is visible as the step it made and a swallowed one is not. */
 const SCENES = [
-  { id: 's-1', name: 'Wedding', live: [], ensembles: [], excluded: [], notes: '' },
-  { id: 's-2', name: 'Interval', live: [], ensembles: [], excluded: [], notes: '' }
+  { id: 's-1', name: 'Wedding', dcas: [], notes: '' },
+  { id: 's-2', name: 'Interval', dcas: [], notes: '' }
 ]
 
 /** The desk a case is about: an SQ, whose profile is the one that offers both routes. */
@@ -123,7 +123,9 @@ describe('useDeskButtons', () => {
       license: { state: 'active', license: TEST_LICENSE },
       cues: [],
       log: [],
-      deskState: {},
+      // Where the desk was left: nothing has been sent to it yet, so both facts are
+      // unknown and the first press writes what it needs.
+      deskState: { mutes: {}, assignments: {} },
       deskSceneId: null
     })
   })
@@ -137,15 +139,21 @@ describe('useDeskButtons', () => {
   /** The show the case is about, as the store holds it, with the hook reading it. */
   function mount(deskSettings: DeskSettings): void {
     useStore.setState(s => ({
-      showSettings: { ...s.showSettings, desk: deskSettings, scenes: { list: SCENES } }
+      showSettings: { ...s.showSettings, desk: deskSettings, scenes: { list: SCENES, allowDuplicateAssignment: true } }
     }))
     act(() => { root.render(<Harness />) })
   }
 
-  /** What the main process does: hand a batch to whatever is listening on the bridge. */
-  function deliver(events: ShowEvent[]): void {
+  /**
+   * What the main process does: hand a batch to whatever is listening on the bridge.
+   *
+   * A press sets a recall going, and the recall writes its line once the desk has answered
+   * — one awaited send at a time — so the delivery is awaited too: a case reads the log
+   * after it, and a case that did not wait would be reading a show that had not moved yet.
+   */
+  async function deliver(events: ShowEvent[]): Promise<void> {
     if (emit === null) throw new Error('nothing is subscribed to the show bus')
-    act(() => { emit!(events) })
+    await act(async () => { emit!(events) })
   }
 
   /**
@@ -163,69 +171,69 @@ describe('useDeskButtons', () => {
     return vi.mocked(window.cuerunner.midi.send).mock.calls.length
   }
 
-  it('lets the next press through when a key was held while a port desk was unplugged', () => {
+  it('lets the next press through when a key was held while a port desk was unplugged', async () => {
     // A desk on a cable, its GO key on a note: the desk transmits only while the key is
     // down, so the note-off is the release — and the port going away is the one event that
     // can take that release with it. The reader has to start over there, or the operator's
     // next press is the repeat of a key nobody is holding and the show never moves.
     mount(desk({ kind: 'midi', midiPort: PORT, ...GO_ON_NOTE }))
 
-    deliver([note(PORT)])
-    deliver([deviceRow(`midi-in:${PORT}`, false)])
-    deliver([note(PORT)])
+    await deliver([note(PORT)])
+    await deliver([deviceRow(`midi-in:${PORT}`, false)])
+    await deliver([note(PORT)])
 
     expect(stepped()).toEqual(['Wedding', 'Interval'])
   })
 
-  it('reads a repeat as a repeat while the key really is still down', () => {
+  it('reads a repeat as a repeat while the key really is still down', async () => {
     // The other half of the same latch, and the reason the reset is the desk's own row: a
     // key that is genuinely held transmits again, and that repeat is not a second press.
     mount(desk({ kind: 'midi', midiPort: PORT, ...GO_ON_NOTE }))
 
-    deliver([note(PORT)])
-    deliver([note(PORT)])
+    await deliver([note(PORT)])
+    await deliver([note(PORT)])
 
     expect(stepped()).toEqual(['Wedding'])
   })
 
-  it('resets on the desk’s socket too, the other row a desk arrives under', () => {
+  it('resets on the desk’s socket too, the other row a desk arrives under', async () => {
     // A desk on the network publishes `midi-tcp:<host:port>`; the spelling is the only thing
     // that differs — a socket that has gone down cannot release a key either.
     mount(desk({ kind: 'midi-tcp', host: HOST, tcpPort: TCP_PORT, ...GO_ON_NOTE }))
 
-    deliver([note(SOCKET)])
-    deliver([deviceRow(`midi-tcp:${SOCKET}`, false)])
-    deliver([note(SOCKET)])
+    await deliver([note(SOCKET)])
+    await deliver([deviceRow(`midi-tcp:${SOCKET}`, false)])
+    await deliver([note(SOCKET)])
 
     expect(stepped()).toEqual(['Wedding', 'Interval'])
   })
 
-  it('leaves the latch alone when a port that is not the desk’s own goes away', () => {
+  it('leaves the latch alone when a port that is not the desk’s own goes away', async () => {
     // A second port of the same machine — a console's own cable, say — is not where the desk
     // is, and clearing the desk's latch for it would read a repeat as a press.
     mount(desk({ kind: 'midi', midiPort: PORT, ...GO_ON_NOTE }))
 
-    deliver([note(PORT)])
-    deliver([deviceRow(`midi-in:${OTHER_PORT}`, false)])
-    deliver([note(PORT)])
+    await deliver([note(PORT)])
+    await deliver([deviceRow(`midi-in:${OTHER_PORT}`, false)])
+    await deliver([note(PORT)])
 
     expect(stepped()).toEqual(['Wedding'])
   })
 
-  it('leaves the latch alone when another socket goes away', () => {
+  it('leaves the latch alone when another socket goes away', async () => {
     // The socket spelling is the desk's own only at the desk's own address, so the row is
     // keyed on the link the show named rather than on the `midi-tcp:` prefix: another
     // address leaving would otherwise clear this desk's latch and read a repeat as a press.
     mount(desk({ kind: 'midi-tcp', host: HOST, tcpPort: TCP_PORT, ...GO_ON_NOTE }))
 
-    deliver([note(SOCKET)])
-    deliver([deviceRow(`midi-tcp:${OTHER_SOCKET}`, false)])
-    deliver([note(SOCKET)])
+    await deliver([note(SOCKET)])
+    await deliver([deviceRow(`midi-tcp:${OTHER_SOCKET}`, false)])
+    await deliver([note(SOCKET)])
 
     expect(stepped()).toEqual(['Wedding'])
   })
 
-  it('primes the groups again when the desk’s port goes away and comes back', () => {
+  it('primes the groups again when the desk’s port goes away and comes back', async () => {
     // A group is a movement, so what the reader remembers has to be the desk's state — and a
     // message lost while the port was down leaves that memory wrong: the report that follows
     // would read as the operator's hand rather than as where the room stands. The port's own
@@ -235,22 +243,22 @@ describe('useDeskButtons', () => {
 
     // The desk's own report, the way it answers a get or a connect: group 1 is off, which is
     // where the room was left.
-    deliver(group(PORT, false))
+    await deliver(group(PORT, false))
     expect(stepped()).toEqual([])
     const askedAtStart = asks()
 
-    deliver([deviceRow(`midi-in:${PORT}`, false)])
+    await deliver([deviceRow(`midi-in:${PORT}`, false)])
     expect(asks(), 'nothing is asked of a port that has just left').toBe(askedAtStart)
 
-    deliver([deviceRow(`midi-in:${PORT}`, true)])
+    await deliver([deviceRow(`midi-in:${PORT}`, true)])
     expect(asks(), 'the port came back, so the show asks where its groups stand').toBe(askedAtStart + 1)
 
-    deliver(group(PORT, true))
+    await deliver(group(PORT, true))
     expect(stepped(), 'the report after a reset primes rather than presses').toEqual([])
 
     // And the reader is alive: the movement after that report is a press, which is what makes
     // the emptiness above the priming rather than a reader that stopped reading.
-    deliver(group(PORT, false))
+    await deliver(group(PORT, false))
     expect(stepped()).toEqual(['Wedding'])
   })
 })

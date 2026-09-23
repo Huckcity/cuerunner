@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defaultShowSettings } from '../../shared/show'
+import type { CueBase, GroupCue, WaitCue } from '../../shared/cue'
 import type { Workspace } from '../../shared/workspace'
 
 vi.mock('electron', async () => {
@@ -46,6 +47,37 @@ function writeShow(dir: string, name: string, cues: unknown[] = []): string {
     'utf-8'
   )
   return file
+}
+
+/** One cue's own fields, from `CueBase`: what every cue of a file this build wrote carries. */
+function baseCue(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'> {
+  return {
+    id,
+    number: id,
+    name: id,
+    colorLabel: 'none',
+    parentId: null,
+    preWait: 0,
+    postWait: 0,
+    timelineOffset: 0,
+    duration: 0,
+    advance: 'none',
+    isArmed: true,
+    notes: ''
+  }
+}
+
+/**
+ * A cue of the file's own shape — this build writes every field a cue's type requires, and
+ * the shape check refuses one that has not got them — with the numbering and the parent the
+ * repair cases below are about.
+ */
+function waitCue(id: string, number: string, name: string, over: Partial<WaitCue> = {}): WaitCue {
+  return { ...baseCue(id), type: 'wait', number, name, ...over }
+}
+
+function groupCue(id: string, number: string, name: string, over: Partial<GroupCue> = {}): GroupCue {
+  return { ...baseCue(id), type: 'group', mode: 'playlist', number, name, ...over }
 }
 
 function show(): Workspace {
@@ -90,10 +122,10 @@ describe('mergeShow', () => {
     // the file, and two groups inside each other. The funnel repairs both as the merge
     // reads it, and the merge report must say so rather than go quiet about the move.
     const theirs = writeShow(dir, 'theirs.cuerunner', [
-      { id: 'o1', type: 'wait', duration: 1000, number: '3', name: 'Walk-in', parentId: 'gone' },
-      { id: 'g1', type: 'group', mode: 'sequence', number: '4', name: 'Band', parentId: 'g2' },
-      { id: 'g2', type: 'group', mode: 'sequence', number: '5', name: 'Vamp', parentId: 'g1' },
-      { id: 'c1', type: 'wait', duration: 1000, number: '6', name: 'Under', parentId: 'g2' }
+      waitCue('o1', '3', 'Walk-in', { parentId: 'gone' }),
+      groupCue('g1', '4', 'Band', { mode: 'sequence', parentId: 'g2' }),
+      groupCue('g2', '5', 'Vamp', { mode: 'sequence', parentId: 'g1' }),
+      waitCue('c1', '6', 'Under', { parentId: 'g2' })
     ])
     const ancestor = writeShow(dir, 'ancestor.cuerunner')
     const mergedPath = join(dir, 'merged.cuerunner')
@@ -144,9 +176,9 @@ describe('mergeShow', () => {
     // so a row that only said "the file it came from" would read the same for both and
     // the operator could not tell which file needed what.
     const damaged = [
-      { id: 'o1', type: 'wait', duration: 1000, number: '3', name: 'Walk-in', parentId: 'gone' },
-      { id: 'g1', type: 'group', mode: 'sequence', number: '4', name: 'Band', parentId: 'g2' },
-      { id: 'g2', type: 'group', mode: 'sequence', number: '5', name: 'Vamp', parentId: 'g1' }
+      waitCue('o1', '3', 'Walk-in', { parentId: 'gone' }),
+      groupCue('g1', '4', 'Band', { mode: 'sequence', parentId: 'g2' }),
+      groupCue('g2', '5', 'Vamp', { mode: 'sequence', parentId: 'g1' })
     ]
     const theirs = writeShow(dir, 'theirs.cuerunner', damaged)
     const ancestor = writeShow(dir, 'ancestor.cuerunner', damaged)

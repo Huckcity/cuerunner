@@ -969,10 +969,16 @@ describe('an app label that moves', () => {
         'website/reference/control.html (rendered by website/docs/reference.mjs) prints "Show Settings → Channels" with the segment "Channels"'
       )
     )
+    // The formats page's own-file note names the same tab, so it is the fourth site.
+    expect(problems).toContainEqual(
+      expect.stringContaining(
+        'website/reference/formats.html (rendered by website/docs/reference.mjs) prints "Show Settings → Channels" with the segment "Channels"'
+      )
+    )
     expect(problems).toContainEqual(
       expect.stringContaining(`${SHOW_SETTINGS} calls the Show Settings tab \`channels\` "Inputs"`)
     )
-    expect(problems).toHaveLength(3)
+    expect(problems).toHaveLength(4)
   })
 
   it("holds the Edit menu's rows to the labels the window menu declares", () => {

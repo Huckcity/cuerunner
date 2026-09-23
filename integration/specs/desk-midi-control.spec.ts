@@ -7,8 +7,9 @@
 // counterpart is `integration/peers/desk.ts`, listening at `AH_DESK_TARGET` — the address MIDI
 // Control has to be pointed at by hand, because the bridge dials what its operator typed once.
 // What is asserted is the peer's wire view and the peer's own state, the way the desk specs
-// assert them; the app's log is read for the one thing only the app can say (that its trigger
-// fired) and the port it fired from is named in the line.
+// assert them — the whole of what a recall writes on this profile, which is the mic's own mute
+// and, on an Avantis, the assignment too — and the app's log is read for the one thing only the
+// app can say (that its trigger fired), with the port it fired from named in the line.
 //
 // This is the only lane that measures the bridge at all — that MIDI Control hands an
 // application's bytes to a socket, and a desk's answers back the other way. INTEGRATION-HARNESS.md
@@ -37,10 +38,29 @@ const PROFILE: DeskProfile = SAID_PROFILE === 'avantis' ? 'avantis' : 'sq'
 /** The channel the desk is set to: blank takes the range's own default. */
 const SAID_CHANNEL = process.env.AH_MIDI_CHANNEL || undefined
 const CHANNEL = SAID_CHANNEL === undefined ? (PROFILE === 'avantis' ? 12 : 1) : Number(SAID_CHANNEL)
-/** DCA 1, as the peer keys it: the SQ's page and parameter, the Avantis's channel and note. */
-const DCA_KEY = PROFILE === 'sq' ? '02:00' : `${(CHANNEL + 3).toString(16).padStart(2, '0')}:36`
-/** What the peer calls that DCA: each range names its own, which is why this follows the profile. */
-const DCA_LABEL = PROFILE === 'sq' ? 'DCA1' : 'DCA 1'
+/**
+ * The status bytes every message about the one mic carries: the desk's own MIDI channel,
+ * which is where both ranges answer for an input — `CH 00` on `N` for an Avantis, page 00's
+ * parameter 0 for an SQ. The block four channels above is a DCA/mute-group block, and no
+ * recall writes one.
+ */
+const CC = 0xb0 | ((CHANNEL - 1) & 0x0f)
+const NOTE_ON = 0x90 | ((CHANNEL - 1) & 0x0f)
+/** The one mic's own number in the controlled set, from zero: the show has one channel. */
+const MIC_INDEX = 0x00
+/**
+ * The peer's own key for that mic's mute: an SQ keys a parameter as `page:lsb` — page 00's
+ * parameter 0, the first input — and an Avantis keys a note as `channel:note`, where the mic
+ * answers on the desk's own channel. The label beside it is the desk's own reference table.
+ */
+const MIC_KEY = PROFILE === 'sq'
+  ? '00:00'
+  : `${(CHANNEL - 1).toString(16).padStart(2, '0')}:00`
+const MIC_LABEL = PROFILE === 'sq' ? 'Ip1' : 'Input 1'
+/** DCA 1's place in the show's own list, which is what an Avantis's assignment carries. */
+const PLACE = 0x00
+/** NRPN 40 assigns a channel to a DCA; the value carries `40 + the fader's place`. */
+const ASSIGN_PARAM = 0x40
 
 test.skip(
   MIDI_PORT === undefined,
@@ -94,16 +114,38 @@ let page: Page
 let userDataDir: string
 let peer: DeskPeer
 
-/** The desk's own record of DCA 1's mute, which is the desk speaking rather than the app. */
-function dcaMute(): { on: boolean; label: string } | undefined {
-  return peer.state.mutes[DCA_KEY]
+/** The desk's own record of the one mic's mute, which is the desk speaking rather than the app. */
+function micMute(): { on: boolean; label: string } | undefined {
+  return peer.state.mutes[MIC_KEY]
 }
 
-/** The opening message this profile takes for DCA 1, as its document writes it. */
-function openBytes(): number[] {
-  if (PROFILE === 'avantis') return [0x90 | ((CHANNEL + 3) & 0x0f), 0x36, 0x7f]
-  const cc = 0xb0 | ((CHANNEL - 1) & 0x0f)
-  return [cc, 0x63, 0x02, cc, 0x62, 0x00, cc, 0x06, 0x00, cc, 0x26, 0x01]
+/**
+ * The mic's mute as the profile takes it: an SQ's NRPN page 00 at the input's own number, an
+ * Avantis's note pair whose velocity says which half it is — 3F off, 7F on, and 00 ending it.
+ */
+function micMuteMessages(closed: boolean): number[][] {
+  if (PROFILE === 'avantis') {
+    return [
+      [NOTE_ON, MIC_INDEX, closed ? 0x7f : 0x3f],
+      [NOTE_ON, MIC_INDEX, 0x00]
+    ]
+  }
+  return [[CC, 0x63, 0x00, CC, 0x62, MIC_INDEX, CC, 0x06, 0x00, CC, 0x26, closed ? 0x01 : 0x00]]
+}
+
+/**
+ * The whole of what a recall writes on this link, in the order it writes it. An Avantis is
+ * told its assignment here as well — NRPN 40, whose parameter's MSB names the input and whose
+ * value carries `40 + the fader's place` in and the place alone out — and an SQ is not: its
+ * membership needs the desk's own control service on the TCP port, which a MIDI port cannot be,
+ * so this lane carries the mic's mute alone for it.
+ */
+function recallMessages(closed: boolean): number[][] {
+  if (PROFILE !== 'avantis') return micMuteMessages(closed)
+  return [
+    [CC, 0x63, MIC_INDEX, CC, 0x62, ASSIGN_PARAM, CC, 0x06, closed ? PLACE : ASSIGN_PARAM + PLACE],
+    ...micMuteMessages(closed)
+  ]
 }
 
 test.beforeAll(async () => {
@@ -145,17 +187,25 @@ test('a scene recall reaches the desk through the virtual port, as the bytes it 
 
   // Through the bridge the bytes are the same bytes the desk's own socket carries: what MIDI
   // Control passes is what it was given, and this is the assertion that says whether it does.
-  expect(peer.received[0].bytes).toEqual(openBytes())
-  await expect.poll(() => dcaMute()?.on, { timeout: 10_000 }).toBe(true)
-  expect(dcaMute()?.label).toBe(DCA_LABEL)
+  // The scene places the mic, so what it writes is the mic's mute *open*, and on an Avantis
+  // the assignment that put it on the fader comes first.
+  await expect.poll(() => peer.received.length, { timeout: 10_000 })
+    .toBe(recallMessages(false).length)
+  expect(peer.received.map(message => message.bytes)).toEqual(recallMessages(false))
+  await expect.poll(() => micMute()?.on, { timeout: 10_000 }).toBe(false)
+  expect(micMute()?.label).toBe(MIC_LABEL)
 })
 
-test('the close is the same message with the other value, and the desk comes back down', { tag: '@ah' }, async () => {
+test('the close is the same messages with the other value, and the desk comes back down', { tag: '@ah' }, async () => {
+  const before = peer.received.length
   await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
 
-  // The half that never worked before the profile: the app used to close with a note-off,
-  // which is not a mute to either range.
-  await expect.poll(() => dcaMute()?.on, { timeout: 10_000 }).toBe(false)
+  // The half that never worked before the profile: the app used to close with a note-off, and
+  // neither range reads one as a mute. The close is the same messages with the other value.
+  await expect.poll(() => peer.received.length, { timeout: 10_000 })
+    .toBe(before + recallMessages(true).length)
+  expect(peer.received.slice(before).map(message => message.bytes)).toEqual(recallMessages(true))
+  await expect.poll(() => micMute()?.on, { timeout: 10_000 }).toBe(true)
 })
 
 test('the desk’s own scene recall comes back through the bridge and fires the cue', { tag: '@ah' }, async () => {

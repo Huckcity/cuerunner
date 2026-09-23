@@ -10,8 +10,7 @@ import {
   DEMO_PACK_COUNT,
   DEMO_SOURCE_ID,
   demoChannelId,
-  startingChannels,
-  startingDcas
+  startingChannels
 } from '../../../shared/show'
 
 describe('demoSource', () => {
@@ -57,7 +56,7 @@ describe('demoPacks and demoPerformers', () => {
   })
 
   it('patches every performer to the strip of their own number, so a scene moves them', () => {
-    const channels = startingChannels(startingDcas())
+    const channels = startingChannels()
     const performers = demoPerformers(channels)
 
     // A performer with no strip is a row no scene can open, and the demo is the show

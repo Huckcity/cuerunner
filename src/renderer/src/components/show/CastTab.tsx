@@ -10,13 +10,6 @@ import {
 import type { CastSettings } from '../../../../shared/show'
 import { TextField } from '../common/Field'
 
-/** The DCA a strip drives, as the cast list names it: "DCA 4", or a label someone wrote. */
-function dcaLabel(cast: CastSettings, dcaId: string | null): string {
-  if (dcaId === null) return ''
-  const index = cast.dcas.findIndex(dca => dca.id === dcaId)
-  return index === -1 ? '' : cast.dcas[index].label
-}
-
 /**
  * The cast: who is in the show, which strip their mic is patched to, and the ensembles
  * they are grouped into. An ensemble is a grouping and nothing else — it is applied to a
@@ -58,21 +51,15 @@ export function CastTab() {
               className="performer-channel"
               value={performer.channelId ?? ''}
               aria-label="Performer channel"
-              title="The strip their mic is patched to — the DCA it opens is the strip's"
+              title="The strip their mic is patched to"
               onChange={e => apply(updatePerformer(cast, performer.id, { channelId: e.target.value || null }))}
             >
               <option value="">— unpatched —</option>
-              {cast.channels.map(channel => {
-                const label = channelLabel(cast.channels, channel.id)
-                const fader = dcaLabel(cast, channel.dcaId)
-                // The fader is part of what a patch means, so the option says it: picking
-                // a strip is choosing what the desk moves.
-                return (
-                  <option key={channel.id} value={channel.id}>
-                    {fader === '' ? label : `${label} → ${fader}`}
-                  </option>
-                )
-              })}
+              {cast.channels.map(channel => (
+                <option key={channel.id} value={channel.id}>
+                  {channelLabel(cast.channels, channel.id)}
+                </option>
+              ))}
             </select>
             <TextField
               className="performer-notes"

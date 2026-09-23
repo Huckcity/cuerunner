@@ -39,6 +39,18 @@ const HELLO = [0x7f, 0x00, 0x02, 0x00, 0x00, 0x00, 0x66, 0xae]
 /** The capture's own answer to that hello, which is the echo a desk gives. */
 const ANSWER = Buffer.from('7f00020000007cc8', 'hex')
 
+/**
+ * What a membership writes, in the capture's own bytes: input 1 on DCA 1 placed, input 2 on
+ * DCA 1 cleared, and the channel's flag both ways — `00 00` for the channel that rides a DCA
+ * and `01` for the one that rides none. Spelled here rather than read out of the codec, so
+ * that a codec which moved would not move its own expectation with it; `frames.test.ts` holds
+ * these same literals against the fixture.
+ */
+const PLACED = 'f707071d00000100'
+const CLEARED = 'f707071d01000000'
+const FLAG_RIDES = 'f707070c00000000'
+const FLAG_NONE = 'f707070c01000100'
+
 interface DeskOptions {
   /**
    * Whether the desk answers the hello and each ping, as the capture measures one doing.
@@ -157,6 +169,14 @@ async function until(condition: () => boolean, timeoutMs = 3000, saw?: () => str
     }
     await yieldTurn()
   }
+}
+
+/**
+ * Lets the loop turn a few times, so that bytes a case believes were not written have had
+ * every chance to arrive: an absence is evidence only once something could have happened.
+ */
+async function turns(count = 4): Promise<void> {
+  for (let turn = 0; turn < count; turn++) await yieldTurn()
 }
 
 /**
@@ -397,6 +417,115 @@ describe('opening the session', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('a membership', () => {
+  it('writes the pair and then the channel’s flag, in the capture’s own bytes', async () => {
+    const underTest = await desk()
+    // The fake clock keeps the pings out of the bytes these cases read: after the session's
+    // own frames, the membership is the only thing written.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    try {
+      const { engine: session, statuses } = engine()
+      session.open(HOST)
+      // The desk's answer is what makes this a session a membership may be written on.
+      await until(() => statuses.length === 1)
+      const opened = underTest.received.length
+
+      expect(session.sendMembership({ channel: 1, dca: 1, placed: true, rides: true })).toBe(2)
+      await until(() => underTest.received.length >= opened + 16)
+
+      // Input 1 on fader 1, placed as the capture places it, and the channel's own flag after
+      // it: `00 00` is the channel that rides a DCA.
+      expect(hex(underTest.received.slice(opened))).toBe(PLACED + FLAG_RIDES)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('clears a pair with the same frame, and the flag that says it rides none', async () => {
+    const underTest = await desk()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    try {
+      const { engine: session, statuses } = engine()
+      session.open(HOST)
+      await until(() => statuses.length === 1)
+      const opened = underTest.received.length
+
+      expect(session.sendMembership({ channel: 2, dca: 1, placed: false, rides: false })).toBe(2)
+      await until(() => underTest.received.length >= opened + 16)
+
+      // Input 2 off fader 1 — the frame the capture writes `00 00` — and the flag `00 01 00`,
+      // which is the channel the capture's pairing leaves riding none.
+      expect(hex(underTest.received.slice(opened))).toBe(CLEARED + FLAG_NONE)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('writes nothing, and answers 0, until the desk has spoken — and writes once it has', async () => {
+    // §6's other state: the desk took the connection and says nothing. It is not a session to
+    // write into — the bytes would be accepted and do nothing — so the recall is told nothing
+    // went, while the panel is not told of a session either.
+    const underTest = await desk({ answers: false })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    try {
+      const { engine: session, statuses } = engine()
+      session.open(HOST)
+      await until(() => underTest.received.length >= SESSION_BYTES)
+      const written = underTest.received.length
+
+      expect(session.sendMembership({ channel: 1, dca: 1, placed: true, rides: true })).toBe(0)
+      await turns()
+      expect(underTest.received, 'bytes written to a desk that has not answered').toHaveLength(written)
+      expect(statuses).toEqual([])
+
+      // The desk's own push is what makes the session one, and the same call then goes out:
+      // what decided it is the desk having spoken, not the socket being connected.
+      underTest.push('7f080e00000018180c0100000047726f75700000')
+      await until(() => statuses.length === 1)
+      expect(session.sendMembership({ channel: 1, dca: 1, placed: true, rides: true })).toBe(2)
+      await until(() => underTest.received.length >= written + 16)
+      expect(hex(underTest.received.slice(written))).toBe(PLACED + FLAG_RIDES)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('writes nothing, and answers 0, on a session the desk has ended', async () => {
+    const underTest = await desk()
+    const { engine: session, statuses } = engine()
+    session.open(HOST)
+    await until(() => statuses.length === 1)
+
+    underTest.drop()
+    await until(() => statuses.length === 2)
+
+    const written = underTest.received.length
+    expect(session.sendMembership({ channel: 1, dca: 1, placed: true, rides: true })).toBe(0)
+    await turns()
+    expect(underTest.received).toHaveLength(written)
+    // And no session was opened to write it on: a desk that went without its goodbye takes a
+    // client again only after it is reset, so a membership has nowhere to arrive.
+    expect(underTest.controls).toHaveLength(0)
+  })
+
+  it('writes nothing, and answers 0, once the show has let the desk go', async () => {
+    const underTest = await desk()
+    const { engine: session, statuses } = engine()
+    session.open(HOST)
+    await until(() => statuses.length === 1)
+
+    session.closeAll()
+    const written = underTest.received.length
+
+    expect(session.sendMembership({ channel: 1, dca: 1, placed: true, rides: true })).toBe(0)
+    await turns()
+    // The show stopped naming the desk: nothing was written on the session that ended and
+    // nothing was dialled for a membership nobody has a desk to send it to.
+    expect(underTest.received).toHaveLength(written)
+    expect(underTest.controls).toHaveLength(1)
   })
 })
 

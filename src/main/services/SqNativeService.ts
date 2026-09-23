@@ -3,16 +3,21 @@ import { NATIVE_TCP_PORT } from '../desk/frames'
 import { reportMainError } from '../errors'
 import { deskLinkName } from '../../shared/deskLink'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
-import type { ShowSettings } from '../../shared/show'
+import type { ShowSettings, SqMembershipAnswer, SqMembershipIntent } from '../../shared/show'
 
 /**
  * What this service needs of the session. The engine behind it owns a socket, the channel to
- * the desk's own leave port and three timers — a test only has to be the three things the
+ * the desk's own leave port and three timers — a test only has to be the four things the
  * service actually talks to.
  */
 export interface NativeSession {
   open(host: string): void
   closeAll(): void
+  /**
+   * One membership written on the session: the pair frame and the channel's flag, and how
+   * many frames went out — 0 when there is no session the desk has spoken on.
+   */
+  sendMembership(intent: SqMembershipIntent): number
   /**
    * A session coming up or going down, with why when it goes: `lost` is a session the desk
    * was holding and is not, which is the state that leaves a desk mute until it is reset.
@@ -21,13 +26,48 @@ export interface NativeSession {
 }
 
 /**
+ * The membership a payload names, or the sentence saying what about it was not one.
+ *
+ * The renderer's intent arrives over the IPC boundary as `unknown`, so every number is
+ * checked before a frame is built from it: the frames address 1-based numbers and the codec
+ * subtracts one, so a zero would name the frame before the first input, and a fraction or a
+ * string a form sent would be a frame written from a coerced value. The sentence names the
+ * field rather than throwing, because it is what the operator reads when a recall's send is
+ * refused — the rest of that recall goes on.
+ */
+function membershipOf(payload: unknown): SqMembershipIntent | string {
+  if (typeof payload !== 'object' || payload === null) {
+    return 'a membership needs a payload naming a channel, a fader, and whether the pair is placed'
+  }
+  const { channel, dca, placed, rides } = payload as Record<string, unknown>
+  if (!isCount(channel)) return `a membership needs a channel as a whole number at or past 1${found(channel)}`
+  if (!isCount(dca)) return `a membership needs a fader as a whole number at or past 1${found(dca)}`
+  if (typeof placed !== 'boolean') return `a membership needs placed to be true or false${found(placed)}`
+  if (typeof rides !== 'boolean') return `a membership needs rides to be true or false${found(rides)}`
+  return { channel, dca, placed, rides }
+}
+
+/** A whole number at or past the first input, which is the only number a frame can address. */
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+/** What a refusal names when the payload carried the field at all: nothing where it did not. */
+function found(value: unknown): string {
+  if (value === undefined) return ''
+  // A string is quoted, so that the sentence tells a `"3"` from a 3; anything else reads as it
+  // would in the window. Nothing here can throw: this runs on a payload no check has passed.
+  return `, not ${typeof value === 'string' ? `"${value}"` : String(value)}`
+}
+
+/**
  * The SQ's own control service, on the desk's TCP 51326 — the route a DCA membership is
  * written over, because the MIDI link on 51325 has no input-to-DCA assignment at all.
  *
  * The desk's session is a conversation rather than a cue: this opens it, keeps it alive the
  * two ways the capture measures, reads what the desk pushes, and leaves by the desk's own
- * door when the show stops. Nothing sends an assignment yet — the recall that does is Story
- * 11.2's, and the frames it will write are held by the capture until then.
+ * door when the show stops. What it writes is the membership `frames.ts` holds the capture's
+ * bytes for: one pair at a time, on the session already standing.
  */
 export class SqNativeService implements ShowService {
   readonly id = 'sq-native'
@@ -118,5 +158,37 @@ export class SqNativeService implements ShowService {
     this.desk = null
     this.session.onStatus = null
     this.session.closeAll()
+  }
+
+  /**
+   * `membership` writes one (channel, fader) pair and that channel's flag to the desk — the
+   * frames `frames.ts` holds the capture's bytes for, and the only action this service takes.
+   *
+   * The payload is checked here rather than in the engine, because this is the boundary the
+   * renderer's intent crosses: what a frame is built from is a number that was read, never one
+   * that was assumed. A refusal is a sentence and not a throw, because a recall writes one
+   * membership after another and reports the ones that did not go; a session that is not up is
+   * refused the same way, which is what a 0 from the engine means.
+   */
+  command(action: string, payload?: unknown): SqMembershipAnswer {
+    if (action !== 'membership') throw new Error(`Unknown action "${action}"`)
+    const intent = membershipOf(payload)
+    if (typeof intent === 'string') return { ok: false, error: intent }
+    const frames = this.session.sendMembership(intent)
+    if (frames === 0) {
+      return {
+        ok: false,
+        error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+      }
+    }
+    // A write is two frames — the pair and the channel's flag — so one of them is the
+    // connection going between them, and the desk holds half of what the caller asked for.
+    if (frames < 2) {
+      return {
+        ok: false,
+        error: 'only the pair went — the channel’s flag did not, so the write is half made'
+      }
+    }
+    return { ok: true, frames }
   }
 }

@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import {
   addChannel,
-  channelLabel,
-  removeChannel,
   setDcaCount,
   updateChannel,
   updateDca
 } from '../../utils/cast'
-import { dcaAddress, dcaChannel, dcaLimit, dcaNumber, dcaValue, dcaValueRange, deskChannelGap } from '../../utils/desk'
+import { placementFor, rowChannels } from '../../utils/scenes'
+import { dcaAddress, dcaLimit, dcaNumber, dcaValue, dcaValueRange, deskChannelGap } from '../../utils/desk'
 import { MUTE_GROUP_COUNT } from '../../utils/deskInput'
 import { DCA_LIMIT } from '../../../../shared/show'
 import type { CastSettings, DeskProfile, DeskSettings } from '../../../../shared/show'
@@ -20,11 +19,6 @@ const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
 function deskGap(desk: DeskSettings): string | null {
   if (desk.kind === 'midi' && desk.midiPort === '') return 'No MIDI port chosen.'
   if (desk.kind === 'midi-tcp' && desk.host.trim() === '') return 'No desk address.'
-  // A channel the DCAs do not answer on is the same kind of missing as an address nobody
-  // typed: the row says so rather than previewing a send that cannot happen.
-  if (deskChannelGap(desk.profile, desk.midiChannel) && desk.kind !== 'none' && desk.kind !== 'osc') {
-    return 'An Avantis answers four channels above its own, so its MIDI channel is 12 or lower.'
-  }
   return null
 }
 
@@ -77,14 +71,19 @@ function MuteGroupOptions({ none }: { none: string }) {
 }
 
 /**
- * What the show sends, read back from the connection. A pattern and a port are easier to
- * check as addresses than as fields, and this is the only place the convention lives, so
- * a DCA row is left saying what it is rather than what goes out of it.
+ * What a recall will touch, read back from the connection. The set is the show's own
+ * channels — a recall writes their mutes and their membership and nothing else — and each
+ * profile says what of that it can be told. A pattern and a port are easier to check as
+ * addresses than as fields, and this is the only place the convention lives, so a DCA row
+ * is left saying what it is rather than what goes out of it.
  */
-function deskPreview(desk: DeskSettings, dcas: number): string {
-  const last = Math.max(0, dcas - 1)
+function deskPreview(desk: DeskSettings, channels: number, dcas: number): string {
+  // The set, as the operator counts it: the strips a recall writes, and nothing else.
+  const set = channels === 1 ? '1 channel' : `${channels} channels`
+  const mutes = channels === 1 ? `1 channel mute` : `${channels} channel mutes`
+  const last = Math.max(1, channels)
   if (desk.kind === 'osc') {
-    return `Sends ${dcaAddress(desk.address, 0)} … ${dcaAddress(desk.address, last)} to ${desk.host}:${desk.port}, with 1 to open and 0 to close`
+    return `Sends ${dcaAddress(desk.address, 1)} … ${dcaAddress(desk.address, last)} to ${desk.host}:${desk.port}, with 1 to open and 0 to close — a recall writes ${mutes} there and takes no assignment`
   }
   const where = desk.kind === 'midi-tcp' ? `${desk.host}:${desk.tcpPort}` : `"${desk.midiPort}"`
   // A desk with fewer faders than the show drives is worth saying here, before the night:
@@ -95,30 +94,37 @@ function deskPreview(desk: DeskSettings, dcas: number): string {
     ? ''
     : `; the desk has ${limit}, so ${dcas - limit} of the show’s DCAs are not sent`
   if (desk.profile === 'sq') {
-    return `Sends an SQ’s DCA mutes — NRPN page 02 on channel ${desk.midiChannel} — to ${where}${beyond}`
+    // The assignment is written over the desk's own control service, which is the socket
+    // only: a show that reaches its SQ through a MIDI port can mute it and nothing more.
+    const assignment = desk.kind === 'midi-tcp'
+      ? 'and its assignment over the desk’s own control service'
+      : 'and no assignment — an SQ’s assignment needs the desk’s own control service, on its TCP route'
+    return `Sends an SQ’s channel mutes — NRPN page 00 on channel ${desk.midiChannel} — to ${where}, ${assignment} — a recall writes ${set} and nothing else${beyond}`
   }
   if (desk.profile === 'avantis') {
-    return `Sends an Avantis’s DCA mutes — note-on, 7F on and 3F off, on channel ${dcaChannel(desk.profile, desk.midiChannel)} — to ${where}${beyond}`
+    return `Sends an Avantis’s channel mutes — note-on, 7F on and 3F off, on channel ${desk.midiChannel} — to ${where}, and its assignment as NRPN 40 on the same channel — a recall writes ${set} and nothing else${beyond}`
   }
-  return `Sends note ${dcaNumber(0)} … ${dcaNumber(last)} to ${where}, on and off${beyond}`
+  return `Sends note 1 … ${last} to ${where}, on and off — a recall writes ${mutes} and takes no assignment`
 }
 
 /**
- * Channels: the console as the show sees it. Where the desk is, how many DCAs it has,
- * the strips and the fader each one drives, and the DCAs themselves.
+ * Channels: the console as the show sees it. Where the desk is, the strips on it, and
+ * the faders a scene can place them on.
  *
  * It is set up once, so the defaults do the work: a new show has twelve strips and twelve
- * DCAs, strip n driving DCA n, and the only thing nobody can guess is where the desk is.
- * What is left here is the exceptions — a chorus sharing one fader, a desk that numbers
- * its DCAs differently — which is why the DCA rows are the last thing on the tab rather
- * than the first.
+ * faders, and the only thing nobody can guess is where the desk is. A strip is a name and
+ * a number — which fader it rides is the scene's decision, made in the Scenes view — and a
+ * fader is a label and the number the desk answers it by, which is its place unless the
+ * number beside it says otherwise.
  */
 export function ChannelsTab() {
   const cast = useStore(s => s.showSettings.cast)
+  const scenes = useStore(s => s.showSettings.scenes.list)
   const desk = useStore(s => s.showSettings.desk)
   const midiOutPort = useStore(s => s.midiSettings.outputPortName)
   const updateCastSettings = useStore(s => s.updateCastSettings)
   const updateDeskSettings = useStore(s => s.updateDeskSettings)
+  const removeChannel = useStore(s => s.removeChannel)
   const [ports, setPorts] = useState<string[]>([])
 
   useEffect(() => {
@@ -140,6 +146,10 @@ export function ChannelsTab() {
     ? [desk.midiPort, ...ports]
     : ports
   const gap = deskGap(desk)
+  // An Avantis answers for its buttons four channels above its own, which past channel 12
+  // is past what MIDI has: a desk up there cannot be run from its keys, though a recall —
+  // mutes and assignment both go on the desk's own channel — still sends.
+  const buttonsBlocked = deskChannelGap(desk.profile, desk.midiChannel)
 
   return (
     <div className="show-tab-body">
@@ -290,7 +300,7 @@ export function ChannelsTab() {
 
         {/* The desk's own buttons: a mute group assigned to a key at the desk is a button
             that reports itself, which is the only kind a console offers. */}
-        {hasMuteGroups(desk) && !gap && (
+        {hasMuteGroups(desk) && !gap && !buttonsBlocked && (
           <div className="desk-row desk-buttons">
             <label className="desk-label" htmlFor="desk-button-go">GO button</label>
             <select
@@ -321,12 +331,20 @@ export function ChannelsTab() {
             </select>
           </div>
         )}
-        {sameButton(desk) && !gap && (
+        {/* The block four channels up a high desk would answer on is past what MIDI has,
+            so there are no keys to assign: the show is run from the window, and a recall
+            still sends. */}
+        {hasMuteGroups(desk) && !gap && buttonsBlocked && (
+          <div className="desk-preview desk-gap">
+            {`An Avantis reads its GO and BACK keys four channels above its own — past what MIDI has from channel ${desk.midiChannel} — so the desk cannot run the show from its keys, but a recall still sends.`}
+          </div>
+        )}
+        {sameButton(desk) && !gap && !buttonsBlocked && (
           <div className="desk-preview desk-gap">
             One mute group cannot be both buttons.
           </div>
         )}
-        {hasMuteGroups(desk) && !gap && !sameButton(desk) && (
+        {hasMuteGroups(desk) && !gap && !sameButton(desk) && !buttonsBlocked && (
           <div className="desk-hint">
             GO recalls the next scene, BACK the one before it, in the order the Scenes view
             shows them.
@@ -376,11 +394,11 @@ export function ChannelsTab() {
           </div>
         )}
 
-        {/* What the show sends, read back from the connection: a pattern and a port are
-            easier to check as addresses. This is the only place the convention lives, so a
+        {/* What a recall will touch, read back from the connection: the set and what this
+            profile can be told of it. This is the only place the convention lives, so a
             DCA row is left saying what it is rather than what goes out of it. */}
         {desk.kind !== 'none' && !gap && (
-          <div className="desk-preview">{deskPreview(desk, cast.dcas.length)}</div>
+          <div className="desk-preview">{deskPreview(desk, cast.channels.length, cast.dcas.length)}</div>
         )}
         {gap !== null && <div className="desk-preview desk-gap">{gap}</div>}
       </div>
@@ -393,6 +411,8 @@ export function ChannelsTab() {
           </button>
         </div>
 
+        {/* A strip is a name and a number: which fader it rides is the scene's decision,
+            made in the Scenes view, so there is nothing to choose here. */}
         {cast.channels.map((channel, index) => (
           <div className="channel-row" key={channel.id}>
             <span className="channel-number">{index + 1}</span>
@@ -403,23 +423,11 @@ export function ChannelsTab() {
               aria-label={`Channel ${index + 1} name`}
               onValue={name => apply(updateChannel(cast, channel.id, { name }))}
             />
-            <select
-              className="channel-dca"
-              value={channel.dcaId ?? ''}
-              aria-label={`Channel ${index + 1} DCA`}
-              title="Which fader this mic rides: its own number unless a group shares one"
-              onChange={e => apply(updateChannel(cast, channel.id, { dcaId: e.target.value || null }))}
-            >
-              <option value="">— no DCA —</option>
-              {cast.dcas.map((dca, place) => (
-                <option key={dca.id} value={dca.id}>{dcaNumber(place)} · {dca.label}</option>
-              ))}
-            </select>
             <button
               className="channel-remove"
               aria-label={`Remove channel ${index + 1}`}
               title="Remove this strip — undo puts it back"
-              onClick={() => apply(removeChannel(cast, channel.id))}
+              onClick={() => removeChannel(channel.id)}
             >✕</button>
           </div>
         ))}
@@ -450,12 +458,22 @@ export function ChannelsTab() {
           <p className="show-empty">No DCAs: a show that drives no desk leaves this at none.</p>
         ) : (
           cast.dcas.map((dca, index) => {
-            const carrying = cast.channels
-              .filter(channel => channel.dcaId === dca.id)
-              .map(channel => channelLabel(cast.channels, channel.id))
+            // A fader's channels are placed per scene now, so this line names the scenes
+            // that place something on it: a fader nobody places anything on is one a
+            // recall never writes.
+            const placing = scenes.filter(scene =>
+              rowChannels(cast, placementFor(scene, dca.id)).length > 0).length
+            const carrying = placing === 0
+              ? 'nothing is placed on it yet'
+              : placing === 1
+                ? '1 scene places mics here'
+                : `${placing} scenes place mics here`
             // What an override may be on this desk: the DCA block's own numbers, so the
             // field refuses one that would address something else on the desk.
             const range = dcaValueRange(desk.profile)
+            // The number its place derives, which is what the field says until it is typed
+            // in: empty means derived, so the placeholder carries it.
+            const derived = dcaValue(index, desk.profile)
             return (
               <div className="dca-row" key={dca.id}>
                 <div className="dca-fields">
@@ -467,39 +485,26 @@ export function ChannelsTab() {
                     aria-label={`DCA ${dcaNumber(index)} label`}
                     onValue={label => apply(updateDca(cast, dca.id, { label }))}
                   />
-                  {/* The override: empty means the message the number makes, and the
-                      placeholder is that message, so the field says what will be sent
+                  {/* The one override: empty means the number its place makes, and the
+                      placeholder is that number, so the field says what will be sent
                       without being typed into. */}
-                  {desk.kind === 'osc' && (
-                    <TextField
-                      className="dca-override"
-                      value={dca.address ?? ''}
-                      placeholder={dcaAddress(desk.address, index)}
-                      aria-label={`DCA ${dcaNumber(index)} address`}
-                      title="Sent instead of the address of its number. Clear it to go back."
-                      onValue={address => apply(updateDca(cast, dca.id, {
-                        address: address.trim() === '' ? null : address
-                      }))}
-                    />
-                  )}
                   {(desk.kind === 'midi' || desk.kind === 'midi-tcp') && (
                     <NumberField
                       className="dca-override"
-                      value={dca.note ?? dcaValue(index, desk.profile)}
+                      value={dca.deskNumber}
                       min={range.min}
                       max={range.max}
+                      placeholder={String(derived)}
                       aria-label={`DCA ${dcaNumber(index)} number`}
-                      title={desk.profile === 'sq'
-                        ? 'Sent instead of the NRPN parameter its place makes — 0 for DCA 1'
-                        : 'Sent instead of the note its place makes'}
-                      onValue={note => apply(updateDca(cast, dca.id, {
-                        note: note === dcaValue(index, desk.profile) ? null : note
+                      title={`Sent instead of the number its place makes — ${derived} for DCA ${dcaNumber(index)}. Clear it to go back.`}
+                      onValue={deskNumber => apply(updateDca(cast, dca.id, {
+                        deskNumber: deskNumber === derived ? null : deskNumber
                       }))}
                     />
                   )}
                 </div>
                 <div className="dca-carrying">
-                  {carrying.length === 0 ? 'nothing assigned' : carrying.join(', ')}
+                  {carrying}
                 </div>
               </div>
             )

@@ -3,12 +3,26 @@
 // separate specs and separate profiles.
 //
 // The desk side is `integration/peers/desk.ts`, written from "Avantis MIDI TCP/IP Protocol"
-// (V2.0+): base MIDI channel N, DCAs on N+4 at notes 36–45 hex, mutes as a note-on whose
-// velocity says which half of the pair it is. What is asserted is the wire and the desk's
-// own state, so what the app sends is judged by the desk that receives it.
+// (V2.0+). Its inputs answer on the desk's own MIDI channel, the note naming which one — a
+// mic's mute is therefore a note-on whose velocity says which half of the pair it is (7F on,
+// 3F off) and a velocity of 00 ending it — and a DCA assignment is NRPN 40 on that same
+// channel, whose parameter MSB names the input and whose value carries `40 + the fader's
+// place` into the DCA and the place alone out of it. The block four channels above the desk's
+// own is its DCAs and its mute groups, which this app writes no message to at all: a mic is
+// an input (AD-26). What is asserted is the wire and the desk's own state, so what the app
+// sends is judged by the desk that receives it.
 //
-// The cases run in order and leave DCA 1 open, closed, closed: the last one needs a change
-// to exist before it can be refused, which is what the close before it leaves behind.
+// This is also the one lane where the membership itself is on the link, so both facts a
+// recall writes are readable here — the assignment first, then the mic's mute — which is
+// what the SQ lane cannot assert at all: an SQ's membership goes over its own control service
+// on 51326, where no peer stands in for it yet (Story 11.5).
+//
+// The cases run in order and leave the mic open, closed, closed and open again: the state each
+// recall writes, which is what makes the next one a change that sends. The last case changes
+// the show's desk for good and is therefore last, and it is also the one that says what a
+// channel too high for the desk's *group* block does and does not cost: the assignment and the
+// mic's mute still go, on the desk's own channel, because the block the address cannot reach is
+// the buttons' and not the inputs'.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
@@ -17,19 +31,35 @@ import { writeDeskShow } from './deskFixture'
 
 /** The desk's own channel, 12 — its default — which is what the show is told. */
 const DESK_CHANNEL = 12
-/** DCA 1, per the document's channel map: base channel + 4 — channel 16 — at notes 36–45 hex. */
-const DCA_NOTE = 0x36
-/** The desk's own key for that fader: the channel nibble (15, which is channel 16) and the CH note. */
-const DCA_KEY = '0f:36'
+/**
+ * The nibble the desk's own channel is on the wire, which is where every fact about a mic
+ * answers: inputs are `CH 00`–`5F` on `N`, and DCA assignments are NRPN 40 on `N` too.
+ */
+const MIC_CHANNEL = DESK_CHANNEL - 1
+/** Input 1's own note, which is the mic's number on the desk and the show's one channel. */
+const MIC_NOTE = 0x00
+/** The status byte every controller message on the desk's own channel carries. */
+const CC = 0xb0 | MIC_CHANNEL
+/** The same, for the note pair a mute is: 9N at the velocity, 9N at 00 to end it. */
+const NOTE_ON = 0x90 | MIC_CHANNEL
+/** The desk's own key for the mic's mute: the channel's nibble, then the input's own note. */
+const MIC_KEY = `${MIC_CHANNEL.toString(16).padStart(2, '0')}:${MIC_NOTE.toString(16).padStart(2, '0')}`
+/** NRPN 40 assigns a channel to a DCA; the value carries `40 + the fader's place`. */
+const ASSIGN_PARAM = 0x40
+/**
+ * The nibble the last case's desk is on: the show is told 13, which is one channel higher than
+ * the group block MIDI has room for, and a mic still answers on it.
+ */
+const MOVED_CHANNEL = 13 - 1
 
 let app: ElectronApplication
 let page: Page
 let userDataDir: string
 let peer: DeskPeer
 
-/** The desk's own record of DCA 1's mute. */
-function dcaMute(): { on: boolean; label: string } | undefined {
-  return peer.state.mutes[DCA_KEY]
+/** The desk's own record of the mic's mute, at the strip's own note on the desk's channel. */
+function micMute(): { on: boolean; label: string } | undefined {
+  return peer.state.mutes[MIC_KEY]
 }
 
 test.beforeAll(async () => {
@@ -45,32 +75,59 @@ test.afterAll(async () => {
   await peer.close()
 })
 
-test('a scene recall mutes the DCA, four channels above the desk’s own', async () => {
+test('a recall writes the membership first and then the mic’s mute, both on the desk’s own channel', async () => {
   await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
   await expect.poll(() => peer.received.length).toBeGreaterThan(0)
-  // The show is told the desk's channel is 12; the desk answers for DCA 1 on 16 at note
-  // 0x36, which is the profile's arithmetic and not the operator's. Velocity 0x7F is on.
+  // The assignment, as the document writes it: the parameter's MSB names the input — 0, this
+  // show's one channel — the assignment is NRPN 40, and `40 + place 0` is that fader's DCA 1.
+  // The peer decodes NRPN 40 into the fader it names, so the assertion is the desk's own
+  // reading of the frames rather than the bytes being the only witness.
   expect(peer.received[0]).toMatchObject({
-    kind: 'mute',
+    kind: 'assign',
+    channel: MIC_CHANNEL,
+    parameter: ASSIGN_PARAM,
     on: true,
-    bytes: [0x9f, DCA_NOTE, 0x7f]
+    label: 'DCA 1'
   })
-  await expect.poll(() => dcaMute()?.on).toBe(true)
-  expect(dcaMute()?.label).toBe('DCA 1')
-  // The document's mute is the pair: the note at the velocity, then velocity 00 to end it.
-  expect(peer.received[1]).toMatchObject({ kind: 'raw', bytes: [0x9f, DCA_NOTE, 0x00] })
+  expect(peer.received[0].bytes)
+    .toEqual([CC, 0x63, MIC_NOTE, CC, 0x62, ASSIGN_PARAM, CC, 0x06, ASSIGN_PARAM])
+
+  // Then the mic's own mute. The scene places the channel, so the mic is open: velocity 3F is
+  // this desk's OFF — 01–3F and not a note-off, which it ignores outright — and velocity 00
+  // ends the pair. The desk's own state is what says the mic moved.
+  expect(peer.received[1]).toMatchObject({
+    kind: 'mute',
+    channel: MIC_CHANNEL,
+    note: MIC_NOTE,
+    on: false,
+    label: 'Input 1'
+  })
+  expect(peer.received[2]).toMatchObject({ kind: 'raw', bytes: [NOTE_ON, MIC_NOTE, 0x00] })
+  await expect.poll(() => micMute()?.on).toBe(false)
+  expect(micMute()?.label).toBe('Input 1')
 })
 
-test('the close is a note-on at velocity 3F, which is the OFF this desk has', async () => {
+test('the close clears the membership and is a note-on at velocity 7F, which is the ON this desk has', async () => {
   await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
 
-  // The half that never worked before the profile: the app used to close with a note-off,
-  // which the Avantis document says is ignored outright, so the DCA stayed open on the
-  // desk while the app believed it had closed it.
-  await expect.poll(() => peer.received.some(entry => entry.bytes[0] === 0x9f && entry.bytes[2] === 0x3f))
-    .toBe(true)
-  await expect.poll(() => dcaMute()?.on).toBe(false)
+  // The clear is the same three controllers with the place alone as the value, and the mic
+  // is closed with velocity 7F. The half that never worked before the profile: the app used
+  // to close with a note-off, which the Avantis document says is ignored outright, so the
+  // desk stayed open while the app believed it had closed it.
+  await expect.poll(() => peer.received.length).toBeGreaterThan(3)
+  expect(peer.received[3]).toMatchObject({
+    kind: 'assign',
+    channel: MIC_CHANNEL,
+    parameter: ASSIGN_PARAM,
+    value: 0x00,
+    on: false,
+    label: 'DCA 1'
+  })
+  expect(peer.received[3].bytes)
+    .toEqual([CC, 0x63, MIC_NOTE, CC, 0x62, ASSIGN_PARAM, CC, 0x06, 0x00])
+  expect(peer.received[4]).toMatchObject({ kind: 'mute', channel: MIC_CHANNEL, note: MIC_NOTE, on: true })
+  await expect.poll(() => micMute()?.on).toBe(true)
 })
 
 test('the desk’s own scene recall fires the cue that answers to it', async () => {
@@ -81,22 +138,32 @@ test('the desk’s own scene recall fires the cue that answers to it', async () 
   await expect(page.locator('.log-panel')).toContainText(`127.0.0.1:${peer.port}`)
 })
 
-test('a show told a channel its DCAs do not answer on says so instead of sending', async () => {
-  // 13 + 4 is channel 17, which MIDI does not have. The row says so before the night, and
-  // a recall reports the refusal rather than wrapping into the desk's mute groups. This is
-  // the last case in the file because it changes the show's desk for good.
+test('a channel too high for the desk’s group block is named in the settings, and the recall still goes', async () => {
+  // 13 + 4 is channel 17, which MIDI does not have. That block is where an Avantis's DCAs and
+  // its mute groups answer, so its buttons are what this show cannot read — and the row says so
+  // before the night rather than previewing buttons nothing could arrive on. What is *not* out
+  // of reach is the recall: a mic is an input, and every range addresses its inputs on the
+  // desk's own channel, so both facts are still written. This is the last case in the file
+  // because it changes the show's desk for good.
   await openShowSettings(page)
   const settings = page.locator('.show-settings-dialog')
   await settings.locator('.desk-tcp-channel').fill('13')
   await settings.locator('.desk-tcp-channel').blur()
   await expect(settings.locator('.desk-gap'))
-    .toHaveText('An Avantis answers four channels above its own, so its MIDI channel is 12 or lower.')
+    .toHaveText('An Avantis reads its GO and BACK keys four channels above its own — past what MIDI has from channel 13 — so the desk cannot run the show from its keys, but a recall still sends.')
   await settings.locator('.show-settings-done').click()
 
   const before = peer.received.length
   await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
-  await openLogPanel(page)
-  await expect(page.locator('.log-panel')).toContainText('Cannot be told to this desk')
-  expect(peer.received.length).toBe(before)
+  // The desk the show now names is on 13 — nibble 0c — and every fact about a mic carries it.
+  // Nothing is addressed at 17, which is what a show that still wrote the DCA/mute-group block
+  // would send and what no MIDI channel can carry.
+  await expect.poll(() => peer.received.length).toBeGreaterThan(before)
+  const arrived = peer.received.slice(before)
+    .filter(message => message.kind === 'mute' || message.kind === 'assign')
+  expect(arrived.map(message => message.channel)).toEqual([MOVED_CHANNEL, MOVED_CHANNEL])
+  expect(arrived.map(message => message.kind)).toEqual(['assign', 'mute'])
+  expect(arrived[0]).toMatchObject({ parameter: ASSIGN_PARAM, on: true, label: 'DCA 1' })
+  expect(arrived[1]).toMatchObject({ note: MIC_NOTE, on: false })
 })

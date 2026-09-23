@@ -15,8 +15,8 @@ import type {
   CastSettings, Dca, Ensemble, MicScene, Performer, RfPack, RfPlot, RfSwap, ShowChannel
 } from '../../../../shared/show'
 
-function showChannel(id: string, name: string, dcaId: string | null = null): ShowChannel {
-  return { id, name, dcaId }
+function showChannel(id: string, name: string): ShowChannel {
+  return { id, name }
 }
 
 function performer(overrides: Partial<Performer> = {}): Performer {
@@ -28,11 +28,11 @@ function ensemble(overrides: Partial<Ensemble> = {}): Ensemble {
 }
 
 function dca(overrides: Partial<Dca> = {}): Dca {
-  return { id: 'dca-1', label: 'DCA 1', note: null, address: null, ...overrides }
+  return { id: 'dca-1', label: 'DCA 1', deskNumber: null, ...overrides }
 }
 
-function scene(id: string, name: string, live: string[], overrides: Partial<MicScene> = {}): MicScene {
-  return { id, name, live, ensembles: [], excluded: [], notes: '', ...overrides }
+function scene(id: string, name: string, dcas: MicScene['dcas'] = []): MicScene {
+  return { id, name, dcas, notes: '' }
 }
 
 function pack(overrides: Partial<RfPack> = {}): RfPack {
@@ -90,7 +90,7 @@ describe('ShowSettings', () => {
         showSettings: {
           ...defaults,
           cast: { ...defaults.cast, ...state.cast },
-          scenes: { list: state.scenes ?? [] },
+          scenes: { list: state.scenes ?? [], allowDuplicateAssignment: true },
           rf: { ...defaults.rf, plot: state.plot ?? { packs: [] }, swaps: state.swaps ?? [] }
         },
         showSettingsTab: state.tab ?? 'channels',
@@ -216,34 +216,37 @@ describe('ShowSettings', () => {
       expect(cast().performers[0].notes).toBe('on book for act two')
     })
 
-    it('patches a performer to a strip, whose options name the fader it drives', async () => {
+    it('patches a performer to a strip, whose options name the strip alone', async () => {
       await show({
         tab: 'cast',
         cast: {
-          channels: [showChannel('ch-1', 'Ruth', 'dca-1'), showChannel('ch-2', '', 'dca-2')],
+          channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', '')],
           dcas: [dca({ id: 'dca-1', label: 'DCA 1' }), dca({ id: 'dca-2', label: 'DCA 2' })],
           performers: [performer()]
         }
       })
 
       const select = field<HTMLSelectElement>('.performer-channel')
-      // Picking a strip is choosing what the desk moves, so the option names the fader too.
+      // A strip is a name and a number, and which fader it rides is the scene's decision
+      // rather than the strip's — so the option says the strip and nothing else.
       expect([...select.options].map(option => option.textContent))
-        .toEqual(['— unpatched —', 'Ch 1 · Ruth → DCA 1', 'Ch 2 → DCA 2'])
+        .toEqual(['— unpatched —', 'Ch 1 · Ruth', 'Ch 2'])
       expect(select.value).toBe('')
 
       await choose(select, 'ch-1')
       expect(cast().performers[0].channelId).toBe('ch-1')
     })
 
-    it('removes a performer: releases their pack, drops them from the cast, its ensembles and the scenes', async () => {
+    it('removes a performer: releases their pack, drops them from the cast and its ensembles, and leaves the scenes alone', async () => {
       await show({
         tab: 'cast',
         cast: {
           performers: [performer(), performer({ id: 'p-2', name: 'Sancho' })],
           ensembles: [ensemble({ members: ['p-1'] })]
         },
-        scenes: [scene('s-1', 'Opening', ['p-1', 'p-2'], { ensembles: ['ens-1'], excluded: ['p-1'] })],
+        scenes: [scene('s-1', 'Opening', [
+          { dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['ens-1'], excluded: [] }
+        ])],
         plot: { packs: [pack({ performerId: 'p-1' })] }
       })
 
@@ -257,8 +260,11 @@ describe('ShowSettings', () => {
       expect(useStore.getState().showSettings.rf.plot.packs[0].performerId).toBeNull()
       expect(useStore.getState().showSettings.rf.swaps).toHaveLength(1)
       expect(useStore.getState().log[0]?.message).toBe('Swap: Pack 1 Aldonza → unassigned')
-      expect(useStore.getState().showSettings.scenes.list[0].live).toEqual(['p-2'])
-      expect(useStore.getState().showSettings.scenes.list[0].excluded).toEqual([])
+      // The scenes name channels, and the strip stays on the console after the person who
+      // was on it has gone — so removing a performer touches no placement.
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+        { dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['ens-1'], excluded: [] }
+      ])
     })
   })
 
@@ -322,7 +328,9 @@ describe('ShowSettings', () => {
       await show({
         tab: 'cast',
         cast: { performers: [performer()], ensembles: [ensemble({ members: ['p-1'] })] },
-        scenes: [scene('s-1', 'Opening', [], { ensembles: ['ens-1'] })]
+        scenes: [scene('s-1', 'Opening', [
+          { dcaId: 'dca-1', channels: [], ensembles: ['ens-1'], excluded: [] }
+        ])]
       })
 
       await act(async () => {
@@ -331,31 +339,28 @@ describe('ShowSettings', () => {
 
       expect(cast().ensembles).toEqual([])
       expect(cast().performers.map(entry => entry.name)).toEqual(['Aldonza'])
-      // A scene still pointing at an ensemble that is gone is a group of mics nobody can
-      // open or close from the grid again.
-      expect(useStore.getState().showSettings.scenes.list[0].ensembles).toEqual([])
+      // A row still pointing at an ensemble that is gone is a row nobody can group from
+      // again, so the row stops naming it while keeping what it placed by hand.
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
     })
   })
 
   describe('channels', () => {
-    it('opens a new show wired: twelve strips, twelve DCAs, and strip n on DCA n', async () => {
+    it('opens a new show with twelve strips and twelve faders, and no per-channel fader select', async () => {
       await show({ tab: 'channels' })
 
       expect(container.querySelectorAll('.channel-row')).toHaveLength(12)
       expect(container.querySelectorAll('.dca-row')).toHaveLength(12)
-      // Strip n drives DCA n, so a new show moves a desk before anything has been
-      // assigned: the mic-per-fader arrangement a wireless show is set up as.
-      expect(cast().channels.map(channel => channel.dcaId))
-        .toEqual(cast().dcas.map(entry => entry.id))
-      expect([...container.querySelectorAll<HTMLSelectElement>('.channel-dca')]
-        .map(select => select.value)).toEqual(cast().dcas.map(entry => entry.id))
-      // …and what the desk is sent is read back once, from the connection: the address a
-      // DCA's number makes, where it goes, and which value opens it.
+      // A strip is a name and a number now: which fader it rides is the scene's decision,
+      // made in the Scenes view, so there is nothing to choose on the row.
+      expect(container.querySelector('.channel-dca')).toBeNull()
+      // …and what a recall will touch is read back once, from the connection: the set it
+      // writes and what this desk can be told of it.
       expect(container.querySelector('.desk-preview')?.textContent)
-        .toBe('Sends /dca/1/on … /dca/12/on to 127.0.0.1:8000, with 1 to open and 0 to close')
+        .toBe('Sends /dca/1/on … /dca/12/on to 127.0.0.1:8000, with 1 to open and 0 to close — a recall writes 12 channel mutes there and takes no assignment')
     })
 
-    it('edits where the desk is: the host, the port and the address pattern a DCA is sent to', async () => {
+    it('edits where the desk is: the host, the port and the address pattern a channel mute is sent to', async () => {
       await show({ tab: 'channels' })
 
       // The first and last of what the show will send, read back from the pattern: it is
@@ -374,7 +379,7 @@ describe('ShowSettings', () => {
       expect(useStore.getState().showSettings.desk.port).toBe(9000)
       expect(useStore.getState().showSettings.desk.address).toBe('/dca/{n}/mute')
       expect(container.querySelector('.desk-preview')?.textContent)
-        .toBe('Sends /dca/1/mute … /dca/12/mute to 10.0.0.5:9000, with 1 to open and 0 to close')
+        .toBe('Sends /dca/1/mute … /dca/12/mute to 10.0.0.5:9000, with 1 to open and 0 to close — a recall writes 12 channel mutes there and takes no assignment')
     })
 
     it('drives the desk over MIDI, offering the ports the machine reports', async () => {
@@ -397,19 +402,20 @@ describe('ShowSettings', () => {
       expect(useStore.getState().showSettings.desk.midiPort).toBe('Yamaha')
       expect(useStore.getState().showSettings.desk.midiChannel).toBe(3)
       expect(container.querySelector('.desk-preview')?.textContent)
-        .toBe('Sends note 1 … 12 to "Yamaha", on and off')
+        .toBe('Sends note 1 … 12 to "Yamaha", on and off — a recall writes 12 channel mutes and takes no assignment')
 
-      // A desk that numbers its DCAs differently: its own note in place of the one the
-      // number makes, and typing that number back clears the override.
-      const note = field('.dca-override', 3)
-      expect(note.value).toBe('4')
-      await type(note, '60')
-      await leave(note)
-      expect(cast().dcas[3].note).toBe(60)
+      // A desk that numbers its faders differently: its own number in place of the one the
+      // place makes, and clearing the field goes back to derived.
+      const number = field<HTMLInputElement>('.dca-override', 3)
+      expect(number.value).toBe('')
+      expect(number.placeholder).toBe('4')
+      await type(number, '60')
+      await leave(number)
+      expect(cast().dcas[3].deskNumber).toBe(60)
 
-      await type(field('.dca-override', 3), '4')
+      await type(field('.dca-override', 3), '')
       await leave(field('.dca-override', 3))
-      expect(cast().dcas[3].note).toBeNull()
+      expect(cast().dcas[3].deskNumber).toBeNull()
     })
 
     it('drives the desk over the network, on the port the desk serves its MIDI on', async () => {
@@ -437,10 +443,10 @@ describe('ShowSettings', () => {
         midiChannel: 3
       })
       expect(container.querySelector('.desk-preview')?.textContent)
-        .toBe('Sends note 1 … 12 to 10.0.0.5:51325, on and off')
+        .toBe('Sends note 1 … 12 to 10.0.0.5:51325, on and off — a recall writes 12 channel mutes and takes no assignment')
     })
 
-    it('sets how many DCAs the desk has, and a strip on a cut fader goes back to its own number', async () => {
+    it('sets how many faders the show drives, and the rows it keeps', async () => {
       await show({
         tab: 'channels',
         cast: { channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', 'Bea')], dcas: [] }
@@ -455,26 +461,24 @@ describe('ShowSettings', () => {
       expect([...container.querySelectorAll<HTMLInputElement>('.dca-label')].map(input => input.value))
         .toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
 
-      // One strip on a fader that stays, one on the fader that is cut.
-      await choose(field<HTMLSelectElement>('.channel-dca', 0), cast().dcas[0].id)
-      await choose(field<HTMLSelectElement>('.channel-dca', 1), cast().dcas[2].id)
-
       await choose(field<HTMLSelectElement>('.dca-count-select'), '2')
 
       expect(cast().dcas.map(entry => entry.label)).toEqual(['DCA 1', 'DCA 2'])
-      expect(cast().channels[0].dcaId).toBe(cast().dcas[0].id)
-      // A strip pointing at a fader nothing can open is worse than the cut, so it goes
-      // back to the fader of its own number — the one that is certainly still there.
-      expect(cast().channels[1].dcaId).toBe(cast().dcas[1].id)
+      // The strips stay: a fader cut drops nobody's strip, and a scene that placed a
+      // channel on a fader that is gone keeps the entry where the row comes back.
+      expect(cast().channels.map(entry => entry.name)).toEqual(['Ruth', 'Bea'])
     })
 
-    it('adds a channel on the fader of its own number, and removing one unpatches whoever was on it', async () => {
+    it('adds a strip, and removing one unpatches whoever was on it and clears its placements', async () => {
       await show({
         tab: 'channels',
         cast: {
           channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', 'Bea')],
           performers: [performer({ channelId: 'ch-2' })]
-        }
+        },
+        scenes: [scene('s-1', 'Opening', [
+          { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }
+        ])]
       })
 
       const rows = (): Element[] => [...container.querySelectorAll('.channel-row')]
@@ -484,11 +488,6 @@ describe('ShowSettings', () => {
 
       expect(cast().channels).toHaveLength(3)
       expect(rows()[2].querySelector('.channel-number')?.textContent).toBe('3')
-      // The new strip drives the fader of its own number, so a channel needs no second
-      // decision before it can move the desk.
-      expect(cast().channels[2].dcaId).toBe(cast().dcas[2].id)
-      expect(rows()[2].querySelector<HTMLSelectElement>('.channel-dca')?.value)
-        .toBe(cast().dcas[2].id)
 
       await act(async () => {
         rows()[1].querySelector<HTMLButtonElement>('.channel-remove')!.click()
@@ -500,60 +499,45 @@ describe('ShowSettings', () => {
       expect([...container.querySelectorAll('.channel-number')].map(number => number.textContent))
         .toEqual(['1', '2'])
       expect(cast().performers[0].channelId).toBeNull()
+      // The placement naming the strip that went is gone with it: a cell nobody can read
+      // again is worse than the cut.
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
     })
-
-    it('takes a strip off its DCA, which leaves that fader carrying nothing', async () => {
+    it('refuses a fader number outside the profile’s own block', async () => {
       await show({ tab: 'channels' })
 
-      // A strip rides the fader of its own number out of the box, and “— no DCA —” is how
-      // one stops moving the desk without the rest of it being reconfigured.
-      await choose(field<HTMLSelectElement>('.channel-dca', 0), '')
+      await choose(field<HTMLSelectElement>('.desk-kind'), 'midi-tcp')
+      await choose(field<HTMLSelectElement>('.desk-profile'), 'sq')
 
-      expect(cast().channels[0].dcaId).toBeNull()
-      expect(field<HTMLSelectElement>('.channel-dca', 0).value).toBe('')
-      expect(container.querySelector('.dca-carrying')?.textContent).toBe('nothing assigned')
+      // An SQ numbers its faders 0–7: the field says the derived number until typed in,
+      // and refuses one past the block rather than sending it.
+      const number = field<HTMLInputElement>('.dca-override', 0)
+      expect(number.placeholder).toBe('0')
+      await type(number, '60')
+      await leave(number)
+      expect(cast().dcas[0].deskNumber).toBeNull()
     })
 
-    it("overrides a DCA's address, and clearing it goes back to what the number makes", async () => {
-      await show({ tab: 'channels' })
-
-      // The field says the address its number makes by way of its placeholder, so what
-      // will be sent is readable without anything being typed.
-      const override = field('.dca-override', 3)
-      expect(override.value).toBe('')
-      expect(override.placeholder).toBe('/dca/4/on')
-
-      await type(override, '/dca/99/mute')
-      await leave(override)
-
-      expect(cast().dcas[3].address).toBe('/dca/99/mute')
-      expect(field('.dca-override', 3).value).toBe('/dca/99/mute')
-
-      await type(field('.dca-override', 3), '')
-      await leave(field('.dca-override', 3))
-
-      // Empty is not "send nothing": it is the address the number makes again, which is
-      // what the placeholder is there to say.
-      expect(cast().dcas[3].address).toBeNull()
-      expect(field('.dca-override', 3).value).toBe('')
-      expect(field('.dca-override', 3).placeholder).toBe('/dca/4/on')
-    })
-
-    it('shows which strips feed each DCA', async () => {
+    it('names the scenes that place channels on each fader', async () => {
       await show({
         tab: 'channels',
         cast: {
-          channels: [
-            showChannel('ch-1', 'Ruth', 'dca-1'),
-            showChannel('ch-2', 'Bea', 'dca-1'),
-            showChannel('ch-3', '', 'dca-2')
-          ],
+          channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', 'Bea')],
           dcas: [dca({ id: 'dca-1', label: 'DCA 1' }), dca({ id: 'dca-2', label: 'DCA 2' })]
-        }
+        },
+        scenes: [
+          scene('s-1', 'Opening', [
+            { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+          ]),
+          scene('s-2', 'Finale', [
+            { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }
+          ])
+        ]
       })
 
+      // A fader nobody places anything on is one a recall never writes.
       expect([...container.querySelectorAll('.dca-carrying')].map(row => row.textContent))
-        .toEqual(['Ch 1 · Ruth, Ch 2 · Bea', 'Ch 3'])
+        .toEqual(['2 scenes place mics here', 'nothing is placed on it yet'])
     })
   })
 
