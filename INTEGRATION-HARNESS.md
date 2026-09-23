@@ -447,9 +447,11 @@ one-client rule belongs to the MIDI service rather than to the desk.
 a `7f` family — `7f <command> <length: 4 bytes little-endian> <payload>` — beside a second
 family of eight-byte frames beginning `f7`. A client opens a session (`7f 00 02 …`), identifies
 itself (`7f 01`, answered `7f 02 …` carrying the model and `01 06 01` for firmware 1.6.1), reads
-the desk's descriptor (`7f 14`, answered `7f 15`), pushes its layout (one 8192-byte `7f 0a`,
-byte-identical between sessions of the same show), settles the session (`7f 0b 02 …`, `7f 11`,
-`f7 02 02 20 …`, `7f 03`), and keeps it alive with an `f7 05 …` datagram to **UDP 51324** every
+the desk's descriptor (`7f 14`, answered `7f 15`), settles the session (`7f 0b 02 …`, then the
+layout push — one 8192-byte `7f 0a`, byte-identical between sessions of the same show — then
+`7f 0d`, `7f 11`, `f7 02 02 20 …`, `7f 03`: the wire's own order, which puts `7f 0b 02` before
+the push and names a `7f 0d` the prose here did not until Story 11.1 read the capture), and keeps
+it alive with an `f7 05 …` datagram to **UDP 51324** every
 second and a `7f 00 02 …` ping on the socket every three. The desk answers the ping and pushes
 state as `7f 08 …` and `7f 0e …` frames.
 
@@ -459,8 +461,9 @@ A DCA assignment — the reason this was captured — is one frame per (channel,
 | --- | --- |
 | `f7 07 07 1d <channel-1> <dca-1> 01 00` | assign that input to that DCA |
 | `f7 07 07 1d <channel-1> <dca-1> 00 00` | clear it |
-| `f7 07 07 0c <channel-1> 00 01 00` | the per-channel "rides a DCA" flag (`00 00` = none) |
-| `7f 08 0e 000000 18 18 0c <channel-1> 00 00 <ascii> 00` | the strip's own name: the desk pushes its names in this form, and a client writes one to label a strip with its group |
+| `f7 07 07 0c <channel-1> 00 00 00` | the per-channel "rides a DCA" flag, on a channel that rides one |
+| `f7 07 07 0c <channel-1> 00 01 00` | the same flag on a channel that rides none — the polarity the capture's own pairing fixes, and the reverse of how this table read until Story 11.1 |
+| `7f 08 0e 000000 18 18 0c <channel-1> 00 00 00 <ascii> 00 00` | the strip's own name: the desk pushes its names in this form, and a client writes one to label a strip with its group. The capture also holds the same frame with `01` in the middle of that run of zeros (`… 18 18 0c <channel-1> 00 01 00 20 00 00 00 00 00 00`), which this table states no meaning for: what that byte says is unmeasured |
 
 The capture is `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken through
 `integration/sqCapture.mjs` against a show whose assignments are known — inputs 1 and 3 on DCA 1,
@@ -975,7 +978,10 @@ assumption and the message a real key press sends stay unproven (§11).
    measured before it was promised.** The frames are in §6 and the capture is
    `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`: assignment is
    `f7 07 07 1d <channel-1> <dca-1> 01 00`, clearing is the same frame with `00 00`, and the
-   per-channel flag `f7 07 07 0c <channel-1> 00 01 00` follows. Three things stay open, which is
+   per-channel "rides a DCA" flag follows — `f7 07 07 0c <channel-1> 00 00 00` on a channel that
+   rides one and `00 01 00` on a channel that rides none, which is how the capture's own pairing
+   reads and the reverse of the polarity this line printed before Story 11.1 wrote the frames.
+   Three things stay open, which is
    why this is a decision rather than a claim: the **read form** is unmeasured, so until it is,
    the base a recall diffs against is what Cuerunner itself last sent rather than the desk's own
    answer (which is what AD-22 assumes, and its wording is corrected for this); the desk's

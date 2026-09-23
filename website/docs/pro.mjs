@@ -120,7 +120,7 @@ export const PRO_ROWS = [
       prose: `A one-off message to the desk, when you send it yourself.`
     },
     pro: {
-      identifiers: ['midi-tcp'],
+      identifiers: ['midi-tcp', 'sq-native'],
       cues: ['scene'],
       notYetProved: 'Allen &amp; Heath SQ or Avantis',
       prose: `The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis ${NOT_YET_PROVED} as one of its own steps, and the desk link that lets the desk's keys walk the show.`
@@ -202,7 +202,7 @@ export const PRO_MARKS = [
   {
     page: 'guides/desk.html',
     words: 'Scenes and the desk',
-    identifiers: ['midi-tcp'],
+    identifiers: ['midi-tcp', 'sq-native'],
     cues: ['scene']
   },
   {
@@ -258,16 +258,18 @@ export const PRO_MARKS = [
 ]
 
 /**
- * The four things the hero note names as Cuerunner Pro, each with the record's identifier behind
+ * The four things the hero note names as Cuerunner Pro, each with the record's identifiers behind
  * it: "Cuerunner Pro is the desk, the radios, the tablet and the second machine." The note states
  * the free/Pro line on the landing page, and `website/index.html` is hand-written, so the words
- * and the classes they stand on are declared here and the guard holds the note to them.
+ * and the classes they stand on are declared here and the guard holds the note to them. A noun
+ * stands on every service it takes to keep it: the desk is the MIDI link *and* the SQ's own
+ * control service, and a list left empty is a Pro statement with nothing behind it.
  */
 export const HERO_NOUNS = [
-  { noun: 'the desk', identifier: 'midi-tcp' },
-  { noun: 'the radios', identifier: 'rf' },
-  { noun: 'the tablet', identifier: 'companion' },
-  { noun: 'the second machine', identifier: 'redundancy' }
+  { noun: 'the desk', identifiers: ['midi-tcp', 'sq-native'] },
+  { noun: 'the radios', identifiers: ['rf'] },
+  { noun: 'the tablet', identifiers: ['companion'] },
+  { noun: 'the second machine', identifiers: ['redundancy'] }
 ]
 
 export const PRO = [

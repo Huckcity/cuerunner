@@ -19,7 +19,9 @@
       "them; timing is as the client sent it and paces nothing.",
       "What this proves: the write form for a DCA assignment, against a show whose assignments",
       "are known \u2014 f7 07 07 1d <channel-1> <dca-1> 01 00 to assign, 00 00 to clear, and",
-      "f7 07 07 0c <channel-1> 00 01 00 as the per-channel flag.",
+      "f7 07 07 0c <channel-1> 00 00 00 where a channel rides a DCA, \u2026 00 01 00 where it rides",
+      "none: the polarity this capture's own pairing fixes, the four channels the 1d \u2026 01 00",
+      "frames place carrying the first form and the twelve they leave alone the second.",
       "What it does not prove: that the desk reports the assignment back. The read form is still",
       "to be measured, and so is the desk's rule for a second controlling client."
     ]

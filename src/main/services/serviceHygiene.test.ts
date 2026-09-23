@@ -19,7 +19,7 @@ import {
   setInterval as nodeSetInterval,
   setTimeout as nodeSetTimeout
 } from 'node:timers'
-import { createServer as createTcpServer } from 'node:net'
+import { createConnection as connectTcp, createServer as createTcpServer, type Server, type Socket } from 'node:net'
 import { ShowBus } from '../bus/ShowBus'
 import { defaultServices } from '../show/runtime'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
@@ -27,9 +27,11 @@ import { defaultRfThresholds, defaultShowSettings } from '../../shared/show'
 import type { ShowSettings, TelemetrySource } from '../../shared/show'
 import { defaultRedundancySettings, type RedundancySettings } from '../../shared/redundancy'
 import { deskLinkName } from '../../shared/deskLink'
+import { SqNativeEngine } from '../desk/SqNativeEngine'
 import { OscInputService } from './OscInputService'
 import { MidiInputService } from './MidiInputService'
 import { MidiTcpService, type DeskLink } from './MidiTcpService'
+import { SqNativeService } from './SqNativeService'
 import { WirelessService } from './WirelessService'
 import { PresenceService, type PresenceSocket } from './PresenceService'
 import { CompanionService } from './CompanionService'
@@ -547,10 +549,79 @@ function redundancyDriver(): Driver {
   }
 }
 
+function sqNativeDriver(): Driver {
+  // The desk this drive owns: a real server the engine's dial reaches, so the session really
+  // comes up and the two cadences are really armed. The ports are the desk's own, so the
+  // seam the drive stands in is the dial itself.
+  const sockets: Socket[] = []
+  return {
+    // §6's two cadences, as the literals they were measured as: the keepalive datagram each
+    // second and the socket ping every three. A drive that never brought a session up would
+    // arm neither.
+    arms: [1000, 3000],
+    names: 'needs a reset',
+    async start(h) {
+      const server: Server = createTcpServer(socket => {
+        sockets.push(socket)
+        // The desk answers the session's hello, as a real one does — the capture's own echo
+        // — because a session is not up until the desk has said something.
+        let answered = false
+        let seen = ''
+        let scanned = 0
+        socket.on('data', chunk => {
+          if (answered) return
+          seen += chunk.toString('hex')
+          if (!seen.includes('7f000200000066ae', scanned)) {
+            // Keep the tail unscanned: the frame may straddle two reads.
+            scanned = Math.max(scanned, seen.length - 15)
+            return
+          }
+          answered = true
+          socket.write(Buffer.from('7f00020000007cc8', 'hex'))
+        })
+        socket.on('error', () => {
+          // The reset this drive asks for is not a failure of the desk's own.
+        })
+      })
+      held.push(server)
+      const bound = Promise.withResolvers<void>()
+      server.once('error', bound.reject)
+      server.listen(0, '127.0.0.1', () => bound.resolve())
+      await bound.promise
+      const address = server.address()
+      if (typeof address !== 'object' || address === null) throw new Error('the drive’s desk never bound')
+
+      const service = new SqNativeService(
+        new SqNativeEngine((_host, _port) => connectTcp({ host: '127.0.0.1', port: address.port }))
+      )
+      service.start(
+        h.context,
+        h.settings({ desk: { ...defaultShowSettings().desk, kind: 'midi-tcp', profile: 'sq', host: DESK } })
+      )
+      // The session is up once the desk has read the hello and answered it: that is what
+      // arms the cadences. The dial and the answer are real I/O, and `turns` counts
+      // iterations rather than time, so the budget is generous and a session that never
+      // comes up says what it saw instead of leaving an unarmed timer behind.
+      await turns(() => h.reported().some(report => report.startsWith('running')), 1_000_000)
+      if (!h.reported().some(report => report.startsWith('running'))) {
+        throw new Error(`the drive’s desk never brought the session up: ${h.reported().join(' / ')}`)
+      }
+      return service
+    },
+    async crash(h) {
+      // The desk the session was on goes away under it, which is the outage the row and the
+      // alarm are written for.
+      for (const socket of sockets.splice(0)) socket.destroy()
+      await turns(() => h.reported().length > 0)
+    }
+  }
+}
+
 const DRIVERS: Record<string, () => Driver> = {
   OscInputService: oscDriver,
   MidiInputService: midiInputDriver,
   MidiTcpService: midiTcpDriver,
+  SqNativeService: sqNativeDriver,
   WirelessService: wirelessDriver,
   PresenceService: presenceDriver,
   CompanionService: companionDriver,

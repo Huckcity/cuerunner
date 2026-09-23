@@ -4,6 +4,7 @@ import { stableJson } from '../../shared/showfile'
 import { OscInputService } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
 import { MidiTcpService } from '../services/MidiTcpService'
+import { SqNativeService } from '../services/SqNativeService'
 import { WirelessService } from '../services/WirelessService'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
@@ -30,6 +31,9 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     new OscInputService(),
     new MidiInputService(),
     new MidiTcpService(),
+    // The SQ's own control service, beside the desk link: the membership is written there
+    // and the desk's mutes stay on the MIDI socket.
+    new SqNativeService(),
     new WirelessService(),
     new PresenceService(),
     new CompanionService(),

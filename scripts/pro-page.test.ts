@@ -87,10 +87,10 @@ interface DeclaredMark extends Mark {
   cues: string[]
 }
 
-/** One thing the hero note names as Cuerunner Pro, with the record identifier it claims. */
+/** One thing the hero note names as Cuerunner Pro, with the record identifiers it claims. */
 interface HeroNoun {
   noun: string
-  identifier: string
+  identifiers: string[]
 }
 
 /** Everything the checks read, in one value: a case below hands them a mutation of it. */
@@ -437,7 +437,13 @@ function claimProblems(reading: Reading): string[] {
           ]
         : classProblems(reading, `the Pro mark on "${entry.words}" in ${entry.page}`, entry.identifiers, entry.cues)
     ),
-    ...reading.nouns.flatMap(entry => classProblems(reading, `the hero note's "${entry.noun}"`, [entry.identifier], []))
+    ...reading.nouns.flatMap(entry =>
+      entry.identifiers.length === 0
+        ? [
+            `website/docs/pro.mjs's hero noun "${entry.noun}" claims nothing: the note states the Cuerunner Pro half, so a noun that names no record identifier states a class nothing holds`
+          ]
+        : classProblems(reading, `the hero note's "${entry.noun}"`, entry.identifiers, [])
+    )
   ]
 }
 
@@ -463,7 +469,7 @@ function heroProblems(reading: Reading): string[] {
       .filter(entry => !reading.hero.includes(entry.noun))
       .map(
         entry =>
-          `website/index.html's hero note does not name ${entry.noun}, which website/docs/pro.mjs declares as part of the Cuerunner Pro half (the record's \`${entry.identifier}\`): a noun the note drops is a Pro statement that stops being made`
+          `website/index.html's hero note does not name ${entry.noun}, which website/docs/pro.mjs declares as part of the Cuerunner Pro half (the record's ${entry.identifiers.map(identifier => `\`${identifier}\``).join(', ')}): a noun the note drops is a Pro statement that stops being made`
       ),
     ...(reading.hero.includes(sentence)
       ? []
@@ -714,9 +720,22 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a hero noun standing on a free identifier', () => {
-    const sold = LIVE.nouns.map(entry => (entry.noun === 'the radios' ? { ...entry, identifier: 'midi:send' } : entry))
+    const sold = LIVE.nouns.map(entry =>
+      entry.noun === 'the radios' ? { ...entry, identifiers: ['midi:send'] } : entry
+    )
     expect(claimProblems({ ...LIVE, nouns: sold })).toEqual([
       expect.stringContaining('the hero note\'s "the radios" claims `midi:send`, and the record classes it free')
+    ])
+  })
+
+  it('names a hero noun that claims nothing at all', () => {
+    // The noun states the Cuerunner Pro half on the landing page: with no identifier behind it
+    // that is a Pro class nothing in the record holds, which is what the chips are refused for.
+    const bare = LIVE.nouns.map(entry =>
+      entry.noun === 'the desk' ? { ...entry, identifiers: [] } : entry
+    )
+    expect(claimProblems({ ...LIVE, nouns: bare })).toEqual([
+      expect.stringContaining('website/docs/pro.mjs\'s hero noun "the desk" claims nothing')
     ])
   })
 
