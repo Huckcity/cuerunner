@@ -34,11 +34,14 @@ import {
   addEnsemble,
   removeChannel as removeChannelFromCast,
   removeEnsemble as removeEnsembleFromCast,
-  removePerformerFromCast
+  removePerformerFromCast,
+  setChannelCount as setChannelCountInCast,
+  setDcaCount as setDcaCountInCast
 } from '../utils/cast'
 import {
   placementFor,
-  removeChannelFromScenes,
+  removeChannelsFromScenes,
+  removeDcasFromScenes,
   removeEnsembleFromScenes,
   rowChannels,
   setRowEnsemble,
@@ -432,6 +435,20 @@ interface CueListState {
    * be read again.
    */
   removeChannel: (channelId: string) => void
+
+  /**
+   * How many strips the console has, as one edit: the list, whoever was patched to the
+   * strips that went, and every scene's placements of them. One edit because the halves are
+   * a single decision — a show that was set up too large is corrected by one count, and half
+   * an undo of that would put the strips back under scenes that no longer place them.
+   */
+  setChannelCount: (count: number) => void
+  /**
+   * How many faders the show drives, the same way: shrinking drops the last ones off and
+   * takes every scene's rows for those places with them, so no scene names a fader the show
+   * no longer has. A fader grown back is a new place and comes back empty.
+   */
+  setDcaCount: (count: number) => void
 
   // Where the desk was left. Session state, not workspace content: a show that has just
   // loaded has not told the desk anything yet, and saying otherwise would stop the first
@@ -1482,9 +1499,10 @@ export const useStore = create<CueListState>((set) => ({
   })),
 
   // The cast — the channels, the performers and the ensembles — is edited in a handful
-  // of places, same as the scene list, and every list in it is one undo away: the DCAs
-  // are the only part of the setup that a stray press cannot ruin, because they are
-  // resized by a count rather than edited row by row.
+  // of places, same as the scene list, and every list in it is one undo away. The two
+  // lists that are sized by a count rather than edited row by row — the strips and the
+  // faders — have actions of their own instead, because a shrink takes what named the
+  // places that went with it.
   updateCastSettings: (patch) => set(s => {
     const record = 'performers' in patch || 'ensembles' in patch ||
       'channels' in patch || 'dcas' in patch
@@ -1515,12 +1533,57 @@ export const useStore = create<CueListState>((set) => ({
     showSettings: {
       ...s.showSettings,
       cast: removeChannelFromCast(s.showSettings.cast, channelId),
-      scenes: removeChannelFromScenes(s.showSettings.scenes, channelId)
+      scenes: removeChannelsFromScenes(s.showSettings.scenes, [channelId])
     },
     past: pushPast(s.past, snapshotOf(s)),
     future: [],
     isDirty: true
   })),
+
+  // The count reshapes the list, so everything that was true of the strips that went has to
+  // stop being: their mics are unpatched by the count itself and their placements leave
+  // every scene here, in the same edit. A count re-chosen at its own value is not an edit at
+  // all — no new state, no history line, and the show stays as clean as it was.
+  setChannelCount: (count) => set(s => {
+    const cast = s.showSettings.cast
+    const next = setChannelCountInCast(cast, count)
+    if (next === cast) return s
+
+    // Only a shrink drops anything, and what it drops is the tail: a grow's empty list
+    // leaves every scene exactly where it was.
+    const dropped = cast.channels.slice(next.channels.length).map(channel => channel.id)
+    return {
+      showSettings: {
+        ...s.showSettings,
+        cast: next,
+        scenes: removeChannelsFromScenes(s.showSettings.scenes, dropped)
+      },
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+      isDirty: true
+    }
+  }),
+
+  // One rule for both counts: whichever list shrinks, the places that went leave every
+  // scene's rows in the same edit. A row naming a fader the show no longer has is a cell
+  // nothing reads and nothing can revive, and a fader grown back is minted fresh.
+  setDcaCount: (count) => set(s => {
+    const cast = s.showSettings.cast
+    const next = setDcaCountInCast(cast, count)
+    if (next === cast) return s
+
+    const gone = cast.dcas.slice(next.dcas.length).map(dca => dca.id)
+    return {
+      showSettings: {
+        ...s.showSettings,
+        cast: next,
+        scenes: removeDcasFromScenes(s.showSettings.scenes, gone)
+      },
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+      isDirty: true
+    }
+  }),
 
   // Who is in the new ensemble is who rides the row it is made from, which is the one thing
   // the operator is looking at when they press it.

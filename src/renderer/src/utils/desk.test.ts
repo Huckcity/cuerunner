@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest'
 import {
   AVANTIS_ASSIGN_NRPN,
   AVANTIS_DCA_FIRST_NOTE,
+  channelLimit,
   channelMutes,
   dcaAddress,
   dcaChannel,
@@ -24,7 +25,7 @@ import {
   deskChannelGap,
   membershipWrite
 } from './desk'
-import { defaultDeskSettings } from '../../../shared/show'
+import { CHANNEL_LIMIT, defaultDeskSettings } from '../../../shared/show'
 import type { MidiMessageKind } from '../../../shared/cue'
 import type { Dca, DeskSettings } from '../../../shared/show'
 
@@ -372,6 +373,25 @@ describe('the gaps a profile has', () => {
     expect(dcaLimit('sq')).toBe(8)
     expect(dcaLimit('avantis')).toBe(16)
     expect(dcaLimit('note')).toBeNull()
+  })
+
+  it('states the inputs a profile has, and nothing where it states none', () => {
+    // The numbers are the profiles' own published input counts rather than measured ones,
+    // which is why nothing refuses on them: a profile that states one wrongly must not stop
+    // a show from being recalled.
+    expect(channelLimit('sq')).toBe(48)
+    expect(channelLimit('avantis')).toBe(96)
+    expect(channelLimit('note')).toBeNull()
+  })
+
+  it('states nothing wider than the dial’s own cap, which is that widest number', () => {
+    // `CHANNEL_LIMIT` is where no profile states a ceiling of its own, so it must be the
+    // widest one any profile does state: a profile stating more would be a ceiling the
+    // control could not offer, and a narrower cap would stop a show short of the desk.
+    const stated = (['note', 'sq', 'avantis'] as const)
+      .map(profile => channelLimit(profile))
+      .filter(limit => limit !== null)
+    expect(Math.max(...stated)).toBe(CHANNEL_LIMIT)
   })
 
   it('says which fader cannot be addressed, and how many there are instead', () => {

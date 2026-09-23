@@ -2,18 +2,32 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import {
   addChannel,
-  setDcaCount,
   updateChannel,
   updateDca
 } from '../../utils/cast'
 import { placementFor, rowChannels } from '../../utils/scenes'
-import { dcaAddress, dcaLimit, dcaNumber, dcaValue, dcaValueRange, deskChannelGap } from '../../utils/desk'
+import {
+  channelLimit,
+  dcaAddress,
+  dcaLimit,
+  dcaNumber,
+  dcaValue,
+  dcaValueRange,
+  deskChannelGap
+} from '../../utils/desk'
 import { MUTE_GROUP_COUNT } from '../../utils/deskInput'
-import { DCA_LIMIT } from '../../../../shared/show'
+import { CHANNEL_LIMIT, DCA_LIMIT } from '../../../../shared/show'
 import type { CastSettings, DeskProfile, DeskSettings } from '../../../../shared/show'
 import { TextField, NumberField } from '../common/Field'
 
-const DCA_COUNTS = Array.from({ length: DCA_LIMIT + 1 }, (_, index) => index)
+/**
+ * The counts a dial offers: every size up to the limit, or — for a show already larger than
+ * it — the show's own whole range, so each size between the two stays reachable and the
+ * count it has is the count the dial reports.
+ */
+function dialCounts(length: number, limit: number): number[] {
+  return Array.from({ length: Math.max(length, limit) + 1 }, (_, index) => index)
+}
 
 /** What the desk is missing before it can be driven at all, or null when it is ready. */
 function deskGap(desk: DeskSettings): string | null {
@@ -25,6 +39,17 @@ function deskGap(desk: DeskSettings): string | null {
 /** Whether this desk has the mute groups a button is assigned to. */
 function hasMuteGroups(desk: DeskSettings): boolean {
   return (desk.kind === 'midi' || desk.kind === 'midi-tcp') && desk.profile !== 'note'
+}
+
+/**
+ * How many strips this show's desk takes, or null while no desk model is in force.
+ *
+ * A profile is a statement about a MIDI desk — which desk it is and how it is addressed —
+ * so OSC and "no desk" state no ceiling, whatever the profile field happens to hold from
+ * an earlier setup.
+ */
+function channelCeiling(desk: DeskSettings): number | null {
+  return desk.kind === 'midi' || desk.kind === 'midi-tcp' ? channelLimit(desk.profile) : null
 }
 
 /**
@@ -93,16 +118,25 @@ function deskPreview(desk: DeskSettings, channels: number, dcas: number): string
   const beyond = limit === null || dcas <= limit
     ? ''
     : `; the desk has ${limit}, so ${dcas - limit} of the show’s DCAs are not sent`
+  // The strips are read the same way and by the same rule: the profile's own stated input
+  // count, named with the number exceeded. Nothing is truncated on it — the ceiling is a
+  // statement rather than a measurement, so a set past it is reported and sent as it always
+  // was, and the count control is the one place the number is obeyed.
+  const inputs = channelLimit(desk.profile)
+  const past = inputs === null ? 0 : channels - inputs
+  const channelsBeyond = inputs === null || past <= 0
+    ? ''
+    : `; the desk has ${inputs} inputs, so ${past === 1 ? '1 channel is' : `${past} channels are`} past its last one`
   if (desk.profile === 'sq') {
     // The assignment is written over the desk's own control service, which is the socket
     // only: a show that reaches its SQ through a MIDI port can mute it and nothing more.
     const assignment = desk.kind === 'midi-tcp'
       ? 'and its assignment over the desk’s own control service'
       : 'and no assignment — an SQ’s assignment needs the desk’s own control service, on its TCP route'
-    return `Sends an SQ’s channel mutes — NRPN page 00 on channel ${desk.midiChannel} — to ${where}, ${assignment} — a recall writes ${set} and nothing else${beyond}`
+    return `Sends an SQ’s channel mutes — NRPN page 00 on channel ${desk.midiChannel} — to ${where}, ${assignment} — a recall writes ${set} and nothing else${channelsBeyond}${beyond}`
   }
   if (desk.profile === 'avantis') {
-    return `Sends an Avantis’s channel mutes — note-on, 7F on and 3F off, on channel ${desk.midiChannel} — to ${where}, and its assignment as NRPN 40 on the same channel — a recall writes ${set} and nothing else${beyond}`
+    return `Sends an Avantis’s channel mutes — note-on, 7F on and 3F off, on channel ${desk.midiChannel} — to ${where}, and its assignment as NRPN 40 on the same channel — a recall writes ${set} and nothing else${channelsBeyond}${beyond}`
   }
   return `Sends note 1 … ${last} to ${where}, on and off — a recall writes ${mutes} and takes no assignment`
 }
@@ -120,11 +154,15 @@ function deskPreview(desk: DeskSettings, channels: number, dcas: number): string
 export function ChannelsTab() {
   const cast = useStore(s => s.showSettings.cast)
   const scenes = useStore(s => s.showSettings.scenes.list)
+  const allowDuplicates = useStore(s => s.showSettings.scenes.allowDuplicateAssignment)
   const desk = useStore(s => s.showSettings.desk)
   const midiOutPort = useStore(s => s.midiSettings.outputPortName)
   const updateCastSettings = useStore(s => s.updateCastSettings)
+  const updateScenesSettings = useStore(s => s.updateScenesSettings)
   const updateDeskSettings = useStore(s => s.updateDeskSettings)
   const removeChannel = useStore(s => s.removeChannel)
+  const setChannelCount = useStore(s => s.setChannelCount)
+  const setDcaCount = useStore(s => s.setDcaCount)
   const [ports, setPorts] = useState<string[]>([])
 
   useEffect(() => {
@@ -150,6 +188,11 @@ export function ChannelsTab() {
   // is past what MIDI has: a desk up there cannot be run from its keys, though a recall —
   // mutes and assignment both go on the desk's own channel — still sends.
   const buttonsBlocked = deskChannelGap(desk.profile, desk.midiChannel)
+  // The desk's own ceiling where it states one, and the dial's own cap where it does not:
+  // where the show is already larger, the options carry its whole range, so the set it has
+  // and every size between it and the desk's number stay reachable.
+  const ceiling = channelCeiling(desk) ?? CHANNEL_LIMIT
+  const countOptions = dialCounts(cast.channels.length, ceiling)
 
   return (
     <div className="show-tab-body">
@@ -406,9 +449,27 @@ export function ChannelsTab() {
       <div className="show-section">
         <div className="show-section-head">
           <span className="show-section-title">Channels</span>
-          <button className="channel-add add-row" onClick={() => apply(addChannel(cast))}>
-            + Channel
-          </button>
+          <div className="show-section-tools">
+            <label className="channel-count">
+              <span className="channel-count-label">Count</span>
+              <select
+                className="channel-count-select"
+                aria-label="Number of channels"
+                title="How many strips the console has — set it to the desk's own input count and the list is that long"
+                value={cast.channels.length}
+                onChange={e => setChannelCount(Number(e.target.value))}
+              >
+                {/* A show larger than the desk states keeps its own count selectable, so
+                    the control reads the show rather than truncating it. */}
+                {countOptions.map(count => (
+                  <option key={count} value={count}>{count === 0 ? 'none' : count}</option>
+                ))}
+              </select>
+            </label>
+            <button className="channel-add add-row" onClick={() => apply(addChannel(cast))}>
+              + Channel
+            </button>
+          </div>
         </div>
 
         {/* A strip is a name and a number: which fader it rides is the scene's decision,
@@ -441,12 +502,14 @@ export function ChannelsTab() {
             <select
               className="dca-count-select"
               aria-label="Number of DCAs"
+              title="How many faders the show drives — a fader that goes takes every scene’s row for that place with it, and one grown back comes back empty"
               value={cast.dcas.length}
-              onChange={e => apply(setDcaCount(cast, Number(e.target.value)))}
+              onChange={e => setDcaCount(Number(e.target.value))}
             >
-              {/* A show from an older build can carry more DCAs than the dial offers;
-                  the count it has stays selectable rather than silently shrinking. */}
-              {(cast.dcas.length > DCA_LIMIT ? [...DCA_COUNTS, cast.dcas.length] : DCA_COUNTS)
+              {/* A show from an older build can carry more DCAs than the dial offers; the
+                  count it has, and every size between it and the dial, stay selectable
+                  rather than the list being silently shrunk by its own count. */}
+              {dialCounts(cast.dcas.length, DCA_LIMIT)
                 .map(count => (
                   <option key={count} value={count}>{count === 0 ? 'none' : count}</option>
                 ))}
@@ -510,6 +573,22 @@ export function ChannelsTab() {
             )
           })
         )}
+
+        {/* The grid's rule about a strip that rides two faders at once, which is the show's
+            fact rather than a scene's — and the one part of the rule the grid itself cannot
+            state. Left on, a channel rides as many faders as a scene places it on; switched
+            off, the editor keeps one per channel in a scene and a recall folds whatever a
+            file still carries down to the lowest-numbered fader. */}
+        <label className="dca-rule">
+          <input
+            type="checkbox"
+            className="dca-duplicates"
+            checked={allowDuplicates}
+            title="Off, placing a strip on a fader takes it off that scene's other faders, and a recall folds a leftover down to the lowest-numbered one"
+            onChange={e => updateScenesSettings({ allowDuplicateAssignment: e.target.checked })}
+          />
+          <span>Allow a channel to ride more than one fader</span>
+        </label>
       </div>
     </div>
   )

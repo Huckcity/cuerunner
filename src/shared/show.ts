@@ -658,6 +658,14 @@ export const DCA_LIMIT = 12
 export const CHANNEL_START_COUNT = 12
 
 /**
+ * How many strips a show can drive where no desk profile states a ceiling: the widest
+ * number any profile states, so the count control has a range to offer without the app
+ * inventing one. A desk that does state its own inputs bounds the control instead, and a
+ * show larger than either is reported rather than truncated.
+ */
+export const CHANNEL_LIMIT = 96
+
+/**
  * What a DCA's own number sounds like on a desk that has never been told otherwise: the
  * DCA is opened and closed at one address, the way most desks take a mute, and it is the
  * address that carries the number.

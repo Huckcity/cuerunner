@@ -91,12 +91,87 @@ test('the DCA count resizes the faders, and a strip is a name and a number', asy
   await expect(dialog.locator('.dca-row').first().locator('.dca-carrying'))
     .toHaveText('nothing is placed on it yet')
 
-  // A desk with two faders gets two rows. The strips stay: a strip is a console input, and
-  // what a scene placed on a fader that is gone is a placement no row reads.
+  // A desk with two faders gets two rows. The strips stay: a fader cut drops nobody's
+  // strip, and the scenes' rows for the places that went go with them.
   await dialog.locator('.dca-count-select').selectOption('2')
   await expect(dialog.locator('.dca-row')).toHaveCount(2)
   await expect(dialog.locator('.channel-row')).toHaveCount(12)
   await expect(dialog.locator('.channel-row').first().locator('.channel-number')).toHaveText('1')
+})
+
+test('the channel count sizes the console, and a show set up too large is corrected in one move', async () => {
+  await openShowSettings(page)
+  const dialog = page.locator('.show-settings-dialog')
+
+  // The show's own set, as the control reads it.
+  await expect(dialog.locator('.channel-count-select')).toHaveValue('12')
+  await expect(dialog.locator('.channel-row')).toHaveCount(12)
+
+  // Growing the console is one press rather than a + Channel per strip: the dial appends,
+  // and what was there keeps its number, its name and its place.
+  await dialog.locator('.channel-count-select').selectOption('14')
+  await expect(dialog.locator('.channel-row')).toHaveCount(14)
+  await expect(dialog.locator('.channel-row').nth(13).locator('.channel-number')).toHaveText('14')
+
+  // And back: a mis-sized show is one press from the right size, rather than a ✕ per
+  // strip. The row is still a number, a name and a remove — the per-channel fader select
+  // stays absent, because which fader a strip rides is the scene's decision.
+  await dialog.locator('.channel-count-select').selectOption('12')
+  await expect(dialog.locator('.channel-row')).toHaveCount(12)
+  await expect(dialog.locator('.channel-count-select')).toHaveValue('12')
+  await expect(dialog.locator('.channel-dca')).toHaveCount(0)
+})
+
+test('a show larger than the desk model states is reported under the connection, and not truncated', async () => {
+  await openShowSettings(page)
+  const dialog = page.locator('.show-settings-dialog')
+
+  // No desk model is in force yet, so the dial offers its own cap — 96, the widest any
+  // profile states — and a show of 49 strips is set up on an OSC desk.
+  const counts = dialog.locator('.channel-count-select option')
+  await expect(counts).toHaveCount(97)
+  await dialog.locator('.channel-count-select').selectOption('49')
+  await expect(dialog.locator('.channel-row')).toHaveCount(49)
+
+  // Point it at an SQ, which states 48 inputs: the options stop at the number, the show's
+  // own whole range above it stays reachable, and the connection names the gap.
+  await dialog.locator('.desk-kind').selectOption('midi-tcp')
+  await dialog.locator('.desk-profile').selectOption('sq')
+  await expect(counts).toHaveCount(50)
+  await expect(counts.last()).toHaveText('49')
+  await expect(counts.nth(48)).toHaveText('48')
+  await expect(dialog.locator('.desk-preview'))
+    .toContainText('the desk has 48 inputs, so 1 channel is past its last one')
+
+  // Reported, never refused: the show keeps all 49 strips.
+  await expect(dialog.locator('.channel-row')).toHaveCount(49)
+  await dialog.locator('.show-settings-done').click()
+})
+
+test('turning the duplicate rule off keeps the grid to one fader per channel', async () => {
+  await openShowSettings(page)
+  const dialog = page.locator('.show-settings-dialog')
+
+  // On by default — a chorus master on one fader and its members spread across others is
+  // how a show is usually built — and turned off from the faders it is about.
+  await expect(dialog.locator('.dca-duplicates')).toBeChecked()
+  await dialog.locator('.dca-duplicates').uncheck()
+  await dialog.locator('.show-settings-done').click()
+
+  await openScenesView(page)
+  await editScenes(page)
+  await page.locator('.scenes-add').click()
+  const first = page.locator('.matrix-row').nth(0).locator('.matrix-cell').first()
+  const second = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
+
+  await second.locator('.matrix-place').selectOption({ label: 'Ch 1' })
+  await expect(second.locator('.matrix-channel')).toHaveCount(1)
+
+  // The same strip on another fader: the row it was on loses it in the same press, so a
+  // channel rides one fader in a scene while the rule is off.
+  await first.locator('.matrix-place').selectOption({ label: 'Ch 1' })
+  await expect(first.locator('.matrix-channel')).toHaveCount(1)
+  await expect(second.locator('.matrix-channel')).toHaveCount(0)
 })
 
 test('a fader carries one desk number, for a desk that counts them differently', async () => {

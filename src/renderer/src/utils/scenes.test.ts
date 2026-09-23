@@ -13,7 +13,8 @@ import {
   channelDcas,
   ensembleState,
   placementFor,
-  removeChannelFromScenes,
+  removeChannelsFromScenes,
+  removeDcasFromScenes,
   removeEnsembleFromScenes,
   removeScene,
   rowChannels,
@@ -368,17 +369,51 @@ describe('a channel that leaves the console', () => {
       { dcaId: 'dca-1', channels: ['ch-1', 'ch-3'], ensembles: [], excluded: [] },
       { dcaId: 'dca-2', channels: [], ensembles: ['ens-1'], excluded: ['ch-1'] }
     ])
-    const next = removeChannelFromScenes(settings, 'ch-1')
+    const next = removeChannelsFromScenes(settings, ['ch-1'])
 
     expect(next.list[0].dcas[0].channels).toEqual(['ch-3'])
     // The exclusion goes too: a strip that is gone is not a member any row leaves off.
     expect(next.list[0].dcas[1].excluded).toEqual([])
     // ...and a row left saying nothing is dropped rather than kept as a shell.
-    expect(removeChannelFromScenes(settings, 'ch-3').list[0].dcas[0].channels).toEqual(['ch-1'])
-    expect(removeChannelFromScenes(
+    expect(removeChannelsFromScenes(settings, ['ch-3']).list[0].dcas[0].channels)
+      .toEqual(['ch-1'])
+    expect(removeChannelsFromScenes(
       scenesOf([{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }]),
-      'ch-1'
+      ['ch-1']
     ).list[0].dcas).toEqual([])
+  })
+
+  it('takes the whole tail of a count’s shrink out at once, in one pass', () => {
+    // What a count shrinks by is several strips rather than one, and each of them leaves
+    // every row the way a single strip does — placements, exclusions and emptied rows.
+    const settings = scenesOf([
+      { dcaId: 'dca-1', channels: ['ch-1', 'ch-2', 'ch-3'], ensembles: [], excluded: ['ch-2'] },
+      { dcaId: 'dca-2', channels: ['ch-2'], ensembles: [], excluded: [] }
+    ])
+    const next = removeChannelsFromScenes(settings, ['ch-2', 'ch-3'])
+
+    expect(next.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+    ])
+    // Nothing dropped is nothing to do, and the list is the same one rather than a copy.
+    expect(removeChannelsFromScenes(settings, [])).toBe(settings)
+  })
+})
+
+describe('a fader that leaves the show', () => {
+  it('takes its rows out of every scene, and leaves the other faders’ rows where they are', () => {
+    // A row is a scene's word about one place on the desk, so a place the show no longer
+    // has leaves no row behind: nothing to read, nothing to revive.
+    const settings = scenesOf([
+      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] },
+      { dcaId: 'dca-2', channels: ['ch-2'], ensembles: ['ens-1'], excluded: [] }
+    ])
+    const next = removeDcasFromScenes(settings, ['dca-2'])
+
+    expect(next.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+    ])
+    expect(removeDcasFromScenes(settings, [])).toBe(settings)
   })
 })
 
