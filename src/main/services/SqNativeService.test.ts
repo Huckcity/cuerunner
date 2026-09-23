@@ -1,7 +1,7 @@
-// The SQ's native service: what the show's settings decide, and what the panels are told.
-// The session itself belongs to the engine and is held to a real desk in
-// SqNativeEngine.test.ts — here the session is a stand-in, because what this class decides
-// is when to open, what to publish, and when to let go.
+// The SQ's native service: what the show's settings decide, what the panels are told, and what
+// a membership command answers. The session itself belongs to the engine and is held to a real
+// desk in SqNativeEngine.test.ts — here the session is a stand-in, because what this class
+// decides is when to open, what to publish, what a payload is, and when to let go.
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { SqNativeService, type NativeSession } from './SqNativeService'
 import { ShowBus } from '../bus/ShowBus'
@@ -10,9 +10,12 @@ import type { DeviceState, ShowSettings } from '../../shared/show'
 import { defaultShowSettings } from '../../shared/show'
 import { drainMainErrors } from '../errors'
 
-/** The three things the service talks to, with nothing behind them. */
-function fakeSession(): NativeSession {
-  return { open: vi.fn(), closeAll: vi.fn(), onStatus: null }
+/**
+ * The four things the service talks to, with nothing behind them. A membership answers the
+ * count the case needs, because how many frames went out is the engine's to decide.
+ */
+function fakeSession(frames = 2): NativeSession {
+  return { open: vi.fn(), closeAll: vi.fn(), sendMembership: vi.fn(() => frames), onStatus: null }
 }
 
 const DESK = '10.0.0.5'
@@ -34,8 +37,8 @@ interface Harness {
   bus: ShowBus
 }
 
-function harness(): Harness {
-  const session = fakeSession()
+function harness(frames = 2): Harness {
+  const session = fakeSession(frames)
   const service = new SqNativeService(session)
   const bus = new ShowBus({ now: () => 1000 })
   const setState = vi.fn()
@@ -167,5 +170,88 @@ describe('SqNativeService', () => {
     // licence check could be suspending everything.
     expect(session.onStatus).toBeNull()
     expect(row(bus)).toMatchObject({ service: 'sq-native', online: false })
+  })
+})
+
+/**
+ * The one thing the renderer asks this service to write. The payload arrives as `unknown` from
+ * the window, so these cases are about what the class does with a shape it did not choose — the
+ * frames themselves belong to the engine, and are held to a real desk in SqNativeEngine.test.ts.
+ */
+describe('a membership command', () => {
+  it('writes the intent it was sent, and answers how many frames went out', () => {
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    const answer = service.command('membership', { channel: 3, dca: 5, placed: true, rides: true })
+
+    // What the engine reads is the intent that was checked field by field; what the renderer
+    // reads is this answer, which becomes `ShowCommandResult.result`.
+    expect(session.sendMembership).toHaveBeenCalledWith({ channel: 3, dca: 5, placed: true, rides: true })
+    expect(answer).toEqual({ ok: true, frames: 2 })
+  })
+
+  it('refuses a payload that is not a membership, naming what was wrong and writing nothing', () => {
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    const refused: Array<[unknown, string]> = [
+      [undefined, 'needs a payload'],
+      ['membership', 'needs a payload'],
+      [{ dca: 1, placed: true, rides: true }, 'needs a channel'],
+      [{ channel: 0, dca: 1, placed: true, rides: true }, 'at or past 1, not 0'],
+      [{ channel: '1', dca: 1, placed: true, rides: true }, 'at or past 1, not "1"'],
+      [{ channel: 1, dca: 2.5, placed: true, rides: true }, 'at or past 1, not 2.5'],
+      [{ channel: 1, dca: 1, placed: true }, 'needs rides'],
+      [{ channel: 1, dca: 1, placed: 'yes', rides: true }, 'placed to be true or false, not "yes"']
+    ]
+
+    for (const [payload, said] of refused) {
+      const answer = service.command('membership', payload)
+      expect(answer.ok, `for ${JSON.stringify(payload) ?? String(payload)}`).toBe(false)
+      expect(answer.frames).toBeUndefined()
+      expect(answer.error).toContain(said)
+    }
+    // Not one of them reached the engine: a frame is never built from a number nobody checked.
+    expect(session.sendMembership).not.toHaveBeenCalled()
+  })
+
+  it('answers that the session is not up when the engine wrote nothing', () => {
+    const { service, session, context } = harness(0)
+    service.start(context, settings())
+
+    const answer = service.command('membership', { channel: 1, dca: 1, placed: false, rides: false })
+
+    expect(session.sendMembership).toHaveBeenCalledTimes(1)
+    expect(answer.ok).toBe(false)
+    expect(answer.error).toContain('the SQ session is not up')
+    // A refusal carries no count: nothing went out, and the recall reports the sentence.
+    expect(answer.frames).toBeUndefined()
+  })
+
+  it('refuses a membership that went as one frame, saying which half is missing', () => {
+    // A write is the pair and then the channel's flag: a count of one is the connection
+    // going between them, and a half-written write recorded as landed is a mic the next
+    // recall will not place again.
+    const { service, session, context } = harness(1)
+    service.start(context, settings())
+
+    const answer = service.command('membership', { channel: 1, dca: 1, placed: true, rides: true })
+
+    expect(session.sendMembership).toHaveBeenCalledTimes(1)
+    expect(answer.ok).toBe(false)
+    expect(answer.error).toContain('only the pair went')
+    expect(answer.error).toContain('the channel’s flag did not')
+    expect(answer.frames).toBeUndefined()
+  })
+
+  it('refuses an action it does not take', () => {
+    // The convention the tree's services share: an action a service does not have is a fault
+    // rather than a refusal, and the host turns the throw into one for whoever asked.
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    expect(() => service.command('reboot')).toThrow('Unknown action "reboot"')
+    expect(session.sendMembership).not.toHaveBeenCalled()
   })
 })

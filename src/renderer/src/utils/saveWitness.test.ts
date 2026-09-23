@@ -118,7 +118,7 @@ describe('witnessSave', () => {
         const s = useStore.getState()
         s.updateScenesSettings({
           list: [...s.showSettings.scenes.list, {
-            id: 'scene-witness', name: 'Witness scene', live: [], ensembles: [], excluded: [], notes: ''
+            id: 'scene-witness', name: 'Witness scene', dcas: [], notes: ''
           }]
         })
       },

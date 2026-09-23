@@ -1,5 +1,5 @@
-// Cuerunner and an SQ: the app drives the desk's DCAs over the desk's own MIDI socket, and
-// the desk's own scene recall comes back to the app as a trigger.
+// Cuerunner and an SQ: the app drives the desk's own MIDI, and the desk's own scene recall
+// comes back to the app as a trigger.
 //
 // The counterpart is `integration/peers/desk.ts`, written from "SQ MIDI Protocol" (Issue 5
 // and the V1.6 article). What is asserted is the wire and the desk's own state, never the
@@ -7,36 +7,50 @@
 // desk in Show Settings — the profile — and what arrives is what the document says an SQ
 // takes, so the desk's own mute state moving is the assertion that the profile is right.
 //
-// The cases run in order and each leaves DCA 1 somewhere, which the next one needs: a
+// A recall writes two facts and only one of them is on this link. The mic's mute is: page 00
+// — an SQ's input mutes — at the channel's own number from zero, because a DCA is a control
+// group and closing one is not how a mic is silenced (AD-26). The membership is not: which
+// channels ride which fader is written over the desk's own control service on TCP 51326
+// (`f7 07 07 1d <ch-1> <dca-1> 01|00 00`, INTEGRATION-HARNESS.md §6), and no peer here stands
+// in for that service yet — Story 11.5's lane is the one whose peer replays the capture. So
+// this lane asserts the half it can see and says plainly which half it cannot: the mic's mute
+// arrives and the desk's own state moves with it, nothing on this link addresses a DCA at all
+// any more, and a membership the service could not take is reported — by the app, in its log,
+// which is an app fact and never read here as a desk one — without stopping the mute that
+// follows it. The membership's own claim stays where the record left it (AD-24).
+//
+// The cases run in order and each leaves the mic somewhere, which the next one needs: a
 // recall that changes nothing sends nothing, and an assertion about the wire would then be
 // about the app's bookkeeping instead of about the desk. Leaving it at: 1 open, 2 closed,
-// 3 closed (the desk's own recall moves no DCA), 4 open again, 5 open as far as the app
+// 3 closed (the desk's own recall moves no mute), 4 open again, 5 open as far as the app
 // knows — the close it attempts is refused by a desk that is not there, which is the point
-// of that case. An editor who adds a case in the middle has to say where it leaves the DCA.
+// of that case — and 6 closed on the peer's state, since the last case is the decoder's and
+// primes the desk by hand. An editor who adds a case in the middle has to say where it
+// leaves the mic.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
 import { writeDeskShow } from './deskFixture'
 import { BACK_GROUP, GO_GROUP } from './deskButtonsFixture'
-import { openDeskWire, sqDcaGet, sqMuteValue } from './deskReadBack'
+import { openDeskWire, sqMuteGet, sqMuteValue, SQ_INPUT_1 } from './deskReadBack'
 // The app's own reading of a show control command, so the text this case expects is what the
 // app composes rather than a wording typed here.
 import { describeMsc } from '../../src/renderer/src/utils/msc'
 
 /** The channel the desk is set to, and the one the show is told it is. */
 const CHANNEL = 1
-/** DCA 1 on an SQ: parameter 0 of NRPN page 02, which is where the reference table puts it. */
-const DCA_KEY = '02:00'
+/** The one mic on an SQ: the input mutes are page 00, and its own number is 0. */
+const MIC_KEY = '00:00'
 
 let app: ElectronApplication
 let page: Page
 let userDataDir: string
 let peer: DeskPeer
 
-/** The desk's own record of DCA 1's mute. */
-function dcaMute(): { on: boolean; label: string } | undefined {
-  return peer.state.mutes[DCA_KEY]
+/** The desk's own record of the mic's mute. */
+function micMute(): { on: boolean; label: string } | undefined {
+  return peer.state.mutes[MIC_KEY]
 }
 
 test.beforeAll(async () => {
@@ -52,24 +66,40 @@ test.afterAll(async () => {
   await peer.close()
 })
 
-test('a scene recall reaches the desk as the NRPN mute it takes, and the desk moves', async () => {
+test('a scene recall writes the mic’s own mute, and the desk moves with it', async () => {
   await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
   await expect.poll(() => peer.received.length).toBeGreaterThan(0)
-  // The sequence is the one the document writes: select parameter 0 of page 02, then set
-  // it — `B0 63 02 B0 62 00 B0 06 00 B0 26 01` — not the note-on the app's own
-  // arrangement would have sent, which an SQ reads as soft-key traffic and ignores.
-  expect(peer.received[0].bytes).toEqual([0xb0, 0x63, 0x02, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x01])
-  await expect.poll(() => dcaMute()?.on).toBe(true)
-  expect(dcaMute()?.label).toBe('DCA1')
+  // The sequence is the one the document writes: select parameter 0 of page 00 — the first
+  // input's own mute — then set it, `B0 63 00 B0 62 00 B0 06 00 B0 26 00`. It is not page
+  // 02, which is where a DCA's mute lives and which this app no longer writes at all, and it
+  // is not the note-on the app's own arrangement would have sent, which an SQ reads as
+  // soft-key traffic and ignores. The scene places the channel, so the mic is open: fine 00.
+  expect(peer.received[0].bytes).toEqual([0xb0, 0x63, 0x00, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x00])
+  await expect.poll(() => micMute()?.on).toBe(false)
+  expect(micMute()?.label).toBe('Ip1')
+
+  // And the membership did not come this way: an SQ is told which channels ride which fader
+  // over its own control service on 51326, so nothing arriving on this link addresses a DCA.
+  expect(peer.received.filter(message => message.kind === 'mute' && message.page === 0x02)).toEqual([])
+
+  // The app's own line about the half it could not write, which is the app speaking rather
+  // than the desk: the membership needs the service no peer here stands in for (Story 11.5),
+  // and it is a failure that does not stop the mute above — which is what makes the line
+  // worth reading rather than merely present.
+  await openLogPanel(page)
+  await expect(page.locator('.log-panel')).toContainText('the SQ session is not up')
 })
 
-test('the close is the same sequence with the fine byte at zero, and the desk comes back down', async () => {
+test('the close is the same sequence with the fine byte at one, and the desk comes back down', async () => {
   await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
 
-  // The half that never worked before the profile: the app used to close with a note-off,
-  // which is not a mute to an SQ at all.
-  await expect.poll(() => dcaMute()?.on).toBe(false)
+  // The half that never worked before the profile: the app used to close a DCA with a
+  // note-off, which is not a mute to an SQ at all. The mic is closed with the desk's own
+  // form and the other fine byte, and the desk's own state is what says so.
+  await expect.poll(() => peer.received.length).toBeGreaterThan(1)
+  expect(peer.received[1].bytes).toEqual([0xb0, 0x63, 0x00, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x01])
+  await expect.poll(() => micMute()?.on).toBe(true)
 })
 
 test('the desk’s own scene recall fires the cue that answers to it', async () => {
@@ -88,14 +118,15 @@ test('survives the burst an SQ sends the moment a client connects', async () => 
   peer.emitConnectBurst()
   const before = peer.received.length
 
-  // The DCA was closed by the case above, so this recall is a change and has somewhere to
+  // The mic was closed by the case above, so this recall is a change and has somewhere to
   // go — which is what makes the assertion about the burst rather than about the app
   // deciding there was nothing to send.
   await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
   await expect.poll(() => peer.received.length).toBeGreaterThan(before)
   // What arrived after the burst is the whole open, not a fragment of it mistaken for one.
-  expect(peer.received[peer.received.length - 1]).toMatchObject({ kind: 'mute', on: true })
+  expect(peer.received[peer.received.length - 1])
+    .toMatchObject({ kind: 'mute', page: 0x00, note: 0x00, on: false })
 })
 
 test('a desk that goes away is reported, and the next recall reaches it when it is back', async () => {
@@ -110,7 +141,7 @@ test('a desk that goes away is reported, and the next recall reaches it when it 
   await expect(page.locator('.log-panel')).toContainText('offline')
 
   // A recall at a desk that is not there is a failure the operator reads, not a cue that
-  // hangs: the show carries on. The DCA is open from the case above, so this closes it.
+  // hangs: the show carries on. The mic is open from the case above, so this closes it.
   await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
   await expect(page.locator('.log-panel')).toContainText('Could not reach the desk')
 
@@ -128,20 +159,21 @@ test('a desk that goes away is reported, and the next recall reaches it when it 
 
 test('the desk answers a get, and its own answer reads back as the value it holds', async () => {
   // The decode the hardware lane leans on, held where a lane that runs on every pull request
-  // can answer it: the get is the one §3.7 of the SQ document describes, and what it is read
-  // back against is the peer's own state — so a decoder that drifts from the document fails
-  // here rather than on the one lane that needs a desk in the room.
+  // can answer it: the get is the one §3.7 of the SQ document describes, asked at the address
+  // the recall writes — page 00, the input's own number — and what it is read back against is
+  // the peer's own state, so a decoder that drifts from the document fails here rather than on
+  // the one lane that needs a desk in the room.
   const wire = await openDeskWire('127.0.0.1', peer.port)
   try {
-    peer.setMute(CHANNEL, 0, true, 0x02)
-    const open = await wire.ask(sqDcaGet(CHANNEL))
+    peer.setMute(CHANNEL - 1, 0, true, 0x00)
+    const open = await wire.ask(sqMuteGet(CHANNEL, SQ_INPUT_1))
     expect(open, 'the peer said nothing to a get').not.toBeNull()
-    expect(sqMuteValue(open ?? [])).toBe(true)
+    expect(sqMuteValue(open ?? [], SQ_INPUT_1)).toBe(true)
 
-    peer.setMute(CHANNEL, 0, false, 0x02)
-    const closed = await wire.ask(sqDcaGet(CHANNEL))
+    peer.setMute(CHANNEL - 1, 0, false, 0x00)
+    const closed = await wire.ask(sqMuteGet(CHANNEL, SQ_INPUT_1))
     expect(closed, 'the peer said nothing to a get').not.toBeNull()
-    expect(sqMuteValue(closed ?? [])).toBe(false)
+    expect(sqMuteValue(closed ?? [], SQ_INPUT_1)).toBe(false)
   } finally {
     wire.close()
   }
@@ -187,9 +219,9 @@ test.describe('the show the fixture writes', () => {
     const settings = page.locator('.show-settings-dialog')
     await expect(settings.locator('.desk-button-go')).toHaveValue(String(GO_GROUP))
     await expect(settings.locator('.desk-button-back')).toHaveValue(String(BACK_GROUP))
-    // The file names no notes — it was written before the route existed — and the
-    // normaliser fills them empty rather than leaving the field undefined, which would
-    // read back as a value and draw the "both buttons" line on two unassigned fields.
+    // The file assigns no notes — the mute groups are the route this show uses — and every
+    // field the show declares is in it, so an unassigned note reads back empty rather than
+    // as a value, and the "both buttons" line stays off two fields nobody set.
     await expect(settings.locator('.desk-note-go')).toHaveValue('')
     await expect(settings.locator('.desk-note-back')).toHaveValue('')
     await expect(settings.locator('.desk-gap')).toHaveCount(0)

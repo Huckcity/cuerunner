@@ -1,9 +1,9 @@
-import { performerDcaId } from './cast'
-import { deskMessages } from './desk'
+import { channelLabel } from './cast'
 import type {
-  DeskMessage,
+  CastSettings,
   Ensemble,
   MicScene,
+  SceneDcaPlacement,
   ScenesSettings,
   ShowSettings
 } from '../../../shared/show'
@@ -11,24 +11,25 @@ import type {
 /**
  * Scenes, as pure operations.
  *
- * The point of the whole feature is the function at the bottom of this file: given who is
- * open in a scene, what does the desk actually have to be told? A scene recall should be
- * three messages, not a slam of every fader on the desk — both because a desk takes a
- * moment to accept them and because the operator can see what changed.
+ * A scene owns the assignment: per fader it names the channels it places, the ensembles
+ * applied to that row and the member channels it leaves off. Nothing but a scene says which
+ * fader a channel rides (AD-26), so everything here is about placements rather than about
+ * who is open — a controlled channel is open exactly when some row of the scene carries it.
  *
- * Who is open is two things rather than one: the performers named here, and the ensembles
- * applied here. An ensemble is membership, so a performer added to the chorus joins every
- * scene the chorus is applied to; a scene that wants its own version of that closes the
- * ones it does not want, and that is what `excluded` records.
+ * The function at the bottom is the point of the file: given a scene and what the desk was
+ * last told, what does a recall actually write? Two facts per controlled channel — the
+ * faders it rides and whether it is muted — and nothing outside the controlled set, ever.
  */
 
+// ── The scenes themselves ──────────────────────────────────────────────────
+
 export function addScene(settings: ScenesSettings, name = ''): ScenesSettings {
+  // A new scene places nothing. Which fader a channel rides is the decision the scene
+  // exists to make, so guessing one here would be the app making it for the operator.
   const scene: MicScene = {
     id: crypto.randomUUID(),
     name: name.trim() === '' ? `Scene ${settings.list.length + 1}` : name.trim(),
-    live: [],
-    ensembles: [],
-    excluded: [],
+    dcas: [],
     notes: ''
   }
   return { ...settings, list: [...settings.list, scene] }
@@ -49,153 +50,6 @@ export function removeScene(settings: ScenesSettings, sceneId: string): ScenesSe
   return { ...settings, list: settings.list.filter(scene => scene.id !== sceneId) }
 }
 
-/** Removes a performer from every scene: the ones they were named in, and the exclusions. */
-export function removePerformerFromScenes(settings: ScenesSettings, performerId: string): ScenesSettings {
-  return {
-    ...settings,
-    list: settings.list.map(scene => ({
-      ...scene,
-      live: scene.live.includes(performerId)
-        ? scene.live.filter(id => id !== performerId)
-        : scene.live,
-      excluded: scene.excluded.includes(performerId)
-        ? scene.excluded.filter(id => id !== performerId)
-        : scene.excluded
-    }))
-  }
-}
-
-/** Unapplies an ensemble from every scene that had it, once it has left the cast. */
-export function removeEnsembleFromScenes(settings: ScenesSettings, ensembleId: string): ScenesSettings {
-  return {
-    ...settings,
-    list: settings.list.map(scene => scene.ensembles.includes(ensembleId)
-      ? { ...scene, ensembles: scene.ensembles.filter(id => id !== ensembleId) }
-      : scene)
-  }
-}
-
-function ensembleMembersOf(ensembles: Ensemble[], ensembleId: string): string[] {
-  return ensembles.find(ensemble => ensemble.id === ensembleId)?.members ?? []
-}
-
-/**
- * Everyone open in a scene: named performers, plus the members of applied ensembles,
- * less the ones the scene excludes. The order is the order they were found in, which is
- * the scene's own list first — nothing downstream reads it as a running order.
- */
-export function sceneLiveIds(scene: MicScene | null, ensembles: Ensemble[]): string[] {
-  if (scene === null) return []
-  const excluded = new Set(scene.excluded)
-  const live = new Set(scene.live.filter(id => !excluded.has(id)))
-  for (const ensembleId of scene.ensembles) {
-    for (const memberId of ensembleMembersOf(ensembles, ensembleId)) {
-      if (!excluded.has(memberId)) live.add(memberId)
-    }
-  }
-  return [...live]
-}
-
-/** Whether one performer's mic is open in a scene, by any route. */
-export function isPerformerLive(
-  scene: MicScene | null,
-  ensembles: Ensemble[],
-  performerId: string
-): boolean {
-  return sceneLiveIds(scene, ensembles).includes(performerId)
-}
-
-/**
- * What a scene does with one ensemble: applied, not applied, or applied with some of its
- * members closed in this scene. The third state is why a cell cannot be a tick.
- */
-export function ensembleState(
-  scene: MicScene,
-  ensemble: Ensemble
-): 'off' | 'on' | 'partial' {
-  if (!scene.ensembles.includes(ensemble.id)) return 'off'
-  const closed = ensemble.members.some(memberId => scene.excluded.includes(memberId))
-  return closed ? 'partial' : 'on'
-}
-
-/**
- * Opens or closes one performer in one scene.
- *
- * Closing a performer who rides in on an applied ensemble is an exclusion rather than a
- * removal — they are still in the ensemble, and the next scene that applies it opens them
- * again. Opening someone who was excluded takes the exclusion back.
- */
-export function setPerformerLive(
-  settings: ScenesSettings,
-  sceneId: string,
-  performerId: string,
-  live: boolean,
-  ensembles: Ensemble[]
-): ScenesSettings {
-  return {
-    ...settings,
-    list: settings.list.map(scene => {
-      if (scene.id !== sceneId) return scene
-      if (live) {
-        return {
-          ...scene,
-          live: scene.live.includes(performerId) ? scene.live : [...scene.live, performerId],
-          excluded: scene.excluded.filter(id => id !== performerId)
-        }
-      }
-      const carried = scene.ensembles.some(ensembleId =>
-        ensembleMembersOf(ensembles, ensembleId).includes(performerId))
-      return {
-        ...scene,
-        live: scene.live.filter(id => id !== performerId),
-        // Only an applied ensemble can be the reason they were open, so only then is
-        // there anything to exclude them from.
-        excluded: carried && !scene.excluded.includes(performerId)
-          ? [...scene.excluded, performerId]
-          : scene.excluded
-      }
-    })
-  }
-}
-
-/**
- * Applies or unapplies an ensemble to a scene.
- *
- * Applying it takes its members off the scene's own list, exclusions and all: they are
- * open because the ensemble says so now, which is what lets the ensemble grow later.
- * Unapplying closes whoever it was holding open and leaves the performers the operator
- * named by hand exactly as they were.
- */
-export function setEnsembleApplied(
-  settings: ScenesSettings,
-  sceneId: string,
-  ensemble: Ensemble,
-  applied: boolean
-): ScenesSettings {
-  return {
-    ...settings,
-    list: settings.list.map(scene => {
-      if (scene.id !== sceneId) return scene
-      const inEnsemble = (id: string): boolean => ensemble.members.includes(id)
-      if (!applied) {
-        return {
-          ...scene,
-          ensembles: scene.ensembles.filter(id => id !== ensemble.id),
-          excluded: scene.excluded.filter(id => !inEnsemble(id))
-        }
-      }
-      return {
-        ...scene,
-        ensembles: scene.ensembles.includes(ensemble.id)
-          ? scene.ensembles
-          : [...scene.ensembles, ensemble.id],
-        live: scene.live.filter(id => !inEnsemble(id)),
-        excluded: scene.excluded.filter(id => !inEnsemble(id))
-      }
-    })
-  }
-}
-
 /**
  * Where a desk button moves the show's scenes to, or null when there is nowhere to go.
  *
@@ -211,71 +65,351 @@ export function sceneStep(list: MicScene[], current: string | null, step: 1 | -1
   return list[(index < 0 ? -1 : index) + step] ?? null
 }
 
-/** One group the desk has to be told about, and what to tell it. */
-export interface DeskChange {
-  channelId: string
-  label: string
-  /** True when the group is being opened, false when it is being closed. */
-  live: boolean
-  /** What to send, or null when this desk cannot be told about the DCA at all. */
-  message: DeskMessage | null
-  /** Why there is nothing to send, when that is the case. */
-  error?: string
+// ── A row, and what rides it ───────────────────────────────────────────────
+
+/** The row a scene keeps for one fader, or null when the scene says nothing about it. */
+export function placementFor(scene: MicScene | null, dcaId: string): SceneDcaPlacement | null {
+  if (scene === null) return null
+  return scene.dcas.find(placement => placement.dcaId === dcaId) ?? null
+}
+
+/** The channels an ensemble carries, through the performers whose mics are on them. */
+function ensembleChannels(cast: CastSettings, ensembleId: string): string[] {
+  const ensemble = cast.ensembles.find(candidate => candidate.id === ensembleId)
+  if (ensemble === undefined) return []
+  const channels: string[] = []
+  for (const memberId of ensemble.members) {
+    const performer = cast.performers.find(candidate => candidate.id === memberId)
+    const channelId = performer?.channelId ?? null
+    if (channelId !== null && !channels.includes(channelId)) channels.push(channelId)
+  }
+  return channels
 }
 
 /**
- * What a recall actually sends.
+ * The controlled channels one row carries in one scene: the ones placed on it by hand, plus
+ * the channels of the ensembles applied to it, less the member channels the scene leaves off.
  *
- * A DCA is open when a performer open in the scene is patched — through their channel —
- * to it. DCAs nothing is routed to are left alone entirely, because the desk may well be
- * doing something else with them, and a DCA already in the state the scene asks for is
- * not mentioned: that is what makes a recall a few messages instead of a sweep.
+ * The order is the show's own channel order, which is the order the desk numbers its inputs
+ * in — nothing downstream reads this as an edit order.
+ */
+export function rowChannels(cast: CastSettings, placement: SceneDcaPlacement | null): string[] {
+  if (placement === null) return []
+  const carried = new Set(placement.channels)
+  for (const ensembleId of placement.ensembles) {
+    for (const channelId of ensembleChannels(cast, ensembleId)) carried.add(channelId)
+  }
+  const channels: string[] = []
+  for (const channel of cast.channels) {
+    if (carried.has(channel.id) && !placement.excluded.includes(channel.id)) channels.push(channel.id)
+  }
+  return channels
+}
+
+/** The faders a channel rides in a scene, in the show's DCA order. */
+export function channelDcas(scene: MicScene | null, channelId: string, cast: CastSettings): string[] {
+  if (scene === null) return []
+  const dcas: string[] = []
+  for (const dca of cast.dcas) {
+    if (rowChannels(cast, placementFor(scene, dca.id)).includes(channelId)) dcas.push(dca.id)
+  }
+  return dcas
+}
+
+/** Every channel a scene places anywhere: what a row's "group these" makes an ensemble of. */
+export function sceneChannelIds(scene: MicScene | null, cast: CastSettings): string[] {
+  if (scene === null) return []
+  const channels = new Set<string>()
+  for (const dca of cast.dcas) {
+    for (const channelId of rowChannels(cast, placementFor(scene, dca.id))) channels.add(channelId)
+  }
+  return cast.channels.filter(channel => channels.has(channel.id)).map(channel => channel.id)
+}
+
+/**
+ * What a scene does with one ensemble on one fader: applied, not applied, or applied with
+ * some of its members left off this row. The third state is why a cell cannot be a tick.
+ */
+export function ensembleState(
+  scene: MicScene | null,
+  dcaId: string,
+  ensemble: Ensemble,
+  cast: CastSettings
+): 'off' | 'on' | 'partial' {
+  const row = placementFor(scene, dcaId)
+  if (row === null || !row.ensembles.includes(ensemble.id)) return 'off'
+  const left = ensembleChannels(cast, ensemble.id).some(channelId => row.excluded.includes(channelId))
+  return left ? 'partial' : 'on'
+}
+
+// ── Editing a placement ────────────────────────────────────────────────────
+
+/** Whether a row still says anything. An empty one is dropped rather than kept as a shell. */
+function isEmptyRow(row: SceneDcaPlacement): boolean {
+  return row.channels.length === 0 && row.ensembles.length === 0 && row.excluded.length === 0
+}
+
+/**
+ * Edits one row of one scene, creating it when it is not there yet and dropping it when the
+ * edit leaves it saying nothing.
  *
- * What each DCA is told comes from the show's connection and the DCA's number, so the
- * patch is one thing to set up rather than one per fader.
+ * One function, because every placement edit is the same three lines and the difference
+ * between them is what the row ends up holding: a new row is not a thing any of them should
+ * have to remember to make, and an empty one left behind is a scene that speaks for a fader
+ * it has nothing to say about.
+ */
+function writeRow(
+  settings: ScenesSettings,
+  sceneId: string,
+  dcaId: string,
+  edit: (row: SceneDcaPlacement) => SceneDcaPlacement
+): ScenesSettings {
+  return {
+    ...settings,
+    list: settings.list.map(scene => {
+      if (scene.id !== sceneId) return scene
+      const existing = scene.dcas.find(row => row.dcaId === dcaId)
+      const next = edit(existing ?? { dcaId, channels: [], ensembles: [], excluded: [] })
+      const dcas = isEmptyRow(next)
+        ? scene.dcas.filter(row => row.dcaId !== dcaId)
+        : existing === undefined
+          ? [...scene.dcas, next]
+          : scene.dcas.map(row => row.dcaId === dcaId ? next : row)
+      return { ...scene, dcas }
+    })
+  }
+}
+
+/** Takes a channel off every row of one scene: the show keeps one fader per channel. */
+function clearChannelFromScene(
+  settings: ScenesSettings,
+  sceneId: string,
+  channelId: string
+): ScenesSettings {
+  return {
+    ...settings,
+    list: settings.list.map(scene => scene.id === sceneId
+      ? {
+          ...scene,
+          dcas: scene.dcas
+            .map(row => row.channels.includes(channelId)
+              ? { ...row, channels: row.channels.filter(id => id !== channelId) }
+              : row)
+            .filter(row => !isEmptyRow(row))
+        }
+      : scene)
+  }
+}
+
+/**
+ * Places a controlled channel on one fader in one scene, or takes it off.
  *
- * A null scene is the all-closed scene: every DCA the show drives is closed.
+ * Taking a hand placement off a channel an applied ensemble carries is an *exclusion*
+ * rather than a removal: the ensemble still holds them, and the next scene that applies it
+ * rides them again. Placing one by hand says where it goes, so it takes the exclusion back.
+ *
+ * A show that keeps one fader per channel takes the channel off every other row of that
+ * scene first — the editor's half of the rule; the recall collapses whatever a file still
+ * carries.
+ */
+export function setChannelPlaced(
+  settings: ScenesSettings,
+  sceneId: string,
+  dcaId: string,
+  channelId: string,
+  placed: boolean,
+  cast: CastSettings
+): ScenesSettings {
+  const cleared = placed && !settings.allowDuplicateAssignment
+    ? clearChannelFromScene(settings, sceneId, channelId)
+    : settings
+  return writeRow(cleared, sceneId, dcaId, row => {
+    if (placed) {
+      return {
+        ...row,
+        channels: row.channels.includes(channelId) ? row.channels : [...row.channels, channelId],
+        excluded: row.excluded.filter(id => id !== channelId)
+      }
+    }
+    const carried = row.ensembles.some(ensembleId =>
+      ensembleChannels(cast, ensembleId).includes(channelId))
+    return {
+      ...row,
+      channels: row.channels.filter(id => id !== channelId),
+      excluded: carried && !row.excluded.includes(channelId)
+        ? [...row.excluded, channelId]
+        : row.excluded
+    }
+  })
+}
+
+/**
+ * Applies an ensemble to one fader in one scene, or takes it off.
+ *
+ * Applying it takes its members' channels off the row's own list, exclusions and all: they
+ * ride because the ensemble says so now, which is what lets the ensemble grow later without
+ * the scene being edited again. Unapplying leaves whatever the operator placed by hand
+ * exactly as it was, and an exclusion only means something while the ensemble is applied.
+ */
+export function setRowEnsemble(
+  settings: ScenesSettings,
+  sceneId: string,
+  dcaId: string,
+  ensemble: Ensemble,
+  applied: boolean,
+  cast: CastSettings
+): ScenesSettings {
+  const members = ensembleChannels(cast, ensemble.id)
+  return writeRow(settings, sceneId, dcaId, row => {
+    if (!applied) {
+      return {
+        ...row,
+        ensembles: row.ensembles.filter(id => id !== ensemble.id),
+        excluded: row.excluded.filter(id => !members.includes(id))
+      }
+    }
+    return {
+      ...row,
+      ensembles: row.ensembles.includes(ensemble.id)
+        ? row.ensembles
+        : [...row.ensembles, ensemble.id],
+      channels: row.channels.filter(id => !members.includes(id)),
+      excluded: row.excluded.filter(id => !members.includes(id))
+    }
+  })
+}
+
+/**
+ * Leaves one member's channel off one fader in one scene, or puts it back. An exclusion and
+ * a hand placement contradict each other, so excluding takes the placement off the row.
+ */
+export function setMemberExcluded(
+  settings: ScenesSettings,
+  sceneId: string,
+  dcaId: string,
+  channelId: string,
+  excluded: boolean
+): ScenesSettings {
+  return writeRow(settings, sceneId, dcaId, row => {
+    if (!excluded) return { ...row, excluded: row.excluded.filter(id => id !== channelId) }
+    return {
+      ...row,
+      channels: row.channels.filter(id => id !== channelId),
+      excluded: row.excluded.includes(channelId) ? row.excluded : [...row.excluded, channelId]
+    }
+  })
+}
+
+/** Takes a channel out of every scene: it has left the console, so nothing can carry it. */
+export function removeChannelFromScenes(settings: ScenesSettings, channelId: string): ScenesSettings {
+  return {
+    ...settings,
+    list: settings.list.map(scene => ({
+      ...scene,
+      dcas: scene.dcas
+        .map(row => ({
+          ...row,
+          channels: row.channels.filter(id => id !== channelId),
+          excluded: row.excluded.filter(id => id !== channelId)
+        }))
+        .filter(row => !isEmptyRow(row))
+    }))
+  }
+}
+
+/** Unapplies an ensemble from every row that had it, once it has left the cast. */
+export function removeEnsembleFromScenes(settings: ScenesSettings, ensembleId: string): ScenesSettings {
+  return {
+    ...settings,
+    list: settings.list.map(scene => ({
+      ...scene,
+      dcas: scene.dcas
+        .map(row => row.ensembles.includes(ensembleId)
+          ? { ...row, ensembles: row.ensembles.filter(id => id !== ensembleId) }
+          : row)
+        .filter(row => !isEmptyRow(row))
+    }))
+  }
+}
+
+// ── What a recall writes ───────────────────────────────────────────────────
+
+/** What Cuerunner was last told it wrote to the desk, per controlled channel. */
+export interface DeskState {
+  /** Whether the desk was last told to mute the channel. An absent key is not known. */
+  mutes: Record<string, boolean>
+  /** The faders the channel was last written onto. An absent key is not known. */
+  assignments: Record<string, string[]>
+}
+
+/**
+ * What a desk nothing has been sent to reads as: every fact unknown, so the next recall
+ * writes it. The resync is the same thing said on purpose — the desk was moved by hand, and
+ * the record of what was sent is worth nothing.
+ */
+export const UNKNOWN_DESK_STATE: DeskState = { mutes: {}, assignments: {} }
+
+/** One controlled channel a recall would write, and what the scene asks of it. */
+export interface DeskChange {
+  channelId: string
+  /** How the operator reads it: "Ch 3 · Ruth", or "Ch 7" while the strip is unnamed. */
+  label: string
+  /** Whether the scene places it at all: a channel placed nowhere is closed. */
+  open: boolean
+  /** The faders the scene places it on, in the show's DCA order. */
+  dcas: string[]
+}
+
+/** Whether two sets of faders are the same set, whatever order each is written in. */
+function sameFaders(a: string[], b: string[]): boolean {
+  return a.length === b.length && b.every(id => a.includes(id))
+}
+
+/**
+ * What a recall actually writes: the controlled channels the scene moves, and what the scene
+ * asks of each.
+ *
+ * The controlled set is the boundary and nothing outside it is ever computed — the walk is
+ * the show's own channel list, so a channel the scene never mentions is not merely left
+ * alone, it is not reachable from here. A channel the scene places nowhere yields no faders
+ * and is closed; a channel whose faders and mute already match the record yields nothing at
+ * all, which is what makes a recall a few messages instead of a sweep.
+ *
+ * The record's own shape is a fact per channel, and a fact nothing is known about is a fact
+ * to write: a channel the record has never mentioned — a fresh show, or the resync's emptied
+ * base — is told to the desk rather than assumed to be where the show wants it.
+ *
+ * A null scene is the all-closed column: every controlled channel the record has something
+ * to say about is closed, which is the same rule with nothing placed.
  */
 export function sceneChanges(
   show: ShowSettings,
   scene: MicScene | null,
-  deskState: Record<string, boolean>
+  deskState: DeskState
 ): DeskChange[] {
   const changes: DeskChange[] = []
-  const live = new Set(sceneLiveIds(scene, show.cast.ensembles))
+  for (const channel of show.cast.channels) {
+    const dcas = channelDcas(scene, channel.id, show.cast)
+    // A residual duplicate — a file written with more than one fader per channel while the
+    // show now keeps one — collapses to the lowest-numbered fader, which is the lowest place
+    // in the show's own order.
+    const target = show.scenes.allowDuplicateAssignment ? dcas : dcas.slice(0, 1)
+    const open = target.length > 0
 
-  show.cast.dcas.forEach((dca, index) => {
-    const routed = show.cast.performers.filter(
-      performer => performerDcaId(performer, show.cast.channels) === dca.id
-    )
-    if (routed.length === 0) return
-
-    const shouldBeLive = routed.some(performer => live.has(performer.id))
-    if (deskState[dca.id] === shouldBeLive) return
-
-    const send = deskMessages(dca, index, show.desk)
-    if (send === null) return
-    if (!send.ok) {
-      // The desk is there and cannot be told about this DCA — past the end of its list,
-      // or on a channel it does not answer on. The reason travels with the change so the
-      // operator reads it instead of a fader that quietly never moves.
-      changes.push({
-        channelId: dca.id,
-        label: dca.label,
-        live: shouldBeLive,
-        message: null,
-        error: send.error
-      })
-      return
-    }
+    const muted = deskState.mutes[channel.id]
+    // A fact the record has never carried reads as no faders, which is what the recall would
+    // write from it anyway: a channel placed nowhere and already muted is not a change, and a
+    // change that produces no write is a press that never clears.
+    const wrote = deskState.assignments[channel.id] ?? []
+    const mutedMatches = muted !== undefined && muted === !open
+    if (mutedMatches && sameFaders(wrote, target)) continue
 
     changes.push({
-      channelId: dca.id,
-      label: dca.label,
-      live: shouldBeLive,
-      message: shouldBeLive ? send.unmute : send.mute
+      channelId: channel.id,
+      label: channelLabel(show.cast.channels, channel.id),
+      open,
+      dcas: target
     })
-  })
-
+  }
   return changes
 }

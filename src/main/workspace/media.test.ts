@@ -25,7 +25,7 @@ import {
 } from './WorkspaceManager'
 import { Refusal } from '../ipc/refusal'
 import type { MissingMedia } from '../../shared/media'
-import type { AudioCue, Cue } from '../../shared/cue'
+import type { AudioCue, Cue, CueBase, GroupCue, WaitCue } from '../../shared/cue'
 import type { Workspace } from '../../shared/workspace'
 
 vi.mock('electron', async () => {
@@ -98,6 +98,36 @@ function workspaceWith(cues: Cue[]): Workspace {
     midiSettings: { outputPortName: '' },
     cues
   }
+}
+
+/** One cue's own fields, from `CueBase`: what every cue of a file this build wrote carries. */
+function baseCue(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'> {
+  return {
+    id,
+    number: id,
+    name: id,
+    colorLabel: 'none',
+    parentId: null,
+    preWait: 0,
+    postWait: 0,
+    timelineOffset: 0,
+    duration: 0,
+    advance: 'none',
+    isArmed: true,
+    notes: ''
+  }
+}
+
+/**
+ * A cue of the file's own shape, for the grouping cases below: this build writes every field
+ * its type requires, and the shape check refuses a cue that has not got one.
+ */
+function waitCue(id: string, over: Partial<WaitCue> = {}): WaitCue {
+  return { ...baseCue(id), type: 'wait', ...over }
+}
+
+function groupCue(id: string, over: Partial<GroupCue> = {}): GroupCue {
+  return { ...baseCue(id), type: 'group', mode: 'playlist', ...over }
 }
 
 function write(dirPath: string, name: string, contents = 'RIFF....WAVE'): string {
@@ -511,10 +541,10 @@ describe('saving and reopening a show folder', () => {
     const damaged = {
       ...workspaceWith([]),
       cues: [
-        { id: 'g1', type: 'group', mode: 'playlist' },
-        { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-        { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
-        { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+        groupCue('g1', { mode: 'playlist' }),
+        waitCue('c1', { duration: 1000, parentId: 'g1' }),
+        waitCue('o1', { duration: 500, parentId: 'gone' }),
+        waitCue('c2', { duration: 2000, parentId: 'g1' })
       ]
     } as unknown as Workspace
     await writeRecovery(damaged, join(dir, 'Tour Show.cuerunner'))
@@ -537,10 +567,10 @@ describe('saving and reopening a show folder', () => {
       JSON.stringify({
         ...workspaceWith([]),
         cues: [
-          { id: 'g1', type: 'group', mode: 'playlist' },
-          { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-          { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
-          { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+          groupCue('g1', { mode: 'playlist' }),
+          waitCue('c1', { duration: 1000, parentId: 'g1' }),
+          waitCue('o1', { duration: 500, parentId: 'gone' }),
+          waitCue('c2', { duration: 2000, parentId: 'g1' })
         ]
       })
     )

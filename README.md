@@ -544,15 +544,19 @@ it cannot read keeps the history it already had and replaces the file anyway.
 A file is unknown when it is not JSON, when it carries no cue list, when its `version` is not
 1, when it has a top-level section this build does not declare, when a cue type is outside the
 declared set, when its settings carry a section this build does not declare, when its settings
-leave out a section this build writes — which is what a show saved by an older build meets —
-or when what sits under `showSettings` is not a set of sections at all. What is absent is not
-checked, because the check reads what the document carries: a file that omits `history`,
-`audioSettings`, `midiSettings`, `showSettings` or `triggerGuard` reads, with the window standing
-its own defaults in for the sections a file has not got and a load completing the one gate a file
-carries none of, `triggerGuard`. A `showSettings` that is there is different, though: it has to be
-exactly the declared sections, and one this build does not declare, or one the file leaves out,
-is a refusal rather than a default. Loading repairs a damaged cue grouping and reports it as a
-note beside missing media, and it writes no file.
+leave out a section this build writes, when a field inside a settings section is one this build
+does not write, when a declared field is missing from the section that carries it, when a cue has
+not got a field its own type requires — which is what a show saved before the shapes below
+changed meets — or when what sits under `showSettings` is not a set of sections at all. What is
+absent at the file's own top level is not checked, because the check reads what the document
+carries: a file that omits `history`, `audioSettings`, `midiSettings`, `showSettings` or
+`triggerGuard` reads, with the window standing its own defaults in for the sections a file has
+not got and a load completing the one gate a file carries none of, `triggerGuard`. A
+`showSettings` that is there is different: it has to be exactly the declared sections, each one
+carrying exactly the declared fields. Loading repairs a damaged cue grouping and reports it as a
+note beside missing media, and it writes no file. There is no conversion either way: a show whose
+settings predate the scene-owned fader assignment refuses, and its channels, faders and
+placements are set up again in Show Settings and the Scenes grid.
 
 The shape is held by tests — `src/main/workspace/migrate.test.ts` for the refusals and what a
 load still does, `src/main/workspace/funnel.test.ts` for one case per entry point,
@@ -687,15 +691,23 @@ Desk and console integration:
 - A desk is reached over its own MIDI socket — an Allen & Heath SQ or Avantis on port 51325,
   set up in Show Settings → Channels — as well as through Allen & Heath MIDI Control's virtual
   ports. A cue that cannot reach the desk says so in the run log rather than doing nothing
-- **A desk is told in its own arrangement.** Show Settings → Channels names the desk — an SQ,
-  an Avantis, or any desk that takes a note on and a note off — and a DCA's message follows
-  from what that desk's document says a mute is: an SQ's NRPN parameter on page 02, an
-  Avantis's note-on at velocity `7F` to open and `3F` to close, on the channel four above its
-  own. A DCA the profile cannot address (an SQ has eight, an Avantis sixteen) is reported
-  rather than going quiet. The harness found the difference (`INTEGRATION-HARNESS.md` §7) and
-  `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each
-  desk does with the bytes rather than to what the app sent — on the peers lane, whose
-  counterpart is the harness's desk peer rather than a desk
+- **A desk is told in its own arrangement, and a scene owns the assignment.** Show Settings →
+  Channels names the desk — an SQ, an Avantis, or any desk that takes a note on and a note off
+  — and the Scenes grid says which channels ride which fader, scene by scene. A recall writes
+  two facts in that order: the **membership** (the channels the scene places, the faders it
+  takes them off, over the route the desk takes it on — an SQ's own control service on its
+  51326, whose frames were measured from the desk; an Avantis's NRPN `40` on the desk link),
+  and then the **mic's mute**, whose number is the channel's own and never a fader's, because a
+  DCA is a control group and closing one is not how a mic is silenced. A mic that changes fader
+  is never muted by the move: it keeps playing and takes the new fader's position. A profile
+  with no assignment route — the note convention, OSC, and an SQ reached over a plain MIDI
+  port, whose assignment needs the desk's own control service — reports that gap and writes the
+  mute anyway; a placement past the desk's own DCA list (an SQ has eight, an Avantis sixteen),
+  or a fader whose desk number points past it, is reported rather than going quiet. The frames are the harness's `§6`, and
+  `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each desk
+  does with the bytes rather than to what the app sent — on the peers lane, whose counterpart is
+  the harness's desk peer rather than a desk. That peer models the MIDI links: no lane replays
+  the SQ's own control service, so nothing here claims a desk has accepted a membership
 - **A show run from the desk's own buttons, two ways.** A console reports a key press only
   when the key has been assigned to a console function, so the buttons a show runs from are
   spare **mute groups** — and, where a key that latches is not what a press means, **MIDI
@@ -710,12 +722,13 @@ Desk and console integration:
   is two surfaces at once; that pairing is the operator's to make knowingly. The desk's
   messages are read by `utils/deskInput.ts`; the desk's report of its groups primes the app
   rather than moving it — a show opened onto a desk with a group already muted must not recall
-  a scene by itself — a note has no get to prime it and is a press the first time, and a DCA's
-  own mute deliberately is not read as a press, so a scene recall coming back off the desk
-  cannot run the show. The note route is offered where the **desk's own traffic** cannot be a
-  note — an SQ, which mutes with NRPN — and not on an Avantis or a `note` desk, where the
-  app's DCA mutes are notes and a read could be its own echo; it does not promise a note came
-  from a hand, since a cue can put that note on the desk link too.
+  a scene by itself — a note has no get to prime it and is a press the first time, and the
+  messages a recall writes are deliberately not read as a press: an SQ's groups are page `04`
+  where a recall writes page `00`, and the notes a recall writes are inputs on the desk's own
+  channel, where its groups live on another. The note route is offered where the **desk's own
+  traffic** cannot be a note — an SQ, which mutes with NRPN — and not on an Avantis or a `note`
+  desk, where a mute is a note and a read could be its own echo; it does not promise a note
+  came from a hand, since a cue can put that note on the desk link too.
   `integration/specs/desk-buttons.spec.ts` drives both routes against the peer
 - **Or any control that sends something.** A soft key assigned to a MIDI note, a footswitch, a
   scene recalled at the desk — whatever the desk transmits is a MIDI trigger on its own

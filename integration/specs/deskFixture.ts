@@ -4,11 +4,12 @@
 // to use, and the connection is what these specs are about: the form that sets it has its
 // own spec (e2e/desk-tcp.spec.ts).
 //
-// One channel, one DCA and one cue that answers to the desk — plus, where a lane asks for
+// One channel, one fader and one cue that answers to the desk — plus, where a lane asks for
 // them, a second scene for the desk's own keys to walk to and a cue that answers a console's
-// show control command. That is the whole show: a scene recall on a one-mic show is a handful
-// of messages, so what went on the wire can be read at a glance instead of fished out of a
-// sweep of twelve.
+// show control command. That is the whole show: the scene owns the assignment, so it places
+// its one channel on the one fader and says nothing else, and a recall of it is a handful of
+// messages — which is what lets what went on the wire be read at a glance instead of fished
+// out of a sweep of twelve.
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -50,7 +51,8 @@ interface DeskShowCommon {
   /**
    * The buttons an operator has assigned at the desk. The lanes that pass this assign the
    * mute groups only — the note route has its own fixture (`deskButtonsFixture.ts`) — but
-   * the shape is the show's own, so a field added to it cannot go missing here.
+   * the shape is the show's own, so a field added to it cannot go missing here: what the
+   * caller names is written over every field the show declares, the unassigned ones as null.
    */
   buttons?: Partial<DeskButtons>
   /**
@@ -105,6 +107,10 @@ export interface MscInput {
 /** What the show is called, so a spec's failure names something an operator would say. */
 export const DESK_SHOW_NAME = 'Desk Show'
 
+/** The one channel's id, and the one fader's: what a scene's placement names. */
+export const CHANNEL_ID = 'ch-1'
+export const DCA_ID = 'dca-1'
+
 export function writeDeskShow(options: DeskShowOptions): string {
   const { host = LOOPBACK, channel, profile, dcaNote, buttons, msc, deskScene = 7 } = options
   const root = mkdtempSync(join(tmpdir(), 'cuerunner-desk-'))
@@ -120,13 +126,16 @@ export function writeDeskShow(options: DeskShowOptions): string {
     ...(msc === undefined ? [] : [msc.port])
   ]
   // A show the desk's own keys walk needs a second scene to walk to; a show the specs
-  // recall by hand has the one, and the peer lane asserts on that one.
+  // recall by hand has the one, and the peer lane asserts on that one. The first scene
+  // places the channel on the fader — which is the membership a recall writes and the
+  // reason the mic is open — and the second places nothing, so a recall of it is a close.
   const defaults = defaultShowSettings()
+  const placed = { dcaId: DCA_ID, channels: [CHANNEL_ID], ensembles: [], excluded: [] }
   const scenes = buttons === undefined
-    ? [{ id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' }]
+    ? [{ id: 's-1', name: 'Wedding', dcas: [placed], notes: '' }]
     : [
-        { id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' },
-        { id: 's-2', name: 'Interval', live: [], ensembles: [], excluded: [], notes: '' }
+        { id: 's-1', name: 'Wedding', dcas: [placed], notes: '' },
+        { id: 's-2', name: 'Interval', dcas: [], notes: '' }
       ]
 
   writeFileSync(path, `${JSON.stringify({
@@ -155,17 +164,24 @@ export function writeDeskShow(options: DeskShowOptions): string {
         ...(options.kind === 'midi'
           ? { midiPort: options.midiPort }
           : { midiPort: '', host, port: 8000, tcpPort: options.port }),
-        ...(buttons === undefined ? {} : { buttons })
+        ...(buttons === undefined ? {} : { buttons: { ...defaults.desk.buttons, ...buttons } })
       },
       cast: {
-        channels: [{ id: 'ch-1', name: 'Ruth', dcaId: 'dca-1' }],
+        // A channel is a name and a number: which fader it rides is the scene's decision and
+        // never the strip's (AD-26), so there is no assignment on the channel at all.
+        channels: [{ id: CHANNEL_ID, name: 'Ruth' }],
         performers: [
-          { id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: 'ch-1' }
+          { id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: CHANNEL_ID }
         ],
         ensembles: [],
-        dcas: [{ id: 'dca-1', label: 'DCA 1', note: dcaNote ?? null, address: null }]
+        // One number for the fader, and null is the number its place derives: an override is
+        // the desk's own numbering rather than a second way of writing the place down.
+        dcas: [{ id: DCA_ID, label: 'DCA 1', deskNumber: dcaNote ?? null }]
       },
-      scenes: { list: scenes }
+      // The scenes own the assignment, and the field beside them is not optional on disk:
+      // the load funnel reads every declared field, so a file that left it out would be one
+      // this build refuses rather than one it completes.
+      scenes: { list: scenes, allowDuplicateAssignment: true }
     },
     cues: [
       {

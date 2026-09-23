@@ -482,10 +482,10 @@ export async function pointDeskAtTcp(page: Page, port: number, host = '127.0.0.1
 
 /**
  * A show set up through the view, in the order an operator would do it: the desk pointed
- * at a port the test owns, the first performer named, and a scene with that performer open
- * in it. The defaults do the wiring — a new show is a mic per fader, strip n on DCA n —
- * and the desk is left driving one DCA: a one-mic show whose recall is about what changed,
- * rather than the sweep of twelve a brand-new show puts on the wire.
+ * at a port the test owns, the first performer named, and a scene that places their strip
+ * on the first fader. Naming the performer names their strip, which is what the grid shows,
+ * and the placement is the scene's own — nothing else in the show says which fader a
+ * channel rides (AD-26).
  *
  * `point` is which of the app's desk connections the caller is exercising; a show driven
  * over the desk's own socket passes `pointDeskAtTcp`.
@@ -499,16 +499,14 @@ export async function buildDeskShow(
   await point(page, port)
   const settings = page.locator('.show-settings-dialog')
 
-  await settings.locator('.dca-count-select').selectOption('1')
-
-  // The demo cast is patched to the strips and strip 1 drives DCA 1, so nothing here has
-  // to be assigned. Naming the performer names their strip, which is what the grid shows.
+  // The demo rack's cast is patched to the strips, so naming the first performer names
+  // the first strip; nothing here has to be routed.
   await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
   const performer = settings.locator('.performer-row').first()
   const patched = await performer.locator('.performer-channel').evaluate(
     select => (select as HTMLSelectElement).selectedOptions[0]?.textContent ?? ''
   )
-  expect(patched).toBe('Ch 1 → DCA 1')
+  expect(patched).toBe('Ch 1')
   await performer.locator('.performer-name').fill('Ruth')
   await performer.locator('.performer-name').blur()
   await settings.locator('.show-settings-done').click()
@@ -516,7 +514,10 @@ export async function buildDeskShow(
   await openScenesView(page)
   await editScenes(page)
   await page.locator('.scenes-add').click()
-  await page.locator('.matrix-row').first().locator('.matrix-cell').first().click()
+  // A scene places the channels it wants: the first strip on the first fader, which is
+  // the membership a recall writes and the reason the mic is open.
+  await page.locator('.matrix-row').first().locator('.matrix-cell').first()
+    .locator('.matrix-place').selectOption({ label: 'Ch 1 · Ruth' })
 }
 
 /**

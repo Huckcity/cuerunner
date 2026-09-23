@@ -61,17 +61,27 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
         buttons: { go: GO_GROUP, back: BACK_GROUP, goNote: GO_NOTE, backNote: BACK_NOTE }
       },
       cast: {
-        channels: [{ id: 'ch-1', name: 'Ruth', dcaId: 'dca-1' }],
+        // A channel is a name and a number: the fader it rides is the scene's, so a strip
+        // carries no assignment (AD-26) and the desk's own numbers live on the faders.
+        channels: [{ id: 'ch-1', name: 'Ruth' }],
         performers: [{ id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: 'ch-1' }],
         ensembles: [],
-        dcas: [{ id: 'dca-1', label: 'DCA 1', note: null, address: null }]
+        dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }]
       },
       // Two scenes over one mic: the walk the desk's keys drive is this list, in this order.
+      // The first places the mic on the fader — the membership a recall writes, and the
+      // reason the desk has it open — and the second places nothing.
       scenes: {
         list: [
-          { id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: '' },
-          { id: 's-2', name: 'Interval', live: [], ensembles: [], excluded: [], notes: '' }
-        ]
+          {
+            id: 's-1',
+            name: 'Wedding',
+            dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
+            notes: ''
+          },
+          { id: 's-2', name: 'Interval', dcas: [], notes: '' }
+        ],
+        allowDuplicateAssignment: true
       }
     },
     cues: []

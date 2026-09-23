@@ -1,7 +1,8 @@
 // The Scenes view: the matrix the show is run from and the only place scenes are
-// edited. The DCAs, the cast and the ensembles are Show Settings'
-// (`show-settings.spec.ts`); the test owns a UDP port and the show's desk points at it, so
-// what is asserted here is what actually left the app.
+// edited. The faders, the cast and the ensembles are Show Settings' — a scene says which
+// channels ride which fader, and nothing else in the show says it (`show-settings.spec.ts`).
+// The test owns a UDP port and the show's desk points at it, so what is asserted here is
+// what actually left the app.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import {
   addCueFromMoreMenu,
@@ -11,6 +12,7 @@ import {
   launchApp,
   listenOsc,
   mintLicense,
+  openLogPanel,
   openShowSettings
 } from './helpers'
 
@@ -34,23 +36,32 @@ test('the view holds the show, and recall works from a column', async () => {
   try {
     await buildDeskShow(page, desk.port)
 
-    // Twelve mics down the rows, one scene across the columns — plus the all-closed
-    // column that is always there in front of them.
+    // The show's twelve faders down the rows, one scene across the columns — plus the
+    // all-closed column that is always there in front of them.
     await expect(page.locator('.matrix-row')).toHaveCount(12)
     await expect(page.locator('.matrix-scene:not([data-all-closed])')).toHaveCount(1)
     await expect(page.locator('.matrix-scene')).toHaveCount(2)
 
-    // The all-closed column takes no one: a performer row has one cell per scene and a
+    // The all-closed column places nothing: a fader's row has one cell per scene and a
     // blank where the empty stage is, so a scene's cell index is still its place among
     // the scenes.
     const row = page.locator('.matrix-row').first()
     await expect(row.locator('.matrix-cell')).toHaveCount(1)
     await expect(row.locator('.matrix-cell-blank')).toHaveCount(1)
+    // The one cell of the scene the helper built names the strip it places.
+    await expect(row.locator('.matrix-cell').first().locator('.matrix-channel'))
+      .toContainText('Ch 1 · Ruth')
 
-    // Recalling from the column header is what the view is for.
+    // Recalling from the column header is what the view is for. The desk has never been
+    // told anything, so the recall says the whole show: the strip the scene places is
+    // open, and the eleven it says nothing about are closed — by their own numbers,
+    // because a mic's mute is the channel's and never a fader's.
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
-    await expect.poll(() => desk.received.length).toBe(1)
+    await expect.poll(() => desk.received.length).toBe(12)
     expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
+    expect(desk.received.slice(1).map(message => message.address))
+      .toEqual(Array.from({ length: 11 }, (_, index) => `/dca/${index + 2}/on`))
+    expect(desk.received.slice(1).map(message => message.args[0])).toEqual(Array(11).fill(0))
     await expect(page.locator('.matrix-scene:not([data-all-closed])'))
       .toHaveAttribute('data-current', 'true')
   } finally {
@@ -89,12 +100,16 @@ test('the show is edited in the view, not in a dialog', async () => {
   await expect(allClosed.locator('.scene-name-field')).toHaveCount(0)
   await expect(allClosed.locator('.matrix-scene-remove')).toHaveCount(0)
 
-  // The row is the performer, with the strip their mic is patched to beside them — the
-  // name they were given named the strip, which is what the console calls it. Which DCA
-  // that opens is set up in Show Settings, not in the grid the show is run from.
-  await expect(page.locator('.matrix-performer').first()).toHaveText('Ruth')
-  await expect(page.locator('.matrix-channel').first()).toHaveText('Ch 1 · Ruth')
-  await expect(page.locator('.matrix-row').first().locator('select')).toHaveCount(0)
+  // The row is a fader of the show, and the cell names the strips that scene places on
+  // it — the name the performer was given named their strip, which is what the console
+  // calls it. Which channel rides which fader is the scene's decision, made here and
+  // nowhere else.
+  await expect(page.locator('.matrix-mic').first()).toContainText('DCA 1')
+  await expect(page.locator('.matrix-channel').first()).toContainText('Ch 1 · Ruth')
+  // What the grid does with a strip is place it on a fader. Who is on which strip, and
+  // what the console calls it, are Show Settings': the row's own header is a label rather
+  // than a picker.
+  await expect(page.locator('.matrix-mic').first().locator('select')).toHaveCount(0)
 })
 
 test('a show with many scenes still fits the window', async () => {
@@ -216,36 +231,60 @@ test('deleting a scene leaves the view where it is, and undo puts it back', asyn
   await buildDeskShow(page, freePort())
   const columns = page.locator('.matrix-scene:not([data-all-closed])')
 
-  // Fifteen numbers, one of them named for what it does and with a mic of its own.
+  // Fifteen numbers, one of them named for what it does and with a mic of its own. It is the
+  // second scene because this test deletes it, which is also why the press has to be one the
+  // operator can make without moving the grid — the delete below says why.
   for (let i = 0; i < 14; i++) {
     await page.locator('.scenes-add').click()
     const field = columns.last().locator('.scene-name-field')
     await field.fill(`Number ${i + 2}`)
     await field.blur()
   }
-  const vows = columns.nth(2).locator('.scene-name-field')
+  const vows = columns.nth(1).locator('.scene-name-field')
   await vows.fill('Vows')
   await vows.blur()
-  // The third cell of the row is the third scene: the all-closed column is a blank in
-  // the row rather than a cell, so the index did not move.
-  await page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(2).click()
+  // Vows places a strip on the seventh fader: the second cell of that row is the second
+  // scene, because the all-closed column is a blank in the row rather than a cell.
+  const vowsCell = page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(1)
+  await vowsCell.locator('.matrix-place').selectOption({ label: 'Ch 1 · Ruth' })
+  await expect(vowsCell).toHaveAttribute('data-placed', 'true')
 
-  // The show reaches the fifteenth through the cue stack.
+  // The show reaches the fifteenth through the cue stack. The cue is armed here; the press
+  // that fires it belongs to the view the show is run from, so the grid is left where an
+  // operator watching the top of the show would have it, and the show is left to move it.
   await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
   await addCueFromMoreMenu(page, 'Scene')
   await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
   await page.locator('#scene-cue-select').selectOption({ label: 'Number 15' })
-  await page.locator('.btn-go').click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
+  const scroll = page.locator('.matrix-scroll')
+  await scroll.evaluate(el => { el.scrollLeft = 0 })
+
+  // GO, and the view follows the show: the desk is on the last scene, which following takes
+  // as far right as the grid goes. Waited for, and the wait is only unambiguous because the
+  // box was just put at the top by hand. The follow is a passive effect — queued in the
+  // commit that flips `data-current`, flushed on a task the browser is free to run after the
+  // next call from here — so until it has run the view is still on its way, and a scroll of
+  // ours at that moment races the show rather than the delete.
+  await page.locator('.btn-go').click()
   await expect(columns.nth(14)).toHaveAttribute('data-current', 'true')
+  const rightEnd = await scroll.evaluate(el => el.scrollWidth - el.clientWidth)
+  await expect.poll(() => scroll.evaluate(el => el.scrollLeft)).toBe(rightEnd)
 
   // The operator scrolls back to the top of the show and deletes a scene they do not want.
   // That is an edit: the desk has not moved, so the view must not either — it used to snap
-  // back to wherever the show was, as though the delete had been a recall.
-  await page.locator('.matrix-scroll').evaluate(el => { el.scrollLeft = 0 })
-  await columns.nth(2).locator('.matrix-scene-remove').click()
+  // back to wherever the show was, as though the delete had been a recall. The second scene
+  // is the one that goes because its ✕ is on screen from the top of the show: a control that
+  // is not on screen is scrolled into view before it is pressed, and that scroll would be the
+  // harness's own hand inside the measurement made below. The line before the press holds
+  // that to the layout, so a ✕ pushed off the side fails there, where the reason is, rather
+  // than three lines later at a scroll assertion.
+  const remove = columns.nth(1).locator('.matrix-scene-remove')
+  await scroll.evaluate(el => { el.scrollLeft = 0 })
+  await expect(remove).toBeInViewport({ ratio: 1 })
+  await remove.click()
   await expect(columns).toHaveCount(14)
-  expect(await page.locator('.matrix-scroll').evaluate(el => el.scrollLeft)).toBe(0)
+  expect(await scroll.evaluate(el => el.scrollLeft)).toBe(0)
   await expect(columns.last()).not.toBeInViewport()
 
   // Undo returns it where it was, with the mic it opens.
@@ -255,9 +294,10 @@ test('deleting a scene leaves the view where it is, and undo puts it back', asyn
       ?.click(undefined, BrowserWindow.getAllWindows()[0])
   })
   await expect(columns).toHaveCount(15)
-  await expect(columns.nth(2).locator('.scene-name-field')).toHaveValue('Vows')
-  await expect(page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(2))
-    .toHaveAttribute('data-live', 'true')
+  await expect(columns.nth(1).locator('.scene-name-field')).toHaveValue('Vows')
+  // With the placement it had: the cell names the strip again.
+  await expect(page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(1))
+    .toHaveAttribute('data-placed', 'true')
 })
 
 test('editing a cell moves the scene, and the desk is told only when asked', async () => {
@@ -267,42 +307,39 @@ test('editing a cell moves the scene, and the desk is told only when asked', asy
   try {
     await buildDeskShow(page, desk.port)
 
+    // The first recall says the whole show, because the desk has never been told anything:
+    // the strip the scene places is open and the eleven it says nothing about are closed.
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
-    await expect.poll(() => desk.received.length).toBe(1)
-    expect(desk.received[0].args).toEqual([1])
+    await expect.poll(() => desk.received.length).toBe(12)
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
 
-    // Two mics on one fader is what makes the desk's silence observable: the second strip
-    // joins the first, so the second mic opening rides a fader that is already open.
-    await openShowSettings(page)
-    const settings = page.locator('.show-settings-dialog')
-    await settings.locator('.channel-row').nth(1).locator('.channel-dca')
-      .selectOption({ label: '1 · DCA 1' })
-    await settings.locator('.show-settings-done').click()
-
-    const secondMic = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
-    await secondMic.click()
-    await expect(secondMic).toHaveAttribute('data-live', 'true')
-    await expect(page.locator('.matrix-apply')).toHaveCount(0)
-    expect(desk.received).toHaveLength(1)
-
-    // The first mic closing leaves the second still riding the fader, so still nothing.
-    const firstMic = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await firstMic.click()
-    await expect(firstMic).toHaveAttribute('data-live', 'false')
-    await expect(page.locator('.matrix-apply')).toHaveCount(0)
-    expect(desk.received).toHaveLength(1)
-
-    // The last mic on the fader closing does change it, and editing is not applying: the
-    // desk waits until the operator says so.
-    await secondMic.click()
-    await expect(secondMic).toHaveAttribute('data-live', 'false')
+    // Editing is not applying: the second strip joins the first on its fader, and the desk
+    // hears nothing until the operator says so.
+    const firstFader = page.locator('.matrix-row').first().locator('.matrix-cell').first()
+    await firstFader.locator('.matrix-place').selectOption({ label: 'Ch 2' })
+    await expect(firstFader.locator('.matrix-channel')).toHaveCount(2)
     await expect(page.locator('.matrix-apply')).toBeVisible()
-    expect(desk.received).toHaveLength(1)
+    await page.waitForTimeout(300)
+    expect(desk.received).toHaveLength(12)
 
+    // The press that moves the room: the channel the scene has just placed is opened by
+    // its own number, and the membership it now rides is reported as a gap — a desk that
+    // takes a note on and a note off has no assignment for Cuerunner to write.
     await page.locator('.matrix-apply').click()
-    await expect.poll(() => desk.received.length).toBe(2)
-    // The last mic went out, so the DCA closes.
-    expect(desk.received[1]).toEqual({ address: '/dca/1/on', args: [0] })
+    await expect.poll(() => desk.received.length).toBe(13)
+    expect(desk.received[12]).toEqual({ address: '/dca/2/on', args: [1] })
+    await openLogPanel(page)
+    await expect(page.locator('.log-panel')).toContainText('Cannot be told to this desk')
+    await expect(page.locator('.log-panel')).toContainText('OSC takes no assignment')
+
+    // The mutes are done — a second press changes nothing on the wire — but the placement
+    // is still owed: an OSC desk takes no assignment, so the record never learns it and
+    // the press stays up with the gap in the log, rather than going quiet about half a
+    // recall. That is the honest half: the mic is open, the fader is not Cuerunner's to set.
+    const written = desk.received.length
+    await page.locator('.matrix-apply').click()
+    await page.waitForTimeout(300)
+    expect(desk.received).toHaveLength(written)
   } finally {
     await desk.close()
   }
@@ -324,10 +361,12 @@ test('a scene cue moves the desk when GO reaches it', async () => {
 
     await page.locator('.btn-go').click()
 
-    await expect.poll(() => desk.received.length).toBe(1)
+    // The desk has heard nothing yet, so the cue says the whole show: the strip the scene
+    // places opened by its own number, and the eleven the scene does not place closed.
+    await expect.poll(() => desk.received.length).toBe(12)
     expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
     await page.locator('.btn-log').click()
-    await expect(page.locator('.log-panel')).toContainText('Scene "Scene 1" — 1 opened')
+    await expect(page.locator('.log-panel')).toContainText('Scene "Scene 1" — 1 opened, 11 closed')
   } finally {
     await desk.close()
   }
@@ -340,11 +379,14 @@ test('the all-closed column closes everything the show drives', async () => {
   try {
     await buildDeskShow(page, desk.port)
 
-    // The first column is the empty stage, and recalling it closes every DCA the show
-    // drives — a scene of its own is not needed to get the desk back to nothing.
+    // The first column is the empty stage, and recalling it closes every channel the show
+    // has — a scene of its own is not needed to get the desk back to nothing.
     await page.locator('.matrix-scene[data-all-closed] .matrix-recall').click()
-    await expect.poll(() => desk.received.length).toBe(1)
-    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [0] })
+    await expect.poll(() => desk.received.length).toBe(12)
+    expect(desk.received.map(message => message.address)).toEqual(
+      Array.from({ length: 12 }, (_, index) => `/dca/${index + 1}/on`)
+    )
+    expect(desk.received.map(message => message.args[0])).toEqual(Array(12).fill(0))
 
     // The desk is left somewhere the view can say: the all-closed column is the state it
     // is on, not an absence of one.
@@ -355,23 +397,17 @@ test('the all-closed column closes everything the show drives', async () => {
   }
 })
 
-test('a scene that applies an ensemble opens every member of it', async () => {
+test('a scene that applies an ensemble to a row rides every member of it', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())
 
   try {
     await buildDeskShow(page, desk.port)
 
-    // A second fader for the second mic: an ensemble is two mics moving together, and the
-    // show the helper built drives one DCA.
+    // The two performers — the one the scene places and the one after them — are grouped
+    // into one ensemble by its own member list, built in the Cast tab.
     await openShowSettings(page)
     const settings = page.locator('.show-settings-dialog')
-    await settings.locator('.dca-count-select').selectOption('2')
-    await settings.locator('.channel-row').nth(1).locator('.channel-dca')
-      .selectOption({ label: '2 · DCA 2' })
-
-    // The two performers — the one the scene has open and the one after them — are grouped
-    // into one ensemble by its member list.
     await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
     const performers = settings.locator('.performer-row')
     const first = await performers.nth(0).locator('.performer-name').inputValue()
@@ -383,34 +419,34 @@ test('a scene that applies an ensemble opens every member of it', async () => {
     await expect(ensemble.locator('.member-chip')).toHaveCount(2)
     await settings.locator('.show-settings-done').click()
 
-    // An ensemble routes nothing itself: applying it to the scene is what opens both
-    // mics, and each member's own DCA is told, at the address its own number makes.
-    const applied = page.locator('.matrix-ensemble-row').first().locator('.matrix-cell').first()
-    await applied.click()
-    await expect(applied).toHaveAttribute('data-applied', 'on')
+    // An ensemble routes nothing itself: applying it to a row is what puts both members'
+    // strips on that fader, and the row names it and the members it now carries.
+    const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
+    await cell.locator('.matrix-ensemble-add').selectOption({ label: 'Ensemble 1' })
+    await expect(cell.locator('.matrix-ensemble')).toHaveAttribute('data-applied', 'on')
+    await expect(cell.locator('.matrix-channel')).toHaveCount(2)
 
-    // It is one grid: an ensemble's cell for a scene sits over the performers' cells for
-    // the same scene, under the same header. A row that is one cell short draws every
-    // column a place to the left — and takes every row after it with it, which is a
-    // thing the clicks still do correctly and the eye does not.
+    // It is one grid: a cell sits over its own column, whatever it is carrying. A row that
+    // is one cell short draws every column a place to the left — and takes every row after
+    // it with it, which is a thing the clicks still do correctly and the eye does not.
     const boxOf = async (selector: string): Promise<{ x: number; width: number }> => {
       const box = await page.locator(selector).first().boundingBox()
       if (box === null) throw new Error(`${selector} is not on screen`)
       return box
     }
-    const ensembleCell = await boxOf('.matrix-ensemble-row .matrix-cell')
-    const performerCell = await boxOf('.matrix-row .matrix-cell')
+    const cellBox = await boxOf('.matrix-row .matrix-cell')
     const sceneHeader = await boxOf('.matrix-scene:not([data-all-closed])')
-    expect(ensembleCell.x).toBe(performerCell.x)
-    expect(ensembleCell.width).toBe(performerCell.width)
     // The cell is inset by its own margin, so it starts a couple of pixels inside its
     // column — a column is ninety wide, so anything that is not that is a whole column out.
-    expect(Math.abs(ensembleCell.x - sceneHeader.x)).toBeLessThan(4)
+    expect(Math.abs(cellBox.x - sceneHeader.x)).toBeLessThan(4)
 
+    // Both members are told by their own channel numbers, at the addresses those numbers
+    // make, and the ten the scene says nothing about are closed.
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
-    await expect.poll(() => desk.received.length).toBe(2)
+    await expect.poll(() => desk.received.length).toBe(12)
     expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
     expect(desk.received[1]).toEqual({ address: '/dca/2/on', args: [1] })
+    expect(desk.received.slice(2).map(message => message.args[0])).toEqual(Array(10).fill(0))
   } finally {
     await desk.close()
   }
@@ -423,29 +459,31 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
   try {
     await buildDeskShow(page, desk.port)
 
-    // Done: the show is being run, and a stray click changes nothing.
+    // Done: the show is being run, and a stray click changes nothing. A cell is a readout
+    // — the strips its row places — and the presses that would change the show are not
+    // drawn as presses: the pickers are gone and the ✕ beside a strip is disabled.
     await page.locator('.scenes-edit').click()
     await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'false')
     await expect(page.locator('.scenes-editing-hint')).toHaveCount(0)
 
     const cell = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
-    await expect(cell).toBeDisabled()
-    await cell.click({ force: true })
-    await expect(cell).toHaveAttribute('data-live', 'false')
+    await expect(cell).toHaveAttribute('data-placed', 'false')
+    await expect(page.locator('.matrix-place')).toHaveCount(0)
+    await expect(page.locator('.matrix-ensemble-add')).toHaveCount(0)
+    await expect(page.locator('.matrix-channel-remove').first()).toBeDisabled()
     await expect(page.locator('.scenes-add')).toHaveCount(0)
     await expect(page.locator('.matrix-scene-remove')).toHaveCount(0)
-    // Editing the cast is not this view's either: Show Settings stays in the menu.
-    await expect(page.locator('.scenes-ensemble')).toHaveCount(0)
 
-    // Recalling is what the view is for: it stays live.
+    // Recalling is what the view is for: it stays live. The desk has heard nothing, so the
+    // recall says the whole show.
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
-    await expect.poll(() => desk.received.length).toBe(1)
+    await expect.poll(() => desk.received.length).toBe(12)
     expect(desk.received[0].args).toEqual([1])
 
     // And Edit gives the show back.
     await page.locator('.scenes-edit').click()
-    await expect(cell).toBeEnabled()
-    await expect(page.locator('.scenes-add')).toBeVisible()
+    await cell.locator('.matrix-place').selectOption({ label: 'Ch 2' })
+    await expect(cell.locator('.matrix-channel')).toHaveCount(1)
   } finally {
     await desk.close()
   }

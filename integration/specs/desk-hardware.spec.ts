@@ -11,15 +11,19 @@
 // is what "on demand only, wherever a desk is" means.
 //
 // What is asserted is the desk's own reply, read on this spec's own socket (`deskReadBack.ts`:
-// an SQ answers a get with the parameter's current value in the NRPN form that sets it, an
-// Avantis answers a name get in its own SysEx header). That socket reaches the desk through the
-// relay (`../deskRelay.ts`), because the desk's MIDI service serves one connection at a time —
-// measured on an SQ-6, firmware 1.6.1: a second connection is accepted and reset before it can
-// send anything (`INTEGRATION-HARNESS.md` §6) — and this lane needs two: the app that drives the
-// desk, and this spec that asks it for its own value. The app's log is read for the two things
-// only the app can say — that a key press moved the show, and that the console's command fired
-// the cue that answers it — and the desk's or the console's own device is named in the line it
-// fired from. Nothing here reads the app's account of what it sent.
+// an SQ answers a get with the parameter's current value in the NRPN form that sets it — asked
+// at the input's own page, which is the fact a recall writes — and an Avantis answers a name
+// get in its own SysEx header, the only read-back it publishes). That socket reaches the desk
+// through the relay (`../deskRelay.ts`), because the desk's MIDI service serves one connection
+// at a time — measured on an SQ-6, firmware 1.6.1: a second connection is accepted and reset
+// before it can send anything (`INTEGRATION-HARNESS.md` §6) — and this lane needs two: the app
+// that drives the desk, and this spec that asks it for its own value. What the relay does not
+// carry is the SQ's own control service on 51326, where an SQ's membership is written: that
+// half of a recall is unreadable here and its claim stays where the record left it. The app's
+// log is read for the two things only the app can say — that a key press moved the show, and
+// that the console's command fired the cue that answers it — and the desk's or the console's
+// own device is named in the line it fired from. Nothing here reads the app's account of what
+// it sent.
 //
 // Until a run happens, the peer's model of the desk, the vendor lane's "MIDI bytes are MIDI
 // bytes" assumption and the message a real key press sends stay unproven, and §11 of the
@@ -32,12 +36,13 @@ import type { DeskRelay } from '../deskRelay.ts'
 import { writeDeskShow } from './deskFixture'
 import { BACK_GROUP, GO_GROUP } from './deskButtonsFixture'
 import {
-  avantisDcaNameGet,
+  avantisInputNameGet,
   DESK_ANSWER_MS,
   isAvantisNameReply,
   openDeskWire,
-  sqDcaGet,
+  sqMuteGet,
   sqMuteValue,
+  SQ_INPUT_1,
   type DeskWire
 } from './deskReadBack'
 // The app's own vocabulary for a show control command and the values it takes, so what this
@@ -136,16 +141,22 @@ function checklist(): string {
   ].join('\n')
 }
 
-/** The question this spec asks the desk, for the parameter every case is about. */
+/**
+ * The question this spec asks the desk, for the fact every case is about. What a recall writes
+ * here is the mic's own mute, so an SQ is asked for the parameter the app writes — page 00 at
+ * the input's own number — and an Avantis is asked for that input's name, which is the only
+ * read-back its document publishes: a mute get is an SQ's, and no range answers for an
+ * assignment at all (INTEGRATION-HARNESS.md §6 records it as unmeasured).
+ */
 function readBack(): number[] {
-  return PROFILE === 'avantis' ? avantisDcaNameGet(CHANNEL) : sqDcaGet(CHANNEL)
+  return PROFILE === 'avantis' ? avantisInputNameGet(CHANNEL) : sqMuteGet(CHANNEL, SQ_INPUT_1)
 }
 
 /**
- * The show's two scenes as the fixture writes them: the first opens DCA 1, the second opens
- * nobody — so a recall is the open and a recall of the other is the close. They are named by
- * id rather than by "the scene that is not all closed", because this show has two scenes the
- * desk's own keys walk between.
+ * The show's two scenes as the fixture writes them: the first places the one channel on the
+ * one fader — so a recall of it opens the mic — and the second places nobody, which is the
+ * close. They are named by id rather than by "the scene that is not all closed", because this
+ * show has two scenes the desk's own keys walk between.
  */
 const OPENING_SCENE = '.matrix-scene[data-scene-id="s-1"] .matrix-recall'
 const CLOSING_SCENE = '.matrix-scene[data-scene-id="s-2"] .matrix-recall'
@@ -156,10 +167,10 @@ let userDataDir: string
 let wire: DeskWire
 let relay: DeskRelay | undefined
 
-/** What the desk's own value says about DCA 1, or null when it has not answered in time. */
-async function dcaValue(): Promise<boolean | null> {
-  const answer = await wire.ask(sqDcaGet(CHANNEL))
-  return answer === null ? null : sqMuteValue(answer)
+/** What the desk's own value says about the mic, or null when it has not answered in time. */
+async function micValue(): Promise<boolean | null> {
+  const answer = await wire.ask(sqMuteGet(CHANNEL, SQ_INPUT_1))
+  return answer === null ? null : sqMuteValue(answer, SQ_INPUT_1)
 }
 
 test.beforeAll(async () => {
@@ -207,7 +218,7 @@ test.afterAll(async () => {
 test('the desk answers for itself', { tag: '@hardware' }, async () => {
   // The whole path in the direction that needs no hand: this spec asks the desk something its
   // own document says it answers. An answer means the address, the port, the channel and the
-  // arithmetic that addresses DCA 1 are right — everything after this would otherwise fail
+  // address the mic answers at are right — everything after this would otherwise fail
   // obscurely. The shape of the answer is what the peer's model asserts too, so a desk that
   // answers differently is a finding about the peer rather than about the app.
   const answer = await wire.ask(readBack())
@@ -224,7 +235,7 @@ test('the desk answers for itself', { tag: '@hardware' }, async () => {
     return
   }
   expect(
-    sqMuteValue(answer),
+    sqMuteValue(answer, SQ_INPUT_1),
     `the desk answered, but not in the value form the SQ document describes ("Getting values"): ${shown}\n\n` +
     'The peer’s model of that reply is the assumption this lane exists to measure (INTEGRATION-HARNESS.md §6).'
   ).not.toBeNull()
@@ -236,16 +247,19 @@ test('a scene recall moves the desk, and the desk’s own value says so', { tag:
     'an Avantis publishes no read-back for a mute, so the desk’s own value is only readable on an SQ — the name reply above is what that range gives'
   )
 
-  // The scene opens DCA 1 — the recall the peer lane asserts on the peer's own state. Here
-  // the desk is the one speaking: the get is the desk's own answer about where the parameter
-  // stands, and the poll asks again until it says so.
+  // The scene places the mic on the fader, so the recall opens it — and what is asked about is
+  // the mic's own mute, on the input's page, because that is the fact a recall writes: a DCA
+  // is a control group, and the assignment is written over the desk's own control service on
+  // 51326 instead, which no peer here stands in for and this relay does not carry (Story
+  // 11.5). Here the desk is the one speaking: the get is its own answer about where the
+  // parameter stands, and the poll asks again until it says so.
   await page.locator(OPENING_SCENE).click()
-  await expect.poll(dcaValue, { timeout: 10_000 }).toBe(true)
+  await expect.poll(micValue, { timeout: 10_000 }).toBe(false)
 
   // And the half that never worked before the profile: the close is the same sequence with
-  // the fine byte at zero, and the desk says so.
+  // the other fine byte, and the desk says so.
   await page.locator(CLOSING_SCENE).click()
-  await expect.poll(dcaValue, { timeout: 10_000 }).toBe(false)
+  await expect.poll(micValue, { timeout: 10_000 }).toBe(true)
 })
 
 test('a key pressed at the desk runs the show, and the desk moves with it', { tag: '@hardware' }, async () => {
@@ -271,7 +285,7 @@ test('a key pressed at the desk runs the show, and the desk moves with it', { ta
   // behind it rather than "already at the last scene".
   await page.locator(OPENING_SCENE).click()
   if (PROFILE === 'sq') {
-    await expect.poll(dcaValue, { timeout: 10_000 }).toBe(true)
+    await expect.poll(micValue, { timeout: 10_000 }).toBe(false)
   }
 
   await openLogPanel(page)
@@ -287,11 +301,12 @@ test('a key pressed at the desk runs the show, and the desk moves with it', { ta
     throw new Error(`${(error as Error).message}\n\n${pressed}`)
   }
 
-  // The desk moved with the show: the second scene closes DCA 1, the app's own message for it
-  // lands at the desk, and the desk's own value is what says so. On an Avantis the log line
-  // above is all this case carries — its document has no read-back to ask.
+  // The desk moved with the show: the second scene places nobody, so the recall closes the
+  // mic, the app's own message for it lands at the desk, and the desk's own value is what says
+  // so. On an Avantis the log line above is all this case carries — its document has no
+  // read-back for a mute to ask.
   if (PROFILE === 'sq') {
-    await expect.poll(dcaValue, { timeout: 10_000 }).toBe(false)
+    await expect.poll(micValue, { timeout: 10_000 }).toBe(true)
   }
 })
 

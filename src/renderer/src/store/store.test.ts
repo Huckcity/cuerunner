@@ -3,6 +3,7 @@ import { useStore } from './index'
 import type { AudioCue } from '../../../shared/cue'
 import { defaultShowSettings } from '../../../shared/show'
 import { setDcaCount } from '../utils/cast'
+import { rowChannels, setChannelPlaced } from '../utils/scenes'
 import type {
   AlertEvent,
   AlertLevel,
@@ -17,9 +18,9 @@ import type {
   ShowEvent
 } from '../../../shared/show'
 
-const DCA: Dca = { id: 'dca-1', label: 'DCA 1', note: null, address: null }
+const DCA: Dca = { id: 'dca-1', label: 'DCA 1', deskNumber: null }
 /** The strip Ada's mic is on, which is what carries her to the desk. */
-const CHANNEL = { id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }
+const CHANNEL = { id: 'ch-1', name: 'Ada' }
 const ROUTED_PERFORMER: Performer = {
   id: 'p1',
   name: 'Ada',
@@ -27,12 +28,11 @@ const ROUTED_PERFORMER: Performer = {
   notes: '',
   channelId: 'ch-1'
 }
+/** The scene Ada is on: the first fader, and the strip that rides it. */
 const NUMBER: MicScene = {
   id: 's1',
   name: 'Bows',
-  live: ['p1'],
-  ensembles: [],
-  excluded: [],
+  dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
   notes: ''
 }
 
@@ -825,9 +825,12 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().cues.find(c => c.id === c1.id)?.name).toBe('First')
   })
 
-  it('undo after removing an ensemble brings it back with the scenes that applied it', () => {
+  it('undo after removing an ensemble brings it back with the rows that applied it', () => {
     const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', members: ['p1'] }
-    const applying: MicScene = { ...NUMBER, live: [], ensembles: ['ens-1'] }
+    const applying: MicScene = {
+      ...NUMBER,
+      dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['ens-1'], excluded: [] }]
+    }
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
@@ -839,36 +842,41 @@ describe('store — undo/redo', () => {
 
     useStore.getState().removeEnsemble(chorus.id)
 
-    // The ensemble goes and the scenes that had it applied stop applying it, in the same
-    // edit: a scene pointing at an ensemble that is gone is a group of mics nobody can
-    // move from the grid again.
+    // The ensemble goes and the rows that had it applied stop applying it, in the same
+    // edit: a row pointing at an ensemble that is gone is a group of mics nobody can move
+    // from the grid again.
     expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
-    expect(useStore.getState().showSettings.scenes.list[0].ensembles).toEqual([])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+    ])
 
     // One undo, rather than half of the edit and then the other half.
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.ensembles.map(ensemble => ensemble.id))
       .toEqual([chorus.id])
-    expect(useStore.getState().showSettings.scenes.list[0].ensembles).toEqual([chorus.id])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas[0].ensembles).toEqual(['ens-1'])
   })
 
-  it('undo after resizing the DCAs brings back what the dropped ones were carrying', () => {
+  it('undo after resizing the DCAs puts the list back and leaves the rest of the show alone', () => {
+    // The count is the show's list of faders, and nothing else moves with it: a strip has
+    // no assignment of its own to fall back to, and a scene's placement names a fader the
+    // show happens not to have — no row and no recall reads it, and the place comes back
+    // if the fader does.
     const defaults = defaultShowSettings()
     useStore.setState({
-      showSettings: { ...defaults, cast: castWith() }
+      showSettings: { ...defaults, cast: castWith(), scenes: { ...defaults.scenes, list: [NUMBER] } }
     })
 
     const cast = useStore.getState().showSettings.cast
     useStore.getState().updateCastSettings(setDcaCount(cast, 0))
 
-    // The strip that was on the DCA is still there, riding the fader of its own number —
-    // the first place, which is now past the end — rather than pointing at a DCA that is gone.
     expect(useStore.getState().showSettings.cast.dcas).toEqual([])
-    expect(useStore.getState().showSettings.cast.channels[0].dcaId).toBeNull()
+    expect(useStore.getState().showSettings.cast.channels).toEqual(cast.channels)
+    expect(useStore.getState().showSettings.scenes.list).toEqual([NUMBER])
 
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.dcas).toEqual([DCA])
-    expect(useStore.getState().showSettings.cast.channels[0].dcaId).toBe('dca-1')
+    expect(useStore.getState().showSettings.cast.channels).toEqual(cast.channels)
   })
 
   it('undo after pointing the show at another desk puts the address back', () => {
@@ -882,28 +890,53 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.desk).toMatchObject({ host: '127.0.0.1', port: 8000 })
   })
 
-  it('makes an ensemble out of a scene in one edit, and applies it there', () => {
+  it('makes no ensemble out of a row whose strips have nobody on them', () => {
+    // The press is there to group the *people* riding a row. A row carrying a strip nobody
+    // is patched to would make an ensemble with no members and apply it: a grouping that
+    // opens nothing, written into the show by a press that changed nothing.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        scenes: { ...defaults.scenes, list: [NUMBER] },
+        cast: { ...castWith(), performers: [] }
+      }
+    })
+    const before = useStore.getState().showSettings
+
+    useStore.getState().addEnsembleFromRow(NUMBER.id, 'dca-1')
+
+    expect(useStore.getState().showSettings).toBe(before)
+    expect(useStore.getState().past).toHaveLength(0)
+  })
+
+  it('makes an ensemble out of a row in one edit, and applies it to that row', () => {
+    // Who is in it is who rides the row it is made from — the one thing the operator is
+    // looking at when they press it — and it is applied there in the same edit: an ensemble
+    // built from a row and not applied to it disappears the moment they look away.
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] }, cast: castWith() }
     })
 
-    useStore.getState().addEnsembleFromScene(NUMBER.id)
+    useStore.getState().addEnsembleFromRow(NUMBER.id, 'dca-1')
 
     const settings = useStore.getState().showSettings
     expect(settings.cast.ensembles).toHaveLength(1)
-    // Members are who the scene opens, and the scene applies the ensemble instead of
-    // naming them one by one.
     expect(settings.cast.ensembles[0].members).toEqual(['p1'])
-    expect(settings.scenes.list[0].ensembles).toEqual([settings.cast.ensembles[0].id])
-    expect(settings.scenes.list[0].live).toEqual([])
+    // The row carries the ensemble now rather than naming the strip by hand, and it still
+    // carries Ada: the regrouping is not a re-routing.
+    expect(settings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: [], ensembles: [settings.cast.ensembles[0].id], excluded: [] }
+    ])
+    expect(rowChannels(settings.cast, settings.scenes.list[0].dcas[0])).toEqual(['ch-1'])
 
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
-    expect(useStore.getState().showSettings.scenes.list[0].live).toEqual(['p1'])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels).toEqual(['ch-1'])
   })
 
-  it('undo after deleting a scene restores it with the mics it opens', () => {
+  it('undo after deleting a scene restores it with its placements', () => {
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] } }
@@ -914,6 +947,86 @@ describe('store — undo/redo', () => {
 
     useStore.getState().undo()
     expect(useStore.getState().showSettings.scenes.list).toEqual([NUMBER])
+  })
+
+  it('records a placement as one edit, restores it on undo, and marks the show dirty', () => {
+    // The grid's cell edits the list and nothing else, so a click that places a strip is
+    // one history entry — and one undo puts the row back exactly as it was.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith(),
+        scenes: { ...defaults.scenes, list: [{ ...NUMBER, dcas: [] }] }
+      },
+      isDirty: false
+    })
+    const before = useStore.getState().past.length
+    const scenes = useStore.getState().showSettings.scenes
+    const cast = useStore.getState().showSettings.cast
+
+    useStore.getState().updateScenesSettings({
+      list: setChannelPlaced(scenes, NUMBER.id, 'dca-1', 'ch-1', true, cast).list
+    })
+
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+    ])
+    expect(useStore.getState().past).toHaveLength(before + 1)
+    expect(useStore.getState().isDirty).toBe(true)
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
+  })
+
+  it('takes a strip out of the cast and out of every scene as one edit', () => {
+    // Two settings sections, one history entry: a placement naming a channel that is gone
+    // is a cell nobody can read again.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith(), scenes: { ...defaults.scenes, list: [NUMBER] } }
+    })
+    const before = useStore.getState().past.length
+
+    useStore.getState().removeChannel('ch-1')
+
+    expect(useStore.getState().showSettings.cast.channels).toEqual([])
+    expect(useStore.getState().showSettings.cast.performers[0].channelId).toBeNull()
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
+    expect(useStore.getState().past).toHaveLength(before + 1)
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings.cast.channels).toEqual([CHANNEL])
+    expect(useStore.getState().showSettings.cast.performers[0].channelId).toBe('ch-1')
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+    ])
+  })
+
+  it('never undoes what the desk was told: the record is session state, not an edit', () => {
+    // Where the desk was left is what Cuerunner last sent, and an undo puts a show back
+    // rather than a desk: a record an undo could rewind would describe a desk nobody has
+    // touched, and the next recall would send nothing.
+    useStore.setState({
+      showSettings: defaultShowSettings(),
+      deskState: { mutes: { 'ch-1': true }, assignments: { 'ch-1': ['dca-1'] } },
+      deskSceneId: 's1',
+      isDirty: false
+    })
+    const before = useStore.getState().past.length
+
+    useStore.getState().mergeDeskState({ mutes: { 'ch-1': false } }, 's2')
+    expect(useStore.getState().deskState.mutes).toEqual({ 'ch-1': false })
+    expect(useStore.getState().deskSceneId).toBe('s2')
+    expect(useStore.getState().past).toHaveLength(before)
+    expect(useStore.getState().isDirty).toBe(false)
+
+    useStore.getState().setDeskState({ mutes: { 'ch-1': false }, assignments: {} }, null)
+    useStore.getState().updateScenesSettings({ list: [] })
+    useStore.getState().undo()
+
+    expect(useStore.getState().deskState).toEqual({ mutes: { 'ch-1': false }, assignments: {} })
+    expect(useStore.getState().deskSceneId).toBeNull()
   })
 
   it('editing the Scenes view is a mode, not an edit, and opening a show ends it', () => {

@@ -28,8 +28,11 @@ import { heldShowSettings } from '../../shared/show'
 import { hasCueList, normalizeTriggerGuard } from '../../shared/workspace'
 import {
   savedShape,
+  CUE_SHAPE,
+  SHOW_SETTINGS_SHAPE,
   SHOW_SETTINGS_SECTIONS,
-  WORKSPACE_SECTIONS
+  WORKSPACE_SECTIONS,
+  type DeclaredFields
 } from '../../shared/workspaceSections'
 
 /**
@@ -224,24 +227,207 @@ const DECLARED_SHOW_SECTIONS: Record<string, true> = Object.fromEntries(
   SHOW_SETTINGS_SECTIONS.map(section => [section, true])
 )
 
+/** Every field a cue of each type has to carry, from the one declaration of them. */
+const DECLARED_CUE_FIELDS: Record<string, readonly string[] | undefined> = Object.fromEntries(
+  Object.entries(CUE_SHAPE)
+)
+
+/** The fields a show's settings carry, from the one declaration of them. */
+const DECLARED_SETTINGS_FIELDS: DeclaredFields = SHOW_SETTINGS_SHAPE
+
 /**
- * Refuses a document whose shape this build does not write. Two levels are checked: the
- * file's own top level, where a section this build does not declare is the fact, and a
+ * Where a value itself sits, for a sentence: `cast.channels.3` for a list's element, and the
+ * list's own path for the list.
+ */
+function valuePath(path: string, at: number): string {
+  return at < 0 ? path : `${path}.${at}`
+}
+
+/**
+ * A field's path as a sentence names it: `desk.buttons`, `cast.channels.0.dcaId` — the path
+ * of the object it is a field of, the element's index where that object is one, and the
+ * field. Built only where a sentence needs one, so a document that is this build's own is
+ * walked without joining a path at all.
+ */
+function fieldPath(path: string, at: number, field: string): string {
+  const owner = valuePath(path, at)
+  return owner === '' ? field : `${owner}.${field}`
+}
+
+/**
+ * What a value is, for a sentence: bounded, because the value may be a list of a million
+ * entries and the sentence is not the place to print it.
+ */
+function valueKind(value: unknown): string {
+  if (value === null || value === undefined) return 'nothing'
+  if (Array.isArray(value)) return 'a list'
+  if (typeof value === 'object') return 'an object'
+  return `a ${typeof value}`
+}
+
+/** Whether the declaration marks a field as one the types make optional on disk. */
+function isAbsentOnDisk(node: unknown): boolean {
+  if (typeof node !== 'object' || node === null) return false
+  return 'absent' in node && node.absent === true
+}
+
+/** A field's node with its `absent` wrapper — where the types put one — taken off. */
+function shapeOf(node: unknown): unknown {
+  if (typeof node !== 'object' || node === null) return node
+  if (!('absent' in node) || node.absent !== true) return node
+  return 'of' in node ? node.of : undefined
+}
+
+/** The fields a list's elements carry, or null when the declaration says the field is no list. */
+function elementFields(node: unknown): DeclaredFields | null {
+  const shape = shapeOf(node)
+  if (typeof shape !== 'object' || shape === null || !('elements' in shape)) return null
+  const elements = shape.elements
+  // A node's `elements` is the fields of its elements' objects by construction, and the walk
+  // only ever reads it as one.
+  return typeof elements === 'object' && elements !== null ? (elements as DeclaredFields) : null
+}
+
+/**
+ * Refuses a value whose fields are not the declared ones: a field the declaration does not
+ * carry, a declared field the value has not got, or a declared field whose value is not the
+ * kind of value the declaration says it is. `path` is where the value sits — a section's own
+ * name, or the field a list hangs under — and `at` is its index where the value is a list's
+ * element, or -1 where it is not.
+ *
+ * The walk descends through the declaration and not the document: four calls at the deepest
+ * — the settings, a section, a list's elements and the lists inside them — whatever a file
+ * nests, so no document can recurse it. A document's keys are iterated rather than listed,
+ * and the declaration's are the declaration's own size, so a document with a million fields
+ * costs the one that is wrong; and the walk refuses at the first thing it does not know
+ * rather than collecting what it found.
+ */
+function refuseForeignFields(
+  value: unknown,
+  fields: DeclaredFields,
+  path: string,
+  at: number,
+  source: string
+): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Refusal(
+      `that show’s settings have ${valuePath(path, at)} as ${valueKind(value)},` +
+      ` where this version of WinsLab writes an object` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+  const carried = value as Record<string, unknown>
+  // The document's own keys, iterated rather than collected into an array: a file may carry a
+  // million of them, and the walk refuses at the first it does not know.
+  for (const field in carried) {
+    if (Object.hasOwn(fields, field)) continue
+    throw new Refusal(
+      `that show’s settings have a field this version of WinsLab does not know` +
+      ` (${fieldPath(path, at, field)})` +
+      ` — ${source} was probably saved by a newer version`
+    )
+  }
+  // The declaration's fields, in the declaration's order: a document that leaves one out is
+  // refused here, which is the direction a file written before the field existed fails in.
+  for (const field of Object.keys(fields)) {
+    const node = fields[field]
+    if (!Object.hasOwn(carried, field)) {
+      if (isAbsentOnDisk(node)) continue
+      throw new Refusal(
+        `that show’s settings have no ${fieldPath(path, at, field)} field,` +
+        ` which this version of WinsLab writes` +
+        ` — ${source} was probably saved by an older build`
+      )
+    }
+    const elements = elementFields(node)
+    if (elements !== null) {
+      refuseForeignList(carried[field], elements, fieldPath(path, at, field), source)
+      continue
+    }
+    const shape = shapeOf(node)
+    if (shape === 'leaf') continue
+    refuseForeignFields(carried[field], shape as DeclaredFields, fieldPath(path, at, field), -1, source)
+  }
+}
+
+/** Refuses a declared list's value that is not a list of objects with the declared fields. */
+function refuseForeignList(value: unknown, fields: DeclaredFields, path: string, source: string): void {
+  if (!Array.isArray(value)) {
+    throw new Refusal(
+      `that show’s settings have ${path} as ${valueKind(value)},` +
+      ` where this version of WinsLab writes a list` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+  for (let at = 0; at < value.length; at++) refuseForeignFields(value[at], fields, path, at, source)
+}
+
+/**
+ * Refuses a cue that has not got a field its own type has to carry — a field the deleted
+ * migration pass used to fill in, which is what a file written before that field existed
+ * carries. The check is the declared fields alone: a cue on disk carries fields the runtime
+ * cue type does not declare — `media` is the one left — so a field this build does not
+ * declare is kept rather than refused. A cue type the declaration does not know is left to
+ * the arm below, which names it as the type it is.
+ */
+function refuseIncompleteCues(cues: readonly Cue[], source: string): void {
+  for (const cue of cues) {
+    if (typeof cue !== 'object' || cue === null || Array.isArray(cue)) {
+      throw new Refusal(
+        `that show has a cue that is not the shape this version of WinsLab writes` +
+        ` — ${source} carries ${valueKind(cue)} instead`
+      )
+    }
+    // `DECLARED_CUE_FIELDS` is a plain object, so a cue whose type is `constructor` or
+    // `toString` would otherwise read a function off `Object.prototype` and be walked as a
+    // list of fields — reach it through `hasOwn`, and let anything it does not own fall
+    // through to the cue-type arm the funnel makes before this one.
+    const declared = Object.hasOwn(DECLARED_CUE_FIELDS, cue.type)
+      ? DECLARED_CUE_FIELDS[cue.type]
+      : undefined
+    if (declared === undefined) continue
+    for (const field of declared) {
+      if (Object.hasOwn(cue, field)) continue
+      throw new Refusal(
+        `that show’s cue ${cueLabel(cue)}` +
+        ` (${String(cue.type)}) has no ${field} field, which this version of WinsLab writes` +
+        ` — ${source} was probably saved by an older build`
+      )
+    }
+  }
+}
+
+/**
+ * Refuses a document whose shape this build does not write. Four levels are checked: the
+ * file's own top level, where a section this build does not declare is the fact; a
  * `showSettings` the file does carry, which has to carry exactly the declared sections —
  * one this build does not declare, or one it leaves out, refuses rather than being filled
- * in. A `showSettings` that is there and is not a set of sections is refused the same way,
- * so the operator gets a sentence rather than the fault `Object.keys` throws at a null or
- * the `in` operator at a number.
+ * in; the fields inside those sections, read against the one declaration of them, in both
+ * directions — a field this build does not write refuses, and so does a declared field the
+ * document leaves out, because either way the window reads a value nobody wrote; and a
+ * cue's declared-required fields, read in the one direction a cue has — a cue is content
+ * rather than settings, so a field this build does not know there is kept, and only a field
+ * a cue's own type requires and the document has not got refuses. A `showSettings` that is
+ * there and is not a set of sections is refused the same way, so the operator gets a
+ * sentence rather than the fault `Object.keys` throws at a null or the `in` operator at a
+ * number.
  *
  * What is absent and legal is not checked. The keys such a document omits split in two: a
  * workspace with no history and no guard is this build's own write, and a workspace with no
  * settings section is one it reads — this build's saves always carry one, and a file that
  * does not is completed by the window's own defaults, not by anything here. Either way the
- * check is what the document carries, so a declared key it omits stays fine.
+ * check is what the document carries, so a declared key it omits stays fine. Inside a
+ * settings section it is the other way round: a section a file carries is read field by
+ * field, because a field a later build added is a field the window dereferences. The one
+ * field a document may leave out is the one the types mark `?:`, and none of a show's
+ * settings does.
  *
  * The sentence names the source the bytes came from — a path, or the bundle entry a
  * showfile came out of, handed in by the caller — because the operator has to know which
- * file to look at, and the funnel is the only place that knows what the fact is.
+ * file to look at, and the funnel is the only place that knows what the fact is. What a
+ * file may be is bounded before any of this runs: `readWorkspaceFile` refuses anything past
+ * `MAX_WORKSPACE_BYTES`, so a document this walk reads is at most 64 MiB of JSON, and the
+ * walk itself is bounded by the declaration it descends.
  */
 function refuseUnknownShape(workspace: Workspace, source: string): void {
   if (workspace.version !== 1) {
@@ -264,29 +450,34 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     )
   }
   const settings = workspace.showSettings as unknown
-  if (settings === undefined) return
-  if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
-    const carried = settings === null ? 'nothing' : JSON.stringify(settings)
-    throw new Refusal(
-      `that show’s settings are not the sections this version of WinsLab writes` +
-      ` — ${source} carries ${carried} instead`
-    )
+  if (settings !== undefined) {
+    if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
+      const carried = settings === null ? 'nothing' : JSON.stringify(settings)
+      throw new Refusal(
+        `that show’s settings are not the sections this version of WinsLab writes` +
+        ` — ${source} carries ${carried} instead`
+      )
+    }
+    const sections = settings as Record<string, unknown>
+    for (const key of Object.keys(sections)) {
+      if (DECLARED_SHOW_SECTIONS[key] === true) continue
+      throw new Refusal(
+        `that show’s settings have a section this version of WinsLab does not know (${key})` +
+        ` — ${source} was probably saved by a newer version`
+      )
+    }
+    for (const section of SHOW_SETTINGS_SECTIONS) {
+      if (section in sections) continue
+      throw new Refusal(
+        `that show’s settings have no ${section} section, which this version of WinsLab writes` +
+        ` — ${source} was probably saved by an older build`
+      )
+    }
+    // The sections are this build's; the fields inside them are the level a file written
+    // before one of them existed differs at.
+    refuseForeignFields(sections, DECLARED_SETTINGS_FIELDS, '', -1, source)
   }
-  const sections = settings as Record<string, unknown>
-  for (const key of Object.keys(sections)) {
-    if (DECLARED_SHOW_SECTIONS[key] === true) continue
-    throw new Refusal(
-      `that show’s settings have a section this version of WinsLab does not know (${key})` +
-      ` — ${source} was probably saved by a newer version`
-    )
-  }
-  for (const section of SHOW_SETTINGS_SECTIONS) {
-    if (section in sections) continue
-    throw new Refusal(
-      `that show’s settings have no ${section} section, which this version of WinsLab writes` +
-      ` — ${source} was probably saved by an older build`
-    )
-  }
+  refuseIncompleteCues(workspace.cues, source)
 }
 
 /** A document as the window holds it: its settings read with this build's defaults in. */

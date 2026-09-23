@@ -261,7 +261,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Scene</strong><span class="pro">Pro</span></td>
-              <td><strong>Scene</strong> — the one to recall. A recall sends only the DCA changes between where the desk stands and where the scene says it should be. With no scene chosen the cue does nothing.</td>
+              <td><strong>Scene</strong> — the one to recall. A recall writes the membership the scene asks for first — which of the show's channels ride which fader — and then each mic's mute, and it addresses nothing outside the show's own channels. With no scene chosen the cue does nothing.</td>
             </tr>
           </tbody>
         </table>
@@ -413,7 +413,7 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
         <table>
           <thead><tr><th>Tab</th><th>What is on it</th></tr></thead>
           <tbody>
-            <tr><td>Channels</td><td>The desk connection — OSC, MIDI or MIDI over TCP, with its address — the channel strips, and the DCA each rides. The line under the connection reads back exactly what will be sent. A recall that fails says which failure it was: nothing answered at that address, or the desk took the connection and reset it. The second is what a desk whose MIDI port another program is holding does, and there the address is right.</td></tr>
+            <tr><td>Channels</td><td>The desk connection — OSC, MIDI or MIDI over TCP, with its address — the channel strips on the console, and the faders the show drives. A strip is a name and a number: which fader it rides is the scene's decision, made in the Scenes grid, so a show sets up its channels and its faders here and places them scene by scene. Each fader carries one desk number, for a desk that counts its DCAs differently from the show. The line under the connection reads back exactly what will be sent. A recall that fails says which failure it was: nothing answered at that address, or the desk took the connection and reset it. The second is what a desk whose MIDI port another program is holding does, and there the address is right.</td></tr>
             <tr><td>Cast</td><td>Performers, their parts, the channel each is on, and ensembles for opening a section at once.</td></tr>
             <tr><td>Mic plot</td><td>Packs, the channel each is patched to, and who is wearing it. Changing a performer on a pack records a swap.</td></tr>
           </tbody>
@@ -570,13 +570,15 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
             <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
-            <tr><td>Scene cue<span class="pro">Pro</span></td><td>Only the DCA changes between where the desk stands and the scene: opens and closes, and nothing for a mic that is already right.</td></tr>
+            <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position.</td></tr>
           </tbody>
         </table>
       </div>
       <p>
         The desk a scene cue drives is set up once in Show Settings → Channels, where the
-        read-back line names the exact addresses or notes it will send.
+        read-back line says which of the show's channels a recall will touch and what the
+        desk it names can be told. <strong>Resync</strong> beside Recall now re-sends the
+        scene the desk is standing on, for when somebody has moved a fader by hand.
       </p>
     </section>
 `
@@ -700,11 +702,17 @@ await rig.blackout()</code></div>
         grouping.
       </p>
       <div class="note">
-        Show files are not converted. The shape is declared and checked, and a file this
-        build does not know is refused — naming the file and the fact, with nothing on disk
-        touched — rather than filled in. An older show file that leaves out a settings section
-        this build writes is refused by name; one that carries every declared section is read
-        like any other. Saving does not convert one either: the show on screen is written as it
+        Show files are not converted. The shape is declared and checked down to the fields, and
+        a file this build does not know is refused — naming the file and the fact, with nothing
+        on disk touched — rather than filled in. A settings section this build writes and the
+        file leaves out is a refusal, and so is a field inside a section that this build does
+        not write or that the file has not got. The one that catches a show saved before the
+        scenes changed is inside the settings: the strips, the faders and the scenes are checked
+        field by field, so a show whose channels carried a fader of their own, or whose scenes
+        listed who was open rather than what rides what, is refused by name. Setting it up again
+        takes minutes and no hand-editing: the channels and faders in <strong>Show Settings →
+        Channels</strong>, and the placements in the <strong>Scenes</strong> grid, which is where
+        they live now. Saving does not convert one either: the show on screen is written as it
         stands, and a save over a file this build cannot read keeps the history it had and
         replaces the file all the same.
       </div>

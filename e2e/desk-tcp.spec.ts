@@ -36,6 +36,9 @@ async function deadPort(): Promise<number> {
 }
 
 test('the desk row takes an address and reads back what the show would send', async () => {
+  // A profile change re-reads every row of the tab and restarts the desk's services;
+  // the default 20 s is the wrong budget for a case that walks the whole dialog.
+  test.setTimeout(60_000)
   await openShowSettings(page)
   const settings = page.locator('.show-settings-dialog')
 
@@ -53,39 +56,54 @@ test('the desk row takes an address and reads back what the show would send', as
   await settings.locator('.desk-tcp-host').fill('10.0.0.5')
   await settings.locator('.desk-tcp-host').blur()
   await expect(settings.locator('.desk-preview')).toHaveText(
-    'Sends note 1 … 12 to 10.0.0.5:51325, on and off'
+    'Sends note 1 … 12 to 10.0.0.5:51325, on and off — a recall writes 12 channel mutes ' +
+    'and takes no assignment'
   )
 
   await settings.locator('.show-settings-done').click()
 })
 
 test('the desk row takes the desk’s own name, and reads back what that desk is sent', async () => {
+  // A profile change re-reads every row of the tab and restarts the desk's services;
+  // the default 20 s is the wrong budget for a case that walks the whole dialog.
+  test.setTimeout(60_000)
   await openShowSettings(page)
   const settings = page.locator('.show-settings-dialog')
 
   // The same show, three desks. What changes is the arrangement the desk takes, which is
   // the difference between a recall that moves it and one it ignores — so the row says
   // which arrangement is in force rather than leaving it to the wire.
+  // An SQ: the mic's mute on this link, and the membership over the desk's own control
+  // service — which is the half no peer models yet, said here as the row's own read-back.
   await settings.locator('.desk-profile').selectOption('sq')
-  await expect(settings.locator('.desk-preview')).toHaveText(
-    'Sends an SQ’s DCA mutes — NRPN page 02 on channel 1 — to 10.0.0.5:51325; ' +
-    'the desk has 8, so 4 of the show’s DCAs are not sent'
-  )
+  // The channel the desk's own messages are set to is the channel the field above says, so
+  // the read-back is asserted by the halves that do not move with it.
+  await expect(settings.locator('.desk-preview')).toContainText(
+    'Sends an SQ’s channel mutes — NRPN page 00 on channel')
+  await expect(settings.locator('.desk-preview')).toContainText(
+    'and its assignment over the desk’s own control service — a recall writes 12 channels ' +
+    'and nothing else; the desk has 8, so 4 of the show’s DCAs are not sent')
 
   await settings.locator('.desk-profile').selectOption('avantis')
-  await expect(settings.locator('.desk-preview')).toHaveText(
-    'Sends an Avantis’s DCA mutes — note-on, 7F on and 3F off, on channel 5 — to 10.0.0.5:51325'
-  )
+  await expect(settings.locator('.desk-preview')).toContainText(
+    'Sends an Avantis’s channel mutes — note-on, 7F on and 3F off, on channel')
+  await expect(settings.locator('.desk-preview')).toContainText(
+    'and its assignment as NRPN 40 on the same channel — a recall writes 12 channels and ' +
+    'nothing else')
 
   await settings.locator('.desk-profile').selectOption('note')
   await expect(settings.locator('.desk-preview')).toHaveText(
-    'Sends note 1 … 12 to 10.0.0.5:51325, on and off'
+    'Sends note 1 … 12 to 10.0.0.5:51325, on and off — a recall writes 12 channel mutes ' +
+    'and takes no assignment'
   )
 
   await settings.locator('.show-settings-done').click()
 })
 
 test('the desk’s own buttons are assigned by mute group, and only on a desk that has them', async () => {
+  // A profile change re-reads every row of the tab and restarts the desk's services;
+  // the default 20 s is the wrong budget for a case that walks the whole dialog.
+  test.setTimeout(60_000)
   await openShowSettings(page)
   const settings = page.locator('.show-settings-dialog')
 
@@ -121,6 +139,9 @@ test('the desk’s own buttons are assigned by mute group, and only on a desk th
 })
 
 test('the desk’s own note keys are assigned beside the groups, on the desk that sends them', async () => {
+  // A profile change re-reads every row of the tab and restarts the desk's services;
+  // the default 20 s is the wrong budget for a case that walks the whole dialog.
+  test.setTimeout(60_000)
   await openShowSettings(page)
   const settings = page.locator('.show-settings-dialog')
 

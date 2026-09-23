@@ -13,8 +13,10 @@
 //
 // What is asserted is the *desk* moving — the mute the peer records, and the desk's own state —
 // from messages it sends the way a hand on the surface sends them, never from the app's account
-// of itself. The app's own DCA messages are the other half of the cases: they are page 02, and
-// a show that read them as a key press would run itself on every scene recall.
+// of itself. The app's own messages are the other half of the cases: a recall writes the mic's
+// mute on page 00, at the channel's own number, and the reader takes a button only from the
+// mute-group page 04 — so a show that ran itself on every recall would be the failure this
+// holds off, the way it did when the app's own message was a DCA's.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
@@ -23,8 +25,8 @@ import { BACK_GROUP, BACK_NOTE, CHANNEL, GO_GROUP, GO_NOTE, writeDeskButtonsShow
 
 /** The SQ's mute-group page: page 04, parameter <group - 1>, absolute form. */
 const MUTE_GROUP_PAGE = 0x04
-/** DCA 1's own mute, as the peer keys it: page 02, parameter 0. */
-const DCA_KEY = '02:00'
+/** The one mic's own mute, as the peer keys it: the input page 00 at the channel's own number. */
+const MIC_KEY = '00:00'
 
 let app: ElectronApplication
 let page: Page
@@ -39,14 +41,23 @@ function pressKey(group: number, on: boolean): void {
   peer.setMute(CHANNEL, group - 1, on, MUTE_GROUP_PAGE)
 }
 
-/** The desk's own record of DCA 1's mute, which a scene recall moves. */
-function dcaMute(): boolean | undefined {
-  return peer.state.mutes[DCA_KEY]?.on
+/** The desk's own record of the mic's mute, which a scene recall moves. */
+function micMuted(): boolean | undefined {
+  return peer.state.mutes[MIC_KEY]?.on
 }
 
-/** The lines a scene recall wrote, which name the button that caused it. */
-function recalls(from: string): Promise<number> {
-  return page.locator('.log-panel .log-row', { hasText: from }).count()
+/**
+ * The lines a scene recall wrote, which name the button that caused it. The summary is an info
+ * row; a recall that could not write its membership also leaves an error row under the same
+ * label on this route — the service on 51326 has no peer here — so what a case counts is the
+ * summary, and the scene it names when the case is about where the walk landed.
+ */
+function recalls(from: string, scene?: string): Promise<number> {
+  const summaries = page.locator('.log-panel .log-row[data-level="info"]', { hasText: from })
+  return (scene === undefined
+    ? summaries
+    : summaries.filter({ hasText: `Scene "${scene}"` })
+  ).count()
 }
 
 test.beforeAll(async () => {
@@ -80,7 +91,7 @@ test('the desk reporting its own state does not run the show', async () => {
   expect(await recalls('Desk BACK')).toBe(0)
   // Nothing has been sent to the desk either: a recall is the app's own messages, and this
   // show has not recalled anything.
-  expect(dcaMute()).toBeUndefined()
+  expect(micMuted()).toBeUndefined()
 })
 
 test('the desk’s GO key recalls the next scene, and the desk moves with it', async () => {
@@ -88,34 +99,38 @@ test('the desk’s GO key recalls the next scene, and the desk moves with it', a
   // still what a GO from the top of the list means. This group was primed by the desk's report;
   // the BACK key in the next case is the one the report never mentions, so that press is what
   // proves the app's own question was answered.
+  const before = await recalls('Desk GO', 'Wedding')
   pressKey(GO_GROUP, false)
 
-  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk GO' }))
-    .toContainText('Scene "Wedding"')
-  // The desk is where the scene says: DCA 1 open, which is the app's own message and not a
-  // key press — the next GO is what moves the show on.
-  await expect.poll(dcaMute).toBe(true)
+  // The first scene's own line: the recall's summary names it, and the refusal that follows on
+  // the same label (the membership needs the service no peer here stands in for) does not.
+  await expect.poll(() => recalls('Desk GO', 'Wedding')).toBe(before + 1)
+  // The desk is where the scene says: the mic open on its own page, which is the app's own
+  // message and not a key press — the next GO is what moves the show on.
+  await expect.poll(micMuted).toBe(false)
 })
 
 test('the next GO moves on, and BACK stands the show back', async () => {
+  const beforeGo = await recalls('Desk GO', 'Interval')
   pressKey(GO_GROUP, true)
-  await expect(page.locator('.log-panel .log-row', { hasText: 'Scene "Interval"' }))
-    .toContainText('Desk GO')
-  await expect.poll(dcaMute).toBe(false)
+  await expect.poll(() => recalls('Desk GO', 'Interval')).toBe(beforeGo + 1)
+  // The second scene places nobody, so the recall mutes the mic rather than opening it.
+  await expect.poll(micMuted).toBe(true)
 
   // The desk's other key walks the same list backwards, and the scene it lands on is recalled.
+  const beforeBack = await recalls('Desk BACK', 'Wedding')
   pressKey(BACK_GROUP, true)
-  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk BACK' }))
-    .toContainText('Scene "Wedding"')
-  await expect.poll(dcaMute).toBe(true)
+  await expect.poll(() => recalls('Desk BACK', 'Wedding')).toBe(beforeBack + 1)
+  await expect.poll(micMuted).toBe(false)
 })
 
-test('a scene message the app sent itself is not a key press', async () => {
-  // The recall above sent DCA 1 open on page 02, and the desk reports what it was told. That
-  // is the app's own message coming back: reading it as a button would make the show run itself.
+test('a mute the app sent itself is not a key press', async () => {
+  // The recall above wrote the mic's mute on page 00, and the desk reporting a mic's mute is
+  // the same message. Reading either as a button would make the show run itself on every
+  // recall it makes.
   const before = await recalls('Desk GO')
 
-  peer.emit([0xb0, 0x63, 0x02, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x00])
+  peer.emit([0xb0, 0x63, 0x00, 0xb0, 0x62, 0x00, 0xb0, 0x06, 0x00, 0xb0, 0x26, 0x00])
 
   await page.waitForTimeout(400)
   expect(await recalls('Desk GO')).toBe(before)
@@ -148,16 +163,16 @@ test('a soft key on the BACK note stands the show back, and the release does not
   // transmits note on at 7F while it is held and note off at 00 when it is let go. The
   // show is on the last scene, so this is a step rather than a refusal — and the press is
   // sent on its own so the release can be shown to be silent rather than assumed.
-  const before = await recalls('Desk BACK')
+  const before = await recalls('Desk BACK', 'Wedding')
   const writesBefore = peer.received.length
 
   peer.emit([0x90, BACK_NOTE, 0x7f])
 
-  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk BACK' }).last())
-    .toContainText('Scene "Wedding"')
-  // The desk is where the scene says, which is the app's own DCA message — the note press
-  // writes nothing to the desk's own groups, so no latch is set and none has to be cleared.
-  await expect.poll(dcaMute).toBe(true)
+  await expect.poll(() => recalls('Desk BACK', 'Wedding')).toBe(before + 1)
+  // The desk is where the scene says, which is the app's own message for the mic — the note
+  // press writes nothing to the desk's own groups, so no latch is set and none has to be
+  // cleared.
+  await expect.poll(micMuted).toBe(false)
 
   // The hand comes off: the release is half of the same event, so it adds no line of its own.
   peer.emit([0x80, BACK_NOTE, 0x00])
@@ -168,14 +183,13 @@ test('a soft key on the BACK note stands the show back, and the release does not
 })
 
 test('a soft key on the GO note moves the show on', async () => {
-  const before = await recalls('Desk GO')
+  const before = await recalls('Desk GO', 'Interval')
 
   peer.pressSoftKey(1)
 
-  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk GO' }).last())
-    .toContainText('Scene "Interval"')
-  await expect.poll(dcaMute).toBe(false)
-  await expect.poll(() => recalls('Desk GO')).toBe(before + 1)
+  await expect.poll(() => recalls('Desk GO', 'Interval')).toBe(before + 1)
+  // The scene places nobody, so the recall mutes the mic — the app's own message again.
+  await expect.poll(micMuted).toBe(true)
 })
 
 test('a note held down is one press, not a repeat', async () => {
@@ -183,15 +197,14 @@ test('a note held down is one press, not a repeat', async () => {
   // the show must not walk two scenes on one press. The show is on the last scene, so this
   // BACK is a step to the first — and a second press there would have nowhere to go, which
   // it would say in a line of its own rather than quietly.
-  const before = await recalls('Desk BACK')
+  const before = await recalls('Desk BACK', 'Wedding')
 
   peer.emit([0x90, BACK_NOTE, 0x7f])
   peer.emit([0x90, BACK_NOTE, 0x7f])
 
-  await expect(page.locator('.log-panel .log-row', { hasText: 'Desk BACK' }).last())
-    .toContainText('Scene "Wedding"')
+  await expect.poll(() => recalls('Desk BACK', 'Wedding')).toBe(before + 1)
   await page.waitForTimeout(400)
-  expect(await recalls('Desk BACK')).toBe(before + 1)
+  expect(await recalls('Desk BACK', 'Wedding')).toBe(before + 1)
 
   peer.emit([0x80, BACK_NOTE, 0x00])
 })

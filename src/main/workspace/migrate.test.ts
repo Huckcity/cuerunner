@@ -3,7 +3,7 @@
 // what it does not know, it refuses by name. Electron is not available in the test
 // environment, so the module is imported with it stubbed.
 import { describe, it, expect, vi } from 'vitest'
-import type { AudioCue, Cue } from '../../shared/cue'
+import type { AudioCue, CueBase, GroupCue, WaitCue } from '../../shared/cue'
 import type { LoadNote, Workspace } from '../../shared/workspace'
 import { defaultShowSettings } from '../../shared/show'
 import { Refusal } from '../ipc/refusal'
@@ -27,6 +27,57 @@ function workspaceWith(cues: unknown[]): Workspace {
   }
 }
 
+/** One cue's own fields, from `CueBase`: what every cue of a file this build wrote carries. */
+function baseCue(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'> {
+  return {
+    id,
+    number: id,
+    name: id,
+    colorLabel: 'none',
+    parentId: null,
+    preWait: 0,
+    postWait: 0,
+    timelineOffset: 0,
+    duration: 0,
+    advance: 'none',
+    isArmed: true,
+    notes: ''
+  }
+}
+
+/**
+ * A cue as this build writes one: the base every cue carries, and the fields a case is about
+ * on top. The documents here are files this build could have written — the shape check
+ * refuses a cue missing a field its type requires, which has cases of its own below — so
+ * nothing here is a cue with fields missing, and the fields the types mark `?:` are left out
+ * on purpose: a cue without them is this build's own shape too.
+ */
+function wait(id: string, over: Partial<WaitCue> = {}): WaitCue {
+  return { ...baseCue(id), type: 'wait', ...over }
+}
+
+function group(id: string, over: Partial<GroupCue> = {}): GroupCue {
+  return { ...baseCue(id), type: 'group', mode: 'playlist', ...over }
+}
+
+function audio(id: string, over: Partial<AudioCue> = {}): AudioCue {
+  return {
+    ...baseCue(id),
+    type: 'audio',
+    filePath: '',
+    startTime: 0,
+    endTime: null,
+    fadeInDuration: 0,
+    volume: 1,
+    pan: 0,
+    outputs: null,
+    loopCount: 0,
+    playbackRate: 1,
+    trim: 0,
+    ...over
+  }
+}
+
 /** A workspace with no version key at all: the literal this build writes is never absent. */
 function workspaceWithMissingVersion(): Workspace {
   const workspace = workspaceWith([]) as unknown as Record<string, unknown>
@@ -42,7 +93,7 @@ describe('migrateWorkspace', () => {
     // refusal rather than a plain error, so the load channels answer it as a value, and the
     // sentence says which file it came out of.
     const fromANewerBuild = workspaceWith([
-      { id: 'w1', type: 'wait', duration: 1000 },
+      wait('w1', { duration: 1000 }),
       { id: 'v1', type: 'video', filePath: 'clip.mp4' }
     ])
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(Refusal)
@@ -52,11 +103,11 @@ describe('migrateWorkspace', () => {
     )
   })
 
-  it('accepts every cue type this build does know', () => {
+  it('accepts a cue of a type this build does know', () => {
     expect(() => migrateWorkspace(workspaceWith([
-      { id: 'w1', type: 'wait', duration: 1000 },
-      { id: 'a1', type: 'audio', filePath: '' },
-      { id: 'g1', type: 'group', mode: 'sequence' }
+      wait('w1', { duration: 1000 }),
+      audio('a1', { filePath: '' }),
+      group('g1', { mode: 'sequence' })
     ]), SHOW)).not.toThrow()
   })
 })
@@ -147,14 +198,39 @@ describe('the shape check', () => {
   })
 
   it('leaves a cue the fields the file gave it, and invents none', () => {
-    // The other half of "no fill": the cue comes back with exactly the keys it carried.
-    // The fields the deleted pass used to default — `advance`, `triggers`, `refire` — are
-    // not added, so a show that is not this build's shape is refused above rather than
-    // quietly completed here.
-    const cue = { id: 'w1', type: 'wait', duration: 1000, parentId: null } as unknown as Cue
-    const loaded = migrateWorkspace(workspaceWith([cue]), SHOW)
+    // The other half of "no fill": the cue comes back with exactly the keys it carried. The
+    // fields the deleted pass used to default and this build's own shape does not require —
+    // `triggers`, `refire` — stay absent rather than arriving as an empty list, while a cue
+    // whose file left out a field its type requires is refused above rather than completed
+    // here.
+    const given = wait('w1', { duration: 1000 })
+    const loaded = migrateWorkspace(workspaceWith([given]), SHOW)
 
-    expect(Object.keys(loaded.cues[0]).sort()).toEqual(['duration', 'id', 'parentId', 'type'])
+    expect(Object.keys(loaded.cues[0]).sort()).toEqual(Object.keys(given).sort())
+  })
+
+  it('names the missing section before a field missing inside another one', () => {
+    // The arms run in order, and the order is the sentence an operator sees: a settings
+    // object that leaves a section out — the shape a file written before the show services
+    // existed has — is refused for that section, whatever the sections it does carry are
+    // missing inside. A file with both faults names the section, which is the bigger fact.
+    const settings = {
+      desk: {
+        kind: 'osc',
+        midiPort: '',
+        midiChannel: 1,
+        host: '127.0.0.1',
+        port: 8000,
+        tcpPort: 51325,
+        address: '/dca/{n}/on',
+        buttons: { go: null, back: null, goNote: null, backNote: null }
+      }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have no oscIn section, which this version of WinsLab writes' +
+      ` — ${SHOW} was probably saved by an older build`
+    )
   })
 })
 
@@ -165,10 +241,10 @@ describe('the shape check', () => {
 describe('migrateWorkspace — cue grouping', () => {
   it('leaves a well-formed file exactly as it is, with no notes', () => {
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'sequence' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
-      { id: 'x1', type: 'wait', duration: 3000 }
+      group('g1', { mode: 'sequence' }),
+      wait('c1', { duration: 1000, parentId: 'g1' }),
+      wait('c2', { duration: 2000, parentId: 'g1' }),
+      wait('x1', { duration: 3000 })
     ]), SHOW).cues
 
     expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'x1'])
@@ -184,10 +260,10 @@ describe('migrateWorkspace — cue grouping', () => {
   it('gathers scattered children into one block behind their group, sibling order kept', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'playlist' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-      { id: 'x1', type: 'wait', duration: 1000 },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+      group('g1', { mode: 'playlist' }),
+      wait('c1', { duration: 1000, parentId: 'g1' }),
+      wait('x1', { duration: 1000 }),
+      wait('c2', { duration: 2000, parentId: 'g1' })
     ]), SHOW, notes).cues
 
     expect(cues.map(c => c.id)).toEqual(['g1', 'c1', 'c2', 'x1'])
@@ -201,11 +277,11 @@ describe('migrateWorkspace — cue grouping', () => {
   it('gathers a whole subtree, inner groups included', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'playlist' },
-      { id: 'g2', type: 'group', mode: 'playlist', parentId: 'g1' },
-      { id: 'c1', type: 'wait', duration: 1000 },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g2' },
-      { id: 'c3', type: 'wait', duration: 3000, parentId: 'g1' }
+      group('g1', { mode: 'playlist' }),
+      group('g2', { mode: 'playlist', parentId: 'g1' }),
+      wait('c1', { duration: 1000 }),
+      wait('c2', { duration: 2000, parentId: 'g2' }),
+      wait('c3', { duration: 3000, parentId: 'g1' })
     ]), SHOW, notes).cues
 
     expect(cues.map(c => c.id)).toEqual(['g1', 'g2', 'c2', 'c3', 'c1'])
@@ -218,11 +294,11 @@ describe('migrateWorkspace — cue grouping', () => {
   it('returns an orphan to the top level, keeping its place among the top-level cues', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'sequence' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-      { id: 'o1', type: 'wait', duration: 500, parentId: 'gone' },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
-      { id: 'x1', type: 'wait', duration: 1000 }
+      group('g1', { mode: 'sequence' }),
+      wait('c1', { duration: 1000, parentId: 'g1' }),
+      wait('o1', { duration: 500, parentId: 'gone' }),
+      wait('c2', { duration: 2000, parentId: 'g1' }),
+      wait('x1', { duration: 1000 })
     ]), SHOW, notes).cues
 
     // The orphan was between c1 and c2; the gathered block goes where it now belongs, so
@@ -241,8 +317,8 @@ describe('migrateWorkspace — cue grouping', () => {
   it('returns a cue whose parent is not a group to the top level', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'w1', type: 'wait', duration: 1000 },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'w1' }
+      wait('w1', { duration: 1000 }),
+      wait('c1', { duration: 1000, parentId: 'w1' })
     ]), SHOW, notes).cues
 
     expect(cues.map(c => [c.id, c.parentId])).toEqual([['w1', null], ['c1', null]])
@@ -256,9 +332,9 @@ describe('migrateWorkspace — cue grouping', () => {
   it('dissolves a loop of groups and completes the load', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'a', type: 'group', mode: 'sequence', parentId: 'b' },
-      { id: 'b', type: 'group', mode: 'sequence', parentId: 'a' },
-      { id: 'c', type: 'wait', duration: 1000, parentId: 'b' }
+      group('a', { mode: 'sequence', parentId: 'b' }),
+      group('b', { mode: 'sequence', parentId: 'a' }),
+      wait('c', { duration: 1000, parentId: 'b' })
     ]), SHOW, notes).cues
 
     // Both loop members return to the top level; the cue hanging under b was never in
@@ -274,8 +350,8 @@ describe('migrateWorkspace — cue grouping', () => {
   it('treats a group that names itself as a loop of one', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'sequence', parentId: 'g1' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' }
+      group('g1', { mode: 'sequence', parentId: 'g1' }),
+      wait('c1', { duration: 1000, parentId: 'g1' })
     ]), SHOW, notes).cues
 
     expect(cues.map(c => [c.id, c.parentId])).toEqual([['g1', null], ['c1', 'g1']])
@@ -285,10 +361,10 @@ describe('migrateWorkspace — cue grouping', () => {
   it('gathers a timeline group’s children without touching their offsets', () => {
     const notes: LoadNote[] = []
     const cues = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'timeline' },
-      { id: 'c2', type: 'audio', filePath: '', timelineOffset: 5000, parentId: 'g1' },
-      { id: 'x1', type: 'wait', duration: 1000 },
-      { id: 'c1', type: 'audio', filePath: '', timelineOffset: 0, parentId: 'g1' }
+      group('g1', { mode: 'timeline' }),
+      audio('c2', { timelineOffset: 5000, parentId: 'g1' }),
+      wait('x1', { duration: 1000 }),
+      audio('c1', { timelineOffset: 0, parentId: 'g1' })
     ]), SHOW, notes).cues
 
     // Array order is kept exactly as it was — the gather never sorts by timelineOffset,
@@ -302,10 +378,10 @@ describe('migrateWorkspace — cue grouping', () => {
   it('keeps every cue of a file whose id repeats, on load and on save', () => {
     const notes: LoadNote[] = []
     const workspace = migrateWorkspace(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'playlist' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' },
-      { id: 'g1', type: 'group', mode: 'playlist' }
+      group('g1', { mode: 'playlist' }),
+      wait('c1', { duration: 1000, parentId: 'g1' }),
+      wait('c2', { duration: 2000, parentId: 'g1' }),
+      group('g1', { mode: 'playlist' })
     ]), SHOW, notes)
 
     // The gather emits by cue identity: the repeated id is neither dropped nor re-emitted
@@ -323,10 +399,10 @@ describe('migrateWorkspace — cue grouping', () => {
   it('writes the repair once: the saved show reopens with no notes and the same bytes', () => {
     const loading: LoadNote[] = []
     const damaged = workspaceWith([
-      { id: 'g1', type: 'group', mode: 'playlist' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-      { id: 'x1', type: 'wait', duration: 1000 },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+      group('g1', { mode: 'playlist' }),
+      wait('c1', { duration: 1000, parentId: 'g1' }),
+      wait('x1', { duration: 1000 }),
+      wait('c2', { duration: 2000, parentId: 'g1' })
     ])
     const repaired = migrateWorkspace(damaged, SHOW, loading)
     expect(loading.map(note => note.kind)).toEqual(['reordered'])
@@ -344,10 +420,10 @@ describe('migrateWorkspace — cue grouping', () => {
     // A file nobody saves is read the same way twice: loading never repairs the file
     // itself, so the same damage comes back with the same report.
     const bytes = JSON.stringify(workspaceWith([
-      { id: 'g1', type: 'group', mode: 'playlist' },
-      { id: 'c1', type: 'wait', duration: 1000, parentId: 'g1' },
-      { id: 'x1', type: 'wait', duration: 1000 },
-      { id: 'c2', type: 'wait', duration: 2000, parentId: 'g1' }
+      group('g1', { mode: 'playlist' }),
+      wait('c1', { duration: 1000, parentId: 'g1' }),
+      wait('x1', { duration: 1000 }),
+      wait('c2', { duration: 2000, parentId: 'g1' })
     ]))
     const first: LoadNote[] = []
     const second: LoadNote[] = []

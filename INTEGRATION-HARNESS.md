@@ -468,10 +468,18 @@ A DCA assignment — the reason this was captured — is one frame per (channel,
 The capture is `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken through
 `integration/sqCapture.mjs` against a show whose assignments are known — inputs 1 and 3 on DCA 1,
 inputs 8 and 9 on DCA 4 — and it holds the whole 16-input × 8-DCA matrix: four `1d` frames carrying
-`01 00`, exactly those pairs, and the other 124 written `00 00`. **No lane uses it yet**, and two
-things are deliberately noted as unmeasured: the **read form** (what the desk reports when asked, or
-pushes when a pair changes at its own surface), so a client that writes these frames knows only what
-it sent; and the desk's **controlling-client rule** — it reports a controlling client, and a client
+`01 00`, exactly those pairs, and the other 124 written `00 00`. **The app writes these frames and
+no peer replays them yet.** Story 11.1's codec is what builds them and Story 11.2 gave it its
+caller: a scene recall sends the *intent* — channel, fader, placed or cleared, and whether the
+channel rides a fader at all — through `show:command` to the `sq-native` service, which holds the
+session on this port and leaves by the desk's own door. The capture is still replayed by nothing:
+the desk peer models the MIDI service and 51326 has no stand-in at all, so `desk-sq.spec.ts`
+asserts the half its link can see — the mic's mute on page 00, and that nothing on the link
+addresses a DCA — and names the membership as the half whose claim stays where the record left it,
+Story 11.5 being the lane that brings the peer. Two things are deliberately noted as unmeasured:
+the **read form** (what the desk reports when asked, or pushes when a pair changes at its own
+surface), so a client that writes these frames knows only what it sent; and the desk's
+**controlling-client rule** — it reports a controlling client, and a client
 that dies without leaving (`BYE.`, on the range's own port 51321) leaves 51326 accepting TCP and
 answering the hello with nothing until the desk is reset or power-cycled. The desk also answers
 discovery: `SQ Find` sent to **UDP 51320** comes back from the desk's own 51320 with its model
@@ -573,15 +581,21 @@ first slice, not the ceiling.
    encoder is wrong). Assert the bytes, and the peer's scene state.
 2. Desk-originated scene: the peer recalls scene 7 on its own → Cuerunner's MIDI trigger
    fires the bound cue. Assert the trigger fired and the log names the device.
-3. DCAs: a scene sends the arrangement the profile names for each DCA, and only those, over
-   the desk's socket. What is asserted is the wire and the desk's own mute state — because
-   **the desks and the app disagreed about the close half, and that disagreement was the
-   harness doing its job**: Cuerunner used to close a DCA with a note-off (velocity 0), which an
-   Avantis ignores outright (its OFF is a note-on at `01`–`3F`) and which an SQ does not read
-   as a mute at all (its DCAs are NRPN parameters on page 02). The fix is the desk profile
-   this document called B4's "console control profiles": the show names its desk and the
-   arrangement follows, so the open *and* the close are asserted end to end, on the desk's own
-   state rather than on the bytes being sent.
+3. A recall's two facts, each on the route its own profile has for it. The **mic's mute** is the
+   desk link's: an SQ's NRPN page 00 at the input's own number, an Avantis's note pair on the
+   desk's own channel at the note that number makes. Both ranges are asserted the same way — the
+   desk's own mute state moving with the recall, and the close being the same message with the
+   other value rather than the note-off the app used to send, which an Avantis ignores outright
+   (its OFF is a note-on at `01`–`3F`) and which an SQ does not read as a mute at all. A DCA is
+   a control group rather than a silence, so no recall writes a DCA's own mute any more (AD-26).
+   The **membership** is the profile's own route: an Avantis takes it over the same link — NRPN
+   40, the parameter's MSB naming the input and the value carrying `40 + the fader's place` into
+   the DCA and the place alone out — and `desk-avantis.spec.ts` asserts the placement, the clear
+   and the mic's mutes with the desk's own record as the witness. An SQ's membership is written
+   on the desk's own control service on **51326** (§6), which no peer here stands in for, so
+   `desk-sq.spec.ts` asserts what its link can see — the mic's mute, and that nothing on that
+   link addresses a DCA — and says in its own header that the membership's claim stays where the
+   record left it until Story 11.5's peer replays the capture.
 4. Mute semantics: Avantis velocity `00` and note-off are ignored; `40`–`7F` is on,
    `01`–`3F` off. Assert all three, because that is where a "sensible" implementation is
    wrong.
@@ -623,13 +637,15 @@ driven through the app rather than through a socket of the spec's own:
    muted, so its burst is the state a room could have been left in; the app has to prime on it
    rather than recall a scene the moment the show opens.
 2. A mute group the show assigned as its GO key recalls the *next scene* and the desk moves with
-   it — the assertion is both the recall's own log line and the peer's mute state, which is the
-   app's DCA message arriving at the desk.
+   it — the assertion is both the recall's own log line and the peer's record of the mic's mute,
+   which is the app's own message for the recalled scene arriving at the desk.
 3. The next GO moves on, and BACK recalls the scene before. The BACK group is the one the desk's
    report never mentioned, so that press is also what proves the app's own get was answered: a
    group nothing has primed would swallow its first press.
-4. A **DCA mute is not a button**: page 02 — the message the app sends itself — moved nothing,
-   which is the case that keeps a show from running itself when a recall comes back off the desk.
+4. A **mic's mute is not a button**: page 00 — the message a recall sends itself, and the form
+   the desk reports a mic in — moved nothing, which is the case that keeps a show from running
+   itself when a recall comes back off the desk. The reader takes a group from page 04 and from
+   nothing else.
 5. A group nobody assigned does nothing.
 6. The same state arriving twice steps once: the desk's own toggle is what tells one press from
    two, so the window the triggers use is not needed here.
@@ -666,12 +682,16 @@ what lets a peer be handed to someone else as a tool.
 by `DESK_HOST`/`DESK_PROFILE`, and at a console's cable by `MSC_HOST`:
 
 1. The desk answers for itself. The spec asks on a socket of its own the get its document
-   describes — an SQ's value for DCA 1, an Avantis's name reply — and the shape of the answer
-   is what the desk said rather than what the app believes it sent. The failure message is the
-   desk's own settings checklist, because a desk that does not answer is a desk setting.
-2. A scene recall moves the desk, and the desk's own value says so: the open and the close,
-   each read back with a fresh get, on an SQ (an Avantis publishes no mute read-back, and the
-   case reports itself skipped there).
+   describes — an SQ's value for the mic's own mute, at the input's page, and an Avantis's name
+   reply for that input's strip — and the shape of the answer is what the desk said rather than
+   what the app believes it sent. The failure message is the desk's own settings checklist,
+   because a desk that does not answer is a desk setting.
+2. A scene recall moves the desk, and the desk's own value says so: the open and the close of the
+   mic, each read back with a fresh get, on an SQ (an Avantis publishes no mute read-back, and
+   the case reports itself skipped there). What is *not* readable here is the membership: an SQ's
+   goes over the desk's own control service on 51326, which this lane's relay does not carry, and
+   an Avantis's takes the same link but the range publishes no read for an assignment — so that
+   half's claim stays where the record left it.
 3. A key pressed at the desk runs the show, and the desk moves with it. The operator assigns a
    spare mute group to the key and presses it; the show's walk lands on the scene, and the
    desk's own value changes with it. It needs a hand, and its failure message is the
@@ -688,10 +708,11 @@ conversation over MIDI Control's virtual port instead of the desk's socket, with
 listening where the bridge dials:
 
 1. A scene recall reaches the desk as the bytes it takes: the peer's own view of the wire says
-   the profile's message arrived, and the peer's state says the DCA moved. Nothing arriving
-   fails with the bridge checklist — MIDI Control running, the port named, the address it
-   bridges to.
-2. The close is the same message with the other value, and the desk comes back down.
+   every message the profile's recall writes arrived, in the order it writes them — the mic's own
+   mute on both ranges, and an Avantis's assignment before it, an SQ's membership never being on
+   this link at all — and the peer's state says the mic moved. Nothing arriving fails with the
+   bridge checklist — MIDI Control running, the port named, the address it bridges to.
+2. The close is the same messages with the other value, and the desk comes back down.
 3. The desk's own scene recall comes back through the bridge and fires the cue, which is the
    half that says the bridge carries both directions.
 
@@ -865,12 +886,16 @@ session replays on Linux.
 opens is the desk show with the counterpart's address changed, plus — because two of its cases
 need them — the desk's own keys and, where a run names one, a console's cable; nothing else
 about it changes. What the cases assert is the desk's own reply, read on the spec's own socket:
-an SQ answers a get with the parameter's value in the NRPN form that sets it, an Avantis answers
-a name get in its own header. Two cases need a hand at the desk while the run goes — a key
-pressed on the surface, and the console's GO below — and their failure message is the
+an SQ answers a get with the parameter's value in the NRPN form that sets it — asked at the
+input's own page, which is where a recall writes the mic's mute — and an Avantis answers a name
+get in its own header, for that input's strip. Two cases need a hand at the desk while the run
+goes — a key pressed on the surface, and the console's GO below — and their failure message is the
 instruction; those two read the app's log line, which names the desk or the console it came
 from, because a hand is the one thing no wire view can see. Against an SQ the key case also
 reads the desk's own value moving, which is the app's message for the recalled scene arriving.
+The membership is not readable here: an SQ's is written on the desk's own control service on
+51326, which the lane's relay does not carry, and an Avantis publishes no read for an
+assignment — so both stay where §6 and §11 decision 6 leave them.
 **MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and fires a
 cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
 so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane: the
@@ -878,7 +903,7 @@ show listens on the MIDI input port the cable appears as (`MSC_HOST`) and the ca
 without a console transmitting.
 **The desk's own buttons are read two ways**, so a show can be run from the surface whether the
 key should latch or not: `desk-buttons.spec.ts` holds the desk's report at connect, GO and BACK
-walking the scenes, the DCA mute that must not be read as a press, the duplicate delivery that is
+walking the scenes, the mic's mute that must not be read as a press, the duplicate delivery that is
 one step, and — in the same show — two soft keys whose notes step it, with the release silent, a
 held key not repeating and an unassigned note ignored. The mute-group route is the one the desk
 assigns a key to; the note route is for a press that only ever means "next cue", and it is
@@ -890,7 +915,10 @@ wider.
 *Acceptance*: met when a run happens. **A developer run against an SQ-6 (firmware 1.6.1) on
 2026-09-21 passed all three cases a desk can carry** — the desk's own read-back, the scene recall
 moving its DCA 1 (read back off the desk, through the relay), and a key press at the surface
-running the show — and the console case reported skipped for want of a console. What has *not*
+running the show — and the console case reported skipped for want of a console. Those three cases
+have since changed shape with Story 11.2 — what a recall moves, and what the get is asked about,
+is the mic's own mute at the input's page rather than a DCA — so that run is the record of the
+specs as they stood that day, and the new shape has not yet been in front of a desk. What has *not*
 happened is the **job**: `integration-hardware.yml` has never been dispatched, so the lane has no
 report of its own, and a report is what the record's rows are evidence of. The desk has to be
 reachable from the runner for that, which is a cable rather than a change.
@@ -933,7 +961,10 @@ assumption and the message a real key press sends stay unproven (§11).
    1.6.1) on 2026-09-21 passed the desk's own read-back, a scene recall moving its DCA 1 as the
    desk's own value reports it, and a key press at the surface running the show — so the message a
    real key press sends is measured rather than assumed, and the peer's read-back and scene shapes
-   are held against a desk instead of only against its documents. Still unproven: the **job**
+   are held against a desk instead of only against its documents. (Story 11.2 has since moved what
+   those cases are about: the value read back is the mic's own mute at the input's page, and an
+   SQ's membership goes to 51326 where no peer stands in for it — see §6 and decision 6.) Still
+   unproven: the **job**
    (`integration-hardware.yml` has never been dispatched, so the lane has no report of its own),
    the vendor lane's "MIDI bytes are MIDI bytes" assumption, which belongs to the bridge, and the
    console case, which has no console. The lane reports skipped, never passed, without a desk
@@ -988,7 +1019,12 @@ assumption and the message a real key press sends stay unproven (§11).
    **controlling-client rule** — it reports one owner, and a client that dies without its goodbye
    leaves the service mute — has to be respected by the app's connect and disconnect paths; and
    the **peer** has no model of this protocol, so nothing in the fast lane holds these frames
-   against anything but this fixture until one is written.
+   against anything but this fixture until one is written. Story 11.2 is the write's caller: the
+   renderer sends the intent — channel, fader, placed or cleared, and whether the channel rides a
+   fader after the write — through `show:command` to the `sq-native` service, and the frames are
+   built in main from `src/main/desk/frames.ts`. So on a peers-lane run, where nothing answers on
+   51326, a recall reports that the session is not up and the mic's mute still goes — which is
+   what `desk-sq.spec.ts` asserts, alongside the absence of any DCA write on the MIDI link.
 
 **Risks**
 

@@ -184,30 +184,68 @@ export interface RfPack {
   notes: string
 }
 
-// ── Scenes: who is on, and what that does to the desk ───────────────────────
+// ── Scenes: who rides what, and what that does to the desk ──────────────────
 //
-// A scene is who is open on stage. Recalling one tells the desk the difference: only the
-// groups whose state actually changes are sent, so a scene recall is a handful of
-// messages rather than a slam of every fader on the desk.
+// A scene says which of the show's controlled channels ride which fader. Recalling one
+// tells the desk the difference in two facts: the membership first, then the mic's mute —
+// and only for the channels the scene moves, so a recall is a handful of messages rather
+// than a slam of every fader on the desk.
 
 /**
- * One DCA's open or close, ready for the transport that carries it.
+ * One write the desk is asked for, ready for the transport that carries it.
  *
  * A MIDI one is a *sequence* rather than a message: what a desk takes as "open this fader"
  * is the desk's own arrangement, and on an SQ it is four NRPN controllers where the app's
  * generic convention sends one note.
+ *
+ * `sq-native` is not a message at all: the SQ's membership is written over the desk's own
+ * control service by the main process, whose codec owns those frames, so the renderer sends
+ * the intent — which channel, which fader, placed or cleared, and whether the channel rides
+ * any fader after this write (the per-channel flag the capture measures).
  */
 export type DeskMessage =
   | { kind: 'midi'; portName: string; messages: MidiMessageKind[] }
   | { kind: 'midi-tcp'; host: string; port: number; messages: MidiMessageKind[] }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
+  | ({ kind: 'sq-native' } & SqMembershipIntent)
+
+/**
+ * One (channel, fader) pair as the SQ's native control service is asked to write it — the
+ * intent the renderer sends, and the only thing it knows about those frames.
+ *
+ * Both numbers are 1-based as the show reads them (the strip's own number, the fader's own
+ * number); the codec in main subtracts the one each frame carries. `rides` is the
+ * per-channel flag: whether the channel rides any fader after this write, which the desk
+ * keeps per channel rather than per pair.
+ */
+export interface SqMembershipIntent {
+  /** The controlled channel's own number: its place in the show's channel list. */
+  channel: number
+  /** The fader's own number on the desk. */
+  dca: number
+  /** Whether this pair is being placed, or cleared. */
+  placed: boolean
+  /** Whether the channel rides any fader after this write. */
+  rides: boolean
+}
+
+/** What the SQ's own service answers a membership write with. */
+export interface SqMembershipAnswer {
+  ok: boolean
+  /** How many frames went out, when they did. */
+  frames?: number
+  /** Why nothing went, when nothing did. */
+  error?: string
+}
 
 // ── The desk: how the show reaches it, and what it is told ──────────────────
 //
-// One connection for the whole show. A DCA's message is derived from its number, so a
+// One connection for the whole show. What a fader is told is derived from its number, so a
 // twelve-mic show is not twelve patches to type — which is what makes a new show runnable
-// before anything has been configured: a strip drives the DCA of its number, and a DCA is
-// sent the note or address of its own.
+// before anything has been configured: a fader carries the number its place derives, and an
+// override says so where the desk numbers its DCAs differently. A mic's mute is the
+// channel's own number, which is why the mute follows the profile's *channel* map rather
+// than its fader map.
 
 export type DeskKind = 'none' | 'midi' | 'osc' | 'midi-tcp'
 
@@ -267,9 +305,12 @@ export interface DeskSettings {
   /** MIDI output port, when the show drives the desk over MIDI. */
   midiPort: string
   /**
-   * The desk's MIDI channel, 1–16 as the desk's own setup screen shows it. Where the DCAs
-   * are addressed is derived from it, because that is the desk's rule and not the
-   * operator's: an Avantis answers for its DCAs four channels above its own.
+   * The desk's MIDI channel, 1–16 as the desk's own setup screen shows it.
+   *
+   * A recall addresses a mic's mute and its assignment on this channel, because that is
+   * where every range puts its inputs. The block four channels above it — an Avantis's DCAs
+   * and mute groups — is the desk's own: it is what a show's buttons are read from, and
+   * nothing a recall writes goes there.
    */
   midiChannel: number
   /** Desk address for the kinds that reach it over the network. */
@@ -283,54 +324,82 @@ export interface DeskSettings {
    */
   tcpPort: number
   /**
-   * The address a DCA is sent to, `{n}` standing in for its number: "/dca/{n}/on". A
-   * pattern with no `{n}` in it has the number appended.
+   * The address a mic's mute is sent to, `{n}` standing in for the channel's own number:
+   * "/dca/{n}/on". A pattern with no `{n}` in it has the number appended. It carries a
+   * *channel*'s number and never a fader's — a mute belongs to the mic (AD-26).
    */
   address: string
   /**
-   * The desk's own buttons. Optional on disk: a workspace saved before a desk could be run
-   * from has none, and nothing fills one in — a show with no buttons is run from the
-   * window, which is what that show was doing already.
+   * The desk's own buttons. Every field of the desk section is one the file carries: the
+   * shape check reads the settings in both directions, so a document without this one is
+   * refused rather than handed to a window that would read it.
    */
   buttons: DeskButtons
 }
 
-/** A DCA on the desk: a number, what the show calls it, and how it is driven. */
+/**
+ * A DCA on the desk: a number, and what the show calls it.
+ *
+ * The desk number is what the fader is addressed by where the show's own numbering is not
+ * the desk's — an SQ numbers its DCAs from zero, an Avantis calls its first one 36 — and
+ * null is the number its place derives. It is one number for every route to that fader,
+ * because it is the desk's fact and not the transport's.
+ */
 export interface Dca {
   id: string
   /** What the show calls it: "DCA 2", or "Chorus" when it is a group's fader. */
   label: string
   /**
-   * What this DCA is addressed by on the desk, instead of the number its place derives:
-   * the note on a desk that takes notes, the NRPN parameter on an SQ. Null is derived.
+   * What this DCA is addressed by on the desk, in the profile's own numbering, instead of
+   * the number its place derives. Null is derived.
    */
-  note: number | null
-  /** The address to send to instead of the one its number derives. Null is derived. */
-  address: string | null
+  deskNumber: number | null
 }
 
 /**
- * Who is open in one scene.
+ * What one scene does with one fader: the channels it places on it, and the ensembles it
+ * applies to it.
  *
- * An applied ensemble is membership rather than a copy of it: adding a performer to the
- * chorus puts them in every scene the chorus is applied to. A member a scene closes
- * anyway is an exclusion, so the two stay independent — which is what keeps a scene a
- * handful of decisions instead of a roster.
+ * A placement is the scene's own: a channel the operator put on this row. The ensembles
+ * are membership rather than a copy of it — a member added to the chorus rides every row
+ * the chorus is applied to — and a member channel the scene leaves off this row is an
+ * exclusion, so the two stay independent.
+ */
+export interface SceneDcaPlacement {
+  /** The fader this row is. */
+  dcaId: string
+  /** Controlled channels placed on this row by hand. */
+  channels: string[]
+  /** The ensembles applied to this row: every member's channel rides it unless excluded. */
+  ensembles: string[]
+  /** Member channels of an applied ensemble this scene leaves off this row anyway. */
+  excluded: string[]
+}
+
+/**
+ * Who rides what in one scene.
+ *
+ * A scene owns the assignment: it says which channels ride which fader, and a channel it
+ * names nowhere is closed. There is no scene-wide "who is open" list — a controlled channel
+ * is open exactly when the scene places it, which is what makes a DCA a control group rather
+ * than a mute group.
  */
 export interface MicScene {
   id: string
   name: string
-  /** Performers open here on their own, whether or not they are in an ensemble. */
-  live: string[]
-  /** The ensembles applied here: every member is open unless this scene excludes them. */
-  ensembles: string[]
-  /** Members of an applied ensemble this scene closes anyway. */
-  excluded: string[]
+  /** The faders this scene speaks for, and the channels it places on each. */
+  dcas: SceneDcaPlacement[]
   notes: string
 }
 
 export interface ScenesSettings {
   list: MicScene[]
+  /**
+   * Whether a channel may ride more than one fader. On by default: a show with a chorus and
+   * a band shares channels all the time. Off, the editor keeps one fader per channel and a
+   * recall collapses any residual duplicate to the lowest-numbered DCA.
+   */
+  allowDuplicateAssignment: boolean
 }
 
 // ── Channels, the cast and the desk ─────────────────────────────────────────
@@ -344,17 +413,14 @@ export interface ScenesSettings {
  * A channel strip on the console: one input, named for what is on the other end of it.
  * Its number is its place in the list, so a show that starts with twelve has twelve of
  * them and adding one appends the thirteenth.
+ *
+ * A strip is a name and a number and nothing else: which fader it rides is the scene's
+ * decision (AD-26), so there is no assignment on the channel at all.
  */
 export interface ShowChannel {
   id: string
   /** What the console calls the strip: a performer, an instrument, a position. */
   name: string
-  /**
-   * The DCA it drives. A strip starts on the DCA of its own number — the mic-per-fader
-   * arrangement a wireless show is set up as — and one that shares a fader with others is
-   * assigned by hand.
-   */
-  dcaId: string | null
 }
 
 /**
@@ -642,28 +708,27 @@ export function startingDcas(): Dca[] {
     // files: a show's cast, its scenes and its plot all travel in the same file.
     id: `dca-${index + 1}`,
     label: `DCA ${index + 1}`,
-    note: null,
-    address: null
+    // The number its place derives is the number the profile's own map gives it, so a
+    // show that has never been set up is addressed correctly on whatever desk it is on.
+    deskNumber: null
   }))
 }
 
 /**
- * The twelve strips a new show opens on, each driving the DCA of its own number: a mic
- * per fader, which is what a wireless show is, so nothing has to be assigned before the
- * first scene moves the desk.
+ * The twelve strips a new show opens on: a mic per fader, which is what a wireless show
+ * is. Which fader each one rides is the scene's, so a new show's strips are placed by the
+ * scenes that name them rather than by the strip itself.
  */
-export function startingChannels(dcas: Dca[]): ShowChannel[] {
+export function startingChannels(): ShowChannel[] {
   return Array.from({ length: CHANNEL_START_COUNT }, (_, index) => ({
     id: `channel-${index + 1}`,
-    name: '',
-    dcaId: dcas[index]?.id ?? null
+    name: ''
   }))
 }
 
 /** A show with nobody cast yet still has a console, wired to a desk and to itself. */
 export function defaultCastSettings(): CastSettings {
-  const dcas = startingDcas()
-  return { channels: startingChannels(dcas), performers: [], ensembles: [], dcas }
+  return { channels: startingChannels(), performers: [], ensembles: [], dcas: startingDcas() }
 }
 
 /** What a show with nothing configured carries: one section per setting, each at its default. */
@@ -701,7 +766,7 @@ export function defaultScriptSettings(): ScriptSettings {
 
 /** A show with no scenes still has a desk; the list starts empty rather than guessed at. */
 export function defaultScenesSettings(): ScenesSettings {
-  return { list: [] }
+  return { list: [], allowDuplicateAssignment: true }
 }
 
 /** The companion is off until it is asked for: it puts the show on the network. */

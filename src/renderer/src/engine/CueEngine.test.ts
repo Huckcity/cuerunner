@@ -1439,26 +1439,31 @@ describe('CueEngine — scene cues', () => {
     useStore.setState({
       showSettings: {
         ...defaults,
-        // The show drives a MIDI desk, and the DCA is sent the note somebody gave it
-        // rather than the one its number makes.
+        // The show drives a MIDI desk on the app's own arrangement: one note per strip,
+        // counted from one. A scene owns the assignment, so the scene below is what puts
+        // Ada's strip on the fader at all.
         desk: { ...defaults.desk, kind: 'midi', midiPort: 'Yamaha', midiChannel: 1 },
         cast: {
-          // Ada's strip is what carries the routing now: the DCA is opened by the
-          // performer whose channel is assigned to it.
-          channels: [{ id: 'ch-1', name: 'Ada', dcaId: 'dca-1' }],
+          // Ada's strip is what carries her to the desk; which fader she rides is the
+          // scene's to say.
+          channels: [{ id: 'ch-1', name: 'Ada' }],
           performers: [{
             id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
           }],
           ensembles: [],
-          dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', note: 36, address: null }]
+          dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', deskNumber: null }]
         },
         scenes: {
           list: [{
-            id: 's-1', name: 'Wedding', live: ['p-1'], ensembles: [], excluded: [], notes: ''
-          }]
+            id: 's-1',
+            name: 'Wedding',
+            dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
+            notes: ''
+          }],
+          allowDuplicateAssignment: true
         }
       },
-      deskState: {},
+      deskState: { mutes: {}, assignments: {} },
       deskSceneId: null,
       log: []
     })
@@ -1483,19 +1488,25 @@ describe('CueEngine — scene cues', () => {
     const { runner, appendLog } = setup([withDesk()])
 
     runner.go()
-    // Wait for the recall to finish rather than for the first message: the log line and
+    // Wait for the recall to finish rather than for the first message: the log lines and
     // the remembered desk state come after the sends.
-    await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(1))
+    await vi.waitFor(() => expect(useStore.getState().log).toHaveLength(2))
 
+    // The mic's mute is what reaches this desk, addressed by the channel's own number —
+    // the first strip, not the first fader.
     expect(window.cuerunner.midi.send).toHaveBeenCalledWith({
       portName: 'Yamaha',
-      messages: [{ kind: 'noteOn', channel: 1, note: 36, velocity: 127 }]
+      messages: [{ kind: 'noteOn', channel: 1, note: 1, velocity: 127 }]
     })
     // The runner says the cue started; the recall says what it did to the desk, under the
     // same label, so the log reads as one story.
     expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ message: 'started' })])
     expect(useStore.getState().log.map(entry => [entry.label, entry.message])).toEqual([
-      ['12 · Wedding Scene', 'Scene "Wedding" — 1 opened']
+      ['12 · Wedding Scene', 'Scene "Wedding" — 1 opened'],
+      // This desk takes no assignment, and the recall says so rather than going quiet
+      // about the half of it that did nothing.
+      ['12 · Wedding Scene',
+        'Cannot be told to this desk — Ch 1 · Ada → DCA 1 — Principals: a note desk takes no assignment']
     ])
     expect(useStore.getState().deskSceneId).toBe('s-1')
   })
@@ -1511,7 +1522,8 @@ describe('CueEngine — scene cues', () => {
     ]))
 
     expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
-    expect(useStore.getState().deskState).toEqual({})
+    // Still the record nothing has been sent against: a refused cue writes no fact.
+    expect(useStore.getState().deskState).toEqual({ mutes: {}, assignments: {} })
     expect(useStore.getState().deskSceneId).toBeNull()
   })
 
