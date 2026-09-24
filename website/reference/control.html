@@ -111,15 +111,18 @@
             <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
-            <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position.</td></tr>
+            <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. Nothing outside the show's own channels is named: a mute carries the channel's own number, never a fader's, and a channel the scene leaves off every fader is closed. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position. The membership goes over the desk's own route — an SQ's control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no membership route reports the gap while the mutes go anyway.</td></tr>
           </tbody>
         </table>
       </div>
       <p>
         The desk a scene cue drives is set up once in Show Settings → Channels, where the
         read-back line says which of the show's channels a recall will touch and what the
-        desk it names can be told. <strong>Resync</strong> beside Recall now re-sends the
-        scene the desk is standing on, for when somebody has moved a fader by hand.
+        desk it names can be told. What goes out is the difference against what Cuerunner
+        last sent, held for the session and never undone, and each write is remembered as it
+        lands: there is no read-back of a recall's own writes, so a fader moved by hand at the
+        desk is invisible here. <strong>Resync</strong> beside Recall now re-sends
+        the scene the desk is standing on and says how many channels it wrote.
       </p>
     </section>
   </main>

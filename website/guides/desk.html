@@ -53,10 +53,21 @@
       <h2>1. Tell Cuerunner about the desk</h2>
       <p>
         <strong>Cuerunner ▾ → Show Settings… → Channels</strong>. Pick how the desk is
-        reached — OSC, MIDI, or MIDI over TCP — and the address or port it answers on. The
-        line under it reads back exactly what Cuerunner will send, so you can check it
-        against the console's own documentation before anything is live.
+        reached — OSC, MIDI, or MIDI over TCP — and the address or port it answers on. A
+        MIDI-over-TCP desk is dialled at the port beside its address — 51325 is what an SQ
+        and an Avantis both serve their MIDI on. The line under it reads back exactly what
+        Cuerunner will send, so you can check it against the console's own documentation
+        before anything is live.
       </p>
+      <div class="note">
+        An SQ is reached on a second port, and the two carry different facts. Its MIDI
+        service — 51325, or a MIDI port — takes the channel mutes. Its <strong>own control
+        service</strong> — TCP 51326 outbound, held open by Cuerunner with a keepalive
+        datagram to the desk's UDP 51324 and a ping on the socket — takes the membership,
+        and there is no other route that does: an SQ reached over a plain MIDI port can be
+        muted and assigned nothing. None of that is a setting: 51326 is the desk's own port,
+        and the cadence is Cuerunner's.
+      </div>
       <figure class="figure">
         <a href="../assets/guide/19-show-settings.png" target="_blank" rel="noreferrer">
           <img src="../assets/guide/19-show-settings.png" alt="Show Settings on its Channels tab: the desk connection, the channel strips with a Count beside their heading, the faders the show drives with one beside theirs, and the rule under them that allows a channel to ride more than one fader." />
@@ -84,6 +95,14 @@
         The line under the desk connection reads the desk's own ceiling back too, so a show
         larger than the desk model states is named there, with the number, and sent as it is.
       </p>
+      <div class="note">
+        Two fields this tab used to carry are deleted rather than deprecated: a strip has no
+        fader select of its own, and a fader has one <strong>desk number</strong> in place of
+        the note and address overrides that used to sit beside it. A show saved with either
+        shape is refused when it is opened, naming what the build does not know, rather than
+        converted — the strips, the faders and the placements are set up again here and in
+        the grid.
+      </div>
     </section>
 
     <section class="panel reveal delay-1">
@@ -121,6 +140,14 @@
         <strong>Done</strong> when you have finished.
       </p>
       <p>
+        A scene answers for every channel, not only for the ones it places: a channel it
+        leaves off every fader in that scene is closed by the recall, and a member excluded
+        from an ensemble rides nothing and is closed with it. The leftmost column,
+        <strong>All closed</strong>, is a scene like any other that way — it places nothing,
+        so it closes every mic the show drives — and it is the one column that is never
+        edited.
+      </p>
+      <p>
         Out of edit mode the grid is for running: press <strong>Recall</strong> on a scene
         and the desk moves. The column the desk is currently on is marked, so the grid
         always says where you are, and <strong>Recall now</strong> appears above it when the
@@ -137,9 +164,30 @@
         moves the desk as part of the show.
       </p>
       <p>
-        A recall sends only what changes: the difference between where the desk stands and
-        where the scene says it should be. Mics that are already open are left alone, so a
-        recall never bumps a live channel, and a scene cue is safe to fire twice.
+        A recall sends two facts and no others: the <strong>membership</strong> — the
+        channels the scene places on each fader, and the faders it takes them off — and then
+        each mic’s <strong>mute</strong>. The order matters twice over. The membership comes
+        first because it is what a mute is a state <em>of</em>: a channel the scene has just
+        placed and opened is opened on the fader it was put on. And a mic whose fader changes
+        keeps playing — it takes the new fader’s position and is never muted on the way
+        there. Neither fact names a channel outside the show’s own set: the strips Show
+        Settings → Channels lists are the boundary, and a mute carries the channel’s own
+        number and never a fader’s, because a fader is a control group and closing one is not
+        how a mic is silenced.
+      </p>
+      <p>
+        What goes out is only what changes, diffed against what Cuerunner last sent, and each
+        write is remembered as it lands. Mics an earlier recall already opened are left
+        alone, so a recall never bumps a live channel and a scene cue is safe to fire twice.
+        Nothing here can see a fader somebody moved by hand at the desk — that is what
+        <strong>Resync</strong> is for.
+      </p>
+      <p>
+        The membership goes over whatever route the show’s desk takes it on: an SQ reached
+        over MIDI over TCP has it written on its own control service, TCP 51326, and an
+        Avantis takes it as NRPN <code>40</code> on the desk link. A desk with no such route
+        — a note desk, an OSC desk, or an SQ reached over a plain MIDI port — reports the gap
+        and writes the mutes anyway rather than going quiet.
       </p>
       <div class="note">
         A scene cue with no scene chosen does nothing rather than closing every mic on the
@@ -170,7 +218,10 @@
       <div class="note">
         The note fields are offered on an SQ, whose own desk traffic Cuerunner cannot mistake
         for a hand on a key. On an Avantis the mute groups <em>are</em> notes and its surface
-        keys latch, so the group route is the one to use there.
+        keys latch, so the group route is the one to use there. Both routes arrive on the
+        desk link — MIDI over TCP on 51325, or a MIDI port — which is the same connection a
+        recall sends the mutes down; the SQ’s own control service on 51326 carries the
+        membership and nothing a key press produces.
       </div>
     </section>
   </main>

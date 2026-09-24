@@ -696,14 +696,21 @@ Desk and console integration:
   — and the Scenes grid says which channels ride which fader, scene by scene. A recall writes
   two facts in that order: the **membership** (the channels the scene places, the faders it
   takes them off, over the route the desk takes it on — an SQ's own control service on its
-  51326, whose frames were measured from the desk; an Avantis's NRPN `40` on the desk link),
-  and then the **mic's mute**, whose number is the channel's own and never a fader's, because a
-  DCA is a control group and closing one is not how a mic is silenced. A mic that changes fader
-  is never muted by the move: it keeps playing and takes the new fader's position. A profile
-  with no assignment route — the note convention, OSC, and an SQ reached over a plain MIDI
-  port, whose assignment needs the desk's own control service — reports that gap and writes the
-  mute anyway; a placement past the desk's own DCA list (an SQ has eight, an Avantis sixteen),
-  or a fader whose desk number points past it, is reported rather than going quiet. The frames are the harness's `§6`, and
+  51326, outbound, held open with a keepalive datagram to the desk's UDP 51324, whose frames
+  were measured from the desk; an Avantis's NRPN `40` on the desk link), and then the **mic's
+  mute**, whose number is the channel's own and never a fader's, because a DCA is a control
+  group and closing one is not how a mic is silenced. Nothing outside the show's own channels
+  is named — the set Show Settings lists is the boundary — and a channel the scene leaves off
+  every fader in that scene is closed. A mic that changes fader is never muted by the move: it
+  keeps playing and takes the new fader's position. A profile with no assignment route — the
+  note convention, OSC, and an SQ reached over a plain MIDI port, whose assignment needs the
+  desk's own control service — reports that gap and writes the mute anyway; a placement past
+  the desk's own DCA list (an SQ has eight, an Avantis sixteen), or a fader whose desk number
+  points past it, is reported rather than going quiet. The fields this setup used to carry are
+  deleted rather than deprecated: a strip has no fader select of its own and a fader has one
+  desk number in place of the note and address overrides, and a show saved with either shape is
+  refused on open rather than converted (see Workspace Format). The frames are the harness's
+  `§6`, and
   `integration/specs/desk-sq.spec.ts` and `desk-avantis.spec.ts` hold the app to what each desk
   does with the bytes rather than to what the app sent — on the peers lane, whose counterpart is
   the harness's desk peers rather than a desk. Those peers model the desk's two services used
