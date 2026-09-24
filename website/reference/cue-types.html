@@ -164,7 +164,7 @@
             </tr>
             <tr>
               <td><strong>Scene</strong><span class="pro">Pro</span></td>
-              <td><strong>Scene</strong> — the one to recall. A recall writes the membership the scene asks for first — which of the show's channels ride which fader — and then each mic's mute, and it addresses nothing outside the show's own channels. With no scene chosen the cue does nothing.</td>
+              <td><strong>Scene</strong> — the one to recall. It answers for the whole show rather than for its placements: a channel the scene leaves off every fader is closed by the recall. Two facts go out, in this order — the <strong>membership</strong> (the channels the scene places on each fader, and the faders it takes them off) and then each mic's <strong>mute</strong> — and no message names a channel outside the show's own set. A mute carries the channel's own number, never a fader's. The membership goes over the route the desk takes it on — an SQ's own control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no such route reports the gap while the mutes go anyway. With no scene chosen the cue does nothing.</td>
             </tr>
           </tbody>
         </table>

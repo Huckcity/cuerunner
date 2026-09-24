@@ -123,7 +123,7 @@ export const PRO_ROWS = [
       identifiers: ['midi-tcp', 'sq-native'],
       cues: ['scene'],
       notYetProved: 'Allen &amp; Heath SQ or Avantis',
-      prose: `The Scenes view and the scene cue, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis ${NOT_YET_PROVED} as one of its own steps, and the desk link that lets the desk's keys walk the show.`
+      prose: `The Scenes view — the show's faders against its scenes — and the scene cue, which writes the membership a scene asks for and then each mic's mute, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis ${NOT_YET_PROVED} as one of its own steps, plus the desk link that lets the desk's keys walk the show.`
     }
   },
   {
