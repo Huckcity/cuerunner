@@ -5,10 +5,13 @@
 * **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid places the show's channels on each scene's faders, with the ensembles applied to a row and their exclusions
 * **desk:** a recall writes the membership first and then each mic's mute, one awaited write at a time, and addresses nothing outside the show's controlled channels: a channel the scene places is open, one it leaves off every fader is closed, and a mic that changes fader keeps playing and takes the new fader's position
 * **desk:** an SQ's membership rides the desk's own control service — TCP 51326 outbound, held with a keepalive datagram to the desk's UDP 51324 — with the frames measured from an SQ-6 on firmware 1.6.1 and replayed by the peers lane; the mutes stay on the MIDI service on 51325, and an Avantis takes its membership as NRPN `40` on the desk link
-* **scenes:** a scene column is a fixed width and the grid scrolls inside the view rather than stretching two scenes across the window, a cell’s pickers say `Place channel` and `Apply ensemble`, and `Create ensemble` makes the performers a row is already carrying into one reusable ensemble applied to it — offered only when it has something to gather, leaving strips nobody is patched to placed by hand, and undone in one press
+* **scenes:** a scene column is a fixed width and the grid scrolls inside the view rather than stretching two scenes across the window
+* **scenes:** every row ends in one blank box, and everything it can gain comes out of it: the picker lists the strips the row does not carry and the ensembles it does not apply under their own headings, filters as it is typed, and opens the builder at `Ensemble…` — the strips moved across its two lists with the arrows become a new ensemble applied to that row in one undo
+* **scenes:** a strip is named the way the operator knows it — the name the strip was given, or the performer whose mic is on it, and its number only while it has neither — in the cells, in the picker and in the builder; the console's own `Ch 3 · Ruth` stays where the desk is spoken about, in the run log, the change list and the scene inspector
 
 ### Removals
 
+* **scenes:** the `Place channel` and `Apply ensemble` selects and the `Create ensemble` press are deleted rather than left beside the box: one blank box opens everything a row can gain, and the group a row folded into itself one press is built in the builder now
 * **show:** the per-channel fader select and the per-DCA note and address overrides are deleted rather than deprecated: a strip is a name and a number, a fader carries one desk number, and a show saved with either shape is refused by name rather than converted
 
 # [0.14.0](https://github.com/Huckcity/cuerunner/compare/v0.13.0...v0.14.0) (2026-09-21)

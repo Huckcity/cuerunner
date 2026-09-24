@@ -177,6 +177,30 @@ export function channelLabel(channels: ShowChannel[], channelId: string | null):
   return name === '' ? `Ch ${index + 1}` : `Ch ${index + 1} · ${name}`
 }
 
+/**
+ * A strip as the Scenes grid reads it: the name the operator gave it, or the name of the
+ * performer whose mic is patched to it, and its number only while it has neither.
+ *
+ * The grid is where the show is built out of people — a row is a fader, and what rides it
+ * is whoever is on the strip — so "Ch 4" is the one thing it should not say about a strip
+ * that has been named or cast. The console's own reading, number first and name beside it,
+ * is `channelLabel` and stays where the desk is spoken about: the run log, the change list
+ * and the report are about the channel the desk knows, not about who is standing on it.
+ */
+export function stripLabel(
+  channels: ShowChannel[],
+  performers: Performer[],
+  channelId: string | null
+): string {
+  const index = channelId === null ? -1 : channels.findIndex(channel => channel.id === channelId)
+  if (index === -1) return ''
+  const named = channels[index].name.trim()
+  if (named !== '') return named
+  const cast = performers.find(performer => performer.channelId === channelId)
+  const who = cast === undefined ? '' : (cast.name.trim() === '' ? cast.role.trim() : cast.name.trim())
+  return who === '' ? `Ch ${index + 1}` : who
+}
+
 // ── Ensembles ──────────────────────────────────────────────────────────────
 
 /**

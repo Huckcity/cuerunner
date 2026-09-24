@@ -143,46 +143,15 @@ export function ensembleState(
 }
 
 /**
- * Who a new ensemble made from a row would hold: the performers whose channels the row is
- * carrying, in cast order — the row's carried channels, which a caller that has already
- * worked them out hands over rather than paying for the same walk again. An empty answer is
- * a row there is nothing to group: the strips it carries have nobody patched to them, and
- * an ensemble names performers.
+ * Who an ensemble built from these channels holds: the performers whose mics stand on
+ * them, in cast order. An empty answer is a set of strips nobody is patched to, and an
+ * ensemble names performers — so a caller offering the strips a group can be built from
+ * leaves those out.
  */
 export function rowPerformers(cast: CastSettings, carried: string[]): string[] {
   return cast.performers
     .filter(performer => performer.channelId !== null && carried.includes(performer.channelId))
     .map(performer => performer.id)
-}
-
-/**
- * Whether Create ensemble has a job on this row: somebody carried, and somebody the one
- * ensemble applied to the row does not already hold.
- *
- * A row held by a single ensemble that holds every performer it carries is already what the
- * press would build — the new group would name the same people — so the control is absent
- * rather than a press that rewrites the row into an equivalent one. A performer the row
- * carries that the group does not hold is the job, whether they are placed by hand or were
- * carried into the row by a Cast change; and with no ensemble applied, or more than one,
- * anything carried is.
- */
-export function canCreateEnsemble(
-  cast: CastSettings,
-  scene: MicScene | null,
-  dcaId: string,
-  carried: string[]
-): boolean {
-  const row = placementFor(scene, dcaId)
-  if (row === null) return false
-  const applied = row.ensembles.length === 1
-    ? cast.ensembles.find(candidate => candidate.id === row.ensembles[0])
-    : undefined
-
-  for (const performer of cast.performers) {
-    if (performer.channelId === null || !carried.includes(performer.channelId)) continue
-    if (applied === undefined || !applied.members.includes(performer.id)) return true
-  }
-  return false
 }
 
 // ── Editing a placement ────────────────────────────────────────────────────
@@ -318,42 +287,6 @@ export function setRowEnsemble(
         : [...row.ensembles, ensemble.id],
       channels: row.channels.filter(id => !members.includes(id)),
       excluded: row.excluded.filter(id => !members.includes(id))
-    }
-  })
-}
-
-/**
- * Consolidates a row onto one ensemble: the performers it is carrying become the new
- * group's members, the group is applied here, and the hand placements and applied groups
- * that named those performers are gone from this row.
- *
- * A carried channel nobody is patched to cannot be in an ensemble at all, so it stays
- * placed by hand and the row keeps naming it. That is why the effective carried set is the
- * one the row already had, however many hands and groups put it together — and why the
- * exclusions go: one only ever meant "not this member's channel", and the new group holds
- * exactly the members that were riding.
- *
- * Only this row changes. The ensembles it used to apply stay in the cast for every other
- * row and scene that still holds them.
- */
-export function consolidateRow(
-  settings: ScenesSettings,
-  sceneId: string,
-  dcaId: string,
-  ensembleId: string,
-  cast: CastSettings
-): ScenesSettings {
-  return writeRow(settings, sceneId, dcaId, row => {
-    const carried = rowChannels(cast, row)
-    return {
-      dcaId,
-      // The channels somebody is patched to ride the new ensemble; one nobody is patched to
-      // cannot be in an ensemble at all, so the row goes on naming it by hand.
-      channels: row.channels.filter(channelId =>
-        carried.includes(channelId) &&
-        !cast.performers.some(performer => performer.channelId === channelId)),
-      ensembles: [ensembleId],
-      excluded: []
     }
   })
 }

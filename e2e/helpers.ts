@@ -1,4 +1,4 @@
-import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import type { ChildProcess } from 'child_process'
 import { createSocket } from 'dgram'
@@ -391,6 +391,49 @@ export async function editScenes(page: Page): Promise<void> {
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
 }
 
+/**
+ * What a cell's blank box opens: the strips the row does not carry, the groups it does not
+ * apply, and the builder. The label is typed into the filter and the row pressed, because
+ * that is how a menu holding a console's worth of strips is actually used — and the strip's
+ * label is the name it was given or the performer standing on it, never its bare number.
+ */
+export async function pickFromBox(page: Page, cell: Locator, label: string): Promise<void> {
+  await cell.locator('.matrix-cell-add').click()
+  const picker = page.locator('.scene-picker')
+  await expect(picker).toBeVisible()
+  await picker.locator('.scene-picker-filter').fill(label)
+  // The rows are the filter's options rather than buttons: the filter is the combobox that
+  // drives them, so the arrows reach them and Tab does not.
+  await picker.getByRole('option', { name: label, exact: true }).click()
+  await expect(picker).toHaveCount(0)
+}
+
+/**
+ * The builder behind the box's last row: a new ensemble, named here and filled from the
+ * strips moved across, applied to the row it was opened from.
+ */
+export async function buildEnsembleFromBox(
+  page: Page,
+  cell: Locator,
+  name: string,
+  strips: string[]
+): Promise<void> {
+  await cell.locator('.matrix-cell-add').click()
+  const picker = page.locator('.scene-picker')
+  await expect(picker).toBeVisible()
+  await picker.getByRole('button', { name: 'Ensemble…', exact: true }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'New ensemble' })
+  await expect(dialog).toBeVisible()
+  await dialog.locator('.ensemble-name-field').fill(name)
+  for (const strip of strips) {
+    await dialog.locator('[data-pane="free"] .ensemble-item').filter({ hasText: strip }).click()
+    await dialog.locator('.ensemble-move').first().click()
+  }
+  await dialog.getByRole('button', { name: 'Create and apply' }).click()
+  await expect(dialog).toHaveCount(0)
+}
+
 /** The tabs of Show Settings, as the menu names them. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
 
@@ -514,10 +557,14 @@ export async function buildDeskShow(
   await openScenesView(page)
   await editScenes(page)
   await page.locator('.scenes-add').click()
-  // A scene places the channels it wants: the first strip on the first fader, which is
-  // the membership a recall writes and the reason the mic is open.
-  await page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    .locator('.matrix-place').selectOption({ label: 'Ch 1 · Ruth' })
+  // A scene places the strips it wants: the first strip on the first fader, which is the
+  // membership a recall writes and the reason the mic is open. Placing one is a press on
+  // the cell's box and a press on the strip in the picker.
+  await pickFromBox(
+    page,
+    page.locator('.matrix-row').first().locator('.matrix-cell').first(),
+    'Ruth'
+  )
 }
 
 /**

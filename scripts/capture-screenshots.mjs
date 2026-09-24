@@ -296,13 +296,23 @@ await page.locator('.scenes-view').waitFor()
 // The view opens to run the show; building one is an Edit away.
 await page.locator('.scenes-edit').click()
 
-// Rows are the show's faders, so placing a channel is choosing it in the cell's picker:
-// the row's cell, then the option for the strip. The grid's first column is the all-closed
-// one, which is not a scene in the file, so a scene's column is found by the id it carries
-// rather than by its place on screen.
-const placeChannel = async (sceneIndex, fader, channel) => {
+// Rows are the show's faders and a row gains everything from the one blank box it carries,
+// so placing a strip is pressing that box and then the strip in the picker it opens. The
+// picker filters as it is typed and is drawn in a portal, so it is found on the page rather
+// than inside the view — and a strip is offered under the name it was given or the name of
+// the performer standing on it, never its bare number. The grid's first column is the
+// all-closed one, which is not a scene in the file, so a scene's column is found by the id
+// it carries rather than by its place on screen.
+const pickFrom = async (cell, label) => {
+  await cell.locator('.matrix-cell-add').click()
+  const picker = page.locator('.scene-picker')
+  await picker.locator('.scene-picker-filter').fill(label)
+  await picker.getByRole('option', { name: label, exact: true }).click()
+  await picker.waitFor({ state: 'detached' })
+}
+const placeStrip = async (sceneIndex, fader, strip) => {
   const row = page.locator('.matrix-row', { has: page.locator('.matrix-fader', { hasText: fader }) })
-  await row.locator('.matrix-cell').nth(sceneIndex).locator('.matrix-place').selectOption({ label: channel })
+  await pickFrom(row.locator('.matrix-cell').nth(sceneIndex), strip)
 }
 const nameScene = async (index, name) => {
   const field = page.locator('.matrix-scene[data-scene-id]').nth(index).locator('.scene-name-field')
@@ -312,26 +322,36 @@ const nameScene = async (index, name) => {
 
 await page.locator('.scenes-add').click()
 await nameScene(0, 'Act One')
-await placeChannel(0, '1 · DCA 1', 'Ch 1')
-await placeChannel(0, '2 · DCA 2', 'Ch 2')
-await placeChannel(0, '3 · DCA 3', 'Ch 3')
-await placeChannel(0, '4 · DCA 4', 'Ch 4')
+await placeStrip(0, '1 · DCA 1', 'Aldonza')
+await placeStrip(0, '2 · DCA 2', 'Sancho')
+await placeStrip(0, '3 · DCA 3', 'Cervantes')
+await placeStrip(0, '4 · DCA 4', 'Pedro')
 await page.locator('.scenes-add').click()
 await nameScene(1, 'Wedding')
-await placeChannel(1, '5 · DCA 5', 'Ch 5')
-await placeChannel(1, '6 · DCA 6', 'Ch 6')
-await placeChannel(1, '7 · DCA 7', 'Ch 7')
-await placeChannel(1, '8 · DCA 8', 'Ch 8')
+await placeStrip(1, '5 · DCA 5', 'Anselmo')
+await placeStrip(1, '6 · DCA 6', 'Fermina')
+await placeStrip(1, '7 · DCA 7', 'Antonia')
+await placeStrip(1, '8 · DCA 8', 'Padre')
 
 // The first scene recalled, so the header says where the desk is and what is coming, and
 // the column the desk is on is the one the figure shows lit.
 await page.locator('.matrix-scene[data-scene-id] .matrix-recall').first().click()
 await page.locator('.matrix-scene[data-scene-id][data-current="true"]').waitFor()
 
-// The other half of building a scene: the row's channels, kept as an ensemble applied to
-// it — what a later scene applies with one press instead of a row of picks.
-await page.locator('.matrix-row', { has: page.locator('.matrix-fader', { hasText: '1 · DCA 1' }) })
-  .locator('.matrix-cell').nth(0).locator('.matrix-ensemble-new').click()
+// The other half of building a scene: the strips picked in the builder, kept as an ensemble
+// applied to the row — what a later scene applies with one press instead of a row of picks.
+const firstRow = page.locator('.matrix-row', { has: page.locator('.matrix-fader', { hasText: '1 · DCA 1' }) })
+await firstRow.locator('.matrix-cell').nth(0).locator('.matrix-cell-add').click()
+await page.locator('.scene-picker')
+  .getByRole('button', { name: 'Ensemble…', exact: true }).click()
+const builder = page.getByRole('dialog', { name: 'New ensemble' })
+await builder.locator('.ensemble-name-field').fill('Principals')
+for (const strip of ['Aldonza', 'Sancho']) {
+  await builder.locator('[data-pane="free"] .ensemble-item').filter({ hasText: strip }).click()
+  await builder.locator('.ensemble-move').first().click()
+}
+await builder.getByRole('button', { name: 'Create and apply' }).click()
+await builder.waitFor({ state: 'detached' })
 await page.locator('.matrix-ensemble').first().waitFor()
 
 // The grid is taller than the window's default by one row, and a screenshot cannot

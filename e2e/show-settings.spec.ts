@@ -15,6 +15,7 @@ import {
   openLogPanel,
   openScenesView,
   openShowSettings,
+  pickFromBox,
   pointDeskAtOsc
 } from './helpers'
 
@@ -164,12 +165,12 @@ test('turning the duplicate rule off keeps the grid to one fader per channel', a
   const first = page.locator('.matrix-row').nth(0).locator('.matrix-cell').first()
   const second = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
 
-  await second.locator('.matrix-place').selectOption({ label: 'Ch 1' })
+  await pickFromBox(page, second, 'Ch 1')
   await expect(second.locator('.matrix-channel')).toHaveCount(1)
 
   // The same strip on another fader: the row it was on loses it in the same press, so a
   // channel rides one fader in a scene while the rule is off.
-  await first.locator('.matrix-place').selectOption({ label: 'Ch 1' })
+  await pickFromBox(page, first, 'Ch 1')
   await expect(first.locator('.matrix-channel')).toHaveCount(1)
   await expect(second.locator('.matrix-channel')).toHaveCount(0)
 })
@@ -216,15 +217,19 @@ test('the defaults take a show nobody wired to a desk of its own', async () => {
 
   try {
     // Nothing here but the desk's own address, and one scene placing the first strip on
-    // the first fader: everything else is what the defaults do.
+    // the first fader: everything else is what the defaults do. The demo rack's cast is on
+    // the strips, so the first one is offered under the performer's name.
     await liveRack(page)
     await pointDeskAtOsc(page, desk.port)
     await page.locator('.show-settings-done').click()
     await openScenesView(page)
     await editScenes(page)
     await page.locator('.scenes-add').click()
-    await page.locator('.matrix-row').first().locator('.matrix-cell').first()
-      .locator('.matrix-place').selectOption({ label: 'Ch 1' })
+    await pickFromBox(
+      page,
+      page.locator('.matrix-row').first().locator('.matrix-cell').first(),
+      'Aldonza'
+    )
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
     // The desk has not been told anything yet, so the first recall says the whole show:
@@ -308,7 +313,7 @@ test('an ensemble built in the Cast tab rides every member when a scene applies 
     // The ensemble routes nothing itself: applying it to a row is what puts both members'
     // strips on that fader, and the row names the ensemble and the members it carries.
     const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await cell.locator('.matrix-ensemble-add').selectOption({ label: 'Ensemble 1' })
+    await pickFromBox(page, cell, 'Ensemble 1')
     const applied = cell.locator('.matrix-ensemble')
     await expect(applied).toHaveAttribute('data-applied', 'on')
     await expect(cell.locator('.matrix-channel')).toHaveCount(2)

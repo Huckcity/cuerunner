@@ -7,13 +7,15 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import {
   addCueFromMoreMenu,
   buildDeskShow,
+  buildEnsembleFromBox,
   closeApp,
   freePort,
   launchApp,
   listenOsc,
   mintLicense,
   openLogPanel,
-  openShowSettings
+  openShowSettings,
+  pickFromBox
 } from './helpers'
 
 let app: ElectronApplication
@@ -48,9 +50,10 @@ test('the view holds the show, and recall works from a column', async () => {
     const row = page.locator('.matrix-row').first()
     await expect(row.locator('.matrix-cell')).toHaveCount(1)
     await expect(row.locator('.matrix-cell-blank')).toHaveCount(1)
-    // The one cell of the scene the helper built names the strip it places.
+    // The one cell of the scene the helper built names the strip it places — by the name
+    // the performer was given, which is what named the strip.
     await expect(row.locator('.matrix-cell').first().locator('.matrix-channel'))
-      .toContainText('Ch 1 · Ruth')
+      .toContainText('Ruth')
 
     // Recalling from the column header is what the view is for. The desk has never been
     // told anything, so the recall says the whole show: the strip the scene places is
@@ -105,7 +108,7 @@ test('the show is edited in the view, not in a dialog', async () => {
   // calls it. Which channel rides which fader is the scene's decision, made here and
   // nowhere else.
   await expect(page.locator('.matrix-mic').first()).toContainText('DCA 1')
-  await expect(page.locator('.matrix-channel').first()).toContainText('Ch 1 · Ruth')
+  await expect(page.locator('.matrix-channel').first()).toContainText('Ruth')
   // What the grid does with a strip is place it on a fader. Who is on which strip, and
   // what the console calls it, are Show Settings': the row's own header is a label rather
   // than a picker.
@@ -323,7 +326,7 @@ test('deleting a scene leaves the view where it is, and undo puts it back', asyn
   // Vows places a strip on the seventh fader: the second cell of that row is the second
   // scene, because the all-closed column is a blank in the row rather than a cell.
   const vowsCell = page.locator('.matrix-row').nth(6).locator('.matrix-cell').nth(1)
-  await vowsCell.locator('.matrix-place').selectOption({ label: 'Ch 1 · Ruth' })
+  await pickFromBox(page, vowsCell, 'Ruth')
   await expect(vowsCell).toHaveAttribute('data-placed', 'true')
 
   // The show reaches the fifteenth through the cue stack. The cue is armed here; the press
@@ -393,7 +396,9 @@ test('editing a cell moves the scene, and the desk is told only when asked', asy
     // Editing is not applying: the second strip joins the first on its fader, and the desk
     // hears nothing until the operator says so.
     const firstFader = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await firstFader.locator('.matrix-place').selectOption({ label: 'Ch 2' })
+    // The strip it gains is named for the performer standing on it, which is what the grid
+    // and the picker both call it.
+    await pickFromBox(page, firstFader, 'Sancho')
     await expect(firstFader.locator('.matrix-channel')).toHaveCount(2)
     await expect(page.locator('.matrix-apply')).toBeVisible()
     await page.waitForTimeout(300)
@@ -499,7 +504,7 @@ test('a scene that applies an ensemble to a row rides every member of it', async
     // An ensemble routes nothing itself: applying it to a row is what puts both members'
     // strips on that fader, and the row names it and the members it now carries.
     const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await cell.locator('.matrix-ensemble-add').selectOption({ label: 'Ensemble 1' })
+    await pickFromBox(page, cell, 'Ensemble 1')
     await expect(cell.locator('.matrix-ensemble')).toHaveAttribute('data-applied', 'on')
     await expect(cell.locator('.matrix-channel')).toHaveCount(2)
 
@@ -514,7 +519,7 @@ test('a scene that applies an ensemble to a row rides every member of it', async
     const cellBox = await boxOf('.matrix-row .matrix-cell')
     const sceneHeader = await boxOf('.matrix-scene:not([data-all-closed])')
     // The cell is inset by its own margin, so it starts a couple of pixels inside its
-    // column — a column is ninety wide, so anything that is not that is a whole column out.
+    // column — a scene column is 192px, so anything that is not that is a whole column out.
     expect(Math.abs(cellBox.x - sceneHeader.x)).toBeLessThan(4)
 
     // Both members are told by their own channel numbers, at the addresses those numbers
@@ -552,7 +557,7 @@ test('a member left off an ensemble rides nothing, and a recall closes it', asyn
     await settings.locator('.show-settings-done').click()
 
     const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await cell.locator('.matrix-ensemble-add').selectOption({ label: 'Ensemble 1' })
+    await pickFromBox(page, cell, 'Ensemble 1')
     await expect(cell.locator('.matrix-channel')).toHaveCount(2)
 
     // Leaving a member off is a press on that member rather than a way of applying the
@@ -634,7 +639,7 @@ test('a long hostile name renders inert, whole in its title, and never widens th
 
   // The column cuts the name; the whole of it is on the element — the chip's own title, the
   // row's fader label, and the scene header the column is named by.
-  await expect(chip).toHaveAttribute('title', `Ch 1 · ${hostileName}`)
+  await expect(chip).toHaveAttribute('title', hostileName)
   await expect(page.locator('.matrix-fader').first()).toHaveAttribute('title', `1 · ${hostileName}`)
   await expect(sceneName).toHaveAttribute('title', hostileName)
 
@@ -658,7 +663,7 @@ test('a long hostile name renders inert, whole in its title, and never widens th
   expect(measured.cellsOverflow.every(overflow => overflow <= 0)).toBe(true)
 })
 
-test('Create ensemble folds a row into one group, and one undo puts it back', async () => {
+test('the builder makes a group from the strips it is given, and one undo puts it back', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())
 
@@ -675,10 +680,10 @@ test('Create ensemble folds a row into one group, and one undo puts it back', as
 
     // The row as the helper built it: one performer's strip placed by hand on the first
     // fader. The bare strip goes on beside it, so the row carries something a group can
-    // hold and something it cannot.
+    // hold and something it cannot — the second strip has nobody named on it, so the picker
+    // offers it by its number, which is all the grid says about it.
     const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await expect(cell.locator('.matrix-place option').first()).toHaveText('Place channel')
-    await cell.locator('.matrix-place').selectOption({ label: 'Ch 2' })
+    await pickFromBox(page, cell, 'Ch 2')
     await expect(cell.locator('.matrix-channel')).toHaveCount(2)
 
     // What the scene carries is what a recall writes: two mics open and ten closed. The
@@ -689,23 +694,19 @@ test('Create ensemble folds a row into one group, and one undo puts it back', as
     expect(desk.received[1]).toEqual({ address: '/dca/2/on', args: [1] })
     expect(desk.received.slice(2).map(message => message.args[0])).toEqual(Array(10).fill(0))
 
-    // The press says what it does, and is only there while it has a job. Grouping itself
-    // is a settings edit, not a command to the desk.
-    await expect(cell.locator('.matrix-ensemble-new')).toHaveText('Create ensemble')
-    await expect(cell.locator('.matrix-ensemble-new'))
-      .toHaveAttribute('title', 'Make a reusable ensemble from this row and apply it here')
+    // The group is built from the strips the operator moves across in the builder. The strip
+    // nobody is patched to cannot be moved at all, so it stays where the row put it, and
+    // grouping is a settings edit rather than a command to the desk.
     const written = desk.received.length
-    await cell.locator('.matrix-ensemble-new').click()
+    await buildEnsembleFromBox(page, cell, 'Principals', ['Ruth'])
 
-    // One group, applied here, holding the performer: the strip nobody is patched to stays
-    // a placement of its own, so the row carries exactly what it carried — and the control
-    // goes with the job.
-    await expect(cell.locator('.matrix-ensemble')).toHaveText('Ensemble 1')
+    await expect(cell.locator('.matrix-ensemble')).toHaveText('Principals')
     await expect(cell.locator('.matrix-ensemble')).toHaveAttribute('data-applied', 'on')
+    // The row carries what it carried: the performer through the group, and the bare strip
+    // as a placement of its own.
     await expect(cell.locator('.matrix-channel')).toHaveCount(2)
-    await expect(cell.locator('.matrix-channel').first()).toContainText('Ch 1 · Ruth')
+    await expect(cell.locator('.matrix-channel').first()).toContainText('Ruth')
     await expect(cell.locator('.matrix-channel').last()).toContainText('Ch 2')
-    await expect(cell.locator('.matrix-ensemble-new')).toHaveCount(0)
 
     // The desk has only received the earlier recall's two opened mics and ten closed, and
     // it is given the moment a message would have taken to arrive before that is read.
@@ -721,7 +722,6 @@ test('Create ensemble folds a row into one group, and one undo puts it back', as
     })
     await expect(cell.locator('.matrix-ensemble')).toHaveCount(0)
     await expect(cell.locator('.matrix-channel')).toHaveCount(2)
-    await expect(cell.locator('.matrix-ensemble-new')).toHaveText('Create ensemble')
   } finally {
     await desk.close()
   }
@@ -743,8 +743,11 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
 
     const cell = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
     await expect(cell).toHaveAttribute('data-placed', 'false')
-    await expect(page.locator('.matrix-place')).toHaveCount(0)
-    await expect(page.locator('.matrix-ensemble-add')).toHaveCount(0)
+    // The box is still drawn — the grid says what every row carries, and an empty row is a
+    // fact about the scene — and it is asleep rather than a press that opens anything.
+    await expect(cell.locator('.matrix-cell-add')).toBeDisabled()
+    await cell.locator('.matrix-cell-add').click({ force: true })
+    await expect(page.locator('.scene-picker')).toHaveCount(0)
     await expect(page.locator('.matrix-channel-remove').first()).toBeDisabled()
     await expect(page.locator('.scenes-add')).toHaveCount(0)
     await expect(page.locator('.matrix-scene-remove')).toHaveCount(0)
@@ -757,7 +760,7 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
 
     // And Edit gives the show back.
     await page.locator('.scenes-edit').click()
-    await cell.locator('.matrix-place').selectOption({ label: 'Ch 2' })
+    await pickFromBox(page, cell, 'Sancho')
     await expect(cell.locator('.matrix-channel')).toHaveCount(1)
   } finally {
     await desk.close()

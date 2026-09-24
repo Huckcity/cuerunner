@@ -410,11 +410,11 @@
 
 .matrix-cell[data-pending='true'][data-placed='false'] { background: var(--accent-amber-bg); }
 
-/* A channel the row carries: its number, which is its place in the list, and the name
-   beside it when it has one. The column is a fixed width, so a long name is cut off: the
-   name is a box of its own that gives way first, so the cut reads as an ellipsis and the ✕
-   that takes the channel off stays where it can be pressed. The chip's title carries the
-   whole name. */
+/* A strip the row carries, named the way the grid names it: the name it was given, or the
+   performer standing on it, and its number only while it has neither (see `stripLabel`).
+   The column is a fixed width, so a long name is cut off: the name is a box of its own that
+   gives way first, so the cut reads as an ellipsis and the ✕ that takes the strip off stays
+   where it can be pressed. The chip's title carries the whole name. */
 .matrix-channel {
   display: inline-flex;
   align-items: center;
@@ -458,32 +458,127 @@
 .matrix-channel-remove:focus-visible,
 .matrix-ensemble:focus-visible,
 .matrix-member:focus-visible,
-.matrix-place:focus-visible,
-.matrix-ensemble-add:focus-visible,
-.matrix-ensemble-new:focus-visible,
+.matrix-cell-add:focus-visible,
 .matrix-resync:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
 }
 
-/* The pickers name what the row does not carry yet: a channel to place, or an ensemble
-   to apply. They read as presses rather than as state, because that is what they are. */
-.matrix-place,
-.matrix-ensemble-add {
+/* The blank box a cell ends with: every strip the row gains and every group it applies
+   comes out of it, so a row carrying nothing is one empty box and a row carrying two
+   strips is those and the box after them. It is drawn while the show runs as well as
+   while it is edited — the grid says what every row carries, and an empty row is a fact
+   about the scene — and there it is inert, which is what the disabled cursor is for. */
+.matrix-cell-add {
+  flex: 1 1 26px;
+  min-width: 26px;
   max-width: 100%;
   height: 20px;
-  padding: 0 4px;
+  padding: 0;
   background: transparent;
   border: 1px dashed var(--border-input);
   border-radius: var(--radius-sm);
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-cell-add:hover:enabled {
+  background: var(--bg-hover);
+  border-color: var(--fg-subtle);
+}
+
+.matrix-cell-add:disabled { cursor: default; }
+
+/* ── What the box opens ────────────────────────────────────────────────────────
+   The picker is drawn in a portal at the box's own corner rather than inside the cell:
+   the grid scrolls, and a menu in a scrolling column is clipped by it. The filter is the
+   first thing in it and takes the keyboard, because the point of the list is that a show
+   with a console's worth of strips is typed at rather than scanned. */
+.scene-picker {
+  position: fixed;
+  z-index: 220;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.scene-picker-filter {
+  height: var(--h-button-sm);
+  margin: var(--space-1) var(--space-1) 0;
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
   font-family: inherit;
+  font-size: var(--text-base);
+}
+
+.scene-picker-filter:focus { outline: none; border-color: var(--border-focus); }
+
+.scene-picker-list {
+  padding: var(--space-1) 0;
+  overflow-y: auto;
+}
+
+.scene-picker-section {
+  padding: 2px var(--space-3);
+  color: var(--fg-subtle);
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scene-picker-item {
+  display: block;
+  width: 100%;
+  padding: 3px var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--fg-body);
+  font-family: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
-.matrix-place:hover,
-.matrix-ensemble-add:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.scene-picker-item[data-active='true'] {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.scene-picker-none {
+  padding: 3px var(--space-3);
+  color: var(--fg-subtle);
+  font-size: var(--text-sm);
+}
+
+.scene-picker-build {
+  height: var(--h-button-sm);
+  margin: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-family: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.scene-picker-build:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.scene-picker-build:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 1px; }
 
 /* An ensemble applied to the row, and the members left off it: taking the group off
    leaves whatever was placed by hand as it was, and leaving a member off is a press on
@@ -543,27 +638,6 @@
   color: var(--accent-amber);
   background: var(--accent-amber-bg);
 }
-
-/* Consolidating what the row carries into one ensemble, applied here: the other half of
-   building a scene from the people already on a fader. It reads as a quiet press rather
-   than as state, because it is the one control in a cell that rewrites the row. */
-.matrix-ensemble-new {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  height: 20px;
-  padding: 0 6px;
-  background: transparent;
-  border: 1px dashed var(--border-input);
-  border-radius: var(--radius-sm);
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.matrix-ensemble-new:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 /* The all-closed column places nothing, so its place in a fader row is a gap rather
    than a cell: the same box, and nothing that can be pressed. */

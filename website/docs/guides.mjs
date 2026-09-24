@@ -758,30 +758,32 @@ export const GUIDES = [
       <h2>3. Build the scenes</h2>
       <figure class="figure">
         <a href="../assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each cell naming the channels that scene puts on that fader." />
+          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each cell naming the strips that scene puts on that fader and the blank box it gains them from." />
         </a>
         <figcaption>The scenes view, mid-build.</figcaption>
       </figure>
       <p>
         Switch the window to <strong>Scenes</strong>, press <strong>Edit</strong>, and add
         one. The show’s <strong>faders</strong> run down the side and the scenes across the
-        top, and each cell says which channels that scene puts on that fader: place one with
-        <strong>Place channel</strong>, and take it off with the ✕ beside its name. A channel
-        can ride several faders — a chorus master on one and its members spread across others
-        — unless Show Settings has that turned off (Channels → Allow a channel to ride more
-        than one fader), where placing a strip on a row takes it off that scene's other rows.
+        top, and each cell says which strips that scene puts on that fader, by the name the
+        strip was given or the name of the performer standing on it. Every row ends in a
+        blank box: press it, type a name into the <strong>filter</strong>, and pick the strip.
+        Take a strip off with the ✕ beside its name. A strip can ride several faders — a
+        chorus master on one and its members spread across others — unless Show Settings has
+        that turned off (Channels → Allow a channel to ride more than one fader), where
+        placing a strip on a row takes it off that scene's other rows.
       </p>
       <p>
-        An <strong>ensemble</strong> is the other half of building a row: apply one with
-        <strong>Apply ensemble</strong> and every member’s strip rides it, with a member you
-        want left off this row shown beside it to switch off. <strong>Create ensemble</strong>
-        is the press that goes the other way: it gathers the performers the row is already
-        carrying — placed by hand, brought on by a group, or both — into one new ensemble in
-        the cast, applies that ensemble to the row, and leaves it there to apply to other
-        rows and scenes. It only appears while it has something to gather. A strip carried
-        with nobody patched to it cannot be grouped and stays placed by hand, and nothing
-        about which channels the row opens changes: a regroup is not a re-route.
-        <strong>Done</strong> when you have finished.
+        An <strong>ensemble</strong> is the other half of building a row: the same box lists
+        the ensembles the row does not apply, and picking one puts every member’s strip on
+        the row, with a member you want left off shown beside it to switch off.
+        <strong>Ensemble…</strong>, the last row of the box, is where a new one is built: name
+        it, move the strips it should hold from <strong>Available</strong> to <strong>In the
+        ensemble</strong> with the two arrows, and press <strong>Create and apply</strong> —
+        the group joins the cast and this row rides it, as one edit you can undo. It is left
+        there to apply to other rows and scenes. A strip nobody is cast on cannot be in a
+        group, so it cannot be moved across: it stays a placement of the row's own, and the
+        row carries exactly what it carried. <strong>Done</strong> when you have finished.
       </p>
       <p>
         A scene answers for every channel, not only for the ones it places: a channel it

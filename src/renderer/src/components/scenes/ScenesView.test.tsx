@@ -1,10 +1,12 @@
 // Scenes is the view the operator lives in at curtain up: a row per fader, a column
 // per scene, the column the desk was last taken to lit where the show is. A cell names the
-// channels its row carries and the ensembles applied to it, and a recall writes that
-// membership and then each mic's mute. These tests pin the glance, the three presses that
-// move the desk (a column's recall, the header's Recall now, and the Resync beside it) and
-// the run mode it opens in, which stops every edit while leaving recall working. The
-// first column is the scene that is never edited: all closed.
+// strips its row carries and the ensembles applied to it, and a recall writes that
+// membership and then each mic's mute. Everything a row can gain comes out of the one blank
+// box it carries — the picker, and the builder behind it — so that is what these tests
+// press. They also pin the glance, the three presses that move the desk (a column's recall,
+// the header's Recall now, and the Resync beside it) and the run mode it opens in, which
+// stops every edit while leaving recall working. The first column is the scene that is never
+// edited: all closed.
 import { describe, it, expect, beforeEach, afterEach, type Mock, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -226,12 +228,51 @@ describe('ScenesView', () => {
     })
   }
 
-  async function choose(select: HTMLSelectElement, value: string): Promise<void> {
+  /**
+   * The picker a cell's box opens, reached the way the operator reaches it: pressing the
+   * box. It is drawn in a portal on the body, so it is found there rather than in the view.
+   */
+  async function openPicker(cell: Element): Promise<HTMLElement> {
     await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
-      setter.call(select, value)
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      cell.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
     })
+    const picker = document.body.querySelector<HTMLElement>('.scene-picker')
+    if (picker === null) throw new Error('no picker opened')
+    return picker
+  }
+
+  /** What the picker is offering, in the order it draws it: each heading, then its rows. */
+  function offerings(picker: Element): string[] {
+    return [...picker.querySelectorAll(
+      '.scene-picker-section, .scene-picker-item, .scene-picker-none'
+    )].map(row => row.textContent ?? '')
+  }
+
+  /** The one control under `parent` reading exactly this, pressed. */
+  async function press(parent: Element, selector: string, label: string): Promise<void> {
+    await act(async () => {
+      const control = [...parent.querySelectorAll<HTMLButtonElement>(selector)]
+        .find(candidate => candidate.textContent === label)
+      if (control === undefined) throw new Error(`nothing under ${selector} reading ${label}`)
+      control.click()
+    })
+  }
+
+  /** The strips one pane of the builder is showing, in the order it shows them. */
+  function pane(dialog: Element, key: string): string[] {
+    return [...dialog.querySelectorAll(`.ensemble-pane[data-pane="${key}"] .ensemble-item`)]
+      .map(item => item.textContent ?? '')
+  }
+
+  /** The builder, opened from the picker's last row, which is the only way to it. */
+  async function openBuilder(cell: Element): Promise<HTMLElement> {
+    const picker = await openPicker(cell)
+    await act(async () => {
+      picker.querySelector<HTMLButtonElement>('.scene-picker-build')!.click()
+    })
+    const dialog = container.querySelector<HTMLElement>('.ensemble-dialog')
+    if (dialog === null) throw new Error('no builder opened')
+    return dialog
   }
 
   it('gives every fader a row, and every scene a named column', async () => {
@@ -249,10 +290,10 @@ describe('ScenesView', () => {
     expect(rows.map(row => row.querySelector('.matrix-fader')?.textContent))
       .toEqual(['1 · DCA 1 — Ensemble', '2 · DCA 2 — Band'])
     expect(rows.map(row => row.querySelectorAll('.matrix-cell').length)).toEqual([3, 3])
-    // Each cell names what its row carries, through the channel labels.
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ch 1 · Ada'])
-    expect(chips(cellFor('2 · DCA 2 — Band', 'Finale')))
-      .toEqual(['Ch 2 · Extra', 'Ch 3 · Bea'])
+    // Each cell names what its row carries, the way the grid names a strip: whoever is
+    // standing on it, and its number only while nobody has named it and nobody is cast.
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ada'])
+    expect(chips(cellFor('2 · DCA 2 — Band', 'Finale'))).toEqual(['Extra', 'Bea'])
   })
 
   it('counts a lone fader and scene in the singular', async () => {
@@ -264,49 +305,58 @@ describe('ScenesView', () => {
     expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('1 fader · 1 scene')
   })
 
-  it('places a channel on a cell with one undo, and removes it with one undo', async () => {
+  it('places a strip on a row from the box, and takes it off with one undo', async () => {
     await show({ scenes: [scene('s1', 'Opening')] })
     const past = (): number => useStore.getState().past.length
 
     const cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
     expect(chips(cell)).toEqual([])
+    // A row carrying nothing is one empty box, and the box is named for what it does.
+    const box = cell.querySelector<HTMLButtonElement>('.matrix-cell-add')
+    expect(box?.disabled).toBe(false)
+    expect(box?.getAttribute('aria-label')).toBe('Add to DCA 1 — Ensemble in Opening')
 
     const before = past()
-    await choose(cell.querySelector<HTMLSelectElement>('.matrix-place')!, 'ch-ada')
+    const picker = await openPicker(cell)
+    // The strips the row does not carry, under their own heading, named the way the grid
+    // names them: the strip's own name, or whoever is standing on it.
+    expect(offerings(picker)).toEqual(['Channels', 'Ada', 'Extra', 'Bea'])
+    await press(picker, '.scene-picker-item', 'Ada')
 
     // One store write, hence one undo: the placement lands in the scene list.
     expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-ada'])])
     expect(useStore.getState().past.length).toBe(before + 1)
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ch 1 · Ada'])
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ada'])
+    // Choosing is done with: the picker went with the press.
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
 
-    // Choosing from the picker resets it to its placeholder: the press is done.
-    expect(cellFor('1 · DCA 1 — Ensemble', 'Opening')
-      .querySelector<HTMLSelectElement>('.matrix-place')?.value).toBe('')
+    // Opened again it offers only what the row still does not carry.
+    const again = await openPicker(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    expect(offerings(again)).toEqual(['Channels', 'Extra', 'Bea'])
+    await press(again, '.scene-picker-item', 'Extra')
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ada', 'Extra'])
 
-    // The picker only offers the channels the row does not carry yet.
-    expect([...cellFor('1 · DCA 1 — Ensemble', 'Opening')
-      .querySelector<HTMLSelectElement>('.matrix-place')!.options]
-      .map(option => option.textContent))
-      .toEqual(['Place channel', 'Ch 2 · Extra', 'Ch 3 · Bea'])
-
-    const placed1 = past()
+    const placed2 = past()
     await act(async () => {
       cellFor('1 · DCA 1 — Ensemble', 'Opening')
         .querySelector<HTMLButtonElement>('.matrix-channel-remove')!.click()
     })
 
-    expect(scenes()[0].dcas).toEqual([])
-    expect(useStore.getState().past.length).toBe(placed1 + 1)
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual([])
+    expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-extra'])])
+    expect(useStore.getState().past.length).toBe(placed2 + 1)
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Extra'])
 
-    // And one undo each puts them back: the place, then the remove.
+    // And one undo each puts them back: the strip that was taken off, then the one that
+    // was placed first, then an empty row.
+    await act(async () => { useStore.getState().undo() })
+    expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-ada', 'ch-extra'])])
     await act(async () => { useStore.getState().undo() })
     expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-ada'])])
     await act(async () => { useStore.getState().undo() })
     expect(scenes()[0].dcas).toEqual([])
   })
 
-  it('applies an ensemble to a row, and leaves a member off it', async () => {
+  it('applies an ensemble to a row from the box, and leaves a member off it', async () => {
     await show({
       scenes: [scene('s1', 'Opening')],
       cast: cast({ ensembles: [CHORUS] })
@@ -315,15 +365,18 @@ describe('ScenesView', () => {
     const cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
     expect(cell.querySelector('.matrix-ensemble')).toBeNull()
 
-    // The picker only offers the ensembles not yet applied to this row.
-    await choose(cell.querySelector<HTMLSelectElement>('.matrix-ensemble-add')!, 'ens-chorus')
+    // The groups this row does not apply are offered under their own heading, after the
+    // strips: the two things a row can gain are different in kind and are read as such.
+    const picker = await openPicker(cell)
+    expect(offerings(picker))
+      .toEqual(['Channels', 'Ada', 'Extra', 'Bea', 'Ensembles', 'Chorus'])
+    await press(picker, '.scene-picker-item', 'Chorus')
 
     expect(scenes()[0].dcas).toEqual([
       placed('dca-ensemble', [], { ensembles: ['ens-chorus'] })
     ])
     // Both members ride the row by way of the group.
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening')))
-      .toEqual(['Ch 1 · Ada', 'Ch 2 · Extra'])
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ada', 'Extra'])
 
     const applied = cellFor('1 · DCA 1 — Ensemble', 'Opening')
       .querySelector<HTMLButtonElement>('.matrix-ensemble')!
@@ -340,7 +393,7 @@ describe('ScenesView', () => {
     expect(scenes()[0].dcas).toEqual([
       placed('dca-ensemble', [], { ensembles: ['ens-chorus'], excluded: ['ch-ada'] })
     ])
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ch 2 · Extra'])
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Extra'])
     expect(cellFor('1 · DCA 1 — Ensemble', 'Opening')
       .querySelector('.matrix-ensemble')?.getAttribute('data-applied')).toBe('partial')
     // The member left off reads excluded; the one still carried is no chip at all.
@@ -358,140 +411,236 @@ describe('ScenesView', () => {
     expect(scenes()[0].dcas).toEqual([])
   })
 
-  it('groups what a row carries into an ensemble from the cell', async () => {
-    await show({ scenes: [OPENING] })
-
-    await act(async () => {
-      cellFor('1 · DCA 1 — Ensemble', 'Opening')
-        .querySelector<HTMLButtonElement>('.matrix-ensemble-new')!.click()
+  it('builds a group in the builder out of the strips it is given, and applies it to the row', async () => {
+    await show({
+      scenes: [scene('s1', 'Opening')],
+      cast: cast({
+        performers: [performer('p1', 'Ada', 'ch-ada'), performer('p2', 'Extra', 'ch-extra')]
+      })
     })
+    const past = (): number => useStore.getState().past.length
+    const before = past()
+
+    const dialog = await openBuilder(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    // The picker went with the row that opened it, and both lists are the show's strips in
+    // the show's own order, named as the grid names them.
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
+    expect(pane(dialog, 'free')).toEqual(['Ada', 'Extra', 'Bea'])
+    expect(pane(dialog, 'held')).toEqual([])
+    // A strip nobody is cast on cannot be in a group at all — an ensemble holds performers —
+    // so it stays where it is and says why rather than moving across and holding nothing.
+    expect([...dialog.querySelectorAll<HTMLButtonElement>('[data-pane="free"] .ensemble-item')]
+      .map(item => item.disabled)).toEqual([false, false, true])
+    // Nothing is picked, so neither arrow has anything to move.
+    expect([...dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')]
+      .every(move => move.disabled)).toBe(true)
+
+    // The name is typed, and the strips are picked and filed across.
+    await type(dialog.querySelector<HTMLInputElement>('.ensemble-name-field')!, 'Chorus')
+    await press(dialog, '[data-pane="free"] .ensemble-item', 'Ada')
+    await act(async () => {
+      dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')[0].click()
+    })
+    await press(dialog, '[data-pane="free"] .ensemble-item', 'Extra')
+    await act(async () => {
+      dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')[0].click()
+    })
+    expect(pane(dialog, 'held')).toEqual(['Ada', 'Extra'])
+
+    // And the other arrow takes one back out, leaving the rest of the group alone.
+    await press(dialog, '[data-pane="held"] .ensemble-item', 'Extra')
+    await act(async () => {
+      dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')[1].click()
+    })
+    expect(pane(dialog, 'held')).toEqual(['Ada'])
+    expect(pane(dialog, 'free')).toEqual(['Extra', 'Bea'])
+    await press(dialog, '[data-pane="free"] .ensemble-item', 'Extra')
+    await act(async () => {
+      dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')[0].click()
+    })
+
+    await press(dialog, '.ensemble-create', 'Create and apply')
 
     const ensembles = useStore.getState().showSettings.cast.ensembles
     expect(ensembles).toHaveLength(1)
-    expect(ensembles[0].members).toEqual(['p1'])
-    // Applied to the row it was made from.
+    expect(ensembles[0].name).toBe('Chorus')
+    // It holds the performers standing on the strips it was given, and it is applied to the
+    // row it was opened from — one store write, so one undo takes the whole thing back.
+    expect(ensembles[0].members).toEqual(['p1', 'p2'])
     expect(scenes()[0].dcas).toEqual([
       placed('dca-ensemble', [], { ensembles: [ensembles[0].id] })
     ])
-    expect(cellFor('1 · DCA 1 — Ensemble', 'Opening')
-      .querySelector('.matrix-ensemble')?.textContent).toBe(ensembles[0].name)
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ada', 'Extra'])
+    expect(useStore.getState().past.length).toBe(before + 1)
+    expect(container.querySelector('.ensemble-dialog')).toBeNull()
+
+    await act(async () => { useStore.getState().undo() })
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
+    expect(scenes()[0].dcas).toEqual([])
   })
 
-  it('names a cell’s picks for what they do, and offers Create ensemble only when it has a job', async () => {
-    await show({
-      scenes: [scene('s1', 'Opening')],
-      cast: cast({ ensembles: [CHORUS] })
-    })
-
-    // The pickers say their verb rather than a mark the operator has to decode — in the
-    // text the operator reads and in the name a screen reader is given.
-    let cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
-    const place = cell.querySelector<HTMLSelectElement>('.matrix-place')
-    expect(place?.options[0].textContent).toBe('Place channel')
-    expect(place?.getAttribute('aria-label')).toBe('Place channel on DCA 1 — Ensemble in Opening')
-    const apply = cell.querySelector<HTMLSelectElement>('.matrix-ensemble-add')
-    expect(apply?.options[0].textContent).toBe('Apply ensemble')
-    expect(apply?.getAttribute('aria-label'))
-      .toBe('Apply ensemble to DCA 1 — Ensemble in Opening')
-    // Nothing is carried, so nobody can be grouped: the press is not there rather than
-    // there and doing nothing.
-    expect(cell.querySelector('.matrix-ensemble-new')).toBeNull()
-
-    // A performer placed by hand is a job for it, and the press says what it makes.
-    await choose(cell.querySelector<HTMLSelectElement>('.matrix-place')!, 'ch-ada')
-
-    cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
-    const create = cell.querySelector<HTMLButtonElement>('.matrix-ensemble-new')
-    expect(create?.textContent).toBe('Create ensemble')
-    expect(create?.title).toBe('Make a reusable ensemble from this row and apply it here')
-
-    // Pressed, the row is one group holding what it already carried, and the control goes
-    // with the job.
-    await act(async () => { create?.click() })
-
-    cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
-    expect(cell.querySelector('.matrix-ensemble-new')).toBeNull()
-    expect(cell.querySelector('.matrix-ensemble')?.getAttribute('data-applied')).toBe('on')
-    expect(chips(cell)).toEqual(['Ch 1 · Ada'])
-  })
-
-  it('keeps Create ensemble while a performer, or a second group, is outside the one applied', async () => {
-    const SOLO: Ensemble = { id: 'ens-solo', name: 'Solo', members: ['p1'] }
-    const BAND_ENSEMBLE: Ensemble = { id: 'ens-band', name: 'Band', members: ['p3'] }
-    const createIn = (): Element | null =>
-      cellFor('1 · DCA 1 — Ensemble', 'Opening').querySelector('.matrix-ensemble-new')
-
-    // One group holding the row on its own is already what the press would build.
-    await show({
-      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', [], { ensembles: ['ens-chorus'] })])],
-      cast: cast({ ensembles: [CHORUS] })
-    })
-    expect(createIn()).toBeNull()
-
-    // ...and a hand placement that names somebody the group already holds is the same row
-    // said twice, not a job: after Ada is patched to a strip the group was applied without,
-    // folding her in would build a second group of the same people.
-    await show({
-      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-ada'], {
-        ensembles: ['ens-solo']
-      })])],
-      cast: cast({ ensembles: [SOLO] })
-    })
-    expect(createIn()).toBeNull()
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ch 1 · Ada'])
-
-    // Two groups on one row are two things to fold into one.
-    await show({
-      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', [], {
-        ensembles: ['ens-chorus', 'ens-band']
-      })])],
-      cast: cast({ ensembles: [CHORUS, BAND_ENSEMBLE] })
-    })
-    expect(createIn()).not.toBeNull()
-
-    // ...and so is a performer the row carries that the one group does not hold, whether
-    // they were placed by hand beside it or carried in by a Cast change.
-    await show({
-      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-extra'], {
-        ensembles: ['ens-solo']
-      })])],
-      cast: cast({ ensembles: [SOLO] })
-    })
-    expect(createIn()).not.toBeNull()
-
-    // A row whose carried strips have nobody patched to them carries people an ensemble
-    // cannot hold, so there is nothing for the press to make.
-    await show({
-      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-ada'])])],
-      cast: cast({ performers: [] })
-    })
-    expect(createIn()).toBeNull()
-  })
-
-  it('leaves a strip nobody is patched to placed when the row is consolidated', async () => {
+  it('keeps a strip nobody is patched to where the row put it, because no group can hold it', async () => {
     await show({
       scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-ada', 'ch-extra'])])],
       cast: cast({ performers: [performer('p1', 'Ada', 'ch-ada')] })
     })
 
+    const dialog = await openBuilder(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    await type(dialog.querySelector<HTMLInputElement>('.ensemble-name-field')!, 'Principals')
+    await press(dialog, '[data-pane="free"] .ensemble-item', 'Ada')
     await act(async () => {
-      cellFor('1 · DCA 1 — Ensemble', 'Opening')
-        .querySelector<HTMLButtonElement>('.matrix-ensemble-new')!.click()
+      dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')[0].click()
     })
+    await press(dialog, '.ensemble-create', 'Create and apply')
 
     const ensembles = useStore.getState().showSettings.cast.ensembles
     expect(ensembles[0].members).toEqual(['p1'])
-    // The performer rides the new group; the strip with nobody on it stays a placement of
-    // its own, and one undo puts the whole row back as it was.
+    // Ada rides the new group; the strip with nobody on it stays a placement of its own,
+    // and one undo puts the whole row back as it was.
     expect(scenes()[0].dcas).toEqual([
       placed('dca-ensemble', ['ch-extra'], { ensembles: [ensembles[0].id] })
     ])
-    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening')))
-      .toEqual(['Ch 1 · Ada', 'Ch 2 · Extra'])
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ada', 'Extra'])
 
     await act(async () => { useStore.getState().undo() })
     expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-ada', 'ch-extra'])])
     expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
+  })
+
+  it('filters what the picker offers, and leaves the builder reachable through the filter', async () => {
+    await show({
+      scenes: [scene('s1', 'Opening')],
+      cast: cast({ ensembles: [CHORUS] })
+    })
+
+    const picker = await openPicker(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    expect(offerings(picker))
+      .toEqual(['Channels', 'Ada', 'Extra', 'Bea', 'Ensembles', 'Chorus'])
+
+    // Typing narrows both sections at once, on the names the operator can read.
+    await type(picker.querySelector<HTMLInputElement>('.scene-picker-filter')!, 'be')
+    expect(offerings(picker)).toEqual(['Channels', 'Bea'])
+
+    await type(picker.querySelector<HTMLInputElement>('.scene-picker-filter')!, 'nowhere')
+    expect(offerings(picker)).toEqual(['Nothing matches.'])
+    // The builder is an action rather than a row of the list, so a filter that matches
+    // nothing still leaves the way to it open.
+    expect(picker.querySelector('.scene-picker-build')?.textContent).toBe('Ensemble…')
+  })
+
+  it('opens the builder from the picker, and closes it without changing the show', async () => {
+    await show({ scenes: [scene('s1', 'Opening')] })
+
+    const dialog = await openBuilder(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    expect(dialog.getAttribute('role')).toBe('dialog')
+    expect(dialog.querySelector('.ensemble-title')?.textContent).toBe('New ensemble')
+    // Nothing in the group, so nothing to create with: the press is off rather than a press
+    // that would make a group which opens nothing.
+    expect(dialog.querySelector<HTMLButtonElement>('.ensemble-create')?.disabled).toBe(true)
+
+    await press(dialog, '.ensemble-cancel', 'Cancel')
+    expect(container.querySelector('.ensemble-dialog')).toBeNull()
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
+
+    // Escape is the dismissal every panel in the window answers to.
+    await openBuilder(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    expect(container.querySelector('.ensemble-dialog')).toBeNull()
+  })
+
+  it('walks the picker with the arrows, and picks with Enter', async () => {
+    await show({ scenes: [scene('s1', 'Opening')], cast: cast({ ensembles: [CHORUS] }) })
+
+    const picker = await openPicker(cellFor('1 · DCA 1 — Ensemble', 'Opening'))
+    const filter = picker.querySelector<HTMLInputElement>('.scene-picker-filter')!
+    // The filter drives the list: it is the combobox, the rows are its options, and the one
+    // an arrow lands on is named as active so Enter's target is announced rather than only
+    // painted.
+    expect(filter.getAttribute('role')).toBe('combobox')
+    expect(filter.getAttribute('aria-activedescendant')).toBe('scene-picker-channel-ch-ada')
+
+    await act(async () => {
+      filter.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+    expect(filter.getAttribute('aria-activedescendant')).toBe('scene-picker-channel-ch-extra')
+    await act(async () => {
+      filter.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-extra'])])
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Extra'])
+  })
+
+  it('takes the picker away when its own box is pressed again', async () => {
+    await show({ scenes: [scene('s1', 'Opening')] })
+    const cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
+    const picker = await openPicker(cell)
+    await type(picker.querySelector<HTMLInputElement>('.scene-picker-filter')!, 'be')
+    expect(offerings(picker)).toEqual(['Channels', 'Bea'])
+
+    // The box under the menu is the menu's own press: it puts it away rather than reopening
+    // it with the filter thrown away, which would read as a press that did nothing.
+    await act(async () => {
+      cell.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
+    })
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
+    expect(scenes()[0].dcas).toEqual([])
+  })
+
+  it('puts an overlay away when the show changes under it', async () => {
+    await show({ scenes: [scene('s1', 'Opening')] })
+    expect(await openPicker(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).not.toBeNull()
+
+    // An undo, a redo or another hand changing the show moves the row the menu is pinned to
+    // — or takes it away — so the menu goes with it rather than hanging over whatever is
+    // there now.
+    await act(async () => {
+      useStore.getState().updateScenesSettings({ list: [] })
+    })
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
+  })
+
+  it('takes the keyboard into the builder, and gives it back to the row’s box', async () => {
+    await show({ scenes: [scene('s1', 'Opening')] })
+    const cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
+    const dialog = await openBuilder(cell)
+
+    // The press that opened it was inside a menu that unmounted with it, so the dialog takes
+    // the keyboard itself: the first Tab is the Name field rather than the grid behind it.
+    expect(document.activeElement).toBe(dialog)
+
+    await press(dialog, '.ensemble-cancel', 'Cancel')
+    expect(document.activeElement).toBe(cell.querySelector('.matrix-cell-add'))
+  })
+
+  it('keeps the box on a row that has everything, so the builder stays one press away', async () => {
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', [], { ensembles: ['ens-chorus'] })])],
+      cast: cast({
+        channels: [channel('ch-ada', 'Ada')],
+        performers: [performer('p1', 'Ada', 'ch-ada')],
+        ensembles: [CHORUS]
+      })
+    })
+
+    // The one strip rides the one group and that group is applied, so the picker has nothing
+    // to place and nothing to apply — but the builder is where a group is made, and it is
+    // reachable wherever a row is. The row still says what it carries.
+    const cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
+    expect(cell.querySelector('.matrix-cell-add')).not.toBeNull()
+    expect(chips(cell)).toEqual(['Ada'])
+
+    const picker = await openPicker(cell)
+    expect(offerings(picker)).toEqual(['Everything the show has is already on this row.'])
+    expect(picker.querySelector('.scene-picker-build')?.textContent).toBe('Ensemble…')
+
+    // And the builder behind it is the one that opens.
+    await act(async () => {
+      picker.querySelector<HTMLButtonElement>('.scene-picker-build')!.click()
+    })
+    expect(container.querySelector('.ensemble-dialog')).not.toBeNull()
   })
 
   it('adds a scene from the header and renames it in place, refusing an empty name', async () => {
@@ -608,14 +757,24 @@ describe('ScenesView', () => {
       deskSceneId: 's1'
     })
 
-    // Every control a cell holds is disabled in run mode — the remove, the pickers, the
+    // Every control a cell holds is disabled in run mode — the remove, the box, the
     // ensemble presses — while the chips still name what the row carries.
     const cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
-    expect(chips(cell)).toEqual(['Ch 1 · Ada'])
+    expect(chips(cell)).toEqual(['Ada'])
     expect([...cell.querySelectorAll<
-      HTMLButtonElement | HTMLSelectElement
-    >('.matrix-channel-remove, .matrix-place, .matrix-ensemble-add, .matrix-ensemble-new, .matrix-ensemble, .matrix-member')]
+      HTMLButtonElement
+    >('.matrix-channel-remove, .matrix-cell-add, .matrix-ensemble, .matrix-member')]
       .every(control => control.disabled)).toBe(true)
+    // The box is drawn rather than absent: the grid says what every row carries in either
+    // mode, and an empty row is a fact about the scene — and its name says why it is asleep,
+    // because a disabled control is one the keyboard never reaches to read a tooltip on.
+    expect(cell.querySelector('.matrix-cell-add')?.getAttribute('aria-label'))
+      .toBe('Add to DCA 1 — Ensemble in Opening — asleep while the show runs: press Edit')
+    // What it will not do is open.
+    await act(async () => {
+      cell.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
+    })
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
 
     const recall = columnFor('Interval').querySelector<HTMLButtonElement>('.matrix-recall')
     expect(recall?.disabled).toBe(false)
@@ -858,8 +1017,12 @@ describe('ScenesView', () => {
     // What removes a scene is not there at all, rather than there and asleep beside recall.
     expect(container.querySelector('.matrix-scene-remove')).toBeNull()
     expect(disabled('.matrix-channel-remove').every(Boolean)).toBe(true)
-    expect(container.querySelector('.matrix-place')).toBeNull()
-    expect(container.querySelector('.matrix-ensemble-add')).toBeNull()
+    // The box is there and asleep, and a press on it opens nothing.
+    expect(disabled('.matrix-cell-add').every(Boolean)).toBe(true)
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
+    })
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
     expect(container.querySelector('.scenes-add')).toBeNull()
 
     // Edit is how the show is edited, and recall is what the view is for.

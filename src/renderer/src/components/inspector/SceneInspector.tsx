@@ -17,9 +17,10 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
 
   const scene = scenes.find(candidate => candidate.id === cue.sceneId) ?? null
   // What a recall would touch is what the scene places anywhere: the channels it carries
-  // on any fader, named the way the grid names them, and the faders it speaks for. Both
-  // are asked of the scene rather than read off a list, since an ensemble applied to a
-  // row carries channels no list on the scene names directly.
+  // on any fader, named the console's way — `Ch 3 · Ruth`, which is the desk's own reading
+  // rather than the grid's — and the faders it speaks for. Both are asked of the scene
+  // rather than read off a list, since an ensemble applied to a row carries channels no
+  // list on the scene names directly.
   const placed = scene === null ? [] : sceneChannelIds(scene, cast)
   const labels = placed
     .map(channelId => channelLabel(cast.channels, channelId))

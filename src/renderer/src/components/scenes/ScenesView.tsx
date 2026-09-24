@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import ReactDOM from 'react-dom'
 import { useStore } from '../../store'
 import { recallScene, resyncDesk } from '../../engine/scenes'
-import { channelLabel } from '../../utils/cast'
+import { stripLabel } from '../../utils/cast'
 import {
   addScene,
-  canCreateEnsemble,
   ensembleState,
   placementFor,
   removeScene,
@@ -18,14 +18,17 @@ import {
   type DeskState
 } from '../../utils/scenes'
 import { dcaNumber } from '../../utils/desk'
+import { useModal } from '../../hooks/useModal'
 import { TextField } from '../common/Field'
+import { EnsembleDialog } from './EnsembleDialog'
 import {
   ALL_CLOSED_SCENE_ID,
   type CastSettings,
   type Dca,
   type Ensemble,
   type MicScene,
-  type ScenesSettings
+  type ScenesSettings,
+  type ShowChannel
 } from '../../../../shared/show'
 import './ScenesView.css'
 
@@ -67,25 +70,34 @@ interface CellProps {
   isCurrent: boolean
   locked: boolean
   writeList: (next: ScenesSettings) => void
-  groupRow: (sceneId: string, dcaId: string) => void
+  onAdd: (sceneId: string, dcaId: string, anchor: PickerAnchor) => void
 }
 
 /**
- * One fader in one scene: the channels the row carries, the ensembles applied to it, and
- * — while editing — the presses that change either. A chip names what the row carries,
- * and its ✕ takes it off; the pickers name what it does not, and choosing one puts it on;
- * Create ensemble turns the performers it carries into one group applied here. Every press
- * is one store write, hence one undo.
+ * What the picker hangs from: the box that opened it. The box is kept rather than the corner
+ * it was at, because the grid under it scrolls — the menu is re-measured and travels with
+ * the row it belongs to rather than being left behind pointing at the next one.
+ */
+export interface PickerAnchor {
+  box: HTMLElement
+}
+
+/**
+ * One fader in one scene: the strips the row carries as chips, the ensembles applied to it
+ * beside them, and one blank box at the end.
+ *
+ * A chip names what the row carries and its ✕ takes it off. Everything the row can gain
+ * comes out of the box: the box opens the picker, which offers the strips the row does not
+ * carry, the groups it does not apply, and the builder. Every press is one store write,
+ * hence one undo.
  */
 function SceneCell({
-  scene, dca, cast, scenes, changes, deskState, isCurrent, locked, writeList, groupRow
+  scene, dca, cast, scenes, changes, deskState, isCurrent, locked, writeList, onAdd
 }: CellProps) {
   const placement = placementFor(scene, dca.id)
   const carried = rowChannels(cast, placement)
   const appliedIds = placement?.ensembles ?? []
   const applied = cast.ensembles.filter(ensemble => appliedIds.includes(ensemble.id))
-  const freeChannels = cast.channels.filter(channel => !carried.includes(channel.id))
-  const freeEnsembles = cast.ensembles.filter(ensemble => !appliedIds.includes(ensemble.id))
   const pending = cellPending(changes, dca.id, deskState)
 
   return (
@@ -97,7 +109,10 @@ function SceneCell({
       aria-label={`${dca.label} in ${scene.name}`}
     >
       {carried.map(channelId => {
-        const label = channelLabel(cast.channels, channelId)
+        // The strip as the grid reads it: the name it was given, or whoever is standing on
+        // it — a row is a fader and what rides it is a person, so its number is the last
+        // thing to call it, not the first.
+        const label = stripLabel(cast.channels, cast.performers, channelId)
         if (label === '') return null
         return (
           <span className="matrix-channel" key={channelId} title={label}>
@@ -118,26 +133,6 @@ function SceneCell({
           </span>
         )
       })}
-      {!locked && freeChannels.length > 0 && (
-        <select
-          className="matrix-place"
-          value=""
-          aria-label={`Place channel on ${dca.label} in ${scene.name}`}
-          title="Place a channel on this row"
-          onChange={e => {
-            if (e.target.value !== '') {
-              writeList(setChannelPlaced(scenes, scene.id, dca.id, e.target.value, true, cast))
-            }
-          }}
-        >
-          <option value="">Place channel</option>
-          {freeChannels.map(channel => (
-            <option key={channel.id} value={channel.id}>
-              {channelLabel(cast.channels, channel.id)}
-            </option>
-          ))}
-        </select>
-      )}
       {applied.map(ensemble => (
         <AppliedEnsemble
           key={ensemble.id}
@@ -150,38 +145,27 @@ function SceneCell({
           writeList={writeList}
         />
       ))}
-      {!locked && freeEnsembles.length > 0 && (
-        <select
-          className="matrix-ensemble-add"
-          value=""
-          aria-label={`Apply ensemble to ${dca.label} in ${scene.name}`}
-          title="Apply an ensemble to this row — its members ride it unless left off"
-          onChange={e => {
-            const ensemble = cast.ensembles.find(candidate => candidate.id === e.target.value)
-            if (ensemble !== undefined) {
-              writeList(setRowEnsemble(scenes, scene.id, dca.id, ensemble, true, cast))
-            }
-          }}
-        >
-          <option value="">Apply ensemble</option>
-          {freeEnsembles.map(ensemble => (
-            <option key={ensemble.id} value={ensemble.id}>{ensemble.name}</option>
-          ))}
-        </select>
-      )}
-      {/* Consolidating is offered only when it has something to do: somebody is carried,
-          and the group applied to the row, if there is one, does not already hold them all.
-          Otherwise it is a press that builds a second group of the same people. */}
-      {!locked && canCreateEnsemble(cast, scene, dca.id, carried) && (
-        <button
-          type="button"
-          className="matrix-ensemble-new"
-          title="Make a reusable ensemble from this row and apply it here"
-          onClick={() => groupRow(scene.id, dca.id)}
-        >
-          Create ensemble
-        </button>
-      )}
+      {/* One box, and everything the row can gain comes out of it: the strips the row does
+          not carry, the groups it does not apply, and the builder that makes a group out of
+          the strips the operator names. Pressing it is the only way to change what a row
+          carries, so the empty box is what a row that carries nothing is made of.
+          It is on every row in both modes. Out of edit mode it is drawn and inert rather
+          than absent — the grid says what every row carries, and a stray press on a running
+          show must not open anything — and while editing it stays when a row already has
+          everything, because the builder is where a group is made and that is reachable
+          wherever a row is. */}
+      <button
+        type="button"
+        className="matrix-cell-add"
+        disabled={locked}
+        aria-label={locked
+          ? `Add to ${dca.label} in ${scene.name} — asleep while the show runs: press Edit`
+          : `Add to ${dca.label} in ${scene.name}`}
+        title={locked
+          ? 'Press Edit to change what this row carries'
+          : 'Add a channel, or build an ensemble from the channels you pick'}
+        onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
+      />
     </div>
   )
 }
@@ -259,20 +243,266 @@ function AppliedEnsemble({
   )
 }
 
+/** How wide the picker is drawn, and the most of the window it is allowed to want. */
+const PICKER_WIDTH = 224
+const PICKER_HEIGHT = 320
+
+/** The picker's list, named by the filter that drives it. */
+const PICKER_LIST_ID = 'scene-picker-list'
+
+/** One row of the picker: a strip of the console, or a group that is already built. */
+type PickItem =
+  | { kind: 'channel'; id: string; label: string }
+  | { kind: 'ensemble'; id: string; label: string }
+
+interface PickerProps {
+  scene: MicScene
+  dca: Dca
+  cast: CastSettings
+  /** The strips this row does not carry, in the show's own order. */
+  freeChannels: ShowChannel[]
+  /** The groups this row does not apply. */
+  freeEnsembles: Ensemble[]
+  /** The box it was opened from. */
+  anchor: PickerAnchor
+  /** What clips the box: the grid, which a row can leave before the window does. */
+  clip: HTMLElement | null
+  onChannel: (channelId: string) => void
+  onEnsemble: (ensemble: Ensemble) => void
+  onBuild: () => void
+  onClose: () => void
+}
+
+/**
+ * What a blank box opens: everything one row can gain, in one list, with a filter over it.
+ *
+ * Two sections rather than one list, because the two things are different in kind — a strip
+ * is placed on the row, a group brings its members — and the strips are named the way the
+ * grid names them, which is what the operator is looking at while they type. The filter is
+ * the point of the box on a show with a console's worth of strips: twelve names are scanned,
+ * thirty are typed at. The builder sits at the foot rather than in a section, because it is
+ * an action and not a thing to pick, and it stays reachable however the filter is typed.
+ *
+ * Drawn in a portal at the box's own corner: the grid scrolls, and a menu inside a scrolling
+ * column would be clipped by it.
+ */
+function ScenePicker({
+  scene, dca, cast, freeChannels, freeEnsembles, anchor, clip,
+  onChannel, onEnsemble, onBuild, onClose
+}: PickerProps) {
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const filterRef = useRef<HTMLInputElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const [at, setAt] = useState(() => anchor.box.getBoundingClientRect())
+  const [filter, setFilter] = useState('')
+  const [active, setActive] = useState(0)
+  // The picker owns the keyboard while it is up, so a filter typed into it is a filter and
+  // not the show's next cue.
+  useModal()
+
+  const needle = filter.trim().toLowerCase()
+  const channels: PickItem[] = freeChannels.flatMap(channel => {
+    const label = stripLabel(cast.channels, cast.performers, channel.id)
+    if (label === '' || !label.toLowerCase().includes(needle)) return []
+    return [{ kind: 'channel' as const, id: channel.id, label }]
+  })
+  const ensembles: PickItem[] = freeEnsembles
+    .filter(ensemble => ensemble.name.toLowerCase().includes(needle))
+    .map(ensemble => ({
+      kind: 'ensemble' as const,
+      id: ensemble.id,
+      label: ensemble.name
+    }))
+  const items = [...channels, ...ensembles]
+  const activeItem = items[Math.min(active, items.length - 1)]
+
+  const pick = (item: PickItem): void => {
+    if (item.kind === 'channel') {
+      onChannel(item.id)
+      return
+    }
+    const ensemble = freeEnsembles.find(candidate => candidate.id === item.id)
+    if (ensemble !== undefined) onEnsemble(ensemble)
+  }
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // The press is swallowed either way: dismissing the picker must not also stop the
+      // show behind it.
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      e.preventDefault()
+      onClose()
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      if (pickerRef.current !== null && !pickerRef.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('mousedown', onMouseDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('mousedown', onMouseDown)
+    }
+  }, [onClose])
+
+  // The box is inside a grid that scrolls and clips it, and the picker hangs from the box:
+  // what the operator scrolls under the menu is re-measured rather than dismissed, so the
+  // menu travels with its row instead of being left behind over the next one. It goes when
+  // its row has left the grid — which is where a row stops being visible, and is well
+  // before the window's own edge: between the two there is the dock and the transport bar,
+  // and a menu hanging over those is a menu about a row nobody can see.
+  useEffect(() => {
+    const onMove = (): void => {
+      const box = anchor.box.getBoundingClientRect()
+      const bounds = clip?.getBoundingClientRect() ?? null
+      const onScreen =
+        box.bottom > (bounds?.top ?? 0) &&
+        box.top < (bounds?.bottom ?? window.innerHeight) &&
+        box.right > (bounds?.left ?? 0) &&
+        box.left < (bounds?.right ?? window.innerWidth)
+      if (!onScreen) {
+        onClose()
+        return
+      }
+      setAt(box)
+    }
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  }, [anchor, clip, onClose])
+
+  // The arrows walk the list, and the list is taller than the menu on a show with a
+  // console's worth of strips: the row the highlight names is brought into view, because
+  // Enter picks it and the operator has to be able to see what they are picking.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector<HTMLElement>('.scene-picker-item[data-active="true"]')
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }, [activeItem])
+
+  // The filter takes the keyboard when the picker opens, and the page is not scrolled to it:
+  // a menu that scrolled the show to reach its own field would move the row it is about.
+  useEffect(() => {
+    filterRef.current?.focus({ preventScroll: true })
+  }, [])
+
+  const left = Math.min(Math.max(4, at.left), Math.max(4, window.innerWidth - PICKER_WIDTH - 4))
+  const top = Math.min(at.bottom + 2, Math.max(4, window.innerHeight - PICKER_HEIGHT - 4))
+
+  // The two sections as data, so one row of the menu is written once: the strips the row
+  // does not carry, then the groups it does not apply.
+  const sections = [
+    { title: 'Channels', items: channels },
+    { title: 'Ensembles', items: ensembles }
+  ]
+
+  return ReactDOM.createPortal(
+    <div
+      ref={pickerRef}
+      className="scene-picker"
+      style={{ left, top, width: PICKER_WIDTH }}
+      role="dialog"
+      aria-label={`Add to ${dca.label} in ${scene.name}`}
+    >
+      <input
+        ref={filterRef}
+        className="scene-picker-filter"
+        value={filter}
+        placeholder="Filter…"
+        // The filter is the list's own keyboard: it stays focused while the menu is up, the
+        // arrows move the highlight it names, and Enter picks that row.
+        role="combobox"
+        aria-label="Filter channels and ensembles"
+        aria-expanded
+        aria-controls={PICKER_LIST_ID}
+        aria-autocomplete="list"
+        aria-activedescendant={activeItem === undefined
+          ? undefined
+          : `scene-picker-${activeItem.kind}-${activeItem.id}`}
+        onChange={e => { setFilter(e.target.value); setActive(0) }}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            if (items.length === 0) return
+            const step = e.key === 'ArrowDown' ? 1 : items.length - 1
+            setActive(current => (Math.min(current, items.length - 1) + step) % items.length)
+            return
+          }
+          if (e.key === 'Enter' && activeItem !== undefined) {
+            e.preventDefault()
+            pick(activeItem)
+          }
+        }}
+      />
+      <div
+        className="scene-picker-list"
+        id={PICKER_LIST_ID}
+        ref={listRef}
+        role="listbox"
+        aria-label="Channels and ensembles"
+        // A press on the list's own padding is a press on the menu, not a reason to take the
+        // keyboard off the filter: the arrows are what walk the rows.
+        onMouseDown={e => e.preventDefault()}
+      >
+        {sections.map(section => section.items.length === 0 ? null : (
+          <Fragment key={section.title}>
+            <div className="scene-picker-section">{section.title}</div>
+            {section.items.map(entry => (
+              <button
+                key={entry.id}
+                type="button"
+                id={`scene-picker-${entry.kind}-${entry.id}`}
+                role="option"
+                aria-selected={entry === activeItem}
+                // The filter owns the keyboard, so the rows are out of the tab order: the
+                // arrows reach them and a click works, and Tab leaves the menu.
+                tabIndex={-1}
+                className="scene-picker-item"
+                data-kind={entry.kind}
+                data-active={entry === activeItem}
+                title={entry.label}
+                onClick={() => pick(entry)}
+                onMouseEnter={() => setActive(items.indexOf(entry))}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </Fragment>
+        ))}
+        {items.length === 0 && (
+          <div className="scene-picker-none">
+            {filter.trim() === ''
+              ? 'Everything the show has is already on this row.'
+              : 'Nothing matches.'}
+          </div>
+        )}
+      </div>
+      <button type="button" className="scene-picker-build" onClick={onBuild}>
+        Ensemble…
+      </button>
+    </div>,
+    document.body
+  )
+}
+
 /**
  * Scenes: the show's faders down the side, the scenes across the top. Each cell names the
- * channels its row places in its scene and the ensembles applied to that row, and — while
- * editing — places and removes either with one press each.
+ * strips its row places in its scene and the ensembles applied to that row, and — while
+ * editing — gains either from the one blank box it carries, which opens the picker.
  *
  * The first column is the scene that is always there and never edited: all closed. It is
  * what the desk wants pressed between numbers, and nothing is ever placed in it.
  *
  * This is the curtain-up view and the place the show is run from, so it has two modes.
- * It always opens to run it: recall and Apply are live, and nothing else can be changed
- * by a stray click. Edit is the deliberate press that gives the grid and the names back,
- * and Done hands the view back to the show. Editing a cell changes the scene, never the
- * desk; the header's Apply is the press that moves the room, and it only appears once
- * there is a difference to send.
+ * It always opens to run it: recall and Apply are live, and nothing else can be changed by
+ * a stray click — the blank boxes are drawn and inert, so the grid still says what every
+ * row carries. Edit is the deliberate press that gives the grid and the names back, and
+ * Done hands the view back to the show and puts any picker away with it. Editing a cell
+ * changes the scene, never the desk; the header's Apply is the press that moves the room,
+ * and it only appears once there is a difference to send.
  */
 export function ScenesView() {
   const showSettings = useStore(s => s.showSettings)
@@ -281,10 +511,21 @@ export function ScenesView() {
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
   const updateScenesSettings = useStore(s => s.updateScenesSettings)
-  const addEnsembleFromRow = useStore(s => s.addEnsembleFromRow)
+  const addEnsembleToRow = useStore(s => s.addEnsembleToRow)
   const editing = useStore(s => s.scenesEditing)
   const setEditing = useStore(s => s.setScenesEditing)
   const openShowSettings = useStore(s => s.openShowSettings)
+
+  // What is open over the grid: the box's picker, and the builder the picker's last row
+  // opens. The row is named by ids rather than by the objects, so a scene removed while the
+  // picker is up leaves it pointing at nothing instead of at a copy of what is gone.
+  const [picker, setPicker] = useState<{ sceneId: string; dcaId: string; anchor: PickerAnchor } | null>(null)
+  const [builder, setBuilder] = useState<{
+    sceneId: string
+    dcaId: string
+    /** The box it was opened from, which is where the keyboard goes back to. */
+    box: HTMLElement
+  } | null>(null)
 
   const locked = !editing
   // The scene the desk is on, and whether that is the all-closed one: null is either the
@@ -342,6 +583,34 @@ export function ScenesView() {
   // Every edit writes back the one field it changed, so a cell toggled in the grid cannot
   // carry a stale copy of anything else with it.
   const writeList = (next: ScenesSettings): void => updateScenesSettings({ list: next.list })
+
+  // The row the picker or the builder is open on. Found from the ids each time rather than
+  // held from the moment it was opened: the grid is what has the row, so a scene removed
+  // while an overlay is up puts it away instead of leaving it naming what is gone.
+  const openRow = picker ?? builder
+  const openScene = openRow === null
+    ? null
+    : scenes.list.find(scene => scene.id === openRow.sceneId) ?? null
+  const openDca = openRow === null
+    ? null
+    : cast.dcas.find(dca => dca.id === openRow.dcaId) ?? null
+  // Everything the picker offers is worked out here, where the row is known: an edit made
+  // while it is open takes what it just used off the list rather than leaving a stale copy.
+  const openPlacement = openScene === null || openDca === null
+    ? null
+    : placementFor(openScene, openDca.id)
+  const openCarried = openPlacement === null ? [] : rowChannels(cast, openPlacement)
+  const openApplied = openPlacement?.ensembles ?? []
+  const closeOverlays = (): void => { setPicker(null); setBuilder(null) }
+
+  // The grid under an overlay can move without the overlay being touched: an undo, a redo or
+  // any other edit that adds, removes or shifts a scene, or that changes who is on a strip.
+  // What the overlay names is found again on every render, so what is put away is the
+  // overlay — rather than left hanging over a row that has moved, or over one that is gone.
+  useEffect(() => {
+    if (openRow === null) return
+    closeOverlays()
+  }, [scenes, cast])
 
   return (
     <div className="scenes-view" data-editing={editing}>
@@ -407,7 +676,7 @@ export function ScenesView() {
           <button
             className="scenes-edit"
             data-editing={editing}
-            onClick={() => setEditing(!editing)}
+            onClick={() => { setEditing(!editing); closeOverlays() }}
             title={editing ? 'Back to running the show: recall stays live, nothing else moves' : 'Edit scenes and what their rows carry'}
           >
             {editing ? 'Done' : 'Edit'}
@@ -560,7 +829,15 @@ export function ScenesView() {
                       isCurrent={scene.id === deskSceneId}
                       locked={locked}
                       writeList={writeList}
-                      groupRow={addEnsembleFromRow}
+                      onAdd={(sceneId, dcaId, anchor) => {
+                        // The box under an open menu is the menu's own: pressing it again is
+                        // putting the menu away, not reopening it with the filter cleared.
+                        if (picker !== null && picker.anchor.box === anchor.box) {
+                          setPicker(null)
+                          return
+                        }
+                        setPicker({ sceneId, dcaId, anchor })
+                      }}
                     />
                   ))}
                 </div>
@@ -568,6 +845,49 @@ export function ScenesView() {
             })}
           </div>
         </div>
+      )}
+
+      {/* The two things a blank box can open, drawn over the grid: the picker, and the
+          builder that makes a group out of the strips the operator names. Both are put
+          through the row they were opened on rather than the cell that opened them, so
+          neither holds a copy of a row that an edit has since replaced. */}
+      {picker !== null && openScene !== null && openDca !== null && (
+        <ScenePicker
+          scene={openScene}
+          dca={openDca}
+          cast={cast}
+          freeChannels={cast.channels.filter(channel => !openCarried.includes(channel.id))}
+          freeEnsembles={cast.ensembles.filter(ensemble => !openApplied.includes(ensemble.id))}
+          anchor={picker.anchor}
+          clip={scrollerRef.current}
+          onChannel={channelId => {
+            writeList(setChannelPlaced(scenes, openScene.id, openDca.id, channelId, true, cast))
+            setPicker(null)
+          }}
+          onEnsemble={ensemble => {
+            writeList(setRowEnsemble(scenes, openScene.id, openDca.id, ensemble, true, cast))
+            setPicker(null)
+          }}
+          onBuild={() => {
+            setBuilder({ sceneId: openScene.id, dcaId: openDca.id, box: picker.anchor.box })
+            setPicker(null)
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+
+      {builder !== null && openScene !== null && openDca !== null && (
+        <EnsembleDialog
+          scene={openScene}
+          dca={openDca}
+          cast={cast}
+          box={builder.box}
+          onCancel={closeOverlays}
+          onCreate={(name, channelIds) => {
+            addEnsembleToRow(openScene.id, openDca.id, name, channelIds)
+            closeOverlays()
+          }}
+        />
       )}
     </div>
   )

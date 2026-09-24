@@ -10,9 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   addScene,
-  canCreateEnsemble,
   channelDcas,
-  consolidateRow,
   ensembleState,
   placementFor,
   removeChannelsFromScenes,
@@ -30,7 +28,6 @@ import {
   UNKNOWN_DESK_STATE,
   updateScene
 } from './scenes'
-import { addEnsemble } from './cast'
 import { ALL_CLOSED_SCENE_ID, defaultShowSettings } from '../../../shared/show'
 import type {
   CastSettings,
@@ -289,183 +286,16 @@ describe('an ensemble applied to a row', () => {
   })
 })
 
-describe('consolidating a row into one ensemble', () => {
-  // The second group the cases below fold in: another way for the same row to carry
-  // somebody, so consolidating has more than one source to collapse.
-  const band: Ensemble = { id: 'ens-2', name: 'Band', members: ['p-2'] }
-  const twoGroups: CastSettings = { ...cast(), ensembles: [chorus, band] }
-
-  /**
-   * The press as the store makes it: one new ensemble holding who the row is carrying,
-   * applied to that row in the same edit. The returned cast is the one the row is read
-   * through from here — the group exists in it, which is what makes its members ride.
-   */
-  function createEnsemble(
-    settings: ScenesSettings,
-    castSettings: CastSettings = cast(),
-    dcaId = 'dca-1'
-  ): { cast: CastSettings; settings: ScenesSettings; ensembleId: string } {
-    const carried = rowChannels(castSettings, placementFor(settings.list[0], dcaId))
-    const grouped = addEnsemble(castSettings, '', rowPerformers(castSettings, carried))
-    const ensemble = grouped.ensembles[grouped.ensembles.length - 1]
-    return {
-      cast: grouped,
-      settings: consolidateRow(settings, settings.list[0].id, dcaId, ensemble.id, grouped),
-      ensembleId: ensemble.id
-    }
-  }
-
-  it('holds the performers the row is carrying, wherever it was carrying them', () => {
-    const byHand = setChannelPlaced(
-      setChannelPlaced(scenesOf(), 's-1', 'dca-1', 'ch-1', true, cast()),
-      's-1',
-      'dca-1',
-      'ch-2',
-      true,
-      cast()
-    )
-
-    expect(rowPerformers(cast(), collected(byHand))).toEqual(['p-1', 'p-2'])
-
-    const made = createEnsemble(byHand)
-
-    expect(row(made.settings)).toEqual({
-      dcaId: 'dca-1',
-      channels: [],
-      ensembles: [made.ensembleId],
-      excluded: []
-    })
-    // One group where two hand placements were, and the same two channels riding.
-    expect(made.cast.ensembles[1].members).toEqual(['p-1', 'p-2'])
-    expect(collected(made.settings, 'dca-1', made.cast)).toEqual(['ch-1', 'ch-2'])
-  })
-
-  it('keeps a carried strip nobody is patched to placed by hand, because no group can hold it', () => {
-    const byHand = setChannelPlaced(
-      setChannelPlaced(scenesOf(), 's-1', 'dca-1', 'ch-1', true, cast()),
-      's-1',
-      'dca-1',
-      'ch-3',
-      true,
-      cast()
-    )
-
-    expect(rowPerformers(cast(), collected(byHand))).toEqual(['p-1'])
-
-    const made = createEnsemble(byHand)
-
-    expect(row(made.settings)).toEqual({
-      dcaId: 'dca-1',
-      channels: ['ch-3'],
-      ensembles: [made.ensembleId],
-      excluded: []
-    })
-    expect(made.cast.ensembles[1].members).toEqual(['p-1'])
-    expect(collected(made.settings, 'dca-1', made.cast)).toEqual(['ch-1', 'ch-3'])
-  })
-
-  it('collapses several groups and the hands that placed their members, exclusions and all', () => {
-    const applied = setRowEnsemble(
-      setRowEnsemble(
-        setChannelPlaced(scenesOf(), 's-1', 'dca-1', 'ch-3', true, twoGroups),
-        's-1',
-        'dca-1',
-        chorus,
-        true,
-        twoGroups
-      ),
-      's-1',
-      'dca-1',
-      band,
-      true,
-      twoGroups
-    )
-    const carrying = setMemberExcluded(applied, 's-1', 'dca-1', 'ch-2', true)
-
-    // Two groups, one of them leaving a member off: what the row carries is what its
-    // groups hold, less what it leaves off.
-    expect(collected(applied, 'dca-1', twoGroups)).toEqual(['ch-1', 'ch-2', 'ch-3'])
-    expect(collected(carrying, 'dca-1', twoGroups)).toEqual(['ch-1', 'ch-3'])
-    expect(rowPerformers(twoGroups, collected(carrying, 'dca-1', twoGroups))).toEqual(['p-1'])
-
-    const made = createEnsemble(carrying, twoGroups)
-
-    expect(row(made.settings)).toEqual({
-      dcaId: 'dca-1',
-      channels: ['ch-3'],
-      ensembles: [made.ensembleId],
-      excluded: []
-    })
-    // The same channels ride: the performers the row was carrying, and the strip nobody
-    // is patched to, which stays a placement of its own.
-    expect(made.cast.ensembles[2].members).toEqual(['p-1'])
-    expect(collected(made.settings, 'dca-1', made.cast)).toEqual(collected(carrying, 'dca-1', twoGroups))
-  })
-
-  it('edits the one row, leaving the groups it stopped applying in the cast', () => {
-    const elsewhere = setRowEnsemble(
-      setRowEnsemble(scenesOf(), 's-1', 'dca-1', chorus, true, cast()),
-      's-1',
-      'dca-2',
-      chorus,
-      true,
-      cast()
-    )
-    const made = createEnsemble(elsewhere)
-
-    expect(row(made.settings)?.ensembles).toEqual([made.ensembleId])
-    // The row that still holds the chorus is untouched: consolidation is about one row.
-    expect(placementFor(made.settings.list[0], 'dca-2')?.ensembles).toEqual(['ens-1'])
-    expect(made.settings.list[0].dcas).toHaveLength(2)
-  })
-
-  it('is not offered where it has nothing to fold in, and offered where it has', () => {
-    // A group holding one performer, so a hand placement can be either inside it or out.
-    const solo: Ensemble = { id: 'ens-solo', name: 'Solo', members: ['p-1'] }
-    const withSolo: CastSettings = { ...cast(), ensembles: [solo] }
-
-    // Nothing carried at all.
-    expect(canCreateEnsemble(cast(), scenesOf().list[0], 'dca-1', [])).toBe(false)
-    // A carried strip with nobody patched to it: there is no performer to group.
-    const bare = setChannelPlaced(scenesOf(), 's-1', 'dca-1', 'ch-3', true, cast())
-    expect(canCreateEnsemble(cast(), bare.list[0], 'dca-1', collected(bare))).toBe(false)
-    // One group holding the row on its own is already what the press would build.
-    const oneGroup = setRowEnsemble(scenesOf(), 's-1', 'dca-1', chorus, true, cast())
-    expect(canCreateEnsemble(cast(), oneGroup.list[0], 'dca-1', collected(oneGroup))).toBe(false)
-    // A performer placed by hand beside that group is something to fold in — but only when
-    // the group does not already hold them: a hand placement that names a member is the
-    // same row said twice, and the press would build a second group of the same people.
-    const soloRow = setRowEnsemble(scenesOf(), 's-1', 'dca-1', solo, true, withSolo)
-    const duplicate = setChannelPlaced(soloRow, 's-1', 'dca-1', 'ch-1', true, withSolo)
-    expect(canCreateEnsemble(
-      withSolo,
-      duplicate.list[0],
-      'dca-1',
-      collected(duplicate, 'dca-1', withSolo)
-    )).toBe(false)
-    expect(collected(duplicate, 'dca-1', withSolo)).toEqual(['ch-1'])
-    const outside = setChannelPlaced(soloRow, 's-1', 'dca-1', 'ch-2', true, withSolo)
-    expect(canCreateEnsemble(
-      withSolo,
-      outside.list[0],
-      'dca-1',
-      collected(outside, 'dca-1', withSolo)
-    )).toBe(true)
-    // Two groups are two things to make one of.
-    const two = setRowEnsemble(
-      setRowEnsemble(scenesOf(), 's-1', 'dca-1', chorus, true, twoGroups),
-      's-1',
-      'dca-1',
-      band,
-      true,
-      twoGroups
-    )
-    expect(canCreateEnsemble(
-      twoGroups,
-      two.list[0],
-      'dca-1',
-      collected(two, 'dca-1', twoGroups)
-    )).toBe(true)
+describe('the performers a set of strips holds', () => {
+  // What the builder's picks come to: it names strips and an ensemble holds performers, so
+  // the members are whoever is standing on the strips that were moved across.
+  it('is whoever is cast on them, and nobody for a strip nobody is on', () => {
+    expect(rowPerformers(cast(), ['ch-1', 'ch-2'])).toEqual(['p-1', 'p-2'])
+    // A strip nobody is patched to opens nothing, so it contributes nobody — which is what
+    // leaves the builder with nothing to make when those are the only strips picked.
+    expect(rowPerformers(cast(), ['ch-3'])).toEqual([])
+    expect(rowPerformers(cast(), ['ch-3', 'ch-2'])).toEqual(['p-2'])
+    expect(rowPerformers(cast(), [])).toEqual([])
   })
 })
 

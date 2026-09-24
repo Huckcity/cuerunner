@@ -39,14 +39,11 @@ import {
   setDcaCount as setDcaCountInCast
 } from '../utils/cast'
 import {
-  canCreateEnsemble,
-  consolidateRow,
-  placementFor,
   removeChannelsFromScenes,
   removeDcasFromScenes,
   removeEnsembleFromScenes,
-  rowChannels,
   rowPerformers,
+  setRowEnsemble,
   type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
@@ -415,14 +412,17 @@ interface CueListState {
   removeEnsemble: (ensembleId: string) => void
 
   /**
-   * Makes an ensemble out of the performers riding one fader in a scene, and applies it to
-   * that row. One edit rather than two: an ensemble built from a row and not applied to it
-   * is a grouping that disappears the moment the operator looks away from the grid.
+   * Makes an ensemble out of the strips the operator picked in the builder, and applies it
+   * to the row it was opened from. One edit rather than two: an ensemble built from a row
+   * and not applied to it is a grouping that disappears the moment the operator looks away
+   * from the grid.
    *
-   * Applying it changes nothing about what the row carries — the ensemble holds exactly the
-   * channels the row held — so the press is a regrouping and not a re-routing.
+   * The builder names channels and an ensemble holds performers, so the members are the
+   * performers whose mics stand on those strips. Applying it moves those strips off the
+   * row's own list — the ensemble says where they ride now — which is what lets the group
+   * grow later without this scene being edited again.
    */
-  addEnsembleFromRow: (sceneId: string, dcaId: string) => void
+  addEnsembleToRow: (sceneId: string, dcaId: string, name: string, channelIds: string[]) => void
   /**
    * Drops a performer from the cast: released from every pack they wore (each a swap of
    * its own) and out of whichever ensembles had them. Two settings sections changed as one
@@ -1587,25 +1587,26 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  // Who is in the new ensemble is who rides the row it is made from, which is the one thing
-  // the operator is looking at when they press it. The grouping and the row it lands on are
-  // one edit: the group joins the cast and the row is put on it in the same store write, so
-  // one undo takes both back. Nothing here is a desk command — this is how the scene names
-  // its membership, not what a recall sends.
-  addEnsembleFromRow: (sceneId, dcaId) => set(s => {
+  // The builder names the strips and an ensemble holds the performers standing on them. The
+  // grouping and the row it was opened from are one edit: the group joins the cast and that
+  // row is put on it in the same store write, so one undo takes both back. Nothing here is a
+  // desk command — this is how the scene names its membership, not what a recall sends.
+  addEnsembleToRow: (sceneId, dcaId, name, channelIds) => set(s => {
     const cast = s.showSettings.cast
     const scene = s.showSettings.scenes.list.find(candidate => candidate.id === sceneId)
     if (scene === undefined) return s
-    const carried = rowChannels(cast, placementFor(scene, dcaId))
-    if (!canCreateEnsemble(cast, scene, dcaId, carried)) return s
+    // A strip nobody is patched to opens nothing, so it cannot be part of a group; a builder
+    // that picked only such strips is an ensemble that would do nothing.
+    const members = rowPerformers(cast, channelIds)
+    if (members.length === 0) return s
 
-    const grouped = addEnsemble(cast, '', rowPerformers(cast, carried))
+    const grouped = addEnsemble(cast, name, members)
     const ensemble = grouped.ensembles[grouped.ensembles.length - 1]
     return {
       showSettings: {
         ...s.showSettings,
         cast: grouped,
-        scenes: consolidateRow(s.showSettings.scenes, sceneId, dcaId, ensemble.id, grouped)
+        scenes: setRowEnsemble(s.showSettings.scenes, sceneId, dcaId, ensemble, true, grouped)
       },
       past: pushPast(s.past, snapshotOf(s)),
       future: [],

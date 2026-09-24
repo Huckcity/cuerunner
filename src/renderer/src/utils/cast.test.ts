@@ -19,6 +19,7 @@ import {
   removePerformerFromCast,
   setChannelCount,
   setDcaCount,
+  stripLabel,
   updateChannel,
   updateDca,
   updateEnsemble,
@@ -161,6 +162,29 @@ describe('channels', () => {
     expect(channelLabel(cast.channels, 'ch-3')).toBe('Ch 3')
     expect(channelLabel(cast.channels, 'ch-1')).toBe('Ch 1 · Ruth')
     expect(channelLabel(cast.channels, null)).toBe('')
+  })
+
+  it('names a strip for the grid: its own name, or whoever is standing on it, its number last', () => {
+    // The grid is where the show is built out of people, so "Ch 1" is the one thing it
+    // should not say about a strip that has been named or cast. The console's own reading,
+    // number first, stays the desk's vocabulary — the run log and the change list.
+    const cast = wired()
+    expect(stripLabel(cast.channels, cast.performers, 'ch-1')).toBe('Ruth')
+    expect(stripLabel(cast.channels, cast.performers, 'ch-3')).toBe('Ch 3')
+    expect(stripLabel(cast.channels, cast.performers, null)).toBe('')
+
+    // A name the operator gave the strip wins over the performer's: the strip is what the
+    // console is called, and whoever is on it is who the name was written for.
+    const named = { ...cast, channels: [{ id: 'ch-1', name: 'Vocal 1' }] }
+    expect(stripLabel(named.channels, named.performers, 'ch-1')).toBe('Vocal 1')
+
+    // A performer with no name of their own is called by their part, on a strip the
+    // operator has not named either.
+    const roley = {
+      ...cast,
+      performers: [{ id: 'p9', name: '', role: 'Swing', notes: '', channelId: 'ch-3' }]
+    }
+    expect(stripLabel(roley.channels, roley.performers, 'ch-3')).toBe('Swing')
   })
 
   it('grows to the count asked for, minting strips the way one added by hand is', () => {
