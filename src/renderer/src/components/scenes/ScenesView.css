@@ -8,7 +8,15 @@
      min-content width would push the window wider instead of scrolling inside. */
   min-width: 0;
   --matrix-mic-width: 170px;
-  --matrix-cell-width: 88px;
+  /* A column is a scene's own width rather than a share of the window: a show of two
+     scenes used to draw two half-window blocks with each cell's chips and pickers huddled
+     at one edge, and a show of twenty drew slivers. Fixed, the tracks read the same
+     whatever the show's length, and the width the window has over goes to the space to the
+     right of the last column rather than to the columns themselves. */
+  --matrix-scene-width: 192px;
+  /* The all-closed column is a utility rather than a scene: a label and one press, so it
+     asks for less room than an editable column does. */
+  --matrix-all-closed-width: 112px;
   --matrix-cell-height: 34px;
 
   display: flex;
@@ -403,7 +411,10 @@
 .matrix-cell[data-pending='true'][data-placed='false'] { background: var(--accent-amber-bg); }
 
 /* A channel the row carries: its number, which is its place in the list, and the name
-   beside it when it has one. */
+   beside it when it has one. The column is a fixed width, so a long name is cut off: the
+   name is a box of its own that gives way first, so the cut reads as an ellipsis and the ✕
+   that takes the channel off stays where it can be pressed. The chip's title carries the
+   whole name. */
 .matrix-channel {
   display: inline-flex;
   align-items: center;
@@ -419,6 +430,12 @@
   color: var(--fg-body);
   white-space: nowrap;
   overflow: hidden;
+}
+
+.matrix-channel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .matrix-channel-remove {
@@ -527,15 +544,20 @@
   background: var(--accent-amber-bg);
 }
 
-/* Grouping what the row carries into an ensemble, applied here: the other half of
-   building a scene from the people already on a fader. */
+/* Consolidating what the row carries into one ensemble, applied here: the other half of
+   building a scene from the people already on a fader. It reads as a quiet press rather
+   than as state, because it is the one control in a cell that rewrites the row. */
 .matrix-ensemble-new {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   height: 20px;
   padding: 0 6px;
   background: transparent;
-  border: 1px solid transparent;
+  border: 1px dashed var(--border-input);
   border-radius: var(--radius-sm);
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;

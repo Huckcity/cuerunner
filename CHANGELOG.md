@@ -5,6 +5,7 @@
 * **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid places the show's channels on each scene's faders, with the ensembles applied to a row and their exclusions
 * **desk:** a recall writes the membership first and then each mic's mute, one awaited write at a time, and addresses nothing outside the show's controlled channels: a channel the scene places is open, one it leaves off every fader is closed, and a mic that changes fader keeps playing and takes the new fader's position
 * **desk:** an SQ's membership rides the desk's own control service — TCP 51326 outbound, held with a keepalive datagram to the desk's UDP 51324 — with the frames measured from an SQ-6 on firmware 1.6.1 and replayed by the peers lane; the mutes stay on the MIDI service on 51325, and an Avantis takes its membership as NRPN `40` on the desk link
+* **scenes:** a scene column is a fixed width and the grid scrolls inside the view rather than stretching two scenes across the window, a cell’s pickers say `Place channel` and `Apply ensemble`, and `Create ensemble` makes the performers a row is already carrying into one reusable ensemble applied to it — offered only when it has something to gather, leaving strips nobody is patched to placed by hand, and undone in one press
 
 ### Removals
 

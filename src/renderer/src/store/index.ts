@@ -39,12 +39,14 @@ import {
   setDcaCount as setDcaCountInCast
 } from '../utils/cast'
 import {
+  canCreateEnsemble,
+  consolidateRow,
   placementFor,
   removeChannelsFromScenes,
   removeDcasFromScenes,
   removeEnsembleFromScenes,
   rowChannels,
-  setRowEnsemble,
+  rowPerformers,
   type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
@@ -1586,26 +1588,24 @@ export const useStore = create<CueListState>((set) => ({
   }),
 
   // Who is in the new ensemble is who rides the row it is made from, which is the one thing
-  // the operator is looking at when they press it.
+  // the operator is looking at when they press it. The grouping and the row it lands on are
+  // one edit: the group joins the cast and the row is put on it in the same store write, so
+  // one undo takes both back. Nothing here is a desk command — this is how the scene names
+  // its membership, not what a recall sends.
   addEnsembleFromRow: (sceneId, dcaId) => set(s => {
     const cast = s.showSettings.cast
     const scene = s.showSettings.scenes.list.find(candidate => candidate.id === sceneId)
     if (scene === undefined) return s
-    const channels = rowChannels(cast, placementFor(scene, dcaId))
-    const members = cast.performers
-      .filter(performer => performer.channelId !== null && channels.includes(performer.channelId))
-      .map(performer => performer.id)
-    // Strips nobody is patched to are not a group: an ensemble with no members is a row that
-    // opens nothing, and the press that made it is a press that changed nothing.
-    if (members.length === 0) return s
+    const carried = rowChannels(cast, placementFor(scene, dcaId))
+    if (!canCreateEnsemble(cast, scene, dcaId, carried)) return s
 
-    const grouped = addEnsemble(cast, '', members)
+    const grouped = addEnsemble(cast, '', rowPerformers(cast, carried))
     const ensemble = grouped.ensembles[grouped.ensembles.length - 1]
     return {
       showSettings: {
         ...s.showSettings,
         cast: grouped,
-        scenes: setRowEnsemble(s.showSettings.scenes, sceneId, dcaId, ensemble, true, grouped)
+        scenes: consolidateRow(s.showSettings.scenes, sceneId, dcaId, ensemble.id, grouped)
       },
       past: pushPast(s.past, snapshotOf(s)),
       future: [],

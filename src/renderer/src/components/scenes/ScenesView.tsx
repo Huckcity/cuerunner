@@ -4,6 +4,7 @@ import { recallScene, resyncDesk } from '../../engine/scenes'
 import { channelLabel } from '../../utils/cast'
 import {
   addScene,
+  canCreateEnsemble,
   ensembleState,
   placementFor,
   removeScene,
@@ -29,9 +30,10 @@ import {
 import './ScenesView.css'
 
 // A scene name is what its column is read by, so the field asks for about a name's worth of
-// room and no more. An input's default width is what sets a column's width, and a column
-// wide enough for the browser's taste is one that pushes the numbers after it off the side
-// of the window.
+// room and no more. The column itself is a fixed width — a scene track that stretched with
+// the window would draw two scenes as two half-window blocks with their names and controls
+// huddled at one edge — so this only sets what the input asks for before the width it is
+// given takes over.
 const SCENE_NAME_SIZE = 11
 
 /** The columns that are scenes in the file: the all-closed column is not one of them. */
@@ -71,8 +73,9 @@ interface CellProps {
 /**
  * One fader in one scene: the channels the row carries, the ensembles applied to it, and
  * — while editing — the presses that change either. A chip names what the row carries,
- * and its ✕ takes it off; the pickers name what it does not, and choosing one puts it on.
- * Every press is one store write, hence one undo.
+ * and its ✕ takes it off; the pickers name what it does not, and choosing one puts it on;
+ * Create ensemble turns the performers it carries into one group applied here. Every press
+ * is one store write, hence one undo.
  */
 function SceneCell({
   scene, dca, cast, scenes, changes, deskState, isCurrent, locked, writeList, groupRow
@@ -97,8 +100,11 @@ function SceneCell({
         const label = channelLabel(cast.channels, channelId)
         if (label === '') return null
         return (
-          <span className="matrix-channel" key={channelId}>
-            {label}
+          <span className="matrix-channel" key={channelId} title={label}>
+            {/* The name is its own box so a long one can be cut with an ellipsis while
+                the ✕ beside it stays reachable — the chip's own clipping would take the
+                press off the end of the row with it. */}
+            <span className="matrix-channel-name">{label}</span>
             <button
               type="button"
               className="matrix-channel-remove"
@@ -116,7 +122,7 @@ function SceneCell({
         <select
           className="matrix-place"
           value=""
-          aria-label={`Place a channel on ${dca.label} in ${scene.name}`}
+          aria-label={`Place channel on ${dca.label} in ${scene.name}`}
           title="Place a channel on this row"
           onChange={e => {
             if (e.target.value !== '') {
@@ -124,7 +130,7 @@ function SceneCell({
             }
           }}
         >
-          <option value="">+ place</option>
+          <option value="">Place channel</option>
           {freeChannels.map(channel => (
             <option key={channel.id} value={channel.id}>
               {channelLabel(cast.channels, channel.id)}
@@ -148,7 +154,7 @@ function SceneCell({
         <select
           className="matrix-ensemble-add"
           value=""
-          aria-label={`Apply an ensemble to ${dca.label} in ${scene.name}`}
+          aria-label={`Apply ensemble to ${dca.label} in ${scene.name}`}
           title="Apply an ensemble to this row — its members ride it unless left off"
           onChange={e => {
             const ensemble = cast.ensembles.find(candidate => candidate.id === e.target.value)
@@ -157,20 +163,23 @@ function SceneCell({
             }
           }}
         >
-          <option value="">+ ensemble</option>
+          <option value="">Apply ensemble</option>
           {freeEnsembles.map(ensemble => (
             <option key={ensemble.id} value={ensemble.id}>{ensemble.name}</option>
           ))}
         </select>
       )}
-      {!locked && carried.length > 0 && (
+      {/* Consolidating is offered only when it has something to do: somebody is carried,
+          and the group applied to the row, if there is one, does not already hold them all.
+          Otherwise it is a press that builds a second group of the same people. */}
+      {!locked && canCreateEnsemble(cast, scene, dca.id, carried) && (
         <button
           type="button"
           className="matrix-ensemble-new"
-          title="Group these into an ensemble, applied to this row"
+          title="Make a reusable ensemble from this row and apply it here"
           onClick={() => groupRow(scene.id, dca.id)}
         >
-          + Group
+          Create ensemble
         </button>
       )}
     </div>
@@ -436,8 +445,13 @@ export function ScenesView() {
           <div
             className="matrix-grid"
             style={{
+              // Fixed tracks, so a scene column is the same width in a show of two scenes
+              // and a show of twenty: what the window has over the tracks stays to the right
+              // of the last column rather than widening the columns themselves, and what
+              // does not fit scrolls inside the view.
               gridTemplateColumns:
-                `var(--matrix-mic-width) repeat(${scenes.list.length + 1}, minmax(var(--matrix-cell-width), 1fr))`
+                `var(--matrix-mic-width) var(--matrix-all-closed-width) ` +
+                `repeat(${scenes.list.length}, var(--matrix-scene-width))`
             } as CSSProperties}
           >
             <div className="matrix-corner" />
@@ -483,6 +497,9 @@ export function ScenesView() {
                       placeholder="Scene name"
                       aria-label="Scene name"
                       size={SCENE_NAME_SIZE}
+                      // The column is a fixed width, so a long name is clipped: the title is
+                      // where the whole of it stays readable.
+                      title={scene.name}
                       disabled={locked}
                       // A scene without a name is a row nobody can find again, so the old
                       // name stays until something is actually typed.
@@ -518,33 +535,37 @@ export function ScenesView() {
               )
             })}
 
-            {cast.dcas.map((dca, index) => (
-              <div key={dca.id} className="matrix-row">
-                {/* Who this row is: the fader, by its number and what the show calls it. */}
-                <div className="matrix-mic">
-                  <span className="matrix-fader">{`${dcaNumber(index)} · ${dca.label}`}</span>
+            {cast.dcas.map((dca, index) => {
+              // The row is a fader: the number the operator reaches for at the desk, and
+              // the label the show calls it — clipped to the column, and whole in a title.
+              const label = `${dcaNumber(index)} · ${dca.label}`
+              return (
+                <div key={dca.id} className="matrix-row">
+                  <div className="matrix-mic">
+                    <span className="matrix-fader" title={label}>{label}</span>
+                  </div>
+                  {/* The all-closed column places nothing: there is nothing to carry in a
+                      column that closes everything, so the gap is not a cell and is not in
+                      reach. */}
+                  <div className="matrix-cell-blank" />
+                  {scenes.list.map(scene => (
+                    <SceneCell
+                      key={scene.id}
+                      scene={scene}
+                      dca={dca}
+                      cast={cast}
+                      scenes={scenes}
+                      changes={changesByScene.get(scene.id) ?? []}
+                      deskState={deskState}
+                      isCurrent={scene.id === deskSceneId}
+                      locked={locked}
+                      writeList={writeList}
+                      groupRow={addEnsembleFromRow}
+                    />
+                  ))}
                 </div>
-                {/* The all-closed column places nothing: there is nothing to carry in a
-                    column that closes everything, so the gap is not a cell and is not in
-                    reach. */}
-                <div className="matrix-cell-blank" />
-                {scenes.list.map(scene => (
-                  <SceneCell
-                    key={scene.id}
-                    scene={scene}
-                    dca={dca}
-                    cast={cast}
-                    scenes={scenes}
-                    changes={changesByScene.get(scene.id) ?? []}
-                    deskState={deskState}
-                    isCurrent={scene.id === deskSceneId}
-                    locked={locked}
-                    writeList={writeList}
-                    groupRow={addEnsembleFromRow}
-                  />
-                ))}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

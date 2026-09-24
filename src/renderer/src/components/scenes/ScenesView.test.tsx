@@ -287,7 +287,7 @@ describe('ScenesView', () => {
     expect([...cellFor('1 · DCA 1 — Ensemble', 'Opening')
       .querySelector<HTMLSelectElement>('.matrix-place')!.options]
       .map(option => option.textContent))
-      .toEqual(['+ place', 'Ch 2 · Extra', 'Ch 3 · Bea'])
+      .toEqual(['Place channel', 'Ch 2 · Extra', 'Ch 3 · Bea'])
 
     const placed1 = past()
     await act(async () => {
@@ -375,6 +375,123 @@ describe('ScenesView', () => {
     ])
     expect(cellFor('1 · DCA 1 — Ensemble', 'Opening')
       .querySelector('.matrix-ensemble')?.textContent).toBe(ensembles[0].name)
+  })
+
+  it('names a cell’s picks for what they do, and offers Create ensemble only when it has a job', async () => {
+    await show({
+      scenes: [scene('s1', 'Opening')],
+      cast: cast({ ensembles: [CHORUS] })
+    })
+
+    // The pickers say their verb rather than a mark the operator has to decode — in the
+    // text the operator reads and in the name a screen reader is given.
+    let cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
+    const place = cell.querySelector<HTMLSelectElement>('.matrix-place')
+    expect(place?.options[0].textContent).toBe('Place channel')
+    expect(place?.getAttribute('aria-label')).toBe('Place channel on DCA 1 — Ensemble in Opening')
+    const apply = cell.querySelector<HTMLSelectElement>('.matrix-ensemble-add')
+    expect(apply?.options[0].textContent).toBe('Apply ensemble')
+    expect(apply?.getAttribute('aria-label'))
+      .toBe('Apply ensemble to DCA 1 — Ensemble in Opening')
+    // Nothing is carried, so nobody can be grouped: the press is not there rather than
+    // there and doing nothing.
+    expect(cell.querySelector('.matrix-ensemble-new')).toBeNull()
+
+    // A performer placed by hand is a job for it, and the press says what it makes.
+    await choose(cell.querySelector<HTMLSelectElement>('.matrix-place')!, 'ch-ada')
+
+    cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
+    const create = cell.querySelector<HTMLButtonElement>('.matrix-ensemble-new')
+    expect(create?.textContent).toBe('Create ensemble')
+    expect(create?.title).toBe('Make a reusable ensemble from this row and apply it here')
+
+    // Pressed, the row is one group holding what it already carried, and the control goes
+    // with the job.
+    await act(async () => { create?.click() })
+
+    cell = cellFor('1 · DCA 1 — Ensemble', 'Opening')
+    expect(cell.querySelector('.matrix-ensemble-new')).toBeNull()
+    expect(cell.querySelector('.matrix-ensemble')?.getAttribute('data-applied')).toBe('on')
+    expect(chips(cell)).toEqual(['Ch 1 · Ada'])
+  })
+
+  it('keeps Create ensemble while a performer, or a second group, is outside the one applied', async () => {
+    const SOLO: Ensemble = { id: 'ens-solo', name: 'Solo', members: ['p1'] }
+    const BAND_ENSEMBLE: Ensemble = { id: 'ens-band', name: 'Band', members: ['p3'] }
+    const createIn = (): Element | null =>
+      cellFor('1 · DCA 1 — Ensemble', 'Opening').querySelector('.matrix-ensemble-new')
+
+    // One group holding the row on its own is already what the press would build.
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', [], { ensembles: ['ens-chorus'] })])],
+      cast: cast({ ensembles: [CHORUS] })
+    })
+    expect(createIn()).toBeNull()
+
+    // ...and a hand placement that names somebody the group already holds is the same row
+    // said twice, not a job: after Ada is patched to a strip the group was applied without,
+    // folding her in would build a second group of the same people.
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-ada'], {
+        ensembles: ['ens-solo']
+      })])],
+      cast: cast({ ensembles: [SOLO] })
+    })
+    expect(createIn()).toBeNull()
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening'))).toEqual(['Ch 1 · Ada'])
+
+    // Two groups on one row are two things to fold into one.
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', [], {
+        ensembles: ['ens-chorus', 'ens-band']
+      })])],
+      cast: cast({ ensembles: [CHORUS, BAND_ENSEMBLE] })
+    })
+    expect(createIn()).not.toBeNull()
+
+    // ...and so is a performer the row carries that the one group does not hold, whether
+    // they were placed by hand beside it or carried in by a Cast change.
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-extra'], {
+        ensembles: ['ens-solo']
+      })])],
+      cast: cast({ ensembles: [SOLO] })
+    })
+    expect(createIn()).not.toBeNull()
+
+    // A row whose carried strips have nobody patched to them carries people an ensemble
+    // cannot hold, so there is nothing for the press to make.
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-ada'])])],
+      cast: cast({ performers: [] })
+    })
+    expect(createIn()).toBeNull()
+  })
+
+  it('leaves a strip nobody is patched to placed when the row is consolidated', async () => {
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-ensemble', ['ch-ada', 'ch-extra'])])],
+      cast: cast({ performers: [performer('p1', 'Ada', 'ch-ada')] })
+    })
+
+    await act(async () => {
+      cellFor('1 · DCA 1 — Ensemble', 'Opening')
+        .querySelector<HTMLButtonElement>('.matrix-ensemble-new')!.click()
+    })
+
+    const ensembles = useStore.getState().showSettings.cast.ensembles
+    expect(ensembles[0].members).toEqual(['p1'])
+    // The performer rides the new group; the strip with nobody on it stays a placement of
+    // its own, and one undo puts the whole row back as it was.
+    expect(scenes()[0].dcas).toEqual([
+      placed('dca-ensemble', ['ch-extra'], { ensembles: [ensembles[0].id] })
+    ])
+    expect(chips(cellFor('1 · DCA 1 — Ensemble', 'Opening')))
+      .toEqual(['Ch 1 · Ada', 'Ch 2 · Extra'])
+
+    await act(async () => { useStore.getState().undo() })
+    expect(scenes()[0].dcas).toEqual([placed('dca-ensemble', ['ch-ada', 'ch-extra'])])
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
   })
 
   it('adds a scene from the header and renames it in place, refusing an empty name', async () => {

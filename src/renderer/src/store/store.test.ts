@@ -1051,6 +1051,93 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels).toEqual(['ch-1'])
   })
 
+  it('consolidates a row whose hands and groups both carry people, keeping the bare strip, on one undo', () => {
+    // The row came together three ways: a strip placed by hand, a group applied over it,
+    // and a strip nobody is patched to placed beside them. Bea is on the row by hand and
+    // the group does not hold her, which is what gives the press a job; the press folds the
+    // people into one group and leaves the bare strip where it was, so what the scene
+    // carries is what it carried — and both the cast and the row come back together.
+    const SPARE = { id: 'ch-2', name: 'Spare' }
+    const BEA = { id: 'ch-3', name: 'Bea' }
+    const BEA_PERFORMER: Performer = {
+      id: 'p2',
+      name: 'Bea',
+      role: '',
+      notes: '',
+      channelId: 'ch-3'
+    }
+    const CHORUS: Ensemble = { id: 'e1', name: 'Chorus', members: ['p1'] }
+    const defaults = defaultShowSettings()
+    const scene: MicScene = {
+      id: 's-bows',
+      name: 'Bows',
+      dcas: [{ dcaId: 'dca-1', channels: ['ch-1', 'ch-2', 'ch-3'], ensembles: ['e1'], excluded: [] }],
+      notes: ''
+    }
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({
+          channels: [CHANNEL, SPARE, BEA],
+          performers: [ROUTED_PERFORMER, BEA_PERFORMER],
+          ensembles: [CHORUS]
+        }),
+        scenes: { ...defaults.scenes, list: [scene] }
+      },
+      isDirty: false
+    })
+    const before = useStore.getState().showSettings
+    const past = useStore.getState().past.length
+
+    useStore.getState().addEnsembleFromRow(scene.id, 'dca-1')
+
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.ensembles).toHaveLength(2)
+    const made = settings.cast.ensembles[1]
+    expect(made.members).toEqual(['p1', 'p2'])
+    expect(made.name).toBe('Ensemble 2')
+    // The strip nobody is patched to stays placed, and the group Ada rode is no longer
+    // applied: the row is the new ensemble plus that one placement.
+    expect(settings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [made.id], excluded: [] }
+    ])
+    expect(rowChannels(settings.cast, settings.scenes.list[0].dcas[0]))
+      .toEqual(['ch-1', 'ch-2', 'ch-3'])
+    expect(settings.cast.ensembles[0]).toEqual(CHORUS)
+    expect(useStore.getState().past).toHaveLength(past + 1)
+    expect(useStore.getState().isDirty).toBe(true)
+
+    useStore.getState().undo()
+    expect(useStore.getState().showSettings).toEqual(before)
+  })
+
+  it('makes no second group out of a row one group already holds on its own', () => {
+    // The control is not offered for it, and the store agrees: a press here would build a
+    // second ensemble holding the same person and leave the row saying it twice. A hand
+    // placement of that same person is the same row said twice as well.
+    const CHORUS: Ensemble = { id: 'e1', name: 'Chorus', members: ['p1'] }
+    const defaults = defaultShowSettings()
+    const scene: MicScene = {
+      id: 's-bows',
+      name: 'Bows',
+      dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['e1'], excluded: [] }],
+      notes: ''
+    }
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({ ensembles: [CHORUS] }),
+        scenes: { ...defaults.scenes, list: [scene] }
+      }
+    })
+    const before = useStore.getState().showSettings
+
+    useStore.getState().addEnsembleFromRow(scene.id, 'dca-1')
+
+    expect(useStore.getState().showSettings).toBe(before)
+    expect(useStore.getState().past).toHaveLength(0)
+  })
+
   it('undo after deleting a scene restores it with its placements', () => {
     const defaults = defaultShowSettings()
     useStore.setState({
