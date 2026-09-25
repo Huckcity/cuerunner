@@ -139,12 +139,15 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
-      # Electron's postinstall comes away without its binary now and then — the message the
-      # tests then read is "Electron failed to install correctly, please delete node_modules/
-      # electron and try installing again", which is exactly what this does. One macOS lane of
-      # the three found it; it is an install that did not finish, not a claim about the code.
+      # Node 26 brings npm 12, which refuses to run a package's install scripts until they are
+      # approved by name — so `npm ci` leaves Electron's binary undownloaded and the one file
+      # that requires it says so ("Electron failed to install correctly, please delete
+      # node_modules/electron and try installing again"). The two Node lanes say which is which:
+      # node 24 installs it, node 26 warns `install-scripts … not yet covered by allowScripts`
+      # and goes on. Electron's own install script downloads it and is not subject to that gate
+      # at all; `npm rebuild` is, which is why it fixed nothing.
       - name: Make sure Electron's binary arrived
-        run: node -e "require('electron')" || npm rebuild electron
+        run: node -e "require('electron')" || node node_modules/electron/install.js
 
       - name: Unit tests
         run: npm test
