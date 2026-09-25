@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
 import {
   EXCLUDES,
   body,
@@ -134,5 +136,27 @@ describe('the tree digest', () => {
     const first = treeDigest()
     expect(first).toMatch(/^[0-9a-f]{16}$/)
     expect(treeDigest()).toBe(first)
+  })
+
+  it('changes when a file is edited, not only when one is added', async () => {
+    // The one way a local run could quietly test something other than what is on disk here:
+    // an edit keeps the file's name, so the digest has to read what the file *is*.
+    const probe = join(process.cwd(), 'scripts/tmp-digest-probe.txt')
+    const digestOf = async (): Promise<string> => {
+      vi.resetModules()
+      const fresh = await import('./local-ci.mjs')
+      return fresh.treeDigest()
+    }
+    try {
+      const before = treeDigest()
+      writeFileSync(probe, 'one')
+      const added = await digestOf()
+      writeFileSync(probe, 'two-two')
+      const edited = await digestOf()
+      expect(added).not.toBe(before)
+      expect(edited).not.toBe(added)
+    } finally {
+      rmSync(probe, { force: true })
+    }
   })
 })

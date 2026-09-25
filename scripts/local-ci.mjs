@@ -208,12 +208,21 @@ export function quote(host, path) {
   return host.platform === 'win32' ? `'${path}'` : `"${path}"`
 }
 
-/** The tree's digest, so an unchanged one is not shipped twice in a run. */
+/**
+ * The tree's digest, so an unchanged one is not shipped twice in a run.
+ *
+ * A file's *size and mtime* are what say it changed, not its name: an edit keeps the name and
+ * would otherwise leave a host holding the code from before the edit, which is the one way a
+ * local run could quietly test something other than what is on disk here.
+ */
 let cachedDigest = null
 export function treeDigest() {
   if (cachedDigest !== null) return cachedDigest
   const hash = createHash('sha256')
-  for (const file of walk(process.cwd())) hash.update(file + '\n')
+  for (const file of walk(process.cwd())) {
+    const stat = statSync(join(process.cwd(), file))
+    hash.update(`${file} ${stat.size} ${stat.mtimeMs}\n`)
+  }
   hash.update(lockHash())
   cachedDigest = hash.digest('hex').slice(0, 16)
   return cachedDigest
