@@ -327,7 +327,7 @@ const SETTINGS: ShowSettings = {
     list: [{
       id: 's-1',
       name: 'Wedding',
-      dcas: [{ dcaId: 'dca-1', channels: ['channel-1'], ensembles: ['e-1'], excluded: ['channel-2'] }],
+      dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'channel-1' }],
       notes: ''
     }],
     allowDuplicateAssignment: true
@@ -335,8 +335,8 @@ const SETTINGS: ShowSettings = {
   cast: {
     channels: [{ id: 'channel-1', name: 'Ruth' }],
     performers: [{ id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: 'channel-1' }],
-    ensembles: [{ id: 'e-1', name: 'Chorus', members: ['p-1'] }],
-    dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }]
+    ensembles: [{ id: 'e-1', name: 'Chorus', channelIds: ['channel-1'] }],
+    dcas: [{ id: 'dca-1', deskNumber: null }]
   }
 }
 

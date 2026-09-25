@@ -1,4 +1,4 @@
-import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import type { ChildProcess } from 'child_process'
 import { createSocket } from 'dgram'
@@ -386,9 +386,64 @@ export async function openLogPanel(page: Page): Promise<void> {
 
 /** The view opens to run the show; building one starts with the press that edits it. */
 export async function editScenes(page: Page): Promise<void> {
-  const edit = page.locator('.scenes-edit')
-  if ((await edit.getAttribute('data-editing')) !== 'true') await edit.click()
+  // The grid is the view, so its corner lock is there as soon as a show has faders; a show
+  // with none has no grid and carries the same press in words.
+  const lock = page.locator('.matrix-lock')
+  const way = (await lock.count()) > 0 ? lock : page.locator('.matrix-empty-action')
+  if ((await way.getAttribute('data-editing')) !== 'true') await way.click()
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
+}
+
+/**
+ * What a cell opens — the blank box of a row holding nothing, or the name of one holding
+ * something: every strip and every group the show has, less the one the row holds, under
+ * their own headings, and the builder at its foot. The label is typed into
+ * the filter and the row pressed, because that is how a menu holding a console's worth of
+ * strips is actually used — and the strip's label is the name it was given or the performer
+ * standing on it, never its bare number.
+ */
+export async function pickFromBox(page: Page, cell: Locator, label: string): Promise<void> {
+  // A row holding nothing is a blank box; a row holding something is that name, pressed —
+  // the row holds one thing, so there is no second box beside it.
+  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
+  const picker = page.locator('.scene-picker')
+  await expect(picker).toBeVisible()
+  await picker.locator('.scene-picker-filter').fill(label)
+  // The rows are the filter's options rather than buttons: the filter is the combobox that
+  // drives them, so the arrows reach them and Tab does not.
+  await picker.getByRole('option', { name: label, exact: true }).click()
+  await expect(picker).toHaveCount(0)
+}
+
+/**
+ * The builder behind the box's last row: the strips the operator moves across become a new
+ * ensemble — named here — and it is applied to the row it was opened from. The row this is
+ * called on holds a strip or nothing, so the builder opens as a new group.
+ */
+export async function buildEnsembleFromBox(
+  page: Page,
+  cell: Locator,
+  name: string,
+  strips: string[]
+): Promise<void> {
+  // Whichever the cell offers: a blank box, or the name it already holds.
+  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
+  const picker = page.locator('.scene-picker')
+  await expect(picker).toBeVisible()
+  await picker.getByRole('button', { name: 'Ensemble…', exact: true }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'New ensemble' })
+  await expect(dialog).toBeVisible()
+  await dialog.locator('.ensemble-name-field').fill(name)
+  for (const strip of strips) {
+    // Exactly, not by substring: "Ch 1" is a prefix of "Ch 10".
+    await dialog.locator('[data-pane="free"]')
+      .getByRole('button', { name: strip, exact: true })
+      .click()
+    await dialog.locator('.ensemble-move').first().click()
+  }
+  await dialog.getByRole('button', { name: 'Create and apply' }).click()
+  await expect(dialog).toHaveCount(0)
 }
 
 /** The tabs of Show Settings, as the menu names them. */
@@ -482,10 +537,10 @@ export async function pointDeskAtTcp(page: Page, port: number, host = '127.0.0.1
 
 /**
  * A show set up through the view, in the order an operator would do it: the desk pointed
- * at a port the test owns, the first performer named, and a scene that places their strip
- * on the first fader. Naming the performer names their strip, which is what the grid shows,
- * and the placement is the scene's own — nothing else in the show says which fader a
- * channel rides (AD-26).
+ * at a port the test owns, the first performer named, and a scene whose first row holds
+ * their strip. Naming the performer names their strip, which is what the grid shows, and
+ * the row is the scene's own — nothing else in the show says which fader a channel rides
+ * (AD-26).
  *
  * `point` is which of the app's desk connections the caller is exercising; a show driven
  * over the desk's own socket passes `pointDeskAtTcp`.
@@ -513,11 +568,15 @@ export async function buildDeskShow(
 
   await openScenesView(page)
   await editScenes(page)
-  await page.locator('.scenes-add').click()
-  // A scene places the channels it wants: the first strip on the first fader, which is
-  // the membership a recall writes and the reason the mic is open.
-  await page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    .locator('.matrix-place').selectOption({ label: 'Ch 1 · Ruth' })
+  await page.locator('.matrix-add-scene').click()
+  // A row holds one thing, and this scene places the strip it wants on the first fader:
+  // that is the membership a recall writes and the reason the mic is open. Placing it is a
+  // press on the cell's box and a press on the strip in the picker.
+  await pickFromBox(
+    page,
+    page.locator('.matrix-row').first().locator('.matrix-cell').first(),
+    'Ruth'
+  )
 }
 
 /**

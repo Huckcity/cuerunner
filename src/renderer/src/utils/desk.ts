@@ -20,6 +20,16 @@ export function dcaNumber(index: number): number {
   return index + 1
 }
 
+/**
+ * A fader as a sentence names it — "DCA 3" — from the show's own list and the id a write
+ * carries. Its place is the only name a fader has, so this is the number and the word the
+ * operator reads at the desk, and a fader the show no longer has reads as nothing at all.
+ */
+export function faderLabel(dcas: Dca[], dcaId: string): string {
+  const at = dcas.findIndex(dca => dca.id === dcaId)
+  return at === -1 ? '' : `DCA ${dcaNumber(at)}`
+}
+
 /** The number this DCA's place makes on this desk, before any override. */
 export function dcaValue(index: number, profile: DeskProfile): number {
   if (profile === 'sq') return index

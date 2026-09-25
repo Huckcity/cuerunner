@@ -203,7 +203,7 @@ export const SHOW_SETTINGS_SHAPE = {
         id: 'leaf',
         name: 'leaf',
         dcas: {
-          elements: { dcaId: 'leaf', channels: 'leaf', ensembles: 'leaf', excluded: 'leaf' }
+          elements: { dcaId: 'leaf', kind: 'leaf', memberId: 'leaf' }
         },
         notes: 'leaf'
       }
@@ -213,8 +213,8 @@ export const SHOW_SETTINGS_SHAPE = {
   cast: {
     channels: { elements: { id: 'leaf', name: 'leaf' } },
     performers: { elements: { id: 'leaf', name: 'leaf', role: 'leaf', notes: 'leaf', channelId: 'leaf' } },
-    ensembles: { elements: { id: 'leaf', name: 'leaf', members: 'leaf' } },
-    dcas: { elements: { id: 'leaf', label: 'leaf', deskNumber: 'leaf' } }
+    ensembles: { elements: { id: 'leaf', name: 'leaf', channelIds: 'leaf' } },
+    dcas: { elements: { id: 'leaf', deskNumber: 'leaf' } }
   }
 } as const satisfies { readonly [S in ShowSettingsSection]: ShapeFields<ShowSettings[S]> }
 

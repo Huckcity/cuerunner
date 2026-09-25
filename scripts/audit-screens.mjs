@@ -157,10 +157,10 @@ await tryDo('scenes', async () => {
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
   await page.waitForTimeout(200)
   await shot('50-scenes.png')
-  await page.locator('.scenes-edit').click().catch(() => {})
-  await page.locator('.scenes-add').click().catch(() => {})
+  await page.locator('.matrix-lock, .matrix-empty-action').first().click().catch(() => {})
+  await page.locator('.matrix-add-scene').click().catch(() => {})
   await page.waitForTimeout(150)
-  await shot('51-scenes-edit.png')
+  await shot('51-scenes-unlocked.png')
   await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
 })
 

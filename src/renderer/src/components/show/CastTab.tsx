@@ -1,25 +1,20 @@
 import { useStore } from '../../store'
-import {
-  addEnsemble,
-  addPerformer,
-  channelLabel,
-  ensembleMembers,
-  updateEnsemble,
-  updatePerformer
-} from '../../utils/cast'
+import { addPerformer, channelLabel, updatePerformer } from '../../utils/cast'
 import type { CastSettings } from '../../../../shared/show'
 import { TextField } from '../common/Field'
 
 /**
- * The cast: who is in the show, which strip their mic is patched to, and the ensembles
- * they are grouped into. An ensemble is a grouping and nothing else — it is applied to a
- * scene from the Scenes view, where the mics it holds open are pressed for the show —
- * so this tab is where the groups are named and filled, not where they are used.
+ * The cast: who is in the show, and which strip their mic is patched to.
+ *
+ * A performer is who they are for the whole show — the mic plot assigns packs to them and
+ * the report names them the next morning — so this is where they are named and patched,
+ * and nothing else is: the groups they are opened in are the Scenes view's, built from the
+ * strips a row should carry, because that is where the operator is standing when they
+ * decide who is in the chorus.
  */
 export function CastTab() {
   const cast = useStore(s => s.showSettings.cast)
   const updateCastSettings = useStore(s => s.updateCastSettings)
-  const removeEnsemble = useStore(s => s.removeEnsemble)
   const removePerformer = useStore(s => s.removePerformer)
 
   const apply = (next: CastSettings): void => updateCastSettings(next)
@@ -79,76 +74,6 @@ export function CastTab() {
 
         <button className="performer-add add-row" onClick={() => apply(addPerformer(cast, 'New performer', ''))}>
           + Performer
-        </button>
-      </div>
-
-      <div className="show-section">
-        <div className="show-section-head">
-          <span className="show-section-title">Ensembles</span>
-        </div>
-
-        {cast.ensembles.map(ensemble => {
-          const members = ensembleMembers(cast, ensemble.id)
-          const free = cast.performers.filter(performer => !ensemble.members.includes(performer.id))
-          return (
-            <div className="ensemble-row" key={ensemble.id}>
-              <div className="ensemble-fields">
-                <TextField
-                  className="ensemble-name"
-                  value={ensemble.name}
-                  placeholder="Ensemble"
-                  aria-label="Ensemble name"
-                  onValue={name => apply(updateEnsemble(cast, ensemble.id, { name }))}
-                />
-                <span className="ensemble-count">
-                  {members.length === 1 ? '1 member' : `${members.length} members`}
-                </span>
-                <button
-                  className="ensemble-remove"
-                  aria-label={`Remove ${ensemble.name}`}
-                  title="Remove this ensemble — every scene using it stops using it"
-                  onClick={() => removeEnsemble(ensemble.id)}
-                >✕</button>
-              </div>
-              <div className="ensemble-members">
-                {members.map(member => (
-                  <span className="member-chip" key={member.id}>
-                    {member.name || 'unnamed'}
-                    <button
-                      type="button"
-                      aria-label={`Take ${member.name} out of ${ensemble.name}`}
-                      onClick={() => apply(updateEnsemble(cast, ensemble.id, {
-                        members: ensemble.members.filter(id => id !== member.id)
-                      }))}
-                    >✕</button>
-                  </span>
-                ))}
-                {free.length > 0 && (
-                  <select
-                    className="member-add"
-                    aria-label={`Add a performer to ${ensemble.name}`}
-                    value=""
-                    onChange={e => {
-                      if (e.target.value !== '') {
-                        apply(updateEnsemble(cast, ensemble.id, {
-                          members: [...ensemble.members, e.target.value]
-                        }))
-                      }
-                    }}
-                  >
-                    <option value="">+ add member</option>
-                    {free.map(performer => (
-                      <option key={performer.id} value={performer.id}>{performer.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </div>
-          )
-        })}
-
-        <button className="ensemble-add add-row" onClick={() => apply(addEnsemble(cast))}>
-          + Ensemble
         </button>
       </div>
     </div>

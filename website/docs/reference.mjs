@@ -414,7 +414,7 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
           <thead><tr><th>Tab</th><th>What is on it</th></tr></thead>
           <tbody>
             <tr><td>Channels</td><td>The desk connection — OSC, MIDI or MIDI over TCP, with its address, the MIDI-over-TCP port being 51325 as an SQ and an Avantis both serve it — the channel strips on the console and the faders the show drives, each with a Count beside its heading that sizes the list. An SQ is opened on its own control service as well — TCP 51326 outbound, kept alive with a datagram to the desk's UDP 51324 — because its MIDI service carries the mutes and nothing else: the membership has no route there. A shorter strip count drops the last strips, which leaves every scene and unpatches whoever was on them; a shorter fader count drops the last faders and takes every scene's row for those places with them, and unpatches nobody. A strip is a name and a number — the per-channel fader select this tab used to carry is deleted, not deprecated — and which fader it rides is the scene's decision, made in the Scenes grid, so a show sets up its channels and its faders here and places them scene by scene. Each fader carries one desk number, for a desk that counts its DCAs differently from the show. Under the faders, Allow a channel to ride more than one fader is the rule the grid follows: off, placing a strip on a row takes it off that scene's other rows, and a recall folds whatever a file still carries down to the lowest-numbered fader. The line under the connection reads back exactly what will be sent, and names a show larger than the desk model states, with the number of inputs it exceeded. A recall that fails says which failure it was: nothing answered at that address, or the desk took the connection and reset it. The second is what a desk whose MIDI port another program is holding does, and there the address is right.</td></tr>
-            <tr><td>Cast</td><td>Performers, their parts, the channel each is on, and ensembles for opening a section at once.</td></tr>
+            <tr><td>Cast</td><td>Performers, their parts, the channel each is on, and any note. Groups are built in the Scenes view, from the strips a row should carry.</td></tr>
             <tr><td>Mic plot</td><td>Packs, the channel each is patched to, and who is wearing it. Changing a performer on a pack records a swap.</td></tr>
           </tbody>
         </table>
@@ -580,8 +580,9 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
         desk it names can be told. What goes out is the difference against what Cuerunner
         last sent, held for the session and never undone, and each write is remembered as it
         lands: there is no read-back of a recall's own writes, so a fader moved by hand at the
-        desk is invisible here. <strong>Resync</strong> beside Recall now re-sends
-        the scene the desk is standing on and says how many channels it wrote.
+        desk is invisible here: recalling a scene again sends only what has changed since the
+        last send, and that record lives for as long as the show is open. Reopening the show
+        forgets it, and the next recall writes every channel the scene controls.
       </p>
     </section>
 `

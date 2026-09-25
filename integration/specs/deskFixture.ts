@@ -202,7 +202,17 @@ export function writeDeskShow(options: DeskShowOptions): string {
   // the reason the mic is open — and the second places nothing, so a recall of it is a close.
   // A lane that needs placements of its own names its scenes instead.
   const defaults = defaultShowSettings()
-  const placed = { dcaId: faders[0].id, channels: [CHANNEL_ID], ensembles: [], excluded: [] }
+  // A row holds one thing (the show's shape), so a fader a lane puts two mics on carries a
+  // group the fixture declares in the cast — the same membership the desk is told, written as
+  // the grouping it is. A fader with one channel carries the channel itself.
+  const groups: { id: string; name: string; channelIds: string[] }[] = []
+  const member = (sceneName: string, fader: DeskShowFader, channelIds: string[]) => {
+    if (channelIds.length === 1) return { kind: 'channel' as const, memberId: channelIds[0] }
+    const id = `g-${groups.length + 1}`
+    groups.push({ id, name: `${sceneName} · ${fader.label}`, channelIds })
+    return { kind: 'ensemble' as const, memberId: id }
+  }
+  const placed = { dcaId: faders[0].id, ...member('Wedding', faders[0], [CHANNEL_ID]) }
   const defaultScenes = buttons === undefined
     ? [{ id: 's-1', name: 'Wedding', dcas: [placed], notes: '' }]
     : [
@@ -216,12 +226,7 @@ export function writeDeskShow(options: DeskShowOptions): string {
     // which is the shape the editor writes and the shape a recall reads.
     dcas: faders
       .filter(fader => (scene.places[fader.id] ?? []).length > 0)
-      .map(fader => ({
-        dcaId: fader.id,
-        channels: scene.places[fader.id],
-        ensembles: [],
-        excluded: []
-      })),
+      .map(fader => ({ dcaId: fader.id, ...member(scene.name, fader, scene.places[fader.id]) })),
     notes: ''
   })) ?? defaultScenes
 
@@ -261,12 +266,12 @@ export function writeDeskShow(options: DeskShowOptions): string {
         performers: [
           { id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: CHANNEL_ID }
         ],
-        ensembles: [],
+        // A group holds strips, so this is where the ones a row rides are declared.
+        ensembles: groups,
         // One number for a fader, and null is the number its place derives: an override is
         // the desk's own numbering rather than a second way of writing the place down.
         dcas: faders.map(fader => ({
           id: fader.id,
-          label: fader.label,
           deskNumber: fader.deskNumber ?? null
         }))
       },

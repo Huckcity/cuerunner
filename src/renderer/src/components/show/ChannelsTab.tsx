@@ -148,8 +148,7 @@ function deskPreview(desk: DeskSettings, channels: number, dcas: number): string
  * It is set up once, so the defaults do the work: a new show has twelve strips and twelve
  * faders, and the only thing nobody can guess is where the desk is. A strip is a name and
  * a number — which fader it rides is the scene's decision, made in the Scenes view — and a
- * fader is a label and the number the desk answers it by, which is its place unless the
- * number beside it says otherwise.
+ * fader is its number, which is its place unless the desk number beside it says otherwise.
  */
 export function ChannelsTab() {
   const cast = useStore(s => s.showSettings.cast)
@@ -540,14 +539,9 @@ export function ChannelsTab() {
             return (
               <div className="dca-row" key={dca.id}>
                 <div className="dca-fields">
+                  {/* A fader is a number and nothing else: its place in the show, which is
+                      what the desk is told and what the grid's rows are named by. */}
                   <span className="dca-number">{dcaNumber(index)}</span>
-                  <TextField
-                    className="dca-label"
-                    value={dca.label}
-                    placeholder="DCA"
-                    aria-label={`DCA ${dcaNumber(index)} label`}
-                    onValue={label => apply(updateDca(cast, dca.id, { label }))}
-                  />
                   {/* The one override: empty means the number its place makes, and the
                       placeholder is that number, so the field says what will be sent
                       without being typed into. */}

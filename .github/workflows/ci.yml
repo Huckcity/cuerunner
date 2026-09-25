@@ -1,6 +1,8 @@
 # Every lane runs on hardware in the homelab: Linux on `ubox`, macOS on the Mac mini beside
-# it, Windows on a NUC of its own (provisioning: ~/homelab/ci/). None of it is billed, and none
-# of it stops when the account's included minutes run out.
+# it, Windows on a NUC of its own (`nuc-win-1`). None of it is billed, and none of it stops when
+# the account's included minutes run out. The same lanes can be run from a terminal against the
+# same machines — `npm run local-ci`, whose header names the doors — which is what to reach for
+# when a lane is wanted before a push rather than after one.
 name: CI
 
 on:
@@ -140,9 +142,10 @@ jobs:
         include:
           - runner: [self-hosted, linux, x64, ubox]
             label: linux
-          # Windows runs in a KVM guest on ubox: the same x64 Windows the installer ships
-          # for, from the same eval media GitHub's own windows-latest uses, at none of the
-          # 2x minutes (provisioning: ~/homelab/ci/).
+          # Windows runs on the NUC (`nuc-win-1`, an Intel NUC10i7FNH): the same x64 Windows
+          # the installer ships for, at none of the 2x minutes. It used to be a guest on ubox
+          # and kept `ubox-win` as a label from there, which is why the two names coexist.
+          # Provisioning: `C:\actions-runner` on that box, with its own Node and MSVC.
           - runner: [self-hosted, windows, x64, win-ci]
             label: windows
           # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the

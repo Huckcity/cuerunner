@@ -338,7 +338,12 @@ export interface DeskSettings {
 }
 
 /**
- * A DCA on the desk: a number, and what the show calls it.
+ * A DCA on the desk: a fader, whose name is its place in the show.
+ *
+ * A fader is a number and nothing else — the fourth fader of the show is its fourth fader in
+ * every scene and every copy of the show, and the grid, the log and the inspector all say it
+ * the same way. A name would be a second identity to keep in step with the number the desk
+ * is actually told, and the operator reads the number at the desk anyway.
  *
  * The desk number is what the fader is addressed by where the show's own numbering is not
  * the desk's — an SQ numbers its DCAs from zero, an Avantis calls its first one 36 — and
@@ -347,8 +352,6 @@ export interface DeskSettings {
  */
 export interface Dca {
   id: string
-  /** What the show calls it: "DCA 2", or "Chorus" when it is a group's fader. */
-  label: string
   /**
    * What this DCA is addressed by on the desk, in the profile's own numbering, instead of
    * the number its place derives. Null is derived.
@@ -357,23 +360,33 @@ export interface Dca {
 }
 
 /**
- * What one scene does with one fader: the channels it places on it, and the ensembles it
- * applies to it.
+ * The one thing a row of a scene holds: a channel of the console, or an ensemble over some
+ * of them.
  *
- * A placement is the scene's own: a channel the operator put on this row. The ensembles
- * are membership rather than a copy of it — a member added to the chorus rides every row
- * the chorus is applied to — and a member channel the scene leaves off this row is an
- * exclusion, so the two stay independent.
+ * Which of the two `kind` names decides what `memberId` points at. There is one member and
+ * not a list because a row means one thing: several channels on one fader is what an
+ * ensemble *is*, and what a scene says is the sum of what its rows each hold.
  */
-export interface SceneDcaPlacement {
+export interface RowMember {
+  kind: 'channel' | 'ensemble'
+  /** The channel, or the ensemble, that `kind` names. */
+  memberId: string
+}
+
+/**
+ * What one scene does with one fader: the one thing it puts on it.
+ *
+ * A placement is the scene's own, and an ensemble placed on a row is membership rather than
+ * a copy of it — a member added to the chorus rides every row the chorus is on, and a row
+ * holding an ensemble opens all of it. Nothing that means two things can be written here,
+ * so no edit has to choose and no recall has to decide which of them wins.
+ *
+ * A row holding nothing is not in the list at all: an empty row is a shell, and a scene that
+ * speaks for a fader it has nothing to say about is one nobody can read.
+ */
+export interface SceneDcaPlacement extends RowMember {
   /** The fader this row is. */
   dcaId: string
-  /** Controlled channels placed on this row by hand. */
-  channels: string[]
-  /** The ensembles applied to this row: every member's channel rides it unless excluded. */
-  ensembles: string[]
-  /** Member channels of an applied ensemble this scene leaves off this row anyway. */
-  excluded: string[]
 }
 
 /**
@@ -387,7 +400,7 @@ export interface SceneDcaPlacement {
 export interface MicScene {
   id: string
   name: string
-  /** The faders this scene speaks for, and the channels it places on each. */
+  /** The faders this scene speaks for, and the one thing it holds on each. */
   dcas: SceneDcaPlacement[]
   notes: string
 }
@@ -439,16 +452,22 @@ export interface Performer {
 }
 
 /**
- * A named group of performers — the chorus, the band. It is a grouping and nothing else:
- * it exists to be applied to a scene so a handful of mics move together, and it is not
- * desk routing, which is the channel's business. Membership is the list here rather than
- * a pointer on each performer, because a performer can belong to more than one ensemble
- * and an ensemble that is deleted should take its membership with it.
+ * A named group of strips — the chorus, the band. It is a grouping and nothing else: it
+ * exists to be put on a scene row so a handful of mics move together, and it is not desk
+ * routing, which is the channel's business.
+ *
+ * It holds strips rather than the people standing on them, because a group is a set of
+ * faders: the show's cast may be nobody at all — a rack of playback channels is a group too
+ * — and a group has to be buildable the moment a show has strips in it. What it opens is
+ * what those strips open; a strip that leaves the console leaves every group it was in.
+ * Membership is the list here rather than a pointer on each channel, because a channel can
+ * belong to more than one group and a group that is deleted should take its membership with
+ * it.
  */
 export interface Ensemble {
   id: string
   name: string
-  members: string[]
+  channelIds: string[]
 }
 
 /**
@@ -706,16 +725,15 @@ export function defaultDeskSettings(): DeskSettings {
   }
 }
 
-/** The DCAs a new show drives: twelve of them, labelled by number. */
+/** The DCAs a new show drives: twelve of them, numbered by their place. */
 export function startingDcas(): Dca[] {
   return Array.from({ length: DCA_LIMIT }, (_, index) => ({
-    // A strip is a position on the desk rather than an identity: the third DCA of a show
+    // A fader is a position on the desk rather than an identity: the third DCA of a show
     // is its third DCA in every copy of that show. Minting a random id here was the one
     // thing that made two files of the same show differ — a show opened on two machines
     // and saved grew a diff over nothing — and nothing is keyed by these ids across
     // files: a show's cast, its scenes and its plot all travel in the same file.
     id: `dca-${index + 1}`,
-    label: `DCA ${index + 1}`,
     // The number its place derives is the number the profile's own map gives it, so a
     // show that has never been set up is addressed correctly on whatever desk it is on.
     deskNumber: null

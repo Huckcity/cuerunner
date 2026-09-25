@@ -32,6 +32,7 @@ import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
   addEnsemble,
+  updateEnsemble,
   removeChannel as removeChannelFromCast,
   removeEnsemble as removeEnsembleFromCast,
   removePerformerFromCast,
@@ -39,12 +40,11 @@ import {
   setDcaCount as setDcaCountInCast
 } from '../utils/cast'
 import {
-  placementFor,
   removeChannelsFromScenes,
   removeDcasFromScenes,
   removeEnsembleFromScenes,
-  rowChannels,
-  setRowEnsemble,
+  setRowMember,
+  UNKNOWN_DESK_STATE,
   type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
@@ -406,27 +406,34 @@ interface CueListState {
   updateScenesSettings: (patch: Partial<ScenesSettings>) => void
   updateCastSettings: (patch: Partial<CastSettings>) => void
   /**
-   * Drops an ensemble and unapplies it from every scene that had it, as one edit: a
-   * scene still pointing at an ensemble that is gone is a group of mics nobody can open
-   * or close from the grid again.
+   * Drops an ensemble and empties every row that held it, as one edit: a scene still
+   * pointing at an ensemble that is gone is a row of mics nobody can open or close from the
+   * grid again.
    */
   removeEnsemble: (ensembleId: string) => void
 
   /**
-   * Makes an ensemble out of the performers riding one fader in a scene, and applies it to
-   * that row. One edit rather than two: an ensemble built from a row and not applied to it
-   * is a grouping that disappears the moment the operator looks away from the grid.
+   * Saves the ensemble the builder is holding, and puts it on the row it was opened from.
+   * One edit rather than two: an ensemble built from a row and not put on it is a grouping
+   * that disappears the moment the operator looks away from the grid.
    *
-   * Applying it changes nothing about what the row carries — the ensemble holds exactly the
-   * channels the row held — so the press is a regrouping and not a re-routing.
+   * `ensembleId` is the group being edited, or null for a new one — the builder is the only
+   * place a group is named and filled now, so it is both of those — and `channelIds` are the
+   * strips it holds, which is what the builder shows and what the row will open.
    */
-  addEnsembleFromRow: (sceneId: string, dcaId: string) => void
+  saveEnsembleOnRow: (
+    sceneId: string,
+    dcaId: string,
+    ensembleId: string | null,
+    name: string,
+    channelIds: string[]
+  ) => void
   /**
-   * Drops a performer from the cast: released from every pack they wore (each a swap of
-   * its own) and out of whichever ensembles had them. Two settings sections changed as one
-   * edit, because a performer half-removed from one of them is a name that no longer means
-   * anything in the other. What the scenes say is untouched: they name channels, and the
-   * strip stays on the console after the person has left it.
+   * Drops a performer from the cast: released from every pack they wore, each a swap of its
+   * own. The plot and its history are one section and change as one edit, because a pack
+   * still pointing at somebody who is gone is a name that no longer means anything. What the
+   * scenes and the groups say is untouched: they name strips, and the strip stays on the
+   * console after the person has left it.
    */
   removePerformer: (performerId: string) => void
   /**
@@ -753,7 +760,7 @@ export const useStore = create<CueListState>((set) => ({
   showEvents: [],
   redundancy: null,
   redundancySettings: null,
-  deskState: { mutes: {}, assignments: {} },
+  deskState: UNKNOWN_DESK_STATE,
   deskSceneId: null,
   scenesEditing: false,
   modals: 0,
@@ -1406,7 +1413,7 @@ export const useStore = create<CueListState>((set) => ({
       // Where the last show's cursor sat says nothing about this one.
       waveformCursor: null,
       // Nothing has been told to this show's desk yet.
-      deskState: { mutes: {}, assignments: {} },
+      deskState: UNKNOWN_DESK_STATE,
       deskSceneId: null,
       scenesEditing: false,
       past: [],
@@ -1585,27 +1592,42 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  // Who is in the new ensemble is who rides the row it is made from, which is the one thing
-  // the operator is looking at when they press it.
-  addEnsembleFromRow: (sceneId, dcaId) => set(s => {
+  // The builder names the strips and a group holds strips, so the membership is what it was
+  // given — the one list, with no second identity to map it through. The grouping and the row
+  // it was opened from are one write, so one undo takes both back. Nothing here is a desk
+  // command: this is how the scene names its membership, not what a recall sends.
+  saveEnsembleOnRow: (sceneId, dcaId, ensembleId, name, channelIds) => set(s => {
     const cast = s.showSettings.cast
     const scene = s.showSettings.scenes.list.find(candidate => candidate.id === sceneId)
     if (scene === undefined) return s
-    const channels = rowChannels(cast, placementFor(scene, dcaId))
-    const members = cast.performers
-      .filter(performer => performer.channelId !== null && channels.includes(performer.channelId))
-      .map(performer => performer.id)
-    // Strips nobody is patched to are not a group: an ensemble with no members is a row that
-    // opens nothing, and the press that made it is a press that changed nothing.
-    if (members.length === 0) return s
+    // A group with nothing in it opens nothing, and the row would hold a block that stands
+    // for nothing: the press that made it must not write.
+    if (channelIds.length === 0) return s
 
-    const grouped = addEnsemble(cast, '', members)
-    const ensemble = grouped.ensembles[grouped.ensembles.length - 1]
+    const existing = cast.ensembles.find(ensemble => ensemble.id === ensembleId)
+    const grouped = ensembleId === null
+      ? addEnsemble(cast, name, channelIds)
+      : updateEnsemble(cast, ensembleId, {
+          // A group is read by its name, so an empty field keeps the one it had rather than
+          // leaving a row holding a block with nothing to draw.
+          name: name.trim() === '' ? existing?.name ?? '' : name.trim(),
+          channelIds
+        })
+    const ensemble = ensembleId === null
+      ? grouped.ensembles[grouped.ensembles.length - 1]
+      : grouped.ensembles.find(candidate => candidate.id === ensembleId)
+    if (ensemble === undefined) return s
+
     return {
       showSettings: {
         ...s.showSettings,
         cast: grouped,
-        scenes: setRowEnsemble(s.showSettings.scenes, sceneId, dcaId, ensemble, true, grouped)
+        scenes: setRowMember(
+          s.showSettings.scenes,
+          sceneId,
+          dcaId,
+          { kind: 'ensemble', memberId: ensemble.id }
+        )
       },
       past: pushPast(s.past, snapshotOf(s)),
       future: [],

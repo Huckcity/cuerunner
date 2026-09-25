@@ -599,6 +599,8 @@ and the sentences here, among the sites `scripts/showfile-prose.test.ts` reads.
 npm test && npm run typecheck
 # For UI changes, also run:
 npm run test:e2e
+# For the same gate on the Windows and Mac machines as well (see CI/CD below):
+npm run local-ci
 ```
 
 ## CI/CD
@@ -640,6 +642,38 @@ GitHub Actions workflows in `.github/workflows/`:
   own: a release published with the repository's own token starts no workflow, so this
   workflow dispatches `build.yml` for the tag it cut, which is what uploads the installers
   and fills the mirror — a release with no installers means that dispatch did not happen.
+
+### Running the lanes yourself
+
+`npm run local-ci` runs the same commands `ci.yml` runs, on the homelab's own machines, over
+ssh — for feedback before a push instead of after one, and for a lane at a time while the
+runner queue is busy:
+
+```bash
+npm run local-ci                     # every host, its own default lanes
+npm run local-ci -- --hosts=win      # one host
+npm run local-ci -- --lanes=unit     # one lane, wherever it is meaningful
+npm run local-ci -- --list           # what would run, and where, without running it
+```
+
+It ships the working tree as a tar over ssh (nothing has to be committed; `node_modules`,
+`.git` and the build outputs stay behind), installs only when `package-lock.json` changed, and
+prints one `[host lane]` stream per step and a summary that says what each host did.
+
+| Host | Where | Default lanes |
+| --- | --- | --- |
+| `linux` | this machine | typecheck, unit, native, integration, e2e |
+| `win` | `adam@192.168.0.210` — the NUC that runs the Windows lanes (`nuc-win-1`), with the runner's Node and MSVC already provisioned | typecheck, unit |
+| `mac` | `adam@mac.local` — the Mac mini (`mac-mini-1`), which needs Remote Login on before anything can reach it | typecheck, unit |
+
+`LOCAL_CI_WIN`, `LOCAL_CI_MAC`, `LOCAL_CI_LINUX` and `LOCAL_CI_WIN_KEY` override those doors,
+which is what to do when DHCP moves one. A host that does not answer is a `skipped` row rather
+than a failure, so a run says what it did and what it could not (`scripts/lane-status.mjs`).
+
+The e2e lane runs here, on Linux, where `scripts/run-e2e.js` gives Electron a private Xvfb
+display. No host can run it over ssh: an Electron window needs a desktop session, which is why
+CI runs that lane from a launchd agent in the Mac's login session and from the Windows runner's
+own session — the script reports that reason rather than pretending to try.
 
 [`RELEASE_CHECKLIST.md`](./.github/RELEASE_CHECKLIST.md) is what a release engineer walks
 before that dispatch, including the check that keeps this file's limitations honest.

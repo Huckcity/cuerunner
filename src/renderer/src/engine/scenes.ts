@@ -1,7 +1,7 @@
 import { useStore } from '../store'
-import { channelMutes, describeDeskMessage, membershipWrite } from '../utils/desk'
+import { channelMutes, describeDeskMessage, faderLabel, membershipWrite } from '../utils/desk'
 import { sendDeskMessage } from './deskSend'
-import { sceneChanges, UNKNOWN_DESK_STATE, type DeskChange, type DeskState } from '../utils/scenes'
+import { sceneChanges, type DeskChange, type DeskState } from '../utils/scenes'
 import { ALL_CLOSED_SCENE_ID } from '../../../shared/show'
 import type { Dca, DeskMessage, ShowSettings } from '../../../shared/show'
 
@@ -10,14 +10,6 @@ export interface RecallResult {
   sceneName: string | null
   changes: DeskChange[]
   /** The writes the desk did not accept, described for the log. */
-  failures: string[]
-}
-
-export interface ResyncResult {
-  /** The scene that was standing, or null when none was. */
-  sceneName: string | null
-  /** How many controlled channels were written back to it. */
-  written: number
   failures: string[]
 }
 
@@ -82,57 +74,6 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
   logFailures(outcome.failed, outcome.causes, label)
 
   return { sceneName: scene?.name ?? null, changes, failures: outcome.failures }
-}
-
-/**
- * Puts the desk back in step with the scene that is standing, by re-sending its whole set.
- *
- * There is no read-back to resync against: the base for both facts is what Cuerunner last
- * sent, and once somebody has moved a fader or muted a mic by hand at the desk, that record
- * is a description of a desk that no longer exists. So the resync writes the standing
- * scene's set as though nothing had been sent — the same computation a recall makes against
- * an emptied record — and says how many channels it wrote.
- *
- * With no scene standing there is nothing to put back: the desk is wherever the operator
- * left it, and this is not the press that closes every mic.
- */
-export async function resyncDesk(label = 'Desk'): Promise<ResyncResult> {
-  const state = useStore.getState()
-  const standing = state.deskSceneId
-  if (standing === null) {
-    useStore.getState().appendLog([{
-      level: 'info',
-      label,
-      message: 'nothing to resync — no scene is standing'
-    }])
-    return { sceneName: null, written: 0, failures: [] }
-  }
-
-  const scene = standing === ALL_CLOSED_SCENE_ID
-    ? null
-    : state.showSettings.scenes.list.find(candidate => candidate.id === standing)
-  if (scene === undefined) {
-    useStore.getState().appendLog([{
-      level: 'info',
-      label,
-      message: `nothing to resync — the scene the desk is on is no longer in the show (${standing})`
-    }])
-    return { sceneName: null, written: 0, failures: [] }
-  }
-
-  const changes = sceneChanges(state.showSettings, scene, UNKNOWN_DESK_STATE)
-  const outcome = await writeChanges(state.showSettings, changes, UNKNOWN_DESK_STATE)
-  const where = scene === null ? 'All closed' : `Scene "${scene.name}"`
-  const written = `${outcome.channels.size} channel${outcome.channels.size === 1 ? '' : 's'}`
-  useStore.getState().appendLog([{
-    level: 'info',
-    label,
-    message: `desk resynced — ${where}: ${written} written`
-  }])
-  logRefusals(outcome.refusals, label)
-  logFailures(outcome.failed, outcome.causes, label)
-
-  return { sceneName: scene?.name ?? null, written: outcome.channels.size, failures: outcome.failures }
 }
 
 /** One write a recall makes, in the order it makes them. */
@@ -270,7 +211,7 @@ async function writeChanges(
     // What the operator reads: the channel, and the fader when the write is a placement.
     const where = write.kind === 'mute'
       ? write.change.label
-      : `${write.change.label} → ${write.dca.label}`
+      : `${write.change.label} → ${faderLabel(show.cast.dcas, write.dca.id)}`
     const send = addressed(show, write, channelIndex)
     // Nothing to send it to at all — a show that drives no desk, a port nobody chose. Not a
     // failure: there is nothing to fail, and the record is left alone.
@@ -305,7 +246,7 @@ async function writeChanges(
       // them can fail for two different reasons.
       const where = write.kind === 'mute'
         ? write.change.label
-        : `${write.change.label} → ${write.dca.label}`
+        : `${write.change.label} → ${faderLabel(show.cast.dcas, write.dca.id)}`
       outcome.failed.push({
         described: `${where}: ${describeDeskMessage(message)}`,
         cause: sent.error ?? null
@@ -368,7 +309,7 @@ function logFailures(
 
 /**
  * The all-closed column's own line: how many channels it wrote. "Mics closed — 12 closed"
- * says the same thing twice, and the column already reads "All closed" above the press.
+ * says the same thing twice, and the column already reads "Out" above the press.
  */
 function channelCount(count: number): string {
   return `${count} channel${count === 1 ? '' : 's'}`

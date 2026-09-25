@@ -1,0 +1,216 @@
+/* The ensemble builder: the strips a group could hold, and the two presses that move them
+   across. Drawn on the same overlay as every other panel in the app — a dismissal by
+   Escape, never by a press beside it, because a half-built group should not disappear
+   because a click landed on the backdrop. */
+
+.ensemble-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.ensemble-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 660px);
+  max-height: 84vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.ensemble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+}
+
+.ensemble-title {
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  color: var(--fg-primary);
+}
+
+.ensemble-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 16px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.ensemble-dismiss:hover { color: var(--fg-primary); }
+
+.ensemble-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) 16px 0;
+}
+
+.ensemble-hint {
+  margin: 0 0 var(--space-3) calc(var(--field-label-w) + var(--field-gap));
+  color: var(--fg-subtle);
+  font-size: var(--text-sm);
+}
+
+/* Two lists and the presses between them: the arrows sit in the middle column and are
+   centred against the panes rather than pinned to the top of them. */
+.ensemble-panes {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.ensemble-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ensemble-pane[data-pane='free'] { grid-column: 1; grid-row: 1; }
+.ensemble-pane[data-pane='held'] { grid-column: 3; grid-row: 1; }
+
+.ensemble-pane-title {
+  padding-bottom: var(--space-1);
+  color: var(--fg-subtle);
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* A list is a well rather than a stack of cards: these are the show's strips, and the
+   dialog is a box they are moved between. It scrolls on its own so the two panes line up
+   however long one of them gets. */
+.ensemble-list {
+  /* A fixed number of rows, from the show's own strip count: the panes never change size as
+     strips move between them, so the dialog stands still under the pointer. `flex: none`
+     rather than a grow, because a flexing item's main size is its flex basis and not its
+     height — which is exactly how this list used to follow its own contents. */
+  flex: none;
+  height: calc(var(--ensemble-rows, 8) * 24px + var(--space-2));
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1);
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  list-style: none;
+}
+
+.ensemble-item {
+  display: block;
+  width: 100%;
+  padding: 3px var(--space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-family: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.ensemble-item:hover:enabled { background: var(--bg-hover); }
+
+/* Picked is what an arrow moves, so it has to be readable at a glance from across the
+   two lists: the blue the app uses for the thing that is selected. */
+.ensemble-item[data-selected='true'] {
+  background: var(--bg-selected-row);
+  color: var(--fg-primary);
+}
+
+.ensemble-none {
+  padding: 3px var(--space-2);
+  color: var(--fg-subtle);
+  font-size: var(--text-sm);
+}
+
+.ensemble-arrows {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.ensemble-move {
+  width: 30px;
+  height: var(--h-button-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+.ensemble-move:hover:enabled { background: var(--bg-hover); color: var(--fg-primary); }
+
+.ensemble-move:disabled { color: var(--fg-disabled); cursor: default; }
+
+.ensemble-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) 16px var(--space-4);
+}
+
+/* What pushes Delete away from the two presses that keep the group. */
+.ensemble-footer-spacer { flex: 1; }
+
+.ensemble-cancel,
+.ensemble-create,
+.ensemble-delete {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.ensemble-cancel {
+  background: transparent;
+  border: 1px solid var(--border-input);
+  color: var(--fg-body);
+}
+
+.ensemble-cancel:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* The one press in this dialog that takes something away: the danger tone the window's
+   other destructive presses read, rather than a UA button beside Cancel. */
+.ensemble-delete {
+  background: transparent;
+  border: 1px solid var(--danger-border);
+  color: var(--danger-fg);
+}
+
+.ensemble-delete:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger-fg);
+}
+
+.ensemble-create {
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  color: var(--fg-primary);
+}
+
+.ensemble-create:hover:enabled { background: var(--bg-hover); }
+
+.ensemble-create:disabled { color: var(--fg-disabled); cursor: default; }

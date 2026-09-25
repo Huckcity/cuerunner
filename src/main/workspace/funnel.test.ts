@@ -135,6 +135,44 @@ const REFUSED: readonly Refused[] = [
     fact: 'settings have a field this version of WinsLab does not know (cast.channels.0.dcaId)'
   },
   {
+    what: 'a row holding the several channels a build before this one wrote',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        scenes: {
+          list: [{
+            id: 's-1',
+            name: 'Wedding',
+            dcas: [{ dcaId: 'dca-1', channels: ['channel-1'], ensembles: [], excluded: [] }],
+            notes: ''
+          }],
+          allowDuplicateAssignment: true
+        }
+      }
+    }),
+    fact: 'settings have a field this version of WinsLab does not know (scenes.list.0.dcas.0.channels)'
+  },
+  {
+    what: 'an ensemble holding the performers a build before this one grouped',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        cast: { ...defaultCastSettings(), ensembles: [{ id: 'e-1', name: 'Chorus', members: ['p-1'] }] }
+      }
+    }),
+    fact: 'settings have a field this version of WinsLab does not know (cast.ensembles.0.members)'
+  },
+  {
+    what: 'a fader carrying the name a build before this one wrote',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        cast: { ...defaultCastSettings(), dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }] }
+      }
+    }),
+    fact: 'settings have a field this version of WinsLab does not know (cast.dcas.0.label)'
+  },
+  {
     what: 'a scene field the pre-change shape carried',
     show: show({
       showSettings: {

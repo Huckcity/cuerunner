@@ -368,7 +368,7 @@ describe('ServiceHost — startChanged', () => {
 
     // The second declared section: a comparison that stopped at the first would leave the
     // service watching a cast it no longer matches.
-    const cast = { ...defaultShowSettings().cast, ensembles: [{ id: 'chorus', name: 'Chorus', members: [] }] }
+    const cast = { ...defaultShowSettings().cast, ensembles: [{ id: 'chorus', name: 'Chorus', channelIds: [] }] }
     const movedCast = { ...showSettings(), cast }
     await host.startChanged(movedCast)
 

@@ -2,12 +2,31 @@
 
 ### Features
 
-* **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid places the show's channels on each scene's faders, with the ensembles applied to a row and their exclusions
+* **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid puts one channel or one ensemble on each row of each scene
 * **desk:** a recall writes the membership first and then each mic's mute, one awaited write at a time, and addresses nothing outside the show's controlled channels: a channel the scene places is open, one it leaves off every fader is closed, and a mic that changes fader keeps playing and takes the new fader's position
 * **desk:** an SQ's membership rides the desk's own control service — TCP 51326 outbound, held with a keepalive datagram to the desk's UDP 51324 — with the frames measured from an SQ-6 on firmware 1.6.1 and replayed by the peers lane; the mutes stay on the MIDI service on 51325, and an Avantis takes its membership as NRPN `40` on the desk link
+* **scenes:** the grid is the whole view — the bar over it (the title, the fader and scene counts, the desk's `now`/`next` readout, the editing hint and the `Add scene` press) is gone, so what is left is the grid: `All closed` is renamed `Out`, the mode is a padlock drawn in its top-left corner, and `+` after the last scene adds one
+* **scenes:** the column the desk is on carries the running colour down its own header box rather than a wash over the column, so the cells say only what a scene holds
+* **scenes:** colour is left to the cells: the pending amber, the green wash down the recalled column and the running-colour edge on a held row are gone, and the recalled scene is marked in its own title box; a group's block is outlined in the same ink as everything else, and its member list is in its title
+* **scenes:** a scene column is a fixed width and the grid scrolls inside the view rather than stretching two scenes across the window
+* **scenes:** a row of a scene holds exactly one thing — a strip of the console, or an ensemble over several of them — so a cell is that one block and nothing else: an empty row is a blank box, a row that holds something is its name across the whole cell, and pressing either is what changes it. The picker behind it filters the strips and the groups as it is typed, and the builder at `Ensemble…` names a group and fills it from the strips moved across its two lists, putting it on that row in one undo
+* **scenes:** the columns are narrower and measured rather than guessed — 176px of scene, an eighteen-character scene name in the header's own font, and 88px of the all-closed column
+* **scenes:** the builder holds its size — its two lists are a fixed number of rows taken from the show's strips, so moving one across cannot walk the box up or down under the pointer — and the press keeps the place: the next strip in the list is picked after a move, so a group is filled by picking and pressing rather than by reaching back to the list between every one
+* **scenes:** the builder is the one place a group is named and filled — opened from a row holding a group it edits that group, `Save` changing it on every row that holds it, and `Delete` removing it; a group holds **strips**, so any strip of the show can be grouped whether or not anybody is cast on it
+* **scenes:** an ensemble's block says which strips it opens in its title, so a row reads as what is open without becoming a list of a dozen names
+* **scenes:** the ✕ that empties a row is drawn only while the grid is unlocked — a press that does nothing is one the operator has to read to find out it does nothing
+* **scenes:** a strip is named the way the operator knows it — the name the strip was given, or the performer whose mic is on it, and its number only while it has neither — in the blocks, in the picker and in the builder; the console's own `Ch 3 · Ruth` stays where the desk is spoken about, in the run log, the change list and the scene inspector
+* **desk:** a fader is its number: the fourth fader of the show is its fourth fader in every scene, and the Scenes grid's rows, the run log and the fader list in Show Settings all name it that way
 
 ### Removals
 
+* **scenes:** `Resync` — the full re-send of the standing scene, for a desk somebody has moved by hand — is deleted with its engine path: what a recall sends is the difference against what Cuerunner last sent, and that record lives as long as the show is open, so a fader or mute moved by hand at the desk is now repaired by reopening the show rather than by a press
+
+* **scenes:** the `Place channel` and `Apply ensemble` selects and the `Create ensemble` press are deleted rather than left beside the box: one blank box opens everything a row can hold, and the group a row folded into itself one press is built in the builder now
+* **cast:** an ensemble no longer holds performers: it holds the strips it opens (`members` became `channelIds`), so a show that has never cast anybody still has groups, and a strip that leaves the console leaves every group it was in. A show saved with the old field is refused by name, as every retired shape is
+* **scenes:** a member can no longer be left off an ensemble on one row — a row holding a group opens all of it, and the amber `partial` state and the per-member exclusion list go with the presses that made them — and a row holding several channels is no longer a shape a scene can carry: the file's placement now names one member
+* **show:** an ensemble is no longer a section of Show Settings → Cast: the Cast tab is the people and nothing else, and the groups they are opened in are built from the rows they ride
+* **show:** a DCA has no operator-written name: a fader is a number, and a show saved with a fader label is refused when it is opened rather than converted
 * **show:** the per-channel fader select and the per-DCA note and address overrides are deleted rather than deprecated: a strip is a name and a number, a fader carries one desk number, and a show saved with either shape is refused by name rather than converted
 
 # [0.14.0](https://github.com/Huckcity/cuerunner/compare/v0.13.0...v0.14.0) (2026-09-21)

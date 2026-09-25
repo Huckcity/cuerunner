@@ -30,18 +30,18 @@ function snapshot(): {
   const showSettings = defaultShowSettings()
   // The show reaches its desk over MIDI, and this DCA is addressed by a number the show
   // gave it rather than the one its place derives: what recovery hands back is the
-  // connection and the number, not a patch per fader. The scene places the strip Ada is on
-  // on that fader, which is the only place a placement lives.
+  // connection and the number, not a patch per fader. The scene places the first strip on
+  // that fader, which is the only place a placement lives.
   showSettings.desk = { ...showSettings.desk, kind: 'midi', midiPort: 'Yamaha' }
   showSettings.cast = {
     ...showSettings.cast,
-    dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', deskNumber: 36 }]
+    dcas: [{ id: 'dca-1', deskNumber: 36 }]
   }
   showSettings.scenes = {
     list: [{
       id: 's-1',
       name: 'Wedding',
-      dcas: [{ dcaId: 'dca-1', channels: ['channel-1'], ensembles: [], excluded: [] }],
+      dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'channel-1' }],
       notes: ''
     }],
     allowDuplicateAssignment: true
@@ -123,8 +123,7 @@ describe('RecoveryNotice', () => {
     // The desk, the plot and the script are part of that show, not decoration.
     expect(state.showSettings.desk.midiPort).toBe('Yamaha')
     expect(state.showSettings.scenes.list.map(scene => scene.name)).toEqual(['Wedding'])
-    expect(state.showSettings.cast.dcas.map(dca => dca.label))
-      .toEqual(['DCA 1 — Principals'])
+    expect(state.showSettings.cast.dcas).toEqual([{ id: 'dca-1', deskNumber: 36 }])
     expect(state.showSettings.script.path).toBe('/shows/act-one.txt')
     // A file that cannot be found is part of what the recovered session has to say.
     expect(state.missingMedia).toEqual([

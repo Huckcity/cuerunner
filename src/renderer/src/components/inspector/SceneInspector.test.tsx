@@ -56,12 +56,12 @@ describe('SceneInspector', () => {
             id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
           }],
           ensembles: [],
-          dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }],
+          dcas: [{ id: 'dca-1', deskNumber: null }],
           ...cast
         },
         scenes: {
           list: scenes.list ?? [scene('s-1', 'Wedding', [
-            { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+            { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }
           ])],
           allowDuplicateAssignment: scenes.allowDuplicateAssignment ?? true
         }
@@ -128,7 +128,7 @@ describe('SceneInspector', () => {
     show(
       cue('s-1'),
       { list: [scene('s-1', 'Wedding', [
-        { dcaId: 'dca-1', channels: [], ensembles: ['ens-1'], excluded: [] }
+        { dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }
       ])] },
       {
         channels: [{ id: 'ch-1', name: 'Ada' }, { id: 'ch-2', name: 'Bea' }],
@@ -136,7 +136,7 @@ describe('SceneInspector', () => {
           { id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1' },
           { id: 'p-2', name: 'Bea', role: 'Chorus', notes: '', channelId: 'ch-2' }
         ],
-        ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }]
+        ensembles: [{ id: 'ens-1', name: 'Chorus', channelIds: ['ch-1', 'ch-2'] }]
       }
     )
 

@@ -24,11 +24,11 @@ function performer(overrides: Partial<Performer> = {}): Performer {
 }
 
 function ensemble(overrides: Partial<Ensemble> = {}): Ensemble {
-  return { id: 'ens-1', name: 'Ensemble', members: [], ...overrides }
+  return { id: 'ens-1', name: 'Ensemble', channelIds: [], ...overrides }
 }
 
 function dca(overrides: Partial<Dca> = {}): Dca {
-  return { id: 'dca-1', label: 'DCA 1', deskNumber: null, ...overrides }
+  return { id: 'dca-1', deskNumber: null, ...overrides }
 }
 
 function scene(id: string, name: string, dcas: MicScene['dcas'] = []): MicScene {
@@ -223,7 +223,7 @@ describe('ShowSettings', () => {
         tab: 'cast',
         cast: {
           channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', '')],
-          dcas: [dca({ id: 'dca-1', label: 'DCA 1' }), dca({ id: 'dca-2', label: 'DCA 2' })],
+          dcas: [dca({ id: 'dca-1' }), dca({ id: 'dca-2' })],
           performers: [performer()]
         }
       })
@@ -239,15 +239,16 @@ describe('ShowSettings', () => {
       expect(cast().performers[0].channelId).toBe('ch-1')
     })
 
-    it('removes a performer: releases their pack, drops them from the cast and its ensembles, and leaves the scenes alone', async () => {
+    it('removes a performer: releases their pack, drops them from the cast, and leaves the strips and the scenes alone', async () => {
       await show({
         tab: 'cast',
         cast: {
           performers: [performer(), performer({ id: 'p-2', name: 'Sancho' })],
-          ensembles: [ensemble({ members: ['p-1'] })]
+          ensembles: [ensemble({ channelIds: ['ch-1'] })]
         },
         scenes: [scene('s-1', 'Opening', [
-          { dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['ens-1'], excluded: [] }
+          { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' },
+          { dcaId: 'dca-2', kind: 'ensemble', memberId: 'ens-1' }
         ])],
         plot: { packs: [pack({ performerId: 'p-1' })] }
       })
@@ -257,94 +258,35 @@ describe('ShowSettings', () => {
       })
 
       expect(cast().performers.map(entry => entry.id)).toEqual(['p-2'])
+      // The group holds strips, and the strip they were standing on is still there: the
+      // person leaving is the plot's business and the group's membership is not.
       expect(cast().ensembles).toHaveLength(1)
-      expect(cast().ensembles[0].members).toEqual([])
+      expect(cast().ensembles[0].channelIds).toEqual(['ch-1'])
       expect(useStore.getState().showSettings.rf.plot.packs[0].performerId).toBeNull()
       expect(useStore.getState().showSettings.rf.swaps).toHaveLength(1)
       expect(useStore.getState().log[0]?.message).toBe('Swap: Pack 1 Aldonza → unassigned')
-      // The scenes name channels, and the strip stays on the console after the person who
-      // was on it has gone — so removing a performer touches no placement.
+      // The scenes name channels and ensembles, both of which outlive the person: the strip
+      // stays on the console and the group stays in the cast, so nothing placed moves.
       expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
-        { dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['ens-1'], excluded: [] }
+        { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' },
+        { dcaId: 'dca-2', kind: 'ensemble', memberId: 'ens-1' }
       ])
     })
   })
 
-  describe('ensembles', () => {
-    it('names a new ensemble after the ones already there', async () => {
-      await show({ tab: 'cast' })
-
-      await act(async () => { container.querySelector<HTMLButtonElement>('.ensemble-add')!.click() })
-      await act(async () => { container.querySelector<HTMLButtonElement>('.ensemble-add')!.click() })
-
-      expect(cast().ensembles.map(entry => entry.name)).toEqual(['Ensemble 1', 'Ensemble 2'])
+  it('shows the cast alone: groups are built from the strips a row names, not from a section here', async () => {
+    // The ensembles section is gone: a group is made in the Scenes view, from the strips
+    // the row it is opened from should carry. A show that still carries groups from an
+    // earlier build keeps them in the cast, and this tab shows nothing of them.
+    await show({
+      tab: 'cast',
+      cast: { performers: [performer()], ensembles: [ensemble({ channelIds: ['ch-1'] })] }
     })
 
-    it('renames an ensemble in place', async () => {
-      await show({ tab: 'cast', cast: { ensembles: [ensemble()] } })
-
-      await type(field('.ensemble-name'), 'Chorus')
-      await leave(field('.ensemble-name'))
-
-      expect(cast().ensembles[0].name).toBe('Chorus')
-    })
-
-    it('adds a member from the picker, which then stops offering them', async () => {
-      await show({
-        tab: 'cast',
-        cast: {
-          performers: [performer(), performer({ id: 'p-2', name: 'Sancho' })],
-          ensembles: [ensemble({ id: 'ens-1', name: 'Leads' }), ensemble({ id: 'ens-2', name: 'Chorus' })]
-        }
-      })
-
-      const rows = [...container.querySelectorAll('.ensemble-row')]
-      await choose(rows[0].querySelector<HTMLSelectElement>('.member-add')!, 'p-1')
-
-      expect(cast().ensembles[0].members).toEqual(['p-1'])
-      expect(rows[0].querySelectorAll('.member-chip')).toHaveLength(1)
-      expect(rows[0].querySelector('.ensemble-count')?.textContent).toBe('1 member')
-      // Membership is a list, so the picker is what keeps a performer from being added
-      // to the same ensemble twice.
-      expect([...rows[0].querySelectorAll<HTMLOptionElement>('.member-add option')]
-        .map(option => option.textContent)).toEqual(['+ add member', 'Sancho'])
-      expect(rows[1].querySelectorAll('.member-chip')).toHaveLength(0)
-    })
-
-    it("removing a chip's ✕ takes the performer out without removing the ensemble", async () => {
-      await show({
-        tab: 'cast',
-        cast: { performers: [performer()], ensembles: [ensemble({ members: ['p-1'] })] }
-      })
-
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>('.member-chip button')!.click()
-      })
-
-      expect(cast().ensembles[0].members).toEqual([])
-      expect(cast().ensembles).toHaveLength(1)
-      expect(cast().performers).toHaveLength(1)
-    })
-
-    it('removing an ensemble leaves its members in the cast, and unapplies it everywhere', async () => {
-      await show({
-        tab: 'cast',
-        cast: { performers: [performer()], ensembles: [ensemble({ members: ['p-1'] })] },
-        scenes: [scene('s-1', 'Opening', [
-          { dcaId: 'dca-1', channels: [], ensembles: ['ens-1'], excluded: [] }
-        ])]
-      })
-
-      await act(async () => {
-        container.querySelector<HTMLButtonElement>('.ensemble-remove')!.click()
-      })
-
-      expect(cast().ensembles).toEqual([])
-      expect(cast().performers.map(entry => entry.name)).toEqual(['Aldonza'])
-      // A row still pointing at an ensemble that is gone is a row nobody can group from
-      // again, so the row stops naming it while keeping what it placed by hand.
-      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
-    })
+    expect(container.querySelectorAll('.performer-row')).toHaveLength(1)
+    expect(container.querySelector('.ensemble-row')).toBeNull()
+    expect(container.querySelector('.ensemble-add')).toBeNull()
+    expect(cast().ensembles).toHaveLength(1)
   })
 
   describe('channels', () => {
@@ -356,6 +298,11 @@ describe('ShowSettings', () => {
       // A strip is a name and a number now: which fader it rides is the scene's decision,
       // made in the Scenes view, so there is nothing to choose on the row.
       expect(container.querySelector('.channel-dca')).toBeNull()
+      // A fader is its number and nothing else: no label to keep in step with the place
+      // the desk is actually told, and the row's one field is the override.
+      expect([...container.querySelectorAll('.dca-row .dca-number')].map(node => node.textContent))
+        .toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
+      expect(container.querySelector('.dca-label')).toBeNull()
       // …and what a recall will touch is read back once, from the connection: the set it
       // writes and what this desk can be told of it.
       expect(container.querySelector('.desk-preview')?.textContent)
@@ -407,7 +354,9 @@ describe('ShowSettings', () => {
         .toBe('Sends note 1 … 12 to "Yamaha", on and off — a recall writes 12 channel mutes and takes no assignment')
 
       // A desk that numbers its faders differently: its own number in place of the one the
-      // place makes, and clearing the field goes back to derived.
+      // place makes, and clearing the field goes back to derived. The row is a number and
+      // that one field — nothing else about a fader is editable.
+      expect(container.querySelectorAll('.dca-row input')).toHaveLength(12)
       const number = field<HTMLInputElement>('.dca-override', 3)
       expect(number.value).toBe('')
       expect(number.placeholder).toBe('4')
@@ -459,23 +408,27 @@ describe('ShowSettings', () => {
 
       await choose(field<HTMLSelectElement>('.dca-count-select'), '3')
 
-      expect(cast().dcas.map(entry => entry.label)).toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
-      expect([...container.querySelectorAll<HTMLInputElement>('.dca-label')].map(input => input.value))
-        .toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
+      expect(cast().dcas).toHaveLength(3)
+      expect(cast().dcas.map(entry => entry.deskNumber)).toEqual([null, null, null])
+      expect([...container.querySelectorAll('.dca-row .dca-number')].map(node => node.textContent))
+        .toEqual(['1', '2', '3'])
+      expect(container.querySelector('.dca-label')).toBeNull()
 
       // A scene that places a strip on the fader the shrink is about to take.
       const third = cast().dcas[2].id
       await act(async () => {
         useStore.getState().updateScenesSettings({
           list: [scene('s-1', 'Opening', [
-            { dcaId: third, channels: ['ch-1'], ensembles: [], excluded: [] }
+            { dcaId: third, kind: 'channel', memberId: 'ch-1' }
           ])]
         })
       })
 
       await choose(field<HTMLSelectElement>('.dca-count-select'), '2')
 
-      expect(cast().dcas.map(entry => entry.label)).toEqual(['DCA 1', 'DCA 2'])
+      expect(cast().dcas).toHaveLength(2)
+      expect([...container.querySelectorAll('.dca-row .dca-number')].map(node => node.textContent))
+        .toEqual(['1', '2'])
       // The strips stay — a fader cut drops nobody's strip — and the scene's row for the
       // place that went goes with it, so a fader grown back comes back empty.
       expect(cast().channels.map(entry => entry.name)).toEqual(['Ruth', 'Bea'])
@@ -498,8 +451,8 @@ describe('ShowSettings', () => {
           performers: [performer({ channelId: 'ch-3' })]
         },
         scenes: [scene('s-1', 'Opening', [
-          { dcaId: 'dca-1', channels: ['ch-2', 'ch-3'], ensembles: [], excluded: [] },
-          { dcaId: 'dca-2', channels: [], ensembles: [], excluded: ['ch-3'] }
+          { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' },
+          { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-3' }
         ])]
       })
 
@@ -513,25 +466,30 @@ describe('ShowSettings', () => {
       expect(cast().channels.slice(0, 3).map(entry => entry.name)).toEqual(['Ruth', 'Bea', 'Nell'])
       // Nothing was dropped, so no scene moved and nobody was unpatched.
       expect(cast().performers[0].channelId).toBe('ch-3')
-      expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels)
-        .toEqual(['ch-2', 'ch-3'])
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+        { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' },
+        { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-3' }
+      ])
 
       await choose(field<HTMLSelectElement>('.channel-count-select'), '2')
 
       expect(cast().channels.map(entry => entry.name)).toEqual(['Ruth', 'Bea'])
       expect(container.querySelectorAll('.channel-row')).toHaveLength(2)
-      // The mic on the strip that went is patched to nothing, its placement is off the row
-      // and its exclusion is gone too — a row left saying nothing goes with them.
+      // The mic on the strip that went is patched to nothing, and the row that held it goes
+      // with it — a row left saying nothing is one nobody can read again.
       expect(cast().performers[0].channelId).toBeNull()
       expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
-        { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }
+        { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' }
       ])
 
       // One edit, so one undo puts the count, the placements and the patch back together.
       await act(async () => { useStore.getState().undo() })
       expect(cast().channels).toHaveLength(4)
       expect(cast().performers[0].channelId).toBe('ch-3')
-      expect(useStore.getState().showSettings.scenes.list[0].dcas[1].excluded).toEqual(['ch-3'])
+      expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
+        { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' },
+        { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-3' }
+      ])
     })
 
     it('stops the count at the desk model’s own ceiling, and reports a set larger than it', async () => {
@@ -650,7 +608,7 @@ describe('ShowSettings', () => {
           performers: [performer({ channelId: 'ch-2' })]
         },
         scenes: [scene('s-1', 'Opening', [
-          { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }
+          { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' }
         ])]
       })
 
@@ -696,14 +654,14 @@ describe('ShowSettings', () => {
         tab: 'channels',
         cast: {
           channels: [showChannel('ch-1', 'Ruth'), showChannel('ch-2', 'Bea')],
-          dcas: [dca({ id: 'dca-1', label: 'DCA 1' }), dca({ id: 'dca-2', label: 'DCA 2' })]
+          dcas: [dca({ id: 'dca-1' }), dca({ id: 'dca-2' })]
         },
         scenes: [
           scene('s-1', 'Opening', [
-            { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+            { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }
           ]),
           scene('s-2', 'Finale', [
-            { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }
+            { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' }
           ])
         ]
       })

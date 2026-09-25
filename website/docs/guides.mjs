@@ -725,9 +725,11 @@ export const GUIDES = [
         unpatches nobody — the mics stay where they are, and a fader grown back comes back
         empty. Which channel rides which fader is not set up here: that is the scene's
         decision, taken in the grid, so a chorus can ride one fader in one number and be
-        split across the stage in the next. Each fader carries one <strong>desk number</strong>,
-        for a desk that counts its DCAs differently from the show, and the row under it says
-        how many scenes place anything on it. Under the faders is the one rule the grid cannot
+        split across the stage in the next. A fader is its <strong>number</strong> — the
+        fourth fader of the show is its fourth fader in every scene, and the grid's rows are
+        named by that number — and each carries one <strong>desk number</strong>, for a desk
+        that counts its DCAs differently from the show. The row under it says how many
+        scenes put anything on it. Under the faders is the one rule the grid cannot
         state for itself — <strong>Allow a channel to ride more than one fader</strong>: left
         on, a strip rides as many faders as a scene places it on; switched off, the grid keeps
         one fader per channel and a recall folds a leftover down to the lowest-numbered one.
@@ -735,22 +737,25 @@ export const GUIDES = [
         larger than the desk model states is named there, with the number, and sent as it is.
       </p>
       <div class="note">
-        Two fields this tab used to carry are deleted rather than deprecated: a strip has no
-        fader select of its own, and a fader has one <strong>desk number</strong> in place of
-        the note and address overrides that used to sit beside it. A show saved with either
-        shape is refused when it is opened, naming what the build does not know, rather than
-        converted — the strips, the faders and the placements are set up again here and in
-        the grid.
+        Fields this tab used to carry are deleted rather than deprecated: a strip has no
+        fader select of its own, a fader has no <strong>name</strong> — one
+        <strong>desk number</strong> in place of the note and address overrides that used to
+        sit beside it — and a scene's row holds one thing rather than a list of them. A show
+        saved with any of those shapes is refused when it is opened, naming what the build
+        does not know, rather than converted — the strips, the faders and the placements are
+        set up again here and in the grid.
       </div>
     </section>
 
     <section class="panel reveal delay-1">
       <h2>2. Enter the cast</h2>
       <p>
-        <strong>Cast</strong> is the people: a name, a part, the channel they are on and
-        any note you need. <strong>Ensembles</strong> are groups you will open together —
-        principals, chorus, band — so a scene can apply a whole section in one press
-        instead of a row of them.
+        <strong>Cast</strong> is the people: a name, a part, the channel they are on and any
+        note you need. A performer is who they are for the whole show — the mic plot hands
+        them packs and the report names them the next morning — so this is where they are set
+        up and nothing else is. The groups they are opened in belong to the grid: build them
+        from the strips a row should carry, where you are standing when you decide who is in
+        the chorus.
       </p>
     </section>
 
@@ -758,41 +763,62 @@ export const GUIDES = [
       <h2>3. Build the scenes</h2>
       <figure class="figure">
         <a href="../assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each cell naming the channels that scene puts on that fader." />
+          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each row holding one strip or one ensemble, which is the press that changes it." />
         </a>
         <figcaption>The scenes view, mid-build.</figcaption>
       </figure>
       <p>
-        Switch the window to <strong>Scenes</strong>, press <strong>Edit</strong>, and add
-        one. The show’s <strong>faders</strong> run down the side and the scenes across the
-        top, and each cell says which channels that scene puts on that fader: place one from
-        the cell’s own picker, and take it off with the ✕ beside its name. A channel can ride
-        several faders — a chorus master on one and its members spread across others — unless
-        Show Settings has that turned off (Channels → Allow a channel to ride more than one
-        fader), where placing a strip on a row takes it off that scene's other rows.
+        Switch the window to <strong>Scenes</strong> and unlock the <strong>padlock</strong>
+        in the grid’s top-left corner; the <strong>+</strong> after the last scene adds one.
+        The show’s <strong>faders</strong> run down the side — numbered, because that is
+        what the desk is told and what you reach for — and the scenes across the top. Each
+        row of a scene holds <strong>one thing</strong>: a strip, or an ensemble over several
+        of them. An empty row is a blank box — press it, type a name into the
+        <strong>filter</strong>, and pick the strip or the group. A row that holds something
+        is that name, using the whole cell: press it to put something else there, and the ✕
+        beside it to empty the row. A strip can ride several faders — a chorus master on one
+        and its members spread across others — unless Show Settings has that turned off
+        (Channels → Allow a channel to ride more than one fader), where putting a strip on a
+        row takes it off that scene's other rows.
       </p>
       <p>
-        An <strong>ensemble</strong> is the other half of building a row: apply one to a
-        fader and every member’s strip rides it, with a member you want left off this row
-        shown beside it to switch off. <strong>+ Group</strong> makes an ensemble out of the
-        strips a cell is already carrying, so the same people are one press next time.
-        <strong>Done</strong> when you have finished.
+        Several strips on one fader is what an <strong>ensemble</strong> is for, and
+        <strong>Ensemble…</strong> — the last row of the box — is where one is built or
+        changed: name it, move the strips it should hold from <strong>Available</strong> to
+        <strong>In the ensemble</strong> with the two arrows, and press <strong>Create and
+        apply</strong>. The group joins the cast, this row holds it, and it is left there to
+        put on other rows and scenes with the same box. Opened from a row that already holds a
+        group it edits that group instead — <strong>Save</strong> changes it on every row that
+        holds it, because an ensemble is membership rather than a copy, and
+        <strong>Delete</strong> removes it and empties those rows. A group holds
+        <strong>strips</strong>, so any strip of the show can be moved across whether or not
+        anybody is cast on it — a rack of playback channels is a group like any other.
+        Lock the padlock again when you have finished.
       </p>
       <p>
         A scene answers for every channel, not only for the ones it places: a channel it
-        leaves off every fader in that scene is closed by the recall, and a member excluded
-        from an ensemble rides nothing and is closed with it. The leftmost column,
-        <strong>All closed</strong>, is a scene like any other that way — it places nothing,
+        leaves off every fader in that scene is closed by the recall. An ensemble's block
+        says which mics it opens in its title. The leftmost column,
+        <strong>Out</strong>, is a scene like any other that way — it places nothing,
         so it closes every mic the show drives — and it is the one column that is never
-        edited.
+        edited. Columns are a fixed width — an eighteen-character scene name is what one is
+        measured for — so a show of two scenes reads the same as a show of twenty: what does
+        not fit across the window scrolls inside the grid.
       </p>
       <p>
-        Out of edit mode the grid is for running: press <strong>Recall</strong> on a scene
-        and the desk moves. The column the desk is currently on is marked, so the grid
-        always says where you are, and <strong>Recall now</strong> appears above it when the
-        desk has not been told everything the current scene asks for. <strong>Resync</strong>
-        beside it re-sends that scene’s whole set: it is the press for when somebody has
-        moved a fader or muted a mic by hand at the desk, which nothing here can see.
+        The grid has two modes, and the <strong>padlock</strong> in its top-left corner is
+        the one press that changes them: shut, the show is being run and a stray click
+        changes nothing but which scene is recalled; open, cells and names are the show being
+        built and the presses that change it are drawn. Recalling is live in either mode:
+        press <strong>Recall</strong> on a scene and the desk moves. The column the desk is
+        on carries the running colour down its own header, so the grid always says where you
+        are.
+      </p>
+      <p>
+        A recall sends what has changed since the desk was last told, so the grid is safe to
+        press twice. What it cannot do is see the desk itself: a fader or a mute moved by hand
+        is invisible here, and the record of what has been sent lives for as long as the show
+        is open — reopening it is what starts the next recall from the whole scene.
       </p>
     </section>
 
@@ -818,8 +844,10 @@ export const GUIDES = [
         What goes out is only what changes, diffed against what Cuerunner last sent, and each
         write is remembered as it lands. Mics an earlier recall already opened are left
         alone, so a recall never bumps a live channel and a scene cue is safe to fire twice.
-        Nothing here can see a fader somebody moved by hand at the desk — that is what
-        <strong>Resync</strong> is for.
+        Nothing here can see a fader or a mute somebody moved by hand at the desk: a recall
+        sends only what has changed since Cuerunner last sent, so a channel it believes is
+        already closed cannot be closed from here. Reopening the show forgets that record, and
+        the next recall writes every channel the scene controls.
       </p>
       <p>
         The membership goes over whatever route the show’s desk takes it on: an SQ reached

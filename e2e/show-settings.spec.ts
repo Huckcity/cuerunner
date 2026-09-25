@@ -5,6 +5,7 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import {
   buildDeskShow,
+  buildEnsembleFromBox,
   closeApp,
   editScenes,
   freePort,
@@ -15,6 +16,7 @@ import {
   openLogPanel,
   openScenesView,
   openShowSettings,
+  pickFromBox,
   pointDeskAtOsc
 } from './helpers'
 
@@ -160,18 +162,18 @@ test('turning the duplicate rule off keeps the grid to one fader per channel', a
 
   await openScenesView(page)
   await editScenes(page)
-  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-add-scene').click()
   const first = page.locator('.matrix-row').nth(0).locator('.matrix-cell').first()
   const second = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
 
-  await second.locator('.matrix-place').selectOption({ label: 'Ch 1' })
-  await expect(second.locator('.matrix-channel')).toHaveCount(1)
+  await pickFromBox(page, second, 'Ch 1')
+  await expect(second.locator('.matrix-block')).toHaveCount(1)
 
   // The same strip on another fader: the row it was on loses it in the same press, so a
   // channel rides one fader in a scene while the rule is off.
-  await first.locator('.matrix-place').selectOption({ label: 'Ch 1' })
-  await expect(first.locator('.matrix-channel')).toHaveCount(1)
-  await expect(second.locator('.matrix-channel')).toHaveCount(0)
+  await pickFromBox(page, first, 'Ch 1')
+  await expect(first.locator('.matrix-block')).toHaveCount(1)
+  await expect(second.locator('.matrix-block')).toHaveCount(0)
 })
 
 test('a fader carries one desk number, for a desk that counts them differently', async () => {
@@ -216,15 +218,19 @@ test('the defaults take a show nobody wired to a desk of its own', async () => {
 
   try {
     // Nothing here but the desk's own address, and one scene placing the first strip on
-    // the first fader: everything else is what the defaults do.
+    // the first fader: everything else is what the defaults do. The demo rack's cast is on
+    // the strips, so the first one is offered under the performer's name.
     await liveRack(page)
     await pointDeskAtOsc(page, desk.port)
     await page.locator('.show-settings-done').click()
     await openScenesView(page)
     await editScenes(page)
-    await page.locator('.scenes-add').click()
-    await page.locator('.matrix-row').first().locator('.matrix-cell').first()
-      .locator('.matrix-place').selectOption({ label: 'Ch 1' })
+    await page.locator('.matrix-add-scene').click()
+    await pickFromBox(
+      page,
+      page.locator('.matrix-row').first().locator('.matrix-cell').first(),
+      'Aldonza'
+    )
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
 
     // The desk has not been told anything yet, so the first recall says the whole show:
@@ -282,39 +288,29 @@ test('a show with no desk sends nothing, however the scene moves', async () => {
   }
 })
 
-test('an ensemble built in the Cast tab rides every member when a scene applies it to a row', async () => {
+test('an ensemble built from a row rides every member of it, and the desk is told each', async () => {
   test.setTimeout(60_000)
   const desk = await listenOsc(freePort())
 
   try {
     await buildDeskShow(page, desk.port)
 
-    // The two performers are put in one ensemble by name, from its own member list: an
-    // ensemble is two mics moving together, and it is built where the cast is.
-    await openShowSettings(page)
-    const settings = page.locator('.show-settings-dialog')
-    await settings.locator('.show-settings-tab', { hasText: 'Cast' }).click()
-    const performers = settings.locator('.performer-row')
-    const first = await performers.nth(0).locator('.performer-name').inputValue()
-    const second = await performers.nth(1).locator('.performer-name').inputValue()
-    await settings.locator('.ensemble-add').click()
-    const ensemble = settings.locator('.ensemble-row').first()
-    await ensemble.locator('.member-add').selectOption({ label: first })
-    await ensemble.locator('.member-add').selectOption({ label: second })
-    await expect(ensemble.locator('.member-chip')).toHaveCount(2)
-    await expect(ensemble.locator('.ensemble-count')).toHaveText('2 members')
-    await settings.locator('.show-settings-done').click()
-
-    // The ensemble routes nothing itself: applying it to a row is what puts both members'
-    // strips on that fader, and the row names the ensemble and the members it carries.
+    // An ensemble is two mics moving together, and it is built where the row is: from the
+    // fader it is wanted on, out of the strips the operator moves across.
     const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
-    await cell.locator('.matrix-ensemble-add').selectOption({ label: 'Ensemble 1' })
-    const applied = cell.locator('.matrix-ensemble')
-    await expect(applied).toHaveAttribute('data-applied', 'on')
-    await expect(cell.locator('.matrix-channel')).toHaveCount(2)
+    await buildEnsembleFromBox(page, cell, 'Principals', ['Ruth', 'Sancho'])
+
+    // It routes nothing itself: putting it on the row is what makes both members' strips
+    // ride it, and the row stands for the whole group — its name, and who is in it.
+    const block = cell.locator('.matrix-block')
+    await expect(block).toHaveAttribute('data-kind', 'ensemble')
+    // The block's own name is its text, beside the ✕ that empties the row — which is why
+    // the name is read off the box that holds it rather than off the block.
+    await expect(block.locator('.matrix-block-name')).toHaveText('Principals')
+    await expect(block).toHaveAttribute('title', 'Principals — Ruth, Sancho')
 
     // A recall writes each member's mic by its own number, at the address that number
-    // makes: the two the ensemble places are open and the ten the scene says nothing about
+    // makes: the two the ensemble brings are open and the ten the scene says nothing about
     // are closed.
     await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(12)
