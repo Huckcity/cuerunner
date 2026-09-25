@@ -638,6 +638,24 @@ test('the builder makes a group from the strips it is given, and one undo puts i
     // The group is built out of the strips the operator moves across in the builder, which
     // is reached from the row's own box. Grouping is a settings edit rather than a command
     // to the desk: the desk has heard nothing, and the save does not change that.
+    //
+    // The dialog is a fixed size — its lists hold a number of rows taken from the show — so
+    // moving a strip between them cannot walk the box up or down under the pointer, and the
+    // press keeps the place: something is still picked, so the arrow is still live.
+    await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
+    await page.locator('.scene-picker')
+      .getByRole('button', { name: 'Ensemble…', exact: true }).click()
+    const builder = page.getByRole('dialog', { name: 'New ensemble' })
+    const opened = Math.round((await builder.boundingBox())!.height)
+    for (const strip of ['Ruth', 'Sancho']) {
+      await builder.locator('[data-pane="free"]')
+        .getByRole('button', { name: strip, exact: true }).click()
+      await builder.locator('.ensemble-move').first().click()
+      expect(Math.round((await builder.boundingBox())!.height)).toBe(opened)
+    }
+    await expect(builder.locator('.ensemble-item[aria-pressed="true"]')).toHaveCount(1)
+    await builder.getByRole('button', { name: 'Cancel' }).click()
+
     await buildEnsembleFromBox(page, cell, 'Principals', ['Ruth', 'Sancho'])
     const block = cell.locator('.matrix-block')
     await expect(block).toHaveAttribute('data-kind', 'ensemble')

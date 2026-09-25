@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { stripLabel } from '../../utils/cast'
 import { ensembleChannels } from '../../utils/scenes'
 import { useModal } from '../../hooks/useModal'
@@ -92,6 +92,12 @@ export function EnsembleDialog({
   const free = cast.channels.filter(channel => !held.includes(channel.id))
   const chosen = cast.channels.filter(channel => held.includes(channel.id))
 
+  // How tall the two lists are, fixed for as long as the dialog is open and measured in rows
+  // rather than grown to fit: a list that shrank as strips were moved across would walk the
+  // dialog up and down under the pointer, and the strips are moving between the two of them.
+  // Four rows is the least that reads as a list, twelve the most that fits a dialog.
+  const rows = Math.max(4, Math.min(12, cast.channels.length))
+
   // The two lists as data: one pane of the dialog is written once, and which arrow moves
   // what is the only thing that differs between them.
   const panes = [
@@ -118,6 +124,7 @@ export function EnsembleDialog({
       <div
         className="ensemble-dialog"
         ref={dialogRef}
+        style={{ '--ensemble-rows': rows } as CSSProperties}
         role="dialog"
         aria-modal="true"
         aria-label={editing === null ? 'New ensemble' : `Edit ${editing.name}`}
@@ -174,8 +181,14 @@ export function EnsembleDialog({
                       disabled={pickedFree === null}
                       onClick={() => {
                         if (pickedFree === null) return
+                        // What takes its place is what is picked: the next strip in the list,
+                        // or the one above it when it was the last — so a group is filled by
+                        // picking and pressing, over and over, rather than by reaching back to
+                        // the list between every one.
+                        const at = free.findIndex(channel => channel.id === pickedFree)
+                        const next = free[at + 1] ?? free[at - 1] ?? null
                         setHeld([...held, pickedFree])
-                        setPickedFree(null)
+                        setPickedFree(next?.id ?? null)
                       }}
                     >
                       →
@@ -188,8 +201,12 @@ export function EnsembleDialog({
                       disabled={pickedHeld === null}
                       onClick={() => {
                         if (pickedHeld === null) return
+                        // The same on the way out: the next strip it holds is picked, so a
+                        // group is emptied from the middle without losing the place.
+                        const at = chosen.findIndex(channel => channel.id === pickedHeld)
+                        const next = chosen[at + 1] ?? chosen[at - 1] ?? null
                         setHeld(held.filter(id => id !== pickedHeld))
-                        setPickedHeld(null)
+                        setPickedHeld(next?.id ?? null)
                       }}
                     >
                       ←
@@ -216,7 +233,10 @@ export function EnsembleDialog({
                           data-selected={pane.picked === channel.id}
                           aria-label={label}
                           title={label}
-                          onClick={() => pane.pick(pane.picked === channel.id ? null : channel.id)}
+                          // Pressing a strip picks it, always: pressing the one that is
+                          // already picked is how a list is read, and a press that emptied
+                          // the pick would leave the arrow under the hand doing nothing.
+                          onClick={() => pane.pick(channel.id)}
                         >
                           {label}
                         </button>

@@ -93,9 +93,12 @@
    dialog is a box they are moved between. It scrolls on its own so the two panes line up
    however long one of them gets. */
 .ensemble-list {
-  flex: 1;
-  min-height: 132px;
-  max-height: 40vh;
+  /* A fixed number of rows, from the show's own strip count: the panes never change size as
+     strips move between them, so the dialog stands still under the pointer. `flex: none`
+     rather than a grow, because a flexing item's main size is its flex basis and not its
+     height — which is exactly how this list used to follow its own contents. */
+  flex: none;
+  height: calc(var(--ensemble-rows, 8) * 24px + var(--space-2));
   overflow-y: auto;
   margin: 0;
   padding: var(--space-1);

@@ -275,6 +275,13 @@ describe('ScenesView', () => {
     })
   }
 
+  /** Every strip the builder has picked, across both of its panes. */
+  function pickedLabels(dialog: Element): string[] {
+    return [...dialog.querySelectorAll('.ensemble-item')]
+      .filter(item => item.getAttribute('aria-pressed') === 'true')
+      .map(item => item.textContent ?? '')
+  }
+
   /** The strips one pane of the builder is showing, in the order it shows them. */
   function pane(dialog: Element, key: string): string[] {
     return [...dialog.querySelectorAll(`.ensemble-pane[data-pane="${key}"] .ensemble-item`)]
@@ -511,14 +518,20 @@ describe('ScenesView', () => {
     await type(dialog.querySelector<HTMLInputElement>('.ensemble-name-field')!, 'Chorus')
     await press(dialog, '[data-pane="free"] .ensemble-item', 'Ada')
     // Which strip the arrows act on is announced, not only painted.
-    const picked = [...dialog.querySelectorAll('.ensemble-item')]
-      .filter(item => item.getAttribute('aria-pressed') === 'true')
-    expect(picked.map(item => item.textContent)).toEqual(['Ada'])
+    expect(pickedLabels(dialog)).toEqual(['Ada'])
     await move(dialog, 'in')
-    await press(dialog, '[data-pane="free"] .ensemble-item', 'Extra')
+    // The press keeps the place: what took the moved strip's place in the list is picked, so
+    // the next one goes across on the same press without reaching back to the list.
+    expect(pickedLabels(dialog)).toEqual(['Extra'])
     await move(dialog, 'in')
     expect(pane(dialog, 'held')).toEqual(['Ada', 'Extra'])
-    expect(pane(dialog, 'free')).toEqual(['Ch 3'])
+    // 'Ch 3' was last in what was left, so the strip above it takes the pick.
+    expect(pickedLabels(dialog)).toEqual(['Ch 3'])
+    await move(dialog, 'in')
+    // And now the list is swept: there is nothing left to pick.
+    expect(pickedLabels(dialog)).toEqual([])
+    expect(pane(dialog, 'held')).toEqual(['Ada', 'Extra', 'Ch 3'])
+    expect(pane(dialog, 'free')).toEqual([])
     expect(dialog.querySelector<HTMLButtonElement>('.ensemble-create')?.disabled).toBe(false)
 
     await press(dialog, '.ensemble-create', 'Create and apply')
@@ -528,7 +541,7 @@ describe('ScenesView', () => {
     expect(ensembles[0].name).toBe('Chorus')
     // It holds the strips it was given, and it is on the row it was opened from — one store
     // write, so one undo takes the cast and the row back together.
-    expect(ensembles[0].channelIds).toEqual(['ch-ada', 'ch-extra'])
+    expect(ensembles[0].channelIds).toEqual(['ch-ada', 'ch-extra', 'ch-spare'])
     expect(scenes()[0].dcas).toEqual([placed('dca-1', 'ensemble', ensembles[0].id)])
     expect(blockName(cellFor('1', 'Opening'))).toBe('Chorus')
     expect(past()).toBe(before + 1)
@@ -537,6 +550,41 @@ describe('ScenesView', () => {
     await act(async () => { useStore.getState().undo() })
     expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
     expect(scenes()[0].dcas).toEqual([])
+  })
+
+  it('keeps the place when the strip that moved was the last of its list', async () => {
+    await show({ scenes: [scene('s1', 'Opening')] })
+    const dialog = await openBuilder(cellFor('1', 'Opening'))
+
+    // The last of three goes across: the one above it takes its place, so the arrow still has
+    // something to act on rather than going dead the moment the end of the list is reached.
+    await press(dialog, '[data-pane="free"] .ensemble-item', 'Ch 3')
+    await move(dialog, 'in')
+    expect(pane(dialog, 'held')).toEqual(['Ch 3'])
+    expect(pickedLabels(dialog)).toEqual(['Extra'])
+
+    // 'Extra' went across on the same press, and 'Ada' took the pick when it was the last
+    // left: the fallback is the strip above, not the end of the list.
+    await move(dialog, 'in')
+    expect(pickedLabels(dialog)).toEqual(['Ada'])
+    await move(dialog, 'in')
+    expect(pickedLabels(dialog)).toEqual([])
+
+    // And the same on the way out: taking the last of the group's strips out picks the one
+    // above it, so a group is emptied from the end without losing the place either.
+    await press(dialog, '[data-pane="held"] .ensemble-item', 'Ada')
+    await move(dialog, 'out')
+    expect(pane(dialog, 'held')).toEqual(['Extra', 'Ch 3'])
+    expect(pickedLabels(dialog)).toEqual(['Extra'])
+
+    // Pressing a strip that is already picked picks it again rather than emptying the pick:
+    // the arrow under the hand keeps its job.
+    await press(dialog, '[data-pane="held"] .ensemble-item', 'Ch 3')
+    expect(pickedLabels(dialog)).toEqual(['Ch 3'])
+    await move(dialog, 'out')
+    expect(pane(dialog, 'free')).toEqual(['Ada', 'Ch 3'])
+    expect(pane(dialog, 'held')).toEqual(['Extra'])
+    expect(pickedLabels(dialog)).toEqual(['Extra'])
   })
 
   it('opens the builder at the group the row holds, and saves it back there', async () => {
