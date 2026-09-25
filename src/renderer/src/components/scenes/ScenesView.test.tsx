@@ -1,26 +1,25 @@
 // Scenes is the view the operator lives in at curtain up: a row per fader, a column per
-// scene, the column the desk was last taken to lit where the show is. A row holds one thing
-// — a strip of the console, or an ensemble over several of them — and says it in one block
-// whose title carries the whole of what the row stands for, with a blank box beside it that
-// changes it.
+// scene, and the column the desk was last taken to saying so in its own title box. A row
+// holds one thing — a strip of the console, or an ensemble over several of them — and says it
+// in one block whose title carries the whole of what the row stands for. The block's name is
+// the press that changes it; a row holding nothing is a blank box instead.
 //
-// Everything a row can become comes out of that box: the picker, which lists every strip and
-// every group the row does not already hold, behind a filter, and the builder behind the
-// picker, which names a group and fills it from the strips the cast stands on. So that is
-// what these tests press. They pin the one store write each press makes — and the one undo
-// that takes it back — the ✕ that takes a row out of a scene entirely, and the keyboard both
-// dialogs take as they open and give back to the row's box as they close.
+// That press opens the picker, which lists every strip and every group the row does not
+// already hold behind a filter, and the builder behind the picker, which names a group and
+// fills it from the strips moved across. So that is what these tests press. They pin the one
+// store write each press makes — and the one undo that takes it back — the ✕ that takes a row
+// out of a scene entirely, and the keyboard both dialogs take as they open and give back to
+// the row as they close.
 //
-// They also pin the glance (a row per fader, a named column per scene, the all-closed column
-// that is never edited and carries nothing), the three presses that move the desk (a column's
-// recall, the header's Recall now, and the Resync beside it) and the run mode the view opens
-// in, which stops every edit while leaving recall working.
+// They also pin the glance (a row per fader, a named column per scene, the Out column that is
+// never edited and carries nothing), the one press that moves the desk — a column's recall —
+// the padlock in the grid's corner that locks the show and unlocks it again, and the run mode
+// the view opens in, which stops every edit while leaving recall working.
 import { describe, it, expect, beforeEach, afterEach, type Mock, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScenesView } from './ScenesView'
 import { useStore } from '../../store'
-import * as scenesEngine from '../../engine/scenes'
 import { ALL_CLOSED_SCENE_ID, defaultDeskSettings, defaultShowSettings } from '../../../../shared/show'
 import type {
   CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, RowMember, SceneDcaPlacement,
@@ -313,8 +312,6 @@ describe('ScenesView', () => {
       ]
     })
 
-    expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('2 faders · 3 scenes')
-
     expect(sceneColumns().map(column =>
       column.querySelector<HTMLInputElement>('.scene-name-field')?.value))
       .toEqual(['Opening', 'Finale', 'Interval'])
@@ -330,15 +327,6 @@ describe('ScenesView', () => {
     expect(blockName(cellFor('2', 'Finale'))).toBe('Extra')
     expect(blockName(cellFor('1', 'Interval'))).toBeNull()
     expect(blockName(cellFor('2', 'Opening'))).toBeNull()
-  })
-
-  it('counts a lone fader and scene in the singular', async () => {
-    await show({
-      scenes: [OPENING],
-      cast: cast({ dcas: [FIRST] })
-    })
-
-    expect(container.querySelector('.scenes-subtitle')?.textContent).toBe('1 fader · 1 scene')
   })
 
   it('places a strip on a row from the box, and one undo takes the row back', async () => {
@@ -792,9 +780,12 @@ describe('ScenesView', () => {
   it('adds a scene from the header and renames it in place, refusing an empty name', async () => {
     await show({ scenes: [] })
 
+    // A sceneless show has no grid, so the lock that lives in the grid's corner is not drawn:
+    // the empty state carries the same press, and it locks as well as unlocks.
     expect(container.querySelectorAll('.matrix-scene')).toHaveLength(0)
+    expect(container.querySelector('.matrix-lock')).toBeNull()
     expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet.')
-    expect(container.querySelector('.matrix-empty')?.textContent).toContain('Add one from the header.')
+    expect(container.querySelector('.matrix-empty-action')?.textContent).toBe('Lock it again')
 
     await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-add')!.click() })
 
@@ -835,7 +826,7 @@ describe('ScenesView', () => {
 
     const column = allClosedColumn()
     expect(container.querySelectorAll('.matrix-scene')[0]).toBe(column)
-    expect(column.querySelector('.scene-name-static')?.textContent).toBe('All closed')
+    expect(column.querySelector('.scene-name-static')?.textContent).toBe('Out')
 
     // A place the desk can be, not a scene with a name to type or a column to remove —
     // while the scenes beside it have both.
@@ -925,7 +916,7 @@ describe('ScenesView', () => {
     const empty = cellFor('1', 'Interval')
     expect(empty.querySelector('.matrix-cell-add')).not.toBeNull()
     expect(empty.querySelector('.matrix-cell-add')?.getAttribute('aria-label'))
-      .toBe('Change DCA 1 in Interval — asleep while the show runs: press Edit')
+      .toBe('Change DCA 1 in Interval — asleep while the show runs: unlock the grid')
     await act(async () => {
       empty.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
     })
@@ -941,25 +932,32 @@ describe('ScenesView', () => {
     expect(columnFor('Interval').getAttribute('data-current')).toBe('true')
   })
 
-  it('opens to run the show, and Edit and Done switch it, saying what the clicks now do', async () => {
+  it('opens to run the show, and the corner padlock unlocks it and locks it again', async () => {
     await show({ scenes: [OPENING], editing: false })
 
-    const edit = container.querySelector<HTMLButtonElement>('.scenes-edit')
-    expect(edit?.textContent).toBe('Edit')
+    // The lock is the grid's own corner, and it is the only press that changes what the rest
+    // of the grid does: shut while the show runs, open while it is being built.
+    const lock = container.querySelector<HTMLButtonElement>('.matrix-lock')
+    expect(lock).not.toBeNull()
+    expect(container.querySelector('.scenes-edit')).toBeNull()
+    expect(lock?.getAttribute('data-editing')).toBe('false')
+    expect(lock?.getAttribute('aria-label')).toContain('Unlock')
+    expect(lock?.getAttribute('title')).toContain('edit scenes')
     expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('false')
     expect(container.querySelector('.scenes-editing-hint')).toBeNull()
     expect(container.querySelector('.scenes-add')).toBeNull()
 
-    await act(async () => { edit?.click() })
+    await act(async () => { lock?.click() })
 
     // A mode of the window, not a change to the show.
     expect(useStore.getState().scenesEditing).toBe(true)
-    expect(edit?.textContent).toBe('Done')
+    expect(lock?.getAttribute('data-editing')).toBe('true')
+    expect(lock?.getAttribute('aria-label')).toContain('Lock')
     expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('true')
     expect(container.querySelector('.scenes-editing-hint')?.textContent).toContain('Editing')
     expect(container.querySelector('.scenes-add')).not.toBeNull()
 
-    await act(async () => { edit?.click() })
+    await act(async () => { lock?.click() })
     expect(useStore.getState().scenesEditing).toBe(false)
   })
 
@@ -1043,10 +1041,8 @@ describe('ScenesView', () => {
       deskSceneId: 's1'
     })
 
-    expect(container.querySelector('.matrix-apply')).toBeNull()
-
     // Taking the row out leaves the desk holding a placement the scene no longer names: the
-    // column says so in amber and the header offers the change that would send.
+    // column carries the change that would send it.
     await act(async () => {
       cellFor('1', 'Opening').querySelector<HTMLButtonElement>('.matrix-block-remove')!.click()
     })
@@ -1055,12 +1051,13 @@ describe('ScenesView', () => {
     expect(cellFor('1', 'Opening').getAttribute('data-pending')).toBe('true')
     expect(cellFor('2', 'Opening').getAttribute('data-pending')).toBe('false')
 
-    const apply = container.querySelector<HTMLButtonElement>('.matrix-apply')
-    expect(apply?.textContent).toBe('Recall now (1)')
-
+    // The column's own press is what sends it: it is the press the view is for, and it is
+    // live in either mode.
     midiSend.mockClear()
     oscSend.mockClear()
-    await act(async () => { apply?.click() })
+    await act(async () => {
+      columnFor('Opening').querySelector<HTMLButtonElement>('.matrix-recall')!.click()
+    })
 
     expect(midiSend).toHaveBeenCalledTimes(1)
     expect(midiSend).toHaveBeenCalledWith({
@@ -1100,35 +1097,6 @@ describe('ScenesView', () => {
     })
     expect(oscSend).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBe('s1')
-  })
-
-  it('re-sends the scene the desk is on when Resync is pressed', async () => {
-    const resync = vi.spyOn(scenesEngine, 'resyncDesk').mockResolvedValue({
-      sceneName: 'Opening', written: 1, failures: []
-    })
-    await show({
-      scenes: [OPENING, INTERVAL],
-      desk: DESK,
-      deskState: {
-        mutes: { 'ch-ada': false, 'ch-extra': true, 'ch-spare': true },
-        assignments: { 'ch-ada': ['dca-1'], 'ch-extra': [], 'ch-spare': [] }
-      },
-      deskSceneId: 's1'
-    })
-
-    const button = container.querySelector<HTMLButtonElement>('.matrix-resync')
-    expect(button).not.toBeNull()
-    expect(button?.title).toContain('moved a fader by hand')
-
-    await act(async () => { button?.click() })
-    expect(resync).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows no Resync with no scene standing', async () => {
-    await show({ scenes: [OPENING, INTERVAL] })
-
-    expect(useStore.getState().deskSceneId).toBeNull()
-    expect(container.querySelector('.matrix-resync')).toBeNull()
   })
 
   it('says the show has no faders, and goes straight to setting them up', async () => {
@@ -1172,9 +1140,11 @@ describe('ScenesView', () => {
         .map(control => control.disabled)
 
     expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
-    // What removes a scene is not there at all, rather than there and asleep beside recall.
+    // What removes a scene is not there at all, rather than there and asleep beside recall —
+    // and neither is the ✕ on a block: a press that does nothing is one the operator has to
+    // read to find out it does nothing.
     expect(container.querySelector('.matrix-scene-remove')).toBeNull()
-    expect(disabled('.matrix-block-remove').every(Boolean)).toBe(true)
+    expect(container.querySelector('.matrix-block-remove')).toBeNull()
     // The box is there and asleep, and a press on it opens nothing.
     expect(disabled('.matrix-cell-add').every(Boolean)).toBe(true)
     await act(async () => {
@@ -1183,13 +1153,10 @@ describe('ScenesView', () => {
     expect(document.body.querySelector('.scene-picker')).toBeNull()
     expect(container.querySelector('.scenes-add')).toBeNull()
 
-    // Edit is how the show is edited, and recall is what the view is for.
-    expect(container.querySelector<HTMLButtonElement>('.scenes-edit')?.disabled).toBe(false)
+    // The lock is how the show is edited, and recall is what the view is for.
+    expect(container.querySelector<HTMLButtonElement>('.matrix-lock')?.disabled).toBe(false)
     expect([...container.querySelectorAll<HTMLButtonElement>('.matrix-recall')]
       .every(recall => !recall.disabled)).toBe(true)
-    // The desk is where Opening left it, so the header has nothing to apply: the opening
-    // scene's own count is none, and Apply only appears once there is a difference.
-    expect(container.querySelector('.matrix-apply')).toBeNull()
 
     // A column recall still opens Extra and closes Ada.
     midiSend.mockClear()

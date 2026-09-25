@@ -231,8 +231,8 @@ export interface DeskState {
 
 /**
  * What a desk nothing has been sent to reads as: every fact unknown, so the next recall
- * writes it. The resync is the same thing said on purpose — the desk was moved by hand, and
- * the record of what was sent is worth nothing.
+ * writes it. It is where a fresh show starts, and what a test asks about when it wants to
+ * know what a scene says rather than what has changed since.
  */
 export const UNKNOWN_DESK_STATE: DeskState = { mutes: {}, assignments: {} }
 

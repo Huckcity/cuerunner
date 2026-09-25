@@ -386,8 +386,11 @@ export async function openLogPanel(page: Page): Promise<void> {
 
 /** The view opens to run the show; building one starts with the press that edits it. */
 export async function editScenes(page: Page): Promise<void> {
-  const edit = page.locator('.scenes-edit')
-  if ((await edit.getAttribute('data-editing')) !== 'true') await edit.click()
+  // The lock lives in the grid's corner, and a show with no scenes yet has no grid: the
+  // empty state carries the same press in words.
+  const lock = page.locator('.matrix-lock')
+  const way = (await lock.count()) > 0 ? lock : page.locator('.matrix-empty-action')
+  if ((await way.getAttribute('data-editing')) !== 'true') await way.click()
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
 }
 

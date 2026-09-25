@@ -19,8 +19,8 @@
      scene name asks for in the header's own font, measured: 120px of text, the field's
      padding and border, the ✕ beside it and the column's padding. */
   --matrix-scene-width: 176px;
-  /* The all-closed column is a utility rather than a scene: the words "All closed" and one
-     press, so it asks for what those words need and nothing more. */
+  /* The first column, labelled "Out", is a utility rather than a scene: one word and one
+     press, so it asks for the room those need and nothing more. */
   --matrix-all-closed-width: 88px;
   --matrix-cell-height: 34px;
 
@@ -114,18 +114,6 @@
   color: var(--fg-subtle);
 }
 
-.scenes-subtitle {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-muted);
-}
-
 .scenes-actions {
   display: flex;
   align-items: center;
@@ -133,10 +121,9 @@
   flex: none;
 }
 
-/* The edits the grid cannot hold: a scene, and an ensemble made from the one the desk is
-   on. They read as buttons rather than as state, because that is what they are. */
-.scenes-add,
-.scenes-edit {
+/* The one edit the header holds: a scene. It reads as a button rather than as state,
+   because that is what it is — and it is there only while the grid is unlocked. */
+.scenes-add {
   flex: none;
   height: 22px;
   padding: 0 var(--space-2);
@@ -150,41 +137,7 @@
   transition: var(--transition-fast);
 }
 
-.scenes-add:hover,
-.scenes-edit:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-/* A scene that would move the desk is a thing to do, not a readout: it gets the warning
-   colour and the exact number of messages that would go out. The resync re-sends the
-   scene the desk is standing on — for when somebody moved a fader by hand — so it reads
-   as a quiet press beside the amber one rather than as a second thing to do. */
-.matrix-apply {
-  height: 22px;
-  padding: 0 var(--space-2);
-  background: var(--accent-amber-bg);
-  border: 1px solid var(--accent-amber);
-  border-radius: var(--radius-sm);
-  color: var(--accent-amber);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.matrix-resync {
-  flex: none;
-  height: 22px;
-  padding: 0 var(--space-2);
-  background: transparent;
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-sm);
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.matrix-resync:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.scenes-add:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 .scenes-editing-hint {
   flex-shrink: 0;
@@ -216,14 +169,54 @@
 /* The row carries whether the pack is open; its cells place themselves in the columns. */
 .matrix-row { display: contents; }
 
+/* The corner the grid leaves empty: the lock the show is held with, since it is the one
+   press that changes what the rest of the grid does. */
 .matrix-corner {
   position: sticky;
   top: 0;
   left: 0;
   z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-raised);
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
+}
+
+.matrix-lock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.matrix-lock:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* Open while the grid is unlocked: the shape says the state, and the colour agrees. */
+.matrix-lock[data-editing='true'] { color: var(--accent-blue); }
+
+.matrix-lock:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.matrix-lock-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 /* One column per scene. Recalling is never locked out, so the header is always a press. */
 .matrix-scene {
@@ -239,12 +232,9 @@
   border-left: 1px solid var(--border-soft);
 }
 
-/* The recalled scene is where the show is, so its column carries the running colour all
-   the way down rather than a label the operator has to read. */
-.matrix-scene[data-current='true'] {
-  background: var(--bg-playing-row);
-  border-bottom-color: var(--state-running-fg);
-}
+/* The recalled scene is where the show is, and it says so in the one box that names it: the
+   columns carry no colour of their own, which leaves the palette free for the grid's next
+   idea and the cells to say what they hold. */
 
 /* The all-closed column is always there and never edited, so it reads as a place the
    show can be rather than as another scene with a name to type. */
@@ -252,15 +242,19 @@
   background: var(--bg-well);
 }
 
-.matrix-scene[data-all-closed='true'][data-current='true'] {
+.matrix-scene[data-all-closed='true'][data-current='true'] .scene-name-static {
   background: var(--bg-playing-row);
-  border-bottom-color: var(--state-running-fg);
+  border-color: var(--state-running-fg);
+  color: var(--fg-primary);
 }
 
 .scene-name-static {
   display: flex;
   align-items: center;
   height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   font-size: var(--text-base);
   color: var(--fg-muted);
   letter-spacing: 0.01em;
@@ -268,9 +262,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.matrix-scene[data-all-closed='true'][data-current='true'] .scene-name-static { color: var(--fg-primary); }
-.matrix-scene[data-all-closed='true'][data-pending='true'] .scene-name-static { color: var(--accent-amber); }
 
 /* The scene name is edited in place: the column is the row, and a separate editor for a
    name that is already right there would be a second place to look. */
@@ -290,12 +281,14 @@
 
 .scene-name-field:focus { border-color: var(--border-focus); }
 
+/* Where the show is, in the box that names the column: the title carries the running colour
+   rather than the whole column. */
 .matrix-scene[data-current='true'] .scene-name-field {
+  background: var(--bg-playing-row);
+  border-color: var(--state-running-fg);
   color: var(--fg-primary);
   font-weight: var(--fw-medium);
 }
-
-.matrix-scene[data-pending='true'] .scene-name-field { color: var(--accent-amber); }
 
 /* An ensemble's name is edited where the ensemble is, same as a scene's: the row is the
    thing, and a second place to look for its name is a second place to get it wrong. */
@@ -399,23 +392,8 @@
   transition: var(--transition-fast);
 }
 
-/* A row holding something is a block of running colour's edge rather than its fill: the
-   block names what is held, so the cell only has to say that there is something. */
-.matrix-cell[data-placed='true'] {
-  border-color: var(--state-running-fg);
-}
-
-/* ...except down the current column, which is tinted so the scene the desk is in is
-   findable without reading a name. */
-.matrix-cell[data-current='true'] {
-  background: var(--bg-playing-row);
-}
-
-/* Pending is amber: the desk has not been told what this row is carrying now. */
-.matrix-cell[data-pending='true'] { border-color: var(--accent-amber); }
-
-.matrix-cell[data-pending='true'][data-placed='false'] { background: var(--accent-amber-bg); }
-
+/* A row holding something needs no edge of its own: the block in it is the edge, and the
+   cell's ink stays the grid's own so colour is left free to mean something else. */
 /* The one thing a row holds: a strip of the console or a group, as one block. A group's
    block is outlined and a strip's is filled, so a glance down a scene says which rows are
    riding on a group rather than on a single mic. The name is the press that changes the row
@@ -445,9 +423,12 @@
   color: var(--fg-body);
 }
 
+/* Outlined rather than filled, so a glance down a scene says which rows ride on a group —
+   in the same ink as everything else, because the shape is the message and the colour is
+   not. */
 .matrix-block[data-kind='ensemble'] {
   background: transparent;
-  border: 1px solid var(--state-running-fg);
+  border: 1px solid var(--border-input);
   font-family: inherit;
   color: var(--fg-body);
 }
@@ -499,8 +480,7 @@
 }
 
 .matrix-block-remove:focus-visible,
-.matrix-cell-add:focus-visible,
-.matrix-resync:focus-visible {
+.matrix-cell-add:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
 }

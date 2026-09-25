@@ -11,7 +11,7 @@
 // the scene never mentions is not merely left alone by accident: there is no path from the
 // scene to it, and the case that holds that reads the numbers the frames themselves carry.
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
-import { recallScene, resyncDesk } from './scenes'
+import { recallScene } from './scenes'
 import { useStore } from '../store'
 import type { MidiMessageKind } from '../../../shared/cue'
 import {
@@ -642,97 +642,5 @@ describe('recallScene', () => {
     expect(sent).toEqual([])
     expect(useStore.getState().deskState.assignments).toEqual({ 'ch-1': ['dca-1'] })
     expect(useStore.getState().deskSceneId).toBe('s-3')
-  })
-})
-
-describe('resyncDesk', () => {
-  let midiSend: Mock
-  let sent: string[]
-
-  beforeEach(() => {
-    sent = []
-    midiSend = vi.mocked(window.cuerunner.midi.send).mockImplementation(request => {
-      sent.push(said({ kind: 'midi', portName: request.portName, messages: request.messages }))
-      return Promise.resolve({ ok: true })
-    })
-    vi.mocked(window.cuerunner.midi.sendTcp).mockImplementation(request => {
-      sent.push(said({ kind: 'midi-tcp', host: request.host, port: request.port, messages: request.messages }))
-      return Promise.resolve({ ok: true })
-    })
-    vi.mocked(window.cuerunner.show.command).mockImplementation((_service, _action, payload) => {
-      sent.push(said({ kind: 'sq-native', ...(payload as SqMembershipIntent) }))
-      return Promise.resolve({ ok: true, result: { ok: true, frames: 4 } })
-    })
-    seed()
-  })
-
-  afterEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('re-sends the standing scene’s whole set and says how much it wrote', async () => {
-    // There is no read-back: once somebody has moved a fader at the desk, the record is a
-    // description of a desk that no longer exists. So the resync writes the standing
-    // scene's set as though nothing had been sent, and says how many channels it wrote.
-    seed(EMPTY, 's-1')
-
-    const result = await resyncDesk()
-
-    expect(result).toEqual({ sceneName: 'Wedding', written: 4, failures: [] })
-    expect(sent).toEqual([
-      'SQ ch1 onto fader 1',
-      'cc 63 0 | cc 62 0 | cc 6 0 | cc 26 0',
-      'cc 63 0 | cc 62 1 | cc 6 0 | cc 26 1',
-      'cc 63 0 | cc 62 2 | cc 6 0 | cc 26 1',
-      'cc 63 0 | cc 62 3 | cc 6 0 | cc 26 1'
-    ])
-    expect(useStore.getState().deskState).toEqual({
-      mutes: { 'ch-1': false, 'ch-2': true, 'ch-3': true, 'ch-4': true },
-      assignments: { 'ch-1': ['dca-1'] }
-    })
-    expect(midiSend).not.toHaveBeenCalled()
-    expect(useStore.getState().log.map(entry => entry.message))
-      .toEqual(['desk resynced — Scene "Wedding": 4 channels written'])
-  })
-
-  it('does nothing when no scene is standing, because there is nothing to put back', async () => {
-    // The desk is wherever the operator left it, and this is not the press that closes
-    // every mic.
-    seed(EMPTY, null)
-
-    const result = await resyncDesk()
-
-    expect(result).toEqual({ sceneName: null, written: 0, failures: [] })
-    expect(sent).toEqual([])
-    expect(useStore.getState().log.map(entry => entry.message))
-      .toEqual(['nothing to resync — no scene is standing'])
-  })
-
-  it('does nothing when the scene the desk is on has left the show', async () => {
-    seed(EMPTY, 's-gone')
-
-    const result = await resyncDesk()
-
-    expect(result.written).toBe(0)
-    expect(sent).toEqual([])
-    expect(useStore.getState().log.map(entry => entry.message)).toEqual([
-      'nothing to resync — the scene the desk is on is no longer in the show (s-gone)'
-    ])
-  })
-
-  it('closes the controlled set when the all-closed column is what is standing', async () => {
-    seed(EMPTY, ALL_CLOSED_SCENE_ID)
-
-    const result = await resyncDesk()
-
-    expect(result).toEqual({ sceneName: null, written: 4, failures: [] })
-    expect(sent).toEqual([
-      'cc 63 0 | cc 62 0 | cc 6 0 | cc 26 1',
-      'cc 63 0 | cc 62 1 | cc 6 0 | cc 26 1',
-      'cc 63 0 | cc 62 2 | cc 6 0 | cc 26 1',
-      'cc 63 0 | cc 62 3 | cc 6 0 | cc 26 1'
-    ])
-    expect(useStore.getState().log.map(entry => entry.message))
-      .toEqual(['desk resynced — All closed: 4 channels written'])
   })
 })

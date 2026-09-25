@@ -44,6 +44,7 @@ import {
   removeDcasFromScenes,
   removeEnsembleFromScenes,
   setRowMember,
+  UNKNOWN_DESK_STATE,
   type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
@@ -759,7 +760,7 @@ export const useStore = create<CueListState>((set) => ({
   showEvents: [],
   redundancy: null,
   redundancySettings: null,
-  deskState: { mutes: {}, assignments: {} },
+  deskState: UNKNOWN_DESK_STATE,
   deskSceneId: null,
   scenesEditing: false,
   modals: 0,
@@ -1412,7 +1413,7 @@ export const useStore = create<CueListState>((set) => ({
       // Where the last show's cursor sat says nothing about this one.
       waveformCursor: null,
       // Nothing has been told to this show's desk yet.
-      deskState: { mutes: {}, assignments: {} },
+      deskState: UNKNOWN_DESK_STATE,
       deskSceneId: null,
       scenesEditing: false,
       past: [],

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import ReactDOM from 'react-dom'
 import { useStore } from '../../store'
-import { recallScene, resyncDesk } from '../../engine/scenes'
+import { recallScene } from '../../engine/scenes'
 import { stripLabel } from '../../utils/cast'
 import {
   addScene,
@@ -39,12 +39,6 @@ const SCENE_NAME_SIZE = 18
 
 /** The columns that are scenes in the file: the all-closed column is not one of them. */
 const SCENE_COLUMN = '.matrix-scene[data-scene-id]'
-
-/** The count as the operator says it out loud: "4 faders", "1 fader", "no faders". */
-function faderCount(count: number): string {
-  if (count === 0) return 'no faders'
-  return `${count} fader${count === 1 ? '' : 's'}`
-}
 
 /**
  * Whether this row of this scene is still to send: the column's own change list holds a
@@ -143,14 +137,17 @@ function SceneCell({
             title={locked ? whole : `Change what this row holds — ${whole}`}
             onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
           >{member}</button>
-          <button
-            type="button"
-            className="matrix-block-remove"
-            aria-label={`Take ${member} off DCA ${fader} in ${scene.name}`}
-            title={locked ? whole : `Take ${member} off this row — undo puts it back`}
-            disabled={locked}
-            onClick={() => writeList(setRowMember(scenes, scene.id, dca.id, null))}
-          >✕</button>
+          {/* Not drawn while the show runs: a press that does nothing is a press the
+              operator has to read to find out it does nothing. */}
+          {!locked && (
+            <button
+              type="button"
+              className="matrix-block-remove"
+              aria-label={`Take ${member} off DCA ${fader} in ${scene.name}`}
+              title={`Take ${member} off this row — undo puts it back`}
+              onClick={() => writeList(setRowMember(scenes, scene.id, dca.id, null))}
+            >✕</button>
+          )}
         </span>
       ) : (
         /* A row holding nothing is one blank box, and the box is what it becomes something
@@ -162,10 +159,10 @@ function SceneCell({
           className="matrix-cell-add"
           disabled={locked}
           aria-label={locked
-            ? `Change DCA ${fader} in ${scene.name} — asleep while the show runs: press Edit`
+            ? `Change DCA ${fader} in ${scene.name} — asleep while the show runs: unlock the grid`
             : `Change DCA ${fader} in ${scene.name}`}
           title={locked
-            ? 'Press Edit to change what this row holds'
+            ? 'Unlock the grid to change what this row holds'
             : 'Put a channel or an ensemble on this row'}
           onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
         />
@@ -224,6 +221,7 @@ function ScenePicker({
 }: PickerProps) {
   const pickerRef = useRef<HTMLDivElement | null>(null)
   const filterRef = useRef<HTMLInputElement | null>(null)
+  const rowRef = useRef<HTMLElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const [at, setAt] = useState(() => anchor.box.getBoundingClientRect())
   const [filter, setFilter] = useState('')
@@ -323,10 +321,23 @@ function ScenePicker({
   }, [activeItem])
 
   // The filter takes the keyboard when the picker opens, and the page is not scrolled to it:
-  // a menu that scrolled the show to reach its own field would move the row it is about.
+  // a menu that scrolled the show to reach its own field would move the row it is about. And
+  // it gives the keyboard back to the row as it closes, because the field it was typed into
+  // unmounts with the menu — a keyboard left on the body is one the show's own keys are live
+  // for, and Space would go.
   useEffect(() => {
+    // The row is remembered while the press that opened this is still in the document: React
+    // detaches a control it stops rendering from its parent, so afterwards there is no
+    // climbing from that press to the cell it was in.
+    rowRef.current = anchor.box.closest('.matrix-cell')
     filterRef.current?.focus({ preventScroll: true })
-  }, [])
+    return () => {
+      const into = anchor.box.isConnected
+        ? anchor.box
+        : rowRef.current?.querySelector<HTMLElement>('.matrix-cell-add, .matrix-block-name') ?? null
+      into?.focus({ preventScroll: true })
+    }
+  }, [anchor])
 
   const left = Math.min(Math.max(4, at.left), Math.max(4, window.innerWidth - PICKER_WIDTH - 4))
   const top = Math.min(at.bottom + 2, Math.max(4, window.innerHeight - PICKER_HEIGHT - 4))
@@ -518,10 +529,6 @@ export function ScenesView() {
     return map
   }, [showSettings, deskState, scenes.list])
 
-  // The desk's question, asked for the header: what would a recall of the standing scene
-  // change? Nothing means the desk is where the show left it.
-  const toApply = deskSceneId === null ? 0 : (changesByScene.get(deskSceneId) ?? []).length
-
   // Every edit writes back the one field it changed, so a cell toggled in the grid cannot
   // carry a stale copy of anything else with it.
   const writeList = (next: ScenesSettings): void => updateScenesSettings({ list: next.list })
@@ -571,8 +578,8 @@ export function ScenesView() {
                   <strong className="scenes-where-number">
                     {allClosed ? 0 : currentIndex + 1}
                   </strong>{' '}
-                  <span className="scenes-where-name" title={allClosed ? 'All closed' : current?.name}>
-                    {allClosed ? 'All closed' : current?.name}
+                  <span className="scenes-where-name" title={allClosed ? 'Out' : current?.name}>
+                    {allClosed ? 'Out' : current?.name}
                   </span>
                 </>
               )}
@@ -586,9 +593,6 @@ export function ScenesView() {
             )}
           </div>
         )}
-        <span className="scenes-subtitle">
-          {`${faderCount(cast.dcas.length)} · ${scenes.list.length} scene${scenes.list.length === 1 ? '' : 's'}`}
-        </span>
         <div className="scenes-actions">
           {editing && (
             <button
@@ -599,48 +603,29 @@ export function ScenesView() {
               Add scene
             </button>
           )}
-          {deskSceneId !== null && toApply > 0 && (
-            <button
-              className="matrix-apply"
-              onClick={() => { void recallScene(deskSceneId) }}
-              title="Recall the current scene: send its changes to the desk"
-            >
-              Recall now ({toApply})
-            </button>
-          )}
-          {deskSceneId !== null && (
-            <button
-              className="matrix-resync"
-              onClick={() => { void resyncDesk() }}
-              title="Re-send the scene the desk is on: for when somebody moved a fader by hand"
-            >
-              Resync
-            </button>
-          )}
-          <button
-            className="scenes-edit"
-            data-editing={editing}
-            onClick={() => { setEditing(!editing); closeOverlays() }}
-            title={editing ? 'Back to running the show: recall stays live, nothing else moves' : 'Edit scenes and what their rows carry'}
-          >
-            {editing ? 'Done' : 'Edit'}
-          </button>
         </div>
       </div>
 
       {editing && (
         <div className="scenes-editing-hint">
-          Editing — cells and names change the show. Done when finished.
+          Editing — cells and names change the show. Lock it again when you are finished.
         </div>
       )}
 
       {scenes.list.length === 0 ? (
         <div className="matrix-empty">
           <span>No scenes yet.</span>
+          {/* There is no grid to carry the lock yet, so the press that unlocks it is here —
+              and it locks again, because a sceneless show must not be able to strand the
+              operator in a mode whose only way out is off screen. */}
           {editing ? (
-            <span>Add one from the header.</span>
+            <button className="matrix-empty-action" onClick={() => setEditing(false)}>
+              Lock it again
+            </button>
           ) : (
-            <button className="matrix-empty-action" onClick={() => setEditing(true)}>Edit to add one</button>
+            <button className="matrix-empty-action" onClick={() => setEditing(true)}>
+              Unlock to add one
+            </button>
           )}
         </div>
       ) : cast.dcas.length === 0 ? (
@@ -652,6 +637,12 @@ export function ScenesView() {
           >
             Set up channels…
           </button>
+          {/* No grid means no corner, so the lock is here too. */}
+          {editing && (
+            <button className="matrix-empty-action" onClick={() => setEditing(false)}>
+              Lock it again
+            </button>
+          )}
         </div>
       ) : (
         <div className="matrix-scroll" ref={scrollerRef}>
@@ -667,7 +658,40 @@ export function ScenesView() {
                 `repeat(${scenes.list.length}, var(--matrix-scene-width))`
             } as CSSProperties}
           >
-            <div className="matrix-corner" />
+            {/* The lock the show is held with, in the corner the grid leaves empty: shut
+                while the show runs, open while it is being built. It is the one press that
+                changes what the rest of the grid does, so it lives where the grid starts
+                rather than among the actions over it. */}
+            <div className="matrix-corner">
+              <button
+                className="matrix-lock"
+                data-editing={editing}
+                onClick={() => { setEditing(!editing); closeOverlays() }}
+                aria-label={editing
+                  ? 'Lock the grid: run the show again'
+                  : 'Unlock the grid: edit the scenes and what their rows hold'}
+                title={editing
+                  ? 'Lock — back to running the show: recall stays live, nothing else moves'
+                  : 'Unlock — edit scenes and what their rows hold'}
+              >
+                <svg
+                  className="matrix-lock-icon"
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  {/* The body, and a shackle seated in it while the grid is locked and lifted
+                      clear of it while the grid is open. */}
+                  <rect x="3.25" y="7.25" width="9.5" height="5.75" rx="1.5" />
+                  {editing
+                    ? <path
+                        d="M5.75 7.25V4.5a2.5 2.5 0 0 1 5 0v1"
+                        transform="translate(2.25 -1.5)"
+                      />
+                    : <path d="M5.75 7.25V4.5a2.5 2.5 0 0 1 5 0v2.75" />}
+                </svg>
+              </button>
+            </div>
 
             {/* The scene that is never edited and always there: every mic closed. It is a
                 column like the others so the press is where the show is run from, and the
@@ -679,13 +703,13 @@ export function ScenesView() {
               data-pending={(changesByScene.get(ALL_CLOSED_SCENE_ID) ?? []).length > 0}
             >
               <div className="matrix-scene-name">
-                <span className="scene-name-static">All closed</span>
+                <span className="scene-name-static">Out</span>
               </div>
               <button
                 className="matrix-recall"
                 onClick={() => { void recallScene(ALL_CLOSED_SCENE_ID) }}
                 title="Close every mic the show drives"
-                aria-label="Recall all closed"
+                aria-label="Recall Out"
               >
                 →
               </button>

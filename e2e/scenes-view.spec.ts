@@ -103,7 +103,7 @@ test('the show is edited in the view, not in a dialog', async () => {
   // it by, even while the show is being edited — there is nothing in an empty stage to
   // move into or out of.
   const allClosed = page.locator('.matrix-scene[data-all-closed]')
-  await expect(allClosed.locator('.scene-name-static')).toHaveText('All closed')
+  await expect(allClosed.locator('.scene-name-static')).toHaveText('Out')
   await expect(allClosed.locator('.scene-name-field')).toHaveCount(0)
   await expect(allClosed.locator('.matrix-scene-remove')).toHaveCount(0)
 
@@ -135,12 +135,12 @@ test('a show with many scenes still fits the window', async () => {
   expect(sceneWidths).toEqual([88, ...Array(13).fill(176)])
 
   // The grid scrolls inside the view. The view itself must not grow past the window, or
-  // the Edit press and the far scenes end up clipped somewhere unreachable — which is what
+  // the lock and the far scenes end up clipped somewhere unreachable — which is what
   // happened before: 1532px of view in a 1280px window, and no visible scroller.
   const measured = await page.evaluate(() => {
     const view = document.querySelector('.scenes-view') as HTMLElement
     const scroll = document.querySelector('.matrix-scroll') as HTMLElement
-    const lock = document.querySelector('.scenes-edit') as HTMLElement
+    const lock = document.querySelector('.matrix-lock') as HTMLElement
     return {
       viewScrollWidth: view.scrollWidth,
       gridScrolls: scroll.scrollWidth > scroll.clientWidth,
@@ -433,7 +433,6 @@ test('editing a cell moves the scene, and the desk is told only when asked', asy
     await pickFromBox(page, firstFader, 'Sancho')
     await expect(firstFader.locator('.matrix-block')).toContainText('Sancho')
     await expect(firstFader.locator('.matrix-block')).not.toContainText('Ruth')
-    await expect(page.locator('.matrix-apply')).toBeVisible()
     await page.waitForTimeout(300)
     expect(desk.received).toHaveLength(12)
 
@@ -441,7 +440,7 @@ test('editing a cell moves the scene, and the desk is told only when asked', asy
     // number, the one that took its place is opened by its own — and the membership the row
     // now carries is reported as a gap, because a desk that takes a note on and a note off
     // has no assignment for Cuerunner to write.
-    await page.locator('.matrix-apply').click()
+    await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await expect.poll(() => desk.received.length).toBe(14)
     expect(desk.received[12]).toEqual({ address: '/dca/2/on', args: [1] })
     expect(desk.received[13]).toEqual({ address: '/dca/1/on', args: [0] })
@@ -454,11 +453,9 @@ test('editing a cell moves the scene, and the desk is told only when asked', asy
     // the press stays up with the gap in the log, rather than going quiet about half a
     // recall. That is the honest half: the mic is open, the fader is not Cuerunner's to set.
     const written = desk.received.length
-    await expect(page.locator('.matrix-apply')).toContainText('Recall now (1)')
-    await page.locator('.matrix-apply').click()
+    await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
     await page.waitForTimeout(300)
     expect(desk.received).toHaveLength(written)
-    await expect(page.locator('.matrix-apply')).toBeVisible()
   } finally {
     await desk.close()
   }
@@ -680,10 +677,10 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
   try {
     await buildDeskShow(page, desk.port)
 
-    // Done: the show is being run, and a stray click changes nothing. A cell is a readout
+    // Locked: the show is being run, and a stray click changes nothing. A cell is a readout
     // — the one thing its row holds — and the presses that would change the show are not
-    // drawn as presses: the box is there and asleep, and the ✕ beside a block is disabled.
-    await page.locator('.scenes-edit').click()
+    // drawn at all: an empty row's box is there and asleep, and a block carries no ✕.
+    await page.locator('.matrix-lock').click()
     await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'false')
     await expect(page.locator('.scenes-editing-hint')).toHaveCount(0)
 
@@ -696,7 +693,7 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
     await expect(box).toBeDisabled()
     await box.click({ force: true })
     await expect(page.locator('.scene-picker')).toHaveCount(0)
-    await expect(page.locator('.matrix-block-remove').first()).toBeDisabled()
+    await expect(page.locator('.matrix-block-remove')).toHaveCount(0)
     await expect(page.locator('.scenes-add')).toHaveCount(0)
     await expect(page.locator('.matrix-scene-remove')).toHaveCount(0)
 
@@ -706,8 +703,8 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
     await expect.poll(() => desk.received.length).toBe(12)
     expect(desk.received[0].args).toEqual([1])
 
-    // And Edit gives the show back.
-    await page.locator('.scenes-edit').click()
+    // And unlocking gives the show back.
+    await page.locator('.matrix-lock').click()
     await pickFromBox(page, cell, 'Sancho')
     await expect(cell.locator('.matrix-block')).toContainText('Sancho')
   } finally {

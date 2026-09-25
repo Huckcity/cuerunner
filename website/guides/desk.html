@@ -159,19 +159,25 @@
         A scene answers for every channel, not only for the ones it places: a channel it
         leaves off every fader in that scene is closed by the recall. An ensemble's block
         says which mics it opens in its title. The leftmost column,
-        <strong>All closed</strong>, is a scene like any other that way — it places nothing,
+        <strong>Out</strong>, is a scene like any other that way — it places nothing,
         so it closes every mic the show drives — and it is the one column that is never
         edited. Columns are a fixed width — an eighteen-character scene name is what one is
         measured for — so a show of two scenes reads the same as a show of twenty: what does
         not fit across the window scrolls inside the grid.
       </p>
       <p>
-        Out of edit mode the grid is for running: press <strong>Recall</strong> on a scene
-        and the desk moves. The column the desk is currently on is marked, so the grid
-        always says where you are, and <strong>Recall now</strong> appears above it when the
-        desk has not been told everything the current scene asks for. <strong>Resync</strong>
-        beside it re-sends that scene’s whole set: it is the press for when somebody has
-        moved a fader or muted a mic by hand at the desk, which nothing here can see.
+        The grid has two modes, and the <strong>padlock</strong> in its top-left corner is
+        the one press that changes them: shut, the show is being run and a stray click
+        changes nothing but which scene is recalled; open, cells and names are the show being
+        built. Recalling is live in either mode: press <strong>Recall</strong> on a scene and
+        the desk moves. The column the desk is on says so in its own title box, so the grid
+        always says where you are.
+      </p>
+      <p>
+        A recall sends what has changed since the desk was last told, so the grid is safe to
+        press twice. What it cannot do is see the desk itself: a fader or a mute moved by hand
+        is invisible here, and the record of what has been sent lives for as long as the show
+        is open — reopening it is what starts the next recall from the whole scene.
       </p>
     </section>
 
@@ -197,8 +203,10 @@
         What goes out is only what changes, diffed against what Cuerunner last sent, and each
         write is remembered as it lands. Mics an earlier recall already opened are left
         alone, so a recall never bumps a live channel and a scene cue is safe to fire twice.
-        Nothing here can see a fader somebody moved by hand at the desk — that is what
-        <strong>Resync</strong> is for.
+        Nothing here can see a fader or a mute somebody moved by hand at the desk: a recall
+        sends only what has changed since Cuerunner last sent, so a channel it believes is
+        already closed cannot be closed from here. Reopening the show forgets that record, and
+        the next recall writes every channel the scene controls.
       </p>
       <p>
         The membership goes over whatever route the show’s desk takes it on: an SQ reached

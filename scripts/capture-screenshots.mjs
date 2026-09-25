@@ -294,7 +294,7 @@ await page.locator('.btn-script').click()
 await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
 await page.locator('.scenes-view').waitFor()
 // The view opens to run the show; building one is an Edit away.
-await page.locator('.scenes-edit').click()
+await page.locator('.matrix-lock, .matrix-empty-action').first().click()
 
 // Rows are the show's faders, and a fader is its number: the row is found by that number
 // exactly, since "1" is also the first character of "10". A row holds one thing, and it
