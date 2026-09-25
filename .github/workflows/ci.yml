@@ -139,15 +139,44 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      # Two things can leave Electron's binary undownloaded, and neither is about the code:
       # Node 26 brings npm 12, which refuses to run a package's install scripts until they are
-      # approved by name — so `npm ci` leaves Electron's binary undownloaded and the one file
-      # that requires it says so ("Electron failed to install correctly, please delete
-      # node_modules/electron and try installing again"). The two Node lanes say which is which:
-      # node 24 installs it, node 26 warns `install-scripts … not yet covered by allowScripts`
-      # and goes on. Electron's own install script downloads it and is not subject to that gate
-      # at all; `npm rebuild` is, which is why it fixed nothing.
+      # approved by name (`npm warn install-scripts … not yet covered by allowScripts`, then
+      # `rebuilt dependencies successfully` for an `npm rebuild` that did nothing, because the
+      # gate applies to it too); and the download itself is over the network, which failed on
+      # the macOS runner in one lane while the e2e lane on the same machine installed it
+      # happily. Electron's own `install.js` is not subject to the gate, so it runs in place of
+      # the postinstall, with a bounded retry for the network, and the job fails if the binary
+      # truly cannot be had rather than letting one file report it.
       - name: Make sure Electron's binary arrived
-        run: node -e "require('electron')" || node node_modules/electron/install.js
+        shell: node {0}
+        run: |
+          const { execFileSync } = require('node:child_process')
+          const works = () => {
+            try {
+              execFileSync(process.execPath, ['-e', "require('electron')"], { stdio: 'ignore' })
+              return true
+            } catch {
+              return false
+            }
+          }
+          if (works()) {
+            console.log("Electron's binary is already in place")
+            return
+          }
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              execFileSync(process.execPath, ['node_modules/electron/install.js'], { stdio: 'inherit' })
+            } catch (error) {
+              console.log(`attempt ${attempt} did not finish: ${error.message}`)
+            }
+            if (works()) {
+              console.log(`Electron's binary arrived on attempt ${attempt}`)
+              return
+            }
+          }
+          console.error("Electron's binary could not be downloaded")
+          process.exit(1)
 
       - name: Unit tests
         run: npm test
