@@ -139,7 +139,11 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
-      # Two things can leave Electron's binary undownloaded, and neither is about the code:
+      # `package.json` already approves Electron's install script for npm 12 (`allowScripts`, which
+      # npm 11 ignores), so `npm ci` on Node 26 does fetch the binary — the `install-scripts`
+      # warning that lane prints is fsevents, whose script is optional and skipped. This is the
+      # network case, and it runs Electron's own script for a reason: `npm rebuild electron` is
+      # covered by the same gate (`rebuilt dependencies successfully`, having done nothing).
       # Node 26 brings npm 12, which refuses to run a package's install scripts until they are
       # approved by name (`npm warn install-scripts … not yet covered by allowScripts`, then
       # `rebuilt dependencies successfully` for an `npm rebuild` that did nothing, because the
