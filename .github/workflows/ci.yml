@@ -123,19 +123,7 @@ jobs:
       - run: npm ci --legacy-peer-deps
 
       - name: Unit tests
-        if: runner.os != 'macOS'
         run: npm test
-
-      # One retry on macOS, and nowhere else, while two native-service cases are understood
-      # rather than fixed: the desk's goodbye on a session the show moved away from, and the
-      # MIDI link's state when its desk goes away. Both spawn the compiled services on the
-      # ports the protocol fixes, they fail on that machine and pass on Linux, and the runner
-      # leaves orphaned `cuerunner-audio` processes behind — state another case in the same run
-      # can be reading. The retry is not a licence to leave them: the deferred-work ledger
-      # carries both, with what was seen, and the Linux lane stays strict.
-      - name: Unit tests (macOS)
-        if: runner.os == 'macOS'
-        run: npm test -- --retry=1
 
   # The playback engine is C++ and is part of the app: its deterministic offline-render
   # acceptance suite (exact start/stop/fade frames, routing, streaming, cache, M4A) runs
