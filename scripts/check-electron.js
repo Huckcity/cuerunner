@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Verifies and repairs the Electron binary after npm install.
 //
-// npm 12+ gate: even when `allowScripts` approves a package, the install
-// script can still fail silently (e.g. network timeout during the ~200 MB
-// binary download, corrupt cache). This runs from the root project's
-// postinstall — which always executes — and repairs the Electron binary
-// when npm's own electron postinstall didn't deliver it.
+// npm runs a dependency's install scripts before the root postinstall, so on Node 26
+// Electron's own postinstall extracts its zip before `scripts/postinstall.js` has patched
+// fd-slicer — and that extraction stalls without saying so, leaving `dist/` partial and no
+// `path.txt` (see patch-fd-slicer.js). A network timeout or a corrupt cache fails the same
+// way, just as quietly. This runs from the root postinstall — which always executes — and
+// repairs the Electron binary when npm's own electron postinstall didn't deliver it.
 
 'use strict'
 

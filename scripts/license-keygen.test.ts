@@ -82,7 +82,9 @@ describe('keygen', () => {
       const keyPath = join(dir, 'issuer.pem')
       const { lines } = run(['keygen', '--key', keyPath])
 
-      expect(statSync(keyPath).mode & 0o777).toBe(0o600)
+      // A mode is a POSIX fact: Windows has none, and the file's protection there is the
+      // profile's own ACLs rather than anything this writer could set.
+      if (process.platform !== 'win32') expect(statSync(keyPath).mode & 0o777).toBe(0o600)
       const printed = lines.join('\n')
       expect(printed).toContain('BEGIN PUBLIC KEY')
       expect(printed).not.toContain('PRIVATE KEY')

@@ -1,0 +1,9 @@
+# Every checkout is LF.
+#
+# The tests read this repository as text and write text of their own: the demo show's round
+# trip, the rendered pages, the prose guards, the release workflows. A Windows checkout turns
+# LF into CRLF by default (`core.autocrlf`), so adding the Windows unit lane failed forty of
+# them on bytes nobody had edited — and the local pipeline, which ships the working tree over
+# ssh, never sees it, because the tree it ships is this one. Nothing here wants CRLF: there is
+# no .bat or .cmd file in the repository.
+* text=auto eol=lf

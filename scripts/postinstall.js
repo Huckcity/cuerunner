@@ -7,8 +7,10 @@
 //
 // 1. Patch @electron/rebuild's node-gyp.js (import.meta.dirname is undefined when
 //    the module is dynamically imported inside a forked CJS process).
-// 2. Patch fd-slicer's ReadStream sentinel — without it, zip extraction deadlocks
-//    on Node 26 and the Electron binary never lands (see patch-fd-slicer.js).
+// 2. Patch fd-slicer's ReadStream — without it, zip extraction deadlocks on Node 26
+//    (the EOF sentinel collides with stream state) or stalls in `stream.pipeline`
+//    (ReadStream.destroy emits no 'close'), and the Electron binary never lands
+//    (see patch-fd-slicer.js).
 // 3. Verify the Electron binary exists and repair it if not. Requires step 2, since
 //    the repair re-runs electron's install script, which extracts a zip.
 

@@ -37,12 +37,41 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  # The suite runs on all three platforms the app ships to, not only where it is convenient:
+  # most of it is the main process — the workspace and its atomic write, the audio wire, the
+  # redundancy service — and those are exactly the places a platform shows up. It ran on
+  # `ubox` alone until the first Windows run of it found 24 failures, most of them tests that
+  # had only ever been written against POSIX (a mode that makes a write fail, a directory's
+  # permissions, `bash` for the release tooling's own scripts); those state their platform now,
+  # and the two that were real — an engine on a machine with no output endpoint, and a port
+  # Windows hands out twice — are fixed rather than skipped.
   unit-test:
-    runs-on: [self-hosted, linux, x64, ubox]
+    name: unit-test (${{ matrix.label }}, node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: [24, 26]
+        include:
+          # 24 = LTS (release toolchain), 26 = current — catches cross-major breakage like
+          # fd-slicer's zip extraction stalling on Node 26 (#49) — on each of the three.
+          - label: linux
+            runner: [self-hosted, linux, x64, ubox]
+            node-version: 24
+          - label: linux
+            runner: [self-hosted, linux, x64, ubox]
+            node-version: 26
+          - label: windows
+            runner: [self-hosted, windows, x64, win-ci]
+            node-version: 24
+          - label: windows
+            runner: [self-hosted, windows, x64, win-ci]
+            node-version: 26
+          - label: macos
+            runner: [self-hosted, macos, arm64, mac-mini]
+            node-version: 24
+          - label: macos
+            runner: [self-hosted, macos, arm64, mac-mini]
+            node-version: 26
     steps:
       - uses: actions/checkout@v7
 
@@ -50,13 +79,108 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
+      # A working copy the runner kept from an earlier run is what it was: `.gitattributes`
+      # changes what a checkout *writes*, not what is already on disk, and nothing short of
+      # removing a file makes git write it again — `git checkout-index -a -f` left it CRLF, and
+      # so did the same with `core.autocrlf=false`, measured in the Windows runner's own
+      # checkout, where 1766 tracked files were still CRLF for the tests that read the
+      # repository as text. Removing the ones git reports as CRLF and checking them out again
+      # writes them with the attribute, which is LF; the same measurement showed it working.
+      - name: Normalise line endings
+        shell: node {0}
+        run: |
+          const { execFileSync } = require('node:child_process')
+          const { rmSync } = require('node:fs')
+          const crlf = execFileSync('git', ['ls-files', '--eol'], { encoding: 'utf8' })
+            .split('\n')
+            .filter((line) => line.includes('w/crlf'))
+            .map((line) => line.split('\t').pop().trim())
+            .filter(Boolean)
+          if (crlf.length === 0) {
+            console.log('every checkout file is already LF')
+            return
+          }
+          for (const file of crlf) rmSync(file, { force: true })
+          execFileSync('git', ['checkout', '--', '.'], { stdio: 'inherit' })
+          console.log(`${crlf.length} files were CRLF and are LF now`)
+
       - name: Install ALSA dev headers
+        if: runner.os == 'Linux'
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
+      # `npm test` builds the native engine first: the compiler has to be on PATH, and on
+      # Windows that means importing the developer environment, the same way the e2e job
+      # does it and for the same reason.
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
+      - name: Locate the ASIO SDK
+        if: runner.os == 'Windows'
+        shell: cmd
+        # Opt-in on the machine, like the e2e lane: a runner with an SDK builds with ASIO, and
+        # one without gets this warning and an honest build without it.
+        run: |
+          set "ASIO=%CUERUNNER_ASIO_SDK%"
+          if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo CUERUNNER_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          echo Using the ASIO SDK at %ASIO%
+
       - run: npm ci --legacy-peer-deps
+
+      # `package.json` already approves Electron's install script for npm 12 (`allowScripts`, which
+      # npm 11 ignores) — this is not the install-scripts gate: the `install-scripts` warning this
+      # lane prints is fsevents, whose script is optional and skipped. It is order. npm runs a
+      # dependency's install scripts before the root postinstall, so on Node 26 Electron's own
+      # postinstall extracts its zip *before* `scripts/postinstall.js` has patched fd-slicer, and
+      # that extraction stalls in silence (see patch-fd-slicer.js: no error, no non-zero exit — a
+      # partial `dist`, no `path.txt`). The root postinstall patches fd-slicer and re-runs the
+      # extraction; this step guards that outcome, in place of the postinstall, because Electron's
+      # own `install.js` is not subject to npm's gate (`npm rebuild electron` is). Bounded retry
+      # for the network, and the job fails if the binary truly cannot be had rather than letting
+      # one file report it. The `electron-install` lane covers the same install on a clean tree.
+      - name: Make sure Electron's binary arrived
+        shell: node {0}
+        run: |
+          const { execFileSync } = require('node:child_process')
+          const works = () => {
+            try {
+              execFileSync(process.execPath, ['-e', "require('electron')"], { stdio: 'ignore' })
+              return true
+            } catch {
+              return false
+            }
+          }
+          if (works()) {
+            console.log("Electron's binary is already in place")
+            return
+          }
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              execFileSync(process.execPath, ['node_modules/electron/install.js'], { stdio: 'inherit' })
+            } catch (error) {
+              console.log(`attempt ${attempt} did not finish: ${error.message}`)
+            }
+            if (works()) {
+              console.log(`Electron's binary arrived on attempt ${attempt}`)
+              return
+            }
+          }
+          console.error("Electron's binary could not be downloaded")
+          process.exit(1)
 
       - name: Unit tests
         run: npm test

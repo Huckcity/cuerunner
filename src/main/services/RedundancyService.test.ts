@@ -339,10 +339,17 @@ describe('a machine on its own', () => {
     expect(alone.health.at(-1)).toEqual({ state: 'running', detail: alone.latest()?.status.detail })
   })
 
-  it('degrades with the port it could not have, rather than failing the show', async () => {
+  // Windows hands the port out twice: measured on the Windows runner, a second listener bound
+  // to `0.0.0.0` on a port a first one holds exclusively succeeds there, so the refusal this
+  // case needs cannot be produced on that platform at all. The claim itself is exercised on
+  // Linux and macOS, where a taken port is taken; what Windows does with two instances of the
+  // app and one port is in the deferred-work ledger.
+  it.skipIf(process.platform === 'win32')('degrades with the port it could not have, rather than failing the show', async () => {
     const taken = createServer()
     const listening = Promise.withResolvers<void>()
-    taken.listen(0, '127.0.0.1', listening.resolve)
+    // Held the way the service holds its own — every interface, and exclusively — because a
+    // listener on one address is not a port taken (see the Windows note on the case below).
+    taken.listen({ port: 0, exclusive: true }, listening.resolve)
     await listening.promise
     const port = (taken.address() as AddressInfo).port
 

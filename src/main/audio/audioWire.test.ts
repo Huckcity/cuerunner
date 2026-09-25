@@ -86,8 +86,14 @@ describe('the wire declaration', () => {
     const binary = ensureBinary()
     const previousBin = process.env.CUERUNNER_AUDIO_BIN
     const previousDeclared = process.env.CUERUNNER_TEST_AUDIO_PROTOCOL
+    const previousBackend = process.env.CUERUNNER_AUDIO_BACKEND
     process.env.CUERUNNER_AUDIO_BIN = binary
     process.env.CUERUNNER_TEST_AUDIO_PROTOCOL = String(AUDIO_PROTOCOL_VERSION + 1)
+    // What is being refused is a *declaration*, not a device: the silent backend is the one
+    // that starts on a machine with no output endpoint at all, which is what a headless
+    // Windows runner is. Without it the engine exits during startup and the client — rightly
+    // — reports that instead of the protocol it never got to hear.
+    process.env.CUERUNNER_AUDIO_BACKEND = 'silent'
     const stale = new NativeAudioEngine()
     try {
       const failure = await stale.ensureStarted().then(
@@ -106,6 +112,7 @@ describe('the wire declaration', () => {
     } finally {
       restoreEnv('CUERUNNER_AUDIO_BIN', previousBin)
       restoreEnv('CUERUNNER_TEST_AUDIO_PROTOCOL', previousDeclared)
+      restoreEnv('CUERUNNER_AUDIO_BACKEND', previousBackend)
       await stale.shutdown()
     }
   })
@@ -135,8 +142,12 @@ describe('the wire declaration', () => {
 
     const previousBin = process.env.CUERUNNER_AUDIO_BIN
     const previousSocket = process.env.CUERUNNER_AUDIO_SOCKET
+    const previousBackend = process.env.CUERUNNER_AUDIO_BACKEND
     process.env.CUERUNNER_AUDIO_BIN = binary
     process.env.CUERUNNER_AUDIO_SOCKET = socketPath
+    // The same as the case above: a machine with no output endpoint still has to reach the
+    // handshake before it can be refused for what it says in it.
+    process.env.CUERUNNER_AUDIO_BACKEND = 'silent'
     vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
     const silent = new NativeAudioEngine()
     try {
@@ -156,6 +167,7 @@ describe('the wire declaration', () => {
     } finally {
       restoreEnv('CUERUNNER_AUDIO_BIN', previousBin)
       restoreEnv('CUERUNNER_AUDIO_SOCKET', previousSocket)
+      restoreEnv('CUERUNNER_AUDIO_BACKEND', previousBackend)
       await silent.shutdown()
       for (const socket of sockets) socket.destroy()
       await new Promise<void>((resolveClosed) => server.close(() => resolveClosed()))

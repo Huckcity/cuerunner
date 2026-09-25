@@ -164,10 +164,14 @@ extract and run it instead:
 On **Node 26** this happens on every fresh install: the Electron download succeeds, but
 extracting the ~200 MB zip deadlocks inside `extract-zip`'s dependency `fd-slicer@1.1.0`,
 which uses `stream.destroyed` as its own EOF flag — on Node 26 that property is backed by
-stream state, so the extraction stream ends without emitting `end`, the process exits
-silently, and `dist/` is left holding a single half-written file. (Verified: Node 24.9
-extracts the same archive fine, Node 26.7 stalls.) CI builds on Node 24, which is why
-released AppImages are unaffected.
+stream state, so the extraction stream ends without emitting `end`. Its `destroy()` returns
+early for the same reason, so the stream never emits `close` either, and `stream.pipeline`
+— which extract-zip awaits — never settles. Either way the process exits silently, with no
+error and no non-zero status, and `dist/` is left holding a few half-written files.
+(Verified: Node 24.9 extracts the same archive fine, Node 26.7 stalls on the first zip
+entry; with the `end` half patched alone, the darwin-arm64 archive stops at its first
+*stored* entry, a form the linux-x64 archive has not got.) CI builds on Node 24, which is
+why released AppImages are unaffected.
 
 `npm install` fixes this automatically: the project's postinstall patches `fd-slicer`, then
 re-runs Electron's install script if the binary is missing. If you still end up without a
@@ -608,8 +612,12 @@ npm run local-ci
 GitHub Actions workflows in `.github/workflows/`:
 
 - **`ci.yml`**: Runs on pull requests
-  - Typecheck, unit tests, and the Electron-install contract on Ubuntu, on Node 24 (LTS)
-    and 26 (current)
+  - Typecheck and the Electron-install contract on Ubuntu, on Node 24 (LTS) and 26 (current)
+  - Unit tests on all three platforms — Windows, macOS and Linux — on both Node majors: the
+    suite is mostly the main process (the workspace and its atomic write, the audio wire, the
+    redundancy service), which is where a platform shows up. The release tooling's own tests
+    and the `chmod`-based refusal cases state their platform, because they need a POSIX shell
+    or a mode that makes a write fail
   - E2E tests on Windows, macOS, and Linux (Ubuntu under Xvfb)
   - Integration tests on Linux: Cuerunner against the protocol peers for the console and the
     desk (no vendor software, no hardware)
