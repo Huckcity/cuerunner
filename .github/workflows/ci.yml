@@ -139,6 +139,72 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      # TEMPORARY, do not merge: the macOS node-26 lane's Electron install, probed where it
+      # happens. Deleted once the mechanism has a name.
+      - name: Diagnose the Electron install
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          echo "=== versions"
+          node -v; npm -v; sw_vers -productVersion; uname -m; sysctl -in sysctl.proc_translated
+          echo "=== env"
+          env | grep -i -e electron -e proxy | sort || echo "(no electron or proxy vars)"
+          echo "=== electron dir"
+          ls -la node_modules/electron || true
+          ls -la node_modules/electron/dist 2>&1 | head -20
+          echo "path.txt: $(cat node_modules/electron/path.txt 2>&1)"
+          echo "dist/version: $(cat node_modules/electron/dist/version 2>&1)"
+          echo "fd-slicer sentinel lines: $(grep -c _fdsDestroyed node_modules/fd-slicer/index.js)"
+          echo "=== cache"
+          find "$HOME/Library/Caches/electron" -type f -exec ls -la {} \; 2>/dev/null | head -10 || true
+          echo "=== cached zip integrity"
+          for z in $(find "$HOME/Library/Caches/electron" -name '*.zip'); do echo "$z"; unzip -t "$z" 2>&1 | tail -3; done
+          echo "=== node binaries beside the runner"
+          ls -d "$RUNNER_TEMP"/../../_tool/node/*/arm64/bin/node 2>/dev/null || true
+
+          echo "=== install.js, DEBUG naming the stage it stops in"
+          DEBUG='@electron/get:*' node node_modules/electron/install.js > "$RUNNER_TEMP/install-26.log" 2>&1
+          echo "install.js exit code: $?"
+          head -40 "$RUNNER_TEMP/install-26.log"
+
+          echo "=== install.js with --trace-exit"
+          node --trace-exit node_modules/electron/install.js > "$RUNNER_TEMP/install-trace.log" 2>&1
+          echo "exit code: $?"
+          head -20 "$RUNNER_TEMP/install-trace.log"
+
+          cat > "$RUNNER_TEMP/probe-extract.cjs" <<'PROBE'
+          const extract = require(process.argv[3])
+          const fs = require('node:fs')
+          const path = require('node:path')
+          const os = require('node:os')
+          const seen = []
+          const dir = path.join(os.tmpdir(), 'probe-extract-' + process.argv[4])
+          fs.rmSync(dir, { recursive: true, force: true })
+          const started = Date.now()
+          extract(process.argv[2], { dir, onEntry: (e) => seen.push(e.fileName) })
+            .then(() => {
+              console.log('EXTRACT OK', seen.length, 'entries in', Date.now() - started, 'ms')
+              process.exit(0)
+            })
+            .catch((e) => {
+              console.log('EXTRACT FAILED', e.message)
+              process.exit(0)
+            })
+          setTimeout(() => {
+            console.log('EXTRACT STALLED after', Date.now() - started, 'ms;', seen.length, 'entries; last:', seen.slice(-3))
+            process.exit(0)
+          }, 90000)
+          PROBE
+
+          echo "=== extraction of the cached zip, under every node on the machine"
+          for z in $(find "$HOME/Library/Caches/electron" -name '*.zip' | head -1); do
+            echo "zip: $z"
+            for n in "$(command -v node)" $(ls -d "$RUNNER_TEMP"/../../_tool/node/*/arm64/bin/node 2>/dev/null); do
+              echo "--- $n ($("$n" -v))"
+              timeout 150 "$n" "$RUNNER_TEMP/probe-extract.cjs" "$z" "$(pwd)/node_modules/extract-zip" "$(basename "$n" | tr -d '.')" || echo "--- exited $?"
+            done
+          done
+
       # `package.json` already approves Electron's install script for npm 12 (`allowScripts`, which
       # npm 11 ignores), so `npm ci` on Node 26 does fetch the binary — the `install-scripts`
       # warning that lane prints is fsevents, whose script is optional and skipped. This is the
