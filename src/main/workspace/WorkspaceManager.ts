@@ -32,7 +32,8 @@ import {
   SHOW_SETTINGS_SHAPE,
   SHOW_SETTINGS_SECTIONS,
   WORKSPACE_SECTIONS,
-  type DeclaredFields
+  type DeclaredFields,
+  type ShapeLeaf
 } from '../../shared/workspaceSections'
 
 /**
@@ -278,24 +279,111 @@ function shapeOf(node: unknown): unknown {
   return 'of' in node ? node.of : undefined
 }
 
-/** The fields a list's elements carry, or null when the declaration says the field is no list. */
+/** How a sentence names the value a leaf declares: `a number`, `a string`, `a boolean`. */
+const LEAF_WORDS: Record<ShapeLeaf, string> = {
+  string: 'a string',
+  number: 'a number',
+  boolean: 'a boolean'
+}
+
+/** How a sentence names the value a list of primitives declares: `a list of strings`. */
+const ITEM_WORDS: Record<ShapeLeaf, string> = {
+  string: 'a list of strings',
+  number: 'a list of numbers',
+  boolean: 'a list of booleans'
+}
+
+/**
+ * The fields a list's elements carry, or null when the declaration says the field is no list of
+ * objects. Called with a node whose wrappers are already off.
+ */
 function elementFields(node: unknown): DeclaredFields | null {
-  const shape = shapeOf(node)
-  if (typeof shape !== 'object' || shape === null || !('elements' in shape)) return null
-  const elements = shape.elements
+  if (typeof node !== 'object' || node === null || !('elements' in node)) return null
+  const elements = node.elements
   // A node's `elements` is the fields of its elements' objects by construction, and the walk
   // only ever reads it as one.
   return typeof elements === 'object' && elements !== null ? (elements as DeclaredFields) : null
 }
 
 /**
- * Refuses a value whose fields are not the declared ones: a field the declaration does not
- * carry, a declared field the value has not got, or a declared field whose value is not the
- * kind of value the declaration says it is. `path` is where the value sits — a section's own
- * name, or the field a list hangs under — and `at` is its index where the value is a list's
- * element, or -1 where it is not.
+ * Refuses one declared field's value that is not what the declaration says it is: a leaf of
+ * another kind, a leaf carrying `null` where the types do not allow one, a list that is not a
+ * list or an element that is not the kind its list carries, or an object where the declaration
+ * writes an object's own fields. `node` is the field's node as the declaration holds it,
+ * wrappers and all, and `path` is the path the sentence names the value by.
  *
- * The walk descends through the declaration and not the document: four calls at the deepest
+ * The declaration's reserved names tell its forms apart, so a node is read by what it carries:
+ * `items` is a list of primitives, `elements` a list of objects, anything else that is an
+ * object is an object's own fields — and a node that is none of those is a leaf, compared
+ * against the value's own `typeof` as the tag it carries. The two wrappers are read first, in
+ * the order the types put them: `absent` is the field's and the caller has already read it, and
+ * `nothing` admits `null` and is taken off before the shape inside it is read.
+ */
+function refuseForeignValue(value: unknown, node: unknown, path: string, source: string): void {
+  // The wrappers are the declaration's own: `absent` is a fact about the key and is read where
+  // the key is, and `nothing` says the value may be `null` — the one value admitted before the
+  // shape inside the wrapper is read, and only where the types allow it.
+  const shape = shapeOf(node)
+  if (typeof shape === 'object' && shape !== null && 'nothing' in shape && shape.nothing === true) {
+    if (value === null) return
+    refuseForeignValue(value, 'of' in shape ? shape.of : undefined, path, source)
+    return
+  }
+  if (shape === 'string' || shape === 'number' || shape === 'boolean') {
+    if (typeof value === shape) return
+    throw new Refusal(
+      `that show’s settings have ${path} as ${valueKind(value)},` +
+      ` where this version of WinsLab writes ${LEAF_WORDS[shape]}` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+  if (typeof shape === 'object' && shape !== null && 'items' in shape) {
+    const kind = shape.items
+    if (kind === 'string' || kind === 'number' || kind === 'boolean') {
+      refuseForeignItems(value, kind, path, source)
+      return
+    }
+  }
+  const elements = elementFields(shape)
+  if (elements !== null) {
+    refuseForeignList(value, elements, path, source)
+    return
+  }
+  refuseForeignFields(value, shape as DeclaredFields, path, -1, source)
+}
+
+/**
+ * Refuses a declared list of primitives whose value is not a list, or whose element is not the
+ * kind the list carries. The sentence names the element's own path — `midiIn.portNames.1` —
+ * because an element is the one place the field's name does not reach.
+ */
+function refuseForeignItems(value: unknown, kind: ShapeLeaf, path: string, source: string): void {
+  if (!Array.isArray(value)) {
+    throw new Refusal(
+      `that show’s settings have ${path} as ${valueKind(value)},` +
+      ` where this version of WinsLab writes ${ITEM_WORDS[kind]}` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+  for (let at = 0; at < value.length; at++) {
+    if (typeof value[at] === kind) continue
+    throw new Refusal(
+      `that show’s settings have ${valuePath(path, at)} as ${valueKind(value[at])},` +
+      ` where this version of WinsLab writes ${LEAF_WORDS[kind]}` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+}
+
+/**
+ * Refuses a value whose fields are not the declared ones: a field the declaration does not
+ * carry, a declared field the value has not got, or a declared field whose value is not what
+ * its declaration says — `refuseForeignValue` reads that one, down to the kind of a leaf and
+ * the kind of a list's elements. `path` is where the value sits — a section's own name, or
+ * the field a list hangs under — and `at` is its index where the value is a list's element,
+ * or -1 where it is not.
+ *
+ * The walk descends through the declaration and not the document: four levels at the deepest
  * — the settings, a section, a list's elements and the lists inside them — whatever a file
  * nests, so no document can recurse it. A document's keys are iterated rather than listed,
  * and the declaration's are the declaration's own size, so a document with a million fields
@@ -339,14 +427,7 @@ function refuseForeignFields(
         ` — ${source} was probably saved by an older build`
       )
     }
-    const elements = elementFields(node)
-    if (elements !== null) {
-      refuseForeignList(carried[field], elements, fieldPath(path, at, field), source)
-      continue
-    }
-    const shape = shapeOf(node)
-    if (shape === 'leaf') continue
-    refuseForeignFields(carried[field], shape as DeclaredFields, fieldPath(path, at, field), -1, source)
+    refuseForeignValue(carried[field], node, fieldPath(path, at, field), source)
   }
 }
 
@@ -404,7 +485,9 @@ function refuseIncompleteCues(cues: readonly Cue[], source: string): void {
  * one this build does not declare, or one it leaves out, refuses rather than being filled
  * in; the fields inside those sections, read against the one declaration of them, in both
  * directions — a field this build does not write refuses, and so does a declared field the
- * document leaves out, because either way the window reads a value nobody wrote; and a
+ * document leaves out, because either way the window reads a value nobody wrote, and each
+ * field's value is then held to the kind its tag declares, down to the element of a list of
+ * primitives, which is the check the window's own readers used to fail on instead; and a
  * cue's declared-required fields, read in the one direction a cue has — a cue is content
  * rather than settings, so a field this build does not know there is kept, and only a field
  * a cue's own type requires and the document has not got refuses. A `showSettings` that is

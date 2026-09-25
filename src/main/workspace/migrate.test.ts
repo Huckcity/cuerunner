@@ -209,6 +209,146 @@ describe('the shape check', () => {
     expect(Object.keys(loaded.cues[0]).sort()).toEqual(Object.keys(given).sort())
   })
 
+  it('refuses a settings leaf carrying a value of the kind its type does not write', () => {
+    // The declaration carries the kinds, so a leaf is checked as well as the fields around it:
+    // `desk.midiChannel` is a number this build's services hand the desk, and a file carrying
+    // `"1"` there would walk into them as a string. The sentence names the field's path, the
+    // kind the file carried and the kind this build writes, in the family the object and list
+    // mismatches already use.
+    const settings = {
+      ...defaultShowSettings(),
+      desk: { ...defaultShowSettings().desk, midiChannel: '1' }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have desk.midiChannel as a string, where this version of WinsLab writes a number' +
+      ` — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses a leaf the types allow null for carrying another kind instead', () => {
+    // The wrapper admits `null` and nothing else: the kind inside it is what the value is
+    // checked against, so a string at a mute group refuses rather than being read as the
+    // group's number by whatever asked for it.
+    const settings = {
+      ...defaultShowSettings(),
+      desk: {
+        ...defaultShowSettings().desk,
+        buttons: { go: '48', back: null, goNote: null, backNote: null }
+      }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have desk.buttons.go as a string, where this version of WinsLab writes a number' +
+      ` — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses a settings field inside a scene’s row, where two element indices meet', () => {
+    // The path a sentence builds from two lists is the deepest one: `scenes.list[0]` and then
+    // that scene's `dcas[0]`, whose `memberId` the grid resolves against the cast. A number
+    // there opens nothing and says nothing about why, so the sentence names both indices.
+    const settings = {
+      ...defaultShowSettings(),
+      scenes: {
+        list: [{
+          id: 's-1',
+          name: 'Wedding',
+          dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 3 }],
+          notes: ''
+        }],
+        allowDuplicateAssignment: true
+      }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have scenes.list.0.dcas.0.memberId as a number, ' +
+      `where this version of WinsLab writes a string — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses a list of primitives that is not a list, naming what the list carries', () => {
+    // A list of primitives is the other leaf the declaration tags: a number where the list
+    // should be is the shape a file from another build would carry, and the sentence says what
+    // this build writes there rather than leaving the window to iterate it.
+    const settings = {
+      ...defaultShowSettings(),
+      cast: {
+        ...defaultShowSettings().cast,
+        ensembles: [{ id: 'e-1', name: 'Chorus', channelIds: 3 }]
+      }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have cast.ensembles.0.channelIds as a number, ' +
+      'where this version of WinsLab writes a list of strings' +
+      ` — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses an element of a list of primitives that is another kind, naming its index', () => {
+    // The element is where a list of primitives can be wrong inside itself, so the sentence
+    // names the index the file got wrong: a scene builder reading `portNames` would otherwise
+    // open a port called `3`.
+    const settings = {
+      ...defaultShowSettings(),
+      midiIn: { ...defaultShowSettings().midiIn, portNames: ['in', 3] }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
+      'that show’s settings have midiIn.portNames.1 as a number, ' +
+      `where this version of WinsLab writes a string — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses null where the types do not allow it, and reads it where they do', () => {
+    // `null` is legal exactly where the types allow it, so the same value is a refusal at
+    // `presence.goneAfterSeconds` — a number no build writes as nothing — and this build's own
+    // shape at the desk's buttons, an unpatched pack, a swap with nobody on it, a performer
+    // between channels and a fader nobody has numbered. Each of those also carries a real
+    // value somewhere, because a wrapper that took `null` and refused everything else would be
+    // the wrong check wearing the right sentence.
+    const withNull = {
+      ...defaultShowSettings(),
+      presence: { ...defaultShowSettings().presence, goneAfterSeconds: null }
+    } as unknown as Workspace['showSettings']
+    const allowed = {
+      ...defaultShowSettings(),
+      desk: {
+        ...defaultShowSettings().desk,
+        buttons: { go: 48, back: null, goNote: null, backNote: null }
+      },
+      rf: {
+        ...defaultShowSettings().rf,
+        plot: { packs: [{ id: 'pack-1', label: 'Belt pack', channelId: 'channel-1', performerId: null, notes: '' }] },
+        swaps: [{ at: 0, packId: 'pack-1', packLabel: 'Belt pack', from: null, to: null }]
+      },
+      cast: {
+        ...defaultShowSettings().cast,
+        performers: [{ id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: null }],
+        dcas: [{ id: 'dca-1', deskNumber: null }]
+      }
+    } as unknown as Workspace['showSettings']
+
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: withNull }, SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: withNull }, SHOW)).toThrow(
+      'that show’s settings have presence.goneAfterSeconds as nothing, ' +
+      `where this version of WinsLab writes a number — ${SHOW} was probably saved by another build`
+    )
+    const loaded = migrateWorkspace({ ...workspaceWith([]), showSettings: allowed }, SHOW).showSettings
+    expect(loaded?.desk.buttons.go).toBe(48)
+    expect(loaded?.desk.buttons.back).toBeNull()
+    expect(loaded?.rf.plot.packs[0].channelId).toBe('channel-1')
+    expect(loaded?.rf.swaps[0].to).toBeNull()
+    expect(loaded?.cast.performers[0].channelId).toBeNull()
+    expect(loaded?.cast.dcas[0].deskNumber).toBeNull()
+  })
+
   it('names the missing section before a field missing inside another one', () => {
     // The arms run in order, and the order is the sentence an operator sees: a settings
     // object that leaves a section out — the shape a file written before the show services

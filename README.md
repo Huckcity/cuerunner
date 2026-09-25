@@ -549,11 +549,14 @@ A file is unknown when it is not JSON, when it carries no cue list, when its `ve
 1, when it has a top-level section this build does not declare, when a cue type is outside the
 declared set, when its settings carry a section this build does not declare, when its settings
 leave out a section this build writes, when a field inside a settings section is one this build
-does not write, when a declared field is missing from the section that carries it, when a cue has
-not got a field its own type requires — which is what a show saved before the shapes below
-changed meets — or when what sits under `showSettings` is not a set of sections at all. What is
-absent at the file's own top level is not checked, because the check reads what the document
-carries: a file that omits `history`, `audioSettings`, `midiSettings`, `showSettings` or
+does not write, when a declared field is missing from the section that carries it, when what a
+declared field carries is not the JSON kind its own type writes — a string where this build
+writes a number, a number where it writes a list of strings, or an entry of that list that is not
+what the list carries — when that field carries `null` where the show's types allow no such thing,
+when a cue has not got a field its own type requires — which is what a show saved before the
+shapes below changed meets — or when what sits under `showSettings` is not a set of sections at
+all. What is absent at the file's own top level is not checked, because the check reads what the
+document carries: a file that omits `history`, `audioSettings`, `midiSettings`, `showSettings` or
 `triggerGuard` reads, with the window standing its own defaults in for the sections a file has
 not got and a load completing the one gate a file carries none of, `triggerGuard`. A
 `showSettings` that is there is different: it has to be exactly the declared sections, each one

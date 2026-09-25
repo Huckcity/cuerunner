@@ -17,6 +17,7 @@
 * **scenes:** the ✕ that empties a row is drawn only while the grid is unlocked — a press that does nothing is one the operator has to read to find out it does nothing
 * **scenes:** a strip is named the way the operator knows it — the name the strip was given, or the performer whose mic is on it, and its number only while it has neither — in the blocks, in the picker and in the builder; the console's own `Ch 3 · Ruth` stays where the desk is spoken about, in the run log, the change list and the scene inspector
 * **desk:** a fader is its number: the fourth fader of the show is its fourth fader in every scene, and the Scenes grid's rows, the run log and the fader list in Show Settings all name it that way
+* **workspace:** a settings field is checked for the kind its own type writes and not only for its name, so a leaf carrying another JSON kind — a string where this build writes a number, a number where it writes a list of strings, an entry of that list that is not what the list carries — and `null` where the show's types allow no such thing are refused as the file opens, naming the field and the kind the file carried. A show saved with one is refused by name, as every retired shape is
 
 ### Removals
 

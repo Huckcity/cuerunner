@@ -119,42 +119,91 @@ export type RequiredKeys<T> = { readonly [K in keyof T]-?: {} extends Pick<T, K>
 /**
  * The fields of one object, as the declaration carries them: a name per field of `T`.
  *
- * An entry is one of three things. `'leaf'` is a value nothing inside is read — a string, a
- * number, a boolean, or a list of them: a document that carries the field at all is this
- * build's. `{ elements }` is a list whose every element is an object with those fields.
- * Anything else is an object's own fields, declared the same way. A field `T` marks `?:` is
- * declared `{ absent: true, of: … }` around its shape, because a document without it stays
- * legal — and `absent` and `elements` are the declaration's own two names, so a settings
- * field called either one fails to compile here rather than being read as a flag or a list.
+ * An entry is one of four things, and the kinds are the types': `'string'`, `'number'` and
+ * `'boolean'` are a leaf of that kind — what a value nothing inside is read has to be on
+ * disk, and a union of strings is still a string while a union of mixed kinds, which no single
+ * tag could hold, is a compile error. `{ items }` is a list of one primitive
+ * kind. `{ elements }` is a list whose every element is an object with those fields.
+ * Anything else is an object's own fields, declared the same way. A field whose type allows
+ * `null` is declared `{ nothing: true, of: … }` around its shape, mirroring the
+ * `{ absent: true, of: … }` a field `T` marks `?:` gets, and a field that is both optional
+ * and null-able carries both wrappers: `null` is legal exactly where the types allow it,
+ * and a runtime tag has to be one value. `absent`, `nothing`, `of`, `elements` and `items`
+ * are the declaration's own names, so a settings field called any of them fails to compile
+ * here rather than being read as a flag or a list.
  *
  * This is the reach of the `satisfies` on the shapes below: it holds the declaration to the
  * types, at every level — every field of every settings object is named and no name the
  * type does not carry is accepted, so a field added to `ShowSettings` fails to compile
- * until it is declared, and so does a field the declaration invents. What no value-level
- * `satisfies` can hold is that a *document* is read the way the declaration says; that is
- * the walk test's half (`src/main/workspace/savedShape.test.ts` walks a whole value of the
- * settings against the declaration), and the funnel tests' half (a document off that shape
- * refuses).
+ * until it is declared, and so does a field the declaration invents, and so does a tag that
+ * disagrees with the field's type. What no value-level `satisfies` can hold is that a
+ * *document* is read the way the declaration says; that is the walk test's half
+ * (`src/main/workspace/savedShape.test.ts` walks a whole value of the settings against the
+ * declaration), and the funnel tests' half (a document off that shape refuses).
  */
 export type ShapeFields<T> = {
   readonly [K in keyof T]-?: {} extends Pick<T, K>
     ? { readonly absent: true; readonly of: ShapeNode<T[K]> }
     : ShapeNode<T[K]>
-} & { readonly absent?: never; readonly of?: never; readonly elements?: never }
+} & {
+  readonly absent?: never
+  readonly of?: never
+  readonly elements?: never
+  readonly items?: never
+  readonly nothing?: never
+}
 
-/** One field's shape: a leaf, a list of objects, or an object's own fields. */
-export type ShapeNode<T> = T extends readonly (infer E)[]
-  ? [E] extends [object] ? { readonly elements: ShapeFields<E> } : 'leaf'
-  : T extends object ? ShapeFields<T> : 'leaf'
+/** A leaf's declared kind: the one value a leaf of that kind may be on disk. */
+export type ShapeLeaf = 'string' | 'number' | 'boolean'
+
+/** A primitive's own tag: what a leaf of that kind is on disk, or nothing for any other type. */
+type LeafTagOf<T> = [T] extends [string]
+  ? 'string'
+  : [T] extends [number]
+    ? 'number'
+    : [T] extends [boolean]
+      ? 'boolean'
+      : never
+
+/**
+ * One field's shape, as the types give the field: a field `T` marks `?:` carries `undefined`
+ * in its type, and that is the one thing the `absent` wrapper already declares, so it comes off
+ * before any shape is asked for. An optional list of objects, an optional list of primitives and
+ * an optional primitive therefore take the shape of the value they would carry.
+ */
+export type ShapeNode<T> = ShapeNodeOf<Exclude<T, undefined>>
+
+/**
+ * The shape of a value that is there: a primitive leaf, a list of primitives, a list of objects,
+ * or an object's own fields — a leaf the types allow `null` for wrapped in `{ nothing: true,
+ * of: … }`, so the declaration says where a document may carry `null`.
+ *
+ * Every test is bracketed, so a union type is read as one type rather than distributed over:
+ * a union of strings is still a `string` and takes that tag, while `string | number` reaches
+ * `LeafTagOf` whole and has no tag at all, so a field declared with one fails to compile
+ * instead of being under-declared as its first member's kind.
+ */
+type ShapeNodeOf<T> = null extends T
+  ? { readonly nothing: true; readonly of: ShapeNode<Exclude<T, null>> }
+  : [T] extends [readonly (infer E)[]]
+    ? [E] extends [object]
+      ? { readonly elements: ShapeFields<E> }
+      : { readonly items: LeafTagOf<E> }
+    : [T] extends [object]
+      ? ShapeFields<T>
+      : LeafTagOf<T>
 
 /**
  * A show's settings, field by field: the one declaration of the field shape the load
  * funnel's check reads, in the order `ShowSettings` and the types under it declare their
  * fields. The shape check reads a document with it in both directions — a field it does not
  * carry is refused, and a declared field the document leaves out is refused too, because a
- * field a later build added is a field the window dereferences. A field the types mark `?:`
- * is the one exception, and today none is: every field of `ShowSettings` is a field a
- * document has to carry. `TelemetryChannel` is the external bridge document's own shape —
+ * field a later build added is a field the window dereferences — and each field's value is
+ * then held to the kind its tag declares, down to a list's elements. A field the types mark
+ * `?:` is the one exception to the field itself, and today none is: every field of
+ * `ShowSettings` is a field a document has to carry. What the types allow `null` for is
+ * declared `{ nothing: true, of: … }`, and `null` anywhere else is the wrong kind rather
+ * than a value to be read. `TelemetryChannel` is the external bridge document's own shape —
  * what a telemetry source is asked to produce — and it is not part of these settings, so it
  * is not declared here and a receiver's channel fields are not read.
  *
@@ -164,64 +213,102 @@ export type ShapeNode<T> = T extends readonly (infer E)[]
  * holds the declaration against a value of the whole of `ShowSettings`.
  */
 export const SHOW_SETTINGS_SHAPE = {
-  oscIn: { enabled: 'leaf', port: 'leaf' },
-  midiIn: { enabled: 'leaf', portNames: 'leaf' },
+  oscIn: { enabled: 'boolean', port: 'number' },
+  midiIn: { enabled: 'boolean', portNames: { items: 'string' } },
   desk: {
-    kind: 'leaf',
-    profile: 'leaf',
-    midiPort: 'leaf',
-    midiChannel: 'leaf',
-    host: 'leaf',
-    port: 'leaf',
-    tcpPort: 'leaf',
-    address: 'leaf',
+    kind: 'string',
+    profile: 'string',
+    midiPort: 'string',
+    midiChannel: 'number',
+    host: 'string',
+    port: 'number',
+    tcpPort: 'number',
+    address: 'string',
     // The desk's own buttons: an object of its own inside the section, which is why the
     // declaration nests rather than stopping at the section's fields.
-    buttons: { go: 'leaf', back: 'leaf', goNote: 'leaf', backNote: 'leaf' }
-  },
-  rf: {
-    plot: { packs: { elements: { id: 'leaf', label: 'leaf', channelId: 'leaf', performerId: 'leaf', notes: 'leaf' } } },
-    sources: {
-      elements: { id: 'leaf', label: 'leaf', kind: 'leaf', target: 'leaf', pollMs: 'leaf', timeoutMs: 'leaf' }
-    },
-    thresholds: {
-      batteryWarning: 'leaf',
-      batteryCritical: 'leaf',
-      rfWarningDbm: 'leaf',
-      offlineAfterSeconds: 'leaf'
-    },
-    swaps: {
-      elements: { at: 'leaf', packId: 'leaf', packLabel: 'leaf', from: 'leaf', to: 'leaf' }
+    buttons: {
+      go: { nothing: true, of: 'number' },
+      back: { nothing: true, of: 'number' },
+      goNote: { nothing: true, of: 'number' },
+      backNote: { nothing: true, of: 'number' }
     }
   },
-  presence: { enabled: 'leaf', services: 'leaf', goneAfterSeconds: 'leaf' },
-  script: { path: 'leaf', fontSize: 'leaf' },
-  companion: { enabled: 'leaf', port: 'leaf', token: 'leaf' },
+  rf: {
+    plot: {
+      packs: {
+        elements: {
+          id: 'string',
+          label: 'string',
+          channelId: { nothing: true, of: 'string' },
+          performerId: { nothing: true, of: 'string' },
+          notes: 'string'
+        }
+      }
+    },
+    sources: {
+      elements: {
+        id: 'string',
+        label: 'string',
+        kind: 'string',
+        target: 'string',
+        pollMs: 'number',
+        timeoutMs: 'number'
+      }
+    },
+    thresholds: {
+      batteryWarning: 'number',
+      batteryCritical: 'number',
+      rfWarningDbm: 'number',
+      offlineAfterSeconds: 'number'
+    },
+    swaps: {
+      elements: {
+        at: 'number',
+        packId: 'string',
+        packLabel: 'string',
+        from: { nothing: true, of: 'string' },
+        to: { nothing: true, of: 'string' }
+      }
+    }
+  },
+  presence: { enabled: 'boolean', services: { items: 'string' }, goneAfterSeconds: 'number' },
+  script: { path: 'string', fontSize: 'number' },
+  companion: { enabled: 'boolean', port: 'number', token: 'string' },
   scenes: {
     list: {
       elements: {
-        id: 'leaf',
-        name: 'leaf',
+        id: 'string',
+        name: 'string',
         dcas: {
-          elements: { dcaId: 'leaf', kind: 'leaf', memberId: 'leaf' }
+          elements: { dcaId: 'string', kind: 'string', memberId: 'string' }
         },
-        notes: 'leaf'
+        notes: 'string'
       }
     },
-    allowDuplicateAssignment: 'leaf'
+    allowDuplicateAssignment: 'boolean'
   },
   cast: {
-    channels: { elements: { id: 'leaf', name: 'leaf' } },
-    performers: { elements: { id: 'leaf', name: 'leaf', role: 'leaf', notes: 'leaf', channelId: 'leaf' } },
-    ensembles: { elements: { id: 'leaf', name: 'leaf', channelIds: 'leaf' } },
-    dcas: { elements: { id: 'leaf', deskNumber: 'leaf' } }
+    channels: { elements: { id: 'string', name: 'string' } },
+    performers: {
+      elements: {
+        id: 'string',
+        name: 'string',
+        role: 'string',
+        notes: 'string',
+        channelId: { nothing: true, of: 'string' }
+      }
+    },
+    ensembles: { elements: { id: 'string', name: 'string', channelIds: { items: 'string' } } },
+    dcas: { elements: { id: 'string', deskNumber: { nothing: true, of: 'number' } } }
   }
 } as const satisfies { readonly [S in ShowSettingsSection]: ShapeFields<ShowSettings[S]> }
 
 /**
  * The declaration as the check reads it: the value above with the types left out. A field's
- * entry is what `ShapeFields` says it is — `'leaf'`, `{ elements }`, an object's own fields,
- * or any of those wrapped as `{ absent: true, of: … }` where the types mark the field `?:`.
+ * entry is what `ShapeFields` says it is — a leaf's own `'string' | 'number' | 'boolean'`,
+ * `{ items }` for a list of primitives, `{ elements }` for a list of objects, an object's own
+ * fields otherwise — wrapped as `{ absent: true, of: … }` where the types mark the field `?:`
+ * and `{ nothing: true, of: … }` where they allow `null`, which a field may carry both of.
  */
 export type DeclaredFields = { readonly [field: string]: unknown }
 

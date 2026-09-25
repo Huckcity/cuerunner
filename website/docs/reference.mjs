@@ -710,15 +710,23 @@ await rig.blackout()</code></div>
         a file this build does not know is refused — naming the file and the fact, with nothing
         on disk touched — rather than filled in. A settings section this build writes and the
         file leaves out is a refusal, and so is a field inside a section that this build does
-        not write or that the file has not got. The one that catches a show saved before the
-        scenes changed is inside the settings: the strips, the faders and the scenes are checked
-        field by field, so a show whose channels carried a fader of their own, or whose scenes
-        listed who was open rather than what rides what, is refused by name. Setting it up again
-        takes minutes and no hand-editing: the channels and faders in <strong>Show Settings →
-        Channels</strong>, and the placements in the <strong>Scenes</strong> grid, which is where
-        they live now. Saving does not convert one either: the show on screen is written as it
-        stands, and a save over a file this build cannot read keeps the history it had and
-        replaces the file all the same.
+        not write or that the file has not got. What a field carries is checked as well, but
+        only for its JSON kind: a string where this build writes a number — or a number where it
+        writes a list of strings, or an entry of such a list that is not what the list carries —
+        is refused the same way, and <code>null</code> is read only where the show's own types
+        allow it. What a value <em>says</em> is the app's reading rather than the file's, so a
+        name the code does not offer, a desk kind among them, is read as it stands. The one that
+        catches a show saved before the scenes changed is inside the settings: the strips, the
+        faders and the scenes are checked field by field, so a show whose channels carried a
+        fader of their own, or whose scenes listed who was open rather than what rides what, is
+        refused by name. Setting it up again takes minutes and no hand-editing: the channels and
+        faders in <strong>Show Settings → Channels</strong>, and the placements in the
+        <strong>Scenes</strong> grid, which is where they live now. A file refused over a value
+        is the other case, and not one to set up again: the sentence names the field and both
+        kinds, and since nothing here guesses what the value was meant to be, the file is
+        corrected where that value sits or opened in the build that wrote it. Saving does not
+        convert one either: the show on screen is written as it stands, and a save over a file
+        this build cannot read keeps the history it had and replaces the file all the same.
       </div>
     </section>
 

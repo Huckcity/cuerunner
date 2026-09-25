@@ -254,16 +254,51 @@ function shapeOf(node: unknown): unknown {
 }
 
 /**
- * Every way a value and the declaration beside it disagree: a field the value carries that
- * the declaration does not name, a declared field the value has not got, a field that is a
- * list on one side and not on the other, and a list the value left empty — which is no
- * disagreement, but it is a list nothing inside is walked, and the fixtures below exist to
- * be walked. The declaration is read the way the funnel reads it: `'leaf'` for a value
- * nothing inside is read, `{ elements }` for a list of objects, an object's own fields
- * otherwise, and `{ absent: true, of: … }` around a field the types mark `?:`.
- *
- * What comes back empty is a value of the declared shape, and what it names is the fact the
- * funnel would refuse: the same reading, over a value rather than a document.
+ * Every way one value and the declaration node beside it disagree: a leaf of another kind, a
+ * list that is not a list or whose element is not the kind the list carries, `null` where the
+ * types do not allow one, or an object whose fields are not the declared ones. The declaration
+ * is read the way the funnel reads it, so what this names is what the funnel refuses: the
+ * wrappers are the types' own — `{ absent: true, of: … }` around a field the types mark `?:`
+ * and `{ nothing: true, of: … }` around a leaf they allow `null` for — and a node is told from
+ * the others by its own reserved name, never by the value beside it.
+ */
+function valueDifferences(value: unknown, node: unknown, path: string): string[] {
+  const shape = shapeOf(node)
+  if (typeof shape === 'object' && shape !== null && 'nothing' in shape && shape.nothing === true) {
+    return value === null ? [] : valueDifferences(value, 'of' in shape ? shape.of : undefined, path)
+  }
+  if (shape === 'string' || shape === 'number' || shape === 'boolean') {
+    return typeof value === shape
+      ? []
+      : [`${path} is ${typeof value}, not the ${shape} the declaration writes`]
+  }
+  const kind = typeof shape === 'object' && shape !== null && 'items' in shape ? shape.items : undefined
+  if (kind === 'string' || kind === 'number' || kind === 'boolean') {
+    if (!Array.isArray(value)) return [`${path} is not a list`]
+    if (value.length === 0) return [`${path} is empty, so nothing inside it is walked`]
+    const wrong = value.findIndex(item => typeof item !== kind)
+    return wrong === -1
+      ? []
+      : [`${path}.${wrong} is ${typeof value[wrong]}, not the ${kind} the declaration writes`]
+  }
+  if (typeof shape !== 'object' || shape === null) return [`${path} is declared as ${String(shape)}`]
+  if ('elements' in shape) {
+    if (!Array.isArray(value)) return [`${path} is not a list`]
+    if (value.length === 0) return [`${path} is empty, so nothing inside it is walked`]
+    // Every element of a list carries the one shape the declaration gives it, so the first is
+    // the whole of what there is to walk.
+    return shapeDifferences(value[0], asFields(shape.elements as object), `${path}[]`)
+  }
+  return shapeDifferences(value, asFields(shape), path)
+}
+
+/**
+ * Every way a value and the declaration beside it disagree about its fields: a field the value
+ * carries that the declaration does not name, a declared field the value has not got, or a
+ * declared field whose value is not what the declaration writes there — which
+ * `valueDifferences` reads, at every level. What comes back empty is a value of the declared
+ * shape, and what it names is the fact the funnel would refuse: the same reading, over a value
+ * rather than a document.
  */
 function shapeDifferences(value: unknown, fields: DeclaredFields, path: string): string[] {
   if (typeof value !== 'object' || value === null) return [`${path} is ${typeof value}, not an object`]
@@ -281,28 +316,7 @@ function shapeDifferences(value: unknown, fields: DeclaredFields, path: string):
       if (!isAbsentOnDisk(node)) differences.push(`${here} is missing`)
       continue
     }
-    const shape = shapeOf(node)
-    if (shape === 'leaf') continue
-    if (typeof shape !== 'object' || shape === null) {
-      differences.push(`${here} is declared as ${String(shape)}`)
-      continue
-    }
-    if ('elements' in shape) {
-      const list = carried[field]
-      if (!Array.isArray(list)) {
-        differences.push(`${here} is not a list`)
-        continue
-      }
-      if (list.length === 0) {
-        differences.push(`${here} is empty, so nothing inside it is walked`)
-        continue
-      }
-      // Every element of a list carries the one shape the declaration gives it, so the
-      // first is the whole of what there is to walk.
-      differences.push(...shapeDifferences(list[0], asFields(shape.elements as object), `${here}[]`))
-      continue
-    }
-    differences.push(...shapeDifferences(carried[field], asFields(shape), here))
+    differences.push(...valueDifferences(carried[field], node, here))
   }
   return differences
 }
@@ -317,6 +331,9 @@ function shapeDifferences(value: unknown, fields: DeclaredFields, path: string):
  */
 const SETTINGS: ShowSettings = {
   ...defaultShowSettings(),
+  // The defaults leave the port list empty, and an empty list is a list nothing inside is
+  // walked — the element's own kind is one of the things this fixture exists to check.
+  midiIn: { enabled: true, portNames: ['Desk', 'Keys'] },
   rf: {
     ...defaultRfSettings(),
     plot: { packs: [{ id: 'pack-1', label: 'Belt pack', channelId: null, performerId: 'p-1', notes: '' }] },

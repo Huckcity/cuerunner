@@ -22,7 +22,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { dialog } from 'electron'
-import { defaultCastSettings, defaultShowSettings } from '../../shared/show'
+import { defaultCastSettings, defaultShowSettings, type ShowSettings } from '../../shared/show'
 import type { Workspace } from '../../shared/workspace'
 import { Refusal } from '../ipc/refusal'
 import { readBundle } from './bundle'
@@ -83,7 +83,10 @@ interface Refused {
  * The field cases are the pre-change shape's own fields: a channel's `dcaId` and a scene's
  * `live` are what a file written before a scene owned the assignment carries, and a desk
  * with no `profile` is a file written before profiles existed. That is the file the
- * field-level rule exists to refuse.
+ * field-level rule exists to refuse. The kind cases are the other half of a field: what the
+ * value beside a declared field has to be — a primitive of the kind the declaration tags,
+ * a list of primitives whose every element is that kind, and `null` only where the types
+ * allow it.
  */
 const REFUSED: readonly Refused[] = [
   {
@@ -239,6 +242,85 @@ const REFUSED: readonly Refused[] = [
     what: 'a cue that is not a cue at all',
     show: show({ cues: [null] }),
     fact: 'has a cue that is not the shape this version of WinsLab writes'
+  },
+  {
+    what: 'a settings leaf carrying a value of another kind',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        desk: { ...defaultShowSettings().desk, midiChannel: '1' }
+      }
+    }),
+    fact: 'settings have desk.midiChannel as a string, where this version of WinsLab writes a number'
+  },
+  {
+    what: 'a list of primitives carrying something that is not a list',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        cast: {
+          ...defaultCastSettings(),
+          ensembles: [{ id: 'e-1', name: 'Chorus', channelIds: 3 }]
+        }
+      }
+    }),
+    fact: 'settings have cast.ensembles.0.channelIds as a number, ' +
+      'where this version of WinsLab writes a list of strings'
+  },
+  {
+    what: 'an element of a list of primitives carrying another kind',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        midiIn: { ...defaultShowSettings().midiIn, portNames: ['in', 3] }
+      }
+    }),
+    fact: 'settings have midiIn.portNames.1 as a number, where this version of WinsLab writes a string'
+  },
+  {
+    what: 'a leaf carrying null where the types do not allow it',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        presence: { ...defaultShowSettings().presence, goneAfterSeconds: null }
+      }
+    }),
+    fact: 'settings have presence.goneAfterSeconds as nothing, ' +
+      'where this version of WinsLab writes a number'
+  },
+  {
+    what: 'a leaf the types allow null for carrying another kind instead',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        desk: {
+          ...defaultShowSettings().desk,
+          // Inside the `{ nothing: true, of: 'number' }` wrapper: `null` is admitted here and
+          // a string is not, so the kind is checked after the wrapper is read.
+          buttons: { go: '48', back: null, goNote: null, backNote: null }
+        }
+      }
+    }),
+    fact: 'settings have desk.buttons.go as a string, where this version of WinsLab writes a number'
+  },
+  {
+    what: 'a settings field inside a scene’s row, where two element indices meet',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        scenes: {
+          list: [{
+            id: 's-1',
+            name: 'Wedding',
+            dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 3 }],
+            notes: ''
+          }],
+          allowDuplicateAssignment: true
+        }
+      }
+    }),
+    fact: 'settings have scenes.list.0.dcas.0.memberId as a number, ' +
+      'where this version of WinsLab writes a string'
   }
 ]
 
@@ -426,6 +508,54 @@ describe('this build’s own write, through the funnel', () => {
 
     expect(reopened.loadNotes).toEqual([])
     expect(reopened.workspace).toEqual(opened.workspace)
+  })
+
+  it('reads a leaf carrying the null the types allow, wherever the file carries one', async () => {
+    // The other side of the kind check: `null` is the one value a null-able leaf may carry,
+    // and it is legal exactly there. The desk's buttons, a pack nobody is on, a swap that
+    // changed no one, a performer between channels and a fader nobody has numbered are the
+    // fields the types allow it for, and a file carrying all of them is this build's own.
+    // Each wrapper also carries a real value somewhere — a mute group, a channel id — because
+    // a wrapper that admitted `null` and nothing else would be the wrong check wearing the
+    // right sentence.
+    const settings = defaultShowSettings()
+    const path = join(dir, 'Nulls.cuerunner')
+    const document = show({
+      showSettings: {
+        ...settings,
+        midiIn: { enabled: true, portNames: ['Desk', 'Keys'] },
+        desk: { ...settings.desk, buttons: { go: 48, back: null, goNote: null, backNote: null } },
+        rf: {
+          ...settings.rf,
+          plot: {
+            packs: [{ id: 'pack-1', label: 'Belt pack', channelId: 'channel-1', performerId: null, notes: '' }]
+          },
+          swaps: [{ at: 0, packId: 'pack-1', packLabel: 'Belt pack', from: null, to: null }]
+        },
+        cast: {
+          ...defaultCastSettings(),
+          performers: [{ id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: null }],
+          ensembles: [{ id: 'e-1', name: 'Chorus', channelIds: ['channel-1', 'channel-2'] }],
+          dcas: [{ id: 'dca-1', deskNumber: null }]
+        }
+      },
+      cues: []
+    }) as unknown as Workspace
+    writeFileSync(path, serialiseWorkspace(document, dir))
+
+    const opened = await openWorkspaceFromPath(path)
+    const read = opened.workspace.showSettings as ShowSettings
+
+    expect(opened.loadNotes).toEqual([])
+    expect(read.desk.buttons.go).toBe(48)
+    expect(read.desk.buttons.back).toBeNull()
+    expect(read.midiIn.portNames).toEqual(['Desk', 'Keys'])
+    expect(read.rf.plot.packs[0].channelId).toBe('channel-1')
+    expect(read.rf.plot.packs[0].performerId).toBeNull()
+    expect(read.rf.swaps[0].to).toBeNull()
+    expect(read.cast.performers[0].channelId).toBeNull()
+    expect(read.cast.ensembles[0].channelIds).toEqual(['channel-1', 'channel-2'])
+    expect(read.cast.dcas[0].deskNumber).toBeNull()
   })
 
   it('reads a cue whether the fields the types make optional are there or not', async () => {
