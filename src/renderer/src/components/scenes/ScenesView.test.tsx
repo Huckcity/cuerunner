@@ -251,7 +251,10 @@ describe('ScenesView', () => {
    */
   async function openPicker(cell: Element): Promise<HTMLElement> {
     await act(async () => {
-      cell.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
+      // A row holding nothing is a blank box; a row holding something is that name, pressed.
+      const way = cell.querySelector<HTMLButtonElement>('.matrix-cell-add') ??
+        cell.querySelector<HTMLButtonElement>('.matrix-block-name')!
+      way.click()
     })
     const picker = document.body.querySelector<HTMLElement>('.scene-picker')
     if (picker === null) throw new Error('no picker opened')
@@ -628,6 +631,28 @@ describe('ScenesView', () => {
     expect(scenes()[0].dcas).toEqual([placed('dca-1', 'ensemble', 'ens-chorus')])
   })
 
+  it('gives the keyboard back to the row, whichever way in the row now has', async () => {
+    // A save can take the box away — the row was empty and now holds the group — and a
+    // delete can take the name away, so what the keyboard goes back to is the row's own way
+    // in, found again rather than the element that opened the dialog. Focusing a detached
+    // element is a no-op, and the operator would be left at the top of the window.
+    await show({ scenes: [scene('s1', 'Opening')] })
+    const cell = cellFor('1', 'Opening')
+    const dialog = await openBuilder(cell)
+    await type(dialog.querySelector<HTMLInputElement>('.ensemble-name-field')!, 'Principals')
+    await press(dialog, '[data-pane="free"] .ensemble-item', 'Ada')
+    await act(async () => {
+      dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')[0].click()
+    })
+    await press(dialog, '.ensemble-create', 'Create and apply')
+
+    // The row holds the group now, so the block's name is the way in — and it has the
+    // keyboard.
+    const held = cellFor('1', 'Opening')
+    expect(blockName(held)).toBe('Principals')
+    expect(document.activeElement).toBe(held.querySelector('.matrix-block-name'))
+  })
+
   it('takes the keyboard into the builder, and gives it back to the row’s box', async () => {
     await show({ scenes: [scene('s1', 'Opening')] })
     const cell = cellFor('1', 'Opening')
@@ -666,29 +691,31 @@ describe('ScenesView', () => {
     expect(container.querySelector('.ensemble-dialog')).toBeNull()
   })
 
-  it('keeps the box on a row that has everything, so the builder stays one press away', async () => {
+  it('has no second box once a row holds something, and the name it holds is the way in', async () => {
     await show({
       scenes: [scene('s1', 'Opening', [placed('dca-1', 'channel', 'ch-ada')])],
       cast: cast({ channels: [channel('ch-ada')], performers: [PERFORMERS[0]] })
     })
 
-    // The one strip rides the row and there is no group to apply, so the picker has nothing
-    // to offer — but the builder is where a group is made, and it is reachable wherever a
-    // row is. The row still says what it holds, and the box beside it stays.
+    // The row holds one thing, so it is one block: no empty box beside it to imply a row can
+    // hold another. The one strip rides the row and there is no group to apply, so the
+    // picker has nothing to offer — but the builder is where a group is made, and the name
+    // the row holds is the press that reaches it, wherever a row is.
     const cell = cellFor('1', 'Opening')
     expect(blockName(cell)).toBe('Ada')
-    expect(cell.querySelector('.matrix-cell-add')).not.toBeNull()
+    expect(cell.querySelector('.matrix-cell-add')).toBeNull()
 
     const picker = await openPicker(cell)
     expect(offerings(picker)).toEqual(['Everything the show has is already on this row.'])
     expect(picker.querySelector('.scene-picker-build')?.textContent).toBe('Ensemble…')
 
-    // And the builder behind it is the one that opens.
+    // And the builder behind it is the one that opens, on the row it was reached from.
     await act(async () => {
       picker.querySelector<HTMLButtonElement>('.scene-picker-build')!.click()
     })
     expect(document.body.querySelector('.scene-picker')).toBeNull()
     expect(container.querySelector('.ensemble-dialog')).not.toBeNull()
+    expect(scenes()[0].dcas).toEqual([placed('dca-1', 'channel', 'ch-ada')])
   })
 
   it('takes the picker away when its own box is pressed again', async () => {
@@ -879,25 +906,32 @@ describe('ScenesView', () => {
       deskSceneId: 's1'
     })
 
-    // Every control a cell holds is disabled in run mode — the ✕ and the box — while the
-    // block still names what the row holds, and the marks on the cell are the marks they
-    // always were: this is the scene the desk is on, and it is where the desk was left.
+    // Every control a cell holds is disabled in run mode — the name, the ✕, and the box an
+    // empty row carries — while the block still names what the row holds, and the marks on
+    // the cell are the marks they always were: this is the scene the desk is on, and it is
+    // where the desk was left.
     const cell = cellFor('1', 'Opening')
     expect(blockName(cell)).toBe('Ada')
-    expect([...cell.querySelectorAll<HTMLButtonElement>('.matrix-cell-add, .matrix-block-remove')]
+    expect([...cell.querySelectorAll<HTMLButtonElement>('.matrix-block-name, .matrix-block-remove')]
       .every(control => control.disabled)).toBe(true)
     expect(cell.getAttribute('data-current')).toBe('true')
     expect(cell.getAttribute('data-pending')).toBe('false')
     expect(columnFor('Opening').getAttribute('data-pending')).toBe('false')
     expect(columnFor('Interval').getAttribute('data-pending')).toBe('true')
-    // The box is drawn rather than absent: the grid says what every row holds in either
-    // mode, and its name says why it is asleep, because a disabled control is one the
-    // keyboard never reaches to read a tooltip on.
-    expect(cell.querySelector('.matrix-cell-add')?.getAttribute('aria-label'))
-      .toBe('Change DCA 1 in Opening — asleep while the show runs: press Edit')
-    // What it will not do is open.
+
+    // Nothing in the cell opens: the name is asleep, and a row holding nothing carries a box
+    // that is drawn rather than absent and says why it is asleep, because a disabled control
+    // is one the keyboard never reaches to read a tooltip on.
     await act(async () => {
-      cell.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
+      cell.querySelector<HTMLButtonElement>('.matrix-block-name')!.click()
+    })
+    expect(document.body.querySelector('.scene-picker')).toBeNull()
+    const empty = cellFor('1', 'Interval')
+    expect(empty.querySelector('.matrix-cell-add')).not.toBeNull()
+    expect(empty.querySelector('.matrix-cell-add')?.getAttribute('aria-label'))
+      .toBe('Change DCA 1 in Interval — asleep while the show runs: press Edit')
+    await act(async () => {
+      empty.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
     })
     expect(document.body.querySelector('.scene-picker')).toBeNull()
 

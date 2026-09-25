@@ -30,12 +30,12 @@ import {
 } from '../../../../shared/show'
 import './ScenesView.css'
 
-// A scene name is what its column is read by, so the field asks for about a name's worth of
-// room and no more. The column itself is a fixed width — a scene track that stretched with
-// the window would draw two scenes as two half-window blocks with their names and controls
-// huddled at one edge — so this only sets what the input asks for before the width it is
-// given takes over.
-const SCENE_NAME_SIZE = 11
+// A scene name is what its column is read by, so the field asks for a name's worth of room —
+// eighteen characters, which is what the column is measured for — and no more. The column
+// itself is a fixed width (a scene track that stretched with the window would draw two
+// scenes as two half-window blocks with their names huddled at one edge), so this only sets
+// what the input asks for before the width it is given takes over.
+const SCENE_NAME_SIZE = 18
 
 /** The columns that are scenes in the file: the all-closed column is not one of them. */
 const SCENE_COLUMN = '.matrix-scene[data-scene-id]'
@@ -90,8 +90,8 @@ export interface PickerAnchor {
  * members in its title, because what a scene is for at curtain up is reading which mics
  * open, and a row of twelve member chips is a list nobody reads.
  *
- * Everything the row can become comes out of the box beside it. Every press is one store
- * write, hence one undo.
+ * Everything the row can become comes out of one press: the name it holds, or the blank box
+ * an empty row carries. Every press is one store write, hence one undo.
  */
 function SceneCell({
   scene, dca, fader, cast, scenes, changes, deskState, isCurrent, locked, writeList, onAdd
@@ -128,42 +128,49 @@ function SceneCell({
       data-pending={pending}
       aria-label={`${where} in ${scene.name}`}
     >
-      {placement !== null && member !== '' && (
+      {placement !== null && member !== '' ? (
+        /* What the row holds takes the whole cell: its name is the press that changes it, and
+           the ✕ beside it empties the row. There is no second box to imply a row can hold
+           more than one thing — the row holds one, and this is it. */
         <span className="matrix-block" data-kind={placement.kind} title={whole}>
-          {/* The name is its own box so a long one can be cut with an ellipsis while the ✕
-              beside it stays reachable — the block's own clipping would take the press off
-              the end of the row with it. */}
-          <span className="matrix-block-name">{member}</span>
+          <button
+            type="button"
+            className="matrix-block-name"
+            disabled={locked}
+            // The name says what the press acts on as well as what it does: the control
+            // reads "Ada" on screen, so "Ada" is in its name, which is what speech control
+            // and a name-only announcement have to match.
+            aria-label={`Change ${member} on DCA ${fader} in ${scene.name}`}
+            title={locked ? whole : `Change what this row holds — ${whole}`}
+            onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
+          >{member}</button>
           <button
             type="button"
             className="matrix-block-remove"
             aria-label={`Take ${member} off DCA ${fader} in ${scene.name}`}
-            title={locked
-              ? whole
-              : `Take ${member} off this row — undo puts it back`}
+            title={locked ? whole : `Take ${member} off this row — undo puts it back`}
             disabled={locked}
             onClick={() => writeList(setRowMember(scenes, scene.id, dca.id, null))}
           >✕</button>
         </span>
+      ) : (
+        /* A row holding nothing is one blank box, and the box is what it becomes something
+           out of: the picker behind it lists the console's strips, the show's groups, and the
+           builder. Out of edit mode it is drawn and inert rather than absent — the grid says
+           what every row holds, and a stray press on a running show must not open anything. */
+        <button
+          type="button"
+          className="matrix-cell-add"
+          disabled={locked}
+          aria-label={locked
+            ? `Change DCA ${fader} in ${scene.name} — asleep while the show runs: press Edit`
+            : `Change DCA ${fader} in ${scene.name}`}
+          title={locked
+            ? 'Press Edit to change what this row holds'
+            : 'Put a channel or an ensemble on this row'}
+          onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
+        />
       )}
-      {/* One box, and everything the row can become comes out of it: one strip of the console,
-          one group, or the builder that makes a group out of the strips the operator names.
-          It is on every row in both modes. Out of edit mode it is drawn and inert rather than
-          absent — the grid says what every row holds, and a stray press on a running show must
-          not open anything — and while editing it is always there, because a row holding
-          everything there is still a row the operator may want the other thing on. */}
-      <button
-        type="button"
-        className="matrix-cell-add"
-        disabled={locked}
-        aria-label={locked
-          ? `Change DCA ${fader} in ${scene.name} — asleep while the show runs: press Edit`
-          : `Change DCA ${fader} in ${scene.name}`}
-        title={locked
-          ? 'Press Edit to change what this row holds'
-          : 'Put a channel or an ensemble on this row'}
-        onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
-      />
     </div>
   )
 }

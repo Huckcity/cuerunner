@@ -392,14 +392,17 @@ export async function editScenes(page: Page): Promise<void> {
 }
 
 /**
- * What a cell's blank box opens: every strip and every group the show has, less the one the
- * row holds, under their own headings, and the builder at its foot. The label is typed into
+ * What a cell opens — the blank box of a row holding nothing, or the name of one holding
+ * something: every strip and every group the show has, less the one the row holds, under
+ * their own headings, and the builder at its foot. The label is typed into
  * the filter and the row pressed, because that is how a menu holding a console's worth of
  * strips is actually used — and the strip's label is the name it was given or the performer
  * standing on it, never its bare number.
  */
 export async function pickFromBox(page: Page, cell: Locator, label: string): Promise<void> {
-  await cell.locator('.matrix-cell-add').click()
+  // A row holding nothing is a blank box; a row holding something is that name, pressed —
+  // the row holds one thing, so there is no second box beside it.
+  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
   const picker = page.locator('.scene-picker')
   await expect(picker).toBeVisible()
   await picker.locator('.scene-picker-filter').fill(label)
@@ -420,7 +423,8 @@ export async function buildEnsembleFromBox(
   name: string,
   strips: string[]
 ): Promise<void> {
-  await cell.locator('.matrix-cell-add').click()
+  // Whichever the cell offers: a blank box, or the name it already holds.
+  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
   const picker = page.locator('.scene-picker')
   await expect(picker).toBeVisible()
   await picker.getByRole('button', { name: 'Ensemble…', exact: true }).click()

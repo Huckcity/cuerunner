@@ -49,6 +49,7 @@ export function EnsembleDialog({
   const [pickedFree, setPickedFree] = useState<string | null>(null)
   const [pickedHeld, setPickedHeld] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
+  const rowRef = useRef<HTMLElement | null>(null)
   // The dialog owns the keyboard: the name being typed is a name, and its Escape is a
   // dismissal rather than the transport's stop.
   useModal()
@@ -64,13 +65,27 @@ export function EnsembleDialog({
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [onCancel])
 
-  // The dialog takes the keyboard as it opens, and gives it back to the row's box as it
-  // closes. It has to: the press that opened it was inside a menu that unmounted with it,
-  // so without this the operator is left typing into nothing — and the first Tab would walk
-  // the grid behind a dialog that says it is the only thing on screen.
+  // The dialog takes the keyboard as it opens, and gives it back to the row as it closes. It
+  // has to: the press that opened it was inside a menu that unmounted with it, so without
+  // this the operator is left typing into nothing — and the first Tab would walk the grid
+  // behind a dialog that says it is the only thing on screen.
+  //
+  // Back to the row, rather than to the box that opened it: a save or a delete can take that
+  // box away — a row that was empty now holds the group, and a row that held one is empty —
+  // and React swaps the cell's box and its block for one another. Focusing a detached element
+  // is a no-op, so the row's own way in is found again, whichever of the two it now is.
   useEffect(() => {
+    // The row is remembered while the press that opened this dialog is still in the
+    // document: React detaches a control it stops rendering from its parent, so afterwards
+    // there is no climbing from that press to the cell it was in.
+    rowRef.current = box.closest('.matrix-cell')
     dialogRef.current?.focus({ preventScroll: true })
-    return () => box.focus({ preventScroll: true })
+    return () => {
+      const into = box.isConnected
+        ? box
+        : rowRef.current?.querySelector<HTMLElement>('.matrix-cell-add, .matrix-block-name') ?? null
+      into?.focus({ preventScroll: true })
+    }
   }, [box])
 
   // The strips somebody is standing on, which is the set a group can be built out of.

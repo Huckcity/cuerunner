@@ -129,7 +129,7 @@ test('a show with many scenes still fits the window', async () => {
   await expect(page.locator('.matrix-scene')).toHaveCount(14)
   const sceneWidths = await page.locator('.matrix-scene').evaluateAll(columns =>
     columns.map(column => Math.round(column.getBoundingClientRect().width)))
-  expect(sceneWidths).toEqual([112, ...Array(13).fill(192)])
+  expect(sceneWidths).toEqual([88, ...Array(13).fill(176)])
 
   // The grid scrolls inside the view. The view itself must not grow past the window, or
   // the Edit press and the far scenes end up clipped somewhere unreachable — which is what
@@ -160,8 +160,9 @@ test('a scene column is the width a scene is, whatever the window', async () => 
 
   await buildDeskShow(page, freePort())
 
-  // The all-closed column first, then a scene per column: 112px of utility and 192px of
-  // scene, measured rather than read off the stylesheet.
+  // The all-closed column first, then a scene per column: 88px of utility and 176px of
+  // scene, measured rather than read off the stylesheet. 176 is what an eighteen-character
+  // scene name asks for, which the last case measures against the app's own font.
   const layout = (): Promise<{
     columns: number[]
     scrolls: boolean
@@ -188,14 +189,14 @@ test('a scene column is the width a scene is, whatever the window', async () => 
   // One scene. Its column is its own width rather than a share of the window, which is what
   // a show this short used to draw: one column stretched across most of the view with its
   // name and controls huddled at one edge.
-  expect((await layout()).columns).toEqual([112, 192])
+  expect((await layout()).columns).toEqual([88, 176])
 
   // A second scene changes nothing about the first, and the two of them still fit: fixed
   // tracks take what they need rather than dividing what the window has.
   await page.locator('.scenes-add').click()
   await expect(page.locator('.matrix-scene:not([data-all-closed])')).toHaveCount(2)
   const wide = await layout()
-  expect(wide.columns).toEqual([112, 192, 192])
+  expect(wide.columns).toEqual([88, 176, 176])
   expect(wide.scrolls).toBe(false)
   expect(wide.viewScrollWidth).toBeLessThanOrEqual(wide.windowWidth)
   expect(wide.documentScrollWidth).toBeLessThanOrEqual(wide.windowWidth)
@@ -214,10 +215,32 @@ test('a scene column is the width a scene is, whatever the window', async () => 
   const narrow = await layout()
   // Neither track stretched to fill the window, and the show scrolls inside the view
   // instead of widening the view or the document behind it.
-  expect(narrow.columns).toEqual([112, 192, 192])
+  expect(narrow.columns).toEqual([88, 176, 176])
   expect(narrow.scrolls).toBe(true)
   expect(narrow.viewScrollWidth).toBeLessThanOrEqual(narrow.windowWidth)
   expect(narrow.documentScrollWidth).toBeLessThanOrEqual(narrow.windowWidth)
+
+  // An eighteen-character scene name is what the column is measured for: typed into the
+  // header's own field it fits the box, measured in the field's own font rather than
+  // assumed, because the name is what the column is read by and the font is the one the app
+  // bundles. What does not fit is a longer name, which is cut and readable in its title.
+  const named = await page.evaluate(() => {
+    const field = document.querySelector<HTMLInputElement>('.scene-name-field')!
+    const style = getComputedStyle(field)
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')!
+    context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+    const room = field.clientWidth -
+      parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    const name = 'Wedding Scene No 1'
+    return {
+      letters: name.length,
+      text: Math.round(context.measureText(name).width),
+      room: Math.round(room)
+    }
+  })
+  expect(named.letters).toBe(18)
+  expect(named.text).toBeLessThanOrEqual(named.room)
 
   // The fader column is a number, not a name: it stays where it is — at the width its own
   // narrow track gives it — whichever way the grid is scrolled, so the numbers are still
@@ -529,7 +552,7 @@ test('a scene that applies an ensemble to a row rides every member of it', async
     const cellBox = await boxOf('.matrix-row .matrix-cell')
     const sceneHeader = await boxOf('.matrix-scene:not([data-all-closed])')
     // The cell is inset by its own margin, so it starts a couple of pixels inside its
-    // column — a scene column is 192px, so anything that is not that is a whole column out.
+    // column — a scene column is 176px, so anything that is not that is a whole column out.
     expect(Math.abs(cellBox.x - sceneHeader.x)).toBeLessThan(4)
 
     // Both members are told by their own channel numbers, at the addresses those numbers
@@ -550,7 +573,7 @@ test('a long hostile name renders inert, whole in its title, and never widens th
 
   // A name as long as a company's own and as hostile as one pasted out of a browser. The
   // channel and the scene each take it; the fader cannot, because a fader is its number.
-  const hostileName = '<img src=x onerror="window.__scenePwned=1"> & the rest of a name no 192px column holds'
+  const hostileName = '<img src=x onerror="window.__scenePwned=1"> & the rest of a name no 176px column holds'
   await openShowSettings(page, 'channels')
   const settings = page.locator('.show-settings-dialog')
   const channel = settings.locator('.channel-row').first().locator('.channel-name')

@@ -12,14 +12,16 @@
      reads at the desk. Narrow, because the grid beside it is what needs the room. */
   --matrix-mic-width: 44px;
   /* A column is a scene's own width rather than a share of the window: a show of two
-     scenes used to draw two half-window blocks with each cell's contents huddled
-     at one edge, and a show of twenty drew slivers. Fixed, the tracks read the same
-     whatever the show's length, and the width the window has over goes to the space to the
-     right of the last column rather than to the columns themselves. */
-  --matrix-scene-width: 192px;
-  /* The all-closed column is a utility rather than a scene: a label and one press, so it
-     asks for less room than an editable column does. */
-  --matrix-all-closed-width: 112px;
+     scenes used to draw two half-window blocks with each cell's contents huddled at one
+     edge, and a show of twenty drew slivers. Fixed, the tracks read the same whatever the
+     show's length, and the width the window has over goes to the space to the right of the
+     last column rather than to the columns themselves. 176px is what an eighteen-character
+     scene name asks for in the header's own font, measured: 120px of text, the field's
+     padding and border, the ✕ beside it and the column's padding. */
+  --matrix-scene-width: 176px;
+  /* The all-closed column is a utility rather than a scene: the words "All closed" and one
+     press, so it asks for what those words need and nothing more. */
+  --matrix-all-closed-width: 88px;
   --matrix-cell-height: 34px;
 
   display: flex;
@@ -420,12 +422,14 @@
    one is cut with an ellipsis while the ✕ beside it stays where it can be pressed; the
    block's title carries the whole of what it stands for — a group's name and its members. */
 .matrix-block {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  flex: 1 1 auto;
   max-width: 100%;
-  padding: 1px 2px 1px 6px;
+  height: 20px;
+  padding: 0 2px 0 6px;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   white-space: nowrap;
@@ -447,10 +451,30 @@
   color: var(--fg-body);
 }
 
+/* The name is the press that changes what the row holds — the whole of the cell it is given,
+   because the row holds one thing and this is it. */
 .matrix-block-name {
+  flex: 1;
   min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: inherit;
+  text-align: left;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.matrix-block-name:disabled { cursor: default; }
+
+.matrix-block-name:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
 }
 
 .matrix-block-remove {
@@ -480,11 +504,11 @@
   outline-offset: 1px;
 }
 
-/* The blank box a cell ends with: everything the row can become comes out of it, so a row
-   holding nothing is one empty box and a row holding a strip is that block and the box
-   after it. It is drawn while the show runs as well as while it is edited — the grid says
-   what every row holds, and an empty row is a fact about the scene — and there it is inert,
-   which is what the disabled cursor is for. */
+/* The blank box an empty row is: everything the row can become comes out of it, and a row
+   holding something carries no second one — a box beside a member would say a row can hold
+   two. It is drawn while the show runs as well as while it is edited — the grid says what
+   every row holds, and an empty row is a fact about the scene — and there it is inert, which
+   is what the disabled cursor is for. */
 .matrix-cell-add {
   flex: 1 1 26px;
   min-width: 26px;

@@ -763,7 +763,7 @@ export const GUIDES = [
       <h2>3. Build the scenes</h2>
       <figure class="figure">
         <a href="../assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each row holding one strip or one ensemble and ending in the blank box that changes it." />
+          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each row holding one strip or one ensemble, which is the press that changes it." />
         </a>
         <figcaption>The scenes view, mid-build.</figcaption>
       </figure>
@@ -772,13 +772,13 @@ export const GUIDES = [
         one. The show’s <strong>faders</strong> run down the side — numbered, because that is
         what the desk is told and what you reach for — and the scenes across the top. Each
         row of a scene holds <strong>one thing</strong>: a strip, or an ensemble over several
-        of them. Press the blank box beside it, type a name into the
-        <strong>filter</strong>, and pick the strip or the group; picking one where the row
-        already holds another replaces it, and the ✕ beside the name takes the row back to
-        empty. A strip can ride several faders — a chorus master on one and its members spread
-        across others — unless Show Settings has that turned off (Channels → Allow a channel
-        to ride more than one fader), where putting a strip on a row takes it off that
-        scene's other rows.
+        of them. An empty row is a blank box — press it, type a name into the
+        <strong>filter</strong>, and pick the strip or the group. A row that holds something
+        is that name, using the whole cell: press it to put something else there, and the ✕
+        beside it to empty the row. A strip can ride several faders — a chorus master on one
+        and its members spread across others — unless Show Settings has that turned off
+        (Channels → Allow a channel to ride more than one fader), where putting a strip on a
+        row takes it off that scene's other rows.
       </p>
       <p>
         Several strips on one fader is what an <strong>ensemble</strong> is for, and
@@ -799,8 +799,9 @@ export const GUIDES = [
         says which mics it opens in its title. The leftmost column,
         <strong>All closed</strong>, is a scene like any other that way — it places nothing,
         so it closes every mic the show drives — and it is the one column that is never
-        edited. Columns are a fixed width, so a show of two scenes reads the same as a show
-        of twenty: what does not fit across the window scrolls inside the grid.
+        edited. Columns are a fixed width — an eighteen-character scene name is what one is
+        measured for — so a show of two scenes reads the same as a show of twenty: what does
+        not fit across the window scrolls inside the grid.
       </p>
       <p>
         Out of edit mode the grid is for running: press <strong>Recall</strong> on a scene

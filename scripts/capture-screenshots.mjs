@@ -305,7 +305,8 @@ await page.locator('.scenes-edit').click()
 // all-closed one, which is not a scene in the file, so a scene's column is found by the id
 // it carries rather than by its place on screen.
 const pickFrom = async (cell, label) => {
-  await cell.locator('.matrix-cell-add').click()
+  // A row holding nothing is a blank box; a row holding something is that name, pressed.
+  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
   const picker = page.locator('.scene-picker')
   await picker.locator('.scene-picker-filter').fill(label)
   await picker.getByRole('option', { name: label, exact: true }).click()
@@ -343,7 +344,8 @@ await page.locator('.matrix-scene[data-scene-id][data-current="true"]').waitFor(
 // The other half of building a scene: the strips picked in the builder, kept as one group on
 // the row — what a later scene puts there with one press instead of a row of picks. The
 // group replaces what the row held, because a row holds one thing.
-await rowFor(1).locator('.matrix-cell').nth(0).locator('.matrix-cell-add').click()
+await rowFor(1).locator('.matrix-cell').nth(0)
+  .locator('.matrix-cell-add, .matrix-block-name').first().click()
 await page.locator('.scene-picker')
   .getByRole('button', { name: 'Ensemble…', exact: true }).click()
 const builder = page.getByRole('dialog', { name: 'New ensemble' })
