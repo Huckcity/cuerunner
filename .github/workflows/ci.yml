@@ -73,17 +73,34 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # A working copy the runner kept from an earlier run is what it was: `.gitattributes`
-      # changes what a checkout *writes*, not what is already on disk, and git skips a file it
-      # believes is up to date — so the forty tests that read the repository as text went on
-      # seeing CRLF in a tree the Windows runner had checked out before the attribute existed.
-      # This rewrites every tracked file from the index, which is LF wherever it runs.
-      - name: Normalise line endings
-        run: git checkout-index -a -f
-
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
+
+      # A working copy the runner kept from an earlier run is what it was: `.gitattributes`
+      # changes what a checkout *writes*, not what is already on disk, and nothing short of
+      # removing a file makes git write it again — `git checkout-index -a -f` left it CRLF, and
+      # so did the same with `core.autocrlf=false`, measured in the Windows runner's own
+      # checkout, where 1766 tracked files were still CRLF for the tests that read the
+      # repository as text. Removing the ones git reports as CRLF and checking them out again
+      # writes them with the attribute, which is LF; the same measurement showed it working.
+      - name: Normalise line endings
+        shell: node {0}
+        run: |
+          const { execFileSync } = require('node:child_process')
+          const { rmSync } = require('node:fs')
+          const crlf = execFileSync('git', ['ls-files', '--eol'], { encoding: 'utf8' })
+            .split('\n')
+            .filter((line) => line.includes('w/crlf'))
+            .map((line) => line.split('\t').pop().trim())
+            .filter(Boolean)
+          if (crlf.length === 0) {
+            console.log('every checkout file is already LF')
+            return
+          }
+          for (const file of crlf) rmSync(file, { force: true })
+          execFileSync('git', ['checkout', '--', '.'], { stdio: 'inherit' })
+          console.log(`${crlf.length} files were CRLF and are LF now`)
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
@@ -121,6 +138,13 @@ jobs:
           echo Using the ASIO SDK at %ASIO%
 
       - run: npm ci --legacy-peer-deps
+
+      # Electron's postinstall comes away without its binary now and then — the message the
+      # tests then read is "Electron failed to install correctly, please delete node_modules/
+      # electron and try installing again", which is exactly what this does. One macOS lane of
+      # the three found it; it is an install that did not finish, not a claim about the code.
+      - name: Make sure Electron's binary arrived
+        run: node -e "require('electron')" || npm rebuild electron
 
       - name: Unit tests
         run: npm test
