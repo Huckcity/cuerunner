@@ -381,7 +381,10 @@ describe('opening the session', () => {
 
     // The desk that moved was left the way a quit leaves one: `BYE.` on the channel its
     // session was holding.
-    await until(() => underTest.leaveReceived.length >= 4)
+    // Headroom rather than a mask: the macOS lane timed this wait out once at the three
+    // seconds every other wait here uses, on a runner that was building the engine in the
+    // same breath, while the two cases either side of it passed. The claim is unchanged.
+    await until(() => underTest.leaveReceived.length >= 4, 15_000)
     expect(Buffer.from(underTest.leaveReceived.slice(0, 4)).toString('latin1')).toBe('BYE.')
     // The new session wrote its own frames and opened its own door while it came up.
     await until(() => underTest.received.length >= 2 * SESSION_BYTES)
