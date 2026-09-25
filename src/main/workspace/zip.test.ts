@@ -17,7 +17,7 @@ import {
   writeFileSync
 } from 'fs'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { entryDestination, extractZipEntry, readZip, readZipEntry, writeZip } from './zip'
 import { Refusal } from '../ipc/refusal'
 
@@ -304,7 +304,11 @@ describe('an archive that is damaged', () => {
 
 describe('where an entry goes', () => {
   it('is inside the folder it was pointed at', () => {
-    expect(entryDestination('/shows/hamlet', 'media/walk-in.wav')).toBe('/shows/hamlet/media/walk-in.wav')
+    // A platform's own separator, because that is what the destination is on: on Windows the
+    // answer is a `C:\` path, and the guard's job is that the entry lands *inside* the folder
+    // it was pointed at, which is what the two refusals below are about.
+    expect(entryDestination('/shows/hamlet', 'media/walk-in.wav'))
+      .toBe(resolve('/shows/hamlet', 'media/walk-in.wav'))
     expect(() => entryDestination('/shows/hamlet', '../walk-in.wav')).toThrow()
     expect(() => entryDestination('/shows/hamlet', '/etc/passwd')).toThrow()
   })

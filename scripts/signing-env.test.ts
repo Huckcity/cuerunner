@@ -38,7 +38,10 @@ function source(link: string, password: string): { output: string; values: Recor
   return { output, values }
 }
 
-describe('signing-env.sh', () => {
+// Sourced by a POSIX shell — that is what the release lane is (`release.yml` runs on
+// Ubuntu), and what a Windows runner has no `sh` on PATH for. The script is unchanged by
+// which machine reads this file; the test states which machine can.
+describe.skipIf(process.platform === 'win32')('signing-env.sh', () => {
   it('exports nothing when the secret is empty, and warns', () => {
     const { output, values } = source('', '')
     expect(values).toEqual({})

@@ -35,12 +35,41 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  # The suite runs on all three platforms the app ships to, not only where it is convenient:
+  # most of it is the main process — the workspace and its atomic write, the audio wire, the
+  # redundancy service — and those are exactly the places a platform shows up. It ran on
+  # `ubox` alone until the first Windows run of it found 24 failures, most of them tests that
+  # had only ever been written against POSIX (a mode that makes a write fail, a directory's
+  # permissions, `bash` for the release tooling's own scripts); those state their platform now,
+  # and the two that were real — an engine on a machine with no output endpoint, and a port
+  # Windows hands out twice — are fixed rather than skipped.
   unit-test:
-    runs-on: [self-hosted, linux, x64, ubox]
+    name: unit-test (${{ matrix.label }}, node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        node-version: [24, 26]
+        include:
+          # 24 = LTS (release toolchain), 26 = current — catches cross-major breakage like
+          # fd-slicer's zip extraction stalling on Node 26 (#49) — on each of the three.
+          - label: linux
+            runner: [self-hosted, linux, x64, ubox]
+            node-version: 24
+          - label: linux
+            runner: [self-hosted, linux, x64, ubox]
+            node-version: 26
+          - label: windows
+            runner: [self-hosted, windows, x64, win-ci]
+            node-version: 24
+          - label: windows
+            runner: [self-hosted, windows, x64, win-ci]
+            node-version: 26
+          - label: macos
+            runner: [self-hosted, macos, arm64, mac-mini]
+            node-version: 24
+          - label: macos
+            runner: [self-hosted, macos, arm64, mac-mini]
+            node-version: 26
     steps:
       - uses: actions/checkout@v7
 
@@ -49,10 +78,39 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install ALSA dev headers
+        if: runner.os == 'Linux'
         # Already on the homelab runner, and that host has one dpkg lock for six jobs.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+
+      # `npm test` builds the native engine first: the compiler has to be on PATH, and on
+      # Windows that means importing the developer environment, the same way the e2e job
+      # does it and for the same reason.
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VSINSTALL=%%i
+          if "%VSINSTALL%"=="" (echo ::error::no Visual Studio with the C++ tools was found & exit /b 1)
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
+          echo INCLUDE=%INCLUDE%>>"%GITHUB_ENV%"
+          echo LIB=%LIB%>>"%GITHUB_ENV%"
+          echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
+          echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
+          for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
+      - name: Locate the ASIO SDK
+        if: runner.os == 'Windows'
+        shell: cmd
+        # Opt-in on the machine, like the e2e lane: a runner with an SDK builds with ASIO, and
+        # one without gets this warning and an honest build without it.
+        run: |
+          set "ASIO=%CUERUNNER_ASIO_SDK%"
+          if "%ASIO%"=="" if exist "C:\asio-sdk\ASIOSDK\common\asio.h" set "ASIO=C:\asio-sdk\ASIOSDK"
+          if "%ASIO%"=="" (echo ::warning::No ASIO SDK found - set CUERUNNER_ASIO_SDK or unpack the SDK at C:\asio-sdk\ASIOSDK; the build will report ASIO as off. & exit /b 0)
+          echo CUERUNNER_ASIO_SDK=%ASIO%>>"%GITHUB_ENV%"
+          echo Using the ASIO SDK at %ASIO%
 
       - run: npm ci --legacy-peer-deps
 

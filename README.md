@@ -606,8 +606,12 @@ npm run test:e2e
 GitHub Actions workflows in `.github/workflows/`:
 
 - **`ci.yml`**: Runs on pull requests
-  - Typecheck, unit tests, and the Electron-install contract on Ubuntu, on Node 24 (LTS)
-    and 26 (current)
+  - Typecheck and the Electron-install contract on Ubuntu, on Node 24 (LTS) and 26 (current)
+  - Unit tests on all three platforms — Windows, macOS and Linux — on both Node majors: the
+    suite is mostly the main process (the workspace and its atomic write, the audio wire, the
+    redundancy service), which is where a platform shows up. The release tooling's own tests
+    and the `chmod`-based refusal cases state their platform, because they need a POSIX shell
+    or a mode that makes a write fail
   - E2E tests on Windows, macOS, and Linux (Ubuntu under Xvfb)
   - Integration tests on Linux: Cuerunner against the protocol peers for the console and the
     desk (no vendor software, no hardware)

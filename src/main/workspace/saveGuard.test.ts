@@ -267,7 +267,9 @@ describe('a save against the file it is about to replace', () => {
     expect(gates.prompts).toHaveLength(1)
   })
 
-  it('asks about a file it cannot read', async () => {
+  // A file made unreadable by its mode: POSIX only, and the two cases that produce the
+  // state without a mode are here for every platform (a file gone, a file past the ceiling).
+  it.skipIf(process.platform === 'win32')('asks about a file it cannot read', async () => {
     writeFileSync(file, showFile([waitCue('w', 'Bows')]))
     const { workspace: opened } = await openWorkspaceFromPath(file)
 
@@ -336,7 +338,9 @@ describe('a save against the file it is about to replace', () => {
     expect(readFileSync(file, 'utf-8')).toBe(theirs)
   })
 
-  it('does not let the save’s own history pass become the baseline', async () => {
+  // A file made unreadable by its mode: POSIX only, and the two cases that produce the
+  // state without a mode are here for every platform (a file gone, a file past the ceiling).
+  it.skipIf(process.platform === 'win32')('does not let the save’s own history pass become the baseline', async () => {
     writeFileSync(file, showFile([waitCue('w', 'Bows')]))
     const { workspace: opened } = await openWorkspaceFromPath(file)
     const theirs = showFile([waitCue('w', 'Bows'), waitCue('x', 'Their Encore')])

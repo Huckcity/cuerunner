@@ -70,7 +70,10 @@ describe('writeFileAtomically', () => {
     expect(readdirSync(dir)).toEqual(['show.cuerunner', 'show.cuerunner.bak'])
   })
 
-  it('refuses to lose the file when the write cannot be completed', async () => {
+  // A directory's mode is what makes this write impossible, and Windows has none: the same
+  // claim runs on the platforms where the mechanism exists (the Linux and macOS lanes), and
+  // the atomic writer it covers is the same code everywhere.
+  it.skipIf(process.platform === 'win32')('refuses to lose the file when the write cannot be completed', async () => {
     const file = join(dir, 'show.cuerunner')
     await writeFileAtomically(file, '{"good":true}')
 

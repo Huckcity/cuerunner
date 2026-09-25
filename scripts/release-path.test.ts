@@ -1646,7 +1646,10 @@ describe('the release path the repository holds', () => {
   })
 })
 
-describe('the notes the composer writes', () => {
+// These two spawn the composer and the mirror, which are POSIX shell scripts the release
+// lane runs on Ubuntu: a Windows runner has no `bash` on PATH, and the tools are not meant
+// to run there.
+describe.skipIf(process.platform === 'win32')('the notes the composer writes', () => {
   const script = composerScript(LIVE)
 
   it('names the repository\'s own installers unsigned, and never as signed', () => {
@@ -1767,7 +1770,10 @@ describe('the notes the composer writes', () => {
   })
 })
 
-describe('the mirror the composed list fills', () => {
+// These two spawn the composer and the mirror, which are POSIX shell scripts the release
+// lane runs on Ubuntu: a Windows runner has no `bash` on PATH, and the tools are not meant
+// to run there.
+describe.skipIf(process.platform === 'win32')('the mirror the composed list fills', () => {
   const script = mirrorScript(LIVE)
 
   it('copies exactly the files the notes were composed from, under the names the site links', () => {
