@@ -3,6 +3,7 @@ import type {
   CastSettings,
   Ensemble,
   MicScene,
+  RowMember,
   SceneDcaPlacement,
   ScenesSettings,
   ShowSettings
@@ -11,8 +12,8 @@ import type {
 /**
  * Scenes, as pure operations.
  *
- * A scene owns the assignment: per fader it names the channels it places, the ensembles
- * applied to that row and the member channels it leaves off. Nothing but a scene says which
+ * A scene owns the assignment: per fader it names the one thing that rides it — a channel,
+ * or an ensemble over some of them. Nothing but a scene says which
  * fader a channel rides (AD-26), so everything here is about placements rather than about
  * who is open — a controlled channel is open exactly when some row of the scene carries it.
  *
@@ -73,8 +74,12 @@ export function placementFor(scene: MicScene | null, dcaId: string): SceneDcaPla
   return scene.dcas.find(placement => placement.dcaId === dcaId) ?? null
 }
 
-/** The channels an ensemble carries, through the performers whose mics are on them. */
-function ensembleChannels(cast: CastSettings, ensembleId: string): string[] {
+/**
+ * The channels an ensemble carries, through the performers whose mics are on them: the
+ * strips a group stands on, in cast order. A member with no strip contributes nothing —
+ * there is no channel to open — and two on one strip count once.
+ */
+export function ensembleChannels(cast: CastSettings, ensembleId: string): string[] {
   const ensemble = cast.ensembles.find(candidate => candidate.id === ensembleId)
   if (ensemble === undefined) return []
   const channels: string[] = []
@@ -87,23 +92,27 @@ function ensembleChannels(cast: CastSettings, ensembleId: string): string[] {
 }
 
 /**
- * The controlled channels one row carries in one scene: the ones placed on it by hand, plus
- * the channels of the ensembles applied to it, less the member channels the scene leaves off.
+ * The controlled channels one row carries in one scene: the channel it holds, or the
+ * channels of the ensemble it holds.
  *
  * The order is the show's own channel order, which is the order the desk numbers its inputs
  * in — nothing downstream reads this as an edit order.
  */
 export function rowChannels(cast: CastSettings, placement: SceneDcaPlacement | null): string[] {
   if (placement === null) return []
-  const carried = new Set(placement.channels)
-  for (const ensembleId of placement.ensembles) {
-    for (const channelId of ensembleChannels(cast, ensembleId)) carried.add(channelId)
-  }
-  const channels: string[] = []
-  for (const channel of cast.channels) {
-    if (carried.has(channel.id) && !placement.excluded.includes(channel.id)) channels.push(channel.id)
-  }
-  return channels
+  const carried = new Set(placement.kind === 'channel'
+    ? [placement.memberId]
+    : ensembleChannels(cast, placement.memberId))
+  return cast.channels.filter(channel => carried.has(channel.id)).map(channel => channel.id)
+}
+
+/** The ensemble a row holds, or null when it holds a channel or nothing. */
+export function rowEnsemble(
+  cast: CastSettings,
+  placement: SceneDcaPlacement | null
+): Ensemble | null {
+  if (placement === null || placement.kind !== 'ensemble') return null
+  return cast.ensembles.find(ensemble => ensemble.id === placement.memberId) ?? null
 }
 
 /** The faders a channel rides in a scene, in the show's DCA order. */
@@ -127,22 +136,6 @@ export function sceneChannelIds(scene: MicScene | null, cast: CastSettings): str
 }
 
 /**
- * What a scene does with one ensemble on one fader: applied, not applied, or applied with
- * some of its members left off this row. The third state is why a cell cannot be a tick.
- */
-export function ensembleState(
-  scene: MicScene | null,
-  dcaId: string,
-  ensemble: Ensemble,
-  cast: CastSettings
-): 'off' | 'on' | 'partial' {
-  const row = placementFor(scene, dcaId)
-  if (row === null || !row.ensembles.includes(ensemble.id)) return 'off'
-  const left = ensembleChannels(cast, ensemble.id).some(channelId => row.excluded.includes(channelId))
-  return left ? 'partial' : 'on'
-}
-
-/**
  * Who an ensemble built from these channels holds: the performers whose mics stand on
  * them, in cast order. An empty answer is a set of strips nobody is patched to, and an
  * ensemble names performers — so a caller offering the strips a group can be built from
@@ -156,168 +149,48 @@ export function rowPerformers(cast: CastSettings, carried: string[]): string[] {
 
 // ── Editing a placement ────────────────────────────────────────────────────
 
-/** Whether a row still says anything. An empty one is dropped rather than kept as a shell. */
-function isEmptyRow(row: SceneDcaPlacement): boolean {
-  return row.channels.length === 0 && row.ensembles.length === 0 && row.excluded.length === 0
-}
-
 /**
- * Edits one row of one scene, creating it when it is not there yet and dropping it when the
- * edit leaves it saying nothing.
+ * Edits one row of one scene: what it holds, or nothing to drop it.
  *
- * One function, because every placement edit is the same three lines and the difference
- * between them is what the row ends up holding: a new row is not a thing any of them should
- * have to remember to make, and an empty one left behind is a scene that speaks for a fader
- * it has nothing to say about.
+ * One function, because every placement edit comes to the same thing — a row says one thing
+ * — and a null member is a row that says nothing: it is taken out rather than left behind,
+ * since a scene that speaks for a fader it has nothing to say about is one nobody can read,
+ * and a fader grown back is a new place rather than a revivable shell.
+ *
+ * A new row lands at the end of the scene's list. The order of that list is not a running
+ * order — the faders are — so an edit keeps it as it finds it and appends.
  */
-function writeRow(
+export function setRowMember(
   settings: ScenesSettings,
   sceneId: string,
   dcaId: string,
-  edit: (row: SceneDcaPlacement) => SceneDcaPlacement
+  member: RowMember | null
 ): ScenesSettings {
   return {
     ...settings,
     list: settings.list.map(scene => {
       if (scene.id !== sceneId) return scene
-      const existing = scene.dcas.find(row => row.dcaId === dcaId)
-      const next = edit(existing ?? { dcaId, channels: [], ensembles: [], excluded: [] })
-      const dcas = isEmptyRow(next)
-        ? scene.dcas.filter(row => row.dcaId !== dcaId)
-        : existing === undefined
-          ? [...scene.dcas, next]
-          : scene.dcas.map(row => row.dcaId === dcaId ? next : row)
-      return { ...scene, dcas }
+      // A show that keeps one fader per channel takes a channel off this scene's other rows
+      // first — the editor's half of the rule; the recall collapses what a file still carries.
+      const cleared = member !== null && member.kind === 'channel' &&
+        !settings.allowDuplicateAssignment
+        ? scene.dcas
+            .filter(row => !(row.kind === 'channel' && row.memberId === member.memberId))
+        : scene.dcas
+      const others = cleared.filter(row => row.dcaId !== dcaId)
+      if (member === null) return { ...scene, dcas: others }
+      return { ...scene, dcas: [...others, { dcaId, ...member }] }
     })
   }
-}
-
-/** Takes a channel off every row of one scene: the show keeps one fader per channel. */
-function clearChannelFromScene(
-  settings: ScenesSettings,
-  sceneId: string,
-  channelId: string
-): ScenesSettings {
-  return {
-    ...settings,
-    list: settings.list.map(scene => scene.id === sceneId
-      ? {
-          ...scene,
-          dcas: scene.dcas
-            .map(row => row.channels.includes(channelId)
-              ? { ...row, channels: row.channels.filter(id => id !== channelId) }
-              : row)
-            .filter(row => !isEmptyRow(row))
-        }
-      : scene)
-  }
-}
-
-/**
- * Places a controlled channel on one fader in one scene, or takes it off.
- *
- * Taking a hand placement off a channel an applied ensemble carries is an *exclusion*
- * rather than a removal: the ensemble still holds them, and the next scene that applies it
- * rides them again. Placing one by hand says where it goes, so it takes the exclusion back.
- *
- * A show that keeps one fader per channel takes the channel off every other row of that
- * scene first — the editor's half of the rule; the recall collapses whatever a file still
- * carries.
- */
-export function setChannelPlaced(
-  settings: ScenesSettings,
-  sceneId: string,
-  dcaId: string,
-  channelId: string,
-  placed: boolean,
-  cast: CastSettings
-): ScenesSettings {
-  const cleared = placed && !settings.allowDuplicateAssignment
-    ? clearChannelFromScene(settings, sceneId, channelId)
-    : settings
-  return writeRow(cleared, sceneId, dcaId, row => {
-    if (placed) {
-      return {
-        ...row,
-        channels: row.channels.includes(channelId) ? row.channels : [...row.channels, channelId],
-        excluded: row.excluded.filter(id => id !== channelId)
-      }
-    }
-    const carried = row.ensembles.some(ensembleId =>
-      ensembleChannels(cast, ensembleId).includes(channelId))
-    return {
-      ...row,
-      channels: row.channels.filter(id => id !== channelId),
-      excluded: carried && !row.excluded.includes(channelId)
-        ? [...row.excluded, channelId]
-        : row.excluded
-    }
-  })
-}
-
-/**
- * Applies an ensemble to one fader in one scene, or takes it off.
- *
- * Applying it takes its members' channels off the row's own list, exclusions and all: they
- * ride because the ensemble says so now, which is what lets the ensemble grow later without
- * the scene being edited again. Unapplying leaves whatever the operator placed by hand
- * exactly as it was, and an exclusion only means something while the ensemble is applied.
- */
-export function setRowEnsemble(
-  settings: ScenesSettings,
-  sceneId: string,
-  dcaId: string,
-  ensemble: Ensemble,
-  applied: boolean,
-  cast: CastSettings
-): ScenesSettings {
-  const members = ensembleChannels(cast, ensemble.id)
-  return writeRow(settings, sceneId, dcaId, row => {
-    if (!applied) {
-      return {
-        ...row,
-        ensembles: row.ensembles.filter(id => id !== ensemble.id),
-        excluded: row.excluded.filter(id => !members.includes(id))
-      }
-    }
-    return {
-      ...row,
-      ensembles: row.ensembles.includes(ensemble.id)
-        ? row.ensembles
-        : [...row.ensembles, ensemble.id],
-      channels: row.channels.filter(id => !members.includes(id)),
-      excluded: row.excluded.filter(id => !members.includes(id))
-    }
-  })
-}
-
-/**
- * Leaves one member's channel off one fader in one scene, or puts it back. An exclusion and
- * a hand placement contradict each other, so excluding takes the placement off the row.
- */
-export function setMemberExcluded(
-  settings: ScenesSettings,
-  sceneId: string,
-  dcaId: string,
-  channelId: string,
-  excluded: boolean
-): ScenesSettings {
-  return writeRow(settings, sceneId, dcaId, row => {
-    if (!excluded) return { ...row, excluded: row.excluded.filter(id => id !== channelId) }
-    return {
-      ...row,
-      channels: row.channels.filter(id => id !== channelId),
-      excluded: row.excluded.includes(channelId) ? row.excluded : [...row.excluded, channelId]
-    }
-  })
 }
 
 /**
  * Takes channels out of every scene: each has left the console, so nothing can carry it.
  *
  * A set at a time rather than a channel, because a count's shrink drops several strips in
- * one edit: each of them leaves every row's placements and exclusions, and a row left
- * saying nothing goes with them rather than staying as a shell.
+ * one edit: a row that was holding one of them holds nothing and goes with it, while a row
+ * holding an ensemble keeps it — the ensemble is still a group, and it is the cast's editor
+ * that says who is in it, not a scene.
  */
 export function removeChannelsFromScenes(
   settings: ScenesSettings,
@@ -329,13 +202,7 @@ export function removeChannelsFromScenes(
     ...settings,
     list: settings.list.map(scene => ({
       ...scene,
-      dcas: scene.dcas
-        .map(row => ({
-          ...row,
-          channels: row.channels.filter(id => !gone.has(id)),
-          excluded: row.excluded.filter(id => !gone.has(id))
-        }))
-        .filter(row => !isEmptyRow(row))
+      dcas: scene.dcas.filter(row => !(row.kind === 'channel' && gone.has(row.memberId)))
     }))
   }
 }
@@ -357,17 +224,13 @@ export function removeDcasFromScenes(settings: ScenesSettings, dcaIds: string[])
   }
 }
 
-/** Unapplies an ensemble from every row that had it, once it has left the cast. */
+/** Empties every row that was holding an ensemble, once it has left the cast. */
 export function removeEnsembleFromScenes(settings: ScenesSettings, ensembleId: string): ScenesSettings {
   return {
     ...settings,
     list: settings.list.map(scene => ({
       ...scene,
-      dcas: scene.dcas
-        .map(row => row.ensembles.includes(ensembleId)
-          ? { ...row, ensembles: row.ensembles.filter(id => id !== ensembleId) }
-          : row)
-        .filter(row => !isEmptyRow(row))
+      dcas: scene.dcas.filter(row => !(row.kind === 'ensemble' && row.memberId === ensembleId))
     }))
   }
 }

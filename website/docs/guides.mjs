@@ -725,9 +725,11 @@ export const GUIDES = [
         unpatches nobody — the mics stay where they are, and a fader grown back comes back
         empty. Which channel rides which fader is not set up here: that is the scene's
         decision, taken in the grid, so a chorus can ride one fader in one number and be
-        split across the stage in the next. Each fader carries one <strong>desk number</strong>,
-        for a desk that counts its DCAs differently from the show, and the row under it says
-        how many scenes place anything on it. Under the faders is the one rule the grid cannot
+        split across the stage in the next. A fader is its <strong>number</strong> — the
+        fourth fader of the show is its fourth fader in every scene, and the grid's rows are
+        named by that number — and each carries one <strong>desk number</strong>, for a desk
+        that counts its DCAs differently from the show. The row under it says how many
+        scenes put anything on it. Under the faders is the one rule the grid cannot
         state for itself — <strong>Allow a channel to ride more than one fader</strong>: left
         on, a strip rides as many faders as a scene places it on; switched off, the grid keeps
         one fader per channel and a recall folds a leftover down to the lowest-numbered one.
@@ -735,22 +737,25 @@ export const GUIDES = [
         larger than the desk model states is named there, with the number, and sent as it is.
       </p>
       <div class="note">
-        Two fields this tab used to carry are deleted rather than deprecated: a strip has no
-        fader select of its own, and a fader has one <strong>desk number</strong> in place of
-        the note and address overrides that used to sit beside it. A show saved with either
-        shape is refused when it is opened, naming what the build does not know, rather than
-        converted — the strips, the faders and the placements are set up again here and in
-        the grid.
+        Fields this tab used to carry are deleted rather than deprecated: a strip has no
+        fader select of its own, a fader has no <strong>name</strong> — one
+        <strong>desk number</strong> in place of the note and address overrides that used to
+        sit beside it — and a scene's row holds one thing rather than a list of them. A show
+        saved with any of those shapes is refused when it is opened, naming what the build
+        does not know, rather than converted — the strips, the faders and the placements are
+        set up again here and in the grid.
       </div>
     </section>
 
     <section class="panel reveal delay-1">
       <h2>2. Enter the cast</h2>
       <p>
-        <strong>Cast</strong> is the people: a name, a part, the channel they are on and
-        any note you need. <strong>Ensembles</strong> are groups you will open together —
-        principals, chorus, band — so a scene can apply a whole section in one press
-        instead of a row of them.
+        <strong>Cast</strong> is the people: a name, a part, the channel they are on and any
+        note you need. A performer is who they are for the whole show — the mic plot hands
+        them packs and the report names them the next morning — so this is where they are set
+        up and nothing else is. The groups they are opened in belong to the grid: build them
+        from the strips a row should carry, where you are standing when you decide who is in
+        the chorus.
       </p>
     </section>
 
@@ -758,37 +763,40 @@ export const GUIDES = [
       <h2>3. Build the scenes</h2>
       <figure class="figure">
         <a href="../assets/guide/18-scenes.png" target="_blank" rel="noreferrer">
-          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each cell naming the strips that scene puts on that fader and the blank box it gains them from." />
+          <img src="../assets/guide/18-scenes.png" alt="The scenes view: the show's faders down the side and scenes across the top, each row holding one strip or one ensemble and ending in the blank box that changes it." />
         </a>
         <figcaption>The scenes view, mid-build.</figcaption>
       </figure>
       <p>
         Switch the window to <strong>Scenes</strong>, press <strong>Edit</strong>, and add
-        one. The show’s <strong>faders</strong> run down the side and the scenes across the
-        top, and each cell says which strips that scene puts on that fader, by the name the
-        strip was given or the name of the performer standing on it. Every row ends in a
-        blank box: press it, type a name into the <strong>filter</strong>, and pick the strip.
-        Take a strip off with the ✕ beside its name. A strip can ride several faders — a
-        chorus master on one and its members spread across others — unless Show Settings has
-        that turned off (Channels → Allow a channel to ride more than one fader), where
-        placing a strip on a row takes it off that scene's other rows.
+        one. The show’s <strong>faders</strong> run down the side — numbered, because that is
+        what the desk is told and what you reach for — and the scenes across the top. Each
+        row of a scene holds <strong>one thing</strong>: a strip, or an ensemble over several
+        of them. Press the blank box beside it, type a name into the
+        <strong>filter</strong>, and pick the strip or the group; picking one where the row
+        already holds another replaces it, and the ✕ beside the name takes the row back to
+        empty. A strip can ride several faders — a chorus master on one and its members spread
+        across others — unless Show Settings has that turned off (Channels → Allow a channel
+        to ride more than one fader), where putting a strip on a row takes it off that
+        scene's other rows.
       </p>
       <p>
-        An <strong>ensemble</strong> is the other half of building a row: the same box lists
-        the ensembles the row does not apply, and picking one puts every member’s strip on
-        the row, with a member you want left off shown beside it to switch off.
-        <strong>Ensemble…</strong>, the last row of the box, is where a new one is built: name
-        it, move the strips it should hold from <strong>Available</strong> to <strong>In the
-        ensemble</strong> with the two arrows, and press <strong>Create and apply</strong> —
-        the group joins the cast and this row rides it, as one edit you can undo. It is left
-        there to apply to other rows and scenes. A strip nobody is cast on cannot be in a
-        group, so it cannot be moved across: it stays a placement of the row's own, and the
-        row carries exactly what it carried. <strong>Done</strong> when you have finished.
+        Several strips on one fader is what an <strong>ensemble</strong> is for, and
+        <strong>Ensemble…</strong> — the last row of the box — is where one is built or
+        changed: name it, move the strips it should hold from <strong>Available</strong> to
+        <strong>In the ensemble</strong> with the two arrows, and press <strong>Create and
+        apply</strong>. The group joins the cast, this row holds it, and it is left there to
+        put on other rows and scenes with the same box. Opened from a row that already holds a
+        group it edits that group instead — <strong>Save</strong> changes it on every row that
+        holds it, because an ensemble is membership rather than a copy, and
+        <strong>Delete</strong> removes it and empties those rows. A strip nobody is cast on
+        cannot be in a group: it is shown greyed with the reason rather than moved across.
+        <strong>Done</strong> when you have finished.
       </p>
       <p>
         A scene answers for every channel, not only for the ones it places: a channel it
-        leaves off every fader in that scene is closed by the recall, and a member excluded
-        from an ensemble rides nothing and is closed with it. The leftmost column,
+        leaves off every fader in that scene is closed by the recall. An ensemble's block
+        says which mics it opens in its title. The leftmost column,
         <strong>All closed</strong>, is a scene like any other that way — it places nothing,
         so it closes every mic the show drives — and it is the one column that is never
         edited. Columns are a fixed width, so a show of two scenes reads the same as a show

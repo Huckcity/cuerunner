@@ -124,62 +124,50 @@
       "dcas": [
         {
           "id": "dca-1",
-          "label": "DCA 1",
           "deskNumber": null
         },
         {
           "id": "dca-2",
-          "label": "DCA 2",
           "deskNumber": null
         },
         {
           "id": "dca-3",
-          "label": "DCA 3",
           "deskNumber": null
         },
         {
           "id": "dca-4",
-          "label": "DCA 4",
           "deskNumber": null
         },
         {
           "id": "dca-5",
-          "label": "DCA 5",
           "deskNumber": null
         },
         {
           "id": "dca-6",
-          "label": "DCA 6",
           "deskNumber": null
         },
         {
           "id": "dca-7",
-          "label": "DCA 7",
           "deskNumber": null
         },
         {
           "id": "dca-8",
-          "label": "DCA 8",
           "deskNumber": null
         },
         {
           "id": "dca-9",
-          "label": "DCA 9",
           "deskNumber": null
         },
         {
           "id": "dca-10",
-          "label": "DCA 10",
           "deskNumber": null
         },
         {
           "id": "dca-11",
-          "label": "DCA 11",
           "deskNumber": null
         },
         {
           "id": "dca-12",
-          "label": "DCA 12",
           "deskNumber": null
         }
       ]

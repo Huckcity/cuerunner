@@ -30,7 +30,7 @@ import type { MidiMessageKind } from '../../../shared/cue'
 import type { Dca, DeskSettings } from '../../../shared/show'
 
 function dca(overrides: Partial<Dca> = {}): Dca {
-  return { id: 'dca-1', label: 'DCA 1', deskNumber: null, ...overrides }
+  return { id: 'dca-1', deskNumber: null, ...overrides }
 }
 
 function desk(overrides: Partial<DeskSettings> = {}): DeskSettings {
@@ -419,7 +419,7 @@ describe('the gaps a profile has', () => {
     // desk has not got, and it would be recorded as landed.
     const socket = desk({ ...tcp, profile: 'sq' })
     const overridden = membershipWrite(
-      0, { id: 'dca-1', label: 'DCA 1', deskNumber: 9 }, 0, true, true, socket
+      0, { id: 'dca-1', deskNumber: 9 }, 0, true, true, socket
     )
     expect(overridden).toEqual({
       ok: false,
@@ -427,7 +427,7 @@ describe('the gaps a profile has', () => {
     })
     // The same show's eighth fader is fine: 7 is the last parameter an SQ has.
     expect(membershipWrite(
-      0, { id: 'dca-1', label: 'DCA 1', deskNumber: 7 }, 0, true, true, socket
+      0, { id: 'dca-1', deskNumber: 7 }, 0, true, true, socket
     )).toMatchObject({ ok: true })
   })
 

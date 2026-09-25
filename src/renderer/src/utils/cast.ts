@@ -233,13 +233,6 @@ export function removeEnsemble(cast: CastSettings, ensembleId: string): CastSett
   return { ...cast, ensembles: cast.ensembles.filter(ensemble => ensemble.id !== ensembleId) }
 }
 
-/** Who is in an ensemble, in cast order. Members that are no longer cast are dropped. */
-export function ensembleMembers(cast: CastSettings, ensembleId: string): Performer[] {
-  const ensemble = cast.ensembles.find(candidate => candidate.id === ensembleId)
-  if (!ensemble) return []
-  return cast.performers.filter(performer => ensemble.members.includes(performer.id))
-}
-
 // ── DCAs ───────────────────────────────────────────────────────────────────
 
 export function updateDca(
@@ -255,9 +248,8 @@ export function updateDca(
 
 /**
  * How many faders the show drives. The list is resized to match: growing appends DCAs that
- * label and address themselves, and shrinking takes the last ones off. Each list keeps its
- * labels, its order and the ids of what remains, so a fader that survives a count is the
- * same fader.
+ * address themselves, and shrinking takes the last ones off. Each list keeps its names, its
+ * order and the ids of what remains, so a fader that survives a count is the same fader.
  *
  * The cap bounds growth alone, the same way the strips' does: a show a file carries more
  * faders than are offerable keeps its own count selectable, and asking for it back must
@@ -274,7 +266,6 @@ export function setDcaCount(cast: CastSettings, count: number): CastSettings {
   while (dcas.length < wanted) {
     dcas.push({
       id: crypto.randomUUID(),
-      label: `DCA ${dcas.length + 1}`,
       deskNumber: null
     })
   }

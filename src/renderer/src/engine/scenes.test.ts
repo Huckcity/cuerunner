@@ -43,7 +43,6 @@ function cast(): CastSettings {
     ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }],
     dcas: [1, 2, 3, 4].map(index => ({
       id: `dca-${index}`,
-      label: `DCA ${index}`,
       deskNumber: null
     }))
   }
@@ -53,7 +52,7 @@ function cast(): CastSettings {
 const WEDDING: MicScene = {
   id: 's-1',
   name: 'Wedding',
-  dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
+  dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }],
   notes: ''
 }
 
@@ -62,8 +61,8 @@ const FINALE: MicScene = {
   id: 's-2',
   name: 'Finale',
   dcas: [
-    { dcaId: 'dca-2', channels: ['ch-2'], ensembles: [], excluded: [] },
-    { dcaId: 'dca-3', channels: ['ch-3'], ensembles: [], excluded: [] }
+    { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-2' },
+    { dcaId: 'dca-3', kind: 'channel', memberId: 'ch-3' }
   ],
   notes: ''
 }
@@ -72,7 +71,7 @@ const FINALE: MicScene = {
 const MOVED: MicScene = {
   id: 's-3',
   name: 'Moved',
-  dcas: [{ dcaId: 'dca-3', channels: ['ch-1'], ensembles: [], excluded: [] }],
+  dcas: [{ dcaId: 'dca-3', kind: 'channel', memberId: 'ch-1' }],
   notes: ''
 }
 
@@ -374,8 +373,8 @@ describe('recallScene', () => {
         id: 's-5',
         name: 'Phantom',
         dcas: [
-          { dcaId: 'dca-2', channels: ['ch-9'], ensembles: [], excluded: [] },
-          { dcaId: 'dca-9', channels: ['ch-2'], ensembles: [], excluded: [] }
+          { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-9' },
+          { dcaId: 'dca-9', kind: 'channel', memberId: 'ch-2' }
         ],
         notes: ''
       }
@@ -477,8 +476,7 @@ describe('recallScene', () => {
       id: 's-1',
       name: 'Wedding',
       dcas: [
-        { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] },
-        { dcaId: 'dca-2', channels: [], ensembles: [], excluded: [] }
+        { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }
       ],
       notes: ''
     }
@@ -556,14 +554,13 @@ describe('recallScene', () => {
       ensembles: [],
       dcas: Array.from({ length: 9 }, (_, index) => ({
         id: `dca-${index + 1}`,
-        label: `DCA ${index + 1}`,
         deskNumber: null
       }))
     }
     const ninth: MicScene = {
       id: 's-9',
       name: 'Ninth',
-      dcas: [{ dcaId: 'dca-9', channels: ['ch-9'], ensembles: [], excluded: [] }],
+      dcas: [{ dcaId: 'dca-9', kind: 'channel', memberId: 'ch-9' }],
       notes: ''
     }
     seed(EMPTY, null, nine, SQ, [ninth])

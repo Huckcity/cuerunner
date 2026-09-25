@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from './index'
 import type { AudioCue } from '../../../shared/cue'
 import { defaultShowSettings, startingChannels } from '../../../shared/show'
-import { rowChannels, setChannelPlaced } from '../utils/scenes'
+import { rowChannels, setRowMember } from '../utils/scenes'
 import type {
   AlertEvent,
   AlertLevel,
@@ -17,7 +17,7 @@ import type {
   ShowEvent
 } from '../../../shared/show'
 
-const DCA: Dca = { id: 'dca-1', label: 'DCA 1', deskNumber: null }
+const DCA: Dca = { id: 'dca-1', deskNumber: null }
 /** The strip Ada's mic is on, which is what carries her to the desk. */
 const CHANNEL = { id: 'ch-1', name: 'Ada' }
 const ROUTED_PERFORMER: Performer = {
@@ -31,7 +31,7 @@ const ROUTED_PERFORMER: Performer = {
 const NUMBER: MicScene = {
   id: 's1',
   name: 'Bows',
-  dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
+  dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }],
   notes: ''
 }
 
@@ -824,36 +824,57 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().cues.find(c => c.id === c1.id)?.name).toBe('First')
   })
 
-  it('undo after removing an ensemble brings it back with the rows that applied it', () => {
+  it('undo after removing an ensemble brings it back with the rows that held it', () => {
     const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', members: ['p1'] }
-    const applying: MicScene = {
+    const holding: MicScene = {
       ...NUMBER,
-      dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: ['ens-1'], excluded: [] }]
+      dcas: [
+        { dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' },
+        { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-1' }
+      ]
+    }
+    const alsoHolding: MicScene = {
+      id: 's2',
+      name: 'Finale',
+      dcas: [{ dcaId: 'dca-2', kind: 'ensemble', memberId: 'ens-1' }],
+      notes: ''
     }
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
         ...defaults,
-        scenes: { ...defaults.scenes, list: [applying] },
-        cast: castWith({ ensembles: [chorus] })
-      }
+        scenes: { ...defaults.scenes, list: [holding, alsoHolding] },
+        cast: castWith({
+          ensembles: [chorus],
+          dcas: [DCA, { id: 'dca-2', deskNumber: null }]
+        })
+      },
+      isDirty: false
     })
+    const past = useStore.getState().past.length
 
     useStore.getState().removeEnsemble(chorus.id)
 
-    // The ensemble goes and the rows that had it applied stop applying it, in the same
-    // edit: a row pointing at an ensemble that is gone is a group of mics nobody can move
-    // from the grid again.
-    expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
-    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
-      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+    // The ensemble goes and every row that held it goes with it, in the same edit: a row
+    // pointing at an ensemble that is gone is a group of mics nobody can move from the
+    // grid again. A row holding a strip says nothing about the group and stays.
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.ensembles).toEqual([])
+    // The members keep existing: the group is a grouping and nothing else.
+    expect(settings.cast.performers).toEqual([ROUTED_PERFORMER])
+    expect(settings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-1' }
     ])
+    expect(settings.scenes.list[1].dcas).toEqual([])
+    expect(useStore.getState().past).toHaveLength(past + 1)
+    expect(useStore.getState().isDirty).toBe(true)
 
     // One undo, rather than half of the edit and then the other half.
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.ensembles.map(ensemble => ensemble.id))
       .toEqual([chorus.id])
-    expect(useStore.getState().showSettings.scenes.list[0].dcas[0].ensembles).toEqual(['ens-1'])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual(holding.dcas)
+    expect(useStore.getState().showSettings.scenes.list[1].dcas).toEqual(alsoHolding.dcas)
   })
 
   it('undo after resizing the DCAs puts the list back with the rows that named it', () => {
@@ -905,7 +926,7 @@ describe('store — undo/redo', () => {
           ...defaults.scenes,
           list: [
             NUMBER,
-            { id: 's2', name: 'Bows again', dcas: [{ dcaId: 'dca-1', channels: ['ch-2'], ensembles: [], excluded: [] }], notes: '' }
+            { id: 's2', name: 'Bows again', dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' }], notes: '' }
           ]
         }
       },
@@ -928,7 +949,7 @@ describe('store — undo/redo', () => {
     const back = useStore.getState().showSettings
     expect(back.cast.channels.map(channel => channel.name)).toEqual(['Ada', 'Bea'])
     expect(back.cast.performers[0].channelId).toBe('ch-1')
-    expect(back.scenes.list[1].dcas[0].channels).toEqual(['ch-2'])
+    expect(back.scenes.list[1].dcas).toEqual([{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-2' }])
   })
 
   it('a count grown appends strips and leaves every scene and patch alone', () => {
@@ -978,7 +999,7 @@ describe('store — undo/redo', () => {
         cast: castWith({ channels }),
         scenes: {
           ...defaults.scenes,
-          list: [{ id: 's1', name: 'Bows', dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }], notes: '' }]
+          list: [{ id: 's1', name: 'Bows', dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }], notes: '' }]
         }
       },
       isDirty: false
@@ -989,7 +1010,8 @@ describe('store — undo/redo', () => {
 
     expect(useStore.getState().showSettings.cast.channels).toHaveLength(channels.length)
     expect(useStore.getState().showSettings.cast.performers[0].channelId).toBe('ch-1')
-    expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels).toEqual(['ch-1'])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas)
+      .toEqual([{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }])
     expect(useStore.getState().past).toHaveLength(before)
     expect(useStore.getState().isDirty).toBe(false)
   })
@@ -1015,23 +1037,28 @@ describe('store — undo/redo', () => {
         ...defaults,
         scenes: { ...defaults.scenes, list: [NUMBER] },
         cast: { ...castWith(), performers: [] }
-      }
+      },
+      isDirty: false
     })
     const before = useStore.getState().showSettings
+    const past = useStore.getState().past.length
 
-    useStore.getState().addEnsembleToRow(NUMBER.id, 'dca-1', 'Chorus', ['ch-1'])
+    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', null, 'Chorus', ['ch-1'])
 
     expect(useStore.getState().showSettings).toBe(before)
-    expect(useStore.getState().past).toHaveLength(0)
+    expect(useStore.getState().past).toHaveLength(past)
+    expect(useStore.getState().isDirty).toBe(false)
   })
 
-  it('makes the group the builder was given, named as it was named, and applies it to the row', () => {
+  it('makes the group the builder was given, named as it was named, and puts it on the row', () => {
     const defaults = defaultShowSettings()
     useStore.setState({
-      showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] }, cast: castWith() }
+      showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] }, cast: castWith() },
+      isDirty: false
     })
+    const past = useStore.getState().past.length
 
-    useStore.getState().addEnsembleToRow(NUMBER.id, 'dca-1', 'Chorus', ['ch-1'])
+    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', null, 'Chorus', ['ch-1'])
 
     const settings = useStore.getState().showSettings
     expect(settings.cast.ensembles).toHaveLength(1)
@@ -1041,13 +1068,16 @@ describe('store — undo/redo', () => {
     // a regrouping is not a re-routing.
     expect(settings.cast.ensembles[0].members).toEqual(['p1'])
     expect(settings.scenes.list[0].dcas).toEqual([
-      { dcaId: 'dca-1', channels: [], ensembles: [settings.cast.ensembles[0].id], excluded: [] }
+      { dcaId: 'dca-1', kind: 'ensemble', memberId: settings.cast.ensembles[0].id }
     ])
     expect(rowChannels(settings.cast, settings.scenes.list[0].dcas[0])).toEqual(['ch-1'])
+    // The grouping and the row it was opened from are one edit: one undo takes both back.
+    expect(useStore.getState().past).toHaveLength(past + 1)
+    expect(useStore.getState().isDirty).toBe(true)
 
     useStore.getState().undo()
     expect(useStore.getState().showSettings.cast.ensembles).toEqual([])
-    expect(useStore.getState().showSettings.scenes.list[0].dcas[0].channels).toEqual(['ch-1'])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual(NUMBER.dcas)
   })
 
   it('names a group it was given no name for after the ones already there', () => {
@@ -1056,48 +1086,123 @@ describe('store — undo/redo', () => {
       showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] }, cast: castWith() }
     })
 
-    useStore.getState().addEnsembleToRow(NUMBER.id, 'dca-1', '', ['ch-1'])
+    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', null, '', ['ch-1'])
 
     expect(useStore.getState().showSettings.cast.ensembles[0].name).toBe('Ensemble 1')
   })
 
-  it('leaves a strip the builder was not given where the row put it, on one undo', () => {
-    // Picking strips is what moves them into the group. A strip nobody is patched to cannot
-    // be picked at all, so the row goes on naming it by hand — and one undo puts the whole
-    // edit back, the ensemble and the row together.
-    const SPARE = { id: 'ch-2', name: 'Spare' }
-    const defaults = defaultShowSettings()
+  it('keeps a name it was not given, so saving a group never empties the block it draws', () => {
+    // The builder hands over every keystroke, so a cleared field is a blank name — and a
+    // block with no name draws nothing while the row still opens the group's mics. An edit
+    // keeps the name it had; a new group takes the cast's own default.
+    const leads: Ensemble = { id: 'ens-1', name: 'Leads', members: ['p1'] }
     const scene: MicScene = {
-      id: 's-bows',
-      name: 'Bows',
-      dcas: [{ dcaId: 'dca-1', channels: ['ch-1', 'ch-2'], ensembles: [], excluded: [] }],
+      id: 's1',
+      name: 'Opening',
+      dcas: [{ dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }],
       notes: ''
     }
+    const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
         ...defaults,
-        cast: castWith({ channels: [CHANNEL, SPARE] }),
+        cast: castWith({ ensembles: [leads] }),
         scenes: { ...defaults.scenes, list: [scene] }
+      }
+    })
+
+    useStore.getState().saveEnsembleOnRow(scene.id, 'dca-1', leads.id, '   ', ['ch-1'])
+
+    expect(useStore.getState().showSettings.cast.ensembles[0].name).toBe('Leads')
+  })
+
+  it('keeps a member the builder cannot show, because the panes are strips', () => {
+    // A member whose mic stands on no strip is one the two strip panes cannot draw, and
+    // saving — even to rename the group — must not quietly take them out of it.
+    const UNPATCHED: Performer = {
+      id: 'p2',
+      name: 'Bea',
+      role: '',
+      notes: '',
+      channelId: null
+    }
+    const leads: Ensemble = { id: 'ens-1', name: 'Leads', members: ['p1', 'p2'] }
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({ performers: [ROUTED_PERFORMER, UNPATCHED], ensembles: [leads] }),
+        scenes: { ...defaults.scenes, list: [NUMBER] }
+      }
+    })
+
+    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', leads.id, 'Principals', ['ch-1'])
+
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.ensembles).toEqual([
+      { id: 'ens-1', name: 'Principals', members: ['p1', 'p2'] }
+    ])
+  })
+
+  it('edits a group in place, so every row that holds it carries the new membership', () => {
+    // The group is the cast's, not the row's: a save from one scene's row renames and
+    // refills the group itself, and a row of another scene that holds it carries what the
+    // group now holds without being edited at all.
+    const leads: Ensemble = { id: 'ens-1', name: 'Leads', members: ['p1'] }
+    const BEA = { id: 'ch-2', name: 'Bea' }
+    const BEA_PERFORMER: Performer = {
+      id: 'p2',
+      name: 'Bea',
+      role: 'chorus',
+      notes: '',
+      channelId: 'ch-2'
+    }
+    const opening: MicScene = { id: 's1', name: 'Opening', dcas: [], notes: '' }
+    const finale: MicScene = {
+      id: 's2',
+      name: 'Finale',
+      dcas: [{ dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }],
+      notes: ''
+    }
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({
+          channels: [CHANNEL, BEA],
+          performers: [ROUTED_PERFORMER, BEA_PERFORMER],
+          ensembles: [leads]
+        }),
+        scenes: { ...defaults.scenes, list: [opening, finale] }
       },
       isDirty: false
     })
-    const before = useStore.getState().showSettings
     const past = useStore.getState().past.length
 
-    useStore.getState().addEnsembleToRow(scene.id, 'dca-1', 'Principals', ['ch-1'])
+    useStore.getState().saveEnsembleOnRow(opening.id, 'dca-1', leads.id, 'Chorus', ['ch-2'])
 
     const settings = useStore.getState().showSettings
-    const made = settings.cast.ensembles[0]
-    expect(made.members).toEqual(['p1'])
+    expect(settings.cast.ensembles).toEqual([{ id: 'ens-1', name: 'Chorus', members: ['p2'] }])
+    // The row the builder was opened from holds the group now…
     expect(settings.scenes.list[0].dcas).toEqual([
-      { dcaId: 'dca-1', channels: ['ch-2'], ensembles: [made.id], excluded: [] }
+      { dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }
     ])
-    expect(rowChannels(settings.cast, settings.scenes.list[0].dcas[0])).toEqual(['ch-1', 'ch-2'])
+    // …and the row that already held it is not rewritten — it reads the group's membership,
+    // which is the whole of what a row holding an ensemble says.
+    expect(settings.scenes.list[1].dcas).toEqual([
+      { dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }
+    ])
+    expect(rowChannels(settings.cast, settings.scenes.list[0].dcas[0])).toEqual(['ch-2'])
+    expect(rowChannels(settings.cast, settings.scenes.list[1].dcas[0])).toEqual(['ch-2'])
     expect(useStore.getState().past).toHaveLength(past + 1)
     expect(useStore.getState().isDirty).toBe(true)
 
     useStore.getState().undo()
-    expect(useStore.getState().showSettings).toEqual(before)
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([leads])
+    expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([])
+    expect(useStore.getState().showSettings.scenes.list[1].dcas).toEqual([
+      { dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }
+    ])
   })
 
   it('undo after deleting a scene restores it with its placements', () => {
@@ -1127,14 +1232,13 @@ describe('store — undo/redo', () => {
     })
     const before = useStore.getState().past.length
     const scenes = useStore.getState().showSettings.scenes
-    const cast = useStore.getState().showSettings.cast
 
     useStore.getState().updateScenesSettings({
-      list: setChannelPlaced(scenes, NUMBER.id, 'dca-1', 'ch-1', true, cast).list
+      list: setRowMember(scenes, NUMBER.id, 'dca-1', { kind: 'channel', memberId: 'ch-1' }).list
     })
 
     expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
-      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+      { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }
     ])
     expect(useStore.getState().past).toHaveLength(before + 1)
     expect(useStore.getState().isDirty).toBe(true)
@@ -1163,7 +1267,7 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.cast.channels).toEqual([CHANNEL])
     expect(useStore.getState().showSettings.cast.performers[0].channelId).toBe('ch-1')
     expect(useStore.getState().showSettings.scenes.list[0].dcas).toEqual([
-      { dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }
+      { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }
     ])
   })
 

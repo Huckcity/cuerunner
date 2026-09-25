@@ -7,9 +7,12 @@
   /* The view is a grid item in a minmax(0, 1fr) track; without this its content's
      min-content width would push the window wider instead of scrolling inside. */
   min-width: 0;
-  --matrix-mic-width: 170px;
+  /* The fader column is a number and nothing else: a name would be a second identity to
+     keep in step with the number the desk is told, and the numbers are what the operator
+     reads at the desk. Narrow, because the grid beside it is what needs the room. */
+  --matrix-mic-width: 44px;
   /* A column is a scene's own width rather than a share of the window: a show of two
-     scenes used to draw two half-window blocks with each cell's chips and pickers huddled
+     scenes used to draw two half-window blocks with each cell's contents huddled
      at one edge, and a show of twenty drew slivers. Fixed, the tracks read the same
      whatever the show's length, and the width the window has over goes to the space to the
      right of the last column rather than to the columns themselves. */
@@ -371,13 +374,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
   color: var(--fg-body);
 }
 
-/* ── A cell: what one fader carries in one scene ───────────────────────────────
-   A cell names the channels its row carries as chips, and the ensembles applied to the
-   row beside them. An applied ensemble is an outline rather than a fill: the chips are
-   what say a mic is carried, and the outline says which of them the group is holding. */
+/* ── A cell: what one fader holds in one scene ─────────────────────────────────
+   A cell holds one thing, so it is one block and the box that changes it. A strip's block
+   is filled and a group's is outlined: the fill says a mic rides here, the outline says the
+   row is riding on membership, and the group's members are in the block's title. */
 .matrix-cell {
   display: flex;
   flex-wrap: wrap;
@@ -393,8 +397,8 @@
   transition: var(--transition-fast);
 }
 
-/* A row carrying something is a block of running colour's edge rather than its fill: the
-   chips name who is carried, so the cell only has to say that there is someone. */
+/* A row holding something is a block of running colour's edge rather than its fill: the
+   block names what is held, so the cell only has to say that there is something. */
 .matrix-cell[data-placed='true'] {
   border-color: var(--state-running-fg);
 }
@@ -410,35 +414,46 @@
 
 .matrix-cell[data-pending='true'][data-placed='false'] { background: var(--accent-amber-bg); }
 
-/* A strip the row carries, named the way the grid names it: the name it was given, or the
-   performer standing on it, and its number only while it has neither (see `stripLabel`).
-   The column is a fixed width, so a long name is cut off: the name is a box of its own that
-   gives way first, so the cut reads as an ellipsis and the ✕ that takes the strip off stays
-   where it can be pressed. The chip's title carries the whole name. */
-.matrix-channel {
+/* The one thing a row holds: a strip of the console or a group, as one block. A group's
+   block is outlined and a strip's is filled, so a glance down a scene says which rows are
+   riding on membership rather than on a single mic. The name is a box of its own so a long
+   one is cut with an ellipsis while the ✕ beside it stays where it can be pressed; the
+   block's title carries the whole of what it stands for — a group's name and its members. */
+.matrix-block {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
   max-width: 100%;
   padding: 1px 2px 1px 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
   font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-body);
   white-space: nowrap;
   overflow: hidden;
 }
 
-.matrix-channel-name {
+.matrix-block[data-kind='channel'] {
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-body);
+}
+
+.matrix-block[data-kind='ensemble'] {
+  background: transparent;
+  border: 1px solid var(--state-running-fg);
+  font-family: inherit;
+  color: var(--fg-body);
+}
+
+.matrix-block-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.matrix-channel-remove {
+.matrix-block-remove {
   flex: none;
   width: 16px;
   height: 16px;
@@ -453,22 +468,23 @@
   cursor: pointer;
 }
 
-.matrix-channel-remove:disabled { cursor: default; opacity: 0.5; }
+.matrix-block-remove:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
 
-.matrix-channel-remove:focus-visible,
-.matrix-ensemble:focus-visible,
-.matrix-member:focus-visible,
+.matrix-block-remove:focus-visible,
 .matrix-cell-add:focus-visible,
 .matrix-resync:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
 }
 
-/* The blank box a cell ends with: every strip the row gains and every group it applies
-   comes out of it, so a row carrying nothing is one empty box and a row carrying two
-   strips is those and the box after them. It is drawn while the show runs as well as
-   while it is edited — the grid says what every row carries, and an empty row is a fact
-   about the scene — and there it is inert, which is what the disabled cursor is for. */
+/* The blank box a cell ends with: everything the row can become comes out of it, so a row
+   holding nothing is one empty box and a row holding a strip is that block and the box
+   after it. It is drawn while the show runs as well as while it is edited — the grid says
+   what every row holds, and an empty row is a fact about the scene — and there it is inert,
+   which is what the disabled cursor is for. */
 .matrix-cell-add {
   flex: 1 1 26px;
   min-width: 26px;
@@ -579,65 +595,6 @@
 .scene-picker-build:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 .scene-picker-build:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 1px; }
-
-/* An ensemble applied to the row, and the members left off it: taking the group off
-   leaves whatever was placed by hand as it was, and leaving a member off is a press on
-   the member rather than on the group — which is why the member reads quieter until it
-   is the thing being left off. */
-.matrix-applied {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-}
-
-.matrix-ensemble {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  height: 20px;
-  padding: 0 6px;
-  background: transparent;
-  border: 1px solid var(--state-running-fg);
-  border-radius: var(--radius-sm);
-  color: var(--fg-body);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.matrix-ensemble:disabled { cursor: default; }
-
-.matrix-ensemble[data-applied='partial'] {
-  border-color: var(--accent-amber);
-  background: var(--accent-amber-bg);
-}
-
-.matrix-member {
-  height: 20px;
-  padding: 0 6px;
-  background: transparent;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  color: var(--fg-subtle);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.matrix-member:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-.matrix-member:disabled { cursor: default; }
-
-.matrix-member[data-excluded='true'] {
-  border-color: var(--accent-amber);
-  color: var(--accent-amber);
-  background: var(--accent-amber-bg);
-}
 
 /* The all-closed column places nothing, so its place in a fader row is a gap rather
    than a cell: the same box, and nothing that can be pressed. */

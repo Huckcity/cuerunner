@@ -32,6 +32,7 @@ import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
   addEnsemble,
+  updateEnsemble,
   removeChannel as removeChannelFromCast,
   removeEnsemble as removeEnsembleFromCast,
   removePerformerFromCast,
@@ -43,7 +44,7 @@ import {
   removeDcasFromScenes,
   removeEnsembleFromScenes,
   rowPerformers,
-  setRowEnsemble,
+  setRowMember,
   type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
@@ -405,24 +406,29 @@ interface CueListState {
   updateScenesSettings: (patch: Partial<ScenesSettings>) => void
   updateCastSettings: (patch: Partial<CastSettings>) => void
   /**
-   * Drops an ensemble and unapplies it from every scene that had it, as one edit: a
-   * scene still pointing at an ensemble that is gone is a group of mics nobody can open
-   * or close from the grid again.
+   * Drops an ensemble and empties every row that held it, as one edit: a scene still
+   * pointing at an ensemble that is gone is a row of mics nobody can open or close from the
+   * grid again.
    */
   removeEnsemble: (ensembleId: string) => void
 
   /**
-   * Makes an ensemble out of the strips the operator picked in the builder, and applies it
-   * to the row it was opened from. One edit rather than two: an ensemble built from a row
-   * and not applied to it is a grouping that disappears the moment the operator looks away
-   * from the grid.
+   * Saves the ensemble the builder is holding, and puts it on the row it was opened from.
+   * One edit rather than two: an ensemble built from a row and not applied to it is a
+   * grouping that disappears the moment the operator looks away from the grid.
    *
-   * The builder names channels and an ensemble holds performers, so the members are the
-   * performers whose mics stand on those strips. Applying it moves those strips off the
-   * row's own list — the ensemble says where they ride now — which is what lets the group
-   * grow later without this scene being edited again.
+   * `ensembleId` is the group being edited, or null for a new one — the builder is the only
+   * place a group is named and filled now, so it is both of those. The builder names channels
+   * and an ensemble holds performers, so the members are the performers whose mics stand on
+   * those strips.
    */
-  addEnsembleToRow: (sceneId: string, dcaId: string, name: string, channelIds: string[]) => void
+  saveEnsembleOnRow: (
+    sceneId: string,
+    dcaId: string,
+    ensembleId: string | null,
+    name: string,
+    channelIds: string[]
+  ) => void
   /**
    * Drops a performer from the cast: released from every pack they wore (each a swap of
    * its own) and out of whichever ensembles had them. Two settings sections changed as one
@@ -1591,22 +1597,51 @@ export const useStore = create<CueListState>((set) => ({
   // grouping and the row it was opened from are one edit: the group joins the cast and that
   // row is put on it in the same store write, so one undo takes both back. Nothing here is a
   // desk command — this is how the scene names its membership, not what a recall sends.
-  addEnsembleToRow: (sceneId, dcaId, name, channelIds) => set(s => {
+  saveEnsembleOnRow: (sceneId, dcaId, ensembleId, name, channelIds) => set(s => {
     const cast = s.showSettings.cast
     const scene = s.showSettings.scenes.list.find(candidate => candidate.id === sceneId)
     if (scene === undefined) return s
     // A strip nobody is patched to opens nothing, so it cannot be part of a group; a builder
-    // that picked only such strips is an ensemble that would do nothing.
-    const members = rowPerformers(cast, channelIds)
+    // holding only such strips is an ensemble that would do nothing.
+    const existing = cast.ensembles.find(ensemble => ensemble.id === ensembleId)
+    const picked = rowPerformers(cast, channelIds)
+    // The builder works in strips and a group holds performers, so a member who stands on no
+    // strip is one the panes cannot show. What they cannot show is kept rather than dropped:
+    // renaming a group must not quietly take somebody out of it.
+    const hidden = existing === undefined
+      ? []
+      : existing.members
+          .filter(memberId =>
+            !picked.includes(memberId) &&
+            cast.performers.some(performer => performer.id === memberId && performer.channelId === null))
+    const members = cast.performers
+      .filter(performer => picked.includes(performer.id) || hidden.includes(performer.id))
+      .map(performer => performer.id)
     if (members.length === 0) return s
 
-    const grouped = addEnsemble(cast, name, members)
-    const ensemble = grouped.ensembles[grouped.ensembles.length - 1]
+    const grouped = ensembleId === null
+      ? addEnsemble(cast, name, members)
+      : updateEnsemble(cast, ensembleId, {
+          // A group is read by its name, so an empty field keeps the one it had rather than
+          // leaving a row holding a block with nothing to draw.
+          name: name.trim() === '' ? existing?.name ?? '' : name.trim(),
+          members
+        })
+    const ensemble = ensembleId === null
+      ? grouped.ensembles[grouped.ensembles.length - 1]
+      : grouped.ensembles.find(candidate => candidate.id === ensembleId)
+    if (ensemble === undefined) return s
+
     return {
       showSettings: {
         ...s.showSettings,
         cast: grouped,
-        scenes: setRowEnsemble(s.showSettings.scenes, sceneId, dcaId, ensemble, true, grouped)
+        scenes: setRowMember(
+          s.showSettings.scenes,
+          sceneId,
+          dcaId,
+          { kind: 'ensemble', memberId: ensemble.id }
+        )
       },
       past: pushPast(s.past, snapshotOf(s)),
       future: [],

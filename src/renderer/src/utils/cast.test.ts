@@ -12,7 +12,6 @@ import {
   addEnsemble,
   addPerformer,
   channelLabel,
-  ensembleMembers,
   performerChannel,
   removeChannel,
   removeEnsemble,
@@ -61,7 +60,11 @@ describe('a new show', () => {
     expect(cast.channels).toHaveLength(12)
     expect(cast.dcas).toHaveLength(12)
     expect(cast.channels.every(channel => channel.name === '')).toBe(true)
-    expect(cast.dcas.map(dca => dca.label)).toEqual(cast.dcas.map((_, index) => `DCA ${index + 1}`))
+    // A fader is its place in the list and the number the desk addresses it by, and nothing
+    // else: there is no name of its own to keep in step with the number the desk is told.
+    expect(cast.dcas.map(dca => dca.id)).toEqual(
+      Array.from({ length: 12 }, (_, index) => `dca-${index + 1}`)
+    )
     // Nothing has been assigned, to a strip or to a command: a new show's faders are where
     // the scenes put the channels, and every fader is addressed by the number its place
     // derives until somebody says otherwise.
@@ -272,19 +275,8 @@ describe('ensembles', () => {
     const [ruth, sancho] = cast.performers
     const two = addEnsemble(addEnsemble(cast, 'Chorus', [ruth.id]), 'Band', [ruth.id, sancho.id])
 
-    expect(ensembleMembers(two, two.ensembles[0].id).map(performer => performer.name)).toEqual(['Ruth'])
-    expect(ensembleMembers(two, two.ensembles[1].id).map(performer => performer.name))
-      .toEqual(['Ruth', 'Sancho'])
-  })
-
-  it('lists members in cast order and drops the ones who have left', () => {
-    const cast = addPerformer(addPerformer(empty(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
-    const [ruth, sancho] = cast.performers
-    const grouped = addEnsemble(cast, 'Chorus', [sancho.id, ruth.id])
-
-    expect(ensembleMembers(grouped, grouped.ensembles[0].id).map(p => p.name)).toEqual(['Ruth', 'Sancho'])
-    expect(ensembleMembers(removePerformerFromCast(grouped, ruth.id), grouped.ensembles[0].id)
-      .map(p => p.name)).toEqual(['Sancho'])
+    expect(two.ensembles[0].members).toEqual([ruth.id])
+    expect(two.ensembles[1].members).toEqual([ruth.id, sancho.id])
   })
 
   it('removes the ensemble and nothing else', () => {
@@ -301,16 +293,22 @@ describe('ensembles', () => {
     const grouped = addEnsemble(cast, 'Chorus', [ruth.id])
     const id = grouped.ensembles[0].id
 
-    const next = updateEnsemble(grouped, id, { members: [sancho.id] })
-    expect(ensembleMembers(next, id).map(performer => performer.name)).toEqual(['Sancho'])
+    const next = updateEnsemble(grouped, id, { name: 'Band', members: [sancho.id] })
+
+    expect(next.ensembles[0]).toMatchObject({ id, name: 'Band', members: [sancho.id] })
   })
 })
 
 describe('DCAs', () => {
-  it('grows to the count asked for, each one labelling itself and addressing its own place', () => {
+  it('grows to the count asked for, each one a fresh place with a derived number', () => {
     const cast = setDcaCount(empty(), 3)
     expect(cast.dcas).toHaveLength(3)
-    expect(cast.dcas.map(dca => dca.label)).toEqual(['DCA 1', 'DCA 2', 'DCA 3'])
+    // A fader a count adds is a place of its own: an id, the number its place derives, and
+    // no name to carry.
+    expect(new Set(cast.dcas.map(dca => dca.id)).size).toBe(3)
+    expect(cast.dcas.map(dca => Object.keys(dca).sort())).toEqual(
+      cast.dcas.map(() => ['deskNumber', 'id'])
+    )
     expect(cast.dcas.every(dca => dca.deskNumber === null)).toBe(true)
   })
 
@@ -322,7 +320,8 @@ describe('DCAs', () => {
     const cast = wired()
     const next = setDcaCount(cast, 1)
 
-    expect(next.dcas.map(dca => dca.label)).toEqual(['DCA 1'])
+    // The fader that survives a count is the same fader, at the same place in the list.
+    expect(next.dcas).toEqual(cast.dcas.slice(0, 1))
     expect(next.channels).toEqual(cast.channels)
     expect(setDcaCount(cast, 0).dcas).toEqual([])
     expect(setDcaCount(cast, 0).channels).toEqual(cast.channels)
@@ -341,7 +340,6 @@ describe('DCAs', () => {
       ...empty(),
       dcas: Array.from({ length: DCA_LIMIT + 3 }, (_, index) => ({
         id: `dca-${index + 1}`,
-        label: `DCA ${index + 1}`,
         deskNumber: null
       }))
     }
@@ -356,13 +354,12 @@ describe('DCAs', () => {
     expect(setDcaCount(wired(), -3).dcas).toHaveLength(0)
   })
 
-  it('is labelled and given by hand the number its desk addresses it by', () => {
+  it('is given by hand the number its desk addresses it by', () => {
     // The override is the desk's own numbering: an operator whose desk calls its first
     // fader something else types that number, and every route to the fader reads it.
     const cast = setDcaCount(empty(), 1)
-    const next = updateDca(cast, cast.dcas[0].id, { label: 'Chorus', deskNumber: 36 })
+    const next = updateDca(cast, cast.dcas[0].id, { deskNumber: 36 })
 
-    expect(next.dcas[0]).toMatchObject({ label: 'Chorus', deskNumber: 36 })
-    expect(next.dcas[0].id).toBe(cast.dcas[0].id)
+    expect(next.dcas[0]).toEqual({ id: cast.dcas[0].id, deskNumber: 36 })
   })
 })

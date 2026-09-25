@@ -1,41 +1,51 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { stripLabel } from '../../utils/cast'
+import { ensembleChannels } from '../../utils/scenes'
 import { useModal } from '../../hooks/useModal'
 import { TextField } from '../common/Field'
-import type { CastSettings, Dca, MicScene } from '../../../../shared/show'
+import type { CastSettings, Ensemble, MicScene } from '../../../../shared/show'
 import './EnsembleDialog.css'
 
 interface Props {
   scene: MicScene
-  dca: Dca
+  /** The fader's own number: the only name it has. */
+  fader: number
   cast: CastSettings
+  /** The group being edited, or null for a new one. */
+  editing: Ensemble | null
   /** The row's box: the press that opened this came from inside it, so the keyboard goes
    *  back there when the dialog closes. */
   box: HTMLElement
   onCancel: () => void
-  onCreate: (name: string, channelIds: string[]) => void
+  onDelete: () => void
+  onSave: (name: string, channelIds: string[]) => void
 }
 
 /**
- * The ensemble builder: the strips the group could hold on the left, the ones it does hold
- * on the right, and the two arrows between them.
+ * The one place a group is named and filled: the strips it could hold on the left, the ones
+ * it does hold on the right, and the two arrows between them.
+ *
+ * It is reached from a row's box, and it is the row that decides what it opens as — the
+ * group that row holds, or a new one — because a row is where an operator is standing when
+ * they decide the chorus should be the eight people in front of them. Editing an existing
+ * group changes it on every row that holds it, which is what the hint says in as many words:
+ * an ensemble is membership rather than a copy, so there is one list to be wrong about.
  *
  * Both lists are the show's strips in the show's own order, named the way the grid names
- * them, because that is what the operator is looking at through the dialog — the strips,
- * not the people as a separate list. An ensemble holds performers, though, so a strip
- * nobody is cast on cannot be moved across: it is drawn disabled with the reason in its
- * title rather than left out, because a strip missing from a list is a question and a
- * strip that says why is an answer.
+ * them, because that is what the operator is looking at through the dialog. An ensemble
+ * holds performers, though, so a strip nobody is cast on cannot be moved across: it is drawn
+ * disabled with the reason in its name rather than left out, because a strip missing from a
+ * list is a question and a strip that says why is an answer.
  *
- * Creating it and applying it to the row it was opened from are one press and one edit:
- * a group built here and not applied is a grouping that disappears the moment the dialog
- * closes. Nothing here moves the desk, and nothing here watches the cast: the view puts the
- * dialog away when an edit changes the show under it, so what it is holding is always the
- * show it was opened against.
+ * Nothing here moves the desk.
  */
-export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Props) {
-  const [name, setName] = useState('')
-  const [held, setHeld] = useState<string[]>([])
+export function EnsembleDialog({
+  scene, fader, cast, editing, box, onCancel, onDelete, onSave
+}: Props) {
+  const [name, setName] = useState(editing?.name ?? '')
+  const [held, setHeld] = useState<string[]>(
+    editing === null ? [] : ensembleChannels(cast, editing.id)
+  )
   const [pickedFree, setPickedFree] = useState<string | null>(null)
   const [pickedHeld, setPickedHeld] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
@@ -67,8 +77,8 @@ export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Pr
   const castOn = new Set(
     cast.performers.flatMap(performer => performer.channelId === null ? [] : [performer.channelId])
   )
-  // Both lists in the show's channel order, so a group reads the way the console does
-  // rather than in the order it was picked.
+  // Both lists in the show's channel order, so a group reads the way the console does rather
+  // than in the order it was picked.
   const free = cast.channels.filter(channel => !held.includes(channel.id))
   const chosen = cast.channels.filter(channel => held.includes(channel.id))
 
@@ -100,13 +110,15 @@ export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Pr
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="New ensemble"
+        aria-label={editing === null ? 'New ensemble' : `Edit ${editing.name}`}
         // Focusable so the dialog itself can take the keyboard as it opens: the Name field
         // is then the first Tab, rather than the grid behind it.
         tabIndex={-1}
       >
         <div className="ensemble-header">
-          <span className="ensemble-title">New ensemble</span>
+          <span className="ensemble-title">
+            {editing === null ? 'New ensemble' : 'Edit ensemble'}
+          </span>
           <button
             className="ensemble-dismiss"
             onClick={onCancel}
@@ -124,7 +136,7 @@ export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Pr
               className="ensemble-name-field"
               value={name}
               placeholder="Ensemble"
-              // Typed rather than handed over on leaving: the press that creates it is one
+              // Typed rather than handed over on leaving: the press that saves it is one
               // press away, and a name still sitting in an unfocused field would make the
               // group take the default name instead.
               when="typed"
@@ -132,7 +144,9 @@ export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Pr
             />
           </div>
           <p className="ensemble-hint">
-            {`Applies to ${dca.label} in “${scene.name}” the moment you create it.`}
+            {editing === null
+              ? `Applies to DCA ${fader} in “${scene.name}” the moment you create it.`
+              : `On DCA ${fader} in “${scene.name}”, and every other row that holds it: saving changes them all.`}
           </p>
 
           <div className="ensemble-panes">
@@ -187,8 +201,8 @@ export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Pr
                           type="button"
                           className="ensemble-item"
                           // Which strip the arrows will move: painted, and announced as a
-                          // press that is down, because both arrows and the create press
-                          // act on it and nothing else does.
+                          // press that is down, because both arrows and the save press act
+                          // on it and nothing else does.
                           aria-pressed={pane.picked === channel.id}
                           data-selected={pane.picked === channel.id}
                           disabled={pane.key === 'free' && !opens}
@@ -215,16 +229,30 @@ export function EnsembleDialog({ scene, dca, cast, box, onCancel, onCreate }: Pr
         </div>
 
         <div className="ensemble-footer">
+          {/* Deleting is the one press here that takes something away, so it sits apart from
+              the two that keep it, at the far end of the row. */}
+          {editing !== null && (
+            <button
+              className="ensemble-delete"
+              title="Remove this ensemble — every row holding it stops holding it"
+              onClick={onDelete}
+            >
+              Delete
+            </button>
+          )}
+          <span className="ensemble-footer-spacer" />
           <button className="ensemble-cancel" onClick={onCancel}>Cancel</button>
           <button
             className="ensemble-create"
-            disabled={chosen.length === 0}
-            title={chosen.length === 0
+            disabled={chosen.length === 0 && editing === null}
+            title={chosen.length === 0 && editing === null
               ? 'A group with nothing in it opens nothing'
-              : `Create this ensemble and apply it to ${dca.label}`}
-            onClick={() => onCreate(name, chosen.map(channel => channel.id))}
+              : editing === null
+                ? `Create this ensemble and apply it to DCA ${fader}`
+                : `Save it, and put it on DCA ${fader}`}
+            onClick={() => onSave(name, chosen.map(channel => channel.id))}
           >
-            Create and apply
+            {editing === null ? 'Create and apply' : 'Save'}
           </button>
         </div>
       </div>

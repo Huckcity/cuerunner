@@ -392,10 +392,11 @@ export async function editScenes(page: Page): Promise<void> {
 }
 
 /**
- * What a cell's blank box opens: the strips the row does not carry, the groups it does not
- * apply, and the builder. The label is typed into the filter and the row pressed, because
- * that is how a menu holding a console's worth of strips is actually used — and the strip's
- * label is the name it was given or the performer standing on it, never its bare number.
+ * What a cell's blank box opens: every strip and every group the show has, less the one the
+ * row holds, under their own headings, and the builder at its foot. The label is typed into
+ * the filter and the row pressed, because that is how a menu holding a console's worth of
+ * strips is actually used — and the strip's label is the name it was given or the performer
+ * standing on it, never its bare number.
  */
 export async function pickFromBox(page: Page, cell: Locator, label: string): Promise<void> {
   await cell.locator('.matrix-cell-add').click()
@@ -409,8 +410,9 @@ export async function pickFromBox(page: Page, cell: Locator, label: string): Pro
 }
 
 /**
- * The builder behind the box's last row: a new ensemble, named here and filled from the
- * strips moved across, applied to the row it was opened from.
+ * The builder behind the box's last row: the strips the operator moves across become a new
+ * ensemble — named here — and it is applied to the row it was opened from. The row this is
+ * called on holds a strip or nothing, so the builder opens as a new group.
  */
 export async function buildEnsembleFromBox(
   page: Page,
@@ -525,10 +527,10 @@ export async function pointDeskAtTcp(page: Page, port: number, host = '127.0.0.1
 
 /**
  * A show set up through the view, in the order an operator would do it: the desk pointed
- * at a port the test owns, the first performer named, and a scene that places their strip
- * on the first fader. Naming the performer names their strip, which is what the grid shows,
- * and the placement is the scene's own — nothing else in the show says which fader a
- * channel rides (AD-26).
+ * at a port the test owns, the first performer named, and a scene whose first row holds
+ * their strip. Naming the performer names their strip, which is what the grid shows, and
+ * the row is the scene's own — nothing else in the show says which fader a channel rides
+ * (AD-26).
  *
  * `point` is which of the app's desk connections the caller is exercising; a show driven
  * over the desk's own socket passes `pointDeskAtTcp`.
@@ -557,9 +559,9 @@ export async function buildDeskShow(
   await openScenesView(page)
   await editScenes(page)
   await page.locator('.scenes-add').click()
-  // A scene places the strips it wants: the first strip on the first fader, which is the
-  // membership a recall writes and the reason the mic is open. Placing one is a press on
-  // the cell's box and a press on the strip in the picker.
+  // A row holds one thing, and this scene places the strip it wants on the first fader:
+  // that is the membership a recall writes and the reason the mic is open. Placing it is a
+  // press on the cell's box and a press on the strip in the picker.
   await pickFromBox(
     page,
     page.locator('.matrix-row').first().locator('.matrix-cell').first(),

@@ -5,14 +5,12 @@ import { recallScene, resyncDesk } from '../../engine/scenes'
 import { stripLabel } from '../../utils/cast'
 import {
   addScene,
-  ensembleState,
   placementFor,
   removeScene,
   rowChannels,
+  rowEnsemble,
   sceneChanges,
-  setChannelPlaced,
-  setMemberExcluded,
-  setRowEnsemble,
+  setRowMember,
   updateScene,
   type DeskChange,
   type DeskState
@@ -70,6 +68,8 @@ interface CellProps {
   isCurrent: boolean
   locked: boolean
   writeList: (next: ScenesSettings) => void
+  /** The fader's own number — its place in the show, which is the only name it has. */
+  fader: number
   onAdd: (sceneId: string, dcaId: string, anchor: PickerAnchor) => void
 }
 
@@ -83,163 +83,88 @@ export interface PickerAnchor {
 }
 
 /**
- * One fader in one scene: the strips the row carries as chips, the ensembles applied to it
- * beside them, and one blank box at the end.
+ * One fader in one scene: the one thing it holds, and the box that changes it.
  *
- * A chip names what the row carries and its ✕ takes it off. Everything the row can gain
- * comes out of the box: the box opens the picker, which offers the strips the row does not
- * carry, the groups it does not apply, and the builder. Every press is one store write,
- * hence one undo.
+ * A row holds one member — a channel, or an ensemble — so the cell is a single block: its
+ * name, and a ✕ that takes it off. An ensemble's block names the group and carries its
+ * members in its title, because what a scene is for at curtain up is reading which mics
+ * open, and a row of twelve member chips is a list nobody reads.
+ *
+ * Everything the row can become comes out of the box beside it. Every press is one store
+ * write, hence one undo.
  */
 function SceneCell({
-  scene, dca, cast, scenes, changes, deskState, isCurrent, locked, writeList, onAdd
+  scene, dca, fader, cast, scenes, changes, deskState, isCurrent, locked, writeList, onAdd
 }: CellProps) {
   const placement = placementFor(scene, dca.id)
-  const carried = rowChannels(cast, placement)
-  const appliedIds = placement?.ensembles ?? []
-  const applied = cast.ensembles.filter(ensemble => appliedIds.includes(ensemble.id))
   const pending = cellPending(changes, dca.id, deskState)
+  // How every press in this cell and every sentence about it names the fader: its number,
+  // which is the only name a fader has.
+  const where = `DCA ${fader}`
+  // What the block says: the strip by the name the grid uses, or the group's own name. The
+  // group's members ride along in the title — the whole of what the block stands for, where
+  // there is room for it and where a pointer is asking.
+  const channel = placement?.kind === 'channel'
+    ? stripLabel(cast.channels, cast.performers, placement.memberId)
+    : ''
+  const ensemble = rowEnsemble(cast, placement)
+  const member = channel !== '' ? channel : ensemble?.name ?? ''
+  const held = rowChannels(cast, placement)
+    .map(channelId => stripLabel(cast.channels, cast.performers, channelId))
+    .filter(label => label !== '')
+  // What the block stands for. A group whose members stand on no strip is a group that opens
+  // nothing — which is said about the strips it would open, not about the cast: the people are
+  // still in it.
+  const whole = ensemble === null
+    ? member
+    : `${ensemble.name} — ${held.length === 0 ? 'no strips yet' : held.join(', ')}`
 
   return (
     <div
       className="matrix-cell"
-      data-placed={carried.length > 0}
+      data-placed={placement !== null}
+      data-kind={placement?.kind ?? 'none'}
       data-current={isCurrent}
       data-pending={pending}
-      aria-label={`${dca.label} in ${scene.name}`}
+      aria-label={`${where} in ${scene.name}`}
     >
-      {carried.map(channelId => {
-        // The strip as the grid reads it: the name it was given, or whoever is standing on
-        // it — a row is a fader and what rides it is a person, so its number is the last
-        // thing to call it, not the first.
-        const label = stripLabel(cast.channels, cast.performers, channelId)
-        if (label === '') return null
-        return (
-          <span className="matrix-channel" key={channelId} title={label}>
-            {/* The name is its own box so a long one can be cut with an ellipsis while
-                the ✕ beside it stays reachable — the chip's own clipping would take the
-                press off the end of the row with it. */}
-            <span className="matrix-channel-name">{label}</span>
-            <button
-              type="button"
-              className="matrix-channel-remove"
-              aria-label={`Take ${label} off ${dca.label} in ${scene.name}`}
-              title={locked ? label : `Take ${label} off this row — undo puts it back`}
-              disabled={locked}
-              onClick={() => writeList(
-                setChannelPlaced(scenes, scene.id, dca.id, channelId, false, cast)
-              )}
-            >✕</button>
-          </span>
-        )
-      })}
-      {applied.map(ensemble => (
-        <AppliedEnsemble
-          key={ensemble.id}
-          scene={scene}
-          dca={dca}
-          ensemble={ensemble}
-          cast={cast}
-          scenes={scenes}
-          locked={locked}
-          writeList={writeList}
-        />
-      ))}
-      {/* One box, and everything the row can gain comes out of it: the strips the row does
-          not carry, the groups it does not apply, and the builder that makes a group out of
-          the strips the operator names. Pressing it is the only way to change what a row
-          carries, so the empty box is what a row that carries nothing is made of.
-          It is on every row in both modes. Out of edit mode it is drawn and inert rather
-          than absent — the grid says what every row carries, and a stray press on a running
-          show must not open anything — and while editing it stays when a row already has
-          everything, because the builder is where a group is made and that is reachable
-          wherever a row is. */}
+      {placement !== null && member !== '' && (
+        <span className="matrix-block" data-kind={placement.kind} title={whole}>
+          {/* The name is its own box so a long one can be cut with an ellipsis while the ✕
+              beside it stays reachable — the block's own clipping would take the press off
+              the end of the row with it. */}
+          <span className="matrix-block-name">{member}</span>
+          <button
+            type="button"
+            className="matrix-block-remove"
+            aria-label={`Take ${member} off DCA ${fader} in ${scene.name}`}
+            title={locked
+              ? whole
+              : `Take ${member} off this row — undo puts it back`}
+            disabled={locked}
+            onClick={() => writeList(setRowMember(scenes, scene.id, dca.id, null))}
+          >✕</button>
+        </span>
+      )}
+      {/* One box, and everything the row can become comes out of it: one strip of the console,
+          one group, or the builder that makes a group out of the strips the operator names.
+          It is on every row in both modes. Out of edit mode it is drawn and inert rather than
+          absent — the grid says what every row holds, and a stray press on a running show must
+          not open anything — and while editing it is always there, because a row holding
+          everything there is still a row the operator may want the other thing on. */}
       <button
         type="button"
         className="matrix-cell-add"
         disabled={locked}
         aria-label={locked
-          ? `Add to ${dca.label} in ${scene.name} — asleep while the show runs: press Edit`
-          : `Add to ${dca.label} in ${scene.name}`}
+          ? `Change DCA ${fader} in ${scene.name} — asleep while the show runs: press Edit`
+          : `Change DCA ${fader} in ${scene.name}`}
         title={locked
-          ? 'Press Edit to change what this row carries'
-          : 'Add a channel, or build an ensemble from the channels you pick'}
+          ? 'Press Edit to change what this row holds'
+          : 'Put a channel or an ensemble on this row'}
         onClick={e => onAdd(scene.id, dca.id, { box: e.currentTarget })}
       />
     </div>
-  )
-}
-
-interface AppliedProps {
-  scene: MicScene
-  dca: Dca
-  ensemble: Ensemble
-  cast: CastSettings
-  scenes: ScenesSettings
-  locked: boolean
-  writeList: (next: ScenesSettings) => void
-}
-
-/**
- * An ensemble on one row, with its members beside it as the presses that leave them off.
- * Every member the ensemble holds on this row is shown — one the row carries reads
- * unmarked, one left off reads excluded — because leaving someone off has to be a press
- * on them. A member placed here by hand already has a channel chip with its own remove,
- * so the member chips are for what the ensemble holds. Members patched to nothing are
- * not shown: there is no channel to leave off.
- */
-function AppliedEnsemble({
-  scene, dca, ensemble, cast, scenes, locked, writeList
-}: AppliedProps) {
-  const state = ensembleState(scene, dca.id, ensemble, cast)
-  const placement = placementFor(scene, dca.id)
-  const members = ensemble.members.flatMap(memberId => {
-    const performer = cast.performers.find(candidate => candidate.id === memberId)
-    const channelId = performer?.channelId ?? null
-    if (performer === undefined || channelId === null) return []
-    if (!cast.channels.some(channel => channel.id === channelId)) return []
-    if (placement?.channels.includes(channelId) ?? false) return []
-    return [{ performer, channelId }]
-  })
-  return (
-    <span className="matrix-applied">
-      <button
-        type="button"
-        className="matrix-ensemble"
-        data-applied={state}
-        disabled={locked}
-        title={locked
-          ? ensemble.name
-          : `Take ${ensemble.name} off this row — its members' hand placements stay as they were`}
-        aria-label={`${ensemble.name} on ${dca.label} in ${scene.name}`}
-        onClick={() => writeList(setRowEnsemble(scenes, scene.id, dca.id, ensemble, false, cast))}
-      >
-        {ensemble.name}
-      </button>
-      {members.map(({ performer, channelId }) => {
-        const excluded = placement?.excluded.includes(channelId) ?? false
-        return (
-          <button
-            key={performer.id}
-            type="button"
-            className="matrix-member"
-            data-excluded={excluded}
-            disabled={locked}
-            title={locked
-              ? performer.name
-              : excluded
-                ? `Put ${performer.name} back on this row`
-                : `Leave ${performer.name} off this row`}
-            aria-label={`${performer.name}, left off ${dca.label} in ${scene.name}`}
-            onClick={() => writeList(
-              setMemberExcluded(scenes, scene.id, dca.id, channelId, !excluded)
-            )}
-          >
-            {performer.name || 'unnamed'}
-          </button>
-        )
-      })}
-    </span>
   )
 }
 
@@ -257,12 +182,13 @@ type PickItem =
 
 interface PickerProps {
   scene: MicScene
-  dca: Dca
+  /** The fader's own number: the only name it has. */
+  fader: number
   cast: CastSettings
-  /** The strips this row does not carry, in the show's own order. */
-  freeChannels: ShowChannel[]
-  /** The groups this row does not apply. */
-  freeEnsembles: Ensemble[]
+  /** Every strip of the console, in the show's own order, less the one this row holds. */
+  channels: ShowChannel[]
+  /** Every group the show has, less the one this row holds. */
+  ensembles: Ensemble[]
   /** The box it was opened from. */
   anchor: PickerAnchor
   /** What clips the box: the grid, which a row can leave before the window does. */
@@ -287,7 +213,7 @@ interface PickerProps {
  * column would be clipped by it.
  */
 function ScenePicker({
-  scene, dca, cast, freeChannels, freeEnsembles, anchor, clip,
+  scene, fader, cast, channels: freeChannels, ensembles: freeEnsembles, anchor, clip,
   onChannel, onEnsemble, onBuild, onClose
 }: PickerProps) {
   const pickerRef = useRef<HTMLDivElement | null>(null)
@@ -335,7 +261,14 @@ function ScenePicker({
       onClose()
     }
     const onMouseDown = (e: MouseEvent) => {
-      if (pickerRef.current !== null && !pickerRef.current.contains(e.target as Node)) onClose()
+      const at = e.target
+      if (!(at instanceof Node)) return
+      if (pickerRef.current !== null && pickerRef.current.contains(at)) return
+      // A press on the box the picker hangs from is the picker's own toggle, and the click
+      // that follows it is what puts the menu away: closing here instead would leave the
+      // click to reopen it with the filter thrown away.
+      if (anchor.box.contains(at)) return
+      onClose()
     }
     document.addEventListener('keydown', onKeyDown, true)
     document.addEventListener('mousedown', onMouseDown)
@@ -405,7 +338,7 @@ function ScenePicker({
       className="scene-picker"
       style={{ left, top, width: PICKER_WIDTH }}
       role="dialog"
-      aria-label={`Add to ${dca.label} in ${scene.name}`}
+      aria-label={`Change DCA ${fader} in ${scene.name}`}
     >
       <input
         ref={filterRef}
@@ -511,7 +444,8 @@ export function ScenesView() {
   const deskState = useStore(s => s.deskState)
   const deskSceneId = useStore(s => s.deskSceneId)
   const updateScenesSettings = useStore(s => s.updateScenesSettings)
-  const addEnsembleToRow = useStore(s => s.addEnsembleToRow)
+  const saveEnsembleOnRow = useStore(s => s.saveEnsembleOnRow)
+  const removeEnsemble = useStore(s => s.removeEnsemble)
   const editing = useStore(s => s.scenesEditing)
   const setEditing = useStore(s => s.setScenesEditing)
   const openShowSettings = useStore(s => s.openShowSettings)
@@ -525,6 +459,8 @@ export function ScenesView() {
     dcaId: string
     /** The box it was opened from, which is where the keyboard goes back to. */
     box: HTMLElement
+    /** The group being edited, or null for a new one: the row is the way into both. */
+    ensemble: Ensemble | null
   } | null>(null)
 
   const locked = !editing
@@ -599,8 +535,10 @@ export function ScenesView() {
   const openPlacement = openScene === null || openDca === null
     ? null
     : placementFor(openScene, openDca.id)
-  const openCarried = openPlacement === null ? [] : rowChannels(cast, openPlacement)
-  const openApplied = openPlacement?.ensembles ?? []
+  // The one thing the open row holds, which is what the picker leaves out of its lists: a
+  // member already on the row is not something to put on it again.
+  const openMember = openPlacement === null ? null : openPlacement.memberId
+  const openFader = openDca === null ? 0 : dcaNumber(cast.dcas.indexOf(openDca))
   const closeOverlays = (): void => { setPicker(null); setBuilder(null) }
 
   // The grid under an overlay can move without the overlay being touched: an undo, a redo or
@@ -805,13 +743,14 @@ export function ScenesView() {
             })}
 
             {cast.dcas.map((dca, index) => {
-              // The row is a fader: the number the operator reaches for at the desk, and
-              // the label the show calls it — clipped to the column, and whole in a title.
-              const label = `${dcaNumber(index)} · ${dca.label}`
+              // The row is a fader, and a fader is a number: its place in the show, which the
+              // desk is told and the operator reaches for. It is a narrow column because a
+              // number is narrow, and the grid beside it is what needs the room.
+              const fader = dcaNumber(index)
               return (
                 <div key={dca.id} className="matrix-row">
                   <div className="matrix-mic">
-                    <span className="matrix-fader" title={label}>{label}</span>
+                    <span className="matrix-fader" title={`DCA ${fader}`}>{fader}</span>
                   </div>
                   {/* The all-closed column places nothing: there is nothing to carry in a
                       column that closes everything, so the gap is not a cell and is not in
@@ -822,6 +761,7 @@ export function ScenesView() {
                       key={scene.id}
                       scene={scene}
                       dca={dca}
+                      fader={fader}
                       cast={cast}
                       scenes={scenes}
                       changes={changesByScene.get(scene.id) ?? []}
@@ -854,22 +794,34 @@ export function ScenesView() {
       {picker !== null && openScene !== null && openDca !== null && (
         <ScenePicker
           scene={openScene}
-          dca={openDca}
+          fader={openFader}
           cast={cast}
-          freeChannels={cast.channels.filter(channel => !openCarried.includes(channel.id))}
-          freeEnsembles={cast.ensembles.filter(ensemble => !openApplied.includes(ensemble.id))}
+          channels={cast.channels.filter(channel =>
+            !(openPlacement?.kind === 'channel' && openMember === channel.id))}
+          ensembles={cast.ensembles.filter(ensemble =>
+            !(openPlacement?.kind === 'ensemble' && openMember === ensemble.id))}
           anchor={picker.anchor}
           clip={scrollerRef.current}
           onChannel={channelId => {
-            writeList(setChannelPlaced(scenes, openScene.id, openDca.id, channelId, true, cast))
+            writeList(
+              setRowMember(scenes, openScene.id, openDca.id, { kind: 'channel', memberId: channelId })
+            )
             setPicker(null)
           }}
           onEnsemble={ensemble => {
-            writeList(setRowEnsemble(scenes, openScene.id, openDca.id, ensemble, true, cast))
+            writeList(
+              setRowMember(scenes, openScene.id, openDca.id, { kind: 'ensemble', memberId: ensemble.id })
+            )
             setPicker(null)
           }}
           onBuild={() => {
-            setBuilder({ sceneId: openScene.id, dcaId: openDca.id, box: picker.anchor.box })
+            setBuilder({
+              sceneId: openScene.id,
+              dcaId: openDca.id,
+              box: picker.anchor.box,
+              // Editing the group this row holds, or making a new one.
+              ensemble: rowEnsemble(cast, openPlacement)
+            })
             setPicker(null)
           }}
           onClose={() => setPicker(null)}
@@ -879,12 +831,23 @@ export function ScenesView() {
       {builder !== null && openScene !== null && openDca !== null && (
         <EnsembleDialog
           scene={openScene}
-          dca={openDca}
+          fader={openFader}
           cast={cast}
+          editing={builder.ensemble}
           box={builder.box}
           onCancel={closeOverlays}
-          onCreate={(name, channelIds) => {
-            addEnsembleToRow(openScene.id, openDca.id, name, channelIds)
+          onDelete={() => {
+            if (builder.ensemble !== null) removeEnsemble(builder.ensemble.id)
+            closeOverlays()
+          }}
+          onSave={(name, channelIds) => {
+            saveEnsembleOnRow(
+              openScene.id,
+              openDca.id,
+              builder.ensemble?.id ?? null,
+              name,
+              channelIds
+            )
             closeOverlays()
           }}
         />

@@ -2,16 +2,22 @@
 
 ### Features
 
-* **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid places the show's channels on each scene's faders, with the ensembles applied to a row and their exclusions
+* **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid puts one channel or one ensemble on each row of each scene
 * **desk:** a recall writes the membership first and then each mic's mute, one awaited write at a time, and addresses nothing outside the show's controlled channels: a channel the scene places is open, one it leaves off every fader is closed, and a mic that changes fader keeps playing and takes the new fader's position
 * **desk:** an SQ's membership rides the desk's own control service — TCP 51326 outbound, held with a keepalive datagram to the desk's UDP 51324 — with the frames measured from an SQ-6 on firmware 1.6.1 and replayed by the peers lane; the mutes stay on the MIDI service on 51325, and an Avantis takes its membership as NRPN `40` on the desk link
 * **scenes:** a scene column is a fixed width and the grid scrolls inside the view rather than stretching two scenes across the window
-* **scenes:** every row ends in one blank box, and everything it can gain comes out of it: the picker lists the strips the row does not carry and the ensembles it does not apply under their own headings, filters as it is typed, and opens the builder at `Ensemble…` — the strips moved across its two lists with the arrows become a new ensemble applied to that row in one undo
-* **scenes:** a strip is named the way the operator knows it — the name the strip was given, or the performer whose mic is on it, and its number only while it has neither — in the cells, in the picker and in the builder; the console's own `Ch 3 · Ruth` stays where the desk is spoken about, in the run log, the change list and the scene inspector
+* **scenes:** a row of a scene holds exactly one thing — a strip of the console, or an ensemble over several of them — so a cell is one block and the box beside it is what changes it: the picker filters the strips and the groups as it is typed, and the builder behind `Ensemble…` names a group and fills it from the strips moved across its two lists, putting it on that row in one undo
+* **scenes:** the builder is the one place a group is named and filled — opened from a row holding a group it edits that group, `Save` changing it on every row that holds it, and `Delete` removing it
+* **scenes:** an ensemble's block says which mics it opens in its title, so a row reads as what is open without becoming a list of a dozen names
+* **scenes:** a strip is named the way the operator knows it — the name the strip was given, or the performer whose mic is on it, and its number only while it has neither — in the blocks, in the picker and in the builder; the console's own `Ch 3 · Ruth` stays where the desk is spoken about, in the run log, the change list and the scene inspector
+* **desk:** a fader is its number: the fourth fader of the show is its fourth fader in every scene, and the Scenes grid's rows, the run log and the fader list in Show Settings all name it that way
 
 ### Removals
 
-* **scenes:** the `Place channel` and `Apply ensemble` selects and the `Create ensemble` press are deleted rather than left beside the box: one blank box opens everything a row can gain, and the group a row folded into itself one press is built in the builder now
+* **scenes:** the `Place channel` and `Apply ensemble` selects and the `Create ensemble` press are deleted rather than left beside the box: one blank box opens everything a row can hold, and the group a row folded into itself one press is built in the builder now
+* **scenes:** a member can no longer be left off an ensemble on one row — a row holding a group opens all of it, and the amber `partial` state and the per-member exclusion list go with the presses that made them — and a row holding several channels is no longer a shape a scene can carry: the file's placement now names one member
+* **show:** an ensemble is no longer a section of Show Settings → Cast: the Cast tab is the people and nothing else, and the groups they are opened in are built from the rows they ride
+* **show:** a DCA has no operator-written name: a fader is a number, and a show saved with a fader label is refused when it is opened rather than converted
 * **show:** the per-channel fader select and the per-DCA note and address overrides are deleted rather than deprecated: a strip is a name and a number, a fader carries one desk number, and a show saved with either shape is refused by name rather than converted
 
 # [0.14.0](https://github.com/Huckcity/cuerunner/compare/v0.13.0...v0.14.0) (2026-09-21)

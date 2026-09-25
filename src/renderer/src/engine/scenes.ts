@@ -1,5 +1,5 @@
 import { useStore } from '../store'
-import { channelMutes, describeDeskMessage, membershipWrite } from '../utils/desk'
+import { channelMutes, describeDeskMessage, faderLabel, membershipWrite } from '../utils/desk'
 import { sendDeskMessage } from './deskSend'
 import { sceneChanges, UNKNOWN_DESK_STATE, type DeskChange, type DeskState } from '../utils/scenes'
 import { ALL_CLOSED_SCENE_ID } from '../../../shared/show'
@@ -270,7 +270,7 @@ async function writeChanges(
     // What the operator reads: the channel, and the fader when the write is a placement.
     const where = write.kind === 'mute'
       ? write.change.label
-      : `${write.change.label} → ${write.dca.label}`
+      : `${write.change.label} → ${faderLabel(show.cast.dcas, write.dca.id)}`
     const send = addressed(show, write, channelIndex)
     // Nothing to send it to at all — a show that drives no desk, a port nobody chose. Not a
     // failure: there is nothing to fail, and the record is left alone.
@@ -305,7 +305,7 @@ async function writeChanges(
       // them can fail for two different reasons.
       const where = write.kind === 'mute'
         ? write.change.label
-        : `${write.change.label} → ${write.dca.label}`
+        : `${write.change.label} → ${faderLabel(show.cast.dcas, write.dca.id)}`
       outcome.failed.push({
         described: `${where}: ${describeDeskMessage(message)}`,
         cause: sent.error ?? null

@@ -285,8 +285,7 @@
 }
 
 .channel-remove,
-.performer-remove,
-.ensemble-remove {
+.performer-remove {
   width: 26px;
   height: var(--h-input);
   background: transparent;
@@ -300,8 +299,7 @@
 }
 
 .channel-remove:hover,
-.performer-remove:hover,
-.ensemble-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.performer-remove:hover { background: var(--bg-hover); color: var(--fg-primary); }
 
 /* ── DCAs ───────────────────────────────────────────────────────────────────── */
 .dca-row {
@@ -340,8 +338,8 @@
   border-color: var(--border-focus);
 }
 
-/* The number is the DCA's place on the desk, which is what the operator reaches for —
-   the label beside it is what this show calls it. */
+/* The number is the DCA's place on the desk, which is what the operator reaches for and
+   the only name a fader has. */
 .dca-number {
   flex: none;
   width: 16px;
@@ -351,8 +349,6 @@
   color: var(--fg-subtle);
   text-align: right;
 }
-
-.dca-label { flex: 0 0 140px; }
 
 /* The override: empty means the message the DCA's number makes, and the placeholder is
    that message, so the field shows what will be sent without being typed into. */
@@ -395,106 +391,4 @@
 .performer-row input:focus,
 .performer-row select:focus {
   border-color: var(--border-focus);
-}
-
-/* ── Ensembles ──────────────────────────────────────────────────────────────── */
-.ensemble-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2);
-  margin-bottom: var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-}
-
-.ensemble-fields {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.ensemble-fields input {
-  min-width: 0;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  color: var(--fg-primary);
-  font-size: var(--text-base);
-  padding: 4px 7px;
-  height: var(--h-input);
-  outline: none;
-  font-family: inherit;
-}
-
-.ensemble-fields input:focus {
-  border-color: var(--border-focus);
-}
-
-.ensemble-name { flex: 0 0 180px; font-weight: var(--fw-medium); }
-
-/* How many are in it, so a group that has been emptied out on its way somewhere else
-   says so before it is applied to a scene. */
-.ensemble-count {
-  flex: 1;
-  font-size: var(--text-sm);
-  color: var(--fg-subtle);
-}
-
-.ensemble-members {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-left: var(--space-1);
-}
-
-.member-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 4px 0 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
-  color: var(--fg-body);
-}
-
-.member-chip button {
-  all: unset;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  color: var(--fg-subtle);
-  font-size: 10px;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.member-chip button:hover { background: var(--bg-hover); color: var(--fg-primary); }
-
-.member-add {
-  height: 22px;
-  padding: 0 8px;
-  background: transparent;
-  border: 1px dashed var(--border-input);
-  border-radius: var(--radius-pill);
-  color: var(--fg-subtle);
-  font-size: var(--text-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.member-add:hover,
-.member-add:focus {
-  background: var(--accent-blue-glow);
-  border-color: var(--accent-blue-dim);
-  color: var(--accent-blue);
-  outline: none;
 }

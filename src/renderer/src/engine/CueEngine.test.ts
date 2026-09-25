@@ -1451,13 +1451,13 @@ describe('CueEngine — scene cues', () => {
             id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1'
           }],
           ensembles: [],
-          dcas: [{ id: 'dca-1', label: 'DCA 1 — Principals', deskNumber: null }]
+          dcas: [{ id: 'dca-1', deskNumber: null }]
         },
         scenes: {
           list: [{
             id: 's-1',
             name: 'Wedding',
-            dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
+            dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }],
             notes: ''
           }],
           allowDuplicateAssignment: true
@@ -1506,7 +1506,7 @@ describe('CueEngine — scene cues', () => {
       // This desk takes no assignment, and the recall says so rather than going quiet
       // about the half of it that did nothing.
       ['12 · Wedding Scene',
-        'Cannot be told to this desk — Ch 1 · Ada → DCA 1 — Principals: a note desk takes no assignment']
+        'Cannot be told to this desk — Ch 1 · Ada → DCA 1: a note desk takes no assignment']
     ])
     expect(useStore.getState().deskSceneId).toBe('s-1')
   })

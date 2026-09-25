@@ -168,13 +168,18 @@
 
 .ensemble-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
   padding: var(--space-3) 16px var(--space-4);
 }
 
+/* What pushes Delete away from the two presses that keep the group. */
+.ensemble-footer-spacer { flex: 1; }
+
 .ensemble-cancel,
-.ensemble-create {
+.ensemble-create,
+.ensemble-delete {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -188,6 +193,19 @@
 }
 
 .ensemble-cancel:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* The one press in this dialog that takes something away: the danger tone the window's
+   other destructive presses read, rather than a UA button beside Cancel. */
+.ensemble-delete {
+  background: transparent;
+  border: 1px solid var(--danger-border);
+  color: var(--danger-fg);
+}
+
+.ensemble-delete:hover {
+  background: var(--danger-bg);
+  border-color: var(--danger-fg);
+}
 
 .ensemble-create {
   background: var(--bg-input);
