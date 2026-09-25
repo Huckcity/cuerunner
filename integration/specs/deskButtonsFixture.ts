@@ -66,7 +66,7 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
         channels: [{ id: 'ch-1', name: 'Ruth' }],
         performers: [{ id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: 'ch-1' }],
         ensembles: [],
-        dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }]
+        dcas: [{ id: 'dca-1', deskNumber: null }]
       },
       // Two scenes over one mic: the walk the desk's keys drive is this list, in this order.
       // The first places the mic on the fader — the membership a recall writes, and the
@@ -76,7 +76,7 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
           {
             id: 's-1',
             name: 'Wedding',
-            dcas: [{ dcaId: 'dca-1', channels: ['ch-1'], ensembles: [], excluded: [] }],
+            dcas: [{ dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' }],
             notes: ''
           },
           { id: 's-2', name: 'Interval', dcas: [], notes: '' }
