@@ -162,7 +162,7 @@ test('turning the duplicate rule off keeps the grid to one fader per channel', a
 
   await openScenesView(page)
   await editScenes(page)
-  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-add-scene').click()
   const first = page.locator('.matrix-row').nth(0).locator('.matrix-cell').first()
   const second = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
 
@@ -225,7 +225,7 @@ test('the defaults take a show nobody wired to a desk of its own', async () => {
     await page.locator('.show-settings-done').click()
     await openScenesView(page)
     await editScenes(page)
-    await page.locator('.scenes-add').click()
+    await page.locator('.matrix-add-scene').click()
     await pickFromBox(
       page,
       page.locator('.matrix-row').first().locator('.matrix-cell').first(),

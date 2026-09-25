@@ -386,8 +386,8 @@ export async function openLogPanel(page: Page): Promise<void> {
 
 /** The view opens to run the show; building one starts with the press that edits it. */
 export async function editScenes(page: Page): Promise<void> {
-  // The lock lives in the grid's corner, and a show with no scenes yet has no grid: the
-  // empty state carries the same press in words.
+  // The grid is the view, so its corner lock is there as soon as a show has faders; a show
+  // with none has no grid and carries the same press in words.
   const lock = page.locator('.matrix-lock')
   const way = (await lock.count()) > 0 ? lock : page.locator('.matrix-empty-action')
   if ((await way.getAttribute('data-editing')) !== 'true') await way.click()
@@ -568,7 +568,7 @@ export async function buildDeskShow(
 
   await openScenesView(page)
   await editScenes(page)
-  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-add-scene').click()
   // A row holds one thing, and this scene places the strip it wants on the first fader:
   // that is the membership a recall writes and the reason the mic is open. Placing it is a
   // press on the cell's box and a press on the strip in the picker.

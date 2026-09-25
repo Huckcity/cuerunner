@@ -83,9 +83,9 @@ test('the show is edited in the view, not in a dialog', async () => {
   const scenes = page.locator('.matrix-scene:not([data-all-closed])')
 
   // A second scene, and a third to remove.
-  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-add-scene').click()
   await expect(scenes).toHaveCount(2)
-  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-add-scene').click()
   await expect(scenes).toHaveCount(3)
 
   // Renaming happens in the column header, where the name is read.
@@ -126,7 +126,7 @@ test('a show with many scenes still fits the window', async () => {
   test.setTimeout(60_000)
 
   await buildDeskShow(page, freePort())
-  for (let i = 0; i < 12; i++) await page.locator('.scenes-add').click()
+  for (let i = 0; i < 12; i++) await page.locator('.matrix-add-scene').click()
   await expect(page.locator('.matrix-scene:not([data-all-closed])')).toHaveCount(13)
   // Thirteen scenes and the all-closed column in front of them.
   await expect(page.locator('.matrix-scene')).toHaveCount(14)
@@ -196,7 +196,7 @@ test('a scene column is the width a scene is, whatever the window', async () => 
 
   // A second scene changes nothing about the first, and the two of them still fit: fixed
   // tracks take what they need rather than dividing what the window has.
-  await page.locator('.scenes-add').click()
+  await page.locator('.matrix-add-scene').click()
   await expect(page.locator('.matrix-scene:not([data-all-closed])')).toHaveCount(2)
   const wide = await layout()
   expect(wide.columns).toEqual([88, 176, 176])
@@ -268,7 +268,7 @@ test('the view follows the show past the side of the window', async () => {
   await first.fill('Number 1')
   await first.blur()
   for (let i = 0; i < 19; i++) {
-    await page.locator('.scenes-add').click()
+    await page.locator('.matrix-add-scene').click()
     const field = columns.last().locator('.scene-name-field')
     await field.fill(`Number ${i + 2}`)
     await field.blur()
@@ -284,7 +284,7 @@ test('the view follows the show past the side of the window', async () => {
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
   // The show has moved: the scenes view follows what the desk was told, so the cue has to
   // have landed before the view is asked where the show is.
-  await expect(page.locator('.scenes-now')).toContainText('Number 19')
+  await expect(columns.nth(18)).toHaveAttribute('data-current', 'true')
 
   const current = page.locator('.matrix-scene[data-current="true"]')
   await expect(current).toHaveCount(1)
@@ -292,8 +292,10 @@ test('the view follows the show past the side of the window', async () => {
   // screen, which is the point of following at all — a short number cannot hide the next.
   await expect(current).toBeInViewport({ ratio: 1 })
   await expect(columns.nth(19)).toBeInViewport({ ratio: 1 })
-  await expect(page.locator('.scenes-now')).toContainText('Number 19')
-  await expect(page.locator('.scenes-next')).toContainText('Number 20')
+  // The nineteenth of twenty, and the one after it, both on screen — which is the point of
+  // following at all, since a short number cannot hide the next scene.
+  await expect(columns.nth(18)).toHaveAttribute('data-current', 'true')
+  await expect(columns.nth(19)).toHaveAttribute('data-current', 'false')
 
   // Never behind the plot column either: what is on screen is the scene, not a sliver of it.
   const hidden = await page.evaluate(() => {
@@ -331,7 +333,6 @@ test('the view follows the show past the side of the window', async () => {
   // and this is a second, deliberate press rather than a hand that shook.
   await page.waitForTimeout(400)
   await page.locator('.btn-go').click()
-  await expect(page.locator('.scenes-now')).toContainText('Number 19')
   await expect(columns.nth(18)).toHaveAttribute('data-current', 'true')
   await expect(columns.nth(18)).toBeInViewport({ ratio: 1 })
 })
@@ -346,7 +347,7 @@ test('deleting a scene leaves the view where it is, and undo puts it back', asyn
   // second scene because this test deletes it, which is also why the press has to be one the
   // operator can make without moving the grid — the delete below says why.
   for (let i = 0; i < 14; i++) {
-    await page.locator('.scenes-add').click()
+    await page.locator('.matrix-add-scene').click()
     const field = columns.last().locator('.scene-name-field')
     await field.fill(`Number ${i + 2}`)
     await field.blur()
@@ -682,7 +683,7 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
     // drawn at all: an empty row's box is there and asleep, and a block carries no ✕.
     await page.locator('.matrix-lock').click()
     await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'false')
-    await expect(page.locator('.scenes-editing-hint')).toHaveCount(0)
+    await expect(page.locator('.matrix-lock')).toHaveAttribute('data-editing', 'false')
 
     const cell = page.locator('.matrix-row').nth(1).locator('.matrix-cell').first()
     await expect(cell).toHaveAttribute('data-placed', 'false')
@@ -694,7 +695,8 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
     await box.click({ force: true })
     await expect(page.locator('.scene-picker')).toHaveCount(0)
     await expect(page.locator('.matrix-block-remove')).toHaveCount(0)
-    await expect(page.locator('.scenes-add')).toHaveCount(0)
+    // Adding a scene is an edit, so the plus is not drawn while the show runs.
+    await expect(page.locator('.matrix-add-scene')).toHaveCount(0)
     await expect(page.locator('.matrix-scene-remove')).toHaveCount(0)
 
     // Recalling is what the view is for: it stays live. The desk has heard nothing, so the
@@ -723,7 +725,7 @@ test('a show with nobody cast can be grouped, because a group holds strips', asy
     await page.locator('.show-settings-done').click()
     await openScenesView(page)
     await editScenes(page)
-    await page.locator('.scenes-add').click()
+    await page.locator('.matrix-add-scene').click()
 
     const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
     await buildEnsembleFromBox(page, cell, 'Playback', ['Ch 1', 'Ch 2'])

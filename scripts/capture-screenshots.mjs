@@ -323,13 +323,13 @@ const nameScene = async (index, name) => {
   await field.blur()
 }
 
-await page.locator('.scenes-add').click()
+await page.locator('.matrix-add-scene').click()
 await nameScene(0, 'Act One')
 await placeStrip(0, '1', 'Aldonza')
 await placeStrip(0, '2', 'Sancho')
 await placeStrip(0, '3', 'Cervantes')
 await placeStrip(0, '4', 'Pedro')
-await page.locator('.scenes-add').click()
+await page.locator('.matrix-add-scene').click()
 await nameScene(1, 'Wedding')
 await placeStrip(1, '5', 'Anselmo')
 await placeStrip(1, '6', 'Fermina')

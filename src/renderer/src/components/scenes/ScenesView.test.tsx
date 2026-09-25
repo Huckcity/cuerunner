@@ -215,19 +215,6 @@ describe('ScenesView', () => {
     return container.querySelectorAll<T>(selector)[index]
   }
 
-  // The header readout as the operator reads it: the two labels and what they point at.
-  function where(): { now: string; next: string | null } {
-    const slot = (position: string): string | null => {
-      const element = container.querySelector(position)
-      if (element === null) return null
-      return [...element.children]
-        .filter(child => !child.classList.contains('scenes-where-label'))
-        .map(child => child.textContent)
-        .join(' ')
-    }
-    return { now: slot('.scenes-now') ?? '', next: slot('.scenes-next') }
-  }
-
   // Controlled inputs: setting the value through the prototype setter is what gets past
   // React's own tracker, so the dispatched event looks like a real keystroke.
   async function type(input: HTMLInputElement, value: string): Promise<void> {
@@ -777,17 +764,19 @@ describe('ScenesView', () => {
     expect(grouped.querySelector('img')).toBeNull()
   })
 
-  it('adds a scene from the header and renames it in place, refusing an empty name', async () => {
+  it('adds a scene from the plus after the last one, and renames it in place', async () => {
     await show({ scenes: [] })
 
-    // A sceneless show has no grid, so the lock that lives in the grid's corner is not drawn:
-    // the empty state carries the same press, and it locks as well as unlocks.
-    expect(container.querySelectorAll('.matrix-scene')).toHaveLength(0)
-    expect(container.querySelector('.matrix-lock')).toBeNull()
-    expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet.')
-    expect(container.querySelector('.matrix-empty-action')?.textContent).toBe('Lock it again')
+    // The grid is the view whether or not a show has scenes yet: its Out column and the lock
+    // are both there, and the plus waits after the last one — of which there are none.
+    expect(container.querySelector('.matrix-empty')).toBeNull()
+    expect(container.querySelector('.matrix-lock')).not.toBeNull()
+    expect(container.querySelectorAll('.matrix-scene')).toHaveLength(1)
+    expect(sceneColumns()).toHaveLength(0)
 
-    await act(async () => { container.querySelector<HTMLButtonElement>('.scenes-add')!.click() })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.matrix-add-scene')!.click()
+    })
 
     expect(scenes().map(entry => entry.name)).toEqual(['Scene 1'])
     // The all-closed column arrives with the first scene: the grid is what it belongs to.
@@ -944,8 +933,8 @@ describe('ScenesView', () => {
     expect(lock?.getAttribute('aria-label')).toContain('Unlock')
     expect(lock?.getAttribute('title')).toContain('edit scenes')
     expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('false')
-    expect(container.querySelector('.scenes-editing-hint')).toBeNull()
-    expect(container.querySelector('.scenes-add')).toBeNull()
+    // Adding a scene is an edit, so the plus is not drawn while the show runs.
+    expect(container.querySelector('.matrix-add-scene')).toBeNull()
 
     await act(async () => { lock?.click() })
 
@@ -954,8 +943,7 @@ describe('ScenesView', () => {
     expect(lock?.getAttribute('data-editing')).toBe('true')
     expect(lock?.getAttribute('aria-label')).toContain('Lock')
     expect(container.querySelector('.scenes-view')?.getAttribute('data-editing')).toBe('true')
-    expect(container.querySelector('.scenes-editing-hint')?.textContent).toContain('Editing')
-    expect(container.querySelector('.scenes-add')).not.toBeNull()
+    expect(container.querySelector('.matrix-add-scene')).not.toBeNull()
 
     await act(async () => { lock?.click() })
     expect(useStore.getState().scenesEditing).toBe(false)
@@ -997,37 +985,6 @@ describe('ScenesView', () => {
     expect(cellFor('1', 'Opening').getAttribute('data-placed')).toBe('true')
     expect(cellFor('2', 'Opening').getAttribute('data-pending')).toBe('false')
     expect(cellFor('2', 'Opening').getAttribute('data-placed')).toBe('false')
-  })
-
-  it('names the scene the desk is on and the one coming, where the grid cannot', async () => {
-    const three = [OPENING, INTERVAL, scene('s3', 'Finale', [placed('dca-2', 'channel', 'ch-extra')])]
-
-    // Nothing recalled: the show has not started, so the first scene is what is coming.
-    await show({ scenes: three })
-    expect(where()).toEqual({ now: 'nothing recalled', next: '1 Opening' })
-
-    await show({
-      scenes: three,
-      deskSceneId: 's2',
-      deskState: { mutes: { 'ch-extra': false }, assignments: { 'ch-extra': ['dca-2'] } }
-    })
-    expect(where()).toEqual({ now: '2 Interval', next: '3 Finale' })
-
-    // The last scene has nothing after it, so the slot goes rather than naming a scene
-    // that is not there.
-    await show({
-      scenes: three,
-      deskSceneId: 's3',
-      deskState: { mutes: { 'ch-extra': false }, assignments: { 'ch-extra': ['dca-2'] } }
-    })
-    expect(where()).toEqual({ now: '3 Finale', next: null })
-  })
-
-  it('leaves the header to the empty state when there are no scenes to name', async () => {
-    await show({})
-
-    expect(container.querySelector('.scenes-where')).toBeNull()
-    expect(container.querySelector('.matrix-empty')?.textContent).toContain('No scenes yet')
   })
 
   it('marks the scene pending after an edit and applies exactly that change', async () => {
@@ -1112,15 +1069,18 @@ describe('ScenesView', () => {
     expect(useStore.getState().showSettingsTab).toBe('channels')
   })
 
-  it('offers Edit from an empty show that is being run', async () => {
+  it('offers the unlock from a sceneless show that is being run', async () => {
     await show({ scenes: [], editing: false })
 
+    // The grid's corner is there and shut; the plus, which is an edit, is not.
+    expect(container.querySelector('.matrix-add-scene')).toBeNull()
+
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('.matrix-empty-action')!.click()
+      container.querySelector<HTMLButtonElement>('.matrix-lock')!.click()
     })
 
     expect(useStore.getState().scenesEditing).toBe(true)
-    expect(container.querySelector('.scenes-add')).not.toBeNull()
+    expect(container.querySelector('.matrix-add-scene')).not.toBeNull()
   })
 
   it('while the show is run, nothing edits it; recall and Apply stay live', async () => {

@@ -481,18 +481,9 @@ export function ScenesView() {
   } | null>(null)
 
   const locked = !editing
-  // The scene the desk is on, and whether that is the all-closed one: null is either the
-  // all-closed scene or a desk nothing has been recalled to yet, and neither opens a mic.
-  const recalled = scenes.list.find(scene => scene.id === deskSceneId) ?? null
+  // Whether the desk is on the out column, which is a column of the grid like any other and
+  // the one whose press closes everything.
   const allClosed = deskSceneId === ALL_CLOSED_SCENE_ID
-  const current = allClosed ? null : recalled
-  const currentIndex = recalled === null ? -1 : scenes.list.indexOf(recalled)
-
-  // The running order is the show order, so what comes next is the scene after this one —
-  // and before anything has been recalled, the first one. Which scene it is belongs in the
-  // header rather than only in the grid: the columns scroll, this does not.
-  const nextIndex = currentIndex === -1 ? 0 : currentIndex + 1
-  const next = scenes.list[nextIndex] ?? null
 
   // The show moves without a hand on the grid — a scene cue, a trigger, someone else at the
   // desk — so the view follows it: the scene the desk has just gone to is parked at the left
@@ -565,70 +556,7 @@ export function ScenesView() {
 
   return (
     <div className="scenes-view" data-editing={editing}>
-      <div className="scenes-header">
-        <span className="scenes-title">Scenes</span>
-        {(scenes.list.length > 0 || deskSceneId !== null) && (
-          <div className="scenes-where">
-            <span className="scenes-now">
-              <span className="scenes-where-label">now</span>{' '}
-              {current === null && !allClosed ? (
-                <span className="scenes-where-none">nothing recalled</span>
-              ) : (
-                <>
-                  <strong className="scenes-where-number">
-                    {allClosed ? 0 : currentIndex + 1}
-                  </strong>{' '}
-                  <span className="scenes-where-name" title={allClosed ? 'Out' : current?.name}>
-                    {allClosed ? 'Out' : current?.name}
-                  </span>
-                </>
-              )}
-            </span>
-            {next !== null && (
-              <span className="scenes-next">
-                <span className="scenes-where-label">next scene</span>{' '}
-                <strong className="scenes-where-number">{nextIndex + 1}</strong>{' '}
-                <span className="scenes-where-name" title={next.name}>{next.name}</span>
-              </span>
-            )}
-          </div>
-        )}
-        <div className="scenes-actions">
-          {editing && (
-            <button
-              className="scenes-add"
-              onClick={() => writeList(addScene(scenes))}
-              title="Add a scene — it places nothing until its cells do"
-            >
-              Add scene
-            </button>
-          )}
-        </div>
-      </div>
-
-      {editing && (
-        <div className="scenes-editing-hint">
-          Editing — cells and names change the show. Lock it again when you are finished.
-        </div>
-      )}
-
-      {scenes.list.length === 0 ? (
-        <div className="matrix-empty">
-          <span>No scenes yet.</span>
-          {/* There is no grid to carry the lock yet, so the press that unlocks it is here —
-              and it locks again, because a sceneless show must not be able to strand the
-              operator in a mode whose only way out is off screen. */}
-          {editing ? (
-            <button className="matrix-empty-action" onClick={() => setEditing(false)}>
-              Lock it again
-            </button>
-          ) : (
-            <button className="matrix-empty-action" onClick={() => setEditing(true)}>
-              Unlock to add one
-            </button>
-          )}
-        </div>
-      ) : cast.dcas.length === 0 ? (
+      {cast.dcas.length === 0 ? (
         <div className="matrix-empty">
           <span>No faders: the rows are the show&apos;s faders, and this show drives none.</span>
           <button
@@ -637,12 +565,10 @@ export function ScenesView() {
           >
             Set up channels…
           </button>
-          {/* No grid means no corner, so the lock is here too. */}
-          {editing && (
-            <button className="matrix-empty-action" onClick={() => setEditing(false)}>
-              Lock it again
-            </button>
-          )}
+          {/* No grid means no corner lock, so the press that locks and unlocks is here. */}
+          <button className="matrix-empty-action" onClick={() => setEditing(!editing)}>
+            {editing ? 'Lock it again' : 'Unlock to add scenes'}
+          </button>
         </div>
       ) : (
         <div className="matrix-scroll" ref={scrollerRef}>
@@ -655,7 +581,11 @@ export function ScenesView() {
               // does not fit scrolls inside the view.
               gridTemplateColumns:
                 `var(--matrix-mic-width) var(--matrix-all-closed-width) ` +
-                `repeat(${scenes.list.length}, var(--matrix-scene-width))`
+                `repeat(${scenes.list.length}, var(--matrix-scene-width)) ` +
+                // The plus is a track of its own after the last scene, so a show with twenty
+                // scenes has it twenty scenes to the right rather than somewhere the header
+                // would have had to keep in step with the grid.
+                `var(--matrix-add-width)`
             } as CSSProperties}
           >
             {/* The lock the show is held with, in the corner the grid leaves empty: shut
@@ -771,6 +701,19 @@ export function ScenesView() {
                 </div>
               )
             })}
+
+            {/* Adding a scene is an edit, so it is drawn only while the grid is unlocked —
+                and it is the last thing in the header row, where the scene it makes will be. */}
+            {editing && (
+              <button
+                className="matrix-add-scene"
+                onClick={() => writeList(addScene(scenes))}
+                aria-label="Add a scene"
+                title="Add a scene — it holds nothing until its rows do"
+              >
+                +
+              </button>
+            )}
 
             {cast.dcas.map((dca, index) => {
               // The row is a fader, and a fader is a number: its place in the show, which the
