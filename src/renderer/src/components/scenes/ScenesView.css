@@ -381,9 +381,9 @@
 }
 
 /* ── A cell: what one fader holds in one scene ─────────────────────────────────
-   A cell holds one thing, so it is one block and the box that changes it. A strip's block
-   is filled and a group's is outlined: the fill says a mic rides here, the outline says the
-   row is riding on membership, and the group's members are in the block's title. */
+   A cell holds one thing, so it is one block — and the box that changes it, on an empty row.
+   A strip's block is filled and a group's is outlined: the fill says a mic rides here, the
+   outline says the row rides on a group, and the strips that group holds are in its title. */
 .matrix-cell {
   display: flex;
   flex-wrap: wrap;
@@ -418,9 +418,10 @@
 
 /* The one thing a row holds: a strip of the console or a group, as one block. A group's
    block is outlined and a strip's is filled, so a glance down a scene says which rows are
-   riding on membership rather than on a single mic. The name is a box of its own so a long
-   one is cut with an ellipsis while the ✕ beside it stays where it can be pressed; the
-   block's title carries the whole of what it stands for — a group's name and its members. */
+   riding on a group rather than on a single mic. The name is the press that changes the row
+   and is a box of its own, so a long one is cut with an ellipsis while the ✕ beside it stays
+   where it can be pressed; the block's title carries the whole of what it stands for — a
+   group's name and the strips it opens. */
 .matrix-block {
   display: flex;
   align-items: center;

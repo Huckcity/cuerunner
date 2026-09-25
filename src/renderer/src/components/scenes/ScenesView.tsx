@@ -85,10 +85,10 @@ export interface PickerAnchor {
 /**
  * One fader in one scene: the one thing it holds, and the box that changes it.
  *
- * A row holds one member — a channel, or an ensemble — so the cell is a single block: its
- * name, and a ✕ that takes it off. An ensemble's block names the group and carries its
- * members in its title, because what a scene is for at curtain up is reading which mics
- * open, and a row of twelve member chips is a list nobody reads.
+ * A row holds one member — a strip, or a group — so the cell is a single block: its name,
+ * which is the press that changes it, and a ✕ that takes it off. A group's block names the
+ * group and carries the strips it opens in its title, because what a scene is for at curtain
+ * up is reading which mics open, and a row of twelve chip names is a list nobody reads.
  *
  * Everything the row can become comes out of one press: the name it holds, or the blank box
  * an empty row carries. Every press is one store write, hence one undo.
@@ -102,8 +102,8 @@ function SceneCell({
   // which is the only name a fader has.
   const where = `DCA ${fader}`
   // What the block says: the strip by the name the grid uses, or the group's own name. The
-  // group's members ride along in the title — the whole of what the block stands for, where
-  // there is room for it and where a pointer is asking.
+  // strips the group opens ride along in the title — the whole of what the block stands for,
+  // where there is room for it and where a pointer is asking.
   const channel = placement?.kind === 'channel'
     ? stripLabel(cast.channels, cast.performers, placement.memberId)
     : ''
@@ -112,9 +112,8 @@ function SceneCell({
   const held = rowChannels(cast, placement)
     .map(channelId => stripLabel(cast.channels, cast.performers, channelId))
     .filter(label => label !== '')
-  // What the block stands for. A group whose members stand on no strip is a group that opens
-  // nothing — which is said about the strips it would open, not about the cast: the people are
-  // still in it.
+  // What the block stands for. A group holding no strip the show still has opens nothing, and
+  // that is what its title says rather than claiming to hold somebody.
   const whole = ensemble === null
     ? member
     : `${ensemble.name} — ${held.length === 0 ? 'no strips yet' : held.join(', ')}`
@@ -210,7 +209,7 @@ interface PickerProps {
  * What a blank box opens: everything one row can gain, in one list, with a filter over it.
  *
  * Two sections rather than one list, because the two things are different in kind — a strip
- * is placed on the row, a group brings its members — and the strips are named the way the
+ * is put on the row, a group brings the strips it holds — and the strips are named the way the
  * grid names them, which is what the operator is looking at while they type. The filter is
  * the point of the box on a show with a console's worth of strips: twelve names are scanned,
  * thirty are typed at. The builder sits at the foot rather than in a section, because it is

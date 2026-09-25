@@ -136,7 +136,7 @@ describe('SceneInspector', () => {
           { id: 'p-1', name: 'Ada', role: 'Lead', notes: '', channelId: 'ch-1' },
           { id: 'p-2', name: 'Bea', role: 'Chorus', notes: '', channelId: 'ch-2' }
         ],
-        ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }]
+        ensembles: [{ id: 'ens-1', name: 'Chorus', channelIds: ['ch-1', 'ch-2'] }]
       }
     )
 

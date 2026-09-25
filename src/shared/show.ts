@@ -452,16 +452,22 @@ export interface Performer {
 }
 
 /**
- * A named group of performers — the chorus, the band. It is a grouping and nothing else:
- * it exists to be applied to a scene so a handful of mics move together, and it is not
- * desk routing, which is the channel's business. Membership is the list here rather than
- * a pointer on each performer, because a performer can belong to more than one ensemble
- * and an ensemble that is deleted should take its membership with it.
+ * A named group of strips — the chorus, the band. It is a grouping and nothing else: it
+ * exists to be put on a scene row so a handful of mics move together, and it is not desk
+ * routing, which is the channel's business.
+ *
+ * It holds strips rather than the people standing on them, because a group is a set of
+ * faders: the show's cast may be nobody at all — a rack of playback channels is a group too
+ * — and a group has to be buildable the moment a show has strips in it. What it opens is
+ * what those strips open; a strip that leaves the console leaves every group it was in.
+ * Membership is the list here rather than a pointer on each channel, because a channel can
+ * belong to more than one group and a group that is deleted should take its membership with
+ * it.
  */
 export interface Ensemble {
   id: string
   name: string
-  members: string[]
+  channelIds: string[]
 }
 
 /**

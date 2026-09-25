@@ -32,10 +32,9 @@ interface Props {
  * an ensemble is membership rather than a copy, so there is one list to be wrong about.
  *
  * Both lists are the show's strips in the show's own order, named the way the grid names
- * them, because that is what the operator is looking at through the dialog. An ensemble
- * holds performers, though, so a strip nobody is cast on cannot be moved across: it is drawn
- * disabled with the reason in its name rather than left out, because a strip missing from a
- * list is a question and a strip that says why is an answer.
+ * them, because that is what the operator is looking at through the dialog — and every strip
+ * can be moved across: a group holds strips, so a show that has never cast a performer is a
+ * show whose rack can still be grouped.
  *
  * Nothing here moves the desk.
  */
@@ -88,10 +87,6 @@ export function EnsembleDialog({
     }
   }, [box])
 
-  // The strips somebody is standing on, which is the set a group can be built out of.
-  const castOn = new Set(
-    cast.performers.flatMap(performer => performer.channelId === null ? [] : [performer.channelId])
-  )
   // Both lists in the show's channel order, so a group reads the way the console does rather
   // than in the order it was picked.
   const free = cast.channels.filter(channel => !held.includes(channel.id))
@@ -209,7 +204,6 @@ export function EnsembleDialog({
                   )}
                   {pane.channels.map(channel => {
                     const label = stripLabel(cast.channels, cast.performers, channel.id)
-                    const opens = castOn.has(channel.id)
                     return (
                       <li key={channel.id}>
                         <button
@@ -220,15 +214,8 @@ export function EnsembleDialog({
                           // on it and nothing else does.
                           aria-pressed={pane.picked === channel.id}
                           data-selected={pane.picked === channel.id}
-                          disabled={pane.key === 'free' && !opens}
-                          // A disabled button is skipped by Tab, so the reason a strip will
-                          // not move is in its name as well as in its tooltip.
-                          aria-label={opens
-                            ? label
-                            : `${label} — nobody is cast on this strip, so the group could not hold it`}
-                          title={opens
-                            ? label
-                            : `${label} — nobody is cast on this strip, and an ensemble holds performers`}
+                          aria-label={label}
+                          title={label}
                           onClick={() => pane.pick(pane.picked === channel.id ? null : channel.id)}
                         >
                           {label}

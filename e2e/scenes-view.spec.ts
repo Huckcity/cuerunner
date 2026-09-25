@@ -10,13 +10,16 @@ import {
   buildDeskShow,
   buildEnsembleFromBox,
   closeApp,
+  editScenes,
   freePort,
   launchApp,
   listenOsc,
   mintLicense,
   openLogPanel,
+  openScenesView,
   openShowSettings,
-  pickFromBox
+  pickFromBox,
+  pointDeskAtOsc
 } from './helpers'
 
 let app: ElectronApplication
@@ -707,6 +710,39 @@ test('the view opens to run the show: Edit gives it back, and recalling never st
     await page.locator('.scenes-edit').click()
     await pickFromBox(page, cell, 'Sancho')
     await expect(cell.locator('.matrix-block')).toContainText('Sancho')
+  } finally {
+    await desk.close()
+  }
+})
+
+test('a show with nobody cast can be grouped, because a group holds strips', async () => {
+  test.setTimeout(60_000)
+  const desk = await listenOsc(freePort())
+
+  try {
+    // A fresh show: twelve strips and no cast at all — the one case where a group holding
+    // performers would have left the builder with nothing it could move across.
+    await pointDeskAtOsc(page, desk.port)
+    await page.locator('.show-settings-done').click()
+    await openScenesView(page)
+    await editScenes(page)
+    await page.locator('.scenes-add').click()
+
+    const cell = page.locator('.matrix-row').first().locator('.matrix-cell').first()
+    await buildEnsembleFromBox(page, cell, 'Playback', ['Ch 1', 'Ch 2'])
+
+    // The row holds the group, and the group holds the strips: a recall opens both mics and
+    // closes the ten the scene says nothing about.
+    const block = cell.locator('.matrix-block')
+    await expect(block).toHaveAttribute('data-kind', 'ensemble')
+    await expect(block.locator('.matrix-block-name')).toHaveText('Playback')
+    await expect(block).toHaveAttribute('title', 'Playback — Ch 1, Ch 2')
+
+    await page.locator('.matrix-scene:not([data-all-closed]) .matrix-recall').click()
+    await expect.poll(() => desk.received.length).toBe(12)
+    expect(desk.received[0]).toEqual({ address: '/dca/1/on', args: [1] })
+    expect(desk.received[1]).toEqual({ address: '/dca/2/on', args: [1] })
+    expect(desk.received.slice(2).map(message => message.args[0])).toEqual(Array(10).fill(0))
   } finally {
     await desk.close()
   }

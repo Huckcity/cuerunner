@@ -72,18 +72,12 @@ export function updatePerformer(
 }
 
 /**
- * Drops a performer from the cast list, and out of every ensemble that held them. What
- * they were wearing is the plot's business — the caller releases that pack — and any
- * scene that had them open is the scene list's, since neither lives here.
+ * Drops a performer from the cast list. What they were wearing is the plot's business — the
+ * caller releases that pack — and any scene that had them open is the scene list's; the
+ * groups are untouched, because a group holds strips and the strip is still there.
  */
 export function removePerformerFromCast(cast: CastSettings, performerId: string): CastSettings {
-  return {
-    ...cast,
-    performers: cast.performers.filter(performer => performer.id !== performerId),
-    ensembles: cast.ensembles.map(ensemble => ensemble.members.includes(performerId)
-      ? { ...ensemble, members: ensemble.members.filter(id => id !== performerId) }
-      : ensemble)
-  }
+  return { ...cast, performers: cast.performers.filter(performer => performer.id !== performerId) }
 }
 
 // ── Channels ───────────────────────────────────────────────────────────────
@@ -129,8 +123,21 @@ export function removeChannel(cast: CastSettings, channelId: string): CastSettin
   return {
     ...cast,
     channels: cast.channels.filter(channel => channel.id !== channelId),
-    performers: unpatchPerformers(cast.performers, new Set([channelId]))
+    performers: unpatchPerformers(cast.performers, new Set([channelId])),
+    ensembles: stripFromEnsembles(cast.ensembles, new Set([channelId]))
   }
+}
+
+/**
+ * Takes strips out of every group that held them: a group is a set of faders, and a fader
+ * that has left the console cannot ride a row. A group left holding nothing stays — it is
+ * still named, and the builder is where it is filled again.
+ */
+function stripFromEnsembles(ensembles: Ensemble[], gone: Set<string>): Ensemble[] {
+  return ensembles.map(ensemble =>
+    ensemble.channelIds.some(channelId => gone.has(channelId))
+      ? { ...ensemble, channelIds: ensemble.channelIds.filter(channelId => !gone.has(channelId)) }
+      : ensemble)
 }
 
 /**
@@ -156,7 +163,12 @@ export function setChannelCount(cast: CastSettings, count: number): CastSettings
     channels.push({ id: crypto.randomUUID(), name: '' })
   }
   const gone = new Set(cast.channels.slice(wanted).map(channel => channel.id))
-  return { ...cast, channels, performers: unpatchPerformers(cast.performers, gone) }
+  return {
+    ...cast,
+    channels,
+    performers: unpatchPerformers(cast.performers, gone),
+    ensembles: stripFromEnsembles(cast.ensembles, gone)
+  }
 }
 
 /** The channel a performer's mic is patched to, or null while they are patched to none. */
@@ -204,14 +216,14 @@ export function stripLabel(
 // ── Ensembles ──────────────────────────────────────────────────────────────
 
 /**
- * An ensemble is a grouping, so it is created empty and whoever is in it is named by the
- * list it carries. It is not desk routing: what opens for its members is their channels.
+ * An ensemble is a grouping, so it is created empty and the strips it holds are named by the
+ * list it carries. It is not desk routing: what opens is whatever those strips open.
  */
-export function addEnsemble(cast: CastSettings, name = '', members: string[] = []): CastSettings {
+export function addEnsemble(cast: CastSettings, name = '', channelIds: string[] = []): CastSettings {
   const ensemble: Ensemble = {
     id: crypto.randomUUID(),
     name: name.trim() === '' ? `Ensemble ${cast.ensembles.length + 1}` : name.trim(),
-    members
+    channelIds
   }
   return { ...cast, ensembles: [...cast.ensembles, ensemble] }
 }
@@ -228,7 +240,7 @@ export function updateEnsemble(
   }
 }
 
-/** Removes an ensemble; its members keep existing, just no longer grouped under it. */
+/** Removes an ensemble; its strips keep existing, just no longer grouped under it. */
 export function removeEnsemble(cast: CastSettings, ensembleId: string): CastSettings {
   return { ...cast, ensembles: cast.ensembles.filter(ensemble => ensemble.id !== ensembleId) }
 }

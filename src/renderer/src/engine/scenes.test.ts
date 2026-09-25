@@ -40,7 +40,7 @@ function cast(): CastSettings {
       { id: 'p-2', name: 'Sancho', role: 'Comic', notes: '', channelId: 'ch-2' },
       { id: 'p-3', name: 'Nell', role: '', notes: '', channelId: 'ch-3' }
     ],
-    ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }],
+    ensembles: [{ id: 'ens-1', name: 'Chorus', channelIds: ['ch-1', 'ch-2'] }],
     dcas: [1, 2, 3, 4].map(index => ({
       id: `dca-${index}`,
       deskNumber: null

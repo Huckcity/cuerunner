@@ -351,7 +351,7 @@ await page.locator('.scene-picker')
 const builder = page.getByRole('dialog', { name: 'New ensemble' })
 await builder.locator('.ensemble-name-field').fill('Principals')
 for (const strip of ['Aldonza', 'Sancho']) {
-  await builder.locator('[data-pane="free"] .ensemble-item').filter({ hasText: strip }).click()
+  await builder.locator('[data-pane="free"]').getByRole('button', { name: strip, exact: true }).click()
   await builder.locator('.ensemble-move').first().click()
 }
 await builder.getByRole('button', { name: 'Create and apply' }).click()

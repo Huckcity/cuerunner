@@ -75,20 +75,16 @@ export function placementFor(scene: MicScene | null, dcaId: string): SceneDcaPla
 }
 
 /**
- * The channels an ensemble carries, through the performers whose mics are on them: the
- * strips a group stands on, in cast order. A member with no strip contributes nothing —
- * there is no channel to open — and two on one strip count once.
+ * The strips an ensemble stands on, in the show's own channel order — which is the order the
+ * desk numbers its inputs in, and the order a group is read in wherever it is shown. A strip
+ * a group still names but the console no longer has contributes nothing: nothing can open it.
  */
 export function ensembleChannels(cast: CastSettings, ensembleId: string): string[] {
   const ensemble = cast.ensembles.find(candidate => candidate.id === ensembleId)
   if (ensemble === undefined) return []
-  const channels: string[] = []
-  for (const memberId of ensemble.members) {
-    const performer = cast.performers.find(candidate => candidate.id === memberId)
-    const channelId = performer?.channelId ?? null
-    if (channelId !== null && !channels.includes(channelId)) channels.push(channelId)
-  }
-  return channels
+  return cast.channels
+    .filter(channel => ensemble.channelIds.includes(channel.id))
+    .map(channel => channel.id)
 }
 
 /**
@@ -133,18 +129,6 @@ export function sceneChannelIds(scene: MicScene | null, cast: CastSettings): str
     for (const channelId of rowChannels(cast, placementFor(scene, dca.id))) channels.add(channelId)
   }
   return cast.channels.filter(channel => channels.has(channel.id)).map(channel => channel.id)
-}
-
-/**
- * Who an ensemble built from these channels holds: the performers whose mics stand on
- * them, in cast order. An empty answer is a set of strips nobody is patched to, and an
- * ensemble names performers — so a caller offering the strips a group can be built from
- * leaves those out.
- */
-export function rowPerformers(cast: CastSettings, carried: string[]): string[] {
-  return cast.performers
-    .filter(performer => performer.channelId !== null && carried.includes(performer.channelId))
-    .map(performer => performer.id)
 }
 
 // ── Editing a placement ────────────────────────────────────────────────────

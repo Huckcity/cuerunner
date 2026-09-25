@@ -335,7 +335,7 @@ const SETTINGS: ShowSettings = {
   cast: {
     channels: [{ id: 'channel-1', name: 'Ruth' }],
     performers: [{ id: 'p-1', name: 'Ruth', role: 'lead', notes: '', channelId: 'channel-1' }],
-    ensembles: [{ id: 'e-1', name: 'Chorus', members: ['p-1'] }],
+    ensembles: [{ id: 'e-1', name: 'Chorus', channelIds: ['channel-1'] }],
     dcas: [{ id: 'dca-1', deskNumber: null }]
   }
 }

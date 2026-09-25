@@ -64,7 +64,7 @@ const PERFORMERS: Performer[] = [
 ]
 
 /** The group over both, which is what an ensemble is: membership, and a name. */
-const CHORUS: Ensemble = { id: 'ens-chorus', name: 'Chorus', members: ['p1', 'p2'] }
+const CHORUS: Ensemble = { id: 'ens-chorus', name: 'Chorus', channelIds: ['ch-ada', 'ch-extra'] }
 
 function scene(id: string, name: string, dcas: MicScene['dcas'] = []): MicScene {
   return { id, name, dcas, notes: '' }
@@ -521,14 +521,11 @@ describe('ScenesView', () => {
     expect(pane(dialog, 'free')).toEqual(['Ada', 'Extra', 'Ch 3'])
     expect(pane(dialog, 'held')).toEqual([])
     expect(dialog.querySelector('.ensemble-none')?.textContent).toBe('Nothing in it yet.')
-    // A strip nobody is cast on cannot be in a group at all — an ensemble holds performers —
-    // so it stays where it is and says why rather than moving across and holding nothing.
-    const spare = [...dialog.querySelectorAll<HTMLButtonElement>('[data-pane="free"] .ensemble-item')]
-      .find(item => item.textContent === 'Ch 3')
-    expect(spare?.disabled).toBe(true)
-    expect(spare?.getAttribute('aria-pressed')).toBe('false')
-    // A disabled control is one the keyboard never reaches, so the reason is in its name.
-    expect(spare?.getAttribute('aria-label')).toContain('nobody is cast on this strip')
+    // Every strip can be moved across: a group holds strips, so a show with nobody cast on
+    // any of them is still a show whose strips can be grouped.
+    expect([...dialog.querySelectorAll<HTMLButtonElement>('[data-pane="free"] .ensemble-item')]
+      .map(item => [item.textContent, item.disabled]))
+      .toEqual([['Ada', false], ['Extra', false], ['Ch 3', false]])
     // Nothing is picked in either pane, so neither arrow has anything to move and there is
     // nothing to create with.
     expect([...dialog.querySelectorAll<HTMLButtonElement>('.ensemble-move')]
@@ -554,10 +551,9 @@ describe('ScenesView', () => {
     const ensembles = useStore.getState().showSettings.cast.ensembles
     expect(ensembles).toHaveLength(1)
     expect(ensembles[0].name).toBe('Chorus')
-    // It holds the performers standing on the strips it was given, and it is on the row it
-    // was opened from — one store write, so one undo takes the cast and the row back
-    // together.
-    expect(ensembles[0].members).toEqual(['p1', 'p2'])
+    // It holds the strips it was given, and it is on the row it was opened from — one store
+    // write, so one undo takes the cast and the row back together.
+    expect(ensembles[0].channelIds).toEqual(['ch-ada', 'ch-extra'])
     expect(scenes()[0].dcas).toEqual([placed('dca-1', 'ensemble', ensembles[0].id)])
     expect(blockName(cellFor('1', 'Opening'))).toBe('Chorus')
     expect(past()).toBe(before + 1)
@@ -594,7 +590,7 @@ describe('ScenesView', () => {
     await press(dialog, '.ensemble-create', 'Save')
 
     expect(useStore.getState().showSettings.cast.ensembles)
-      .toEqual([{ id: 'ens-chorus', name: 'Principals', members: ['p1'] }])
+      .toEqual([{ id: 'ens-chorus', name: 'Principals', channelIds: ['ch-ada'] }])
     expect(past()).toBe(before + 1)
     expect(scenes()[0].dcas).toEqual([placed('dca-1', 'ensemble', 'ens-chorus')])
     expect(blockName(cellFor('1', 'Opening'))).toBe('Principals')
@@ -775,7 +771,7 @@ describe('ScenesView', () => {
       cast: cast({
         channels: [channel('ch-loud', label)],
         performers: [performer('p9', 'Ruth', 'ch-loud')],
-        ensembles: [{ id: 'ens-loud', name: group, members: ['p9'] }]
+        ensembles: [{ id: 'ens-loud', name: group, channelIds: ['ch-loud'] }]
       })
     })
 

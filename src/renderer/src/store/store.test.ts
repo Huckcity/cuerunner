@@ -825,7 +825,7 @@ describe('store — undo/redo', () => {
   })
 
   it('undo after removing an ensemble brings it back with the rows that held it', () => {
-    const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', members: ['p1'] }
+    const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', channelIds: ['ch-1'] }
     const holding: MicScene = {
       ...NUMBER,
       dcas: [
@@ -1027,23 +1027,41 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.desk).toMatchObject({ host: '127.0.0.1', port: 8000 })
   })
 
-  it('makes no group out of strips nobody is standing on', () => {
-    // The builder names strips and the group holds performers, so a set of strips with
-    // nobody cast on them is a group that would open nothing. The write does not happen at
-    // all rather than landing as an empty ensemble applied to the row.
+  it('makes a group out of strips nobody is standing on, because a group holds strips', () => {
+    // A rack of playback channels has no cast at all, and grouping it is the whole point of
+    // a group being a set of faders rather than a set of people.
     const defaults = defaultShowSettings()
     useStore.setState({
       showSettings: {
         ...defaults,
         scenes: { ...defaults.scenes, list: [NUMBER] },
         cast: { ...castWith(), performers: [] }
-      },
+      }
+    })
+
+    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', null, 'Playback', ['ch-1'])
+
+    const settings = useStore.getState().showSettings
+    expect(settings.cast.ensembles).toEqual([
+      { id: settings.cast.ensembles[0].id, name: 'Playback', channelIds: ['ch-1'] }
+    ])
+    expect(settings.scenes.list[0].dcas).toEqual([
+      { dcaId: 'dca-1', kind: 'ensemble', memberId: settings.cast.ensembles[0].id }
+    ])
+  })
+
+  it('makes no group out of nothing at all', () => {
+    // An empty group is a row holding a block that stands for nothing, so the press that
+    // would make one writes nothing rather than landing as a shell.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, scenes: { ...defaults.scenes, list: [NUMBER] }, cast: castWith() },
       isDirty: false
     })
     const before = useStore.getState().showSettings
     const past = useStore.getState().past.length
 
-    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', null, 'Chorus', ['ch-1'])
+    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', null, 'Chorus', [])
 
     expect(useStore.getState().showSettings).toBe(before)
     expect(useStore.getState().past).toHaveLength(past)
@@ -1063,10 +1081,10 @@ describe('store — undo/redo', () => {
     const settings = useStore.getState().showSettings
     expect(settings.cast.ensembles).toHaveLength(1)
     expect(settings.cast.ensembles[0].name).toBe('Chorus')
-    // The group holds the performer standing on the strip the builder picked, and the row
-    // carries the group now rather than naming the strip by hand — the same strip rides, so
-    // a regrouping is not a re-routing.
-    expect(settings.cast.ensembles[0].members).toEqual(['p1'])
+    // The group holds the strip the builder picked, and the row carries the group now rather
+    // than naming the strip by hand — the same strip rides, so a regrouping is not a
+    // re-routing.
+    expect(settings.cast.ensembles[0].channelIds).toEqual(['ch-1'])
     expect(settings.scenes.list[0].dcas).toEqual([
       { dcaId: 'dca-1', kind: 'ensemble', memberId: settings.cast.ensembles[0].id }
     ])
@@ -1095,7 +1113,7 @@ describe('store — undo/redo', () => {
     // The builder hands over every keystroke, so a cleared field is a blank name — and a
     // block with no name draws nothing while the row still opens the group's mics. An edit
     // keeps the name it had; a new group takes the cast's own default.
-    const leads: Ensemble = { id: 'ens-1', name: 'Leads', members: ['p1'] }
+    const leads: Ensemble = { id: 'ens-1', name: 'Leads', channelIds: ['ch-1'] }
     const scene: MicScene = {
       id: 's1',
       name: 'Opening',
@@ -1116,39 +1134,11 @@ describe('store — undo/redo', () => {
     expect(useStore.getState().showSettings.cast.ensembles[0].name).toBe('Leads')
   })
 
-  it('keeps a member the builder cannot show, because the panes are strips', () => {
-    // A member whose mic stands on no strip is one the two strip panes cannot draw, and
-    // saving — even to rename the group — must not quietly take them out of it.
-    const UNPATCHED: Performer = {
-      id: 'p2',
-      name: 'Bea',
-      role: '',
-      notes: '',
-      channelId: null
-    }
-    const leads: Ensemble = { id: 'ens-1', name: 'Leads', members: ['p1', 'p2'] }
-    const defaults = defaultShowSettings()
-    useStore.setState({
-      showSettings: {
-        ...defaults,
-        cast: castWith({ performers: [ROUTED_PERFORMER, UNPATCHED], ensembles: [leads] }),
-        scenes: { ...defaults.scenes, list: [NUMBER] }
-      }
-    })
-
-    useStore.getState().saveEnsembleOnRow(NUMBER.id, 'dca-1', leads.id, 'Principals', ['ch-1'])
-
-    const settings = useStore.getState().showSettings
-    expect(settings.cast.ensembles).toEqual([
-      { id: 'ens-1', name: 'Principals', members: ['p1', 'p2'] }
-    ])
-  })
-
   it('edits a group in place, so every row that holds it carries the new membership', () => {
     // The group is the cast's, not the row's: a save from one scene's row renames and
     // refills the group itself, and a row of another scene that holds it carries what the
     // group now holds without being edited at all.
-    const leads: Ensemble = { id: 'ens-1', name: 'Leads', members: ['p1'] }
+    const leads: Ensemble = { id: 'ens-1', name: 'Leads', channelIds: ['ch-1'] }
     const BEA = { id: 'ch-2', name: 'Bea' }
     const BEA_PERFORMER: Performer = {
       id: 'p2',
@@ -1182,7 +1172,7 @@ describe('store — undo/redo', () => {
     useStore.getState().saveEnsembleOnRow(opening.id, 'dca-1', leads.id, 'Chorus', ['ch-2'])
 
     const settings = useStore.getState().showSettings
-    expect(settings.cast.ensembles).toEqual([{ id: 'ens-1', name: 'Chorus', members: ['p2'] }])
+    expect(settings.cast.ensembles).toEqual([{ id: 'ens-1', name: 'Chorus', channelIds: ['ch-2'] }])
     // The row the builder was opened from holds the group now…
     expect(settings.scenes.list[0].dcas).toEqual([
       { dcaId: 'dca-1', kind: 'ensemble', memberId: 'ens-1' }

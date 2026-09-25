@@ -153,6 +153,16 @@ const REFUSED: readonly Refused[] = [
     fact: 'settings have a field this version of WinsLab does not know (scenes.list.0.dcas.0.channels)'
   },
   {
+    what: 'an ensemble holding the performers a build before this one grouped',
+    show: show({
+      showSettings: {
+        ...defaultShowSettings(),
+        cast: { ...defaultCastSettings(), ensembles: [{ id: 'e-1', name: 'Chorus', members: ['p-1'] }] }
+      }
+    }),
+    fact: 'settings have a field this version of WinsLab does not know (cast.ensembles.0.members)'
+  },
+  {
     what: 'a fader carrying the name a build before this one wrote',
     show: show({
       showSettings: {

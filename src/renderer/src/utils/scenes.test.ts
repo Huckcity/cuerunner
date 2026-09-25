@@ -18,7 +18,6 @@ import {
   removeScene,
   rowChannels,
   rowEnsemble,
-  rowPerformers,
   sceneChanges,
   sceneChannelIds,
   sceneStep,
@@ -60,12 +59,12 @@ function cast(): CastSettings {
   return {
     channels: [channel('ch-1', 'Ruth'), channel('ch-2', 'Sancho'), channel('ch-3')],
     performers: [performer('p-1', 'ch-1'), performer('p-2', 'ch-2')],
-    ensembles: [{ id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }],
+    ensembles: [{ id: 'ens-1', name: 'Chorus', channelIds: ['ch-1', 'ch-2'] }],
     dcas: [dca('dca-1'), dca('dca-2'), dca('dca-3')]
   }
 }
 
-const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', members: ['p-1', 'p-2'] }
+const chorus: Ensemble = { id: 'ens-1', name: 'Chorus', channelIds: ['ch-1', 'ch-2'] }
 
 /** What a case puts on a row: a channel, by id. A row holds one thing. */
 function channelOn(channelId: string): RowMember {
@@ -205,7 +204,7 @@ describe('an ensemble applied to a row', () => {
     // member list: the chorus names p-2 first, and ch-1 is the first strip.
     const reversed: CastSettings = {
       ...cast(),
-      ensembles: [{ ...chorus, members: ['p-2', 'p-1'] }]
+      ensembles: [{ ...chorus, channelIds: ['ch-2', 'ch-1'] }]
     }
     const applied = placed(scenesOf(), chorusOn)
 
@@ -219,7 +218,7 @@ describe('an ensemble applied to a row', () => {
     const grown: CastSettings = {
       ...cast(),
       performers: [...cast().performers, performer('p-3', 'ch-3')],
-      ensembles: [{ ...chorus, members: ['p-1', 'p-2', 'p-3'] }]
+      ensembles: [{ ...chorus, channelIds: ['ch-1', 'ch-2', 'ch-3'] }]
     }
 
     expect(collected(applied, 'dca-1', grown)).toEqual(['ch-1', 'ch-2', 'ch-3'])
@@ -242,19 +241,6 @@ describe('an ensemble applied to a row', () => {
     expect(rowEnsemble(cast(), row(applied))).toEqual(chorus)
     expect(rowEnsemble(cast(), row(off))).toBeNull()
     expect(rowEnsemble(cast(), null)).toBeNull()
-  })
-})
-
-describe('the performers a set of strips holds', () => {
-  // What the builder's picks come to: it names strips and an ensemble holds performers, so
-  // the members are whoever is standing on the strips that were moved across.
-  it('is whoever is cast on them, and nobody for a strip nobody is on', () => {
-    expect(rowPerformers(cast(), ['ch-1', 'ch-2'])).toEqual(['p-1', 'p-2'])
-    // A strip nobody is patched to opens nothing, so it contributes nobody — which is what
-    // leaves the builder with nothing to make when those are the only strips picked.
-    expect(rowPerformers(cast(), ['ch-3'])).toEqual([])
-    expect(rowPerformers(cast(), ['ch-3', 'ch-2'])).toEqual(['p-2'])
-    expect(rowPerformers(cast(), [])).toEqual([])
   })
 })
 

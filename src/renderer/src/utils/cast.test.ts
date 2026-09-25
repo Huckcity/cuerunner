@@ -37,6 +37,11 @@ function empty(): CastSettings {
   return { channels: [], performers: [], ensembles: [], dcas: [] }
 }
 
+/** The same show with strips in it: a rack, which is a group's world with nobody cast. */
+function emptyWith(count: number): CastSettings {
+  return { ...empty(), channels: startingChannels().slice(0, count) }
+}
+
 /** Two faders and three strips: the smallest setup in which a strip can be patched to none. */
 function wired(): CastSettings {
   return {
@@ -121,14 +126,16 @@ describe('performers', () => {
     expect(updatePerformer(theirOwn, id, { name: 'Nell' }).channels[0].name).toBe('Spare 1')
   })
 
-  it('removes a performer from every ensemble as well as the cast list', () => {
+  it('removes a performer from the cast list and leaves the groups alone', () => {
+    // A group holds strips, and the strip is still there: whoever was standing on it has
+    // left the show, which is the plot's business, not the group's.
     const cast = addPerformer(addPerformer(empty(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
     const [ruth, sancho] = cast.performers
-    const grouped = addEnsemble(cast, 'Chorus', [ruth.id, sancho.id])
+    const grouped = addEnsemble(cast, 'Chorus', [ruth.channelId!, sancho.channelId!])
 
     const next = removePerformerFromCast(grouped, ruth.id)
     expect(next.performers.map(performer => performer.id)).toEqual([sancho.id])
-    expect(next.ensembles[0].members).toEqual([sancho.id])
+    expect(next.ensembles).toEqual(grouped.ensembles)
   })
 })
 
@@ -261,41 +268,66 @@ describe('channels', () => {
 })
 
 describe('ensembles', () => {
-  it('is created with whoever it is made from, and named if it was not', () => {
+  it('is created with the strips it is made from, and named if it was not', () => {
     const first = addEnsemble(empty())
     expect(first.ensembles[0].name).toBe('Ensemble 1')
-    expect(first.ensembles[0].members).toEqual([])
+    expect(first.ensembles[0].channelIds).toEqual([])
 
-    const second = addEnsemble(first, '  Chorus  ', ['p1', 'p2'])
-    expect(second.ensembles[1]).toMatchObject({ name: 'Chorus', members: ['p1', 'p2'] })
+    const second = addEnsemble(first, '  Chorus  ', ['ch-1', 'ch-2'])
+    expect(second.ensembles[1]).toMatchObject({ name: 'Chorus', channelIds: ['ch-1', 'ch-2'] })
   })
 
-  it('holds membership as a list, so a performer can be in two of them', () => {
-    const cast = addPerformer(addPerformer(empty(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
-    const [ruth, sancho] = cast.performers
-    const two = addEnsemble(addEnsemble(cast, 'Chorus', [ruth.id]), 'Band', [ruth.id, sancho.id])
+  it('needs no cast at all: a rack of strips is a group too', () => {
+    // The whole point of holding strips rather than the people on them: a show with nobody
+    // cast still has faders, and a group of them is built the same way.
+    const grouped = addEnsemble(empty(), 'Playback', ['ch-1', 'ch-2'])
+    expect(grouped.performers).toEqual([])
+    expect(grouped.ensembles[0].channelIds).toEqual(['ch-1', 'ch-2'])
+  })
 
-    expect(two.ensembles[0].members).toEqual([ruth.id])
-    expect(two.ensembles[1].members).toEqual([ruth.id, sancho.id])
+  it('holds strips as a list, so one can be in two of them', () => {
+    const grouped = empty()
+    const two = addEnsemble(addEnsemble(grouped, 'Chorus', ['ch-1']), 'Band', ['ch-1', 'ch-2'])
+
+    expect(two.ensembles[0].channelIds).toEqual(['ch-1'])
+    expect(two.ensembles[1].channelIds).toEqual(['ch-1', 'ch-2'])
   })
 
   it('removes the ensemble and nothing else', () => {
-    const cast = addPerformer(empty(), 'Ruth', 'Lead')
-    const grouped = addEnsemble(cast, 'Chorus', [cast.performers[0].id])
-    const next = removeEnsemble(grouped, grouped.ensembles[0].id)
+    const cast = addEnsemble(empty(), 'Chorus', ['ch-1'])
+    const next = removeEnsemble(cast, cast.ensembles[0].id)
     expect(next.ensembles).toEqual([])
-    expect(next.performers).toEqual(cast.performers)
+    expect(next.channels).toEqual(cast.channels)
   })
 
-  it('renames and re-members in one edit', () => {
-    const cast = addPerformer(addPerformer(empty(), 'Ruth', 'Lead'), 'Sancho', 'Comic')
-    const [ruth, sancho] = cast.performers
-    const grouped = addEnsemble(cast, 'Chorus', [ruth.id])
+  it('renames and refills in one edit', () => {
+    const grouped = addEnsemble(empty(), 'Chorus', ['ch-1'])
     const id = grouped.ensembles[0].id
 
-    const next = updateEnsemble(grouped, id, { name: 'Band', members: [sancho.id] })
+    const next = updateEnsemble(grouped, id, { name: 'Band', channelIds: ['ch-2'] })
 
-    expect(next.ensembles[0]).toMatchObject({ id, name: 'Band', members: [sancho.id] })
+    expect(next.ensembles[0]).toMatchObject({ id, name: 'Band', channelIds: ['ch-2'] })
+  })
+
+  it('takes a strip out of every group that held it, when it leaves the console', () => {
+    // A group is a set of faders: one that has left cannot ride a row, and a group left
+    // holding nothing stays named for the builder to fill again.
+    const cast = emptyWith(3)
+    const [first, second, third] = cast.channels
+    const grouped = addEnsemble(addEnsemble(cast, 'Chorus', [first.id, second.id]), 'Band', [second.id])
+
+    const next = removeChannel(grouped, second.id)
+
+    expect(next.channels.map(channel => channel.id)).toEqual([first.id, third.id])
+    expect(next.ensembles.map(ensemble => ensemble.channelIds)).toEqual([[first.id], []])
+  })
+
+  it('does the same for the strips a count takes off the end', () => {
+    const cast = emptyWith(3)
+    const [first, second] = cast.channels
+    const grouped = addEnsemble(cast, 'Chorus', [first.id, second.id])
+
+    expect(setChannelCount(grouped, 1).ensembles[0].channelIds).toEqual([first.id])
   })
 })
 

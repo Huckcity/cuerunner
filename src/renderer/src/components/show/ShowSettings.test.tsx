@@ -24,7 +24,7 @@ function performer(overrides: Partial<Performer> = {}): Performer {
 }
 
 function ensemble(overrides: Partial<Ensemble> = {}): Ensemble {
-  return { id: 'ens-1', name: 'Ensemble', members: [], ...overrides }
+  return { id: 'ens-1', name: 'Ensemble', channelIds: [], ...overrides }
 }
 
 function dca(overrides: Partial<Dca> = {}): Dca {
@@ -239,12 +239,12 @@ describe('ShowSettings', () => {
       expect(cast().performers[0].channelId).toBe('ch-1')
     })
 
-    it('removes a performer: releases their pack, drops them from the cast and its ensembles, and leaves the scenes alone', async () => {
+    it('removes a performer: releases their pack, drops them from the cast, and leaves the strips and the scenes alone', async () => {
       await show({
         tab: 'cast',
         cast: {
           performers: [performer(), performer({ id: 'p-2', name: 'Sancho' })],
-          ensembles: [ensemble({ members: ['p-1'] })]
+          ensembles: [ensemble({ channelIds: ['ch-1'] })]
         },
         scenes: [scene('s-1', 'Opening', [
           { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' },
@@ -258,8 +258,10 @@ describe('ShowSettings', () => {
       })
 
       expect(cast().performers.map(entry => entry.id)).toEqual(['p-2'])
+      // The group holds strips, and the strip they were standing on is still there: the
+      // person leaving is the plot's business and the group's membership is not.
       expect(cast().ensembles).toHaveLength(1)
-      expect(cast().ensembles[0].members).toEqual([])
+      expect(cast().ensembles[0].channelIds).toEqual(['ch-1'])
       expect(useStore.getState().showSettings.rf.plot.packs[0].performerId).toBeNull()
       expect(useStore.getState().showSettings.rf.swaps).toHaveLength(1)
       expect(useStore.getState().log[0]?.message).toBe('Swap: Pack 1 Aldonza → unassigned')
@@ -278,7 +280,7 @@ describe('ShowSettings', () => {
     // earlier build keeps them in the cast, and this tab shows nothing of them.
     await show({
       tab: 'cast',
-      cast: { performers: [performer()], ensembles: [ensemble({ members: ['p-1'] })] }
+      cast: { performers: [performer()], ensembles: [ensemble({ channelIds: ['ch-1'] })] }
     })
 
     expect(container.querySelectorAll('.performer-row')).toHaveLength(1)

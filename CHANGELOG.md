@@ -8,7 +8,7 @@
 * **scenes:** a scene column is a fixed width and the grid scrolls inside the view rather than stretching two scenes across the window
 * **scenes:** a row of a scene holds exactly one thing — a strip of the console, or an ensemble over several of them — so a cell is that one block and nothing else: an empty row is a blank box, a row that holds something is its name across the whole cell, and pressing either is what changes it. The picker behind it filters the strips and the groups as it is typed, and the builder at `Ensemble…` names a group and fills it from the strips moved across its two lists, putting it on that row in one undo
 * **scenes:** the columns are narrower and measured rather than guessed — 176px of scene, an eighteen-character scene name in the header's own font, and 88px of the all-closed column
-* **scenes:** the builder is the one place a group is named and filled — opened from a row holding a group it edits that group, `Save` changing it on every row that holds it, and `Delete` removing it
+* **scenes:** the builder is the one place a group is named and filled — opened from a row holding a group it edits that group, `Save` changing it on every row that holds it, and `Delete` removing it; a group holds **strips**, so any strip of the show can be grouped whether or not anybody is cast on it
 * **scenes:** an ensemble's block says which mics it opens in its title, so a row reads as what is open without becoming a list of a dozen names
 * **scenes:** a strip is named the way the operator knows it — the name the strip was given, or the performer whose mic is on it, and its number only while it has neither — in the blocks, in the picker and in the builder; the console's own `Ch 3 · Ruth` stays where the desk is spoken about, in the run log, the change list and the scene inspector
 * **desk:** a fader is its number: the fourth fader of the show is its fourth fader in every scene, and the Scenes grid's rows, the run log and the fader list in Show Settings all name it that way
@@ -16,6 +16,7 @@
 ### Removals
 
 * **scenes:** the `Place channel` and `Apply ensemble` selects and the `Create ensemble` press are deleted rather than left beside the box: one blank box opens everything a row can hold, and the group a row folded into itself one press is built in the builder now
+* **cast:** an ensemble no longer holds performers: it holds the strips it opens (`members` became `channelIds`), so a show that has never cast anybody still has groups, and a strip that leaves the console leaves every group it was in. A show saved with the old field is refused by name, as every retired shape is
 * **scenes:** a member can no longer be left off an ensemble on one row — a row holding a group opens all of it, and the amber `partial` state and the per-member exclusion list go with the presses that made them — and a row holding several channels is no longer a shape a scene can carry: the file's placement now names one member
 * **show:** an ensemble is no longer a section of Show Settings → Cast: the Cast tab is the people and nothing else, and the groups they are opened in are built from the rows they ride
 * **show:** a DCA has no operator-written name: a fader is a number, and a show saved with a fader label is refused when it is opened rather than converted

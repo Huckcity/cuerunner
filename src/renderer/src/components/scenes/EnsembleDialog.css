@@ -131,11 +131,6 @@
   color: var(--fg-primary);
 }
 
-.ensemble-item:disabled {
-  color: var(--fg-disabled);
-  cursor: default;
-}
-
 .ensemble-none {
   padding: 3px var(--space-2);
   color: var(--fg-subtle);

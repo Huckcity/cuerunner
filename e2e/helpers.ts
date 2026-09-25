@@ -433,7 +433,10 @@ export async function buildEnsembleFromBox(
   await expect(dialog).toBeVisible()
   await dialog.locator('.ensemble-name-field').fill(name)
   for (const strip of strips) {
-    await dialog.locator('[data-pane="free"] .ensemble-item').filter({ hasText: strip }).click()
+    // Exactly, not by substring: "Ch 1" is a prefix of "Ch 10".
+    await dialog.locator('[data-pane="free"]')
+      .getByRole('button', { name: strip, exact: true })
+      .click()
     await dialog.locator('.ensemble-move').first().click()
   }
   await dialog.getByRole('button', { name: 'Create and apply' }).click()
