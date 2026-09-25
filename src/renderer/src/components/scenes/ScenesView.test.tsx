@@ -949,6 +949,24 @@ describe('ScenesView', () => {
     expect(useStore.getState().scenesEditing).toBe(false)
   })
 
+  it('writes a track list a grid can read, with no scenes in it as well as with some', async () => {
+    // `repeat(0, …)` is not a valid track list: the declaration is dropped, the grid falls
+    // back to the browser's own two auto columns, and a show with no scenes draws its Out
+    // column across half the window with the faders pushed off to its right.
+    const grid = (): string =>
+      container.querySelector<HTMLElement>('.matrix-grid')!.style.gridTemplateColumns
+
+    await show({ scenes: [] })
+    expect(grid()).not.toContain('repeat(0')
+    expect(grid().split(' ')).toHaveLength(3)
+    expect(grid().startsWith('var(--matrix-mic-width) var(--matrix-all-closed-width)')).toBe(true)
+    expect(grid().endsWith('var(--matrix-add-width)')).toBe(true)
+
+    await show({ scenes: [OPENING, INTERVAL] })
+    expect(grid().split(' ')).toHaveLength(5)
+    expect(grid().match(/var\(--matrix-scene-width\)/g)).toHaveLength(2)
+  })
+
   it('marks the column the desk is in, and the cells say what is still to send', async () => {
     await show({
       scenes: [OPENING, INTERVAL],

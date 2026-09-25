@@ -747,6 +747,47 @@ test('a show with nobody cast can be grouped, because a group holds strips', asy
   }
 })
 
+test('deleting every scene leaves the grid in order', async () => {
+  test.setTimeout(60_000)
+  // A show with no scenes is a grid like any other: the faders down the side, the Out column
+  // beside them, and the plus after the last scene — of which there are none. It used to fall
+  // back to two auto tracks, which drew the Out column across half the window with the faders
+  // pushed off to its right.
+  await openScenesView(page)
+  await editScenes(page)
+  await page.locator('.matrix-add-scene').click()
+  await page.locator('.matrix-add-scene').click()
+  await expect(page.locator('.matrix-scene[data-scene-id]')).toHaveCount(2)
+
+  await page.locator('.matrix-scene-remove').first().click()
+  await page.locator('.matrix-scene-remove').first().click()
+  await expect(page.locator('.matrix-scene[data-scene-id]')).toHaveCount(0)
+
+  const laid = await page.evaluate(() => {
+    const box = (selector: string) => {
+      const rect = document.querySelector(selector)!.getBoundingClientRect()
+      return { x: Math.round(rect.x), width: Math.round(rect.width) }
+    }
+    return {
+      tracks: getComputedStyle(document.querySelector('.matrix-grid') as HTMLElement)
+        .gridTemplateColumns,
+      corner: box('.matrix-corner'),
+      out: box('.matrix-scene[data-all-closed]'),
+      mic: box('.matrix-mic'),
+      plus: box('.matrix-add-scene')
+    }
+  })
+
+  // Three tracks, each the width the stylesheet gives it: the corner and the fader column
+  // start at the left edge, the Out column is beside them, and the plus is one column on.
+  expect(laid.tracks).toContain('44px')
+  expect(laid.corner.x).toBe(0)
+  expect(laid.mic.x).toBe(0)
+  expect(laid.out.x).toBe(laid.corner.width)
+  expect(laid.plus.x).toBeGreaterThan(laid.out.x)
+  await expect(page.locator('.matrix-fader').first()).toHaveText('1')
+})
+
 test('an opened show always starts out being run, whatever it was left as', async () => {
   test.setTimeout(60_000)
   await buildDeskShow(page, freePort())

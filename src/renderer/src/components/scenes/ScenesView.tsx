@@ -579,13 +579,18 @@ export function ScenesView() {
               // and a show of twenty: what the window has over the tracks stays to the right
               // of the last column rather than widening the columns themselves, and what
               // does not fit scrolls inside the view.
-              gridTemplateColumns:
-                `var(--matrix-mic-width) var(--matrix-all-closed-width) ` +
-                `repeat(${scenes.list.length}, var(--matrix-scene-width)) ` +
-                // The plus is a track of its own after the last scene, so a show with twenty
-                // scenes has it twenty scenes to the right rather than somewhere the header
-                // would have had to keep in step with the grid.
-                `var(--matrix-add-width)`
+              // A track per scene, written out rather than repeated: `repeat(0, …)` is not a
+              // valid track list, so a grid with no scenes in it would fall back to the
+              // browser's own two auto columns — which is the Out column filling half the
+              // window with the faders pushed off to its right. The plus is a track of its
+              // own after the last scene, so a show with twenty scenes has it twenty scenes
+              // to the right rather than somewhere that had to be kept in step with the grid.
+              gridTemplateColumns: [
+                'var(--matrix-mic-width)',
+                'var(--matrix-all-closed-width)',
+                ...scenes.list.map(() => 'var(--matrix-scene-width)'),
+                'var(--matrix-add-width)'
+              ].join(' ')
             } as CSSProperties}
           >
             {/* The lock the show is held with, in the corner the grid leaves empty: shut
