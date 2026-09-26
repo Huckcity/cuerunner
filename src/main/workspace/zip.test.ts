@@ -306,9 +306,14 @@ describe('where an entry goes', () => {
   it('is inside the folder it was pointed at', () => {
     // A platform's own separator, because that is what the destination is on: on Windows the
     // answer is a `C:\` path, and the guard's job is that the entry lands *inside* the folder
-    // it was pointed at, which is what the two refusals below are about.
-    expect(entryDestination('/shows/hamlet', 'media/walk-in.wav'))
-      .toBe(resolve('/shows/hamlet', 'media/walk-in.wav'))
+    // it was pointed at, which is what the two refusals below are about. The expectation is
+    // the literal path — one built from `resolve` would be the expression under test read
+    // back — so Windows keeps that expression and the other lanes hold the value itself.
+    expect(entryDestination('/shows/hamlet', 'media/walk-in.wav')).toBe(
+      process.platform === 'win32'
+        ? resolve('/shows/hamlet', 'media/walk-in.wav')
+        : '/shows/hamlet/media/walk-in.wav'
+    )
     expect(() => entryDestination('/shows/hamlet', '../walk-in.wav')).toThrow()
     expect(() => entryDestination('/shows/hamlet', '/etc/passwd')).toThrow()
   })

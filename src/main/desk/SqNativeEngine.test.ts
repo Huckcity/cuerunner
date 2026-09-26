@@ -16,12 +16,19 @@ import { RETRY_MS, SqNativeEngine, type SqSessionCause } from './SqNativeEngine'
 import { GOODBYE, NATIVE_KEEPALIVE_PORT, NATIVE_LEAVE_PORT, NATIVE_TCP_PORT, sessionFrames } from './frames'
 import { drainMainErrors } from '../errors'
 
-const HOST = '127.0.0.1'
 /**
- * The same desk under another name, for the case where the show moves: `open()` compares
- * what the show typed, and the whole of 127/8 is this machine.
+ * The desk's name here, and the name the moving case dials it by after the show moves: two
+ * loopback addresses that no other lane binds — the unit, integration and e2e lanes each keep
+ * to aliases of their own — so this file's three ports are its own sockets, and the session
+ * bytes a case reads are its own client's.
+ *
+ * Linux and Windows carry the whole 127/8; macOS configures 127.0.0.1 alone, and a second
+ * address there fails the bind with `EADDRNOTAVAIL`. The aliases are therefore chosen per
+ * platform, and only the moving case — the one that needs two — is darwin-skipped, which is
+ * the platform where the two names would collapse into one.
  */
-const MOVED = '127.0.0.2'
+const ALIASES = process.platform === 'darwin' ? ['127.0.0.1'] : ['127.0.0.3', '127.0.0.4']
+const [HOST, MOVED = HOST] = ALIASES
 
 const hex = (bytes: readonly number[] | Uint8Array): string => Buffer.from(bytes).toString('hex')
 
@@ -85,8 +92,10 @@ async function startDesk(options: DeskOptions = {}): Promise<Desk> {
   const controls: Socket[] = []
   const leaves: Socket[] = []
 
-  // The desk's control service, on the port §6 measured.
-  const control: Server = createServer(socket => {
+  // The desk's control service, on the port §6 measured, under both of the names a case
+  // dials it by: one server holds one address, so each of this machine's two names gets its
+  // own listener onto the same desk.
+  const onControl = (socket: Socket): void => {
     controls.push(socket)
     let scanned = 0
     socket.on('data', chunk => {
@@ -105,35 +114,42 @@ async function startDesk(options: DeskOptions = {}): Promise<Desk> {
     socket.on('error', () => {
       // A connection this test reset is a connection it already knows about.
     })
-  })
+  }
   // The desk's own door, on the range's leave port. It answers nothing; it listens, so that
   // a client that dials it here can hold the channel its goodbye goes out on.
-  const leave: Server = createServer(socket => {
+  const onLeave = (socket: Socket): void => {
     leaves.push(socket)
     socket.on('data', chunk => leaveReceived.push(...chunk))
     socket.on('error', () => {
       // Same: a reset this test asked for.
     })
-  })
-  const datagram: DatagramSocket = createSocket('udp4')
+  }
+  const names = ALIASES
+  const control: Server[] = names.map(() => createServer(onControl))
+  const leave: Server[] = names.map(() => createServer(onLeave))
+  const keepalives: DatagramSocket[] = names.map(() => createSocket('udp4'))
 
-  // Bound on every interface rather than on one address, so the same desk is reachable under
-  // the two names the moving case dials it by.
-  const listening = (server: Server, port: number): Promise<void> => {
+  // Bound on this machine's two names rather than on every interface: the desk's ports are
+  // the same numbers every lane uses, and a wildcard bind would take them from another
+  // lane's app — and read that app's client as this file's own desk.
+  const listening = (server: Server, port: number, address: string): Promise<void> => {
     const bound = Promise.withResolvers<void>()
     server.once('error', bound.reject)
-    server.listen(port, '0.0.0.0', () => bound.resolve())
+    server.listen(port, address, () => bound.resolve())
     return bound.promise
   }
-  const boundDatagram = Promise.withResolvers<void>()
-  datagram.on('message', message => datagrams.push([...message]))
-  datagram.once('error', boundDatagram.reject)
-  datagram.bind(NATIVE_KEEPALIVE_PORT, '0.0.0.0', () => boundDatagram.resolve())
+  const boundKeepalive = (socket: DatagramSocket, address: string): Promise<void> => {
+    const bound = Promise.withResolvers<void>()
+    socket.on('message', message => datagrams.push([...message]))
+    socket.once('error', bound.reject)
+    socket.bind(NATIVE_KEEPALIVE_PORT, address, () => bound.resolve())
+    return bound.promise
+  }
 
   await Promise.all([
-    listening(control, NATIVE_TCP_PORT),
-    listening(leave, NATIVE_LEAVE_PORT),
-    boundDatagram.promise
+    ...names.map((name, at) => listening(control[at], NATIVE_TCP_PORT, name)),
+    ...names.map((name, at) => listening(leave[at], NATIVE_LEAVE_PORT, name)),
+    ...names.map((name, at) => boundKeepalive(keepalives[at], name))
   ])
 
   return {
@@ -149,12 +165,15 @@ async function startDesk(options: DeskOptions = {}): Promise<Desk> {
       for (const socket of controls.splice(0)) socket.resetAndDestroy()
     },
     close: async () => {
-      const closed = Promise.withResolvers<void>()
       for (const socket of [...controls, ...leaves]) socket.destroy()
-      datagram.close()
-      control.close()
-      leave.close(() => closed.resolve())
-      await closed.promise
+      for (const socket of keepalives) socket.close()
+      await Promise.all(
+        [...control, ...leave].map(server => {
+          const done = Promise.withResolvers<void>()
+          server.close(() => done.resolve())
+          return done.promise
+        })
+      )
     }
   }
 }
@@ -712,8 +731,8 @@ describe('the faults', () => {
 
       // The session is released either way: the connection the frames arrived on is gone,
       // by the desk's own reading of it. That connection is the newest one it accepted —
-      // the engine holds one at a time — so this asks about the session's own rather than
-      // counting the desk's connections, which a retried dial would be free to move.
+      // the engine holds one at a time — so the wait asks about the session's own, not
+      // about a count a retried dial would be free to move.
       const connection = underTest.controls.at(-1)
       if (connection === undefined) throw new Error('the desk never accepted the session’s connection')
       await until(
@@ -724,7 +743,8 @@ describe('the faults', () => {
           `${underTest.received.length} bytes read, statuses ${JSON.stringify(statuses)})`
       )
 
-      expect(underTest.controls, 'PROBE: the desk took more than one connection').toHaveLength(1)
+      // And it stayed the only one: this release left nothing wanting, so no retry has dialled.
+      expect(underTest.controls, 'the desk took a second connection after the session was released').toHaveLength(1)
 
       // A cadence that fires after the session was released: a write on a socket that is
       // gone is swallowed, not a throw out of a timer into the main process.

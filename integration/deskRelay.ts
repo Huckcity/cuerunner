@@ -105,9 +105,22 @@ export async function startDeskRelay(options: DeskRelayOptions): Promise<DeskRel
   upstream.on('close', () => deskGone('the desk closed the connection'))
   upstream.on('error', (error: Error) => deskGone(error.message))
 
-  const address = await new Promise<AddressInfo>((resolve) =>
-    server.listen(port, host, () => resolve(server.address() as AddressInfo))
-  )
+  // A named port is a caller's own decision (`--listen host:port`), so a port somebody else
+  // holds is a sentence naming it rather than an `error` event with nobody on it, which takes
+  // the worker down: the peers' `listen`/`bind` say the same about their own sockets.
+  const listening = Promise.withResolvers<AddressInfo>()
+  const failed = (error: Error): void => {
+    listening.reject(new Error(`cannot listen on ${host}:${port}: ${error.message}`))
+  }
+  server.once('error', failed)
+  server.listen(port, host, () => {
+    // The rejection handler goes and a listener stays: `listen`'s callback is not the last
+    // word on the socket, and an error after it would be the same unhandled event.
+    server.off('error', failed)
+    server.on('error', () => {})
+    listening.resolve(server.address() as AddressInfo)
+  })
+  const address = await listening.promise
 
   return {
     host,

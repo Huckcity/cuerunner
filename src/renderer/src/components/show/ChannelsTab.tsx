@@ -106,9 +106,13 @@ function deskPreview(desk: DeskSettings, channels: number, dcas: number): string
   // The set, as the operator counts it: the strips a recall writes, and nothing else.
   const set = channels === 1 ? '1 channel' : `${channels} channels`
   const mutes = channels === 1 ? `1 channel mute` : `${channels} channel mutes`
-  const last = Math.max(1, channels)
   if (desk.kind === 'osc') {
-    return `Sends ${dcaAddress(desk.address, 1)} … ${dcaAddress(desk.address, last)} to ${desk.host}:${desk.port}, with 1 to open and 0 to close — a recall writes ${mutes} there and takes no assignment`
+    // A show with no strips sends nothing: a recall walks the show's own channels, so the
+    // last strip a range would name does not exist and is not promised.
+    if (channels === 0) {
+      return `Sends nothing to ${desk.host}:${desk.port} — the show has no channels`
+    }
+    return `Sends ${dcaAddress(desk.address, 1)} … ${dcaAddress(desk.address, channels)} to ${desk.host}:${desk.port}, with 1 to open and 0 to close — a recall writes ${mutes} there and takes no assignment`
   }
   const where = desk.kind === 'midi-tcp' ? `${desk.host}:${desk.tcpPort}` : `"${desk.midiPort}"`
   // A desk with fewer faders than the show drives is worth saying here, before the night:
@@ -138,7 +142,9 @@ function deskPreview(desk: DeskSettings, channels: number, dcas: number): string
   if (desk.profile === 'avantis') {
     return `Sends an Avantis’s channel mutes — note-on, 7F on and 3F off, on channel ${desk.midiChannel} — to ${where}, and its assignment as NRPN 40 on the same channel — a recall writes ${set} and nothing else${channelsBeyond}${beyond}`
   }
-  return `Sends note 1 … ${last} to ${where}, on and off — a recall writes ${mutes} and takes no assignment`
+  return channels === 0
+    ? `Sends nothing to ${where} — the show has no channels`
+    : `Sends note 1 … ${channels} to ${where}, on and off — a recall writes ${mutes} and takes no assignment`
 }
 
 /**
@@ -265,7 +271,7 @@ export function ChannelsTab() {
                 value={desk.address}
                 placeholder="/dca/{n}/on"
                 aria-label="Desk address"
-                title="The address a DCA is sent to. {n} is its number."
+                title="The address a channel mute is sent to. {n} is the channel's number."
                 onValue={address => updateDeskSettings({ address })}
               />
             </>
@@ -534,8 +540,11 @@ export function ChannelsTab() {
             // field refuses one that would address something else on the desk.
             const range = dcaValueRange(desk.profile)
             // The number its place derives, which is what the field says until it is typed
-            // in: empty means derived, so the placeholder carries it.
+            // in: empty means derived, so the placeholder carries it. A fader past the
+            // profile's own list has no such number — every write for it is refused — so
+            // the field shows nothing rather than one nothing would send.
             const derived = dcaValue(index, desk.profile)
+            const sent = derived >= range.min && derived <= range.max
             return (
               <div className="dca-row" key={dca.id}>
                 <div className="dca-fields">
@@ -551,9 +560,11 @@ export function ChannelsTab() {
                       value={dca.deskNumber}
                       min={range.min}
                       max={range.max}
-                      placeholder={String(derived)}
+                      placeholder={sent ? String(derived) : ''}
                       aria-label={`DCA ${dcaNumber(index)} number`}
-                      title={`Sent instead of the number its place makes — ${derived} for DCA ${dcaNumber(index)}. Clear it to go back.`}
+                      title={sent
+                        ? `Sent instead of the number its place makes — ${derived} for DCA ${dcaNumber(index)}. Clear it to go back.`
+                        : 'Past the desk’s own list — nothing is sent for this fader.'}
                       onValue={deskNumber => apply(updateDca(cast, dca.id, {
                         deskNumber: deskNumber === derived ? null : deskNumber
                       }))}

@@ -131,18 +131,18 @@ export interface Workspace {
  * Whether a document an operator picked is a show at all: it carries a cue list, and the
  * cue list is a list.
  *
- * The three load funnels that hand a parsed document to `migrateWorkspace` are the callers —
- * a `.cuerunner`, a bundle's show entry, and the app's own recovery snapshot — and each has
- * the bytes parsed by the time it can ask. The funnel is called with documents that were
- * not read this way too (`openDemoWorkspace`, the save's `historyForSave` and
- * `compareWithFile` all parse a value they built or were handed), and those callers are not
+ * The four load funnels that ask this before they hand a document to `migrateWorkspace` are
+ * the plain `.cuerunner` read, a bundle's show entry, the app's own recovery snapshot and
+ * the demo the app ships, and each has the bytes parsed by the time it can ask. The funnel
+ * is called with documents that were not read this way too (the save's `historyForSave` and
+ * `compareWithFile` parse a value they built or were handed), and those callers are not
  * this check's business.
  *
- * What the funnel does with a document that is not a show is dereference the cue list
- * first — `workspace.cues.find` — and throw V8's own text about it: `Cannot read properties
- * of undefined (reading 'find')` where the key is absent, `… is not a function` where it is
- * there and holds something that is not a list. Neither names the file; a refusal written
- * here does.
+ * What the funnel does with a document that is not a show is iterate the cue list first —
+ * `refuseForeignCues`'s `for (const cue of cues)` — and throw V8's own text about it:
+ * `undefined is not iterable` where the key is absent, `… is not iterable` where it is
+ * there and holds a value that cannot be iterated. Neither names the file; a refusal
+ * written here does.
  *
  * The check is the cue list alone. It is the key every reader of a workspace walks first,
  * so a document without one is not a show whichever of its other keys happen to be there,

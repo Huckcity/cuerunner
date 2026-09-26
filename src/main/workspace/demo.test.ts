@@ -206,6 +206,18 @@ describe('the bundled demo workspace', () => {
     )
   })
 
+  it('refuses a demo file that is not JSON, naming the file', async () => {
+    // The other half of the same guard: bytes that will not parse never reach the shape
+    // check, and with the parse open the window gets V8's own text instead of the refusal
+    // the channel declares.
+    const truncated = join(workDir, 'truncated.cuerunner')
+    await writeFile(truncated, '{"version":1,"cues":[')
+
+    await expect(openDemoWorkspace(truncated)).rejects.toThrow(
+      `that file is not a show — ${truncated} is not JSON`
+    )
+  })
+
   it('carries the cue fields this build writes, with the legacy routing gone', async () => {
     const workspace = loadDemo(await readDemo())
 

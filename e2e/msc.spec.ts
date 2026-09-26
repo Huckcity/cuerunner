@@ -27,6 +27,13 @@ let root: string
 
 /** The desk's own socket: the port an SQ and an Avantis serve MIDI over TCP on. */
 const DESK_PORT = 51325
+/**
+ * Where this lane's desk is: a loopback address of its own rather than 127.0.0.1. The desk's
+ * ports are the machine's — an SQ show dials 51326 and 51321 whatever it is pointed at — and
+ * the unit job holds 127.0.0.3 and 127.0.0.4, so an address shared with another lane is a show
+ * dialling whatever that lane has there.
+ */
+const DESK_HOST = '127.0.0.8'
 /** The cue the show names on the desk's list — the one it sends to, and the one it hears. */
 const CUE = '12'
 
@@ -82,7 +89,7 @@ function writeTriggerShow(): string {
         profile: 'sq',
         midiPort: '',
         midiChannel: 1,
-        host: '127.0.0.1',
+        host: DESK_HOST,
         port: 8000,
         tcpPort: DESK_PORT,
         address: '/dca/{n}/on'
@@ -130,7 +137,7 @@ function writeTriggerShow(): string {
             // The desk's own socket, reported the way the desk service names it.
             id: 't-msc',
             kind: 'msc',
-            device: `127.0.0.1:${DESK_PORT}`,
+            device: `${DESK_HOST}:${DESK_PORT}`,
             deviceId: 127,
             format: 'all',
             command: 'go',
@@ -260,5 +267,5 @@ test('a show file’s own Show Control trigger reads back in the Triggers tab', 
   // What the trigger reads as: the command it answers, the cue it names, and the address
   // it arrived from — the desk's own socket, as the desk service names it.
   await expect(page.locator('.trigger-row[data-kind="msc"] .trigger-text'))
-    .toHaveText(`Show Control Go cue ${CUE} from "127.0.0.1:${DESK_PORT}"`)
+    .toHaveText(`Show Control Go cue ${CUE} from "${DESK_HOST}:${DESK_PORT}"`)
 })

@@ -158,6 +158,59 @@ test('a show with many scenes still fits the window', async () => {
   await expect(page.locator('.matrix-scene').last()).toBeInViewport()
 })
 
+test('the picker stays over its own cell while the grid is scrolled', async () => {
+  test.setTimeout(60_000)
+
+  await buildDeskShow(page, freePort())
+  // A show wider than the window, so the grid has somewhere to scroll: the menu is drawn in
+  // a portal at the box's own corner, and a menu left where it was measured would hang over
+  // whichever cell had moved into its place while its filter and its picks edited this one.
+  for (let i = 0; i < 12; i++) await page.locator('.matrix-add-scene').click()
+  const scroll = page.locator('.matrix-scroll')
+  await scroll.evaluate(el => { el.scrollLeft = 0 })
+
+  // A cell with columns either side of it, so the scroll below moves it a column rather
+  // than running it off the edge — a menu goes when the row it belongs to leaves the grid —
+  // and one with room to its right, because a menu wider than that room is held inside the
+  // grid's own clip and its corner then says nothing about what it hangs from.
+  const cell = page.locator('.matrix-row').first().locator('.matrix-cell').nth(2)
+  const box = cell.locator('.matrix-cell-add, .matrix-block-name').first()
+  await box.click()
+  const picker = page.locator('.scene-picker')
+  await expect(picker).toBeVisible()
+
+  // What the rectangles say: the menu is drawn at the corner of the box the press was made
+  // on — that element, inside the cell, is the anchor — and it covers the cell it belongs to,
+  // which is what makes the list under it the list for this row. `gap` is the distance
+  // between the two, which is the number the scroll below must not change.
+  const anchored = async (): Promise<{ left: number; gap: number; overlaps: boolean }> => {
+    const menu = (await picker.boundingBox())!
+    const anchor = (await box.boundingBox())!
+    const around = (await cell.boundingBox())!
+    return {
+      left: Math.round(menu.x),
+      gap: Math.round(menu.x - anchor.x),
+      overlaps: menu.x < around.x + around.width && menu.x + menu.width > around.x &&
+        menu.y < around.y + around.height && menu.y + menu.height > around.y
+    }
+  }
+  const before = await anchored()
+  expect(before.overlaps).toBe(true)
+
+  // The operator scrolls the grid under the menu. The menu follows the row it belongs to —
+  // the same distance from the box it hangs from — waited for rather than read once: the
+  // re-measure is a render behind the scroll.
+  await scroll.evaluate(el => { el.scrollLeft = 176 })
+  await expect.poll(async () => (await anchored()).overlaps).toBe(true)
+  await expect.poll(async () => Math.abs((await anchored()).gap - before.gap)).toBeLessThan(4)
+  const after = await anchored()
+
+  // Still over its own cell, at the same distance from its own box — and moved with the grid
+  // rather than left behind over the cell that took its place, which is what a menu that
+  // kept the corner it was measured at would do.
+  expect(after.left).toBeLessThan(before.left)
+})
+
 test('a scene column is the width a scene is, whatever the window', async () => {
   test.setTimeout(60_000)
 

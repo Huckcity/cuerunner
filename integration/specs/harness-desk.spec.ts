@@ -625,17 +625,6 @@ test('the peer serves its state as JSON for a human with curl', async () => {
  * does with it, which is the half a byte form that moved has to fail on first.
  */
 test.describe('the SQ’s native control service', () => {
-  const capture: SqNativeCapture = readCapture()
-  const written = capture.exchanges.filter(exchange => exchange.direction === 'to-desk')
-
-  /**
-   * The session the wire shows: the client's own chunks, up to and including the `7f 03` that
-   * ends it. They are sent as they arrived rather than as frames — the capture's chunks are
-   * what TCP delivered, and the push's own chunk carries more than the frame it opens with —
-   * so the peer's reader is what has to find the frames in them.
-   */
-  const session = written.slice(0, written.findIndex(exchange => exchange.bytes === '7f0300000000') + 1)
-
   /**
    * The desk's own answers, as the capture wrote them: the four replies it holds, each of them
    * right after the frame that asked for it. They are here as well as in the fixture, so a
@@ -663,6 +652,18 @@ test.describe('the SQ’s native control service', () => {
   }
 
   test('answers a session as the capture does, and reads the capture’s own assignments', async () => {
+    // The capture, read here where the peer starts rather than in this describe's body: a
+    // missing or malformed fixture at collection time fails the file before a case exists to
+    // report it, and this is the case that reads the wire it is compared against.
+    const capture: SqNativeCapture = readCapture()
+    const written = capture.exchanges.filter(exchange => exchange.direction === 'to-desk')
+    /**
+     * The session the wire shows: the client's own chunks, up to and including the `7f 03` that
+     * ends it. They are sent as they arrived rather than as frames — the capture's chunks are
+     * what TCP delivered, and the push's own chunk carries more than the frame it opens with —
+     * so the peer's reader is what has to find the frames in them.
+     */
+    const session = written.slice(0, written.findIndex(exchange => exchange.bytes === '7f0300000000') + 1)
     expect(session, 'the capture holds no `7f 03` to end a session at').toHaveLength(8)
     // The four pairs the capture places, and the sixteen flags it writes — a `0c` frame per
     // input, four of them `00 00 00` on the channels the pairs place and twelve `00 01 00`.
@@ -707,7 +708,6 @@ test.describe('the SQ’s native control service', () => {
 
       // The capture's own assignments, written by hand: the four `1d … 01 00` frames and the
       // `0c` flag each of those channels carries where it rides a fader.
-      const pendingBefore = client.pending
       for (const exchange of [...placing, ...riding]) client.send(Buffer.from(exchange.bytes, 'hex'))
 
       const pairs = await until(
@@ -728,12 +728,13 @@ test.describe('the SQ’s native control service', () => {
         bytes: [...Buffer.from(exchange.bytes, 'hex')]
       })))
 
-      // Nothing came back for any of them — and it is asserted after the record is complete,
-      // not before: an answer invented late would have arrived by the time the peer has read
-      // the frames it was asked about. The capture holds no frame from the desk that reports a
-      // membership, so the model has none to answer with.
-      await sleep(30)
-      expect(client.pending).toBe(pendingBefore)
+      // Nothing came back for any of them, and the assertion is the peer's own record rather
+      // than a sleep: this model answers inside the handling of the frame that asked, so once
+      // the record holds the frames it was asked about, what it sent is settled. What it sent
+      // is still exactly the capture's four replies — one per session frame that asked a
+      // question, and nothing for a membership, which is what the capture shows the desk
+      // answering.
+      expect(peer.sent.map(answer => Buffer.from(answer).toString('hex'))).toEqual(replies)
 
       // And the clear form reads as the capture's own bytes do: the same frame with `00 00`,
       // which is what a scene that places nobody writes.

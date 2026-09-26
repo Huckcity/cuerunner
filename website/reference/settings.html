@@ -203,6 +203,35 @@
           </tbody>
         </table>
       </div>
+      <p>
+        The Channels tab's own controls, in the order the tab shows them:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Control</th><th>What it sets</th></tr></thead>
+          <tbody>
+            <tr><td>Model</td><td>Which desk this is — any desk's note on and note off, an SQ, or an Avantis — and so what the desk takes as an open and a close.</td></tr>
+            <tr><td>Host</td><td>The desk's address, the one thing nobody can guess.</td></tr>
+            <tr><td>Port</td><td>The desk's MIDI-over-TCP port, 51325 on an SQ and on an Avantis, or the port an OSC desk's addresses are sent to.</td></tr>
+            <tr><td>Address</td><td>The OSC address a fader is sent to, with <code>{n}</code> standing for its number.</td></tr>
+            <tr><td>Channel</td><td>The MIDI channel the desk's own MIDI is set to — <em>Utility → General → MIDI</em> on an SQ.</td></tr>
+            <tr><td>GO button</td><td>The mute group the operator's GO key is assigned to at the desk, or <em>no GO button</em> for a show run from the window.</td></tr>
+            <tr><td>BACK button</td><td>The mute group the operator's BACK key is assigned to.</td></tr>
+            <tr><td>GO note</td><td>The MIDI note the operator's GO key transmits, for a soft key set to MIDI Note — a press that steps the show once and leaves nothing lit. Offered on an SQ, whose own traffic cannot be a note.</td></tr>
+            <tr><td>BACK note</td><td>The MIDI note the operator's BACK key transmits.</td></tr>
+            <tr><td>Count</td><td>Sizes the list beside it: the strips under the Channels heading, the faders under the DCAs one. A shorter count drops the last of them.</td></tr>
+            <tr><td>Allow a channel to ride more than one fader</td><td>The rule the Scenes grid follows: on, a strip rides as many faders as a scene places it on; off, the grid keeps one fader per channel and a recall folds a leftover down to the lowest-numbered one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The desk's own buttons are read from the same connection, so they are set up with it: the
+        two groups above are the mute groups the operator's GO and BACK keys are assigned to at
+        the desk, and the two notes are for soft keys set to MIDI Note — offered on an SQ, whose
+        own traffic cannot be a note. An Avantis answers for its keys four channels above its own,
+        so a desk set to MIDI channel 13 or higher leaves them past what MIDI has: the fields are
+        not drawn there, the show is run from the window, and a recall still sends.
+      </p>
     </section>
   </main>
 

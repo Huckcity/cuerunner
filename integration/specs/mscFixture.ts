@@ -24,6 +24,14 @@ export interface MscShowOptions {
   cue: string
 }
 
+/**
+ * Where this lane's desk is: a loopback address of its own rather than 127.0.0.1, because the
+ * desk's ports are the machine's — an SQ show dials 51326 and 51321 whatever it is pointed at
+ * — so this is an address this lane's own peer binds and the unit job (127.0.0.3, 127.0.0.4)
+ * and the other lanes do not hold.
+ */
+export const MSC_HOST = '127.0.0.7'
+
 /** What the show is called, so a spec's failure names something an operator would say. */
 export const MSC_SHOW_NAME = 'Show Control Show'
 
@@ -51,7 +59,7 @@ export function writeMscShow(options: MscShowOptions): string {
         profile: 'sq',
         midiPort: '',
         midiChannel: 1,
-        host: '127.0.0.1',
+        host: MSC_HOST,
         port: 8000,
         tcpPort: port,
         address: '/dca/{n}/on'
@@ -105,7 +113,7 @@ export function writeMscShow(options: MscShowOptions): string {
             // a MIDI note, and this is the note soft key 3 sends.
             id: 't-key',
             kind: 'midi',
-            device: `127.0.0.1:${port}`,
+            device: `${MSC_HOST}:${port}`,
             message: { kind: 'noteOn', channel: 1, note: SOFT_KEY_NOTE, velocity: 127 }
           }
         ]

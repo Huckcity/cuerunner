@@ -3,7 +3,7 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { closeApp, launchApp } from './helpers'
+import { closeApp, launchApp, readRecovered } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -60,24 +60,13 @@ test('recovers from a renderer crash with an explanation', async () => {
     BrowserWindow.getAllWindows()[0].webContents.getOSProcessId())
   process.kill(rendererPid, 'SIGKILL')
 
-  // executeJavaScript issued while the renderer is being torn down never settles, and
-  // isCrashed() can still read false for a moment after the crash is requested — so a
-  // single read can hang the poll for its whole timeout. Race every read against a
-  // deadline and let the poll try again.
-  const readRecovered = (expression: string) => app.evaluate(async ({ BrowserWindow }, code) => {
-    const wc = BrowserWindow.getAllWindows()[0].webContents
-    if (wc.isCrashed()) return null
-    const deadline = new Promise(resolve => setTimeout(() => resolve(null), 2000))
-    return Promise.race([wc.executeJavaScript(code).catch(() => null), deadline]) as Promise<unknown>
-  }, expression)
-
-  // Playwright's page handle stays marked as crashed after the renderer is replaced,
-  // so the recovered window is inspected through its own webContents instead.
+  // Playwright's page handle stays marked as crashed after the renderer is replaced, so the
+  // recovered window is inspected through its own webContents instead (`readRecovered`).
   try {
     // A crash, a reload and a React boot on a shared runner: generous on purpose, and
     // the failure path below says what was happening if it still runs out.
     await expect.poll(
-      async () => readRecovered("!!document.querySelector('.toolbar')"),
+      async () => readRecovered(app, "!!document.querySelector('.toolbar')"),
       { timeout: 60_000 }
     ).toBe(true)
   } catch (error) {
@@ -89,7 +78,7 @@ test('recovers from a renderer crash with an explanation', async () => {
     throw new Error(`${String(error)}\nwindow: ${state}\nmain process said:\n${mainLog.join('')}`)
   }
 
-  const banner = await readRecovered("document.querySelector('[data-kind=\"crash\"]')?.textContent ?? null")
+  const banner = await readRecovered(app, "document.querySelector('[data-kind=\"crash\"]')?.textContent ?? null")
   expect(banner).toContain('The interface stopped unexpectedly')
   expect(banner).toContain('The workspace file on disk is untouched')
   expect(banner).toContain('was reloaded')
@@ -101,7 +90,7 @@ test('recovers from a renderer crash with an explanation', async () => {
   // autosave caught is offered back with the cue the session was standing on, rather than
   // being written off by the banner above it.
   await expect.poll(
-    () => readRecovered("document.querySelector('[data-kind=\"recovery\"]')?.textContent ?? null"),
+    () => readRecovered(app, "document.querySelector('[data-kind=\"recovery\"]')?.textContent ?? null"),
     { timeout: 30_000 }
   ).toContain('1 · Where I Was')
 

@@ -21,7 +21,15 @@ import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
-import { BACK_GROUP, BACK_NOTE, CHANNEL, GO_GROUP, GO_NOTE, writeDeskButtonsShow } from './deskButtonsFixture'
+import {
+  BACK_GROUP,
+  BACK_NOTE,
+  CHANNEL,
+  DESK_BUTTONS_HOST,
+  GO_GROUP,
+  GO_NOTE,
+  writeDeskButtonsShow
+} from './deskButtonsFixture'
 
 /** The SQ's mute-group page: page 04, parameter <group - 1>, absolute form. */
 const MUTE_GROUP_PAGE = 0x04
@@ -61,7 +69,7 @@ function recalls(from: string, scene?: string): Promise<number> {
 }
 
 test.beforeAll(async () => {
-  peer = await startDeskPeer({ profile: 'sq', midiChannel: CHANNEL, connectBurst: true })
+  peer = await startDeskPeer({ host: DESK_BUTTONS_HOST, profile: 'sq', midiChannel: CHANNEL, connectBurst: true })
   // The desk is already sitting with the GO group muted when the app arrives — a room that
   // was left that way — so its report at connect is a state and not a press.
   peer.setMute(CHANNEL, GO_GROUP - 1, true, MUTE_GROUP_PAGE)
@@ -207,13 +215,18 @@ test('a note held down is one press, not a repeat', async () => {
   // BACK is a step to the first — and a second press there would have nowhere to go, which
   // it would say in a line of its own rather than quietly.
   const before = await recalls('Desk BACK', 'Wedding')
+  const beforeLabel = await recalls('Desk BACK')
 
   peer.emit([0x90, BACK_NOTE, 0x7f])
   peer.emit([0x90, BACK_NOTE, 0x7f])
 
   await expect.poll(() => recalls('Desk BACK', 'Wedding')).toBe(before + 1)
+  // The repeat is what the second note-on would be, and a repeat that stepped the show would
+  // land nowhere: "already at the first scene" is an info row under this label with no scene
+  // name in it, so the label is what is counted — a second row here is the step that must not
+  // happen, where a count of the scene's own name would read the same either way.
   await page.waitForTimeout(400)
-  expect(await recalls('Desk BACK', 'Wedding')).toBe(before + 1)
+  expect(await recalls('Desk BACK')).toBe(beforeLabel + 1)
 
   peer.emit([0x80, BACK_NOTE, 0x00])
 })

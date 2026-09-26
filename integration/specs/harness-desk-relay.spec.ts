@@ -12,8 +12,8 @@
  * case that would fail without it.
  */
 import { expect, test } from '@playwright/test'
-import { createConnection } from 'node:net'
-import type { Socket } from 'node:net'
+import { createConnection, createServer } from 'node:net'
+import type { AddressInfo, Socket } from 'node:net'
 import { startDeskPeer } from '../peers/desk.ts'
 import type { DeskPeer, DeskPeerOptions } from '../peers/desk.ts'
 import { startDeskRelay } from '../deskRelay.ts'
@@ -194,9 +194,30 @@ test('the desk going away is the relay’s end of it, and takes its clients with
   await relay.close()
 })
 
-test('a desk that is not there is named in the failure, not a bare timeout', async () => {
-  // Port 1 on loopback with nothing behind it: the relay's own deadline is what answers.
-  await expect(startDeskRelay({ desk: { host: '127.0.0.1', port: 1 }, connectDeadlineMs: 500 })).rejects.toThrow(
-    'Nothing answered at 127.0.0.1:1'
-  )
+test('a desk that never answers is named with the deadline, not a bare timeout', async () => {
+  // 192.0.2.1 is a TEST-NET-1 address (RFC 5737): no desk is there and nothing answers, so the
+  // dial is not refused — the SYN goes out and nothing comes back, which is the state this
+  // deadline exists for. A loopback port with nothing behind it refuses at once and is answered
+  // by the socket's own error instead, whose sentence is a different one; what is asserted here
+  // is the deadline's own words, so the case would fail if that path stopped being taken.
+  await expect(
+    startDeskRelay({ desk: { host: '192.0.2.1', port: 1 }, connectDeadlineMs: 500 })
+  ).rejects.toThrow('Nothing answered at 192.0.2.1:1 within 500 ms')
+})
+
+test('a listen port somebody else holds is named rather than thrown', async () => {
+  // The desk the relay is pointed at is there, so what fails is the relay's own socket: a
+  // named port is the CLI's own decision, and a port that is taken is the one failure this
+  // path has to have a sentence for rather than an `error` event with nobody on it.
+  const peer = await startDeskPeer({})
+  const held = createServer()
+  try {
+    await new Promise<void>((resolve) => held.listen(0, '127.0.0.1', () => resolve()))
+    const port = (held.address() as AddressInfo).port
+    await expect(startDeskRelay({ desk: { host: '127.0.0.1', port: peer.port }, port }))
+      .rejects.toThrow(`cannot listen on 127.0.0.1:${port}`)
+  } finally {
+    held.close()
+    await peer.close()
+  }
 })

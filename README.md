@@ -565,12 +565,12 @@ document carries: a file that omits `history`, `audioSettings`, `midiSettings`, 
 not got and a load completing the one gate a file carries none of, `triggerGuard`. A
 `showSettings` that is there is different: it has to be exactly the declared sections, each one
 carrying exactly the declared fields. A cue is read the other way round: its declared fields are
-held to the kinds their types write — `triggers`, `refire` and `scriptLine` may be missing, the
-rest may not — and a field a cue carries that this build does not declare, `media` among them,
-is kept rather than refused. Loading repairs a damaged cue grouping and reports it as a
-note beside missing media, and it writes no file. There is no conversion either way: a show whose
-settings predate the scene-owned fader assignment refuses, and its channels, faders and
-placements are set up again in Show Settings and the Scenes grid.
+held to the kinds their types write — `triggers`, `refire`, `scriptLine`, `trimSilence` and
+`soundRegion` may be missing, the rest may not — and a field a cue carries that this build does
+not declare, `media` among them, is kept rather than refused. Loading repairs a damaged cue
+grouping and reports it as a note beside missing media, and it writes no file. There is no
+conversion either way: a show whose settings predate the scene-owned fader assignment refuses,
+and its channels, faders and placements are set up again in Show Settings and the Scenes grid.
 
 The shape is held by tests — `src/main/workspace/migrate.test.ts` for the refusals and what a
 load still does, `src/main/workspace/funnel.test.ts` for one case per entry point,
@@ -680,13 +680,14 @@ prints one `[host lane]` stream per step and a summary that says what each host 
 
 | Host | Where | Default lanes |
 | --- | --- | --- |
-| `linux` | this machine | typecheck, unit, native, integration, e2e |
+| `linux` | this machine, taken as Linux — run the command from that box: the local host's platform is not read, so the Linux lanes are planned wherever it starts | typecheck, unit, native, integration, e2e |
 | `win` | `adam@192.168.0.210` — the NUC that runs the Windows lanes (`nuc-win-1`), with the runner's Node and MSVC already provisioned | typecheck, unit |
 | `mac` | `adam@mac.local` — the Mac mini (`mac-mini-1`), which needs Remote Login on before anything can reach it | typecheck, unit |
 
-`LOCAL_CI_WIN`, `LOCAL_CI_MAC`, `LOCAL_CI_LINUX` and `LOCAL_CI_WIN_KEY` override those doors,
-which is what to do when DHCP moves one. A host that does not answer is a `skipped` row rather
-than a failure, so a run says what it did and what it could not (`scripts/lane-status.mjs`).
+`LOCAL_CI_WIN`, `LOCAL_CI_MAC`, `LOCAL_CI_LINUX`, `LOCAL_CI_WIN_KEY` and `LOCAL_CI_MAC_KEY`
+override those doors and keys — the Mac has no key file unless one is named — which is what to do
+when DHCP moves one. A host that does not answer is a `skipped` row rather than a failure, so a
+run says what it did and what it could not (`scripts/lane-status.mjs`).
 
 The e2e lane runs here, on Linux, where `scripts/run-e2e.js` gives Electron a private Xvfb
 display. No host can run it over ssh: an Electron window needs a desktop session, which is why

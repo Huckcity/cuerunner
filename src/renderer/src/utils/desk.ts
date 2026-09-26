@@ -269,6 +269,9 @@ export function channelMutes(channelIndex: number, desk: DeskSettings): ChannelM
   // The channel's own number is its place in the controlled set, from one.
   const number = channelIndex + 1
   if (desk.kind === 'osc') {
+    // No host is no desk, the same as a blank MIDI port or address: a message to nowhere is
+    // worse than none, because the recall would report a failure that means nothing.
+    if (desk.host.trim() === '') return null
     const { mute, unmute } = oscMessages(desk.host, desk.port, dcaAddress(desk.address, number))
     return { open: unmute, close: mute }
   }
@@ -314,6 +317,10 @@ export function membershipWrite(
   desk: DeskSettings
 ): DeskWrite | null {
   if (desk.kind === 'none') return null
+  // The transport decides before the profile does, as it does for a mute: an OSC show
+  // takes no assignment whatever profile its file still carries from an earlier setup, and
+  // the gap's sentence names a desk that is not in the room.
+  if (desk.kind === 'osc') return { ok: false, error: 'OSC takes no assignment' }
 
   const gap = dcaGap(desk.profile, index)
   if (gap !== null) return { ok: false, error: gap }
@@ -362,8 +369,6 @@ export function membershipWrite(
       }
     }
   }
-
-  if (desk.kind === 'osc') return { ok: false, error: 'OSC takes no assignment' }
 
   if (desk.profile === 'avantis') {
     // The strip's own NRPN, on the desk's own channel: the parameter's MSB names the input

@@ -19,7 +19,7 @@ import type { Socket } from 'node:net'
 import { once } from 'node:events'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
-import { writeDeskShow } from './deskFixture'
+import { DESK_HOST, writeDeskShow } from './deskFixture'
 
 /** The channel the desk is set to, and the one the show is told it is. */
 const CHANNEL = 1
@@ -41,19 +41,28 @@ let peer: DeskPeer
 /** Whatever is on the desk before the app is: a tablet, another app, a colleague's laptop. */
 let holder: Socket
 
+/**
+ * Whether the peer, the holder and the app came up. A run that could not take the desk's port
+ * stops in `beforeAll` and reports the file skipped; the teardown closes what started, and a
+ * `TypeError` there would be reported instead of the sentence naming what holds it.
+ */
+let running = false
+
 test.beforeAll(async () => {
-  peer = await startDeskPeer({ profile: 'sq', midiChannel: CHANNEL, singleClient: true })
+  peer = await startDeskPeer({ host: DESK_HOST, profile: 'sq', midiChannel: CHANNEL, singleClient: true })
   // Connected before the app exists, because the app dials the moment the show loads: a
   // holder attached any later would be the second client, and would be the one reset.
-  holder = createConnection({ host: '127.0.0.1', port: peer.port })
+  holder = createConnection({ host: DESK_HOST, port: peer.port })
   await once(holder, 'connect')
   const show = writeDeskShow({ port: peer.port, channel: CHANNEL, profile: 'sq' })
   ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
+  running = true
 })
 
 test.afterAll(async () => {
+  if (!running) return
   holder.destroy()
   await closeApp(app)
   await peer.close()
@@ -62,7 +71,7 @@ test.afterAll(async () => {
 test('a recall at a held desk names the taken connection, and lands once the holder lets go', async () => {
   await openLogPanel(page)
   const log = page.locator('.log-panel')
-  const desk = `127.0.0.1:${peer.port}`
+  const desk = `${DESK_HOST}:${peer.port}`
 
   // The link's own report of the connection, read before anything is recalled: the desk took
   // it and then reset it, so the recall below is made at a desk the app already knows it is

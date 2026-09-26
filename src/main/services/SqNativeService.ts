@@ -41,13 +41,26 @@ function membershipOf(payload: unknown): SqMembershipIntent | string {
   }
   const { channel, dca, placed, rides } = payload as Record<string, unknown>
   if (!isCount(channel)) return `a membership needs a channel as a whole number at or past 1${found(channel)}`
+  if (channel > MAX_FRAME_NUMBER) {
+    return `a membership needs a channel no larger than ${MAX_FRAME_NUMBER}${found(channel)}`
+  }
   if (!isCount(dca)) return `a membership needs a fader as a whole number at or past 1${found(dca)}`
+  if (dca > MAX_FRAME_NUMBER) {
+    return `a membership needs a fader no larger than ${MAX_FRAME_NUMBER}${found(dca)}`
+  }
   if (typeof placed !== 'boolean') return `a membership needs placed to be true or false${found(placed)}`
   if (typeof rides !== 'boolean') return `a membership needs rides to be true or false${found(rides)}`
   return { channel, dca, placed, rides }
 }
 
-/** A whole number at or past the first input, which is the only number a frame can address. */
+/**
+ * The largest address a frame can carry: the codec writes the number less one into a single
+ * byte, so a 257th input would come out as the first — `Buffer.from` truncates rather than
+ * refusing — and the desk would be told about a different one than the payload named.
+ */
+const MAX_FRAME_NUMBER = 256
+
+/** A whole number at or past the first input: the shape an address has, before its ceiling. */
 function isCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }

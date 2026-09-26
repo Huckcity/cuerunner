@@ -27,7 +27,7 @@ import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
-import { writeDeskShow } from './deskFixture'
+import { DESK_HOST, writeDeskShow } from './deskFixture'
 
 /** The desk's own channel, 12 — its default — which is what the show is told. */
 const DESK_CHANNEL = 12
@@ -63,7 +63,7 @@ function micMute(): { on: boolean; label: string } | undefined {
 }
 
 test.beforeAll(async () => {
-  peer = await startDeskPeer({ profile: 'avantis', midiChannel: DESK_CHANNEL })
+  peer = await startDeskPeer({ host: DESK_HOST, profile: 'avantis', midiChannel: DESK_CHANNEL })
   const show = writeDeskShow({ port: peer.port, channel: DESK_CHANNEL, profile: 'avantis' })
   ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
   await openFromRecent(page, userDataDir, show)
@@ -135,7 +135,7 @@ test('the desk’s own scene recall fires the cue that answers to it', async () 
 
   await openLogPanel(page)
   await expect(page.locator('.log-panel')).toContainText('Triggered by MIDI')
-  await expect(page.locator('.log-panel')).toContainText(`127.0.0.1:${peer.port}`)
+  await expect(page.locator('.log-panel')).toContainText(`${DESK_HOST}:${peer.port}`)
 })
 
 test('a channel too high for the desk’s group block is named in the settings, and the recall still goes', async () => {

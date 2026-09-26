@@ -266,8 +266,12 @@ export function EnsembleDialog({
           <button className="ensemble-cancel" onClick={onCancel}>Cancel</button>
           <button
             className="ensemble-create"
-            disabled={chosen.length === 0 && editing === null}
-            title={chosen.length === 0 && editing === null
+            // Nothing in it is nothing to save, whether the group is new or the edit has just
+            // emptied it: the store refuses an empty list, and a press that is live for it
+            // would close the dialog as if the emptying had been written — with the name
+            // typed in the same visit and the strips taken out of it both gone in silence.
+            disabled={chosen.length === 0}
+            title={chosen.length === 0
               ? 'A group with nothing in it opens nothing'
               : editing === null
                 ? `Create this ensemble and apply it to DCA ${fader}`

@@ -215,8 +215,14 @@ function layersOf(value: string): string[] {
   return layers.filter(part => part !== '')
 }
 
-/** The colours a name stands for, which are the same colour as their hex. */
-const NAMED_COLOURS: Record<string, string> = { white: '#ffffff', black: '#000000', transparent: 'transparent' }
+/** The colours a name stands for, which are the same colour as their hex — and `none`, which is
+ *  the same background as `transparent` and the spelling the print guard itself recommends. */
+const NAMED_COLOURS: Record<string, string> = {
+  white: '#ffffff',
+  black: '#000000',
+  transparent: 'transparent',
+  none: 'transparent'
+}
 
 /**
  * A colour as the one string it is: `#fff`, `#FFFFFF`, `white` and `rgb(255, 255, 255)` are the same
@@ -901,5 +907,12 @@ describe('a stylesheet that drifts from the contract', () => {
     expect(printProblems(printed)).toEqual([])
     expect(sampleProblems(printed)).toEqual([])
     expect(markProblems(printed)).toEqual([])
+  })
+
+  it('reads `background: none` as the transparent it is', () => {
+    // `none` paints no background, the same thing as `transparent` and the spelling the guard
+    // itself recommends for `.table-wrap` above: `.code` saying it prints the white sample.
+    const none = wrote(LIVE, '.code', 'background', () => 'none', { media: 'print' })
+    expect(printProblems(readingOf(none))).toEqual([])
   })
 })

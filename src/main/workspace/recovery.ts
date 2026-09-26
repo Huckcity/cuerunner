@@ -60,6 +60,51 @@ export async function writeRecovery(
   await writeFileAtomically(filePath, JSON.stringify(snapshot))
 }
 
+/** Whether a value is the file identity a snapshot records: a byte length and a hash. */
+function isFingerprint(value: unknown): value is FileFingerprint {
+  if (typeof value !== 'object' || value === null) return false
+  const carried = value as Record<string, unknown>
+  return typeof carried.size === 'number' && typeof carried.hash === 'string'
+}
+
+/**
+ * Refuses a snapshot whose own fields are not the kinds the type writes. The workspace is
+ * checked before this; the fields beside it are read as their types by the window and by
+ * main — a `sourcePath` of another kind reaches `dirname` — so a file an operator's tools
+ * have been through, carrying `sourcePath: 3`, would answer the channel with a stack where
+ * it declares a bar naming the file. Each field is held to the kind it is written as, and
+ * the optional two are allowed to be absent as their types say.
+ */
+function refuseForeignSnapshotFields(snapshot: RecoverySnapshot, filePath: string): void {
+  const carried = snapshot as unknown as Record<string, unknown>
+  const refuse = (field: string): never => {
+    const value = carried[field]
+    const kind = value === null || value === undefined
+      ? 'nothing'
+      : Array.isArray(value)
+        ? 'a list'
+        : typeof value === 'object'
+          ? 'an object'
+          : `a ${typeof value}`
+    throw new Refusal(
+      `that file is not a show — ${filePath} holds a snapshot whose ${field} is ${kind}`
+    )
+  }
+  if (typeof carried.savedAt !== 'number') refuse('savedAt')
+  // A path is a string, or nothing: `null` is a snapshot of a show that was never saved.
+  if (carried.sourcePath !== null && typeof carried.sourcePath !== 'string') refuse('sourcePath')
+  if (
+    carried.selectedCueId !== undefined &&
+    carried.selectedCueId !== null &&
+    typeof carried.selectedCueId !== 'string'
+  ) {
+    refuse('selectedCueId')
+  }
+  if (carried.sourceFingerprint !== undefined && !isFingerprint(carried.sourceFingerprint)) {
+    refuse('sourceFingerprint')
+  }
+}
+
 export async function readRecovery(): Promise<RecoverySnapshot | null> {
   const filePath = recoveryFilePath()
   let text: string
@@ -87,7 +132,8 @@ export async function readRecovery(): Promise<RecoverySnapshot | null> {
   // The bytes are there; now they have to be a snapshot. A file an operator's own tools
   // have been through can parse and hold something else entirely, and a workspace with no
   // cue list would take the funnel down inside the channel, where a fault renders no
-  // bar at all — so the parse and the shape are both checked before the value is returned.
+  // bar at all — so the parse, the workspace's shape and the snapshot's own fields are all
+  // checked before the value is returned.
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
@@ -102,7 +148,9 @@ export async function readRecovery(): Promise<RecoverySnapshot | null> {
   if (!hasCueList(workspace)) {
     throw new Refusal(`that file is not a show — ${filePath} holds no snapshot to bring back`)
   }
-  return parsed as RecoverySnapshot
+  const snapshot = parsed as RecoverySnapshot
+  refuseForeignSnapshotFields(snapshot, filePath)
+  return snapshot
 }
 
 export async function clearRecovery(): Promise<void> {

@@ -77,6 +77,7 @@ const DESTROY_AFTER = `ReadStream.prototype.destroy = function(err) {
 /**
  * Patch a fd-slicer source string: the ReadStream sentinel (so EOF survives Node's
  * `destroyed` accessor) and ReadStream's `destroy` (so `stream.pipeline` sees a 'close').
+ * A copy the sentinel rename has already reached gets the destroy half alone.
  *
  * @param {string} src - contents of fd-slicer/index.js
  * @returns {{ status: 'patched' | 'already-patched' | 'unsupported', output?: string }}
@@ -93,7 +94,10 @@ function patchSource(src) {
   if (CLOSED_RE.test(block)) {
     return { status: 'already-patched' }
   }
-  if (!/\b(this|self)\.destroyed\b/.test(block)) {
+  // A copy the sentinel rename has already reached (v0.14.0 shipped one) has no `destroyed` left
+  // to rename, and is missing exactly the destroy half: refusing it as unrecognised would leave
+  // the half-patch that stalls `stream.pipeline` on the macOS lane.
+  if (!/\b(this|self)\.destroyed\b/.test(block) && !block.includes(SENTINEL)) {
     return { status: 'unsupported' }
   }
 

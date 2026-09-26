@@ -284,8 +284,11 @@ describe('ShowSettings', () => {
     })
 
     expect(container.querySelectorAll('.performer-row')).toHaveLength(1)
-    expect(container.querySelector('.ensemble-row')).toBeNull()
-    expect(container.querySelector('.ensemble-add')).toBeNull()
+    // The section this tab has is the cast's: read off the rows the tab draws rather than a
+    // class for the ensembles it does not draw, which would pass against any tree at all. A
+    // group's own section coming back would bring a second one, and a row of its own with it.
+    expect(container.querySelectorAll('.show-section')).toHaveLength(1)
+    expect(container.querySelector('.show-section-title')?.textContent).toBe('Performers')
     expect(cast().ensembles).toHaveLength(1)
   })
 
@@ -296,8 +299,10 @@ describe('ShowSettings', () => {
       expect(container.querySelectorAll('.channel-row')).toHaveLength(12)
       expect(container.querySelectorAll('.dca-row')).toHaveLength(12)
       // A strip is a name and a number now: which fader it rides is the scene's decision,
-      // made in the Scenes view, so there is nothing to choose on the row.
-      expect(container.querySelector('.channel-dca')).toBeNull()
+      // made in the Scenes view, so nothing in a row routes — asserted against what the rows
+      // actually hold, because a class the product no longer writes would pass whatever the
+      // row grew.
+      expect(container.querySelectorAll('.channel-row select')).toHaveLength(0)
       // A fader is its number and nothing else: no label to keep in step with the place
       // the desk is actually told, and the row's one field is the override.
       expect([...container.querySelectorAll('.dca-row .dca-number')].map(node => node.textContent))
@@ -329,6 +334,21 @@ describe('ShowSettings', () => {
       expect(useStore.getState().showSettings.desk.address).toBe('/dca/{n}/mute')
       expect(container.querySelector('.desk-preview')?.textContent)
         .toBe('Sends /dca/1/mute … /dca/12/mute to 10.0.0.5:9000, with 1 to open and 0 to close — a recall writes 12 channel mutes there and takes no assignment')
+    })
+
+    it('sends nothing when the show has no strips', async () => {
+      // A recall walks the show's own channels: with the count at none there is no strip
+      // for a range to name, on OSC or on a MIDI desk.
+      await show({ tab: 'channels', cast: { channels: [], dcas: [] }, ports: ['Yamaha'] })
+
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends nothing to 127.0.0.1:8000 — the show has no channels')
+
+      await choose(field<HTMLSelectElement>('.desk-kind'), 'midi')
+      await choose(field<HTMLSelectElement>('.desk-midi-port'), 'Yamaha')
+
+      expect(container.querySelector('.desk-preview')?.textContent)
+        .toBe('Sends nothing to "Yamaha" — the show has no channels')
     })
 
     it('drives the desk over MIDI, offering the ports the machine reports', async () => {
@@ -647,6 +667,11 @@ describe('ShowSettings', () => {
       await type(number, '60')
       await leave(number)
       expect(cast().dcas[0].deskNumber).toBeNull()
+
+      // Fader 9 of the show's twelve is past the SQ's own list: every write for it is
+      // refused, so the field advertises no number at all — 8 included.
+      expect(field<HTMLInputElement>('.dca-override', 8).placeholder).toBe('')
+      expect(field<HTMLInputElement>('.dca-override', 8).max).toBe('7')
     })
 
     it('names the scenes that place channels on each fader', async () => {

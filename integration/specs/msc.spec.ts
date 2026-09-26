@@ -21,7 +21,7 @@ import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
-import { SOFT_KEY, writeMscShow } from './mscFixture'
+import { MSC_HOST, SOFT_KEY, writeMscShow } from './mscFixture'
 
 /** The cue the show names on the desk's list. */
 const CUE = '12'
@@ -37,7 +37,7 @@ function firings(): Promise<number> {
 }
 
 test.beforeAll(async () => {
-  peer = await startDeskPeer({ profile: 'sq' })
+  peer = await startDeskPeer({ host: MSC_HOST, profile: 'sq' })
   const show = writeMscShow({ port: peer.port, cue: CUE })
   ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
   await openFromRecent(page, userDataDir, show)
@@ -73,7 +73,7 @@ test('a soft key assigned at the desk fires the cue that answers to it', async (
 
   await openLogPanel(page)
   await expect(page.locator('.log-panel'))
-    .toContainText(`Triggered by MIDI noteOn note ${0x30 + SOFT_KEY - 1} on ch1 from "127.0.0.1:${peer.port}"`)
+    .toContainText(`Triggered by MIDI noteOn note ${0x30 + SOFT_KEY - 1} on ch1 from "${MSC_HOST}:${peer.port}"`)
 })
 
 test('a key pressed twice in one breath fires once', async () => {

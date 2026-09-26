@@ -56,6 +56,14 @@ function record(who, dir, buf) {
 
 /* Discovery: the one place the instrument answers as the desk. */
 const discovery = createSocket('udp4')
+// The TCP side logs a port that will not bind and carries on with the rest; this socket is the
+// instrument's whole reason for existing — a client that finds no desk by discovery dials the
+// desk itself, out of reach of anything watching — so a port somebody else holds is the end of
+// the run rather than a line to read past.
+discovery.on('error', (error) => {
+  console.error(`sqCapture: udp ${DISCOVERY_PORT} — ${error.message}`)
+  process.exit(2)
+})
 discovery.on('message', (msg, rinfo) => {
   const said = lat(msg).replace(/\0+$/, '')
   console.log(`+${String(Date.now() - t0).padStart(6)}ms udp <- ${rinfo.address}:${rinfo.port} ${JSON.stringify(said)}`)

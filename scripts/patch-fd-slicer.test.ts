@@ -217,6 +217,24 @@ describe('the patched ReadStream', () => {
     expect(entry.sourceClosed).toBe(false)
     expect(entry.settled).toBe(null)
   })
+
+  it('patches a copy the sentinel rename already reached, and unstalls it', async () => {
+    // The state v0.14.0's own patch left behind: `destroy` still returns early, so the pipeline
+    // never sees 'close'. The destroy half is the whole of what that copy is missing, so a
+    // second `npm install` has to land it rather than refuse the copy as unrecognised.
+    const directory = path.join(rootDir, 'rename-only-patched')
+    const file = writeFixture(directory, RENAME_ONLY)
+    expect(patchSource(RENAME_ONLY).status).toBe('patched')
+    expect(patchFdSlicer({ rootDir: directory, log: () => {} })).toBe('patched')
+    expect(fs.readFileSync(file, 'utf8')).toContain('_fdsClosed')
+
+    const entry = await driveEntry(file, source, 8)
+
+    expect(entry.extracted).toEqual(Buffer.alloc(8, 7))
+    expect(entry.sourceClosed).toBe(true)
+    expect(entry.settled).toBe('resolved')
+    expect(entry.unrefs).toBe(1)
+  })
 })
 
 describe('findFdSlicerFiles', () => {

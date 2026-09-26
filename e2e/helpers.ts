@@ -195,6 +195,25 @@ export function toolbarCueBtn(page: Page, label: string) {
   return page.locator('.toolbar-cue-btn', { hasText: label })
 }
 
+/**
+ * A read of the window after its renderer was replaced, through the window's own webContents:
+ * Playwright's page handle stays marked as crashed after the renderer is gone, so the page
+ * cannot be asked. Every read is raced against a deadline — `executeJavaScript` issued while a
+ * renderer is being torn down never settles, and `isCrashed()` can read false for a moment
+ * after the crash is requested — and `null` means "not yet", which is what a poll wants.
+ * `expression` is read in the window, so what it names is the page's own `document`.
+ */
+export async function readRecovered(app: ElectronApplication, expression: string): Promise<unknown> {
+  return app.evaluate(async ({ BrowserWindow }, code) => {
+    const contents = BrowserWindow.getAllWindows()[0]?.webContents
+    if (!contents || contents.isCrashed() || contents.isDestroyed()) return null
+    const read = contents.executeJavaScript(code).catch(() => null)
+    const deadline = Promise.withResolvers<unknown>()
+    setTimeout(() => deadline.resolve(null), 2000)
+    return Promise.race([read, deadline.promise]) as Promise<unknown>
+  }, expression)
+}
+
 // Adds a cue from the toolbar's "More" menu (MIDI, OSC, Network, Script).
 export async function addCueFromMoreMenu(page: Page, label: string): Promise<void> {
   await page.locator('.toolbar-more-btn').click()
@@ -387,9 +406,12 @@ export async function openLogPanel(page: Page): Promise<void> {
 /** The view opens to run the show; building one starts with the press that edits it. */
 export async function editScenes(page: Page): Promise<void> {
   // The grid is the view, so its corner lock is there as soon as a show has faders; a show
-  // with none has no grid and carries the same press in words.
+  // with none has no grid and carries the same press in words — under a class two buttons
+  // share, so the one that unlocks is named rather than taken by class.
   const lock = page.locator('.matrix-lock')
-  const way = (await lock.count()) > 0 ? lock : page.locator('.matrix-empty-action')
+  const way = (await lock.count()) > 0
+    ? lock
+    : page.getByRole('button', { name: /Unlock to add scenes|Lock it again/ })
   if ((await way.getAttribute('data-editing')) !== 'true') await way.click()
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'true')
 }

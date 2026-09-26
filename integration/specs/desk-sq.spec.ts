@@ -35,7 +35,14 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskMuteMessage, type DeskPeer } from '../peers/desk'
-import { readCapture, startSqNativePeer, type SqNativeFlagFrame, type SqNativePairFrame, type SqNativePeer } from '../peers/sqNative'
+import {
+  readCapture,
+  startSqNativePeer,
+  type SqNativeExchange,
+  type SqNativeFlagFrame,
+  type SqNativePairFrame,
+  type SqNativePeer
+} from '../peers/sqNative'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
 import { writeDeskShow } from './deskFixture'
 import type { DeskShowFader, DeskShowScene } from './deskFixture'
@@ -47,11 +54,12 @@ import { describeMsc } from '../../src/renderer/src/utils/msc'
 
 /**
  * A loopback alias, and not 127.0.0.1: the desk's ports are the machine's rather than this
- * worker's. The unit job binds 51326/51321/51324 on `0.0.0.0` (`SqNativeEngine.test.ts`), and
- * the E2E lane's MSC show names `127.0.0.1` as its desk, so an app from that lane dialling
- * 51326 would attach to this peer — frames in the very record this file compares exactly. All
- * three jobs run on the same runner, so the lane dials and binds a second loopback address
- * instead, which costs nothing and cannot be reached by anything but this file.
+ * worker's, and the unit job's own desk holds 127.0.0.3 and 127.0.0.4 for the length of a case
+ * (`SqNativeEngine.test.ts`). Every lane's show names a loopback address of its own for the
+ * same reason — so an app from another lane dialling 51326 lands on its own desk rather than on
+ * this peer, whose record this file compares exactly. All three jobs run on the same runner, so
+ * the lane dials and binds the second loopback address instead, which costs nothing and can
+ * only be reached by the clients that name it.
  */
 const HOST = '127.0.0.2'
 
@@ -79,15 +87,19 @@ const SCENES: DeskShowScene[] = [
  * The capture's own four assignments, read out of it rather than typed here: the frames its
  * `1d` form places, and the input and fader each of those frames' own bytes names. A byte form
  * that moved fails this lane, which is the point of a lane that runs on every pull request.
+ *
+ * Read in `beforeAll`, where the peers start, rather than at module scope: a missing or
+ * malformed fixture there would fail the file before any case exists to report it, and a lane
+ * that cannot read the wire it compares against is a sentence in the run, not a load error.
  */
-const capture = readCapture()
-const placed = capture.exchanges.filter(
-  exchange => exchange.direction === 'to-desk' && exchange.bytes.startsWith('f707071d') && exchange.bytes.endsWith('0100')
-)
-const placedPairs = placed.map(exchange => ({
-  channel: Number.parseInt(exchange.bytes.slice(8, 10), 16) + 1,
-  dca: Number.parseInt(exchange.bytes.slice(10, 12), 16) + 1
-}))
+let placed: SqNativeExchange[] = []
+let placedPairs: { channel: number; dca: number }[] = []
+/**
+ * The capture's own answers to the session, in the order it wrote them: what the desk's half of
+ * the session is, up to the `7f 03` the session ends with. Read out of the capture for the same
+ * reason the placements are.
+ */
+let sessionReplies: string[] = []
 
 let app: ElectronApplication
 let page: Page
@@ -142,6 +154,26 @@ test.beforeAll(async () => {
     )
     return
   }
+  // The capture, read here rather than at module scope: a fixture that moved is a sentence in
+  // this run naming the file (`readCapture`'s own), not a file Playwright refuses to collect.
+  const capture = readCapture()
+  placed = capture.exchanges.filter(
+    exchange => exchange.direction === 'to-desk' && exchange.bytes.startsWith('f707071d') && exchange.bytes.endsWith('0100')
+  )
+  placedPairs = placed.map(exchange => ({
+    channel: Number.parseInt(exchange.bytes.slice(8, 10), 16) + 1,
+    dca: Number.parseInt(exchange.bytes.slice(10, 12), 16) + 1
+  }))
+  // The session ends where the capture writes the `7f 03`, so the desk's answers before it are
+  // the ones a session's own frames are given — and a capture that holds no such end, or
+  // answers its session with nothing, is one this lane cannot read rather than one it passes.
+  const sessionEnd = capture.exchanges.findIndex(exchange => exchange.bytes === '7f0300000000')
+  sessionReplies = capture.exchanges
+    .slice(0, sessionEnd + 1)
+    .filter(exchange => exchange.direction === 'from-desk')
+    .map(exchange => exchange.bytes)
+  expect(sessionEnd, 'the capture holds no `7f 03` to end a session at').toBeGreaterThanOrEqual(0)
+  expect(sessionReplies.length, 'the capture answers its own session with nothing').toBeGreaterThan(0)
   const show = writeDeskShow({
     host: HOST,
     port: peer.port,
@@ -201,7 +233,12 @@ test('a recall writes the capture’s own membership, and both fader ranges’ m
   const firstPair = native.received.findIndex(frame => frame.kind === 'pair')
   expect(firstPair).toBeGreaterThanOrEqual(9)
   expect(native.received.slice(9, firstPair).every(frame => frame.kind === 'session')).toBe(true)
-  expect(native.sent.length).toBeGreaterThanOrEqual(1)
+  // And the desk's own half of it, which is not "something came back": the app's session
+  // frames were answered with the capture's own replies, in its order — read as the first
+  // answers this peer sent, because a later ping is answered on its own cadence and a count of
+  // sends would say nothing about which bytes went out.
+  expect(native.sent.slice(0, sessionReplies.length).map(answer => Buffer.from(answer).toString('hex')))
+    .toEqual(sessionReplies)
 
   // And the session kept alive the way §6 measures it: the app's datagram arrives on the
   // desk's own port, and the peer witnesses it as arrival and width alone — the capture holds

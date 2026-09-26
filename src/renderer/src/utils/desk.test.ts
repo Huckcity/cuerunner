@@ -203,6 +203,10 @@ describe('a mic’s mute', () => {
     expect(channelMutes(0, desk({ kind: 'midi', midiPort: '' }))).toBeNull()
     expect(channelMutes(0, desk({ kind: 'midi-tcp', host: '   ' }))).toBeNull()
     expect(channelMutes(0, desk({ kind: 'midi-tcp', host: '' }))).toBeNull()
+    // The same for an OSC show nobody has given a host: the message would go nowhere and
+    // the recall would report a failure that means nothing.
+    expect(channelMutes(0, desk({ kind: 'osc', host: '   ' }))).toBeNull()
+    expect(channelMutes(0, desk({ kind: 'osc', host: '' }))).toBeNull()
   })
 })
 
@@ -312,6 +316,13 @@ describe('membership: which channels ride which fader', () => {
       ok: false,
       error: 'OSC takes no assignment'
     })
+    // Even when the file still carries an SQ from an earlier setup: the transport decides
+    // before the profile does, so the sentence names the route this show has rather than a
+    // control service it has not got — for a fader inside the SQ's list or past it.
+    expect(membershipWrite(0, dca(), 0, true, true, desk({ kind: 'osc', profile: 'sq' })))
+      .toEqual({ ok: false, error: 'OSC takes no assignment' })
+    expect(membershipWrite(0, dca(), 8, true, true, desk({ kind: 'osc', profile: 'sq' })))
+      .toEqual({ ok: false, error: 'OSC takes no assignment' })
     // An SQ's assignment lives on its own control service and nowhere else, so a MIDI link
     // to one has no way to write it.
     expect(membershipWrite(0, dca(), 0, true, true, desk({ kind: 'midi', midiPort: 'Yamaha', profile: 'sq' })))
@@ -429,6 +440,19 @@ describe('the gaps a profile has', () => {
     expect(membershipWrite(
       0, { id: 'dca-1', deskNumber: 7 }, 0, true, true, socket
     )).toMatchObject({ ok: true })
+  })
+
+  it('refuses a fader whose own desk number points before the list', () => {
+    // The other end of the same map: an Avantis calls its first DCA 36, so a desk number of
+    // 3 is 33 places before it — and the value that would go out, `40 - 33`, is one the
+    // same codec reads as a clear of another fader rather than an assignment.
+    const socket = desk({ ...tcp, profile: 'avantis', midiChannel: 12 })
+    expect(membershipWrite(
+      0, { id: 'dca-1', deskNumber: 3 }, 0, true, true, socket
+    )).toEqual({
+      ok: false,
+      error: 'a desk number of 3 is before the desk’s first DCA'
+    })
   })
 
   it('offers an override only the numbers the desk’s own DCA block has', () => {

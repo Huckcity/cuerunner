@@ -27,15 +27,16 @@
 // settings section is an object whose fields the window dereferences, so the same
 // declaration goes on to name every field inside them — `SHOW_SETTINGS_SHAPE` — and, with
 // the kind each field's own type writes it as, the fields a cue of each type carries —
-// `CUE_FIELD_SHAPE`. What the shape check reads is these two, and nothing else reads them:
-// a settings field this build does not write is a refusal rather than a value the window
-// finds `undefined` under, which is what a file written before a field existed would
-// otherwise load as, and a declared field carrying the wrong kind is refused with a
-// sentence rather than left for the reader that dereferences it — a cue's `messages`
-// holding a number is a fault at `messages.flatMap(…)`, and the funnel promises a
-// sentence. A cue keeps what the declaration does not name, because a cue on disk carries
-// `media`; the settings' table is this build's own whole, so there a field it does not
-// name refuses.
+// `CUE_FIELD_SHAPE` — and the kind of each of the form's own sections nothing walks field
+// by field — `WORKSPACE_SECTION_SHAPE`. What the shape check reads is these three, and
+// nothing else reads them: a settings field this build does not write is a refusal rather
+// than a value the window finds `undefined` under, which is what a file written before a
+// field existed would otherwise load as, and a declared field carrying the wrong kind is
+// refused with a sentence rather than left for the reader that dereferences it — a cue's
+// `messages` holding a number is a fault at `messages.flatMap(…)`, a `history` holding one
+// is a fault at `[...history]`, and the funnel promises a sentence. A cue keeps what the
+// declaration does not name, because a cue on disk carries `media`; the settings' table is
+// this build's own whole, so there a field it does not name refuses.
 
 import type { Cue, CueBase, CueType } from './cue'
 import type { ShowSettings } from './show'
@@ -369,6 +370,55 @@ export const SHOW_SETTINGS_SHAPE = {
     dcas: { elements: { id: 'string', deskNumber: { nothing: true, of: 'number' } } }
   }
 } as const satisfies { readonly [S in ShowSettingsSection]: ShapeFields<ShowSettings[S]> }
+
+/**
+ * The sections of the form whose kind the load funnel's shape check reads: the show's own id,
+ * name and date, its history, and the two settings. These are the sections the window reads
+ * as the types say and no walk reads field by field, so the kind is the level a file carrying
+ * something else differs at — a `history` that is not a list is a fault at `[...history]` in
+ * the changes dialog and at `appendHistory` in a save, and the funnel promises a sentence.
+ *
+ * `showSettings` and `cues` are not here: the check reads them through their own declarations
+ * above. Nor is `triggerGuard`, which a load completes through `normalizeTriggerGuard` — a
+ * guard of the wrong kind is read as the default rather than refused — or `version`, whose
+ * one value the check reads as the literal it is.
+ */
+type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings'
+
+/**
+ * The kind a section of the form is read as, from the field's own type: the leaf a primitive
+ * writes it as, a list of objects where the type is a list, and an object otherwise. It is
+ * the coarse half of `ShapeNode`, for the sections whose fields the declaration does not name
+ * one by one: what is read there is the section's kind, which is the level the window's own
+ * reads of it differ at.
+ */
+type SectionKindOf<T> = [T] extends [string]
+  ? 'string'
+  : [T] extends [number]
+    ? 'number'
+    : [T] extends [boolean]
+      ? 'boolean'
+      : [T] extends [readonly object[]]
+        ? { readonly items: 'object' }
+        : 'object'
+
+/**
+ * The kind of each of those sections, as the check reads it. Like the tables above, the
+ * `satisfies` holds each entry to the field it names — read without the `undefined` a field
+ * the types mark `?:` carries where it is absent, since an absent section is one the walk
+ * does not read: a kind that disagrees with the field's type is a compile error until it is
+ * put right.
+ */
+export const WORKSPACE_SECTION_SHAPE = {
+  id: 'string',
+  name: 'string',
+  createdAt: 'string',
+  history: { items: 'object' },
+  audioSettings: 'object',
+  midiSettings: 'object'
+} as const satisfies {
+  readonly [K in KindOnlySectionKey]: SectionKindOf<NonNullable<Workspace[K]>>
+}
 
 /**
  * The declaration as the check reads it: the value above with the types left out. A field's

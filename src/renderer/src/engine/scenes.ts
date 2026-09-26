@@ -157,8 +157,6 @@ interface WriteOutcome {
   opened: number
   closed: number
   moved: number
-  /** The channels any write actually landed for. */
-  channels: Set<string>
   /** The writes the desk is there for and cannot be told, one line each. */
   refusals: string[]
   /** The writes that did not get there, each with the reason the engine gave. */
@@ -190,7 +188,6 @@ async function writeChanges(
     opened: 0,
     closed: 0,
     moved: 0,
-    channels: new Set<string>(),
     refusals: [],
     failed: [],
     causes: [],
@@ -257,7 +254,6 @@ async function writeChanges(
       continue
     }
 
-    outcome.channels.add(write.change.channelId)
     if (write.kind === 'mute') {
       useStore.getState().mergeDeskState({ mutes: { [write.change.channelId]: write.close } })
       continue

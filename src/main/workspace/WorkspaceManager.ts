@@ -31,6 +31,7 @@ import {
   CUE_FIELD_SHAPE,
   SHOW_SETTINGS_SHAPE,
   SHOW_SETTINGS_SECTIONS,
+  WORKSPACE_SECTION_SHAPE,
   WORKSPACE_SECTIONS,
   type DeclaredFields,
   type ShapeLeaf
@@ -71,14 +72,15 @@ const LOAD_REPAIR_DETAIL: Record<LoadNote['kind'], string> = {
 /**
  * Repairs a cue list's grouping and returns the running order the walks expect, in three
  * passes: dissolve parents that name nothing (or a cue that is not a group), dissolve
- * parent loops, then gather every group's subtree into one block behind it. A cue whose
- * `parentId` is absent names no parent at all: the key is set and nothing is reported,
- * because a repair nobody's file needed is not a repair. Sibling and top-level relative
- * order is preserved, and the rebuild of an already well-formed array is that array — the
- * repair is a fixed point. The gather works on cue objects and carries an emitted guard, so
- * a file with a repeated id neither drops nor duplicates a cue. Nothing but `parentId` and
- * the order is touched; inside a timeline group the offsets stay authoritative and are left
- * exactly as they were.
+ * parent loops, then gather every group's subtree into one block behind it. Every cue that
+ * reaches here carries a `parentId` — the shape check refuses a cue without the key, the
+ * way it refuses a file written before the field existed — so `null` is the only way a cue
+ * names no parent, and nothing below completes a key nobody wrote. Sibling and top-level
+ * relative order is preserved, and the rebuild of an already well-formed array is that
+ * array — the repair is a fixed point. The gather works on cue objects and carries an
+ * emitted guard, so a file with a repeated id neither drops nor duplicates a cue. Nothing
+ * but `parentId` and the order is touched; inside a timeline group the offsets stay
+ * authoritative and are left exactly as they were.
  */
 function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
   const note = (cueId: string, kind: LoadNote['kind']): void => {
@@ -99,14 +101,6 @@ function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
   // returns to the top level, keeping its place among the top-level cues, and fires with
   // the show.
   for (const cue of cues) {
-    // A cue with no `parentId` key at all names nothing, so there is no repair to report:
-    // it is a top-level cue already, and only the key is set. This build always writes one
-    // — a hand-made file that leaves it out is not damage, and a load must not claim it
-    // repaired something nobody wrote wrong.
-    if (cue.parentId === undefined) {
-      cue.parentId = null
-      continue
-    }
     if (cue.parentId === null) continue
     const parent = byId.get(cue.parentId)
     if (parent !== undefined && parent.type === 'group') continue
@@ -309,32 +303,42 @@ function kindWords(kinds: readonly unknown[]): string {
 }
 
 /**
- * The voice a refusal sentence is spoken in: the verb its subject takes, and whether a field the
- * declaration does not name refuses. One walk reads two shapes — the settings' table, every field
- * of which is this build's own whole, and a cue's declared fields, where a field the declaration
- * does not name is the document's and is kept — and the subject beside the voice is what differs
- * between them.
+ * The voice a refusal sentence is spoken in: the subject it opens with, the verb that subject
+ * takes, and whether a field the declaration does not name refuses. One walk reads three
+ * shapes — the settings' table, every field of which is this build's own whole; the saved
+ * form's own top level, where the declaration names a section's kind and not its fields; and
+ * a cue's declared fields, where a field the declaration does not name is the document's and
+ * is kept — and the subject beside the voice is what differs between them.
  */
 interface RefusalVoice {
-  /** The verb the subject takes: `have` for the settings' table, `has` for a cue. */
+  /** The subject a sentence opens with where it names no cue: the settings' table, or the show. */
+  readonly subject: 'that show’s settings' | 'that show'
+  /** The verb the subject takes: `have` for the settings' table, `has` for the show or a cue. */
   readonly verb: 'has' | 'have'
   /** Whether a field the declaration does not name refuses. The settings' rule, not a cue's. */
   readonly refuseForeignFields: boolean
 }
 
 /** The settings' voice: the table is this build's own whole, so a field it does not name refuses. */
-const SETTINGS_VOICE: RefusalVoice = { verb: 'have', refuseForeignFields: true }
+const SETTINGS_VOICE: RefusalVoice = {
+  subject: 'that show’s settings',
+  verb: 'have',
+  refuseForeignFields: true
+}
+
+/** The show's voice: its own top level, whose sections are held to the kinds their types write. */
+const SHOW_VOICE: RefusalVoice = { subject: 'that show', verb: 'has', refuseForeignFields: false }
 
 /** A cue's voice: it keeps the fields the declaration does not name, and names the cue it refuses. */
-const CUE_VOICE: RefusalVoice = { verb: 'has', refuseForeignFields: false }
+const CUE_VOICE: RefusalVoice = { subject: 'that show', verb: 'has', refuseForeignFields: false }
 
 /**
  * What a refusal sentence opens with, built where the sentence is thrown: the settings' own
- * table, or the cue that carries the field — the walk's own cue object, named the way the cue
- * list names it. Nothing about a cue is built for a cue nothing is wrong with.
+ * table or the show, or the cue that carries the field — the walk's own cue object, named the
+ * way the cue list names it. Nothing about a cue is built for a cue nothing is wrong with.
  */
 function refusalOpening(voice: RefusalVoice, cue: Cue | null): string {
-  if (cue === null) return `that show’s settings ${voice.verb}`
+  if (cue === null) return `${voice.subject} ${voice.verb}`
   return `that show’s cue ${cueLabel(cue)} (${String(cue.type)}) ${voice.verb}`
 }
 
@@ -550,10 +554,14 @@ function refuseForeignList(
  * makes after this walk, which names it as the type it is.
  */
 function refuseForeignCues(cues: readonly Cue[], source: string): void {
-  for (const cue of cues) {
+  for (let at = 0; at < cues.length; at++) {
+    const cue = cues[at]
     if (typeof cue !== 'object' || cue === null || Array.isArray(cue)) {
+      // The index is the only name such an element has — there is no cue to read a number or
+      // a name off — so the sentence carries the one the list itself gives it, as the
+      // element-level refusals in the settings' walk carry theirs.
       throw new Refusal(
-        `that show has a cue that is not the shape this version of WinsLab writes` +
+        `that show has a cue that is not the shape this version of WinsLab writes (cues.${at})` +
         ` — ${source} carries ${valueKind(cue)} instead`
       )
     }
@@ -571,10 +579,12 @@ function refuseForeignCues(cues: readonly Cue[], source: string): void {
 
 /**
  * Refuses a document whose shape this build does not write. Four levels are checked: the
- * file's own top level, where a section this build does not declare is the fact; a
- * `showSettings` the file does carry, which has to carry exactly the declared sections —
- * one this build does not declare, or one it leaves out, refuses rather than being filled
- * in; the fields inside those sections, read against the one declaration of them, in both
+ * file's own top level, where a section this build does not declare is the fact and a
+ * section it does declare is held to the kind its type writes — the sections whose fields
+ * nothing declares one by one; a `showSettings` the file does carry, which has to carry
+ * exactly the declared sections — one this build does not declare, or one it leaves out,
+ * refuses rather than being filled in; the fields inside those sections, read against the
+ * one declaration of them, in both
  * directions — a field this build does not write refuses, and so does a declared field the
  * document leaves out, because either way the window reads a value nobody wrote, and each
  * field's value is then held to the kind its declaration carries, down to the element of a
@@ -622,6 +632,23 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     throw new Refusal(
       `that show has a section this version of WinsLab does not know (${key})` +
       ` — ${source} was probably saved by a newer version`
+    )
+  }
+  // The sections whose fields the declaration does not name one by one — the show's id, name
+  // and date, its history, its settings — are held to the kind their types write, which is
+  // the level the window's own reads differ at: a `history` that is not a list is a fault at
+  // `[...history]` in the changes dialog and at `appendHistory` in a save, and the funnel
+  // promises a sentence. A section the document does not carry is not read here: what is
+  // absent and legal is the funnel's rule at this level too.
+  for (const [section, node] of Object.entries(WORKSPACE_SECTION_SHAPE)) {
+    if (!Object.hasOwn(workspace, section)) continue
+    refuseForeignValue(
+      (workspace as unknown as Record<string, unknown>)[section],
+      node,
+      section,
+      source,
+      SHOW_VOICE,
+      null
     )
   }
   const settings = workspace.showSettings as unknown
@@ -1105,9 +1132,9 @@ export async function readWorkspaceFile(
   }
   // Bytes that parse are still not necessarily a show — a hand edit, another tool's export,
   // a download that is JSON because the proxy's error page is. The migration's first read is
-  // the cue list, so a document without one is answered with V8's own
-  // `Cannot read properties of undefined (reading 'find')` unless the shape is refused here,
-  // and the sentence says which file it was.
+  // the cue list — `refuseForeignCues` iterates it — so a document without one is answered
+  // with V8's own `undefined is not iterable` unless the shape is refused here, and the
+  // sentence says which file it was.
   if (!hasCueList(parsed)) {
     throw new Refusal(`that file is not a show — ${filePath} holds no cue list`)
   }

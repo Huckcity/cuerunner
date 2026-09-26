@@ -6,10 +6,12 @@ on:
   workflow_dispatch:
 
 
-# One run per ref at a time: a re-dispatch for a tag that is still packaging would otherwise
-# interleave its release body, its asset uploads and its `latest/` writes with the first run's.
+# One run at a time, whatever the ref: every run writes the same `latest/` mirror, and two runs
+# writing it together — a re-dispatch for an older tag beside a release still packaging — would
+# let whichever finishes last delete the other's names. A group per ref would leave exactly that
+# pair running side by side.
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-latest
   cancel-in-progress: false
 
 jobs:
@@ -614,8 +616,6 @@ jobs:
             published="$published $name"
           done <<< "$FILES"
 
-          aws s3 cp SHA256SUMS "s3://$R2_BUCKET/latest/SHA256SUMS" --endpoint-url "$R2_ENDPOINT"
-
           # Every name this mirror writes that the list did not carry stops being served here: a
           # release that withheld an installer must not leave an earlier release's file standing
           # under this release's name for a card to hand out, and the 404 is what the notes
@@ -631,3 +631,8 @@ jobs:
             esac
             aws s3 rm "s3://$R2_BUCKET/latest/$name" --endpoint-url "$R2_ENDPOINT"
           done
+
+          # Last, so that the served digests and the served names agree: a refused removal fails
+          # the step above with the previous release's `latest/SHA256SUMS` still standing beside
+          # the name it does not match, rather than a new sums file naming files this run deleted.
+          aws s3 cp SHA256SUMS "s3://$R2_BUCKET/latest/SHA256SUMS" --endpoint-url "$R2_ENDPOINT"

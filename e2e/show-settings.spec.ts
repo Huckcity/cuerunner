@@ -87,9 +87,11 @@ test('the DCA count resizes the faders, and a strip is a name and a number', asy
 
   // Twelve strips and twelve faders, from the defaults. A strip drives nothing by itself:
   // which fader it rides is the scene's decision, so the row says what it is — a number
-  // and a name — and nothing on this tab is a routing.
+  // and a name — and nothing on this tab is a routing: what a row holds is asserted rather
+  // than a class the product used to write, because a control that came back under another
+  // name would pass that.
   await expect(dialog.locator('.channel-row')).toHaveCount(12)
-  await expect(dialog.locator('.channel-dca')).toHaveCount(0)
+  await expect(dialog.locator('.channel-row select')).toHaveCount(0)
   await expect(dialog.locator('.dca-row').first().locator('.dca-carrying'))
     .toHaveText('nothing is placed on it yet')
 
@@ -121,7 +123,7 @@ test('the channel count sizes the console, and a show set up too large is correc
   await dialog.locator('.channel-count-select').selectOption('12')
   await expect(dialog.locator('.channel-row')).toHaveCount(12)
   await expect(dialog.locator('.channel-count-select')).toHaveValue('12')
-  await expect(dialog.locator('.channel-dca')).toHaveCount(0)
+  await expect(dialog.locator('.channel-row select')).toHaveCount(0)
 })
 
 test('a show larger than the desk model states is reported under the connection, and not truncated', async () => {

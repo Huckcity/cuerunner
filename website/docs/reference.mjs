@@ -6,10 +6,11 @@
 //
 // The settings page is the one page here that documents another window, so the two sides are
 // declared rather than left to drift: `SETTINGS_SECTIONS` names the settings tab each section
-// answers to, and `LICENSE_ROWS`/`LICENSE_KEY_ROWS` state the License tab's rows. Both are read
-// back by `scripts/reference-page.test.ts` — the sections against the app's own `SETTINGS_TABS`,
-// the rows against the labels `LicenseSection.tsx` prints — so a tab the app adds, a section that
-// answers to no tab, and a row label that moves all fail the build.
+// answers to, and `LICENSE_ROWS`/`LICENSE_KEY_ROWS`/`CHANNELS_ROWS` state the rows of the License
+// tab and the controls of the Show Settings → Channels tab. All of them are read back by
+// `scripts/reference-page.test.ts` — the sections against the app's own `SETTINGS_TABS`, the rows
+// against the labels `LicenseSection.tsx` and `ChannelsTab.tsx` print — so a tab the app adds, a
+// section that answers to no tab, and a row label that moves all fail the build.
 import { table } from './table.mjs'
 
 /**
@@ -80,6 +81,60 @@ export const LICENSE_KEY_ROWS = [
   {
     label: 'Activate',
     prose: `Checks what is in the field and turns the Pro half on the spot. A key that is refused says why, under the field.`
+  }
+]
+
+/**
+ * The Show Settings → Channels tab, control by control: the labels `ChannelsTab.tsx` prints, in
+ * the order it prints them, and what each one sets. A field the tab prints in two branches — a
+ * host for the OSC connection and one for a TCP desk — is named once, where the tab first prints
+ * it. The guard reads each label back out of the component, so the tab a reader is sent to is
+ * documented under the words the operator finds its controls under.
+ */
+export const CHANNELS_ROWS = [
+  {
+    label: 'Model',
+    prose: `Which desk this is — any desk's note on and note off, an SQ, or an Avantis — and so what the desk takes as an open and a close.`
+  },
+  {
+    label: 'Host',
+    prose: `The desk's address, the one thing nobody can guess.`
+  },
+  {
+    label: 'Port',
+    prose: `The desk's MIDI-over-TCP port, 51325 on an SQ and on an Avantis, or the port an OSC desk's addresses are sent to.`
+  },
+  {
+    label: 'Address',
+    prose: `The OSC address a fader is sent to, with <code>{n}</code> standing for its number.`
+  },
+  {
+    label: 'Channel',
+    prose: `The MIDI channel the desk's own MIDI is set to — <em>Utility → General → MIDI</em> on an SQ.`
+  },
+  {
+    label: 'GO button',
+    prose: `The mute group the operator's GO key is assigned to at the desk, or <em>no GO button</em> for a show run from the window.`
+  },
+  {
+    label: 'BACK button',
+    prose: `The mute group the operator's BACK key is assigned to.`
+  },
+  {
+    label: 'GO note',
+    prose: `The MIDI note the operator's GO key transmits, for a soft key set to MIDI Note — a press that steps the show once and leaves nothing lit. Offered on an SQ, whose own traffic cannot be a note.`
+  },
+  {
+    label: 'BACK note',
+    prose: `The MIDI note the operator's BACK key transmits.`
+  },
+  {
+    label: 'Count',
+    prose: `Sizes the list beside it: the strips under the Channels heading, the faders under the DCAs one. A shorter count drops the last of them.`
+  },
+  {
+    label: 'Allow a channel to ride more than one fader',
+    prose: `The rule the Scenes grid follows: on, a strip rides as many faders as a scene places it on; off, the grid keeps one fader per channel and a recall folds a leftover down to the lowest-numbered one.`
   }
 ]
 
@@ -419,6 +474,18 @@ ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.pro
           </tbody>
         </table>
       </div>
+      <p>
+        The Channels tab's own controls, in the order the tab shows them:
+      </p>
+${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.prose]))}
+      <p>
+        The desk's own buttons are read from the same connection, so they are set up with it: the
+        two groups above are the mute groups the operator's GO and BACK keys are assigned to at
+        the desk, and the two notes are for soft keys set to MIDI Note — offered on an SQ, whose
+        own traffic cannot be a note. An Avantis answers for its keys four channels above its own,
+        so a desk set to MIDI channel 13 or higher leaves them past what MIDI has: the fields are
+        not drawn there, the show is run from the window, and a recall still sends.
+      </p>
     </section>
 `
   },

@@ -239,7 +239,7 @@ export async function readBundle(bundlePath: string): Promise<ReadBundle> {
     throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry is not JSON`)
   }
   // The same hole as the plain load funnel's: the bytes parse and are not a show, and the
-  // funnel's first read would otherwise be the cue list's `find` — V8's text, naming
+  // funnel's first read would otherwise be the cue list's iteration — V8's text, naming
   // neither the bundle nor its entry. Said in the sentence family above it.
   if (!hasCueList(parsed)) {
     throw new Refusal(`that bundle carries no show — ${bundlePath}’s ${SHOW_ENTRY} entry holds no cue list`)
