@@ -714,7 +714,13 @@ await rig.blackout()</code></div>
         only for its JSON kind: a string where this build writes a number — or a number where it
         writes a list of strings, or an entry of such a list that is not what the list carries —
         is refused the same way, and <code>null</code> is read only where the show's own types
-        allow it. What a value <em>says</em> is the app's reading rather than the file's, so a
+        allow it. A cue's own fields are read the same way, and the sentence names the cue: a
+        MIDI cue's messages are a list, every message an object, a crosspoint's gain a number,
+        and an OSC argument's value a number, a string or a boolean — a cue field carrying any
+        other kind refuses, as does <code>null</code> where a cue's types allow none. What a cue
+        carries that this build does not declare is kept rather than refused, because a cue on
+        disk holds fields the runtime cue type does not: <code>media</code>, the route its file
+        was found by. What a value <em>says</em> is the app's reading rather than the file's, so a
         name the code does not offer, a desk kind among them, is read as it stands. The one that
         catches a show saved before the scenes changed is inside the settings: the strips, the
         faders and the scenes are checked field by field, so a show whose channels carried a

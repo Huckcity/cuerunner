@@ -536,14 +536,15 @@ extension, which this app does not write — and a show bigger than that is refu
 sentence rather than written as an archive whose directory lies about its own offsets.
 
 `WorkspaceManager` (main process) handles I/O. The shape is declared once, in
-`src/shared/workspaceSections.ts` — the top-level sections and the sections a show's settings
-carry — and every set of workspace bytes goes through one call that checks it, wherever a file
-is read: a show opened from the recent list or the dialog, a bundle's show entry, a
-comparison's other side, a recovery snapshot, the demo. A file this build does not know is
-refused — naming the file and the fact, with what is on disk untouched — and a show file is
-never converted, so an older file refusing to load is the accepted outcome rather than a
-regression. One read is the exception, and it is the save's own: a save about to replace a file
-it cannot read keeps the history it already had and replaces the file anyway.
+`src/shared/workspaceSections.ts` — the top-level sections, the sections a show's settings
+carry, and the fields a cue of each type carries with the kind each is written as — and every
+set of workspace bytes goes through one call that checks it, wherever a file is read: a show
+opened from the recent list or the dialog, a bundle's show entry, a comparison's other side, a
+recovery snapshot, the demo. A file this build does not know is refused — naming the file and
+the fact, with what is on disk untouched — and a show file is never converted, so an older file
+refusing to load is the accepted outcome rather than a regression. One read is the exception,
+and it is the save's own: a save about to replace a file it cannot read keeps the history it
+already had and replaces the file anyway.
 
 A file is unknown when it is not JSON, when it carries no cue list, when its `version` is not
 1, when it has a top-level section this build does not declare, when a cue type is outside the
@@ -554,13 +555,19 @@ declared field carries is not the JSON kind its own type writes — a string whe
 writes a number, a number where it writes a list of strings, or an entry of that list that is not
 what the list carries — when that field carries `null` where the show's types allow no such thing,
 when a cue has not got a field its own type requires — which is what a show saved before the
-shapes below changed meets — or when what sits under `showSettings` is not a set of sections at
-all. What is absent at the file's own top level is not checked, because the check reads what the
+shapes below changed meets — when a declared cue field carries the wrong kind, down to an entry
+of one of its lists: a number where a MIDI cue writes a list of messages, an entry of that list
+that is not an object, a string where a crosspoint writes a number, or `null` where the cue's own
+types allow none — or when what sits under `showSettings` is not a set of sections at all. What
+is absent at the file's own top level is not checked, because the check reads what the
 document carries: a file that omits `history`, `audioSettings`, `midiSettings`, `showSettings` or
 `triggerGuard` reads, with the window standing its own defaults in for the sections a file has
 not got and a load completing the one gate a file carries none of, `triggerGuard`. A
 `showSettings` that is there is different: it has to be exactly the declared sections, each one
-carrying exactly the declared fields. Loading repairs a damaged cue grouping and reports it as a
+carrying exactly the declared fields. A cue is read the other way round: its declared fields are
+held to the kinds their types write — `triggers`, `refire` and `scriptLine` may be missing, the
+rest may not — and a field a cue carries that this build does not declare, `media` among them,
+is kept rather than refused. Loading repairs a damaged cue grouping and reports it as a
 note beside missing media, and it writes no file. There is no conversion either way: a show whose
 settings predate the scene-owned fader assignment refuses, and its channels, faders and
 placements are set up again in Show Settings and the Scenes grid.

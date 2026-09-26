@@ -25,11 +25,17 @@
 //
 // Sections are not enough to tell a file this build can read from one it cannot: a
 // settings section is an object whose fields the window dereferences, so the same
-// declaration goes on to name every field inside them — `SHOW_SETTINGS_SHAPE` — and the
-// fields a cue of each type has to carry. What the shape check reads is these two, and
-// nothing else reads them: a field this build does not write is a refusal rather than a
-// value the window finds `undefined` under, which is what a file written before a field
-// existed would otherwise load as.
+// declaration goes on to name every field inside them — `SHOW_SETTINGS_SHAPE` — and, with
+// the kind each field's own type writes it as, the fields a cue of each type carries —
+// `CUE_FIELD_SHAPE`. What the shape check reads is these two, and nothing else reads them:
+// a settings field this build does not write is a refusal rather than a value the window
+// finds `undefined` under, which is what a file written before a field existed would
+// otherwise load as, and a declared field carrying the wrong kind is refused with a
+// sentence rather than left for the reader that dereferences it — a cue's `messages`
+// holding a number is a fault at `messages.flatMap(…)`, and the funnel promises a
+// sentence. A cue keeps what the declaration does not name, because a cue on disk carries
+// `media`; the settings' table is this build's own whole, so there a field it does not
+// name refuses.
 
 import type { Cue, CueBase, CueType } from './cue'
 import type { ShowSettings } from './show'
@@ -110,27 +116,23 @@ export const SHOW_SETTINGS_SECTIONS = [
 export type ShowSettingsSection = (typeof SHOW_SETTINGS_SECTIONS)[number]
 
 /**
- * The keys a value of `T` has to carry, as the types mark them: a key the type declares
- * `?:` is one a document may leave out, and is the only difference between this and
- * `keyof T`.
- */
-export type RequiredKeys<T> = { readonly [K in keyof T]-?: {} extends Pick<T, K> ? never : K }[keyof T]
-
-/**
  * The fields of one object, as the declaration carries them: a name per field of `T`.
  *
- * An entry is one of four things, and the kinds are the types': `'string'`, `'number'` and
- * `'boolean'` are a leaf of that kind — what a value nothing inside is read has to be on
- * disk, and a union of strings is still a string while a union of mixed kinds, which no single
- * tag could hold, is a compile error. `{ items }` is a list of one primitive
- * kind. `{ elements }` is a list whose every element is an object with those fields.
- * Anything else is an object's own fields, declared the same way. A field whose type allows
- * `null` is declared `{ nothing: true, of: … }` around its shape, mirroring the
- * `{ absent: true, of: … }` a field `T` marks `?:` gets, and a field that is both optional
- * and null-able carries both wrappers: `null` is legal exactly where the types allow it,
- * and a runtime tag has to be one value. `absent`, `nothing`, `of`, `elements` and `items`
- * are the declaration's own names, so a settings field called any of them fails to compile
- * here rather than being read as a flag or a list.
+ * An entry is one of six things, and the kinds are the types' — a leaf of `'string'`,
+ * `'number'` or `'boolean'`, what a value nothing inside is read has to be on disk; the
+ * `'object'` leaf, for a type with more than one field set — a union of variants, or an open
+ * record whose keys are the document's — because a declaration written for one variant would
+ * refuse the others; `{ oneOf: […] }`, for a value whose type allows more than one kind — a
+ * union of mixed kinds, which no single tag could hold — with every kind it allows;
+ * `{ items }`, for a list of one primitive kind or of objects where the elements are a union
+ * of variants; `{ elements }`, for a list whose every element is an object with those fields;
+ * and an object's own fields, declared the same way. A union of strings is still a string.
+ * A field whose type allows `null` is declared `{ nothing: true, of: … }` around its shape,
+ * mirroring the `{ absent: true, of: … }` a field `T` marks `?:` gets, and a field that is
+ * both optional and null-able carries both wrappers: `null` is legal exactly where the types
+ * allow it, and a runtime tag has to be one value. `absent`, `nothing`, `of`, `elements`,
+ * `items` and `oneOf` are the declaration's own names, so a field called any of them fails
+ * to compile here rather than being read as a flag or a list.
  *
  * This is the reach of the `satisfies` on the shapes below: it holds the declaration to the
  * types, at every level — every field of every settings object is named and no name the
@@ -151,10 +153,11 @@ export type ShapeFields<T> = {
   readonly elements?: never
   readonly items?: never
   readonly nothing?: never
+  readonly oneOf?: never
 }
 
 /** A leaf's declared kind: the one value a leaf of that kind may be on disk. */
-export type ShapeLeaf = 'string' | 'number' | 'boolean'
+export type ShapeLeaf = 'string' | 'number' | 'boolean' | 'object'
 
 /** A primitive's own tag: what a leaf of that kind is on disk, or nothing for any other type. */
 type LeafTagOf<T> = [T] extends [string]
@@ -164,6 +167,42 @@ type LeafTagOf<T> = [T] extends [string]
     : [T] extends [boolean]
       ? 'boolean'
       : never
+
+/**
+ * The kinds a primitive's type allows, as its own tags: a union of strings is one kind —
+ * `advance` is a string either way — and `number | string | boolean` is three.
+ */
+type AllowedKinds<T> = T extends string
+  ? 'string'
+  : T extends number
+    ? 'number'
+    : T extends boolean
+      ? 'boolean'
+      : never
+
+/**
+ * Whether `T` is a union rather than one type — the fact that a value has more than one field
+ * set, or more than one kind. The comparison is bracketed so the union is read whole, and the
+ * check itself distributes over it: each member asks whether the whole union is assignable to
+ * that member alone, which is false exactly when another member exists, so the members answer
+ * alike. `never` answers false rather than distributing over nothing, which is what leaves a
+ * type with no kind of its own — a function, a symbol — failing on the tag it has none.
+ */
+type IsUnion<T, U = T> = [T] extends [never]
+  ? false
+  : T extends unknown
+    ? [U] extends [T]
+      ? false
+      : true
+    : never
+
+/**
+ * Whether `T` is an open record: a type whose keys are the document's rather than the types' —
+ * `network.headers`, whose every entry is a string this build never named. Its fields cannot be
+ * declared and a document's own are no refusal, so the value is held to being an object and what
+ * is inside it is read as it stands.
+ */
+type IsRecord<T> = string extends keyof T ? true : false
 
 /**
  * One field's shape, as the types give the field: a field `T` marks `?:` carries `undefined`
@@ -178,20 +217,48 @@ export type ShapeNode<T> = ShapeNodeOf<Exclude<T, undefined>>
  * or an object's own fields — a leaf the types allow `null` for wrapped in `{ nothing: true,
  * of: … }`, so the declaration says where a document may carry `null`.
  *
- * Every test is bracketed, so a union type is read as one type rather than distributed over:
- * a union of strings is still a `string` and takes that tag, while `string | number` reaches
- * `LeafTagOf` whole and has no tag at all, so a field declared with one fails to compile
- * instead of being under-declared as its first member's kind.
+ * Every test is bracketed, so a union type is read as one type rather than distributed over: a
+ * union of strings is still a `string` and takes that tag, while a union of objects or of mixed
+ * kinds meets the two rules below. A list whose elements are a union of variants is bounded at
+ * its elements — `{ items: 'object' }`, every element an object while the variants' own fields
+ * are not declared — because one variant's fields are not another's, and a declaration written
+ * for either would refuse the other.
  */
 type ShapeNodeOf<T> = null extends T
   ? { readonly nothing: true; readonly of: ShapeNode<Exclude<T, null>> }
   : [T] extends [readonly (infer E)[]]
     ? [E] extends [object]
-      ? { readonly elements: ShapeFields<E> }
+      ? IsUnion<E> extends true
+        ? { readonly items: 'object' }
+        : { readonly elements: ShapeFields<E> }
       : { readonly items: LeafTagOf<E> }
     : [T] extends [object]
-      ? ShapeFields<T>
-      : LeafTagOf<T>
+      ? ObjectNodeOf<T>
+      : LeafNodeOf<T>
+
+/**
+ * A field whose type is an object: its own fields where the type has one field set, and
+ * `'object'` where it has more than one — a union of variants, no one of which a declaration
+ * could describe without refusing the others, and an open record, whose fields are the
+ * document's. `'object'` is the value's own kind and the end of the walk for that field: the
+ * variants' fields are not declared, which is the rule a field this build does not name already
+ * gets.
+ */
+type ObjectNodeOf<T> = IsUnion<T> extends true
+  ? 'object'
+  : IsRecord<T> extends true
+    ? 'object'
+    : ShapeFields<T>
+
+/**
+ * A field whose type is a primitive: its own tag where the type allows one kind, and
+ * `{ oneOf: […] }` — every kind it allows — where it allows several, which no single tag could
+ * hold. A union of strings is one kind and stays a string; `OscArg.value`, a number, a string or
+ * a boolean, is the mixed case, and the refusal a document meets there names all three.
+ */
+type LeafNodeOf<T> = IsUnion<AllowedKinds<T>> extends true
+  ? { readonly oneOf: readonly AllowedKinds<T>[] }
+  : LeafTagOf<T>
 
 /**
  * A show's settings, field by field: the one declaration of the field shape the load
@@ -305,56 +372,154 @@ export const SHOW_SETTINGS_SHAPE = {
 
 /**
  * The declaration as the check reads it: the value above with the types left out. A field's
- * entry is what `ShapeFields` says it is — a leaf's own `'string' | 'number' | 'boolean'`,
- * `{ items }` for a list of primitives, `{ elements }` for a list of objects, an object's own
- * fields otherwise — wrapped as `{ absent: true, of: … }` where the types mark the field `?:`
- * and `{ nothing: true, of: … }` where they allow `null`, which a field may carry both of.
+ * entry is what `ShapeFields` says it is — a leaf's own `'string' | 'number' | 'boolean' |
+ * 'object'`, `{ items }` for a list of primitives or of objects where their type is a union,
+ * `{ elements }` for a list of objects, `{ oneOf: […] }` for a value whose type allows more
+ * than one kind, an object's own fields otherwise — wrapped as `{ absent: true, of: … }`
+ * where the types mark the field `?:` and `{ nothing: true, of: … }` where they allow `null`,
+ * which a field may carry both of.
  */
 export type DeclaredFields = { readonly [field: string]: unknown }
 
-/** The fields every cue carries, from `CueBase`: the ones the types do not mark `?:`. */
-const CUE_BASE_FIELDS = [
-  'id',
-  'number',
-  'name',
-  'colorLabel',
-  'parentId',
-  'preWait',
-  'postWait',
-  'timelineOffset',
-  'duration',
-  'advance',
-  'isArmed',
-  'notes'
-] as const satisfies readonly RequiredKeys<CueBase>[]
+/** The fields every cue carries, from `CueBase`, with the kind each is written as. */
+const CUE_BASE_SHAPE = {
+  id: 'string',
+  number: 'string',
+  name: 'string',
+  colorLabel: 'string',
+  parentId: { nothing: true, of: 'string' },
+  preWait: 'number',
+  postWait: 'number',
+  timelineOffset: 'number',
+  duration: 'number',
+  advance: 'string',
+  isArmed: 'boolean',
+  notes: 'string',
+  // The fields the types mark `?:`: absent-marked, so a cue may leave them out. A trigger's
+  // clauses are a union — what one carries another has not got — so a trigger is held to
+  // being an object and the clauses' own fields are not declared.
+  triggers: { absent: true, of: { items: 'object' } },
+  refire: { absent: true, of: 'string' },
+  scriptLine: { absent: true, of: { nothing: true, of: 'number' } }
+} as const satisfies ShapeFields<CueBase>
 
 /**
- * A cue's declared-required fields, by type: the base every cue shares, the type's own, and
- * the `type` every cue is read by. The load funnel's check refuses a cue that has not got
- * one of them — a field the deleted migration pass used to fill in, which is what a file
- * written before that field existed carries — and stops there: a cue on disk carries fields
- * the runtime cue type does not declare, `media` being the one left, so a field this build
- * does not declare is kept rather than refused.
+ * A cue's fields, by type, with the kind each is written as: the base every cue carries, the
+ * type's own, and the `type` every cue is read by. The load funnel's check reads a document
+ * with it, the way it reads the settings' — a declared field the document has not got refuses
+ * unless the types mark it `?:`, and a declared field's value is held to the kind its entry
+ * declares, down to a list's elements — with one thing the settings' walk refuses and this
+ * one keeps: a field the declaration does not name. A cue on disk carries `media`, which the
+ * runtime cue type does not declare, so the walk reads the declaration and never the
+ * document's own fields.
  *
- * The fields the types mark `?:` — `triggers`, `refire`, `scriptLine` — are absent from
- * every list, and a name listed here that stops being required fails to compile: the
- * `satisfies` holds each name to a required key of that type. That each list carries them
- * *all* is what the walk test holds, against the build's own cue of each type.
+ * The `satisfies` binds each type's entry to that type, as `ShapeFields` describes: every
+ * field of the type is named — a mapped type over the type's keys demands them all — and no
+ * name the type does not carry is accepted, so a field added to a cue type, a kind that
+ * disagrees with its field, or a name the declaration invents is a compile error until it is
+ * put right. What it cannot hold is that the *document* is read the way the declaration says;
+ * that is the walk test's half (`src/main/workspace/savedShape.test.ts` walks a cue of every
+ * type against this declaration).
  */
-export const CUE_SHAPE = {
-  audio: [...CUE_BASE_FIELDS, 'type', 'filePath', 'startTime', 'endTime', 'fadeInDuration', 'volume', 'pan', 'outputs', 'loopCount', 'playbackRate', 'trim'],
-  midi: [...CUE_BASE_FIELDS, 'type', 'portName', 'messages'],
-  osc: [...CUE_BASE_FIELDS, 'type', 'host', 'port', 'address', 'args'],
-  wait: [...CUE_BASE_FIELDS, 'type'],
-  fade: [...CUE_BASE_FIELDS, 'type', 'targetCueId', 'fadeProperty', 'targetValue', 'curve', 'stopTargetWhenDone'],
-  stop: [...CUE_BASE_FIELDS, 'type', 'targetCueId', 'fadeOut', 'fadeOutDuration', 'waitForFade'],
-  group: [...CUE_BASE_FIELDS, 'type', 'mode'],
-  network: [...CUE_BASE_FIELDS, 'type', 'method', 'url', 'body', 'headers', 'timeout'],
-  script: [...CUE_BASE_FIELDS, 'type', 'language', 'script', 'timeout'],
-  scene: [...CUE_BASE_FIELDS, 'type', 'sceneId'],
-  devamp: [...CUE_BASE_FIELDS, 'type', 'targetCueId'],
-  msc: [...CUE_BASE_FIELDS, 'type', 'command', 'format', 'deviceId', 'cueNumber', 'cueList', 'destination', 'portName']
-} as const satisfies { readonly [K in CueType]: readonly RequiredKeys<Extract<Cue, { type: K }>>[] }
+export const CUE_FIELD_SHAPE = {
+  audio: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    filePath: 'string',
+    startTime: 'number',
+    endTime: { nothing: true, of: 'number' },
+    fadeInDuration: 'number',
+    volume: 'number',
+    pan: 'number',
+    // Crosspoints, or `null` for the automatic routing this build reads as spread across the
+    // pair — so the wrapper is around the list and not around its entries.
+    outputs: {
+      nothing: true,
+      of: { elements: { inputChannel: 'number', outputChannel: 'number', gain: 'number' } }
+    },
+    loopCount: 'number',
+    playbackRate: 'number',
+    trim: 'number',
+    trimSilence: { absent: true, of: 'boolean' },
+    // The last measurement's record: a shape of its own, `null` until the file has been
+    // scanned, and absent on a cue this build's earlier writers left one off.
+    soundRegion: {
+      absent: true,
+      of: {
+        nothing: true,
+        of: { startMs: 'number', endMs: 'number', durationMs: 'number', silent: 'boolean' }
+      }
+    }
+  },
+  // A message is one of five variants — note on, note off, cc, program change, sysex — so the
+  // list is bounded at its elements and what a message carries is not declared.
+  midi: { ...CUE_BASE_SHAPE, type: 'string', portName: 'string', messages: { items: 'object' } },
+  osc: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    host: 'string',
+    port: 'number',
+    address: 'string',
+    // An argument is an object of two fields, and its value is the one field in the saved
+    // form whose type allows more than one kind: a number, a string or a boolean.
+    args: {
+      elements: {
+        type: 'string',
+        value: { oneOf: ['number', 'string', 'boolean'] }
+      }
+    }
+  },
+  wait: { ...CUE_BASE_SHAPE, type: 'string' },
+  fade: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    targetCueId: 'string',
+    fadeProperty: 'string',
+    targetValue: 'number',
+    curve: 'string',
+    stopTargetWhenDone: 'boolean'
+  },
+  stop: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    targetCueId: 'string',
+    fadeOut: 'boolean',
+    fadeOutDuration: 'number',
+    waitForFade: 'boolean'
+  },
+  group: { ...CUE_BASE_SHAPE, type: 'string', mode: 'string' },
+  // The headers are an open record: the operator's own names for fields this build never
+  // composes, so a header is held to being an object and its fields are the document's.
+  network: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    method: 'string',
+    url: 'string',
+    body: 'string',
+    headers: 'object',
+    timeout: 'number'
+  },
+  script: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    language: 'string',
+    script: 'string',
+    timeout: 'number'
+  },
+  scene: { ...CUE_BASE_SHAPE, type: 'string', sceneId: 'string' },
+  devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string' },
+  msc: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    command: 'string',
+    format: 'string',
+    deviceId: 'number',
+    cueNumber: 'string',
+    cueList: 'string',
+    destination: 'string',
+    portName: 'string'
+  }
+} as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 
 /**
  * The values a saved form is built from, keyed by the declaration: the type is `Pick`ed
