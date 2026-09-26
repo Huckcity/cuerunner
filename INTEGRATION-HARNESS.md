@@ -8,8 +8,10 @@ Merged as `d8e2137`. The transport of §3 G1 is in the tree with its unit and E2
 peers and the lanes above are built and green, and M2's acceptance has been met against real
 hardware. The milestones at the end say what each lane still needs, and §11 records the
 decisions — all of them now taken, in the direction this document recommended: the hardware
-lane, the A&H vendor job and the end-to-end MSC case are built and unrun, and each of them
-reports skipped rather than passed until its counterpart is there.
+lane has been dispatched and run (2026-09-26, run `36260514612`, against the SQ-6 below), and
+the A&H vendor job and the end-to-end MSC case are still unrun; each reports skipped rather
+than passed until its counterpart is there, which is why that hardware run's report reads
+`skipped` and not `passed` — its console case had no cable.
 
 Since then, B4's two halves have landed. The desk is told in its own arrangement (§3, below):
 `DeskSettings.profile` names the range, and an SQ's mute is the NRPN sequence its document
@@ -125,10 +127,11 @@ Nothing is "covered" by one lane; the honesty is in saying which lane claims wha
 | **vendor** | nightly + on demand, `win-ci` (and the Mac mini if it earns a slot) | real ETCnomad (`eos-windows`), and A&H MIDI Control's virtual port joined to the desk peer (`ah-windows`) | the fixtures are still what the real software does; Eos is not just a peer we invented; and the bridge a desk is really driven through passes bytes both ways |
 | **hardware** | on demand only, wherever a desk is (`integration-hardware.yml`, `desk_host`) | a real SQ or Avantis on the network — and, when a console is on a cable, the console itself (`msc_host`) | the peer is a fair model of the desk, the vendor lane's assumption (MIDI bytes are MIDI bytes) holds, and an `msc` trigger fires end to end from a console that transmits one (G2) |
 
-All three are built. What is not true of any of them yet is that they have **run**: the
-hardware lane and the A&H job have no run against their counterparts to point at, so what
-each one would prove stays unproven, and each reports skipped — with the name of what is
-missing — rather than passing on a machine that cannot carry it. §11 holds the decisions and
+All three are built. The hardware lane has now run against its counterpart (2026-09-26, the SQ-6
+of §6, four of its five cases passing and the console case reporting skipped for want of a
+cable); the A&H job has no run to point at yet, so what it would prove stays unproven, and each
+reports skipped — with the name of what is missing — rather than passing on a machine that
+cannot carry it. §11 holds the decisions and
 says, per lane, what remains unproven as a consequence.
 
 Fixtures flow **from** the real thing **to** the fast lane: a `--record` run against real
@@ -958,16 +961,22 @@ press the key on — the hardware lane is where the message a key really sends i
 is checked by a hand: the operator assigns the show's GO group to a key and presses it. That case
 stays the group one, so the note route is carried by the peer's model of the desk and nothing
 wider.
-*Acceptance*: met when a run happens. **A developer run against an SQ-6 (firmware 1.6.1) on
+*Acceptance*: met 2026-09-26. **A developer run against an SQ-6 (firmware 1.6.1) on
 2026-09-21 passed all three cases a desk can carry** — the desk's own read-back, the scene recall
 moving its DCA 1 (read back off the desk, through the relay), and a key press at the surface
 running the show — and the console case reported skipped for want of a console. Those three cases
 have since changed shape with Story 11.2 — what a recall moves, and what the get is asked about,
-is the mic's own mute at the input's page rather than a DCA — so that run is the record of the
-specs as they stood that day, and the new shape has not yet been in front of a desk. What has *not*
-happened is the **job**: `integration-hardware.yml` has never been dispatched, so the lane has no
-report of its own, and a report is what the record's rows are evidence of. The desk has to be
-reachable from the runner for that, which is a cable rather than a change.
+is the mic's own mute at the input's page rather than a DCA — and the shape has been in front of
+the same SQ-6: two developer runs on 2026-09-26 passed the read-back at the input's page, the
+recall moving the mic's own mute with the desk's value saying so, the two mics handed from one
+fader to the other and back, and a key press at the surface (the show's GO group assigned to a
+soft key). What the acceptance was waiting on is the **job**, and it has now been dispatched:
+run `36260514612` (2026-09-26, `refs/heads/main`) ran `integration-hardware.spec.ts` against that
+desk and its own report is **4 passed, 1 skipped, 0 failed** — the key press at 12.3 s being the
+hand case, and the console case the skip ("no console named — set MSC_HOST …"). The lane's status
+for the run is therefore `skipped` rather than `passed`, which is AD-24's rule working as
+designed: the desk claims stay `unproven` until a run carries every case, which means a console
+on a cable beside the desk. What remains of this milestone is that cable.
 **Closed, and running on every pull request** as of Story 11.5: **the recorded desk fixture.** A
 session from an SQ-6 (firmware 1.6.1) was captured on 2026-09-22 —
 `integration/fixtures/vendor/sq6-native-apply-2026-09-22.json`, taken through
@@ -1015,10 +1024,12 @@ are MIDI bytes" assumption, and this model's own reading of 51326 stay unproven 
    those cases are about: the value read back is the mic's own mute at the input's page, and an
    SQ's membership goes to 51326 — which Story 11.5's peer now answers as the capture says the
    desk answers, on the peers lane, while the desk's own answer stays outside every peer: see §6
-   and decision 6.) Still unproven: the **job**
-   (`integration-hardware.yml` has never been dispatched, so the lane has no report of its own),
-   the vendor lane's "MIDI bytes are MIDI bytes" assumption, which belongs to the bridge, and the
-   console case, which has no console. The lane reports skipped, never passed, without a desk
+   and decision 6.) The job has now run — `36260514612`, 2026-09-26, four cases passed and the
+   console case skipped — so the desk's own answers are in that run's report and the record's
+   rows carry it as evidence. Still unproven: the vendor lane's "MIDI bytes are MIDI bytes"
+   assumption, which belongs to the bridge, and the console case, which has no console — and
+   because the lane's status is the run's own `skipped`, AD-24 leaves both desk rows where the
+   record has them. The lane reports skipped, never passed, without a desk
    named, and each claim's row moves only on the report that names it.
    **The desk is reached through a relay, and the checklist said otherwise until it was
    measured** (§6): an SQ's MIDI service refuses a second connection from the same host,
