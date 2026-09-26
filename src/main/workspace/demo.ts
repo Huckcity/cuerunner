@@ -8,13 +8,16 @@
 // which survives an app update or a move. The workspace opens with no path of its own,
 // so saving it asks where to put a copy rather than writing over the bundle.
 import { app } from 'electron'
-import { copyFile, mkdir, readFile } from 'fs/promises'
+import { copyFile, mkdir, readFile, stat } from 'fs/promises'
 import { basename, isAbsolute, join } from 'path'
 import { Refusal } from '../ipc/refusal'
 import { hasCueList, type Workspace } from '../../shared/workspace'
 import { migrateWorkspace } from './WorkspaceManager'
 
 export const DEMO_WORKSPACE_FILE = 'Demo Show.cuerunner'
+
+/** The largest demo file this app opens: the same ceiling a workspace file gets. */
+const MAX_DEMO_BYTES = 64 * 1024 * 1024
 
 // Packaged builds carry the demo in extraResources; dev, E2E, and the screenshot script
 // run the app from the repository (out/main/index.js → repository root).
@@ -61,8 +64,23 @@ export async function materialiseDemoAssets(
 export async function openDemoWorkspace(file?: string): Promise<Workspace> {
   const source = demoSourceDir()
   const showFile = file ?? join(source, DEMO_WORKSPACE_FILE)
+  // The demo is a file on disk like any other, so it is bounded before it is read, the way
+  // the app's other three load paths bound theirs: a tampered install must not have main
+  // inflate a file that is not a show at all.
+  const { size } = await stat(showFile)
+  if (size > MAX_DEMO_BYTES) {
+    throw new Refusal(`that demo file is larger than this app will open — ${showFile}`)
+  }
   const raw = await readFile(showFile, 'utf-8')
-  const parsed = JSON.parse(raw) as Workspace
+  // A demo file that will not parse is a damaged install, not a fault: without this guard
+  // the window gets V8's own parse text where the demo channel declares a refusal, so the
+  // sentence is the one the other three funnels give, naming the file.
+  let parsed: Workspace
+  try {
+    parsed = JSON.parse(raw) as Workspace
+  } catch {
+    throw new Refusal(`that file is not a show — ${showFile} is not JSON`)
+  }
   // The same guard the other three load funnels put in front of the funnel, and for the same
   // reason: a document that parses and is not a show would otherwise be walked by the
   // funnel's first read of the cue list and reach the window as V8's own text — a fault,

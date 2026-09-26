@@ -109,13 +109,13 @@ function universalProblems(reading: UniversalReading): string[] {
   const mac = reading.pkg?.build?.mac ?? {}
   const targets: Array<{ arch?: string[] }> = mac.target ?? []
   const archs = targets.flatMap((target) => target.arch ?? [])
-  if (!archs.includes('universal')) return problems
 
   // electron-builder validates `build` against its own schema and refuses an unknown
   // property, so a `//`-style comment key — the JSON convention this repository uses in
   // tsconfig, and which nothing here reads — fails every `npm run dist:*` on every
   // platform before a file is written. It cost a release run: "configuration.mac has an
-  // unknown property '// x64ArchFiles'". Explanations belong in the README.
+  // unknown property '// x64ArchFiles'". Explanations belong in the README. Read before the
+  // target is: a per-architecture dmg still fails every `dist:*` with a comment key inside it.
   const comments: string[] = []
   const walk = (value: unknown, path: string): void => {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return
@@ -130,6 +130,8 @@ function universalProblems(reading: UniversalReading): string[] {
       `package.json's \`${comment}\` is a comment key inside electron-builder's config, which is schema-validated: every \`npm run dist:*\` fails with "has an unknown property" — the explanation belongs in the README`
     )
   }
+
+  if (!archs.includes('universal')) return problems
 
   const resources = (reading.pkg?.build?.extraResources ?? []).find(
     (entry: { to?: string }) => entry.to === 'audio'
@@ -236,6 +238,15 @@ describe('the universal macOS dmg', () => {
 
   it('names a comment key that would fail electron-builder\'s schema', () => {
     const mac = { ...LIVE.pkg.build.mac }
+    mac['// x64ArchFiles'] = 'an explanation in the wrong place'
+    const problems = universalProblems({ ...LIVE, pkg: { build: { ...LIVE.pkg.build, mac } } })
+    expect(problems[0]).toContain('is a comment key inside electron-builder')
+  })
+
+  it('names a comment key whatever the target is per-architecture', () => {
+    // The comment key fails every `npm run dist:*` on every architecture, so a target that
+    // asks nothing of the merge still has to be read for it.
+    const mac = { ...LIVE.pkg.build.mac, target: [{ target: 'dmg', arch: ['arm64'] }] }
     mac['// x64ArchFiles'] = 'an explanation in the wrong place'
     const problems = universalProblems({ ...LIVE, pkg: { build: { ...LIVE.pkg.build, mac } } })
     expect(problems[0]).toContain('is a comment key inside electron-builder')

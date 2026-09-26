@@ -42,12 +42,14 @@ const SCENE_COLUMN = '.matrix-scene[data-scene-id]'
 
 /**
  * Whether this row of this scene is still to send: the column's own change list holds a
- * channel the scene places on this fader, or one the record still has on it — the two
- * sides of the same move, read off the one computation rather than derived a second way.
+ * channel whose placement on this fader the scene and the record disagree about — which is
+ * the difference a recall writes, read off the one computation rather than derived a second
+ * way. A pair the two already agree about is a change about some other row of that channel,
+ * and this row is not to send.
  */
 function cellPending(changes: DeskChange[], dcaId: string, deskState: DeskState): boolean {
   return changes.some(change =>
-    change.dcas.includes(dcaId) ||
+    change.dcas.includes(dcaId) !==
     (deskState.assignments[change.channelId] ?? []).includes(dcaId))
 }
 
@@ -281,6 +283,14 @@ function ScenePicker({
       document.removeEventListener('mousedown', onMouseDown)
     }
   }, [onClose])
+
+  // What the menu hangs from can change without the menu closing: another row's box can be
+  // pressed while this one is up, and the same picker is then drawn for that row. The corner
+  // is measured again with it, because the one taken when the menu opened belongs to the row
+  // it was opened on — a menu left there would edit one row from over another.
+  useEffect(() => {
+    setAt(anchor.box.getBoundingClientRect())
+  }, [anchor])
 
   // The box is inside a grid that scrolls and clips it, and the picker hangs from the box:
   // what the operator scrolls under the menu is re-measured rather than dismissed, so the

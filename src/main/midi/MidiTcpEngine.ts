@@ -74,11 +74,11 @@ interface Link {
    */
   online: boolean | null
   /**
-   * Whether the connection this link last held came up and was then ended by the desk —
-   * the fact the close handler already sees. The sentence a following `send()` returns is
-   * written after that socket is gone, so the fact has to outlive it; anything that proves
-   * the peer is answering now — a connection that comes up, a dial that reaches nothing at
-   * all — clears it, and with it the claim that the address is not the thing to check.
+   * Whether the dial this link last made found a peer that took the connection and then
+   * reset it, rather than one that was not there: the sentence a failed `send()` returns
+   * is written from this, and the claim that the address is not the thing to check rides
+   * on it. Written where that dial's own error is read, and cleared at the start of every
+   * dial — an attempt that reaches nothing must not be answered with the last one's fate.
    */
   reset: boolean
 }
@@ -180,9 +180,13 @@ export class MidiTcpEngine {
           // A connection that came up and was then reset is not a desk that did not
           // answer: the desk answered, so the address and its setting are the two things
           // that are right, and something else holding the desk is what to look at.
+          //
+          // The name is the link's, not this call's argument: the link is the desk's own
+          // address with the whitespace a paste leaves taken off, and it is the one the
+          // panel's row carries.
           error: link.reset
-            ? `The desk at ${deskLinkName(host, port)} accepted the connection and then reset it — something else may be holding its MIDI port`
-            : `The desk at ${deskLinkName(host, port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
+            ? `The desk at ${deskLinkName(link.host, link.port)} accepted the connection and then reset it — something else may be holding its MIDI port`
+            : `The desk at ${deskLinkName(link.host, link.port)} did not answer — check its address, and that MIDI over TCP is on at the desk`
         }
       }
     }
@@ -195,7 +199,7 @@ export class MidiTcpEngine {
     if (!sent.ok) return sent
     return {
       ok: false,
-      error: `Could not send to the desk at ${deskLinkName(host, port)}: the connection dropped before the recall went out`
+      error: `Could not send to the desk at ${deskLinkName(link.host, link.port)}: the connection dropped before the recall went out`
     }
   }
 
@@ -219,11 +223,15 @@ export class MidiTcpEngine {
   }
 
   private link(host: string, port: number): Link {
-    const name = deskLinkName(host, port)
+    // The address `deskLinkName` names, with the whitespace a paste can leave around it
+    // taken off: the SQ native service dials and reports `host.trim()` for the same desk,
+    // and a name with a space in it is not a host anything can be dialled at.
+    const address = host.trim()
+    const name = deskLinkName(address, port)
     const existing = this.links.get(name)
     if (existing) return existing
     const link: Link = {
-      host,
+      host: address,
       port,
       socket: null,
       connected: false,
@@ -319,13 +327,11 @@ export class MidiTcpEngine {
           link.connected = false
           link.dialling = null
           link.socket = null
-          if (wasConnected) {
-            // A connection that came up and was then ended by the desk without a reset —
-            // a graceful close, which the error handler above does not see. The fact is
-            // kept the same way: a send after this one has no socket to write to, and the
-            // sentence it returns is written from what is kept here.
-            link.reset = true
-          }
+          // A connection that came up and was then ended by the desk without a reset — a
+          // graceful close, which the error handler above does not see — is still the desk
+          // having taken this client, so the panel is told with the cause that says so. It
+          // is not what writes `link.reset`: the next `send()` has no socket to write to,
+          // so it dials, and that attempt's own fate is the sentence it returns.
           if (wasConnected && link.online !== false) {
             link.online = false
             this.onStatus?.(name, false, 'the connection was taken or reset', 'reset')

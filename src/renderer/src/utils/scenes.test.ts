@@ -392,8 +392,8 @@ describe('sceneChanges: what a recall writes', () => {
   })
 
   it('writes a fact nothing is known about, rather than assuming the desk is where the show wants it', () => {
-    // A fresh show, or the resync's emptied base: an absent key is a fact to write, not a
-    // fact that happens to match.
+    // A fresh show, or a record with no key for the channel: an absent key is a fact to
+    // write, not a fact that happens to match.
     const known = {
       mutes: { 'ch-1': true, 'ch-2': false, 'ch-3': true },
       assignments: { 'ch-1': [], 'ch-2': ['dca-2'], 'ch-3': [] }

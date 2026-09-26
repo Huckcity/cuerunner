@@ -154,8 +154,8 @@ export function readCapture(path: string = CAPTURE): SqNativeCapture {
     if (direction !== 'to-desk' && direction !== 'from-desk') {
       throw new Error(`${path}: exchange ${index} is neither to nor from the desk`)
     }
-    if (typeof bytes !== 'string' || bytes.length % 2 !== 0 || !HEX.test(bytes)) {
-      throw new Error(`${path}: exchange ${index} carries bytes that are not an even run of hex`)
+    if (typeof bytes !== 'string' || bytes.length === 0 || bytes.length % 2 !== 0 || !HEX.test(bytes)) {
+      throw new Error(`${path}: exchange ${index} carries bytes that are not a non-empty even run of hex`)
     }
     return { at, direction, bytes }
   })

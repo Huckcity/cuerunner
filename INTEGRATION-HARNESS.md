@@ -276,7 +276,12 @@ matching language.
 
 ```
 integration/
-  playwright.config.ts        per-suite config; testDir 'specs'; workers 1 anywhere, retries 1
+  playwright.config.ts        per-suite config; testDir 'specs'; workers 1 anywhere, retries 1 in CI
+  deskRelay.ts                the relay that holds the desk's single connection: the app and a
+                              spec's own wire both attach to it, and the desk's bytes go to all
+                              (§6)
+  sqCapture.mjs               the script a desk session is captured through, kept beside the
+                              recording it made
   peers/
     eos.ts                    the console: an OSC peer over UDP, `--tx-host`/`--tx-port` for
                               where its output goes, `--cue-send-string`, `--control` for a
@@ -291,6 +296,8 @@ integration/
     harness-eos.spec.ts       the Eos peer held to ETC's own pages, no app running
     harness-desk.spec.ts      the desk peers held to the A&H documents — and the native one to
                               its capture — with no app running
+    harness-desk-relay.spec.ts the relay held to being a relay, against a peer told to refuse a
+                              second client exactly as the desk does, so the case fails without it
     eos.spec.ts               Cuerunner ↔ the Eos peer: fire a cue, answer the console
     eos-vendor.spec.ts        @vendor: the same chain against a real console — or against
                               a recording of one — and it skips itself when neither is named
@@ -974,8 +981,7 @@ dials the desk's fixed port for any SQ show and a peer bound there must belong t
 started it. What no peer carries is still the desk's own side: the capture holds no membership
 read and no keepalive datagram, so the read form stays unmeasured and the claim where the record
 leaves it. Until a desk run happens, the peer's model of the desk, the vendor lane's "MIDI bytes
-are MIDI bytes" assumption, the message a real key press sends and this model's own reading of
-51326 stay unproven (§11).
+are MIDI bytes" assumption, and this model's own reading of 51326 stay unproven (§11).
 
 ---
 
@@ -1015,14 +1021,14 @@ are MIDI bytes" assumption, the message a real key press sends and this model's 
    console case, which has no console. The lane reports skipped, never passed, without a desk
    named, and each claim's row moves only on the report that names it.
    **The desk is reached through a relay, and the checklist said otherwise until it was
-   measured** (§6): an SQ's MIDI service refuses a second connection, resetting it the moment it
-   is accepted, so a run that pointed both the app and this spec's own wire at the desk's address
-   could not have passed whatever the desk was set to — the app's connection was the one being
-   reset, and its scene recalls never reached the desk at all. `integration/deskRelay.ts` holds
-   the desk's single connection and both clients connect there; its own spec
-   (`specs/harness-desk-relay.spec.ts`, in the peers lane, so it runs on every pull request) holds
-   it to being a relay rather than a desk. What the lane asserts is still the desk's own bytes —
-   relayed verbatim, one hop that belongs to the harness rather than to the desk.
+   measured** (§6): an SQ's MIDI service refuses a second connection from the same host,
+   resetting it the moment it is accepted, so a run that pointed both the app and this spec's own
+   wire at the desk's address could not have passed whatever the desk was set to — the app's
+   connection was the one being reset, and its scene recalls never reached the desk at all.
+   `integration/deskRelay.ts` holds the desk's single connection and both clients connect there;
+   its own spec (`specs/harness-desk-relay.spec.ts`, in the peers lane, so it runs on every pull
+   request) holds it to being a relay rather than a desk. What the lane asserts is still the desk's
+   own bytes — relayed verbatim, one hop that belongs to the harness rather than to the desk.
 3. **Where the vendor lane runs. — answered: `win-ci`, with a fallback.** ETCnomad is
    installed there (§9), and the machine is Windows with a logged-in session, which is what
    a GUI application needs. The caveats that came with the guest — Server 2025 outside

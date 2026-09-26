@@ -75,6 +75,20 @@ const MOVED: MicScene = {
   notes: ''
 }
 
+/**
+ * One strip placed on two faders of one scene: a recall of it writes twice about one
+ * channel, in the faders' order, which is what makes the record the writes read matter.
+ */
+const DOUBLE: MicScene = {
+  id: 's-6',
+  name: 'Double',
+  dcas: [
+    { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-2' },
+    { dcaId: 'dca-4', kind: 'channel', memberId: 'ch-2' }
+  ],
+  notes: ''
+}
+
 /** The desk nothing has been sent to: both facts unknown, so the next recall writes them. */
 const EMPTY: DeskState = { mutes: {}, assignments: {} }
 
@@ -323,6 +337,21 @@ describe('recallScene', () => {
       mutes: { 'ch-2': false, 'ch-3': false, 'ch-1': true, 'ch-4': true },
       assignments: { 'ch-2': ['dca-2'], 'ch-3': ['dca-3'] }
     })
+
+    // And the same test with the copy taken away for good: a scene that places one strip on
+    // two faders makes two writes about one channel, so the second is computed from the
+    // record the first just wrote. Read from the copy this recall was handed, the second
+    // would leave the record holding the second fader alone while the strip rides both —
+    // and the desk's own fader 2 would be told nothing about it ever again.
+    seed(EMPTY, null, cast(), SQ, [DOUBLE])
+    sent.length = 0
+    await recallScene('s-6')
+
+    expect(sent.filter(line => line.startsWith('SQ '))).toEqual([
+      'SQ ch2 onto fader 2',
+      'SQ ch2 onto fader 4'
+    ])
+    expect(useStore.getState().deskState.assignments['ch-2']).toEqual(['dca-2', 'dca-4'])
   })
 
   it('leaves the first write recorded when a later one fails, and the next recall retries only the rest', async () => {

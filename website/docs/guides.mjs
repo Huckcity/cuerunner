@@ -786,9 +786,9 @@ export const GUIDES = [
         <strong>Ensemble…</strong> — the last row of the box — is where one is built or
         changed: name it, move the strips it should hold from <strong>Available</strong> to
         <strong>In the ensemble</strong> with the two arrows, and press <strong>Create and
-        apply</strong>. The group joins the cast, this row holds it, and it is left there to
-        put on other rows and scenes with the same box. Opened from a row that already holds a
-        group it edits that group instead — <strong>Save</strong> changes it on every row that
+        apply</strong>. The group is put on this row, and it is left there to put on other rows
+        and scenes with the same box. Opened from a row that already holds a group it edits that
+        group instead — <strong>Save</strong> changes it on every row that
         holds it, because an ensemble is membership rather than a copy, and
         <strong>Delete</strong> removes it and empties those rows. A group holds
         <strong>strips</strong>, so any strip of the show can be moved across whether or not

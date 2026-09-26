@@ -55,6 +55,18 @@ describe('MidiTcpService', () => {
     expect(setState).toHaveBeenCalledWith('starting', 'dialling 10.0.0.5:51325')
   })
 
+  it('dials and names the desk without the whitespace a paste left around its address', () => {
+    // What the renderer stores is what was typed, so a paste can leave a space the operator
+    // does not see. The address is the desk's; the name the panel reads is the one the
+    // native service's row also carries.
+    const { service, link, context, setState } = harness()
+
+    service.start(context, settings({ host: ' 10.0.0.5 ' }))
+
+    expect(link.open).toHaveBeenCalledWith('10.0.0.5', 51325)
+    expect(setState).toHaveBeenCalledWith('starting', 'dialling 10.0.0.5:51325')
+  })
+
   it('does nothing when the show drives no desk over the network', () => {
     const { service, link, context, setState } = harness()
 

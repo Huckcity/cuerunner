@@ -17,6 +17,7 @@ import {
   launchApp,
   listenOsc,
   mintLicense,
+  readRecovered,
   sendOsc,
   startServer,
   type TestServer
@@ -45,23 +46,11 @@ async function engineEvents(app: ElectronApplication): Promise<AudioEngineEvent[
 }
 
 /**
- * The crash banner as the reloaded window renders it, read through the window's own
- * webContents: Playwright's page handle stays marked as crashed after the renderer has
- * been replaced, so the page cannot be asked. Every read is raced against a deadline —
- * `executeJavaScript` issued while a renderer is being torn down never settles — and null
- * means "not yet", which is what the poll wants.
+ * The crash banner as the reloaded window renders it. The read itself is `readRecovered`, the
+ * suite's one reader of a window the page handle can no longer ask; what is here is the
+ * selector, so the two specs that watch this banner read the same element.
  */
-async function crashBanner(app: ElectronApplication): Promise<string | null> {
-  return app.evaluate(async ({ BrowserWindow }) => {
-    const contents = BrowserWindow.getAllWindows()[0]?.webContents
-    if (!contents || contents.isCrashed() || contents.isDestroyed()) return null
-    const read = contents
-      .executeJavaScript("document.querySelector('.app-notice[data-kind=\"crash\"]')?.textContent ?? null")
-      .catch(() => null)
-    const deadline = new Promise(resolve => setTimeout(() => resolve(null), 2000))
-    return Promise.race([read, deadline]) as Promise<string | null>
-  })
-}
+const CRASH_BANNER = "document.querySelector('.app-notice[data-kind=\"crash\"]')?.textContent ?? null"
 
 /** The menu item's own click, from the main process — a synthesized key never reaches it. */
 async function clickMenu(app: ElectronApplication, id: string): Promise<void> {
@@ -339,11 +328,11 @@ test('a crashed renderer mid-playback is silenced from main before it is brought
     // reads on mount, and the banner is the only place that tells the operator the show was
     // reset while the file on disk was left alone. Without the pair's registration the crash
     // is known to main and to nobody else.
-    await expect.poll(() => crashBanner(app), { timeout: 30_000 })
+    await expect.poll(() => readRecovered(app, CRASH_BANNER), { timeout: 30_000 })
       .toContain('The interface stopped unexpectedly')
     // And what it says about the show: the banner is the only place the operator reads
     // that the session was reset while the file on disk was left alone.
-    await expect.poll(() => crashBanner(app), { timeout: 10_000 })
+    await expect.poll(() => readRecovered(app, CRASH_BANNER), { timeout: 10_000 })
       .toContain('The workspace file on disk is untouched')
   } finally {
     await closeApp(app)

@@ -53,7 +53,10 @@ export class MidiTcpService implements ShowService {
       return
     }
 
-    const device = deskLinkName(desk.host, desk.tcpPort)
+    // The same address the row is named from and the dial reaches: what the renderer stores
+    // is what was typed, and a paste that left whitespace around it is still this desk.
+    const host = desk.host.trim()
+    const device = deskLinkName(host, desk.tcpPort)
     this.engine.onMessage = (from, message) => {
       context.bus.publish({ kind: 'midi', at: Date.now(), device: from, message })
     }
@@ -86,7 +89,7 @@ export class MidiTcpService implements ShowService {
     }
 
     context.setState('starting', `dialling ${device}`)
-    this.engine.open(desk.host, desk.tcpPort)
+    this.engine.open(host, desk.tcpPort)
   }
 
   stop(): void {

@@ -263,8 +263,8 @@ function sameFaders(a: string[], b: string[]): boolean {
  * all, which is what makes a recall a few messages instead of a sweep.
  *
  * The record's own shape is a fact per channel, and a fact nothing is known about is a fact
- * to write: a channel the record has never mentioned — a fresh show, or the resync's emptied
- * base — is told to the desk rather than assumed to be where the show wants it.
+ * to write: a channel the record has never mentioned — a fresh show, or a record with no key
+ * for that channel — is told to the desk rather than assumed to be where the show wants it.
  *
  * A null scene is the all-closed column: every controlled channel the record has something
  * to say about is closed, which is the same rule with nothing placed.

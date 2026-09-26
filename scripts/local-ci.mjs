@@ -37,7 +37,8 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /** Every lane this can run, and the one command the workflow runs for it. */
 export const LANES = {
@@ -49,7 +50,7 @@ export const LANES = {
     run: 'npm run test:native',
     gui: false,
     linux: true,
-    what: 'the ten native scripts, ending in the matrix bench'
+    what: 'the eleven native scripts, ending in the matrix bench'
   },
   integration: {
     run: 'npm run test:integration',
@@ -63,8 +64,23 @@ export const LANES = {
 /** Where a host keeps the tree it was last sent, under that host's home. */
 export const REMOTE_DIR = 'cuerunner-local-ci'
 
-/** What the tar never carries: build products, the toolchain, and the history. */
-export const EXCLUDES = ['node_modules', '.git', 'out', 'dist', 'test-results', 'playwright-report']
+/**
+ * What the tar never carries: build products, the toolchain, and the history. A name
+ * (`node_modules`) is pruned wherever it sits; a path (`native/audio/build`) is the one tree it
+ * names. The engine's build directory is one platform's binary — `scripts/ensure-native.mjs`
+ * would read a shipped Linux `cuerunner-audio` as current on the Mac — and the FFmpeg cache is
+ * 160 MB a host can fetch for itself.
+ */
+export const EXCLUDES = [
+  'node_modules',
+  '.git',
+  'out',
+  'dist',
+  'test-results',
+  'playwright-report',
+  'native/audio/build',
+  'native/audio/.cache'
+]
 
 /**
  * The hosts, their doors, and the lanes each one is worth running.
@@ -99,10 +115,17 @@ export function plan(argv, env = process.env) {
   const flags = new Map()
   for (const arg of argv) {
     const [name, value = ''] = arg.replace(/^--/, '').split('=')
+    // A misspelt flag is refused rather than ignored: `--lisst` would otherwise run the gate a
+    // reader asked only to see, and `--host=win` every host but the one they named.
+    if (!['hosts', 'lanes', 'list'].includes(name)) throw new Error(`no such flag: ${name}`)
     flags.set(name, value)
   }
   const asked = (flags.get('lanes') ?? '').split(',').map(name => name.trim()).filter(Boolean)
   const names = (flags.get('hosts') ?? 'linux,win,mac').split(',').map(name => name.trim()).filter(Boolean)
+  // An empty list is a spelling of the default only when the flag is absent: `--hosts=` or
+  // `--lanes=` names none, and a gate with no steps reports `0 passed` and exits 0.
+  if (names.length === 0) throw new Error('no host to run: --hosts= named none')
+  if (flags.has('lanes') && asked.length === 0) throw new Error('no lane to run: --lanes= named none')
   const table = hosts(env)
 
   const noHost = names.find(name => table[name] === undefined)
@@ -135,13 +158,19 @@ export function tarArgs(excludes = EXCLUDES) {
   return ['czf', '-', ...excludes.map(name => `--exclude=${name}`), '.']
 }
 
-/** The ssh argv for one command on one host: the key it needs, and no interactive prompt. */
+/**
+ * The ssh argv for one command on one host: the key it needs, no interactive prompt, and a
+ * keepalive — a host that accepts the connection and then stalls has to end the session on its
+ * own, or the run hangs with no output where the README promises a `skipped` row.
+ */
 export function sshArgs(host, argvBody) {
   return [
     'ssh',
     ...(host.keyFile === undefined || host.keyFile === '' ? [] : ['-i', host.keyFile.replace(/^~/, homedir())]),
     '-o', 'BatchMode=yes',
     '-o', 'ConnectTimeout=8',
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=3',
     '-o', 'StrictHostKeyChecking=accept-new',
     host.ssh,
     argvBody
@@ -184,7 +213,7 @@ export function prologue(host) {
   }
   return [
     `if [ -d "$HOME/actions-runner/_work/_tool/node" ]; then`,
-    `tool=$(find "$HOME/actions-runner/_work/_tool/node" -maxdepth 3 -name node -type f 2>/dev/null | sort | tail -1);`,
+    `tool=$(find "$HOME/actions-runner/_work/_tool/node" -maxdepth 4 -name node -type f 2>/dev/null | sort | tail -1);`,
     `[ -n "$tool" ] && PATH="$(dirname "$tool"):$PATH" && export PATH;`,
     `fi`
   ].join(' ')
@@ -198,7 +227,11 @@ export function npmCommand(host, run) {
   return host.platform === 'win32' && run.startsWith('npm ') ? `npm.cmd ${run.slice(4)}` : run
 }
 
-/** A body for the host's own shell: one command per line, failing at the first failure. */
+/**
+ * A body for the host's own shell. POSIX joins with ` && `, so the first line that fails stops
+ * the rest; Windows joins with `; `, which neither PowerShell nor cmd treats as fail-fast — there
+ * the reported status is the last command's.
+ */
 export function body(host, lines) {
   return lines.join(host.platform === 'win32' ? '; ' : ' && ')
 }
@@ -213,7 +246,9 @@ export function quote(host, path) {
  *
  * A file's *size and mtime* are what say it changed, not its name: an edit keeps the name and
  * would otherwise leave a host holding the code from before the edit, which is the one way a
- * local run could quietly test something other than what is on disk here.
+ * local run could quietly test something other than what is on disk here. The walk covers the
+ * whole tree to whatever depth it has: a file the tar would ship and the digest would not see is
+ * that same stale host, one directory down.
  */
 let cachedDigest = null
 export function treeDigest() {
@@ -233,13 +268,16 @@ function lockHash() {
   return existsSync(lock) ? createHash('sha256').update(readFileSync(lock)).digest('hex').slice(0, 16) : 'none'
 }
 
-function* walk(dir, depth = 0) {
-  if (depth > 6) return
+function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (EXCLUDES.includes(entry.name)) continue
     const path = join(dir, entry.name)
-    if (entry.isDirectory()) yield* walk(path, depth + 1)
-    else if (entry.isFile()) yield relative(process.cwd(), path)
+    // The tar's own excludes decide what the digest is over, both spellings of them: a name
+    // (`node_modules`, pruned at any depth) and a path (`native/audio/.cache`, pruned where it
+    // sits). What is not shipped cannot be what makes a host stale.
+    const name = relative(process.cwd(), path).split(sep).join('/')
+    if (EXCLUDES.includes(entry.name) || EXCLUDES.includes(name)) continue
+    if (entry.isDirectory()) yield* walk(path)
+    else if (entry.isFile()) yield name
   }
 }
 
@@ -278,11 +316,20 @@ function ask(host, line) {
   })
 }
 
+/** A command that leaves `where` an empty directory on the host, whatever it held. */
+function freshDir(host, where) {
+  return host.platform === 'win32'
+    ? `Remove-Item -Recurse -Force -Path ${quote(host, where)} -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force -Path ${quote(host, where)} | Out-Null`
+    : `rm -rf ${quote(host, where)} && mkdir -p ${quote(host, where)}`
+}
+
 /** The tar, piped straight into an unpack on the far side of the ssh connection. */
 function ship(host, where, name) {
   return new Promise(resolve => {
     const tar = spawn('tar', tarArgs(), { cwd: process.cwd() })
-    const unpack = sshCommand(host, `tar xzf - -C ${quote(host, where)}`)
+    // Cleared first: an unpack over the host's previous tree leaves a file this one deleted or
+    // renamed still sitting there, and vitest's `scripts/**/*.test.ts` would run it.
+    const unpack = sshCommand(host, body(host, [freshDir(host, where), `tar xzf - -C ${quote(host, where)}`]))
     const ssh = spawn(unpack.command, unpack.args, { stdio: ['pipe', 'pipe', 'pipe'] })
     tar.stdout.pipe(ssh.stdin)
     ssh.stdout.on('data', chunk => process.stdout.write(prefix(name, chunk)))
@@ -327,7 +374,13 @@ async function runStep(step, report) {
     ? `Get-Content ${quote(step.host, `${where}\\.local-ci-${file}`)} -ErrorAction SilentlyContinue`
     : `cat ${quote(step.host, `${where}/.local-ci-${file}`)} 2>/dev/null`
 
-  await ask(step.host, make)
+  // The three commands that prepare the host are checked rather than assumed: a host that
+  // refuses them (a read-only home, or a shell that is not the PowerShell these bodies are
+  // written in) would otherwise re-ship every lane and fail it, as if the code were at fault.
+  if ((await ask(step.host, make)) === null) {
+    report.push({ name, status: 'failed', why: `${step.host.ssh} would not create its tree directory` })
+    return
+  }
   const digest = treeDigest()
   if ((await ask(step.host, read('tree'))) !== digest) {
     console.log(`[${name}] shipping the working tree to ${step.host.ssh}`)
@@ -336,7 +389,10 @@ async function runStep(step, report) {
       report.push({ name, status: 'failed', why: 'the tree did not arrive' })
       return
     }
-    await ask(step.host, marker('tree', digest))
+    if ((await ask(step.host, marker('tree', digest))) === null) {
+      report.push({ name, status: 'failed', why: `${step.host.ssh} would not record the tree it was sent` })
+      return
+    }
   }
 
   const lock = lockHash()
@@ -348,7 +404,10 @@ async function runStep(step, report) {
       report.push({ name, status: 'failed', why: 'npm ci did not finish' })
       return
     }
-    await ask(step.host, marker('lock', lock))
+    if ((await ask(step.host, marker('lock', lock))) === null) {
+      report.push({ name, status: 'failed', why: `${step.host.ssh} would not record the install it ran` })
+      return
+    }
   }
 
   const lane = sshCommand(step.host, body(step.host, [prologue(step.host), `cd ${quote(step.host, where)}`, npmCommand(step.host, step.run)]))
@@ -381,7 +440,12 @@ async function main() {
   return failed === 0 ? 0 : 1
 }
 
-main().then(code => process.exit(code)).catch(error => {
-  console.error(error.message)
-  process.exit(2)
-})
+// Importable for its helpers — `scripts/local-ci.test.ts` does — so only a direct invocation
+// runs the gate. Without this the unit lane's own import planned and ran every lane, the
+// recursive `npm test` included, and then exited the worker.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().then(code => process.exit(code)).catch(error => {
+    console.error(error.message)
+    process.exit(2)
+  })
+}

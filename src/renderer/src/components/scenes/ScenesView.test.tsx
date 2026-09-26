@@ -710,6 +710,37 @@ describe('ScenesView', () => {
     expect(container.querySelector('.ensemble-dialog')).toBeNull()
   })
 
+  it('does not offer to save a group that has been emptied', async () => {
+    await show({
+      scenes: [scene('s1', 'Opening', [placed('dca-1', 'ensemble', 'ens-chorus')])],
+      cast: cast({ ensembles: [CHORUS] })
+    })
+
+    const dialog = await openBuilder(cellFor('1', 'Opening'))
+    expect(dialog.querySelector<HTMLButtonElement>('.ensemble-create')?.disabled).toBe(false)
+
+    // Every strip the group holds is taken out of it. Nothing in it is nothing to save — the
+    // store refuses an empty list — so the press is off rather than a press that writes
+    // nothing and shuts the dialog as if the emptying, and any name typed beside it, had
+    // been saved.
+    await press(dialog, '[data-pane="held"] .ensemble-item', 'Ada')
+    await move(dialog, 'out')
+    await press(dialog, '[data-pane="held"] .ensemble-item', 'Extra')
+    await move(dialog, 'out')
+
+    expect(pane(dialog, 'held')).toEqual([])
+    expect(pane(dialog, 'free')).toEqual(['Ada', 'Extra', 'Ch 3'])
+    expect(dialog.querySelector<HTMLButtonElement>('.ensemble-create')?.disabled).toBe(true)
+    expect(dialog.querySelector('.ensemble-create')?.getAttribute('title'))
+      .toBe('A group with nothing in it opens nothing')
+
+    // And the edit is still open on what it did not write: the group is the group it was,
+    // and so is the row holding it.
+    expect(container.querySelector('.ensemble-dialog')).not.toBeNull()
+    expect(useStore.getState().showSettings.cast.ensembles).toEqual([CHORUS])
+    expect(scenes()[0].dcas).toEqual([placed('dca-1', 'ensemble', 'ens-chorus')])
+  })
+
   it('has no second box once a row holds something, and the name it holds is the way in', async () => {
     await show({
       scenes: [scene('s1', 'Opening', [placed('dca-1', 'channel', 'ch-ada')])],
@@ -746,15 +777,41 @@ describe('ScenesView', () => {
 
     // The box under the menu is the menu's own press: it puts it away rather than reopening
     // it with the filter thrown away, which would read as a press that did nothing. A real
-    // press is a mousedown and then a click, and the menu's own outside-press rule must not
-    // get there first — a `click()` alone would pass while the app reopened the menu.
+    // press is a mousedown and then a click, each with its own render in between: the
+    // menu's own outside-press rule must not take the box away on the mousedown, because
+    // the click that follows would then reopen the menu instead of putting it away.
     const box = cell.querySelector<HTMLButtonElement>('.matrix-cell-add')!
     await act(async () => {
       box.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-      box.click()
     })
+    expect(document.body.querySelector('.scene-picker')).not.toBeNull()
+    await act(async () => { box.click() })
     expect(document.body.querySelector('.scene-picker')).toBeNull()
     expect(scenes()[0].dcas).toEqual([])
+  })
+
+  it('registers each overlay as a modal while it is up, and gives the count back as it closes', async () => {
+    await show({ scenes: [scene('s1', 'Opening')] })
+    expect(useStore.getState().modals).toBe(0)
+
+    // The count is what the transport bindings read to stand down, and the picker is a
+    // modal: without the registration a Space typed into its filter would fire the show's
+    // next cue behind the menu.
+    const picker = await openPicker(cellFor('1', 'Opening'))
+    expect(useStore.getState().modals).toBe(1)
+
+    // The builder is opened from the picker's last row, which unmounts with the press that
+    // opened it: the count is the overlays that are up, not the presses that opened them.
+    await act(async () => {
+      picker.querySelector<HTMLButtonElement>('.scene-picker-build')!.click()
+    })
+    expect(useStore.getState().modals).toBe(1)
+
+    const dialog = container.querySelector<HTMLElement>('.ensemble-dialog')
+    expect(dialog).not.toBeNull()
+    await press(dialog!, '.ensemble-cancel', 'Cancel')
+    expect(container.querySelector('.ensemble-dialog')).toBeNull()
+    expect(useStore.getState().modals).toBe(0)
   })
 
   it('puts an overlay away when the show changes under it', async () => {
@@ -930,14 +987,18 @@ describe('ScenesView', () => {
       deskSceneId: 's1'
     })
 
-    // Every control a cell holds is disabled in run mode — the name, the ✕, and the box an
-    // empty row carries — while the block still names what the row holds, and the marks on
-    // the cell are the marks they always were: this is the scene the desk is on, and it is
-    // where the desk was left.
+    // Every control a cell holds is disabled in run mode — the name, and the box an empty
+    // row carries — while the block still names what the row holds, and the marks on the
+    // cell are the marks they always were: this is the scene the desk is on, and it is
+    // where the desk was left. The count is what makes the claim an assertion: the name is
+    // the one control the block draws while the show runs, and the ✕ besides it is not
+    // drawn at all.
     const cell = cellFor('1', 'Opening')
     expect(blockName(cell)).toBe('Ada')
-    expect([...cell.querySelectorAll<HTMLButtonElement>('.matrix-block-name, .matrix-block-remove')]
-      .every(control => control.disabled)).toBe(true)
+    const still = [...cell.querySelectorAll<HTMLButtonElement>(
+      '.matrix-block-name, .matrix-block-remove')]
+    expect(still.map(control => control.className)).toEqual(['matrix-block-name'])
+    expect(still.every(control => control.disabled)).toBe(true)
     expect(cell.getAttribute('data-current')).toBe('true')
     expect(cell.getAttribute('data-pending')).toBe('false')
     expect(columnFor('Opening').getAttribute('data-pending')).toBe('false')
@@ -1000,19 +1061,23 @@ describe('ScenesView', () => {
   it('writes a track list a grid can read, with no scenes in it as well as with some', async () => {
     // `repeat(0, …)` is not a valid track list: the declaration is dropped, the grid falls
     // back to the browser's own two auto columns, and a show with no scenes draws its Out
-    // column across half the window with the faders pushed off to its right.
-    const grid = (): string =>
+    // column across half the window with the faders pushed off to its right. What is
+    // asserted is the track list the grid is given — one track per scene column it draws,
+    // with the fader column, the Out column and the plus around them — rather than the
+    // separators the declaration happens to be written with.
+    const tracks = (): string[] =>
       container.querySelector<HTMLElement>('.matrix-grid')!.style.gridTemplateColumns
+        .trim().split(/\s+/)
 
     await show({ scenes: [] })
-    expect(grid()).not.toContain('repeat(0')
-    expect(grid().split(' ')).toHaveLength(3)
-    expect(grid().startsWith('var(--matrix-mic-width) var(--matrix-all-closed-width)')).toBe(true)
-    expect(grid().endsWith('var(--matrix-add-width)')).toBe(true)
+    // No scene columns to make tracks of, so the three the grid always has and nothing else:
+    // an emitted `repeat(0, …)` would be a fourth piece under any spelling of it.
+    expect(sceneColumns()).toHaveLength(0)
+    expect(tracks()).toHaveLength(3)
 
     await show({ scenes: [OPENING, INTERVAL] })
-    expect(grid().split(' ')).toHaveLength(5)
-    expect(grid().match(/var\(--matrix-scene-width\)/g)).toHaveLength(2)
+    expect(sceneColumns()).toHaveLength(2)
+    expect(tracks()).toHaveLength(sceneColumns().length + 3)
   })
 
   it('marks the column the desk is in, and the cells say what is still to send', async () => {
@@ -1051,6 +1116,27 @@ describe('ScenesView', () => {
     expect(cellFor('1', 'Opening').getAttribute('data-placed')).toBe('true')
     expect(cellFor('2', 'Opening').getAttribute('data-pending')).toBe('false')
     expect(cellFor('2', 'Opening').getAttribute('data-placed')).toBe('false')
+
+    // One strip on two faders of one scene, with the desk already holding the first of them:
+    // the write that recall makes is the second row's placement and nothing else, so the row
+    // the scene and the record already agree about is not to send. The mark is the write,
+    // not the channel — a row marked because a channel it carries moved somewhere else is a
+    // row the operator would go looking for a change in.
+    await show({
+      scenes: [scene('s1', 'Opening', [
+        placed('dca-1', 'channel', 'ch-ada'),
+        placed('dca-2', 'channel', 'ch-ada')
+      ])],
+      deskState: {
+        mutes: { 'ch-ada': false, 'ch-extra': true, 'ch-spare': true },
+        assignments: { 'ch-ada': ['dca-1'], 'ch-extra': [], 'ch-spare': [] }
+      },
+      deskSceneId: 's1'
+    })
+
+    expect(columnFor('Opening').getAttribute('data-pending')).toBe('true')
+    expect(cellFor('1', 'Opening').getAttribute('data-pending')).toBe('false')
+    expect(cellFor('2', 'Opening').getAttribute('data-pending')).toBe('true')
   })
 
   it('marks the scene pending after an edit and applies exactly that change', async () => {
@@ -1165,14 +1251,22 @@ describe('ScenesView', () => {
       [...container.querySelectorAll<HTMLInputElement | HTMLButtonElement>(selector)]
         .map(control => control.disabled)
 
-    expect(disabled('.scene-name-field').every(Boolean)).toBe(true)
+    // A count beside each: `every` over a list that stopped matching is true, and both of
+    // these are about the controls the view actually draws — one name field per scene, and
+    // the box each empty row carries.
+    const names = disabled('.scene-name-field')
+    expect(names).toHaveLength(2)
+    expect(names.every(Boolean)).toBe(true)
     // What removes a scene is not there at all, rather than there and asleep beside recall —
     // and neither is the ✕ on a block: a press that does nothing is one the operator has to
     // read to find out it does nothing.
     expect(container.querySelector('.matrix-scene-remove')).toBeNull()
     expect(container.querySelector('.matrix-block-remove')).toBeNull()
-    // The box is there and asleep, and a press on it opens nothing.
-    expect(disabled('.matrix-cell-add').every(Boolean)).toBe(true)
+    // The box is there and asleep, and a press on it opens nothing. Two of them: the row of
+    // each scene that places nothing.
+    const boxes = disabled('.matrix-cell-add')
+    expect(boxes).toHaveLength(2)
+    expect(boxes.every(Boolean)).toBe(true)
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.matrix-cell-add')!.click()
     })

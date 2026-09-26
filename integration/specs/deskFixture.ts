@@ -17,8 +17,17 @@ import { defaultShowSettings } from '../../src/shared/show'
 import type { DeskButtons, DeskProfile } from '../../src/shared/show'
 import type { MscCommand, MscFormat } from '../../src/shared/cue'
 
-/** Where a peer on this machine is. A real desk is named by its own address. */
-const LOOPBACK = '127.0.0.1'
+/**
+ * Where a peer on this machine is. A real desk is named by its own address.
+ *
+ * Loopback, and one address per lane rather than 127.0.0.1 for all of them: the desk's ports
+ * are the *machine's* — an SQ show dials 51326 and 51321 whatever it is pointed at — so a lane
+ * that shares an address with another shares those ports with it, and what its app finds there
+ * is the other lane's desk. The unit job holds 127.0.0.3 and 127.0.0.4
+ * (`SqNativeEngine.test.ts`) and the SQ lane holds 127.0.0.2, so this is this file's lanes'
+ * own: the spec that writes with this default binds its peer here too.
+ */
+export const DESK_HOST = '127.0.0.6'
 
 /**
  * A fader a scene places channels on. The id is what a scene names it by, and the desk number
@@ -48,9 +57,10 @@ export interface DeskShowScene {
 /** What every desk show has in common, whichever way the show reaches its desk. */
 interface DeskShowCommon {
   /**
-   * Where the desk is: loopback when the counterpart is a peer running here, and the
-   * desk's own address when a real one is named. That address is the only thing the
-   * hardware lane changes about the show (INTEGRATION-HARNESS.md §10, M3).
+   * Where the desk is: this lane's own loopback address when the counterpart is a peer
+   * running here (`DESK_HOST`), and the desk's own address when a real one is named. That
+   * address is the only thing the hardware lane changes about the show
+   * (INTEGRATION-HARNESS.md §10, M3).
    */
   host?: string
   /**
@@ -157,7 +167,7 @@ export const CHANNEL_ID = 'ch-1'
 export const DCA_ID = 'dca-1'
 
 export function writeDeskShow(options: DeskShowOptions): string {
-  const { host = LOOPBACK, channel, profile, dcaNote, buttons, msc, deskScene = 7 } = options
+  const { host = DESK_HOST, channel, profile, dcaNote, buttons, msc, deskScene = 7 } = options
   const channels = options.channels ?? ['Ruth']
   const faders = options.faders ?? [{ id: DCA_ID, label: 'DCA 1', deskNumber: dcaNote ?? null }]
   // A channel's number on the desk is its place in this list, so the ids are the places.

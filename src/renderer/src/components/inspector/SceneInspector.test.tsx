@@ -143,6 +143,38 @@ describe('SceneInspector', () => {
     expect(container.querySelector('.inspector-hint')?.textContent).toContain('2 channels open')
     expect(container.querySelector('.inspector-hint')?.textContent).toContain('Ch 1 · Ada')
     expect(container.querySelector('.inspector-hint')?.textContent).toContain('Ch 2 · Bea')
+    // One fader carries both channels: the count is of the faders a recall speaks for, a
+    // set, rather than of the placements in the scene.
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('on 1 fader')
+  })
+
+  it('counts the faders a recall would write, folding a leftover duplicate to the lowest', () => {
+    // The editor keeps one fader per channel in a scene while the rule is off, but a file
+    // can still carry a second row — and a recall folds it to the lowest-numbered fader. The
+    // count read before the press is of that fold, not of every row the channel sits on.
+    show(
+      cue('s-1'),
+      {
+        list: [scene('s-1', 'Wedding', [
+          { dcaId: 'dca-1', kind: 'channel', memberId: 'ch-1' },
+          { dcaId: 'dca-2', kind: 'channel', memberId: 'ch-1' }
+        ])],
+        allowDuplicateAssignment: false
+      },
+      { dcas: [{ id: 'dca-1', deskNumber: null }, { id: 'dca-2', deskNumber: null }] }
+    )
+
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('1 channel open')
+    expect(container.querySelector('.inspector-hint')?.textContent).toContain('on 1 fader')
+  })
+
+  it('says an empty scene closes every open channel rather than touching nothing', () => {
+    // A scene that places nothing is still a change for every channel: the recall closes
+    // each one the desk has open, which a count of placements would read as touching none.
+    show(cue('s-1'), { list: [scene('s-1', 'Wedding')] })
+
+    expect(container.querySelector('.inspector-hint')?.textContent)
+      .toContain('every channel the desk has open is closed')
   })
 
   it('recalls the scene by hand, under the cue that will fire it', async () => {

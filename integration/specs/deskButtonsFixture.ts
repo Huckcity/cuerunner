@@ -28,6 +28,16 @@ export interface DeskButtonsShowOptions {
   port: number
 }
 
+/**
+ * Where this lane's desk is: a loopback address of its own rather than 127.0.0.1, because the
+ * desk's ports are the machine's — an SQ show dials 51326 and 51321 whatever it is pointed at,
+ * and no peer in this lane answers them, so what the app finds there is whatever else on the
+ * runner has a show at that address. The unit job holds 127.0.0.3 and 127.0.0.4
+ * (`SqNativeEngine.test.ts`), the SQ lane holds 127.0.0.2, and the desk's own peer binds here:
+ * this address is this lane's.
+ */
+export const DESK_BUTTONS_HOST = '127.0.0.5'
+
 export const DESK_BUTTONS_SHOW_NAME = 'Desk Buttons Show'
 
 export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
@@ -54,7 +64,7 @@ export function writeDeskButtonsShow(options: DeskButtonsShowOptions): string {
         profile: 'sq',
         midiPort: '',
         midiChannel: CHANNEL,
-        host: '127.0.0.1',
+        host: DESK_BUTTONS_HOST,
         port: 8000,
         tcpPort: port,
         address: '/dca/{n}/on',

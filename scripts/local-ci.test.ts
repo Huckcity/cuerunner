@@ -49,6 +49,16 @@ describe('the lanes and the hosts they run on', () => {
     expect(() => plan(['--hosts=nuc'])).toThrow('no such host: nuc')
     expect(() => plan(['--lanes=soak'])).toThrow('no such lane: soak')
   })
+
+  it('refuses a flag it does not know, and a host or lane list that names none', () => {
+    // A misspelt flag is how a reader asks for something other than what they get: `--lisst`
+    // would run the gate instead of listing it, and a valueless `--hosts=` a gate with no steps
+    // that still reports `0 passed` and exits 0.
+    expect(() => plan(['--lisst'])).toThrow('no such flag: lisst')
+    expect(() => plan(['--host=win'])).toThrow('no such flag: host')
+    expect(() => plan(['--hosts='])).toThrow('no host to run')
+    expect(() => plan(['--lanes='])).toThrow('no lane to run')
+  })
 })
 
 describe('what a step can and cannot do where it was asked to', () => {
@@ -74,6 +84,12 @@ describe('the commands it builds', () => {
       expect(args).toContain(`--exclude=${name}`)
       expect(EXCLUDES).toContain(name)
     }
+    // The engine's build directory is one platform's binary, and the Mac would read a shipped
+    // Linux `cuerunner-audio` as current; the FFmpeg cache is 160 MB no host needs shipped.
+    for (const name of ['native/audio/build', 'native/audio/.cache']) {
+      expect(args).toContain(`--exclude=${name}`)
+      expect(EXCLUDES).toContain(name)
+    }
     expect(args.at(-1)).toBe('.')
   })
 
@@ -84,6 +100,10 @@ describe('the commands it builds', () => {
     expect(win.join(' ')).toContain('-i ')
     expect(win.join(' ')).toContain('id_ed25519_winvm')
     expect(win).toContain('BatchMode=yes')
+    // A host that answers and then stalls has to end the session itself, or the run hangs where
+    // the README promises a skipped row.
+    expect(win).toContain('ServerAliveInterval=15')
+    expect(win).toContain('ServerAliveCountMax=3')
     expect(win.at(-2)).toBe(table.win.ssh)
     expect(win.at(-1)).toBe('echo hi')
 

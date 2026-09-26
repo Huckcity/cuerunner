@@ -200,6 +200,21 @@ describe('sending to a desk', () => {
     expect(deskUnderTest.received).toEqual([0x90, 0x04, 0x7f])
   })
 
+  it('dials the address a paste left whitespace around, under the name that address has', async () => {
+    // The settings field stores what was typed, and a paste can leave a space around the
+    // address: the desk is the one at the address, and a host with a space in it is not a
+    // host anything resolves. The SQ native service trims the same paste, so the two ends
+    // have to agree on which desk this is.
+    const deskUnderTest = await desk()
+    const link = engine()
+
+    const result = await link.send(` ${deskUnderTest.host} `, deskUnderTest.port, [NOTE_ON])
+
+    expect(result).toEqual({ ok: true })
+    await until(() => deskUnderTest.received.length === 3)
+    expect(deskUnderTest.received).toEqual([0x90, 0x04, 0x7f])
+  })
+
   it('keeps one socket for the whole show rather than dialling per recall', async () => {
     const deskUnderTest = await desk()
     const link = engine()

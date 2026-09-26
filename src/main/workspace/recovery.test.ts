@@ -158,6 +158,23 @@ describe('recovery snapshots', () => {
     await expect(readRecovery()).rejects.toThrow('holds no snapshot to bring back')
   })
 
+  it('refuses a snapshot whose own fields are not the kinds this build writes', async () => {
+    // The workspace is the shape walk's business; the fields beside it are read here, because
+    // main and the window read them as their types — a `sourcePath` of another kind reaches
+    // `dirname` — so a snapshot carrying `sourcePath: 3` would reject the channel with a stack
+    // instead of the bar naming the file that its declaration promises.
+    mkdirSync(userData, { recursive: true })
+    const file = join(userData, 'recovery.cuerunner')
+    const snapshot = { workspace: workspaceWith([]), savedAt: 1, sourcePath: null }
+
+    writeFileSync(file, JSON.stringify({ ...snapshot, sourcePath: 3 }), 'utf-8')
+    await expect(readRecovery()).rejects.toThrow(Refusal)
+    await expect(readRecovery()).rejects.toThrow('holds a snapshot whose sourcePath is a number')
+
+    writeFileSync(file, JSON.stringify({ ...snapshot, savedAt: 'now' }), 'utf-8')
+    await expect(readRecovery()).rejects.toThrow('holds a snapshot whose savedAt is a string')
+  })
+
   it('refuses a snapshot past the cap this app reads, naming it', async () => {
     // The cap the app's own load paths use, applied to a file this app wrote: one byte past
     // it is a snapshot this build will not read, said rather than dropped the way a

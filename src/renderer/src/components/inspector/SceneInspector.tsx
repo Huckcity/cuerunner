@@ -12,6 +12,7 @@ import type { SceneCue } from '../../../../shared/cue'
 export function SceneInspector({ cue }: { cue: SceneCue }) {
   const scenes = useStore(s => s.showSettings.scenes.list)
   const cast = useStore(s => s.showSettings.cast)
+  const allowDuplicates = useStore(s => s.showSettings.scenes.allowDuplicateAssignment)
   const updateCue = useStore(s => s.updateCue)
   const [recalling, setRecalling] = useState(false)
 
@@ -26,7 +27,14 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
     .map(channelId => channelLabel(cast.channels, channelId))
     .filter(label => label !== '')
   const faders = new Set(
-    placed.flatMap(channelId => (scene === null ? [] : channelDcas(scene, channelId, cast)))
+    placed.flatMap(channelId => {
+      if (scene === null) return []
+      const dcas = channelDcas(scene, channelId, cast)
+      // A recall folds a leftover duplicate to the lowest-numbered fader while the rule is
+      // off, so the count is of what it would write rather than of every row the channel
+      // sits on.
+      return allowDuplicates ? dcas : dcas.slice(0, 1)
+    })
   ).size
 
   return (
@@ -53,6 +61,13 @@ export function SceneInspector({ cue }: { cue: SceneCue }) {
       ) : scene === null ? (
         <p className="inspector-hint">
           Pick a scene. Until then this cue does nothing, rather than closing every mic.
+        </p>
+      ) : placed.length === 0 ? (
+        // A scene that places nothing is a change for every channel: the recall closes each
+        // one the record has open, which the counts below would report as touching nothing.
+        <p className="inspector-hint">
+          Recalling it tells the desk the difference between “{scene.name}” and where it stands
+          now: every channel the desk has open is closed.
         </p>
       ) : (
         <p className="inspector-hint">

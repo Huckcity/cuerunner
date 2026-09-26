@@ -13,6 +13,10 @@
 // - the License tab's rows, read out of `LicenseSection.tsx`: every row the page documents is a
 //   row the panel prints, in the panel's order, and every row the panel prints is documented —
 //   the tab a buyer is sent to has to be the tab the reference describes;
+// - the Channels tab's controls, read out of `ChannelsTab.tsx`: every row the page documents is a
+//   control the tab prints, in the tab's order, and every control the tab prints is documented —
+//   the guide sends a reader to that tab to set the desk's buttons, so the reference names the
+//   fields they will find there;
 // - the tab's own blurb (`TAB_BLURB.license`), which the section opens with.
 //
 // Every check is a pure function of what it reads, so the second describe can hand it a page the
@@ -24,7 +28,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // @ts-ignore — js file, no type declarations
-import { LICENSE_BLURB, LICENSE_KEY_ROWS, LICENSE_ROWS, REFERENCE, SETTINGS_SECTIONS } from '../website/docs/reference.mjs'
+import { CHANNELS_ROWS, LICENSE_BLURB, LICENSE_KEY_ROWS, LICENSE_ROWS, REFERENCE, SETTINGS_SECTIONS } from '../website/docs/reference.mjs'
 // @ts-ignore — js file, no type declarations
 import { renderPage } from '../website/build-docs.mjs'
 
@@ -34,6 +38,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SETTINGS_DIALOG = 'src/renderer/src/components/layout/SettingsDialog.tsx'
 /** The panel the License tab's rows are printed in. */
 const LICENSE_SECTION = 'src/renderer/src/components/license/LicenseSection.tsx'
+/** The tab the Channels rows are read out of. */
+const CHANNELS_TAB = 'src/renderer/src/components/show/ChannelsTab.tsx'
 
 /** One settings tab as the app declares it: the id, the label beside it and where its setting is kept. */
 interface Tab {
@@ -48,7 +54,7 @@ interface Section {
   anchor: string
 }
 
-/** One row of the License tab as the page documents it: the label the panel prints, and what the row is. */
+/** One row the page declares: the label the app prints for it, and what the row is. */
 interface Row {
   label: string
   prose: string
@@ -70,6 +76,7 @@ interface Reading {
   tabs: Tab[]
   sections: Section[]
   rows: Row[]
+  channels: Row[]
   facts: Fact[]
   /** The sources the tabs and the rows are read from, read once. */
   files: Record<string, string>
@@ -169,7 +176,8 @@ function readSource(relative: string): string {
 function sources(): Record<string, string> {
   return {
     [SETTINGS_DIALOG]: readSource(SETTINGS_DIALOG),
-    [LICENSE_SECTION]: readSource(LICENSE_SECTION)
+    [LICENSE_SECTION]: readSource(LICENSE_SECTION),
+    [CHANNELS_TAB]: readSource(CHANNELS_TAB)
   }
 }
 
@@ -184,6 +192,7 @@ const LIVE: Reading = {
   tabs: settingsTabs(readSource(SETTINGS_DIALOG)),
   sections: SETTINGS_SECTIONS,
   rows: [...LICENSE_ROWS, ...LICENSE_KEY_ROWS],
+  channels: CHANNELS_ROWS,
   facts: FACTS,
   files: sources(),
   rendered: renderPage(SETTINGS_PAGE)
@@ -273,6 +282,52 @@ function rowProblems(reading: Reading): string[] {
   ]
 }
 
+/**
+ * The Channels tab's controls, read as the file writes them: the tab's `<label>` texts (the markup
+ * the License reader takes) and the three controls it titles inside a `<span>` — its two count
+ * dials and the rule's own sentence. In the order the file prints them; a label the file writes in
+ * more than one branch (a host for the OSC connection and one for a TCP desk) is one control,
+ * taken where it first appears.
+ */
+const CHANNELS_CONTROL =
+  /<label\b(?![^>]*\/>)[^>]*>\s*([^<]+?)\s*<\/label>|<span className="(?:channel-count-label|dca-count-label)">([^<]+?)<\/span>|<span>([^<]+?)<\/span>/g
+
+/** The controls the tab prints, in the order it prints them, each named once. */
+function channelsControlsIn(source: string): string[] {
+  const words = [...source.matchAll(CHANNELS_CONTROL)].map(found =>
+    (found[1] ?? found[2] ?? found[3]).replace(/\s+/g, ' ').trim()
+  )
+  return [...new Set(words)]
+}
+
+/**
+ * The Channels tab's controls, held to the tab the guide sends readers to: every row the page
+ * documents is a control the tab prints, every control the tab prints is documented, and the two
+ * are in the same order — the reference names the fields the operator will find, in the tab's own
+ * words.
+ */
+function channelsRowProblems(reading: Reading): string[] {
+  const shown = channelsControlsIn(reading.files[CHANNELS_TAB] ?? '')
+  const declared = reading.channels.map(row => row.label)
+  const missing = declared.filter(label => !shown.includes(label))
+  const extra = shown.filter(label => !declared.includes(label))
+  return [
+    ...missing.map(
+      label =>
+        `website/docs/reference.mjs documents the Channels tab's "${label}" row and ${CHANNELS_TAB} prints no control with that label: the page and the tab name the same controls`
+    ),
+    ...extra.map(
+      label =>
+        `${CHANNELS_TAB} prints the Channels tab's "${label}" control and website/docs/reference.mjs documents no row for it: every control the tab shows belongs on the page`
+    ),
+    ...(missing.length > 0 || extra.length > 0 || shown.join(' / ') === declared.join(' / ')
+      ? []
+      : [
+          `website/docs/reference.mjs documents the Channels tab's controls as "${declared.join(', ')}" and ${CHANNELS_TAB} prints them as "${shown.join(', ')}": the page follows the tab's order`
+        ])
+  ]
+}
+
 /** The rows and the tab's own line the module declares, held to the page: a declaration nothing renders is a page and a declaration that disagree. */
 function renderedProblems(reading: Reading): string[] {
   return [
@@ -326,6 +381,10 @@ describe('the settings reference', () => {
 
   it('documents the License tab\'s rows as the panel prints them', () => {
     expect(rowProblems(LIVE)).toEqual([])
+  })
+
+  it('documents the Channels tab\'s controls as the tab prints them', () => {
+    expect(channelsRowProblems(LIVE)).toEqual([])
   })
 
   it('renders every row its declaration holds, and the tab\'s own line with them', () => {

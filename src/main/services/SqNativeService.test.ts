@@ -201,7 +201,9 @@ describe('a membership command', () => {
       [{ dca: 1, placed: true, rides: true }, 'needs a channel'],
       [{ channel: 0, dca: 1, placed: true, rides: true }, 'at or past 1, not 0'],
       [{ channel: '1', dca: 1, placed: true, rides: true }, 'at or past 1, not "1"'],
+      [{ channel: 257, dca: 1, placed: true, rides: true }, 'no larger than 256, not 257'],
       [{ channel: 1, dca: 2.5, placed: true, rides: true }, 'at or past 1, not 2.5'],
+      [{ channel: 1, dca: 257, placed: true, rides: true }, 'no larger than 256, not 257'],
       [{ channel: 1, dca: 1, placed: true }, 'needs rides'],
       [{ channel: 1, dca: 1, placed: 'yes', rides: true }, 'placed to be true or false, not "yes"']
     ]

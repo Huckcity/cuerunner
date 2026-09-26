@@ -112,6 +112,14 @@ const REFUSED: readonly Refused[] = [
     fact: 'has a section this version of WinsLab does not know (futureSection)'
   },
   {
+    what: 'a declared top-level section carrying another kind',
+    // The half of the level above it: the section is one this build declares, so the key
+    // alone is not the fact — the value is, and a `history` that is not a list is a fault
+    // where the window iterates it and where a save spreads it.
+    show: show({ history: 3 }),
+    fact: 'has history as a number, where this version of WinsLab writes a list of objects'
+  },
+  {
     what: 'a settings section this build does not declare',
     show: show({ showSettings: { ...defaultShowSettings(), plot: {} } }),
     fact: 'settings have a section this version of WinsLab does not know (plot)'
@@ -309,7 +317,7 @@ const REFUSED: readonly Refused[] = [
   {
     what: 'a cue that is not a cue at all',
     show: show({ cues: [null] }),
-    fact: 'has a cue that is not the shape this version of WinsLab writes'
+    fact: 'has a cue that is not the shape this version of WinsLab writes (cues.0)'
   },
   {
     what: 'a settings leaf carrying a value of another kind',

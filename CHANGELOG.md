@@ -1,10 +1,16 @@
 # Unreleased
 
+### Bug Fixes
+
+* **packaging:** no comment keys inside electron-builder's config ([44608ff](https://github.com/Huckcity/cuerunner/commit/44608ff68342fe90bbd28a8640836b6e3b57e69b))
+* **packaging:** the mac dmg's engine is built for both architectures ([9919b28](https://github.com/Huckcity/cuerunner/commit/9919b2807c1b574d32125e361c8a4229dbab18f5))
+
 ### Features
 
 * **desk:** a scene owns the DCA assignment — the show sets up a channel count and one desk number per fader, and the Scenes grid puts one channel or one ensemble on each row of each scene
 * **desk:** a recall writes the membership first and then each mic's mute, one awaited write at a time, and addresses nothing outside the show's controlled channels: a channel the scene places is open, one it leaves off every fader is closed, and a mic that changes fader keeps playing and takes the new fader's position
 * **desk:** an SQ's membership rides the desk's own control service — TCP 51326 outbound, held with a keepalive datagram to the desk's UDP 51324 — with the frames measured from an SQ-6 on firmware 1.6.1 and replayed by the peers lane; the mutes stay on the MIDI service on 51325, and an Avantis takes its membership as NRPN `40` on the desk link
+* **desk:** the desk's GO and BACK keys have a second route beside the mute groups: a soft key set to `MIDI Note` transmits note on while it is held, so a press steps the show once and nothing is left lit at the desk — the two notes are set beside the groups in Show Settings → Channels, and the fields are offered only where the desk's own traffic cannot be a note
 * **scenes:** the grid is the whole view — the bar over it (the title, the fader and scene counts, the desk's `now`/`next` readout, the editing hint and the `Add scene` press) is gone, so what is left is the grid: `All closed` is renamed `Out`, the mode is a padlock drawn in its top-left corner, and `+` after the last scene adds one
 * **scenes:** the column the desk is on carries the running colour down its own header box rather than a wash over the column, so the cells say only what a scene holds
 * **scenes:** colour is left to the cells: the pending amber, the green wash down the recalled column and the running-colour edge on a held row are gone, and the recalled scene is marked in its own title box; a group's block is outlined in the same ink as everything else, and its member list is in its title
@@ -101,8 +107,6 @@
 * **native:** the engine is built on the heap, not on a one-MiB stack ([d4ea050](https://github.com/Huckcity/cuerunner/commit/d4ea0500e9ed51effd71301bfe88d89e89b4eb75))
 * **native:** the silent pacer repays the wall time it loses ([4d8179a](https://github.com/Huckcity/cuerunner/commit/4d8179aa7453d7494d60372331b41a3c1ae073ea))
 * **native:** the Windows engine hands out one readable pipe instance ([7aad479](https://github.com/Huckcity/cuerunner/commit/7aad47972ce53e19d2774d02c6ee8e51cca0563a))
-* **packaging:** no comment keys inside electron-builder's config ([44608ff](https://github.com/Huckcity/cuerunner/commit/44608ff68342fe90bbd28a8640836b6e3b57e69b))
-* **packaging:** the mac dmg's engine is built for both architectures ([9919b28](https://github.com/Huckcity/cuerunner/commit/9919b2807c1b574d32125e361c8a4229dbab18f5))
 * **playback:** move a run's end with a slow prepare's late start ([50dfa4a](https://github.com/Huckcity/cuerunner/commit/50dfa4a362f797ea8885ecce56a884f00788ed0a))
 * **playback:** prepare an audio cue before the engine is asked to play it ([371a323](https://github.com/Huckcity/cuerunner/commit/371a323f04f4f4c7eaf08fd82f1824a56deaad71))
 * **redundancy:** a takeover stops what the standby was playing by hand ([d95ad07](https://github.com/Huckcity/cuerunner/commit/d95ad071d94b8c1437117636f049e7abed1abc66))
