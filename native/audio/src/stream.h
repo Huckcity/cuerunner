@@ -10,12 +10,24 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <string>
 
 namespace ws {
 
 struct StreamSlot {
+  /**
+   * Reserved by an acquire that is still opening the file: the slot is this caller's, and
+   * nothing else may take it. Deliberately not what the filler looks at — a slot whose
+   * ring is still being built is not one to decode into.
+   */
+  std::atomic<bool> claimed{false};
+  /**
+   * Published: the ring is configured over its own storage and may be filled. Set as
+   * `acquire`'s last act and cleared as `release`'s first, both under the pool's mutex,
+   * so the filler never sees a slot half-built or half-freed.
+   */
   std::atomic<bool> inUse{false};
   StreamRing ring;
   std::unique_ptr<Source> source;
@@ -40,6 +52,17 @@ struct StreamSlot {
 /** Why an acquire did not open a ring: a decode failure, or a bound that refuses. */
 enum class StreamRefusal { None, Decode, Limit };
 
+/**
+ * The streaming decode pool.
+ *
+ * A slot's *structure* — which source it holds, the storage its ring is configured over —
+ * is mutated by `acquire` and `release` (both documented as command-thread calls) and read
+ * by `fillAll` (the decode thread). Those are different threads, so `mutex_` is what makes
+ * the three atomic with respect to each other: a fill never overlaps a slot being built or
+ * freed, which is the whole reason a slot is published (`inUse`) only once its ring is
+ * real. The audio thread is not a party to it — it reads the ring's own atomic protocol and
+ * the slot's atomics, and frees nothing — so no fill or teardown can block a callback.
+ */
 class StreamPool {
  public:
   StreamPool();
@@ -70,8 +93,17 @@ class StreamPool {
 
  private:
   bool fillOne(StreamSlot& slot);
+  /** `release`'s body, for the callers that already hold `mutex_`. */
+  void releaseLocked(int index);
   static constexpr int64_t kMaxChunkFrames = 8192;
 
+  /**
+   * Guards the slots' structure against everything but the audio thread: `acquire`,
+   * `release`, `releaseByPath`, `fillAll` and `closeAll`. Held across a fill, which is a
+   * bounded chunk of decode, and across the publish/teardown of a slot — never across
+   * `openSource`, which the `claimed` flag reserves the slot for instead.
+   */
+  mutable std::mutex mutex_;
   StreamSlot slots_[kMaxStreams];
   std::atomic<int64_t> residentBytes_{0};
   std::vector<float> scratch_;
