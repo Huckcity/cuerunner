@@ -5,8 +5,9 @@
 // demo's own path is the one part of it that depends on where the app was installed.
 //
 // The shipped bytes are the serialiser's output for the show they hold, and this is the
-// recipe that produces them, run inside that stubbed harness because every module it names
-// reaches Electron through its own imports:
+// recipe that produces them, inside a file whose other halves — the loader the last case
+// opens (`openDemoWorkspace`) and the save it writes (`saveWorkspace`) — reach Electron
+// through their own imports, which is what Electron is stubbed for below:
 //
 //   1. Read `resources/demo/Demo Show.cuerunner` and parse it.
 //   2. Stand this build's defaults in through `heldShowSettings` (`src/shared/show.ts`) —

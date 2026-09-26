@@ -116,6 +116,25 @@ describe('Dock', () => {
     act(() => { useStore.setState({ cues: [cue('wait', { name: 'Count 8' })] }) })
     expect(dock().dataset.collapsed).toBe('false')
     expect(localStorage.getItem('cuerunner.dock.collapsed')).toBeNull()
+
+    // And the fold follows the workspace the other way too: the last cue leaving leaves a
+    // show with nothing to show, and the dock goes with it — still the workspace's fold,
+    // still nothing written down.
+    act(() => { useStore.setState({ cues: [], selectedId: null }) })
+    expect(dock().dataset.collapsed).toBe('true')
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBeNull()
+  })
+
+  it('offers the fold press only where a press can show something', () => {
+    // The Scenes view's Cue tab has no body whatever the fold is — there is no cue list to
+    // have selected from — so the press is not drawn there; the view's own tabs are what
+    // open the dock. Anywhere the body can be drawn, the press is there and the glyph says
+    // which way it goes.
+    act(() => { root.render(<Harness view="scenes" />) })
+    expect(container.querySelector('.dock-collapse')).toBeNull()
+
+    act(() => tab('btn-log').click())
+    expect(container.querySelector<HTMLButtonElement>('.dock-collapse')?.title).toBe('Hide the dock, and give the cue list the room')
   })
 
   it('keeps the operator\'s own fold whoever the workspace is', () => {

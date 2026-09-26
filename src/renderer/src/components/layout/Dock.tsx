@@ -114,11 +114,12 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   const [height, setHeight] = useState(() => Number(readStored(HEIGHT_KEY)) || DOCK_DEFAULT_HEIGHT)
   const [windowHeight, setWindowHeight] = useState(() => window.innerHeight)
   // Whether the operator has folded this dock themselves — the chevron, or a tab press —
-  // and null while they never have. The dock of a show with nothing in it is folded for
-  // them: an empty workspace has no cue for the Cue tab to show, so its 180px are a band of
-  // nothing across the window a new show is being built in. That is the state it *opens*
-  // in, not one written down: nothing is stored until the operator says so, and then their
-  // fold is the dock's wherever a workspace is opened, empty or not.
+  // and null while they never have. Until they do, the fold follows the workspace: a show
+  // with no cue in it has nothing for the Cue tab to show, so the dock is its tabs there —
+  // 180px of nothing across the window a new show is being built in — and the dock comes
+  // back the moment there is something in the list. That is the state it *opens* in, not one
+  // written down: nothing is stored while this is null, and an operator's own fold is the
+  // dock's wherever a workspace is opened from then on, empty or not.
   const [chosenFold, setChosenFold] = useState<boolean | null>(() => {
     const stored = readStored(COLLAPSED_KEY)
     return stored === null ? null : stored === 'true'
@@ -248,14 +249,22 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
             {gated === true && !pro && <ProMark />}
           </button>
         ))}
-        <button
-          className="dock-collapse"
-          onClick={() => setChosenFold(!collapsed)}
-          title={collapsed ? 'Show the dock' : 'Hide the dock, and give the cue list the room'}
-          aria-label={collapsed ? 'Show the dock' : 'Hide the dock'}
-        >
-          {collapsed ? '▴' : '▾'}
-        </button>
+        {/* The fold press says what it does and does what it says: the press sets the fold
+            to the body's own state, so the dock always moves the way the top of the window
+            reads. The Scenes view's Cue tab is the one state where no press can show
+            anything — the body there is pinned away whatever the fold is, because there is
+            no cue list to have selected from — so the press is not offered, and the view's
+            own tabs are what open the dock. */}
+        {!(view === 'scenes' && tab === 'cue') && (
+          <button
+            className="dock-collapse"
+            onClick={() => setChosenFold(showBody)}
+            title={showBody ? 'Hide the dock, and give the cue list the room' : 'Show the dock'}
+            aria-label={showBody ? 'Hide the dock' : 'Show the dock'}
+          >
+            {showBody ? '▾' : '▴'}
+          </button>
+        )}
       </div>
       {showBody && <div className="dock-body">{body}</div>}
     </div>
