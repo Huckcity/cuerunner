@@ -28,11 +28,12 @@ import { defaultRfSettings, defaultShowSettings } from '../../shared/show'
 import { diffWorkspaces } from '../../shared/showfile'
 import { mergeWorkspaces } from '../../shared/showfileMerge'
 import {
-  CUE_SHAPE,
+  CUE_FIELD_SHAPE,
   SHOW_SETTINGS_SHAPE,
   SHOW_SETTINGS_SECTIONS,
   WORKSPACE_SECTIONS,
   type DeclaredFields,
+  type ShapeLeaf,
   type WorkspaceKey
 } from '../../shared/workspaceSections'
 import { CUE_TYPES, type AudioCue, type Cue, type CueBase } from '../../shared/cue'
@@ -254,29 +255,46 @@ function shapeOf(node: unknown): unknown {
 }
 
 /**
+ * Whether a value is the kind the declaration names, read as the funnel reads it: an object for
+ * `'object'`, and never a list or `null`, whose own kinds the walk names separately.
+ */
+const admitsKind = (kind: ShapeLeaf, value: unknown): boolean =>
+  kind === 'object'
+    ? typeof value === 'object' && value !== null && !Array.isArray(value)
+    : typeof value === kind
+
+/**
  * Every way one value and the declaration node beside it disagree: a leaf of another kind, a
  * list that is not a list or whose element is not the kind the list carries, `null` where the
- * types do not allow one, or an object whose fields are not the declared ones. The declaration
- * is read the way the funnel reads it, so what this names is what the funnel refuses: the
- * wrappers are the types' own — `{ absent: true, of: … }` around a field the types mark `?:`
- * and `{ nothing: true, of: … }` around a leaf they allow `null` for — and a node is told from
- * the others by its own reserved name, never by the value beside it.
+ * types do not allow one, a value whose type allows several kinds and carries none of them, or
+ * an object whose fields are not the declared ones. The declaration is read the way the funnel
+ * reads it, so what this names is what the funnel refuses: the wrappers are the types' own —
+ * `{ absent: true, of: … }` around a field the types mark `?:` and `{ nothing: true, of: … }`
+ * around a leaf they allow `null` for — and a node is told from the others by its own reserved
+ * name, never by the value beside it. `'object'` is a leaf whose value is held to being an
+ * object and not read any further, and `{ oneOf: […] }` admits the kinds it lists. Every kind it
+ * reports is one the funnel refuses a document for, on either half of the walk.
  */
 function valueDifferences(value: unknown, node: unknown, path: string): string[] {
   const shape = shapeOf(node)
   if (typeof shape === 'object' && shape !== null && 'nothing' in shape && shape.nothing === true) {
     return value === null ? [] : valueDifferences(value, 'of' in shape ? shape.of : undefined, path)
   }
-  if (shape === 'string' || shape === 'number' || shape === 'boolean') {
-    return typeof value === shape
+  if (shape === 'string' || shape === 'number' || shape === 'boolean' || shape === 'object') {
+    if (admitsKind(shape, value)) return []
+    return [`${path} is ${typeof value}, not the ${shape} the declaration writes`]
+  }
+  if (typeof shape === 'object' && shape !== null && 'oneOf' in shape) {
+    const kinds = Array.isArray(shape.oneOf) ? (shape.oneOf as unknown[]) : []
+    return kinds.some(kind => admitsKind(kind as ShapeLeaf, value))
       ? []
-      : [`${path} is ${typeof value}, not the ${shape} the declaration writes`]
+      : [`${path} is ${typeof value}, not one of the kinds the declaration writes (${kinds.join(', ')})`]
   }
   const kind = typeof shape === 'object' && shape !== null && 'items' in shape ? shape.items : undefined
-  if (kind === 'string' || kind === 'number' || kind === 'boolean') {
+  if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'object') {
     if (!Array.isArray(value)) return [`${path} is not a list`]
     if (value.length === 0) return [`${path} is empty, so nothing inside it is walked`]
-    const wrong = value.findIndex(item => typeof item !== kind)
+    const wrong = value.findIndex(item => !admitsKind(kind, item))
     return wrong === -1
       ? []
       : [`${path}.${wrong} is ${typeof value[wrong]}, not the ${kind} the declaration writes`]
@@ -285,9 +303,12 @@ function valueDifferences(value: unknown, node: unknown, path: string): string[]
   if ('elements' in shape) {
     if (!Array.isArray(value)) return [`${path} is not a list`]
     if (value.length === 0) return [`${path} is empty, so nothing inside it is walked`]
-    // Every element of a list carries the one shape the declaration gives it, so the first is
-    // the whole of what there is to walk.
-    return shapeDifferences(value[0], asFields(shape.elements as object), `${path}[]`)
+    // Every element of a list is read against the one shape the declaration gives it, as the
+    // funnel reads them: an element's own type may allow several kinds — an OSC argument's
+    // value — so it is not only the first that is worth walking.
+    return value.flatMap((element, at) =>
+      shapeDifferences(element, asFields(shape.elements as object), `${path}.${at}`)
+    )
   }
   return shapeDifferences(value, asFields(shape), path)
 }
@@ -299,6 +320,12 @@ function valueDifferences(value: unknown, node: unknown, path: string): string[]
  * `valueDifferences` reads, at every level. What comes back empty is a value of the declared
  * shape, and what it names is the fact the funnel would refuse: the same reading, over a value
  * rather than a document.
+ *
+ * The missing field and the wrong kind are the funnel's own, on both halves. The unknown field
+ * is the settings' rule alone: a cue keeps a field the declaration does not name — `media`,
+ * which the runtime cue type does not declare — so for a cue the report of one is this walk's
+ * own strictness, and what it holds is that a cue of this build carries no such field to begin
+ * with.
  */
 function shapeDifferences(value: unknown, fields: DeclaredFields, path: string): string[] {
   if (typeof value !== 'object' || value === null) return [`${path} is ${typeof value}, not an object`]
@@ -387,10 +414,18 @@ function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'
 
 /**
  * One cue of every type this build knows, in this build's own shape: the base every cue
- * carries, the fields the type adds, and not one field the types mark `?:` — so what a cue
- * here carries is exactly what the declaration has to name as required. Each is typed as its
- * own cue type, so a field the types gain is a field this fixture is missing: a compile
- * error before it is a field the declaration has not learned.
+ * carries, the fields the type adds, and — on the audio and MIDI cues — the fields the types
+ * mark `?:`, so the declaration of those is walked too. The rest carry none of them, because a
+ * cue without them is this build's own shape as much as one with them: a declaration that
+ * demanded one fails here on those cues. Each cue is typed as its own cue type, so a field the
+ * types gain is a field this fixture is missing: a compile error before it is a field the
+ * declaration has not learned.
+ *
+ * The lists are populated rather than empty (an empty list is a list nothing inside is
+ * walked): the MIDI cue sends messages of the union's own variants, the OSC cue's arguments
+ * carry every kind a value may be — a number, a string and a boolean — the network cue carries
+ * the headers an open record holds, and the audio cue carries a crosspoint list, a trigger, a
+ * sound region, the `null` its `endTime` is allowed and a script line pinned to the script.
  */
 const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { type: K }> } = {
   audio: {
@@ -402,13 +437,48 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     fadeInDuration: 0,
     volume: 1,
     pan: 0,
-    outputs: null,
+    outputs: [{ inputChannel: 0, outputChannel: 1, gain: 0.5 }],
     loopCount: 1,
     playbackRate: 1,
-    trim: 0
+    trim: 0,
+    // The fields the types mark `?:`, in the shape a cue this build wrote carries them: a
+    // trigger (a list whose elements are a union of clauses), the re-fire policy, a script line
+    // that is a number here, the trim and the measurement it plays by.
+    triggers: [{ id: 't-a1', kind: 'osc', address: '/go' }],
+    refire: 'restart',
+    scriptLine: 12,
+    trimSilence: true,
+    soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false }
   },
-  midi: { ...cueBase('m1'), type: 'midi', portName: '', messages: [] },
-  osc: { ...cueBase('o1'), type: 'osc', host: '', port: 0, address: '', args: [] },
+  midi: {
+    ...cueBase('m1'),
+    type: 'midi',
+    portName: '',
+    // The list's elements are a union of five variants: each is an object, and what a variant
+    // carries — the note, the controller, the data — is not declared.
+    messages: [
+      { kind: 'cc', channel: 1, controller: 7, value: 64 },
+      { kind: 'sysex', data: [0x7e, 0x00] }
+    ],
+    // The other reading of the one field that is both optional and null-able: the audio cue
+    // pins a number, this one is pinned to nothing.
+    scriptLine: null
+  },
+  osc: {
+    ...cueBase('o1'),
+    type: 'osc',
+    host: '',
+    port: 0,
+    address: '',
+    // An argument's `value` is the one field whose type allows more than one kind, so all
+    // three are carried: a declaration that named one of them would be caught here.
+    args: [
+      { type: 'i', value: 12 },
+      { type: 'f', value: 3.5 },
+      { type: 's', value: '/lx/12' },
+      { type: 'T', value: true }
+    ]
+  },
   wait: { ...cueBase('w1'), type: 'wait' },
   fade: {
     ...cueBase('f1'),
@@ -428,7 +498,17 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     waitForFade: false
   },
   group: { ...cueBase('g1'), type: 'group', mode: 'playlist' },
-  network: { ...cueBase('n1'), type: 'network', method: 'GET', url: '', body: '', headers: {}, timeout: 5000 },
+  network: {
+    ...cueBase('n1'),
+    type: 'network',
+    method: 'GET',
+    url: '',
+    body: '',
+    // An open record: the header names are the operator's, so what is inside it is not
+    // declared and only the object itself is walked.
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 5000
+  },
   script: { ...cueBase('sc1'), type: 'script', language: 'javascript', script: '', timeout: 60000 },
   scene: { ...cueBase('sn1'), type: 'scene', sceneId: '' },
   devamp: { ...cueBase('d1'), type: 'devamp', targetCueId: '' },
@@ -446,20 +526,20 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
 }
 
 describe('the cue-field shape', () => {
-  it('names every field a cue has to carry, and no field the types make optional', () => {
+  it('declares every field a cue of every type carries, with the kind it is written as', () => {
     for (const type of CUE_TYPES) {
-      const cue = CUE_OF_TYPE[type]
-      const declared = CUE_SHAPE[type]
-
-      // A cue of the build's own shape carries every required field and no optional one, so
-      // the declaration and the cue are the same list of names: a required field the
-      // declaration leaves out is one the cue has and the list has not, and a name the list
-      // carries that the cue has not got is a field the types mark `?:` — which is exactly
-      // what the declaration must not demand. The `satisfies` refuses the other mix-ups (a
-      // name that is no field at all, and an optional field listed as required) before this
-      // runs, so what is held here is that the list is the whole of what a cue carries.
-      expect(declared.filter(field => !Object.hasOwn(cue, field)), type).toEqual([])
-      expect(Object.keys(cue).filter(field => !declared.some(name => name === field)), type).toEqual([])
+      // A cue of the build's own shape, walked beside the declaration at every level: a field
+      // the cue carries and the declaration has not learned fails here, and so does a declared
+      // field the cue has not got — which is what the load funnel refuses a document for. The
+      // cue carries no field the types make optional, so a declaration that demanded one fails
+      // on the same walk.
+      //
+      // This is the half the `satisfies` cannot reach, and the one the union rules exist for:
+      // a variant-shaped list or a mixed-kind value declared as one of its variants compiles
+      // and would then refuse a document this build itself wrote — a `cc` message under a
+      // declaration written for `noteOn`, a boolean OSC argument under one written for a
+      // number — and the fixture carries both.
+      expect(shapeDifferences(CUE_OF_TYPE[type], CUE_FIELD_SHAPE[type], ''), type).toEqual([])
     }
   })
 })

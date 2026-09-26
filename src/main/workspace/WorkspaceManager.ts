@@ -28,7 +28,7 @@ import { heldShowSettings } from '../../shared/show'
 import { hasCueList, normalizeTriggerGuard } from '../../shared/workspace'
 import {
   savedShape,
-  CUE_SHAPE,
+  CUE_FIELD_SHAPE,
   SHOW_SETTINGS_SHAPE,
   SHOW_SETTINGS_SECTIONS,
   WORKSPACE_SECTIONS,
@@ -228,9 +228,9 @@ const DECLARED_SHOW_SECTIONS: Record<string, true> = Object.fromEntries(
   SHOW_SETTINGS_SECTIONS.map(section => [section, true])
 )
 
-/** Every field a cue of each type has to carry, from the one declaration of them. */
-const DECLARED_CUE_FIELDS: Record<string, readonly string[] | undefined> = Object.fromEntries(
-  Object.entries(CUE_SHAPE)
+/** Every field a cue of each type carries, from the one declaration of them. */
+const DECLARED_CUE_FIELDS: Record<string, DeclaredFields | undefined> = Object.fromEntries(
+  Object.entries(CUE_FIELD_SHAPE)
 )
 
 /** The fields a show's settings carry, from the one declaration of them. */
@@ -279,18 +279,63 @@ function shapeOf(node: unknown): unknown {
   return 'of' in node ? node.of : undefined
 }
 
-/** How a sentence names the value a leaf declares: `a number`, `a string`, `a boolean`. */
+/** How a sentence names a value of a declared kind: `a number`, `a string`, `an object`. */
 const LEAF_WORDS: Record<ShapeLeaf, string> = {
   string: 'a string',
   number: 'a number',
-  boolean: 'a boolean'
+  boolean: 'a boolean',
+  object: 'an object'
 }
 
-/** How a sentence names the value a list of primitives declares: `a list of strings`. */
+/** How a sentence names the value a list of one kind declares: `a list of strings`. */
 const ITEM_WORDS: Record<ShapeLeaf, string> = {
   string: 'a list of strings',
   number: 'a list of numbers',
-  boolean: 'a list of booleans'
+  boolean: 'a list of booleans',
+  object: 'a list of objects'
+}
+
+/** Whether a value is the kind a leaf declares: an object for `'object'`, never a list or `null`. */
+function admitsLeaf(kind: ShapeLeaf, value: unknown): boolean {
+  if (kind !== 'object') return typeof value === kind
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** How a sentence names the kinds a `{ oneOf }` node allows: `a number, a string or a boolean`. */
+function kindWords(kinds: readonly unknown[]): string {
+  const words = kinds.map(kind => LEAF_WORDS[kind as ShapeLeaf] ?? String(kind))
+  if (words.length === 0) return 'nothing'
+  return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`
+}
+
+/**
+ * The voice a refusal sentence is spoken in: the verb its subject takes, and whether a field the
+ * declaration does not name refuses. One walk reads two shapes — the settings' table, every field
+ * of which is this build's own whole, and a cue's declared fields, where a field the declaration
+ * does not name is the document's and is kept — and the subject beside the voice is what differs
+ * between them.
+ */
+interface RefusalVoice {
+  /** The verb the subject takes: `have` for the settings' table, `has` for a cue. */
+  readonly verb: 'has' | 'have'
+  /** Whether a field the declaration does not name refuses. The settings' rule, not a cue's. */
+  readonly refuseForeignFields: boolean
+}
+
+/** The settings' voice: the table is this build's own whole, so a field it does not name refuses. */
+const SETTINGS_VOICE: RefusalVoice = { verb: 'have', refuseForeignFields: true }
+
+/** A cue's voice: it keeps the fields the declaration does not name, and names the cue it refuses. */
+const CUE_VOICE: RefusalVoice = { verb: 'has', refuseForeignFields: false }
+
+/**
+ * What a refusal sentence opens with, built where the sentence is thrown: the settings' own
+ * table, or the cue that carries the field — the walk's own cue object, named the way the cue
+ * list names it. Nothing about a cue is built for a cue nothing is wrong with.
+ */
+function refusalOpening(voice: RefusalVoice, cue: Cue | null): string {
+  if (cue === null) return `that show’s settings ${voice.verb}`
+  return `that show’s cue ${cueLabel(cue)} (${String(cue.type)}) ${voice.verb}`
 }
 
 /**
@@ -308,67 +353,99 @@ function elementFields(node: unknown): DeclaredFields | null {
 /**
  * Refuses one declared field's value that is not what the declaration says it is: a leaf of
  * another kind, a leaf carrying `null` where the types do not allow one, a list that is not a
- * list or an element that is not the kind its list carries, or an object where the declaration
- * writes an object's own fields. `node` is the field's node as the declaration holds it,
- * wrappers and all, and `path` is the path the sentence names the value by.
+ * list or an element that is not the kind its list carries, a value whose type allows several
+ * kinds and carries none of them, or an object where the declaration writes an object's own
+ * fields. `node` is the field's node as the declaration holds it, wrappers and all, and `path`
+ * is the path the sentence names the value by.
  *
  * The declaration's reserved names tell its forms apart, so a node is read by what it carries:
- * `items` is a list of primitives, `elements` a list of objects, anything else that is an
- * object is an object's own fields — and a node that is none of those is a leaf, compared
- * against the value's own `typeof` as the tag it carries. The two wrappers are read first, in
- * the order the types put them: `absent` is the field's and the caller has already read it, and
- * `nothing` admits `null` and is taken off before the shape inside it is read.
+ * `items` is a list of one kind, `elements` a list of objects, `oneOf` the kinds a value may be,
+ * anything else that is an object is an object's own fields — and a node that is none of those
+ * is a leaf, compared against the value as the tag it carries. `'object'` is a leaf too, and
+ * the one whose value is checked without reading inside it: where the types have more than one
+ * field set, or keys of the document's, the declaration says the value is an object and stops
+ * there. The two wrappers are read first, in the order the types put them: `absent` is a fact
+ * about the key and the caller has already read it, and `nothing` admits `null` and is taken
+ * off before the shape inside it is read.
  */
-function refuseForeignValue(value: unknown, node: unknown, path: string, source: string): void {
+function refuseForeignValue(
+  value: unknown,
+  node: unknown,
+  path: string,
+  source: string,
+  voice: RefusalVoice,
+  cue: Cue | null
+): void {
   // The wrappers are the declaration's own: `absent` is a fact about the key and is read where
   // the key is, and `nothing` says the value may be `null` — the one value admitted before the
   // shape inside the wrapper is read, and only where the types allow it.
   const shape = shapeOf(node)
   if (typeof shape === 'object' && shape !== null && 'nothing' in shape && shape.nothing === true) {
     if (value === null) return
-    refuseForeignValue(value, 'of' in shape ? shape.of : undefined, path, source)
+    refuseForeignValue(value, 'of' in shape ? shape.of : undefined, path, source, voice, cue)
     return
   }
-  if (shape === 'string' || shape === 'number' || shape === 'boolean') {
-    if (typeof value === shape) return
+  if (shape === 'string' || shape === 'number' || shape === 'boolean' || shape === 'object') {
+    if (admitsLeaf(shape, value)) return
     throw new Refusal(
-      `that show’s settings have ${path} as ${valueKind(value)},` +
+      `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
       ` where this version of WinsLab writes ${LEAF_WORDS[shape]}` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
+  if (typeof shape === 'object' && shape !== null && 'oneOf' in shape) {
+    // A value whose type allows more than one kind has no single tag to be compared against,
+    // so it is read against every kind the declaration lists: the kinds are the types', and a
+    // value of none of them is the refusal the sentence names all of them in.
+    const kinds = shape.oneOf
+    const allowed = Array.isArray(kinds) ? (kinds as ShapeLeaf[]) : []
+    if (allowed.some(kind => admitsLeaf(kind, value))) return
+    throw new Refusal(
+      `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
+      ` where this version of WinsLab writes ${kindWords(allowed)}` +
       ` — ${source} was probably saved by another build`
     )
   }
   if (typeof shape === 'object' && shape !== null && 'items' in shape) {
     const kind = shape.items
-    if (kind === 'string' || kind === 'number' || kind === 'boolean') {
-      refuseForeignItems(value, kind, path, source)
+    if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'object') {
+      refuseForeignItems(value, kind, path, source, voice, cue)
       return
     }
   }
   const elements = elementFields(shape)
   if (elements !== null) {
-    refuseForeignList(value, elements, path, source)
+    refuseForeignList(value, elements, path, source, voice, cue)
     return
   }
-  refuseForeignFields(value, shape as DeclaredFields, path, -1, source)
+  refuseForeignFields(value, shape as DeclaredFields, path, -1, source, voice, cue)
 }
 
 /**
- * Refuses a declared list of primitives whose value is not a list, or whose element is not the
- * kind the list carries. The sentence names the element's own path — `midiIn.portNames.1` —
- * because an element is the one place the field's name does not reach.
+ * Refuses a declared list whose value is not a list, or whose element is not the kind the list
+ * carries — a primitive, or an object where the list's elements are a union of variants. The
+ * sentence names the element's own path — `midiIn.portNames.1`, `messages.3` — because an
+ * element is the one place the field's name does not reach.
  */
-function refuseForeignItems(value: unknown, kind: ShapeLeaf, path: string, source: string): void {
+function refuseForeignItems(
+  value: unknown,
+  kind: ShapeLeaf,
+  path: string,
+  source: string,
+  voice: RefusalVoice,
+  cue: Cue | null
+): void {
   if (!Array.isArray(value)) {
     throw new Refusal(
-      `that show’s settings have ${path} as ${valueKind(value)},` +
+      `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
       ` where this version of WinsLab writes ${ITEM_WORDS[kind]}` +
       ` — ${source} was probably saved by another build`
     )
   }
   for (let at = 0; at < value.length; at++) {
-    if (typeof value[at] === kind) continue
+    if (admitsLeaf(kind, value[at])) continue
     throw new Refusal(
-      `that show’s settings have ${valuePath(path, at)} as ${valueKind(value[at])},` +
+      `${refusalOpening(voice, cue)} ${valuePath(path, at)} as ${valueKind(value[at])},` +
       ` where this version of WinsLab writes ${LEAF_WORDS[kind]}` +
       ` — ${source} was probably saved by another build`
     )
@@ -377,43 +454,51 @@ function refuseForeignItems(value: unknown, kind: ShapeLeaf, path: string, sourc
 
 /**
  * Refuses a value whose fields are not the declared ones: a field the declaration does not
- * carry, a declared field the value has not got, or a declared field whose value is not what
- * its declaration says — `refuseForeignValue` reads that one, down to the kind of a leaf and
- * the kind of a list's elements. `path` is where the value sits — a section's own name, or
- * the field a list hangs under — and `at` is its index where the value is a list's element,
- * or -1 where it is not.
+ * carry where the voice refuses those — the settings', and only the settings' — a declared
+ * field the value has not got, or a declared field whose value is not what its declaration says
+ * — `refuseForeignValue` reads that one, down to the kind of a leaf and the kind of a list's
+ * elements. `path` is where the value sits — a section's own name, a cue's own fields, the
+ * field a list hangs under — `at` is its index where the value is a list's element, or -1 where
+ * it is not, and `cue` is the cue a sentence names, or nothing where the walk is the settings'.
  *
  * The walk descends through the declaration and not the document: four levels at the deepest
  * — the settings, a section, a list's elements and the lists inside them — whatever a file
- * nests, so no document can recurse it. A document's keys are iterated rather than listed,
- * and the declaration's are the declaration's own size, so a document with a million fields
- * costs the one that is wrong; and the walk refuses at the first thing it does not know
- * rather than collecting what it found.
+ * nests, so no document can recurse it. A document's keys are iterated rather than listed, and
+ * the declaration's are the declaration's own size, so a document with a million fields costs
+ * the one that is wrong; and the walk refuses at the first thing it does not know rather than
+ * collecting what it found. A cue's own fields are the document's: the declaration's are read
+ * and the document's other keys are left as they are, because a cue on disk carries `media`,
+ * which the runtime cue type does not declare.
  */
 function refuseForeignFields(
   value: unknown,
   fields: DeclaredFields,
   path: string,
   at: number,
-  source: string
+  source: string,
+  voice: RefusalVoice,
+  cue: Cue | null
 ): void {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Refusal(
-      `that show’s settings have ${valuePath(path, at)} as ${valueKind(value)},` +
+      `${refusalOpening(voice, cue)} ${valuePath(path, at)} as ${valueKind(value)},` +
       ` where this version of WinsLab writes an object` +
       ` — ${source} was probably saved by another build`
     )
   }
   const carried = value as Record<string, unknown>
   // The document's own keys, iterated rather than collected into an array: a file may carry a
-  // million of them, and the walk refuses at the first it does not know.
-  for (const field in carried) {
-    if (Object.hasOwn(fields, field)) continue
-    throw new Refusal(
-      `that show’s settings have a field this version of WinsLab does not know` +
-      ` (${fieldPath(path, at, field)})` +
-      ` — ${source} was probably saved by a newer version`
-    )
+  // million of them, and the walk refuses at the first it does not know. A cue's voice does not
+  // refuse them at all, so its walk never reads the document's keys.
+  if (voice.refuseForeignFields) {
+    for (const field in carried) {
+      if (Object.hasOwn(fields, field)) continue
+      throw new Refusal(
+        `${refusalOpening(voice, cue)} a field this version of WinsLab does not know` +
+        ` (${fieldPath(path, at, field)})` +
+        ` — ${source} was probably saved by a newer version`
+      )
+    }
   }
   // The declaration's fields, in the declaration's order: a document that leaves one out is
   // refused here, which is the direction a file written before the field existed fails in.
@@ -422,36 +507,49 @@ function refuseForeignFields(
     if (!Object.hasOwn(carried, field)) {
       if (isAbsentOnDisk(node)) continue
       throw new Refusal(
-        `that show’s settings have no ${fieldPath(path, at, field)} field,` +
+        `${refusalOpening(voice, cue)} no ${fieldPath(path, at, field)} field,` +
         ` which this version of WinsLab writes` +
         ` — ${source} was probably saved by an older build`
       )
     }
-    refuseForeignValue(carried[field], node, fieldPath(path, at, field), source)
+    refuseForeignValue(carried[field], node, fieldPath(path, at, field), source, voice, cue)
   }
 }
 
 /** Refuses a declared list's value that is not a list of objects with the declared fields. */
-function refuseForeignList(value: unknown, fields: DeclaredFields, path: string, source: string): void {
+function refuseForeignList(
+  value: unknown,
+  fields: DeclaredFields,
+  path: string,
+  source: string,
+  voice: RefusalVoice,
+  cue: Cue | null
+): void {
   if (!Array.isArray(value)) {
     throw new Refusal(
-      `that show’s settings have ${path} as ${valueKind(value)},` +
+      `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
       ` where this version of WinsLab writes a list` +
       ` — ${source} was probably saved by another build`
     )
   }
-  for (let at = 0; at < value.length; at++) refuseForeignFields(value[at], fields, path, at, source)
+  for (let at = 0; at < value.length; at++) {
+    refuseForeignFields(value[at], fields, path, at, source, voice, cue)
+  }
 }
 
 /**
- * Refuses a cue that has not got a field its own type has to carry — a field the deleted
+ * Refuses a cue whose declared fields do not hold what this build's types write there. The walk
+ * is the settings' own — the declaration is descended, so a leaf's kind, a list's own kind and
+ * its elements', `null` only where the types allow it, and an object where the types write one
+ * are all read — with the two things a cue's voice decides: the sentence names the cue, and a
+ * field the declaration does not name is kept, because a cue on disk carries `media`. A field
+ * the types mark `?:` may be missing; a field the cue's own type requires and the document has
+ * not got refuses with the sentence this build has always given it — the field the deleted
  * migration pass used to fill in, which is what a file written before that field existed
- * carries. The check is the declared fields alone: a cue on disk carries fields the runtime
- * cue type does not declare — `media` is the one left — so a field this build does not
- * declare is kept rather than refused. A cue type the declaration does not know is left to
- * the arm below, which names it as the type it is.
+ * carries. A cue type the declaration does not know falls through to the cue-type arm the funnel
+ * makes after this walk, which names it as the type it is.
  */
-function refuseIncompleteCues(cues: readonly Cue[], source: string): void {
+function refuseForeignCues(cues: readonly Cue[], source: string): void {
   for (const cue of cues) {
     if (typeof cue !== 'object' || cue === null || Array.isArray(cue)) {
       throw new Refusal(
@@ -460,21 +558,14 @@ function refuseIncompleteCues(cues: readonly Cue[], source: string): void {
       )
     }
     // `DECLARED_CUE_FIELDS` is a plain object, so a cue whose type is `constructor` or
-    // `toString` would otherwise read a function off `Object.prototype` and be walked as a
-    // list of fields — reach it through `hasOwn`, and let anything it does not own fall
-    // through to the cue-type arm the funnel makes before this one.
+    // `toString` would otherwise read a function off `Object.prototype` and be walked as an
+    // object of fields — reach it through `hasOwn`, and let a type it does not own fall
+    // through to the cue-type arm the funnel makes after this walk.
     const declared = Object.hasOwn(DECLARED_CUE_FIELDS, cue.type)
       ? DECLARED_CUE_FIELDS[cue.type]
       : undefined
     if (declared === undefined) continue
-    for (const field of declared) {
-      if (Object.hasOwn(cue, field)) continue
-      throw new Refusal(
-        `that show’s cue ${cueLabel(cue)}` +
-        ` (${String(cue.type)}) has no ${field} field, which this version of WinsLab writes` +
-        ` — ${source} was probably saved by an older build`
-      )
-    }
+    refuseForeignFields(cue, declared, '', -1, source, CUE_VOICE, cue)
   }
 }
 
@@ -486,12 +577,13 @@ function refuseIncompleteCues(cues: readonly Cue[], source: string): void {
  * in; the fields inside those sections, read against the one declaration of them, in both
  * directions — a field this build does not write refuses, and so does a declared field the
  * document leaves out, because either way the window reads a value nobody wrote, and each
- * field's value is then held to the kind its tag declares, down to the element of a list of
- * primitives, which is the check the window's own readers used to fail on instead; and a
- * cue's declared-required fields, read in the one direction a cue has — a cue is content
- * rather than settings, so a field this build does not know there is kept, and only a field
- * a cue's own type requires and the document has not got refuses. A `showSettings` that is
- * there and is not a set of sections is refused the same way, so the operator gets a
+ * field's value is then held to the kind its declaration carries, down to the element of a
+ * list, which is the check the window's own readers used to fail on instead; and a cue's
+ * fields, read against the declaration of them in the one direction a cue has — a cue is
+ * content rather than settings, so a field this build does not know there is kept and a field
+ * the declaration names is held to the kind the cue's own type writes, and only a declared
+ * field the document has not got refuses unless the types mark it `?:`. A `showSettings` that
+ * is there and is not a set of sections is refused the same way, so the operator gets a
  * sentence rather than the fault `Object.keys` throws at a null or the `in` operator at a
  * number.
  *
@@ -502,8 +594,8 @@ function refuseIncompleteCues(cues: readonly Cue[], source: string): void {
  * check is what the document carries, so a declared key it omits stays fine. Inside a
  * settings section it is the other way round: a section a file carries is read field by
  * field, because a field a later build added is a field the window dereferences. The one
- * field a document may leave out is the one the types mark `?:`, and none of a show's
- * settings does.
+ * field a document may leave out is the one the types mark `?:` in the settings, and none of
+ * a show's settings does; a cue has three, and each is declared absent-marked.
  *
  * The sentence names the source the bytes came from — a path, or the bundle entry a
  * showfile came out of, handed in by the caller — because the operator has to know which
@@ -558,9 +650,9 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     }
     // The sections are this build's; the fields inside them are the level a file written
     // before one of them existed differs at.
-    refuseForeignFields(sections, DECLARED_SETTINGS_FIELDS, '', -1, source)
+    refuseForeignFields(sections, DECLARED_SETTINGS_FIELDS, '', -1, source, SETTINGS_VOICE, null)
   }
-  refuseIncompleteCues(workspace.cues, source)
+  refuseForeignCues(workspace.cues, source)
 }
 
 /** A document as the window holds it: its settings read with this build's defaults in. */

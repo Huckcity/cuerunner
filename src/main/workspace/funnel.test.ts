@@ -8,7 +8,8 @@
 // What is refused is a shape, and the shapes below are the levels of one: a version literal,
 // a section at either level, a settings section that is missing, a field inside a settings
 // section — this build's own fields, in both directions, down to a channel's or a scene's —
-// and a cue missing a field its own type carries. The last cases hold the other side of the
+// a cue missing a field its own type carries, and a declared cue field carrying the wrong
+// kind, down to an element of one of its lists. The last cases hold the other side of the
 // same rule: the bytes this build's own serialiser wrote go in and come back untouched, and
 // the fields the types make optional on disk may be there or not.
 //
@@ -75,10 +76,10 @@ interface Refused {
  * The shapes this build refuses: a cue type, a section at either level, a settings section
  * that is missing, a field inside a settings section — the unknown direction, at the
  * section's own level and down inside a list; and the missing direction — a cue without a
- * field its type carries, and the kinds a settings field has to be (an object, a list, and
- * an object per entry in it) when a document carries something else there. Every entry point
- * below drives all of them, so the funnel is held to the same answer wherever the bytes come
- * from.
+ * field its type carries, and the kinds a declared field has to be (an object, a list, an
+ * object per entry in it, a value of one of the kinds it allows) when a document carries
+ * something else there. Every entry point below drives all of them, so the funnel is held to
+ * the same answer wherever the bytes come from.
  *
  * The field cases are the pre-change shape's own fields: a channel's `dcaId` and a scene's
  * `live` are what a file written before a scene owned the assignment carries, and a desk
@@ -86,7 +87,10 @@ interface Refused {
  * field-level rule exists to refuse. The kind cases are the other half of a field: what the
  * value beside a declared field has to be — a primitive of the kind the declaration tags,
  * a list of primitives whose every element is that kind, and `null` only where the types
- * allow it.
+ * allow it — and, for a cue's declared fields, the same reading of the kind a cue's own
+ * types write: a number where a MIDI cue writes a list of messages, an element of that list
+ * that is not a message, a leaf inside a crosspoint, and a value whose type allows several
+ * kinds carrying none of them.
  */
 const REFUSED: readonly Refused[] = [
   {
@@ -212,6 +216,70 @@ const REFUSED: readonly Refused[] = [
     what: 'a cue missing a field its own type carries',
     show: show({ cues: [{ id: 'w1', number: '1', name: 'Walk-in', type: 'wait' }] }),
     fact: 'cue 1 Walk-in (wait) has no colorLabel field, which this version of WinsLab writes'
+  },
+  {
+    what: 'a cue field carrying a number where this build writes a list of objects',
+    show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', messages: 3 })] }),
+    fact: 'cue 12 Strings (midi) has messages as a number, ' +
+      'where this version of WinsLab writes a list of objects'
+  },
+  {
+    what: 'a cue list whose element is not the object this build writes',
+    show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', messages: [3] })] }),
+    fact: 'cue 12 Strings (midi) has messages.0 as a number, ' +
+      'where this version of WinsLab writes an object'
+  },
+  {
+    what: 'a cue field inside a list of objects carrying another kind',
+    show: show({
+      cues: [audioCue('a1', {
+        number: '14',
+        name: 'Walk-in',
+        outputs: [{ inputChannel: 0, outputChannel: 0, gain: '0' }]
+      })]
+    }),
+    fact: 'cue 14 Walk-in (audio) has outputs.0.gain as a string, ' +
+      'where this version of WinsLab writes a number'
+  },
+  {
+    what: 'a cue value whose type allows several kinds and carries none of them',
+    show: show({
+      cues: [oscCue('o1', { number: '13', name: 'LX Cue 12', args: [{ type: 'i', value: {} }] })]
+    }),
+    fact: 'cue 13 LX Cue 12 (osc) has args.0.value as an object, ' +
+      'where this version of WinsLab writes a number, a string or a boolean'
+  },
+  {
+    what: 'a cue list carrying null where every element is an object',
+    // `null` is not a message, and `typeof null` is `'object'` — the element check has to tell
+    // them apart, or a `null` message reaches the engine that sends it.
+    show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', messages: [null] })] }),
+    fact: 'cue 12 Strings (midi) has messages.0 as nothing, ' +
+      'where this version of WinsLab writes an object'
+  },
+  {
+    what: 'a cue field carrying null where its own type writes an object',
+    show: show({ cues: [networkCue('n1', { number: '15', name: 'Trigger Video', headers: null })] }),
+    fact: 'cue 15 Trigger Video (network) has headers as nothing, ' +
+      'where this version of WinsLab writes an object'
+  },
+  {
+    what: 'a cue field carrying a list where its own type writes an object',
+    show: show({ cues: [networkCue('n1', { number: '15', name: 'Trigger Video', headers: [] })] }),
+    fact: 'cue 15 Trigger Video (network) has headers as a list, ' +
+      'where this version of WinsLab writes an object'
+  },
+  {
+    what: 'a cue list of objects carrying null where one element stands',
+    show: show({ cues: [audioCue('a1', { number: '14', name: 'Walk-in', outputs: [null] })] }),
+    fact: 'cue 14 Walk-in (audio) has outputs.0 as nothing, ' +
+      'where this version of WinsLab writes an object'
+  },
+  {
+    what: 'a cue leaf carrying null where the types do not allow it',
+    show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', preWait: null })] }),
+    fact: 'cue 12 Strings (midi) has preWait as nothing, ' +
+      'where this version of WinsLab writes a number'
   },
   {
     what: 'a settings field that is not the object this build writes',
@@ -476,13 +544,91 @@ function waitCue(id: string, over: Record<string, unknown> = {}): Record<string,
   }
 }
 
+/**
+ * A MIDI cue in this build's own shape: every field its type requires, and the case's own on
+ * top. The message list is a union of variants, so a case about it carries whichever variant
+ * it is about.
+ */
+function midiCue(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return waitCue(id, {
+    type: 'midi',
+    portName: '',
+    messages: [{ kind: 'programChange', channel: 1, program: 12 }],
+    ...over
+  })
+}
+
+/** An OSC cue in this build's own shape, with one argument of each kind a value may be. */
+function oscCue(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return waitCue(id, {
+    type: 'osc',
+    host: '127.0.0.1',
+    port: 53000,
+    address: '/lx/12',
+    args: [{ type: 'i', value: 12 }, { type: 'f', value: 3.5 }, { type: 's', value: 'warm' }, { type: 'T', value: true }],
+    ...over
+  })
+}
+
+/**
+ * A network cue in this build's own shape: a request, and the headers it carries — which are an
+ * open record, so the object itself is what is declared and its own field names are the case's.
+ */
+function networkCue(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return waitCue(id, {
+    type: 'network',
+    method: 'POST',
+    url: 'http://127.0.0.1:8080/scene',
+    body: '',
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 5000,
+    ...over
+  })
+}
+
+/** An audio cue in this build's own shape: a file, the crosspoints it is routed through. */
+function audioCue(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return waitCue(id, {
+    type: 'audio',
+    filePath: '',
+    startTime: 0,
+    endTime: null,
+    fadeInDuration: 0,
+    volume: 1,
+    pan: 0,
+    outputs: [{ inputChannel: 0, outputChannel: 1, gain: 1 }],
+    loopCount: 0,
+    playbackRate: 1,
+    trim: 0,
+    ...over
+  })
+}
+
 /** A show in this build's own shape: every settings section, and cues on both sides of the optional fields. */
 function ours(): Workspace {
   return show({
     showSettings: defaultShowSettings(),
     // One cue without the fields the types make optional on disk and one with them, because
-    // both are this build's own shape and the check has to read either.
-    cues: [waitCue('w1'), waitCue('w2', { triggers: [], refire: 'ignore', scriptLine: 12 })]
+    // both are this build's own shape and the check has to read either. Beside them the kinds
+    // the cue declaration carries, on bytes this build itself writes: a message of the union a
+    // MIDI cue sends, all four kinds of OSC argument a value may be, crosspoints on an audio
+    // cue, and the `null`s the types allow — an `endTime` and a `parentId`.
+    cues: [
+      waitCue('w1'),
+      waitCue('w2', { triggers: [], refire: 'ignore', scriptLine: 12 }),
+      midiCue('m1', {
+        number: '3',
+        name: 'Strings',
+        messages: [
+          { kind: 'cc', channel: 1, controller: 7, value: 64 },
+          { kind: 'sysex', data: [0x7e, 0x00] }
+        ]
+      }),
+      oscCue('o1', { number: '4', name: 'LX Cue 12' }),
+      // A blank file, so nothing is resolved and nothing is reported missing: the cue is here
+      // for its crosspoints and its `null` `endTime`, not for a file.
+      audioCue('a1', { number: '5', name: 'Walk-in' })
+    ]
   }) as unknown as Workspace
 }
 
@@ -568,11 +714,41 @@ describe('this build’s own write, through the funnel', () => {
     const opened = await openWorkspaceFromPath(path)
     const cues = opened.workspace.cues.map(cue => cue as unknown as Record<string, unknown>)
 
-    expect(cues.map(cue => cue.id)).toEqual(['w1', 'w2'])
+    expect(cues.map(cue => cue.id)).toEqual(['w1', 'w2', 'm1', 'o1', 'a1'])
     expect(Object.hasOwn(cues[0], 'triggers')).toBe(false)
     expect(Object.hasOwn(cues[0], 'refire')).toBe(false)
     expect(cues[1].triggers).toEqual([])
     expect(cues[1].refire).toBe('ignore')
     expect(cues[1].scriptLine).toBe(12)
+  })
+
+  it('reads the kinds a cue’s own fields carry, as the declaration writes them', async () => {
+    // The other side of the cue-field kind check, and what keeps it from refusing a show this
+    // build wrote: a list whose elements are a union of message variants, an OSC argument of
+    // every kind a value may be, the crosspoints of an audio cue and the `null`s the types
+    // allow there are all this build's own shape, and they come back exactly as they went in.
+    const path = join(dir, 'Kinds.cuerunner')
+    writeFileSync(path, serialiseWorkspace(ours(), dir))
+
+    const opened = await openWorkspaceFromPath(path)
+    const cues = opened.workspace.cues.map(cue => cue as unknown as Record<string, unknown>)
+    const midi = cues.find(cue => cue.id === 'm1')
+    const osc = cues.find(cue => cue.id === 'o1')
+    const audio = cues.find(cue => cue.id === 'a1')
+
+    expect(opened.loadNotes).toEqual([])
+    expect(midi?.messages).toEqual([
+      { kind: 'cc', channel: 1, controller: 7, value: 64 },
+      { kind: 'sysex', data: [0x7e, 0x00] }
+    ])
+    expect(osc?.args).toEqual([
+      { type: 'i', value: 12 },
+      { type: 'f', value: 3.5 },
+      { type: 's', value: 'warm' },
+      { type: 'T', value: true }
+    ])
+    expect(audio?.outputs).toEqual([{ inputChannel: 0, outputChannel: 1, gain: 1 }])
+    expect(audio?.endTime).toBeNull()
+    expect(audio?.parentId).toBeNull()
   })
 })

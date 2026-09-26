@@ -3,7 +3,7 @@
 // what it does not know, it refuses by name. Electron is not available in the test
 // environment, so the module is imported with it stubbed.
 import { describe, it, expect, vi } from 'vitest'
-import type { AudioCue, CueBase, GroupCue, WaitCue } from '../../shared/cue'
+import type { AudioCue, CueBase, GroupCue, MidiCue, NetworkCue, OscCue, WaitCue } from '../../shared/cue'
 import type { LoadNote, Workspace } from '../../shared/workspace'
 import { defaultShowSettings } from '../../shared/show'
 import { Refusal } from '../ipc/refusal'
@@ -74,6 +74,47 @@ function audio(id: string, over: Partial<AudioCue> = {}): AudioCue {
     loopCount: 0,
     playbackRate: 1,
     trim: 0,
+    ...over
+  }
+}
+
+/** A MIDI cue as this build writes one: its own fields, and the messages a case is about. */
+function midi(id: string, over: Partial<MidiCue> = {}): MidiCue {
+  return {
+    ...baseCue(id),
+    type: 'midi',
+    portName: '',
+    messages: [{ kind: 'programChange', channel: 1, program: 12 }],
+    ...over
+  }
+}
+
+/** An OSC cue as this build writes one, with one argument of each kind a value may be. */
+function osc(id: string, over: Partial<OscCue> = {}): OscCue {
+  return {
+    ...baseCue(id),
+    type: 'osc',
+    host: '127.0.0.1',
+    port: 53000,
+    address: '/lx/12',
+    args: [{ type: 'i', value: 12 }, { type: 'f', value: 3.5 }, { type: 's', value: 'warm' }, { type: 'T', value: true }],
+    ...over
+  }
+}
+
+/**
+ * A network cue as this build writes one, with the headers it carries: an open record, whose
+ * field names are the operator's rather than the declaration's.
+ */
+function network(id: string, over: Partial<NetworkCue> = {}): NetworkCue {
+  return {
+    ...baseCue(id),
+    type: 'network',
+    method: 'POST',
+    url: 'http://127.0.0.1:8080/scene',
+    body: '',
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 5000,
     ...over
   }
 }
@@ -347,6 +388,139 @@ describe('the shape check', () => {
     expect(loaded?.rf.swaps[0].to).toBeNull()
     expect(loaded?.cast.performers[0].channelId).toBeNull()
     expect(loaded?.cast.dcas[0].deskNumber).toBeNull()
+  })
+
+  it('refuses a cue field carrying a value of a kind its own type does not write', () => {
+    // The cue half of the kind check, and the sentence the funnel owes where it used to
+    // promise one: `messages` reaches `flatMap` on its way to the desk, so a number there was
+    // a fault rather than a sentence. The walk reads the declaration and names the cue, the
+    // field's path, the kind the file carried and the kind this build writes.
+    const numbered = { ...midi('m1', { number: '12', name: 'Strings' }), messages: 3 }
+
+    expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(
+      'that show’s cue 12 Strings (midi) has messages as a number, ' +
+      `where this version of WinsLab writes a list of objects — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses an element of a cue’s list that is not the object its own type writes', () => {
+    // A list whose elements are a union of variants is bounded at its elements: every message
+    // is an object, and what a message carries — this one's controller, that one's data — is
+    // not declared. An element that is not an object is refused by its index, because the
+    // index is the one place the field's name does not reach.
+    const numbered = { ...midi('m1', { number: '12', name: 'Strings' }), messages: [3] }
+
+    expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(
+      'that show’s cue 12 Strings (midi) has messages.0 as a number, ' +
+      `where this version of WinsLab writes an object — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses null where the declaration writes an object, naming the field or the element', () => {
+    // `typeof null` is `'object'`, so a check reading the kind alone would take a null message or
+    // a null header set for the object it is not. An element is named by its index and a field by
+    // its path, and both sentences say what this build writes there.
+    const nothing = { ...midi('m1', { number: '12', name: 'Strings' }), messages: [null] }
+    const headerless = { ...network('n1', { number: '15', name: 'Trigger Video' }), headers: null }
+
+    expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(
+      'that show’s cue 12 Strings (midi) has messages.0 as nothing, ' +
+      `where this version of WinsLab writes an object — ${SHOW} was probably saved by another build`
+    )
+    expect(() => migrateWorkspace(workspaceWith([headerless]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([headerless]), SHOW)).toThrow(
+      'that show’s cue 15 Trigger Video (network) has headers as nothing, ' +
+      `where this version of WinsLab writes an object — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses a leaf inside a cue’s list of objects, down to the element’s index', () => {
+    // The deepest level the cue walk reaches: a crosspoint is an object with three numbers, and
+    // a gain the desk would read as a level has to be one. The sentence names both the element
+    // and the field, the way a settings list's does.
+    const routed = audio('a1', {
+      number: '14',
+      name: 'Walk-in',
+      outputs: [{ inputChannel: 0, outputChannel: 0, gain: '0' }]
+    } as unknown as Partial<AudioCue>)
+
+    expect(() => migrateWorkspace(workspaceWith([routed]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([routed]), SHOW)).toThrow(
+      'that show’s cue 14 Walk-in (audio) has outputs.0.gain as a string, ' +
+      `where this version of WinsLab writes a number — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses a cue value whose type allows several kinds and carries none of them', () => {
+    // One field of the saved form has no single kind: an OSC argument's value is a number, a
+    // string or a boolean, and the declaration says so with the kinds it allows. A value of
+    // none of them — an object here — is refused with all three named, because the sentence
+    // has to say what this build writes there.
+    const argued = { ...osc('o1', { number: '13', name: 'LX Cue 12' }), args: [{ type: 'i', value: {} }] }
+
+    expect(() => migrateWorkspace(workspaceWith([argued]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([argued]), SHOW)).toThrow(
+      'that show’s cue 13 LX Cue 12 (osc) has args.0.value as an object, ' +
+      `where this version of WinsLab writes a number, a string or a boolean — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('refuses null at a cue field whose own types do not allow it', () => {
+    // `null` is legal exactly where a cue's types allow it: a `parentId` at the top level is
+    // nothing, and a `preWait` is a number the runner waits for. The same value is read in one
+    // place and refused in the other.
+    const nothing = { ...midi('m1', { number: '12', name: 'Strings' }), preWait: null }
+
+    expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(Refusal)
+    expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(
+      'that show’s cue 12 Strings (midi) has preWait as nothing, ' +
+      `where this version of WinsLab writes a number — ${SHOW} was probably saved by another build`
+    )
+  })
+
+  it('reads a message list bounded at its elements, whatever a message carries', () => {
+    // The list is a union of five variants, so what the declaration says is that every element is
+    // an object — not what one carries, which no single set of fields could describe. A message
+    // this build's own writers would not build, one naming only its kind and one with no fields
+    // at all, therefore loads, and the cue reaches the window as the file gave it.
+    const loaded = migrateWorkspace(workspaceWith([
+      { ...midi('m1', { number: '12', name: 'Strings' }), messages: [{ kind: 'cc' }, {}] }
+    ]), SHOW)
+
+    expect(loaded.cues[0]).toMatchObject({ messages: [{ kind: 'cc' }, {}] })
+  })
+
+  it('reads a cue’s own kinds, and keeps the fields this build does not declare', () => {
+    // The other side of the cue walk: what a cue of this build carries is read, and what the
+    // declaration does not name is kept rather than refused. A message of the union a MIDI cue
+    // sends, an argument of every kind a value may be, the `null` a crosspoint list and a
+    // parent id may carry, and the `media` pair an audio cue on disk holds — which the runtime
+    // cue type does not declare, and which a refusal would take off every show this build opens.
+    const loaded = migrateWorkspace(workspaceWith([
+      { ...midi('m1', { number: '12', name: 'Strings' }), messages: [{ kind: 'cc', channel: 1, controller: 7, value: 64 }] },
+      osc('o1', { number: '13', name: 'LX Cue 12' }),
+      {
+        ...audio('a1', { number: '14', name: 'Walk-in', parentId: null, outputs: [{ inputChannel: 0, outputChannel: 1, gain: 1 }] }),
+        media: { path: 'walk-in.wav', originalPath: '' }
+      }
+    ]), SHOW)
+
+    expect(loaded.cues[0]).toMatchObject({ messages: [{ kind: 'cc', channel: 1, controller: 7, value: 64 }] })
+    expect((loaded.cues[1] as OscCue).args).toEqual([
+      { type: 'i', value: 12 },
+      { type: 'f', value: 3.5 },
+      { type: 's', value: 'warm' },
+      { type: 'T', value: true }
+    ])
+    expect((loaded.cues[2] as AudioCue).outputs).toEqual([{ inputChannel: 0, outputChannel: 1, gain: 1 }])
+    expect((loaded.cues[2] as AudioCue).parentId).toBeNull()
+    expect((loaded.cues[2] as unknown as Record<string, unknown>).media).toEqual({
+      path: 'walk-in.wav',
+      originalPath: ''
+    })
   })
 
   it('names the missing section before a field missing inside another one', () => {
