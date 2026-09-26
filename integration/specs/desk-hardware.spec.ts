@@ -17,26 +17,36 @@
 // through the relay (`../deskRelay.ts`), because the desk's MIDI service serves one connection
 // at a time — measured on an SQ-6, firmware 1.6.1: a second connection is accepted and reset
 // before it can send anything (`INTEGRATION-HARNESS.md` §6) — and this lane needs two: the app
-// that drives the desk, and this spec that asks it for its own value. What the relay does not
-// carry is the SQ's own control service on 51326, where an SQ's membership is written: that
-// half of a recall is unreadable here and its claim stays where the record left it — the case
-// that is about a fader's membership says so in its own failure message, which is the operator
-// looking at the desk where this lane cannot. The app's log is read for the two things only the
-// app can say — that a key press moved the show, and that the console's command fired the cue
-// that answers it — and the desk's or the console's own device is named in the line it fired
-// from. Nothing here reads the app's account of what it sent.
+// that drives the desk, and this spec that asks it for its own value. Where an SQ is named, the
+// relay carries the desk's own control service as well — the session on 51326, the leave channel
+// on 51321 and the keepalive datagrams on 51324, the three ports the app dials on the show's desk
+// host — so the membership half of a recall now leaves this runner on the route it is written to,
+// and the relay's own record of that route is what the case about a fader's membership reads: the
+// pair and flag frames the recalled scene's own placement makes, decoded with the app's codec
+// (`src/main/desk/frames.ts`). What stays unreadable here is the desk's own answer for an
+// assignment — an SQ publishes no read for one and the capture holds no such frame — so what the
+// desk made of those bytes is still the operator's to look at, and the case says so. The app's log
+// is read for the two things only the app can say — that a key press moved the show, and that the
+// console's command fired the cue that answers it — and the desk's or the console's own device is
+// named in the line it fired from. Nothing here reads the app's account of what it sent.
 //
-// Until a run happens, the peer's model of the desk, the vendor lane's "MIDI bytes are MIDI
-// bytes" assumption, the message a real key press sends and the native peer's model of 51326
-// stay unproven, and §11 of the harness records that this lane is where they are checked — not
-// that they have been.
+// The lane has run once — 2026-09-26, run `36260514612`, against the SQ-6 of §6: four of its five
+// cases passed and the console case reported skipped for want of a cable — so what those cases
+// check is measured rather than assumed. What no run has carried is the route this change added:
+// the relay's `native` carriage has not been in front of a desk, so an SQ's own reading of a
+// membership stays where the record leaves it, and §11 of the harness records where each claim
+// stands.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
 import { startDeskRelay } from '../deskRelay.ts'
 import type { DeskRelay } from '../deskRelay.ts'
-import { writeDeskShow } from './deskFixture'
+import { writeDeskShow, DCA_ID, membershipFrames } from './deskFixture'
+import type { DeskShowFader, DeskShowScene } from './deskFixture'
 import { BACK_GROUP, GO_GROUP } from './deskButtonsFixture'
+// The app's own codec, so what this lane reads out of the relay's record is what the app wrote
+// on that route rather than a second reading of it.
+import { createFrameReader, helloFrame } from '../../src/main/desk/frames'
 import {
   avantisInputNameGet,
   DESK_ANSWER_MS,
@@ -139,6 +149,13 @@ function checklist(): string {
     '  4. On an SQ, NRPN RX/TX is on — its mutes, and this spec’s get, are NRPN.',
     '  5. Nothing else holds the desk’s MIDI socket: it serves one connection at a time, and this run’s relay is it — the app and this spec both reach the desk through it (`../deskRelay.ts`).',
     '  6. This machine can open a TCP connection to the desk (no firewall in the way).',
+    ...(PROFILE === 'sq'
+      ? [
+          '  7. On an SQ, the desk’s own control service answers as well: this run’s relay dials 51326 for',
+          '     the session and 51321 for the leave channel, and sends the keepalive datagrams to 51324 —',
+          '     all of them on the desk’s own address, and all of them what a recall’s membership needs.'
+        ]
+      : []),
     `The reply this spec waits for is the read-back §6 of INTEGRATION-HARNESS.md documents${
       PROFILE === 'sq' ? ' — select the parameter, then the increment message carrying 7F.' : ' — a name get, answered in the range’s own header.'}`,
     'INTEGRATION-HARNESS.md §10 M3 has the milestone; §11 records the decision that built this lane.'
@@ -157,13 +174,25 @@ function readBack(): number[] {
 }
 
 /**
- * The show's two scenes as the fixture writes them: the first places the one channel on the
- * one fader — so a recall of it opens the mic — and the second places nobody, which is the
- * close. They are named by id rather than by "the scene that is not all closed", because this
- * show has two scenes the desk's own keys walk between.
+ * The show's two scenes as the fixture writes them: the first places the first mic on the one fader
+ * — so a recall of it opens that mic — and the second hands the fader to the show's other mic,
+ * which is what the opening and the close of the case about a fader's membership are. They are
+ * named by id rather than by "the scene that is not all closed", because this show has two scenes
+ * the desk's own keys walk between.
  */
 const OPENING_SCENE = '.matrix-scene[data-scene-id="s-1"] .matrix-recall'
 const CLOSING_SCENE = '.matrix-scene[data-scene-id="s-2"] .matrix-recall'
+
+/**
+ * The show itself: two mics and two scenes that hand the one fader between them. A channel's
+ * place in this list is its input number, so `ch-1` is input 1, and the fader's number is the one
+ * its place derives — and the membership expectation below is built from these rather than typed,
+ * because what the relay's record is checked against is this show's own placement.
+ */
+const CHANNELS = ['Ruth', 'Ada']
+const FADERS: DeskShowFader[] = [{ id: DCA_ID, label: 'DCA 1', deskNumber: null }]
+const OPENING: DeskShowScene = { id: 's-1', name: 'Wedding', places: { [DCA_ID]: ['ch-1'] } }
+const CLOSING: DeskShowScene = { id: 's-2', name: 'Interval', places: { [DCA_ID]: ['ch-2'] } }
 
 let app: ElectronApplication
 let page: Page
@@ -178,20 +207,32 @@ async function inputValue(address: SqAddress): Promise<boolean | null> {
 }
 
 /**
+ * The eight-byte frames a stretch of the relay's record holds, in order — the pairs and flags, with
+ * the session's own `f7 02 …` among them where the stretch reaches back that far, which the reader
+ * keeps whole even where the ring cut the byte before it.
+ */
+function membershipWritten(bytes: number[]): number[][] {
+  return createFrameReader()
+    .push(bytes)
+    .filter(frame => frame[0] === 0xf7 && frame.length === 8)
+}
+
+/**
  * The failure message of the case about a scene's mics: a walkthrough, because two of the
- * things a recall writes are outside every socket this lane has — the membership goes over
- * 51326, which this relay does not carry, and the desk's I/O patch is the desk's own.
+ * things a recall writes are outside every socket this lane has — the desk's own read of an
+ * assignment, and the desk's I/O patch.
  */
 const MIC_WALKTHROUGH = [
   'The desk’s own value for a mic disagreed with the scene, or did not come. Two things this',
   'lane cannot read, and neither is a setting here:',
-  '  1. The membership. Which input rides which fader is written on the desk’s own control',
-  '     service on 51326, and this lane’s relay carries the MIDI service on 51325 only — so no',
-  '     membership frame leaves this runner at all, and nothing below can fail for one. The',
-  '     fader has to be looked at by hand: at the desk, DCA 1 should carry input 1 after the',
-  '     first recall and input 2 after the second, with the fader’s own position where the',
-  '     operator left it, because a recall moves a membership and never a level. Carrying the',
-  '     route through the relay is the work that would make that half readable here.',
+  '  1. The desk’s own answer for an assignment. Which input rides which fader is written on',
+  '     the desk’s own control service on 51326, and this lane now carries that route through',
+  '     its relay: the frames the recalls wrote are read out of the relay’s own record, and the',
+  '     case fails when they are not written at all. What the desk made of them is still the',
+  '     desk’s: an SQ publishes no read for an assignment and the capture holds no such frame,',
+  '     so the fader has to be looked at by hand — at the desk, DCA 1 should carry input 1 after',
+  '     the first recall and input 2 after the second, with the fader’s own position where the',
+  '     operator left it, because a recall moves a membership and never a level.',
   '  2. The I/O patch. Nothing this app writes patches a desk. The two mics this case is about',
   '     have to be patched to input 1 and input 2 as the show’s channels are, and left where the',
   '     run’s operator left them: a mic patched elsewhere answers at another input, and every',
@@ -206,10 +247,29 @@ test.beforeAll(async () => {
   try {
     // The desk's MIDI service takes one client, and both of this lane's clients have to share
     // it: the relay holds the desk, and the show below and this spec's own wire connect here.
-    relay = await startDeskRelay({ desk: { host: deskHost, port: deskPort } })
+    // An SQ dials the desk's own control service on the same host as well — 51326, the leave
+    // channel 51321 and the keepalive datagrams 51324 — so the relay carries that route too: it
+    // is where a recall's membership is written, and an Avantis's assignment goes over the desk
+    // link instead, which is why the carriage is asked for on the range that has that route.
+    relay = await startDeskRelay({
+      desk: { host: deskHost, port: deskPort },
+      native: PROFILE === 'sq'
+    })
     wire = await openDeskWire(relay.host, relay.port)
   } catch (error) {
-    throw new Error(`${(error as Error).message}\n\n${checklist()}`)
+    // Two different failures read the same way unless they are told apart: a desk that does not
+    // answer is a desk setting, and a port this machine already holds is not — the carriage takes
+    // the desk's own numbers at the relay's host, so a `cannot listen on` here is a process, not a
+    // desk.
+    const said = (error as Error).message
+    throw new Error(
+      said.includes('cannot listen on')
+        ? `${said}\n\n` +
+            'The carriage takes the desk’s own numbers — 51326 TCP, 51321 TCP and 51324 UDP — at ' +
+            'the address the show is pointed at, so nothing else on this machine may hold them: ' +
+            'another job’s app, an app left running, or a process started by hand.'
+        : `${said}\n\n${checklist()}`
+    )
   }
   const show = writeDeskShow({
     kind: 'midi-tcp',
@@ -217,14 +277,9 @@ test.beforeAll(async () => {
     port: relay.port,
     channel: CHANNEL,
     profile: PROFILE,
-    // Two mics and two scenes that hand the fader from one to the other: the fifth case is
-    // about a mic leaving a fader, which needs a mic for it to leave to. Everything else about
-    // the show is the desk show the other cases drive.
-    channels: ['Ruth', 'Ada'],
-    scenes: [
-      { id: 's-1', name: 'Wedding', places: { 'dca-1': ['ch-1'] } },
-      { id: 's-2', name: 'Interval', places: { 'dca-1': ['ch-2'] } }
-    ],
+    channels: CHANNELS,
+    faders: FADERS,
+    scenes: [OPENING, CLOSING],
     buttons: { go: GO_GROUP, back: BACK_GROUP },
     ...(MSC_PORT === undefined ? {} : {
       msc: {
@@ -282,10 +337,10 @@ test('a scene recall moves the desk, and the desk’s own value says so', { tag:
 
   // The scene places the mic on the fader, so the recall opens it — and what is asked about is
   // the mic's own mute, on the input's page, because that is the fact a recall writes: a DCA
-  // is a control group, and the assignment is written over the desk's own control service on
-  // 51326 instead, which this lane's relay does not carry and which nothing here reads back
-  // (Story 11.5). Here the desk is the one speaking: the get is its own answer about where the
-  // parameter stands, and the poll asks again until it says so.
+  // is a control group, and the assignment goes over the desk's own control service on 51326
+  // instead, which this lane's relay carries now and which the case about a fader's membership
+  // reads the relay's own record of. Here the desk is the one speaking: the get is its own
+  // answer about where the parameter stands, and the poll asks again until it says so.
   await page.locator(OPENING_SCENE).click()
   await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(false)
 
@@ -335,10 +390,10 @@ test('a key pressed at the desk runs the show, and the desk moves with it', { ta
     throw new Error(`${(error as Error).message}\n\n${pressed}`)
   }
 
-  // The desk moved with the show: the second scene places nobody, so the recall closes the
-  // mic, the app's own message for it lands at the desk, and the desk's own value is what says
-  // so. On an Avantis the log line above is all this case carries — its document has no
-  // read-back for a mute to ask.
+  // The desk moved with the show: the second scene hands the fader to the show's other mic, so
+  // this one's recall closes it, the app's own message for that lands at the desk, and the desk's
+  // own value is what says so. On an Avantis the log line above is all this case carries — its
+  // document has no read-back for a mute to ask.
   if (PROFILE === 'sq') {
     await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(true)
   }
@@ -403,8 +458,13 @@ test('the mic the scene places is open, and the mic that left is silent', { tag:
   // first mic, the second hands the fader to the second. So the first fact is that the mic the
   // scene placed is open — and the mic it did not place is silent — and the second is that the
   // mic which left the fader is silent while the other is open. Every one of the four is the
-  // desk speaking, read on this spec's own socket; what the recall did to the *fader* is not
-  // readable here at all, which is what the walkthrough below says.
+  // desk speaking, read on this spec's own socket. Beside them stands the other half of the same
+  // act, on the route the relay now carries: the membership frames these two recalls wrote, read
+  // out of the relay's own record and decoded with the app's codec — measured from where that
+  // record stood before the first click, because the cases before this one made recalls of their
+  // own and a tail of that shared ring would hold their frames just as well. What the desk then
+  // made of them is the one thing still outside every socket here, and the walkthrough says so.
+  const before = relay?.native?.toDesk.length ?? 0
   try {
     await page.locator(OPENING_SCENE).click()
     await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(false)
@@ -413,6 +473,38 @@ test('the mic the scene places is open, and the mic that left is silent', { tag:
     await page.locator(CLOSING_SCENE).click()
     await expect.poll(() => inputValue(SQ_INPUT_1), { timeout: 10_000 }).toBe(true)
     await expect.poll(() => inputValue(SQ_INPUT_2), { timeout: 10_000 }).toBe(false)
+
+    // The membership: the frames these two recalls added to the relay's record, decoded with the
+    // app's own codec. A recall that wrote nothing leaves the span empty, and a pair or flag that
+    // moved fails the comparison — against what the recalled scenes' own placements make, built
+    // from the show's channels and faders rather than typed here. What the desk made of those bytes
+    // is the walkthrough's.
+    const recalled = [
+      ...membershipFrames(CLOSING, OPENING, CHANNELS, FADERS),
+      ...membershipFrames(OPENING, CLOSING, CHANNELS, FADERS)
+    ]
+    const wrote = membershipWritten((relay?.native?.toDesk ?? []).slice(before))
+    expect(
+      wrote.map(frame => Buffer.from(frame).toString('hex')),
+      'the frames the two recalls added to the relay’s record are not the ones the recalled ' +
+        `scenes’ own placements make (${recalled.map(frame => Buffer.from(frame).toString('hex')).join(' ')}): ` +
+        `${Buffer.from(relay?.native?.toDesk ?? []).toString('hex')}`
+    ).toEqual(recalled.map(frame => Buffer.from(frame).toString('hex')))
+
+    // And the session they were written on held through them: the app's own ping — the same hello
+    // the session opened with — is the last thing the record holds, so the frames above went out
+    // on a live socket rather than into nothing.
+    await expect.poll(
+      () => {
+        const frames = createFrameReader().push(relay?.native?.toDesk ?? [])
+        const last = frames[frames.length - 1]
+        return last !== undefined && Buffer.from(last).equals(Buffer.from(helloFrame()))
+      },
+      { timeout: 10_000 }
+    ).toBe(true)
+    expect(relay?.lost, 'the desk’s own service stayed up through both recalls').toBeNull()
+    expect(relay?.native?.fromDesk.length, 'the desk’s own frames arrived on the carried route')
+      .toBeGreaterThan(0)
   } catch (error) {
     throw new Error(`${(error as Error).message}\n\n${MIC_WALKTHROUGH}`)
   }

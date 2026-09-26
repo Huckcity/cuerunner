@@ -16,6 +16,9 @@ import { join } from 'node:path'
 import { defaultShowSettings } from '../../src/shared/show'
 import type { DeskButtons, DeskProfile } from '../../src/shared/show'
 import type { MscCommand, MscFormat } from '../../src/shared/cue'
+// The app's own codec, so the frames a scene's placement makes are the bytes the app would write
+// rather than a second reading of them.
+import { assignPair, clearPair, dcaFlag } from '../../src/main/desk/frames'
 
 /**
  * Where a peer on this machine is. A real desk is named by its own address.
@@ -24,8 +27,15 @@ import type { MscCommand, MscFormat } from '../../src/shared/cue'
  * are the *machine's* — an SQ show dials 51326 and 51321 whatever it is pointed at — so a lane
  * that shares an address with another shares those ports with it, and what its app finds there
  * is the other lane's desk. The unit job holds 127.0.0.3 and 127.0.0.4
- * (`SqNativeEngine.test.ts`) and the SQ lane holds 127.0.0.2, so this is this file's lanes'
- * own: the spec that writes with this default binds its peer here too.
+ * (`SqNativeEngine.test.ts`), the SQ lane 127.0.0.2, the buttons lane 127.0.0.5, this file's
+ * default 127.0.0.6, the MSC lane 127.0.0.7 and the e2e lane's own shows 127.0.0.8
+ * (`e2e/msc.spec.ts`), so this is this file's lanes' own: the spec that writes with this default
+ * binds its peer here too. Two of the desk's routes hold addresses past those:
+ * `desk-relayed.spec.ts` writes 127.0.0.9 for its relay — the address the show names, and the one
+ * the carriage's listeners take the desk's own numbers at — and 127.0.0.10 for the two models
+ * behind it, and `harness-desk-relay.spec.ts` holds 127.0.0.9 for the desk it dials and 127.0.0.11
+ * for the case about a relay with no carriage, both with no app in the loop. 127.0.0.1 stays clear
+ * for the e2e lane's own shows and for the unit job's fallback address.
  */
 export const DESK_HOST = '127.0.0.6'
 
@@ -165,6 +175,45 @@ export const DESK_SHOW_NAME = 'Desk Show'
 /** The one channel's id, and the one fader's: what a scene's placement names. */
 export const CHANNEL_ID = 'ch-1'
 export const DCA_ID = 'dca-1'
+
+/**
+ * The frames a scene's placement change makes, in the order the app's own writer makes them: the
+ * faders' own walk, with the show's channel order inside each, one pair frame per input-and-fader
+ * the recall moves and the channel's own flag after it — the flag saying whether that channel
+ * rides a fader in the scene now recalled, because the desk keeps it per channel rather than per
+ * pair (`src/main/desk/SqNativeEngine.ts`). A recall is a difference, so it is a scene against the
+ * scene the show stood at, and a channel the change leaves alone is not written at all.
+ *
+ * Here rather than in a lane, because two lanes assert the same rule and one rule wants one
+ * author: `desk-relayed.spec.ts` reads these against a model of the desk on every pull request,
+ * and `desk-hardware.spec.ts` reads them out of its relay's record against a real one. The frames
+ * are the app's own codec's, so what is compared is bytes rather than a test's idea of them.
+ */
+export function membershipFrames(
+  before: DeskShowScene,
+  scene: DeskShowScene,
+  channels: string[],
+  faders: DeskShowFader[]
+): number[][] {
+  const frames: number[][] = []
+  faders.forEach((fader, index) => {
+    // The frame addresses a fader by the number the show carries for it — the desk's own, which is
+    // the one its place derives where the show names none — and the codec takes it from one.
+    const dca = (fader.deskNumber ?? index) + 1
+    channels.forEach((_, at) => {
+      const channel = at + 1
+      // A channel's number on the desk is its place in the show's list, so this is the id the show
+      // declares for it (`writeDeskShow` builds them the same way).
+      const id = `ch-${channel}`
+      const rides = (scene.places[fader.id] ?? []).includes(id)
+      const rode = (before.places[fader.id] ?? []).includes(id)
+      if (rides === rode) return
+      frames.push(rides ? assignPair(channel, dca) : clearPair(channel, dca))
+      frames.push(dcaFlag(channel, Object.values(scene.places).some(placed => placed.includes(id))))
+    })
+  })
+  return frames
+}
 
 export function writeDeskShow(options: DeskShowOptions): string {
   const { host = DESK_HOST, channel, profile, dcaNote, buttons, msc, deskScene = 7 } = options
