@@ -7,7 +7,8 @@ import type { AudioCue, CueBase, GroupCue, MidiCue, NetworkCue, OscCue, WaitCue 
 import type { LoadNote, Workspace } from '../../shared/workspace'
 import { defaultShowSettings } from '../../shared/show'
 import { Refusal } from '../ipc/refusal'
-import { migrateWorkspace, serialiseWorkspace } from './WorkspaceManager'
+import { migrateWorkspace } from './WorkspaceManager'
+import { serialiseWorkspace } from './serialise'
 
 // Hoisted above the import above, so WorkspaceManager never loads the real Electron.
 vi.mock('electron', () => ({ app: {}, dialog: {}, BrowserWindow: {} }))

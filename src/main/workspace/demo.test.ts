@@ -16,14 +16,16 @@
 //      earns with the first save that changes something. The step is here for what that means:
 //      the recipe writes the window's object, so it stays the recipe if a section ever leaves
 //      the file or a default moves.
-//   3. Write it back with `serialiseWorkspace` (`./WorkspaceManager`), in the folder the show
+//   3. Write it back with `serialiseWorkspace` (`./serialise`), in the folder the show
 //      lives in: that folder is the route its audio cues are written against, which is what
 //      keeps them workspace-relative.
 //
-// No tool regenerates the file — the recipe is here to be followed by hand — and the last
-// case holds the equivalence it promises: the demo opened through `openDemoWorkspace` and
-// saved through `saveWorkspace` writes the bytes it was opened with, so the shipped file,
-// the loader, the serialiser and a save of the freshly opened demo cannot drift apart.
+// The recipe is a tool as well as a note — `npm run demo:write` runs its steps
+// (`scripts/regenerate-demo.ts`), and `npm run demo:check` asks whether the file on disk is
+// already what they write. What this file holds is the other direction: the demo opened
+// through `openDemoWorkspace` and saved through `saveWorkspace` writes the bytes it was
+// opened with, so the shipped file, the loader, the serialiser and a save of the freshly
+// opened demo cannot drift apart.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { copyFileSync, existsSync, readFileSync } from 'fs'

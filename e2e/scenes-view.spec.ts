@@ -4,7 +4,7 @@
 // nothing else in the show says which fader a channel rides (`show-settings.spec.ts`). The
 // test owns a UDP port and the show's desk points at it, so what is asserted here is what
 // actually left the app.
-import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import {
   addCueFromMoreMenu,
   buildDeskShow,
@@ -876,4 +876,30 @@ test('an opened show always starts out being run, whatever it was left as', asyn
   await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
   await expect(page.locator('.scenes-view')).toHaveAttribute('data-editing', 'false')
+})
+
+test('the demo ships the scenes it is run from', async () => {
+  // The demo is a show somebody can open a scene on: two scenes are in the file, so the
+  // view has something in it the moment the demo is opened — nothing has to be built first.
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
+  await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor()
+  await openScenesView(page)
+
+  const columns = page.locator('.matrix-scene:not([data-all-closed])')
+  await expect(columns).toHaveCount(2)
+  await expect(columns.nth(0).locator('.scene-name-field')).toHaveValue('Act One')
+  await expect(columns.nth(1).locator('.scene-name-field')).toHaveValue('Wedding')
+
+  // Each scene places four of the show's twelve faders, and the block in a cell names the
+  // strip the row holds: a strip nobody is cast on and nobody has named is named by its
+  // number. A fader neither scene speaks for is a cell of blank boxes.
+  const cell = (fader: number, scene: number): Locator =>
+    page.locator('.matrix-row').nth(fader - 1).locator('.matrix-cell').nth(scene)
+  await expect(cell(1, 0).locator('.matrix-block-name')).toHaveText('Ch 1')
+  await expect(cell(4, 0).locator('.matrix-block-name')).toHaveText('Ch 4')
+  await expect(cell(5, 1).locator('.matrix-block-name')).toHaveText('Ch 5')
+  await expect(cell(8, 1).locator('.matrix-block-name')).toHaveText('Ch 8')
+  await expect(cell(9, 0)).toHaveAttribute('data-placed', 'false')
+  await expect(cell(9, 1)).toHaveAttribute('data-placed', 'false')
 })

@@ -35,9 +35,10 @@ const DOCK_MAX_SHARE = 0.6
 const HEIGHT_KEY = 'cuerunner.dock.height'
 const COLLAPSED_KEY = 'cuerunner.dock.collapsed'
 
-// The dock's size is this operator's taste on this machine, not the show's: it lives in
-// the window's own storage, and a storage that will not answer costs nothing but the
-// default.
+// The dock's size and its fold are this operator's taste on this machine, not the show's:
+// they live in the window's own storage, and a storage that will not answer costs nothing
+// but the default — the fold being the one thing a workspace chooses first, until the
+// operator does.
 function readStored(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
 }
@@ -112,7 +113,18 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   // window is still coming up — is no limit at all.
   const [height, setHeight] = useState(() => Number(readStored(HEIGHT_KEY)) || DOCK_DEFAULT_HEIGHT)
   const [windowHeight, setWindowHeight] = useState(() => window.innerHeight)
-  const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true')
+  // Whether the operator has folded this dock themselves — the chevron, or a tab press —
+  // and null while they never have. The dock of a show with nothing in it is folded for
+  // them: an empty workspace has no cue for the Cue tab to show, so its 180px are a band of
+  // nothing across the window a new show is being built in. That is the state it *opens*
+  // in, not one written down: nothing is stored until the operator says so, and then their
+  // fold is the dock's wherever a workspace is opened, empty or not.
+  const [chosenFold, setChosenFold] = useState<boolean | null>(() => {
+    const stored = readStored(COLLAPSED_KEY)
+    return stored === null ? null : stored === 'true'
+  })
+  const emptyWorkspace = useStore(s => s.cues.length === 0)
+  const collapsed = chosenFold ?? emptyWorkspace
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
   /** The tab the dock last unfolded for, so a real change is told from a re-render. */
   const lastRevealTab = useRef<DockTab>(tab)
@@ -125,7 +137,9 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   }, [])
 
   useEffect(() => { writeStored(HEIGHT_KEY, String(height)) }, [height])
-  useEffect(() => { writeStored(COLLAPSED_KEY, String(collapsed)) }, [collapsed])
+  useEffect(() => {
+    if (chosenFold !== null) writeStored(COLLAPSED_KEY, String(chosenFold))
+  }, [chosenFold])
 
   // The Scenes view has no cue list to have selected from, so it has no Cue tab: the
   // dock there is the show's panels, or just its tabs.
@@ -138,7 +152,7 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
     // The same press that opened a panel puts the cue back, as the strips' buttons did.
     if (next === tab && next !== 'cue' && !collapsed) onTab('cue')
     else onTab(next)
-    setCollapsed(false)
+    setChosenFold(false)
   }
 
   // Somebody else asking for a panel — an alarm chip on the transport, a locked feature
@@ -148,7 +162,7 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   useEffect(() => {
     if (tab !== lastRevealTab.current) {
       lastRevealTab.current = tab
-      setCollapsed(false)
+      setChosenFold(false)
     }
   }, [tab])
 
@@ -236,7 +250,7 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
         ))}
         <button
           className="dock-collapse"
-          onClick={() => setCollapsed(value => !value)}
+          onClick={() => setChosenFold(!collapsed)}
           title={collapsed ? 'Show the dock' : 'Hide the dock, and give the cue list the room'}
           aria-label={collapsed ? 'Show the dock' : 'Hide the dock'}
         >

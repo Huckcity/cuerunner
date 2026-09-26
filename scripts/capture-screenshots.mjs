@@ -289,52 +289,19 @@ await shot('15-script.png', '.script-panel')
 // The dock gives the window back: the scenes view wants all of it.
 await page.locator('.btn-script').click()
 
-// The scenes view: the show as a matrix, run and edited in place. The figure below is the
-// view with the show being built in it, which is the state its header is fullest in.
+// The scenes view: the show as a matrix, run and edited in place. The demo ships its two
+// scenes — Act One and Wedding, four faders each — so the figure is the show the demo opens
+// on: nothing has to be built for the grid to have something in it, and the one thing this
+// capture does build is the ensemble at the end.
 await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
 await page.locator('.scenes-view').waitFor()
 // The view opens to run the show; building one is an Edit away.
 await page.locator('.matrix-lock, .matrix-empty-action').first().click()
 
-// Rows are the show's faders, and a fader is its number: the row is found by that number
-// exactly, since "1" is also the first character of "10". A row holds one thing, and it
-// gains it from the one blank box beside it — pressing the box opens the picker, and the
-// picker filters as it is typed and is drawn in a portal, so it is found on the page rather
-// than inside the view. A strip is offered under the name it was given or the name of the
-// performer standing on it, never its bare number. The grid's first column is the
-// all-closed one, which is not a scene in the file, so a scene's column is found by the id
-// it carries rather than by its place on screen.
-const pickFrom = async (cell, label) => {
-  // A row holding nothing is a blank box; a row holding something is that name, pressed.
-  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
-  const picker = page.locator('.scene-picker')
-  await picker.locator('.scene-picker-filter').fill(label)
-  await picker.getByRole('option', { name: label, exact: true }).click()
-  await picker.waitFor({ state: 'detached' })
-}
+// A fader is its number, and the row is found by that number exactly: "1" is also the
+// first character of "10".
 const rowFor = (fader) =>
   page.locator('.matrix-row', { has: page.locator(`.matrix-fader:text-is("${fader}")`) })
-const placeStrip = async (sceneIndex, fader, strip) => {
-  await pickFrom(rowFor(fader).locator('.matrix-cell').nth(sceneIndex), strip)
-}
-const nameScene = async (index, name) => {
-  const field = page.locator('.matrix-scene[data-scene-id]').nth(index).locator('.scene-name-field')
-  await field.fill(name)
-  await field.blur()
-}
-
-await page.locator('.matrix-add-scene').click()
-await nameScene(0, 'Act One')
-await placeStrip(0, '1', 'Aldonza')
-await placeStrip(0, '2', 'Sancho')
-await placeStrip(0, '3', 'Cervantes')
-await placeStrip(0, '4', 'Pedro')
-await page.locator('.matrix-add-scene').click()
-await nameScene(1, 'Wedding')
-await placeStrip(1, '5', 'Anselmo')
-await placeStrip(1, '6', 'Fermina')
-await placeStrip(1, '7', 'Antonia')
-await placeStrip(1, '8', 'Padre')
 
 // The first scene recalled, so the header says where the desk is and what is coming, and
 // the column the desk is on is the one the figure shows lit.
@@ -343,7 +310,10 @@ await page.locator('.matrix-scene[data-scene-id][data-current="true"]').waitFor(
 
 // The other half of building a scene: the strips picked in the builder, kept as one group on
 // the row — what a later scene puts there with one press instead of a row of picks. The
-// group replaces what the row held, because a row holds one thing.
+// group replaces what the row held, because a row holds one thing. A cell is pressed either
+// way: a row holding nothing is a blank box, a row holding something is that name — and the
+// name is the one the strip was given, or the performer cast on it, which is what the
+// builder's lists offer.
 await rowFor(1).locator('.matrix-cell').nth(0)
   .locator('.matrix-cell-add, .matrix-block-name').first().click()
 await page.locator('.scene-picker')

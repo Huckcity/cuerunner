@@ -172,6 +172,25 @@ test('the dock keeps its 60% of a window that shrinks under it', async () => {
   }
 })
 
+test('a window opening a new workspace folds the dock away until there is a show', async () => {
+  // A fresh instance, so nothing is stored on this machine about where the dock was left:
+  // the state a first launch is in. The demo the beforeEach opened goes with it.
+  await closeApp(app)
+  ;({ app, page } = await launchApp())
+
+  // A new workspace holds no cue at all, so the Cue tab has nothing to show and the dock
+  // is drawn as its tabs — the cue list has the window while the show is being made.
+  await expect(page.locator('.cue-list-empty')).toBeVisible()
+  await expect(page.locator('.dock')).toHaveAttribute('data-collapsed', 'true')
+  await expect(page.locator('.dock-body')).toHaveCount(0)
+
+  // The demo is a show: opening it gives the dock something to show, so it comes back.
+  await page.locator('.cue-list-empty-demo').click()
+  await expect(page.locator('.cue-row', { hasText: 'Walk-in Music' })).toBeVisible()
+  await expect(page.locator('.dock')).toHaveAttribute('data-collapsed', 'false')
+  await expect(page.locator('.dock-body')).toBeVisible()
+})
+
 test('the transport carries the show and nothing else', async () => {
   await expect(page.locator('.transport-bar .btn-log')).toHaveCount(0)
   await expect(page.locator('.dock .btn-log')).toBeVisible()

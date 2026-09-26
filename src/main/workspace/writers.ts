@@ -22,6 +22,10 @@
 // The guard in `writers.test.ts` scans this directory's non-test sources for
 // content-writing calls and fails on any call site no row's `writes` claims (or the test
 // exempts with a reason), so a new writer is a row before it is code.
+//
+// The demo file the seventh row reads is written by a repository tool rather than by a flow
+// here — `npm run demo:write` (`scripts/regenerate-demo.ts`) runs `serialiseWorkspace` in
+// `serialise.ts`, which writes nothing itself — so no row below carries it.
 
 /** The flows that write a saved artifact, under the enumeration's own identifiers. */
 export type SavedArtifactWriterId =

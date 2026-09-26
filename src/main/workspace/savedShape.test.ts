@@ -23,7 +23,7 @@
 // declaration holds is about the app's own writers, and the fixture is what they are held
 // to.
 import { describe, it, expect, vi } from 'vitest'
-import { serialiseWorkspace } from './WorkspaceManager'
+import { serialiseWorkspace } from './serialise'
 import { defaultRfSettings, defaultShowSettings } from '../../shared/show'
 import { diffWorkspaces } from '../../shared/showfile'
 import { mergeWorkspaces } from '../../shared/showfileMerge'

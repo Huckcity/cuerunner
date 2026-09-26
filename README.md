@@ -88,12 +88,15 @@ npm run dev
 
 Every build ships a demo show — `resources/demo/Demo Show.cuerunner` — with one of each cue type
 covered: a sequence group, a timeline group, audio with fades, MIDI, OSC, a network request, a
-script, and a stop cue. Open it from **Cuerunner ▾ → Open Demo Workspace**, or from the button in
-an empty cue list. It opens as an unsaved example (so Save asks where to put your copy, and
-never writes over the bundled file) and its audio is copied into the app's user data folder on
-open, which is where its cues read it from. That file is the serialiser's own output rather
-than a hand-written example: `src/main/workspace/demo.test.ts` records the recipe that produces
-it there, and holds a save of the freshly opened demo to the bytes it was opened with.
+script, and a stop cue. The show's console carries two scenes as well — Act One and Wedding, four
+strips each — so the Scenes view has a show in it the moment the demo is opened. Open it from
+**Cuerunner ▾ → Open Demo Workspace**, or from the button in an empty cue list. It opens as an
+unsaved example (so Save asks where to put your copy, and never writes over the bundled file) and
+its audio is copied into the app's user data folder on open, which is where its cues read it from.
+That file is the serialiser's own output rather than a hand-written example:
+`npm run demo:write` (`scripts/regenerate-demo.ts`) is the recipe that writes it,
+`npm run demo:check` says whether the shipped file is already those bytes, and
+`src/main/workspace/demo.test.ts` holds a save of the freshly opened demo to them.
 
 ### Development Commands
 
@@ -112,12 +115,20 @@ npm run dist:win          # Build and package for Windows only
 npm run dist:mac          # Build and package for macOS only
 npm run dist:linux        # Build and package for Linux only (AppImage)
 npm run screenshots       # Regenerate website/assets/guide images (requires build)
+npm run demo:write        # Put resources/demo/Demo Show.cuerunner through the serialiser
+npm run demo:check        # Fail if the shipped demo is not what that writes
 npm run site              # Serve website/ locally on http://localhost:8080
 ```
 
 `npm run screenshots` launches the built app, opens the demo workspace that ships with it, and
 rewrites every image used by the user guide. Run it after any UI change so the guide cannot
 drift from the product — and after a demo change, so the guide shows the demo users get.
+
+`npm run demo:write` is the demo's own writer: the shipped show is the serialiser's output,
+so edit the demo in `resources/demo/Demo Show.cuerunner` and run this to have the form —
+settings defaults, audio routes, key order — written the way the app writes it.
+`npm run demo:check` asks the same question without writing, which is what a shape change
+leaves red until it has been run.
 
 `npm run site` serves `website/` with no dependencies, so a page can be reviewed locally
 before it deploys. Pass a port to override the default: `npm run site -- 3000`. The
