@@ -19,7 +19,7 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
   int index = -1;
   for (int i = 0; i < kMaxStreams; i++) {
     bool expected = false;
-    if (slots_[i].inUse.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+    if (slots_[i].claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
       index = i;
       break;
     }
@@ -33,10 +33,13 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
   }
 
   StreamSlot& slot = slots_[index];
+  // The file is opened with the slot claimed but unpublished: the filler is told about a
+  // slot only once its ring is real, and `openSource` can take as long as it likes
+  // without stalling a decode pass or blocking another acquire.
   std::unique_ptr<Source> source = openSource(path, error);
   if (!source) {
     refusal = StreamRefusal::Decode;
-    slot.inUse.store(false, std::memory_order_release);
+    slot.claimed.store(false, std::memory_order_release);
     return -1;
   }
   info = source->info();
@@ -70,7 +73,7 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
         refusal = StreamRefusal::Limit;
         error = "the streaming budget is full (streamMaxTotalBytes " + std::to_string(maxTotalBytes) +
                 "): a further " + std::to_string(bytes) + " bytes would exceed it";
-        slot.inUse.store(false, std::memory_order_release);
+        slot.claimed.store(false, std::memory_order_release);
         return -1;
       }
       if (residentBytes_.compare_exchange_weak(resident, resident + reserved, std::memory_order_acq_rel)) break;
@@ -79,16 +82,23 @@ int StreamPool::acquire(const std::string& path, int64_t prerollMs, int64_t maxB
     residentBytes_.fetch_add(reserved, std::memory_order_relaxed);
   }
 
-  slot.pcm.resize(bytes / sizeof(float));
-  slot.source = std::move(source);
-  slot.path = path;
-  slot.channels = channels;
-  slot.sampleRate = sampleRate;
-  slot.capacityFrames = capacityFrames;
-  slot.prerollFrames = capacityFrames;  // the ring is the pre-roll budget
-  slot.eof.store(false, std::memory_order_relaxed);
-  slot.underruns.store(0, std::memory_order_relaxed);
-  slot.ring.configure(slot.pcm.data(), capacityFrames, channels, static_cast<double>(sampleRate));
+  // The structure is built, and the slot published, under the pool's mutex: a decode pass
+  // sees a slot as in use only with a configured ring behind it, and `release` cannot be
+  // tearing the slot down while this is filling it in.
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    slot.pcm.resize(bytes / sizeof(float));
+    slot.source = std::move(source);
+    slot.path = path;
+    slot.channels = channels;
+    slot.sampleRate = sampleRate;
+    slot.capacityFrames = capacityFrames;
+    slot.prerollFrames = capacityFrames;  // the ring is the pre-roll budget
+    slot.eof.store(false, std::memory_order_relaxed);
+    slot.underruns.store(0, std::memory_order_relaxed);
+    slot.ring.configure(slot.pcm.data(), capacityFrames, channels, static_cast<double>(sampleRate));
+    slot.inUse.store(true, std::memory_order_release);
+  }
   return index;
 }
 
@@ -103,6 +113,15 @@ const StreamSlot* StreamPool::at(int index) const {
 }
 
 void StreamPool::release(int index) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  releaseLocked(index);
+}
+
+// The teardown itself, for callers that already hold the mutex: the slot stops being filled
+// before anything it holds is freed, and the storage goes with it. A slot that was never
+// published is not this call's to reclaim — its claim belongs to the acquire that is still
+// building it.
+void StreamPool::releaseLocked(int index) {
   if (index < 0 || index >= kMaxStreams) return;
   StreamSlot& slot = slots_[index];
   if (!slot.inUse.load(std::memory_order_acquire)) return;
@@ -115,13 +134,16 @@ void StreamPool::release(int index) {
   slot.capacityFrames = 0;
   slot.prerollFrames = 0;
   slot.path.clear();
+  // The slot is free again for the pool to hand out: the claim goes with the publication.
+  slot.claimed.store(false, std::memory_order_release);
 }
 
 int64_t StreamPool::releaseByPath(const std::string& path) {
+  std::lock_guard<std::mutex> lock(mutex_);
   int64_t released = 0;
   for (int i = 0; i < kMaxStreams; i++) {
     if (slots_[i].inUse.load(std::memory_order_acquire) && slots_[i].path == path) {
-      release(i);
+      releaseLocked(i);
       released++;
     }
   }
@@ -160,6 +182,7 @@ bool StreamPool::fillOne(StreamSlot& slot) {
 }
 
 void StreamPool::fillAll() {
+  std::lock_guard<std::mutex> lock(mutex_);
   for (int i = 0; i < kMaxStreams; i++) {
     StreamSlot& slot = slots_[i];
     if (!slot.inUse.load(std::memory_order_acquire)) continue;
@@ -168,7 +191,8 @@ void StreamPool::fillAll() {
 }
 
 void StreamPool::closeAll() {
-  for (int i = 0; i < kMaxStreams; i++) release(i);
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (int i = 0; i < kMaxStreams; i++) releaseLocked(i);
   residentBytes_.store(0, std::memory_order_relaxed);
 }
 
