@@ -172,23 +172,25 @@ test('the picker stays over its own cell while the grid is scrolled', async () =
   // A cell with columns either side of it, so the scroll below moves it a column rather
   // than running it off the edge — a menu goes when the row it belongs to leaves the grid.
   const cell = page.locator('.matrix-row').first().locator('.matrix-cell').nth(4)
-  await cell.locator('.matrix-cell-add, .matrix-block-name').first().click()
+  const box = cell.locator('.matrix-cell-add, .matrix-block-name').first()
+  await box.click()
   const picker = page.locator('.scene-picker')
   await expect(picker).toBeVisible()
 
-  // What the two rectangles say: the menu is over the cell it was opened on — it overlaps
-  // that cell, and it hangs off that cell's own corner — which is what makes the list under
-  // it the list for this row.
+  // What the rectangles say: the menu is drawn at the corner of the box the press was made
+  // on — that element, inside the cell, is the anchor — and it covers the cell it belongs to,
+  // which is what makes the list under it the list for this row.
   const anchored = async (): Promise<{ left: number; gap: number; overlaps: boolean }> => {
     const menu = (await picker.boundingBox())!
-    const box = (await cell.boundingBox())!
+    const anchor = (await box.boundingBox())!
+    const around = (await cell.boundingBox())!
     return {
       left: Math.round(menu.x),
-      // The menu is drawn at the box's own left corner, so the two are the same number
+      // The menu is drawn at the anchor's own left corner, so the two are the same number
       // wherever it is not being held off the window's edge.
-      gap: Math.round(menu.x - box.x),
-      overlaps: menu.x < box.x + box.width && menu.x + menu.width > box.x &&
-        menu.y < box.y + box.height && menu.y + menu.height > box.y
+      gap: Math.round(menu.x - anchor.x),
+      overlaps: menu.x < around.x + around.width && menu.x + menu.width > around.x &&
+        menu.y < around.y + around.height && menu.y + menu.height > around.y
     }
   }
   const before = await anchored()

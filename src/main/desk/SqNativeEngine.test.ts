@@ -17,13 +17,18 @@ import { GOODBYE, NATIVE_KEEPALIVE_PORT, NATIVE_LEAVE_PORT, NATIVE_TCP_PORT, ses
 import { drainMainErrors } from '../errors'
 
 /**
- * The desk's name here, and the name the moving case dials it by after the show moves. Two
- * loopback addresses of this machine that no other lane binds — the unit, integration and
- * e2e lanes each keep to loopback aliases of their own — so this file's three ports are its
- * own sockets, and the session bytes a case reads are its own client's.
+ * The desk's name here, and the name the moving case dials it by after the show moves: two
+ * loopback addresses that no other lane binds — the unit, integration and e2e lanes each keep
+ * to aliases of their own — so this file's three ports are its own sockets, and the session
+ * bytes a case reads are its own client's.
+ *
+ * Linux and Windows carry the whole 127/8; macOS configures 127.0.0.1 alone, and a second
+ * address there fails the bind with `EADDRNOTAVAIL`. The aliases are therefore chosen per
+ * platform, and only the moving case — the one that needs two — is darwin-skipped, which is
+ * the platform where the two names would collapse into one.
  */
-const HOST = '127.0.0.3'
-const MOVED = '127.0.0.4'
+const ALIASES = process.platform === 'darwin' ? ['127.0.0.1'] : ['127.0.0.3', '127.0.0.4']
+const [HOST, MOVED = HOST] = ALIASES
 
 const hex = (bytes: readonly number[] | Uint8Array): string => Buffer.from(bytes).toString('hex')
 
@@ -119,7 +124,7 @@ async function startDesk(options: DeskOptions = {}): Promise<Desk> {
       // Same: a reset this test asked for.
     })
   }
-  const names = [HOST, MOVED]
+  const names = ALIASES
   const control: Server[] = names.map(() => createServer(onControl))
   const leave: Server[] = names.map(() => createServer(onLeave))
   const keepalives: DatagramSocket[] = names.map(() => createSocket('udp4'))
