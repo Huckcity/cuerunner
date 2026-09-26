@@ -20,9 +20,9 @@ import {
   relinkWorkspaceMedia,
   resolveMediaReference,
   resolveWorkspaceMedia,
-  saveWorkspace,
-  storedMediaPath
+  saveWorkspace
 } from './WorkspaceManager'
+import { storedMediaPath } from './serialise'
 import { Refusal } from '../ipc/refusal'
 import type { MissingMedia } from '../../shared/media'
 import type { AudioCue, Cue, CueBase, GroupCue, WaitCue } from '../../shared/cue'

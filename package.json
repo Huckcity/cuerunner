@@ -27,6 +27,8 @@
     "screenshots": "electron-vite build && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-screenshots.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-redundancy.mjs",
     "screenshots:redundancy": "electron-vite build && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-redundancy.mjs",
     "site": "node scripts/serve-website.mjs",
+    "demo:write": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regenerate-demo.ts",
+    "demo:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regenerate-demo.ts --check",
     "license:keygen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts keygen",
     "license:issue": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts issue",
     "license:verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts verify",

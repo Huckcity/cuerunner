@@ -30,9 +30,9 @@ import { readBundle } from './bundle'
 import { openDemoWorkspace } from './demo'
 import { writeRecovery } from './recovery'
 import {
-  compareWithFile, openRecovery, openWorkspace, openWorkspaceFromPath, saveWorkspace,
-  serialiseWorkspace
+  compareWithFile, openRecovery, openWorkspace, openWorkspaceFromPath, saveWorkspace
 } from './WorkspaceManager'
+import { serialiseWorkspace } from './serialise'
 import { writeZip } from './zip'
 
 const ends = vi.hoisted(() => ({ userData: { path: '' } }))

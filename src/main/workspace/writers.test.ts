@@ -74,6 +74,7 @@ vi.mock('electron', async () => {
 // stubbed electron, not a copy loaded before it — which is why these are `await import`
 // rather than static imports.
 const WorkspaceManager = await import('./WorkspaceManager')
+const Serialise = await import('./serialise')
 const Bundle = await import('./bundle')
 const Recovery = await import('./recovery')
 const Demo = await import('./demo')
@@ -320,7 +321,7 @@ describe('save as', () => {
     mkdirSync(dirname(taken), { recursive: true })
     writeFileSync(
       taken,
-      WorkspaceManager.serialiseWorkspace(
+      Serialise.serialiseWorkspace(
         workspace([audioCue('a2', '2', 'Sting', outside), waitCue('w1', '3', 'Count')], {
           history: [HISTORY_ENTRY]
         }),
@@ -443,7 +444,7 @@ describe('bundle export', () => {
     // The show entry is the serialiser's output for the document as the bundle carries it
     // — each cue routed at its entry, with where the file came from recorded — and the
     // bundle's own folder.
-    const expected = WorkspaceManager.serialiseWorkspace(
+    const expected = Serialise.serialiseWorkspace(
       {
         ...show,
         cues: [

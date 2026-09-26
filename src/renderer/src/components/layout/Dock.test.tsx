@@ -32,7 +32,10 @@ describe('Dock', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useStore.setState({ cues: [], selectedId: null, license: { state: 'unlicensed' } })
+    // A workspace with a cue in it: the dock of an empty one opens folded, which is a case
+    // of its own below.
+    const count = cue('wait', { name: 'Count 8', number: '3' })
+    useStore.setState({ cues: [count], selectedId: count.id, license: { state: 'unlicensed' } })
   })
 
   afterEach(() => {
@@ -97,6 +100,62 @@ describe('Dock', () => {
     act(() => { root.render(<Harness view="scenes" />) })
     expect(container.querySelector('.btn-cue')).toBeNull()
     expect(dock().dataset.collapsed).toBe('true')
+  })
+
+  it('opens folded in a workspace with nothing in it, and that fold is the workspace\'s', () => {
+    useStore.setState({ cues: [], selectedId: null })
+    act(() => { root.render(<Harness />) })
+
+    // A new workspace has no cue for the Cue tab to show, so the dock is drawn as its tabs.
+    expect(dock().dataset.collapsed).toBe('true')
+    expect(container.querySelector('.dock-body')).toBeNull()
+    // And nothing was written down: this is the workspace's fold, not the operator's.
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBeNull()
+
+    // A cue arriving is a show with something in it, so the dock comes back on its own.
+    act(() => { useStore.setState({ cues: [cue('wait', { name: 'Count 8' })] }) })
+    expect(dock().dataset.collapsed).toBe('false')
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBeNull()
+
+    // And the fold follows the workspace the other way too: the last cue leaving leaves a
+    // show with nothing to show, and the dock goes with it — still the workspace's fold,
+    // still nothing written down.
+    act(() => { useStore.setState({ cues: [], selectedId: null }) })
+    expect(dock().dataset.collapsed).toBe('true')
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBeNull()
+  })
+
+  it('offers the fold press only where a press can show something', () => {
+    // The Scenes view's Cue tab has no body whatever the fold is — there is no cue list to
+    // have selected from — so the press is not drawn there; the view's own tabs are what
+    // open the dock. Anywhere the body can be drawn, the press is there and the glyph says
+    // which way it goes.
+    act(() => { root.render(<Harness view="scenes" />) })
+    expect(container.querySelector('.dock-collapse')).toBeNull()
+
+    act(() => tab('btn-log').click())
+    expect(container.querySelector<HTMLButtonElement>('.dock-collapse')?.title).toBe('Hide the dock, and give the cue list the room')
+  })
+
+  it('keeps the operator\'s own fold whoever the workspace is', () => {
+    // A press is theirs: folded with a show in it, and still folded when the next
+    // workspace opens with nothing in it — which is the fold they chose, not one the
+    // empty show would have given them anyway.
+    act(() => { root.render(<Harness />) })
+    act(() => container.querySelector<HTMLButtonElement>('.dock-collapse')!.click())
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBe('true')
+
+    act(() => { root.unmount() })
+    root = createRoot(container)
+    useStore.setState({ cues: [], selectedId: null })
+    act(() => { root.render(<Harness />) })
+    expect(dock().dataset.collapsed).toBe('true')
+
+    // And the other way round: a dock they opened stays open over an empty workspace.
+    act(() => container.querySelector<HTMLButtonElement>('.dock-collapse')!.click())
+    expect(localStorage.getItem('cuerunner.dock.collapsed')).toBe('false')
+    expect(dock().dataset.collapsed).toBe('false')
+    expect(container.querySelector('.dock-body')).not.toBeNull()
   })
 
   it('keeps the height it was left at, and draws it within the window', () => {

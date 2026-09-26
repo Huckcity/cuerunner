@@ -65,7 +65,62 @@
       "token": ""
     },
     "scenes": {
-      "list": [],
+      "list": [
+        {
+          "id": "b7f1c9d2-4a3e-4c58-9f1b-2d6e8a0c5f31",
+          "name": "Act One",
+          "dcas": [
+            {
+              "dcaId": "dca-1",
+              "kind": "channel",
+              "memberId": "channel-1"
+            },
+            {
+              "dcaId": "dca-2",
+              "kind": "channel",
+              "memberId": "channel-2"
+            },
+            {
+              "dcaId": "dca-3",
+              "kind": "channel",
+              "memberId": "channel-3"
+            },
+            {
+              "dcaId": "dca-4",
+              "kind": "channel",
+              "memberId": "channel-4"
+            }
+          ],
+          "notes": ""
+        },
+        {
+          "id": "c2a4e6f8-1b3d-4e5f-8a7b-9c0d1e2f3a4b",
+          "name": "Wedding",
+          "dcas": [
+            {
+              "dcaId": "dca-5",
+              "kind": "channel",
+              "memberId": "channel-5"
+            },
+            {
+              "dcaId": "dca-6",
+              "kind": "channel",
+              "memberId": "channel-6"
+            },
+            {
+              "dcaId": "dca-7",
+              "kind": "channel",
+              "memberId": "channel-7"
+            },
+            {
+              "dcaId": "dca-8",
+              "kind": "channel",
+              "memberId": "channel-8"
+            }
+          ],
+          "notes": ""
+        }
+      ],
       "allowDuplicateAssignment": true
     },
     "cast": {
