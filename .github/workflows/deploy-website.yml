@@ -28,6 +28,23 @@ jobs:
 
       - uses: actions/configure-pages@v6
 
+      # The pages are generated: the modules under `website/docs/` are the source, and the
+      # `.html` beside them is written by `node website/build-docs.mjs`. `ci.yml` runs on pull
+      # requests only, so a direct push to `main` reached this job with nothing having checked
+      # that the pages are the ones their sources write. That is the one thing this job can
+      # know on its own, and it is the failure that matters here: a module edited without the
+      # build would serve the old words under a new commit. (Whether a change *should* have
+      # been pushed at all is branch protection's business, not this workflow's.)
+      - name: The served pages are what their sources write
+        run: |
+          node website/build-docs.mjs
+          if ! git diff --quiet -- website; then
+            echo "::error::the site's pages are out of date with their sources — run node website/build-docs.mjs and commit the result"
+            git --no-pager diff --stat -- website
+            exit 1
+          fi
+          echo 'the served pages match their sources'
+
       # The reliability page reads ./soak-latest.json, which only the soak workflow
       # publishes — a website-only deploy would otherwise blank its figures until the
       # next nightly. Restore the live file first; a first-ever deploy simply has none.
