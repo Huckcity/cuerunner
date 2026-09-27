@@ -460,6 +460,52 @@ describe('the reliability page', () => {
     ])
   })
 
+  it('renders a night that failed, and names the shard that failed with it', async () => {
+    // The branch a reader sees on a red morning, and the one nothing mounted: the outcome,
+    // the shard row and the failure list all come from the artifact, and nothing in this
+    // suite had ever rendered a report with `passed: false`.
+    const night = result({
+      passed: false,
+      shards: [
+        { ...result().shards[0], passed: false, failures: ['device callbacks missed their deadline — 1 xruns'] }
+      ]
+    })
+
+    await mount({ kind: 'json', value: night })
+
+    expect(el('run-outcome').textContent).toBe('Failed')
+    expect(el('run-outcome').classList.contains('fail')).toBe(true)
+    // The shard's own verdict is its row's, not the run's.
+    expect(shardRows().at(-1)?.at(-1)).toBe('Failed')
+    expect(el('run-failures').textContent).toContain('Shard 1')
+    expect(el('run-failures').textContent).toContain('1 xruns')
+  })
+
+  it('hides the shard table when the artifact carries no shards', async () => {
+    // A report whose shards were never uploaded: the heading and the table go, rather than
+    // sitting there empty under a page that claims to report on eight of them.
+    await mount({ kind: 'json', value: result({ shards: [] }) })
+
+    expect(el('shard-subhead').hidden).toBe(true)
+    expect(el('shard-table').hidden).toBe(true)
+    expect(shardRows()).toHaveLength(0)
+  })
+
+  it('links the workflow run the numbers came from, and only when it is a link', async () => {
+    await mount({ kind: 'json', value: result() })
+    const link = el('run-stamp').querySelector('a')
+    expect(link?.getAttribute('href')).toBe('https://github.com/Huckcity/cuerunner/actions/runs/4815162342')
+    expect(link?.textContent).toBe('workflow run 4815162342')
+
+    // `javascript:` is not a link a page should carry, and neither is a missing one: the
+    // stamp is then the stamp alone.
+    const unlinked = result({ run: { ...result().run, url: 'javascript:alert(1)' } })
+    document.body.innerHTML = ''
+    await mount({ kind: 'json', value: unlinked })
+    expect(el('run-stamp').querySelector('a')).toBeNull()
+    expect(el('run-stamp').textContent).toContain('run of')
+  })
+
   it('says it has no result when none is published', async () => {
     await mount({ kind: 'absent' })
 
