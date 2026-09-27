@@ -36,9 +36,30 @@ if (DESK_HOST === undefined) {
   console.error('sqCapture: --desk <host> is required (the SQ\'s own address, e.g. 192.168.0.226)')
   process.exit(2)
 }
-const FIRST_PORT = Number(args.get('--first-port') ?? 51320)
-const LAST_PORT = Number(args.get('--last-port') ?? 51340)
-const DISCOVERY_PORT = Number(args.get('--discovery-port') ?? 51320)
+/**
+ * A port argument, as a whole number in range. `Number('abc')` is `NaN`, and a sweep over
+ * `NaN` relays nothing while still printing a banner — the operator sees a capture that
+ * "ran" and holds no traffic. A bare `0` is the other end of the same mistake: it walks
+ * 0..last and calls `listen(0)` on ephemeral ports, which bind and answer nothing.
+ */
+function portArg(name, fallback) {
+  const raw = args.get(name)
+  if (raw === undefined) return fallback
+  const port = /^[0-9]+$/.test(raw) ? Number(raw) : NaN
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    console.error(`sqCapture: ${name} takes a whole port number from 1 to 65535, not ${JSON.stringify(raw)}`)
+    process.exit(2)
+  }
+  return port
+}
+
+const FIRST_PORT = portArg('--first-port', 51320)
+const LAST_PORT = portArg('--last-port', 51340)
+const DISCOVERY_PORT = portArg('--discovery-port', 51320)
+if (LAST_PORT < FIRST_PORT) {
+  console.error(`sqCapture: --last-port ${LAST_PORT} is below --first-port ${FIRST_PORT} — there is no range to sweep`)
+  process.exit(2)
+}
 const MODEL_REPLY = args.get('--model-reply') ?? 'SQ-6'
 const CAPTURE = args.get('--capture') ?? '/tmp/sq-capture.jsonl'
 
