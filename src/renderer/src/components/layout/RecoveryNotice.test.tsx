@@ -2,7 +2,7 @@
 // all of it: a show restored without its scenes and its mic plot would look whole and be
 // empty, and the next save would write that emptiness over the operator's file.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
-import { act } from 'react'
+import { StrictMode, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
@@ -171,6 +171,47 @@ describe('RecoveryNotice', () => {
     await offer(null)
 
     expect(container.querySelector('.app-notice')).toBeNull()
+  })
+
+  it('says a fault on the lane rather than rendering nothing at all', async () => {
+    // A rejection is not a refusal: something broke. It used to produce no bar and no log
+    // line — the promise's rejection was unhandled — which left the operator with a
+    // session that silently had no answer about their unsaved work.
+    ;(window.cuerunner.workspace.recovery as unknown as Mock).mockRejectedValue(
+      new Error('the snapshot folder could not be read')
+    )
+
+    await act(async () => { root.render(<RecoveryNotice />) })
+
+    const notice = container.querySelector('.app-notice')
+    expect(notice?.getAttribute('data-kind')).toBe('recovery')
+    expect(notice?.textContent).toContain('Could not look for unsaved work')
+    expect(notice?.textContent).toContain('the snapshot folder could not be read')
+    expect(useStore.getState().log.map(entry => entry.message)).toEqual([
+      'Could not look for unsaved work: the snapshot folder could not be read'
+    ])
+  })
+
+  it('asks once per mount, StrictMode’s second pass included', async () => {
+    // React 18's StrictMode mounts every effect twice in a development session. The ask is
+    // idempotent, but the sentence it logs is not, and a log with the same line twice is a
+    // record nobody can read.
+    ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
+      ok: false,
+      error: 'that show has a cue this version of WinsLab does not know (video)'
+    })
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <RecoveryNotice />
+        </StrictMode>
+      )
+    })
+
+    expect(useStore.getState().log.map(entry => entry.message)).toEqual([
+      'Could not bring the unsaved work back: that show has a cue this version of WinsLab does not know (video)'
+    ])
   })
 
   it('says a snapshot this build cannot bring forward rather than offering nothing', async () => {
