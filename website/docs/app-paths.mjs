@@ -66,7 +66,7 @@ export const APP_PATHS = [
     names: [{ menu: 'settings' }, { tab: 'license' }]
   },
   {
-    page: 'trial.html',
+    page: 'pricing.html',
     printed: `${TRIAL.menu} ${TRIAL.caret} → ${TRIAL.settings}`,
     names: [{ menu: 'settings' }]
   },

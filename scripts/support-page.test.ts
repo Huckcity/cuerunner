@@ -2,12 +2,11 @@
 // address it promises.
 //
 // `website/support.html` is the page institutional procurement reads before it buys — who
-// answers, what is covered free and for Pro, and how a licence comes off a machine — and
-// nothing read it: the deactivation wording could drift from the panel an operator actually
-// sees, a refund sentence could grow a window the seller never agreed to, and a second address
-// or a reply time nobody committed to could ship as a promise. The page's facts are
-// declarations now (website/docs/support.mjs), so this guard can read each one against the file
-// it comes from:
+// answers and how a licence comes off a machine — and nothing read it: the deactivation wording
+// could drift from the panel an operator actually sees, a refund sentence could grow a window
+// the seller never agreed to, and a second address could ship as a promise. The page's facts
+// are declarations now (website/docs/support.mjs), so this guard can read each one against the
+// file it comes from:
 //
 // - the app's own labels and sentence — the `Settings…` item, the `License` tab, the
 //   `Deactivate` button and the note under it — read out of `src/shared/fileMenu.ts`,
@@ -18,15 +17,11 @@
 //   the machine is deactivated.
 //
 // **What the reading covers.** Every fact is held both ways — the source must still say it, and
-// the page must state it in the source's own words. The two coverage rows are the page's own
-// statement of what support covers; the guard holds them to being two (one for the free app and
-// one for Pro), to being whole and free of placeholders, and to being rendered, because "the
-// free app is supported" and "a licence question is answered" are two different promises and a
-// page owes a reader both. The promise checks are the same as the trial page's: the address is
-// the only address on the page and the only place a mailto leads, the reply is the only
-// turnaround any sentence on it promises and it is promised, every link resolves, the refund
-// sentence carries the rule's two halves and no window or terms, and the primary nav of every
-// page the site serves carries this one's link.
+// the page must state it in the source's own words. The promise checks: the address is the only
+// address on the page and the only place a mailto leads, every link resolves, the refund
+// sentence carries the rule's two halves and no window or terms (the merged pricing page being
+// read for a window too, since either page could grow one), and the primary nav of every page
+// the site serves carries this one's link.
 //
 // Every check is a pure function of what it reads, so the second describe can hand it a page
 // the repository would never commit and get the failure back by name. The failure paths are
@@ -38,7 +33,6 @@ import { fileURLToPath } from 'node:url'
 
 // @ts-ignore — js file, no type declarations
 import {
-  COVERAGE,
   DEACTIVATE,
   DEACTIVATION,
   DEACTIVATION_PATH,
@@ -48,9 +42,9 @@ import {
   SUPPORT
 } from '../website/docs/support.mjs'
 // @ts-ignore — js file, no type declarations
-import { TRIAL } from '../website/docs/trial.mjs'
+import { PRICING } from '../website/docs/pricing.mjs'
 // @ts-ignore — js file, no type declarations
-import { ORDER_EMAIL, REPLY_WITHIN } from '../website/docs/contact.mjs'
+import { ORDER_EMAIL } from '../website/docs/contact.mjs'
 // @ts-ignore — js file, no type declarations
 import { NAV, renderPage } from '../website/build-docs.mjs'
 
@@ -67,25 +61,17 @@ interface Fact {
   stated: string
 }
 
-/** One row of coverage as the page declares it: the half of the app, and what is covered there. */
-interface Coverage {
-  who: string
-  prose: string
-}
-
 /** Everything the checks read, in one value: a case below hands them a mutation of it. */
 interface Reading {
-  coverage: Coverage[]
   facts: Fact[]
-  /** What the module declares and the page renders: the coverage rows, the deactivation note and the refund route. */
+  /** What the module declares and the page renders: the deactivation note and the refund route. */
   declared: string[]
   address: string
-  reply: string
   /** The refund route the page declares, and the README's rule, as the paragraph states it. */
   route: string
   rule: string
-  /** The trial page as it is served: the second page a refund window could be published on. */
-  trialRendered: string
+  /** The merged pricing page as it is served: the other page a refund window could be published on. */
+  pricingRendered: string
   /** The sources the facts are read from, read once. */
   files: Record<string, string>
   page: string
@@ -222,24 +208,22 @@ if (SUPPORT_PAGE === undefined) {
 }
 
 /**
- * The other page this promise is public on: the refund-window refusal is not the support page's
- * alone, because a trial page can grow one just as easily.
+ * The other page a refund window is public on: the merged pricing page carries the trial and
+ * the prices now, so it can grow one just as easily as the support page.
  */
-const TRIAL_PAGE = TRIAL.find((page: { path: string }) => page.path === 'trial.html')
-if (TRIAL_PAGE === undefined) {
-  throw new Error('website/docs/trial.mjs no longer declares trial.html: the refund-window check reads the second page it covers')
+const PRICING_PAGE = PRICING.find((page: { path: string }) => page.path === 'pricing.html')
+if (PRICING_PAGE === undefined) {
+  throw new Error('website/docs/pricing.mjs no longer declares pricing.html: the refund-window check reads the merged page it covers')
 }
 
 /** The page as the repository holds it, the rule as the README states it. */
 const LIVE: Reading = {
-  coverage: COVERAGE,
   facts: FACTS,
-  declared: [...COVERAGE.map((row: Coverage) => row.prose), DEACTIVATION_PATH, DEACTIVATION, REFUND_ROUTE],
+  declared: [DEACTIVATION_PATH, DEACTIVATION, REFUND_ROUTE],
   address: ORDER_EMAIL,
-  reply: REPLY_WITHIN,
   route: REFUND_ROUTE,
   rule: refundRule(readSource(README)),
-  trialRendered: renderPage(TRIAL_PAGE),
+  pricingRendered: renderPage(PRICING_PAGE),
   files: sources(),
   page: 'support.html',
   rendered: renderPage(SUPPORT_PAGE),
@@ -277,49 +261,6 @@ function renderedProblems(reading: Reading): string[] {
   return reading.declared
     .filter(text => !reading.rendered.includes(text))
     .map(text => `the rendered page does not carry "${text}", which website/docs/support.mjs declares and renders`)
-}
-
-/**
- * The two halves of coverage. A page that answers for the free app and not for Pro — or the
- * other way round — has promised half of what a buyer came for, and a row that is empty, a
- * placeholder or a label carrying markup is a row that says nothing a reader can hold. Every
- * row has to be rendered whole, so a row declared perfectly and shipped as something else fails
- * too.
- */
-function coverageProblems(reading: Reading): string[] {
-  const problems: string[] = []
-  if (reading.coverage.length !== 2) {
-    problems.push(
-      `website/docs/support.mjs declares ${reading.coverage.length} coverage rows: the page owes a reader what is covered for the free app and what a licence covers, one row each`
-    )
-  }
-  const halves: Array<{ half: string; pattern: RegExp }> = [
-    { half: 'the free app', pattern: /\bfree\b/i },
-    { half: 'Cuerunner Pro', pattern: /\bpro\b/i }
-  ]
-  for (const { half, pattern } of halves) {
-    const rows = reading.coverage.filter(row => pattern.test(row.who))
-    if (rows.length !== 1) {
-      problems.push(
-        `the page declares ${rows.length} coverage rows for ${half}: exactly one row has to say what is covered there`
-      )
-    }
-  }
-  for (const row of reading.coverage) {
-    if (/[<>"]/.test(row.who)) {
-      problems.push(`the page's coverage row "${row.who}" carries markup in the half of the app it names: a row is found by its label`)
-      continue
-    }
-    if (row.prose.trim() === '') {
-      problems.push(`the page's "${row.who}" row covers nothing: it states a label and no answer to what is covered there`)
-    } else if (PLACEHOLDER.test(row.prose)) {
-      problems.push(`the page's "${row.who}" row reads "${row.prose}", which is a placeholder rather than what is covered`)
-    }
-    if (!reading.rendered.includes(row.prose)) {
-      problems.push(`the rendered page does not carry what the "${row.who}" row covers`)
-    }
-  }
-  return problems
 }
 
 /**
@@ -375,13 +316,14 @@ const REFUND_TERMS: Array<{ what: string; pattern: RegExp }> = [
 
 /**
  * The window or the terms a page states where it publishes a route, each named as the phase it
- * took and as the page it sits on. Both pages are read: the trade the decision refuses is a
- * refund published with a window, and the trial page can grow one as easily as this page can.
+ * took and as the page it sits on. Both buyer-facing pages are read: the trade the decision
+ * refuses is a refund published with a window, and the merged pricing page can grow one as
+ * easily as this page can.
  */
 function refundTermProblems(reading: Reading): string[] {
   const pages = [
     { file: 'website/support.html', html: reading.rendered },
-    { file: 'website/trial.html', html: reading.trialRendered }
+    { file: 'website/pricing.html', html: reading.pricingRendered }
   ]
   return pages.flatMap(page =>
     REFUND_TERMS.flatMap(term => {
@@ -403,10 +345,7 @@ function refundTermProblems(reading: Reading): string[] {
 const PLACEHOLDER =
   /\b(?:placeholder|todo|tbd|fixme|changeme|example|foo|bar|yoursite|xxx|your-(?:store|link|domain|address|site))\b|\.(?:test|invalid)\b/i
 
-/** A reply time a sentence can promise: the phrase the pages write after "within". */
-const REPLY_TIME = /^(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)(?: business)? (?:hour|day|week|month)s?$/i
-
-/** Everything the page's promises are held to: the address and the reply the shop front declares once. */
+/** Everything the page's promises are held to: the one address the shop front declares. */
 function promiseProblems(reading: Reading): string[] {
   const problems: string[] = []
   if (reading.address.trim() === '') {
@@ -420,17 +359,6 @@ function promiseProblems(reading: Reading): string[] {
   } else if (!/^\S+@\S+\.\S+$/.test(reading.address)) {
     problems.push(`ORDER_EMAIL reads "${reading.address}", which is not one email address`)
   }
-  if (reading.reply.trim() === '') {
-    problems.push(
-      'website/docs/contact.mjs declares no value for REPLY_WITHIN (the reply the seller commits to): fill it with the turnaround the seller will keep — while it is empty the page promises nothing'
-    )
-  } else if (PLACEHOLDER.test(reading.reply)) {
-    problems.push(`REPLY_WITHIN reads "${reading.reply}", which is a placeholder rather than a reply time`)
-  } else if (/[<>"]/.test(reading.reply)) {
-    problems.push(`REPLY_WITHIN reads "${reading.reply}", which carries markup: the reply is rendered into the page's prose`)
-  } else if (!REPLY_TIME.test(reading.reply)) {
-    problems.push(`REPLY_WITHIN reads "${reading.reply}", which is not a reply time a sentence can promise (the shape is "one business day")`)
-  }
   return problems
 }
 
@@ -442,14 +370,11 @@ function decoded(html: string): string {
 /** An address as the page carries it, in words or behind a mailto. */
 const ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 
-/** A turnaround a sentence promises: the phrase after "within". */
-const TURNAROUND = /\bwithin\s+((?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+business)?\s+(?:hour|day|week|month)s?)/gi
-
 /**
- * What the rendered page promises, held to the two declarations. The address is the only
- * address on the page and the only place a mailto leads; the reply is the only turnaround any
- * sentence on it promises, and it is promised. A second address, a reply the seller never made,
- * or a page that names an address and never says how long an answer takes, each fails by name.
+ * What the rendered page promises, held to the declaration. The address is the only address on
+ * the page and the only place a mailto leads; a second address, or a page that names one and
+ * carries no way to write to it, each fails by name. The reply-time promise the pages once made
+ * was dropped by the owner, so no turnaround is read here any more.
  */
 function renderedPromiseProblems(reading: Reading): string[] {
   const rendered = decoded(reading.rendered)
@@ -466,17 +391,6 @@ function renderedPromiseProblems(reading: Reading): string[] {
   if (!mailtos.some(address => address.toLowerCase() === reading.address.toLowerCase())) {
     problems.push(
       `the rendered page carries no mailto link to the address the support page declares (${reading.address}): a buyer asks for a refund somewhere, and the address is where`
-    )
-  }
-  const turnarounds = [...rendered.matchAll(TURNAROUND)].map(match => match[1].replace(/\s+/g, ' ').trim())
-  for (const phrase of [...new Set(turnarounds)]) {
-    if (phrase.toLowerCase() !== reading.reply.toLowerCase()) {
-      problems.push(`the rendered page promises "${phrase}", and the reply the seller commits to is "${reading.reply}"`)
-    }
-  }
-  if (!turnarounds.some(phrase => phrase.toLowerCase() === reading.reply.toLowerCase())) {
-    problems.push(
-      `the rendered page does not state the reply the seller commits to ("${reading.reply}"): a page that names an address has to say how long an answer takes`
     )
   }
   return problems
@@ -577,20 +491,16 @@ describe('the support page', () => {
     expect(renderedProblems(LIVE)).toEqual([])
   })
 
-  it('answers for the free app and for Pro, one row each, whole', () => {
-    expect(coverageProblems(LIVE)).toEqual([])
-  })
-
   it('publishes the refund route the README states, and no window or terms', () => {
     expect(refundProblems(LIVE)).toEqual([])
     expect(refundTermProblems(LIVE)).toEqual([])
   })
 
-  it('declares the address and the reply as live values', () => {
+  it('declares the address as a live value', () => {
     expect(promiseProblems(LIVE)).toEqual([])
   })
 
-  it('names the declared address and no other, and the declared reply as the only turnaround', () => {
+  it('names the declared address and no other, and carries the mailto that reaches it', () => {
     expect(renderedPromiseProblems(LIVE)).toEqual([])
   })
 
@@ -606,9 +516,9 @@ describe('the support page', () => {
 /**
  * The page the repository would never commit, one failure at a time: each case changes one
  * thing in the live reading and asserts the check names it. These are the states the checks
- * exist to refuse — a control the app has moved, a note the page rewords, half the coverage, a
- * refund with a window, a second address, a turnaround nobody agreed to, a link that goes
- * nowhere, a nav that loses the page — and nothing else in the suite exercises them.
+ * exist to refuse — a control the app has moved, a note the page rewords, a refund with a
+ * window, a second address, a link that goes nowhere, a nav that loses the page — and nothing
+ * else in the suite exercises them.
  */
 describe('the page the checks exist to refuse', () => {
   /** The live reading with one fact's declared words or one source's text replaced. */
@@ -619,11 +529,6 @@ describe('the page the checks exist to refuse', () => {
   /** The live reading with one source file's text replaced. */
   function withSource(reading: Reading, file: string, text: string): Reading {
     return { ...reading, files: { ...reading.files, [file]: text } }
-  }
-
-  /** The live reading with one coverage row replaced. */
-  function withCoverage(reading: Reading, who: string, change: Partial<Coverage>): Reading {
-    return { ...reading, coverage: reading.coverage.map(row => (row.who === who ? { ...row, ...change } : row)) }
   }
 
   it('names the app control the page points at that the app no longer carries', () => {
@@ -640,36 +545,6 @@ describe('the page the checks exist to refuse', () => {
     })
     expect(factProblems(reworded)).toEqual([
       expect.stringContaining('website/docs/support.mjs states "Deactivating returns this machine to the free app." for the note that says what deactivating leaves')
-    ])
-  })
-
-  it('names a page that answers for Pro and not for the free app', () => {
-    const half = { ...LIVE, coverage: LIVE.coverage.filter(row => !/\bfree\b/i.test(row.who)) }
-    expect(coverageProblems(half)).toEqual([
-      expect.stringContaining('website/docs/support.mjs declares 1 coverage rows'),
-      expect.stringContaining('the page declares 0 coverage rows for the free app')
-    ])
-  })
-
-  it('names a coverage row that covers nothing', () => {
-    const empty = withCoverage(LIVE, 'Cuerunner Pro', { prose: '' })
-    expect(coverageProblems(empty)).toEqual([
-      expect.stringContaining('the page\'s "Cuerunner Pro" row covers nothing')
-    ])
-  })
-
-  it('names a coverage row a placeholder was left in', () => {
-    const placeholder = withCoverage(LIVE, 'The free app', { prose: 'TODO: say what is covered here.' })
-    expect(coverageProblems(placeholder)).toEqual([
-      expect.stringContaining('the page\'s "The free app" row reads "TODO: say what is covered here.", which is a placeholder'),
-      expect.stringContaining('the rendered page does not carry what the "The free app" row covers')
-    ])
-  })
-
-  it('names a coverage row the rendered page does not carry', () => {
-    const dropped = { ...LIVE, rendered: LIVE.rendered.replace(COVERAGE[0].prose, '') }
-    expect(coverageProblems(dropped)).toEqual([
-      expect.stringContaining('the rendered page does not carry what the "The free app" row covers')
     ])
   })
 
@@ -705,9 +580,9 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a refund window the other page states, since either page can grow one', () => {
-    const trial = { ...LIVE, trialRendered: `${LIVE.trialRendered}\n<p>Refunds within 14 days.</p>` }
-    expect(refundTermProblems(trial)).toEqual([
-      expect.stringContaining('website/trial.html states a refund window ("Refunds within 14 days")')
+    const merged = { ...LIVE, pricingRendered: `${LIVE.pricingRendered}\n<p>Refunds within 14 days.</p>` }
+    expect(refundTermProblems(merged)).toEqual([
+      expect.stringContaining('website/pricing.html states a refund window ("Refunds within 14 days")')
     ])
   })
 
@@ -744,29 +619,7 @@ describe('the page the checks exist to refuse', () => {
     ])
   })
 
-  it('names a page that names an address and never says how long an answer takes', () => {
-    const silent = { ...LIVE, rendered: LIVE.rendered.split(`within ${REPLY_WITHIN}`).join('soon') }
-    expect(renderedPromiseProblems(silent)).toEqual([
-      expect.stringContaining('the rendered page does not state the reply the seller commits to ("one business day")')
-    ])
-  })
-
-  it('names a turnaround the seller never made', () => {
-    const invented = { ...LIVE, rendered: LIVE.rendered.split(`within ${REPLY_WITHIN}`).join('within 48 hours') }
-    expect(renderedPromiseProblems(invented)).toEqual([
-      expect.stringContaining('the rendered page promises "48 hours", and the reply the seller commits to is "one business day"'),
-      expect.stringContaining('the rendered page does not state the reply the seller commits to ("one business day")')
-    ])
-  })
-
-  it('names a reply the seller has not committed to', () => {
-    expect(promiseProblems({ ...LIVE, reply: 'two business days' })).toEqual([])
-    expect(promiseProblems({ ...LIVE, reply: '' })).toEqual([
-      expect.stringContaining('website/docs/contact.mjs declares no value for REPLY_WITHIN')
-    ])
-    expect(promiseProblems({ ...LIVE, reply: 'as soon as we can' })).toEqual([
-      expect.stringContaining('REPLY_WITHIN reads "as soon as we can", which is not a reply time a sentence can promise')
-    ])
+  it('names an address a placeholder was left in, or one that is not one', () => {
     expect(promiseProblems({ ...LIVE, address: 'orders@example.com' })).toEqual([
       expect.stringContaining('ORDER_EMAIL reads "orders@example.com", which is a placeholder')
     ])

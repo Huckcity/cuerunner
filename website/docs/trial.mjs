@@ -1,21 +1,19 @@
-// The trial page: what a buyer can try before paying, for how long, and how to turn it on.
+// The facts the one commercial page states, and nothing that speaks for a page of its own: how
+// long a trial runs, what it turns on, how a key arrives, how it is entered, and what an ended
+// key leaves behind. `website/docs/pricing.mjs` renders them.
 //
-// The page is the shop front's answer to "can I try it first", and every fact on it is one a
-// reader acts on: how long the trial lasts, what it turns on, the address a request goes to,
-// the app's own menu item, tab, field and button, the sentence the app shows under the field,
-// and what an ended key leaves behind. None of them is typed into the markup — each is declared
-// here and the page renders it — and scripts/trial-page.test.ts reads each one back out of its
-// source: the app's own files (`src/shared/fileMenu.ts`, `SettingsDialog.tsx`,
-// `Toolbar.tsx`, `LicenseSection.tsx`) for the labels and the sentences, `src/main/license/key.ts`
-// for the day a key is good through, the market record's adopted model for the length and the
-// terms, and the README for what a lapsed key leaves, how a key arrives and how it is entered.
-// A label that moves in the app fails the guard by name rather than shipping a page that sends
-// a reader to a menu item that is not there.
+// Every fact here is one a reader acts on, and none of them is typed into the markup — each is
+// declared here and the page renders it — and scripts/trial-page.test.ts reads each one back
+// out of its source: the app's own files (`src/shared/fileMenu.ts`, `SettingsDialog.tsx`,
+// `Toolbar.tsx`, `LicenseSection.tsx`) for the labels and the sentences,
+// `src/main/license/key.ts` for the day a key is good through, the market record's adopted model
+// for the length and the terms, and the README for what a lapsed key leaves, how a key arrives
+// and how it is entered. A label that moves in the app fails the guard by name rather than
+// shipping a page that sends a reader to a menu item that is not there.
 //
-// The address and the reply come from `website/docs/contact.mjs`, where the support page takes
-// them from too: the shop front names one address and promises one turnaround, from one place.
-import { attr } from './attr.mjs'
-import { ORDER_EMAIL, REPLY_WITHIN } from './contact.mjs'
+// The address comes from `website/docs/contact.mjs`, where the support page takes it from too:
+// the shop front names one address, from one place. No reply time is declared anywhere: the
+// site says where to write and promises nothing about how fast the answer comes.
 
 /**
  * The app's own words, each the string the app carries: the toolbar button the file menu opens
@@ -59,7 +57,7 @@ export const TRIAL_TERMS = ['free', 'full Pro', 'self-serve', 'offline']
  * it by email, and the guard holds both halves — minting and email delivery — to that sequence
  * and to this sentence, so a page that promises a form or an instant unlock fails by name.
  */
-export const KEY_DELIVERY = `A person mints the key for you — the same tool every order is fulfilled with — and it comes back by email. There is no checkout and no account in between.`
+export const KEY_DELIVERY = `A person mints the key for you and it comes back by email. There is no checkout and no account in between.`
 
 /**
  * What entering the key takes, in the README's own terms for it: entered once, on the machine
@@ -88,9 +86,9 @@ export const ACTIVATION_STEPS = [
  * restores. Each sentence carries the source's own words, and the guard reads them back.
  */
 export const END_OF_KEY = [
-  `A trial is a key that lapses, and so is a rental: each one is good for the whole of its last day, in UTC. A show that opens on the day the key runs out is not stopped mid-performance because the venue is east of the person who minted it.`,
-  `When the last day passes the machine falls back to the free half, with the show file untouched: the scenes, the mic plot and the triggers written during the trial are still in it, and the cue stack plays on as it always did.`,
-  `Enter a renewed key — a licence, a rental, another trial — and the Pro half comes back on the spot, without a restart and without reinstalling anything.`
+  `A trial is a key that lapses, and so is a rental: each one is good for the whole of its last day, in UTC.`,
+  `When the last day passes, the machine is the free app again, with the show file untouched: the scenes, the mic plot and the triggers written during the trial stay in it, and the cue stack plays on.`,
+  `A renewed key — a licence, a rental, another trial — brings the Pro half back on the spot, without a restart and with nothing to reinstall.`
 ]
 
 /**
@@ -102,88 +100,4 @@ export const END_OF_KEY = [
  * request that does not say it comes back as a question rather than a key.
  */
 export const TRIAL_STARTS = `The ${TRIAL_LENGTH} days run from the day the key is minted — the day it is sent to you — and not from the first time you open the app.`
-export const KEY_NAME = `Say who the key is for, too: every key carries the name it is issued to, and that is the name the License tab reads back to you.`
-
-export const TRIAL = [
-  {
-    path: 'trial.html',
-    title: 'Try Cuerunner Pro',
-    blurb: `${TRIAL_LENGTH} days of the whole Pro half, free: ask for a key at the one address, enter it once, and run a real show with it before you decide anything.`,
-    body: `
-    <section class="panel reveal">
-      <h1>Try Cuerunner Pro</h1>
-      <p class="doc-lede">
-        ${TRIAL_LENGTH} days of the whole Pro half, free, on your own machine: the desk, the
-        radios, the tablet and the second machine. Ask for a key, enter it once, and find out
-        on a real show rather than on a demo.
-      </p>
-    </section>
-
-    <section class="panel reveal delay-1">
-      <h2>What the trial is</h2>
-      <p>
-        A trial key is a Pro key with a last day on it: everything a key turns on is open for
-        the length of the trial, and the app behaves exactly as it does for someone who has
-        paid — nothing watermarked, nothing capped, and nothing held back to make the point.
-      </p>
-      <ul class="tight-list">
-        <li><strong>Full Pro, for ${TRIAL_LENGTH} days.</strong> The whole Pro half —
-          <a href="pro.html">the free and Pro page</a> has the line, capability by
-          capability — so what you test is what you would be buying.</li>
-        <li><strong>Self-serve.</strong> Nothing to book and nobody to persuade: you write,
-          the key is minted, and it arrives by email. No call, no card, no account first.</li>
-        <li><strong>Offline.</strong> The key is checked on the machine it is entered on,
-          against public keys compiled into the app. Nothing is sent anywhere, so a venue
-          machine with no internet unlocks exactly like any other.</li>
-      </ul>
-      <p>
-        ${TRIAL_STARTS}
-      </p>
-    </section>
-
-    <section class="panel reveal delay-2">
-      <h2>Ask for a key</h2>
-      <p>
-        Write to <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> and say what
-        you run and what you would like to try. ${KEY_NAME} ${KEY_DELIVERY} Like everything
-        else sent to that address, a request is answered within ${REPLY_WITHIN}.
-      </p>
-      <p class="note">
-        The key is not a card on file and nothing renews itself. When its last day passes the
-        machine is the free app again, and there is nothing to cancel.
-      </p>
-    </section>
-
-    <section class="panel reveal delay-3">
-      <h2>Enter it</h2>
-      <ol class="steps">
-${ACTIVATION_STEPS.map(step => `        <li>${step}</li>`).join('\n')}
-      </ol>
-      <p class="note">
-        ${ENTRY_NOTE}
-      </p>
-    </section>
-
-    <section class="panel reveal delay-4">
-      <h2>When the ${TRIAL_LENGTH} days are up</h2>
-      <p>
-        ${END_OF_KEY[0]}
-      </p>
-      <p class="note">
-        ${APP.ended}
-      </p>
-      <p>
-        ${END_OF_KEY[1]}
-      </p>
-      <p>
-        ${END_OF_KEY[2]}
-      </p>
-      <p>
-        If you decide to keep it, the <a href="pricing.html">price page</a> has the ways to
-        buy — a card, a purchase order, or a rental for a run — and the
-        <a href="pro.html">free and Pro page</a> has the line the key turns on.
-      </p>
-    </section>
-`
-  }
-]
+export const KEY_NAME = `Say who the key is for: every key carries the name it is issued to, and the License tab reads it back to you.`

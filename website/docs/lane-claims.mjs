@@ -41,31 +41,31 @@ export const COPY_CLAIMS = [
   // ASIO, which the `asio` lane hosts. The two rows no lane carries declare `—`, the record's
   // own mark for a claim with no lane behind it.
   {
-    page: 'pro.html',
+    page: 'pricing.html',
     claim: 'ASIO hosting',
     lane: 'asio',
     words: "ASIO, through the interface's own driver — proved in CI against a real driver"
   },
   {
-    page: 'pro.html',
+    page: 'pricing.html',
     claim: 'Hosting a real driver on the other backends',
     lane: '—',
     words: 'WASAPI shared and exclusive, Core Audio, ALSA and JACK'
   },
   {
-    page: 'pro.html',
+    page: 'pricing.html',
     claim: 'A&H desk acceptance',
     lane: 'hardware',
     words: 'an Allen &amp; Heath SQ or Avantis'
   },
   {
-    page: 'pro.html',
+    page: 'pricing.html',
     claim: 'The MSC end-to-end case',
     lane: 'hardware',
     words: 'show-control messages'
   },
   {
-    page: 'pro.html',
+    page: 'pricing.html',
     claim: 'Live discovery',
     lane: '—',
     words: 'the devices that announce themselves'

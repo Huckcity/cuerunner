@@ -1,17 +1,17 @@
-// The comparison page: what the free app is, and what a key turns on.
+// The free/Pro line: what the free app is, and what a key turns on.
 //
-// Generated like the rest of the site so there is one place to keep it true. The app's own
-// gates are the authority — ShowService.pro in the main process, and the ProLock surfaces
-// in the window — and this page follows them; when the line moves, it moves here in the
-// same change.
+// The rows are declared here and rendered by the one commercial page
+// (`website/docs/pricing.mjs`, served as `pricing.html`), so there is one place to keep them
+// true. The app's own gates are the authority — ShowService.pro in the main process, and the
+// ProLock surfaces in the window — and this declaration follows them; when the line moves, it
+// moves here in the same change.
 //
 // The two tables are declared rows rather than markup: a row carries the words a buyer reads
 // and the record's own identifiers behind them, and scripts/pro-page.test.ts reads that
 // declaration against `capability-catalog.md` — every identifier a free column names classed
 // free there, every one a Pro column names classed Pro, and every Pro class the record holds
-// named by some row. A class this page leaves out, or sells the wrong way round, fails the
-// build rather than the buyer.
-import { table } from './table.mjs'
+// named by some row. A class this declaration leaves out, or sells the wrong way round, fails
+// the build rather than the buyer.
 
 /**
  * The phrase a claim carries where no run has proved it: a claim is only as strong as the lane
@@ -75,7 +75,7 @@ export const FREE_ROWS = [
     label: 'The engine',
     free: {
       notYetProved: 'WASAPI shared and exclusive, Core Audio, ALSA and JACK',
-      prose: `Every output the interface has, one device at a time: ASIO, through the interface's own driver — proved in CI against a real driver; WASAPI shared and exclusive, Core Audio, ALSA and JACK ${NOT_YET_PROVED}. Sample-accurate scheduling, per-cue level and pan, a crosspoint routing matrix, fades and loops, streaming for long files, and honest numbers when something goes wrong.`
+      prose: `ASIO, through the interface's own driver — proved in CI against a real driver. WASAPI shared and exclusive, Core Audio, ALSA and JACK ${NOT_YET_PROVED}. Sample-accurate scheduling, level and pan per cue, a routing matrix, fades, loops and streaming.`
     }
   },
   {
@@ -90,7 +90,7 @@ export const FREE_ROWS = [
       identifiers: ['osc-in', 'midi-in', 'osc:send', 'midi:send'],
       cues: ['MSC'],
       notYetProved: 'show-control messages',
-      prose: `OSC, MIDI and show-control messages ${NOT_YET_PROVED} that fire a cue, whether they come from a desk, a footswitch, a pad or another program; <a href="reference/control.html">the messages</a> Cuerunner sends; the Monitor, which shows what arrived; and panic.`
+      prose: `OSC, MIDI and show-control messages ${NOT_YET_PROVED} that fire a cue — from a desk, a footswitch, a pad or another program. <a href="reference/control.html">The messages</a> Cuerunner sends, the Monitor, and panic.`
     }
   },
   {
@@ -123,7 +123,7 @@ export const PRO_ROWS = [
       identifiers: ['midi-tcp', 'sq-native'],
       cues: ['scene'],
       notYetProved: 'Allen &amp; Heath SQ or Avantis',
-      prose: `The Scenes view — the show's faders against its scenes — and the scene cue, which writes the membership a scene asks for and then each mic's mute, so the show can move an ETC Eos desk or an Allen &amp; Heath SQ or Avantis ${NOT_YET_PROVED} as one of its own steps, plus the desk link that lets the desk's keys walk the show.`
+      prose: `The Scenes view — the show's faders against its scenes — and the scene cue: it writes a scene's membership and each mic's mute, so the show moves an ETC Eos desk or an Allen &amp; Heath SQ or Avantis ${NOT_YET_PROVED} as one of its own steps. Plus the desk link that lets the desk's keys walk the show.`
     }
   },
   {
@@ -133,7 +133,7 @@ export const PRO_ROWS = [
     },
     pro: {
       identifiers: ['rf'],
-      prose: `Every transmitter's battery and RF level in the Monitor and the mic plot, alarms when a pack or an aerial misbehaves, and the session report afterwards. Reads the receivers over a telemetry document or, on the bench, the demo rack.`
+      prose: `Battery and RF for every transmitter, in the Monitor and the mic plot; alarms when a pack or an aerial misbehaves; the session report afterwards. Reads the receivers over a telemetry document, or the demo rack on the bench.`
     }
   },
   {
@@ -270,59 +270,4 @@ export const HERO_NOUNS = [
   { noun: 'the radios', identifiers: ['rf'] },
   { noun: 'the tablet', identifiers: ['companion'] },
   { noun: 'the second machine', identifiers: ['redundancy'] }
-]
-
-export const PRO = [
-  {
-    path: 'pro.html',
-    title: 'Free and Pro',
-    blurb: 'The free app runs a show: the cue stack, the engine, the ears and the file. Cuerunner Pro runs a production — the desk, the radios, the tablet, the second machine and the handover.',
-    body: `
-    <section class="panel reveal">
-      <h1>Free and Pro</h1>
-      <p class="doc-lede">
-        Nothing about running a show is behind a key. The free app plays the sound, drives
-        the rig, fires from a footswitch and shows you what arrived. Cuerunner Pro is the
-        show <em>around</em> it: the desk, the radios, the tablet, the second machine and
-        the handover.
-      </p>
-    </section>
-
-    <section class="panel reveal delay-1">
-      <h2>The free half</h2>
-      <p>
-        No key, no account, no expiry, on as many of your own machines as you like.
-        Nothing is taken away from it later, and the file it writes opens anywhere.
-      </p>
-${table(['What you get', 'Details'], FREE_ROWS.map(row => [row.label, row.free.prose]))}
-    </section>
-
-    <section class="panel reveal delay-2">
-      <h2>What a key turns on</h2>
-      <p>
-        Pro is what a production needs once there is more than one person, more than one
-        machine, or a radio mic in the room.
-      </p>
-${table(['Capability', 'Free', 'Pro'], PRO_ROWS.map(row => [row.label, row.free.prose, row.pro.prose]))}
-    </section>
-
-    <section class="panel reveal delay-3">
-      <h2>The key</h2>
-      <ul>
-        <li>Signed, and checked on the machine — nothing phones home, and nothing needs an account.</li>
-        <li><strong>A key ends when it ends.</strong> The Pro half stops on that machine the moment the last day is out — the Pro services first, the desk link among them, and scene cues refused from then on — while nothing already playing is interrupted and the free half keeps working. A pair set to take over by itself hands the show to the standby when the machine that ran out goes quiet; keeping the standby licensed is what makes that work.</li>
-        <li>Not tied to one computer: the machine you run from and the one standing by.</li>
-        <li>Deactivate it and that machine is back to the free half.</li>
-        <li>A show written with Pro opens anywhere. Its scenes, its mic plot and its triggers travel with the file even on a machine that has no key — only the surfaces and the services wait for one.</li>
-        <li>Enter a renewed key and the Pro half comes back on the spot, with no restart.</li>
-      </ul>
-      <p class="note">
-        What Cuerunner does not do is play the video. Another program owns the projection
-        and Cuerunner tells it when to roll; that boundary is deliberate, and it is how the
-        room keeps one clock — <a href="interop.html">working with other programs</a> shows
-        the wiring.
-      </p>
-    </section>
-`
-  }
 ]

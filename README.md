@@ -966,7 +966,7 @@ app, and nothing between them needs a server:
 
 **A trial request is the same three steps**, and the only order that arrives without money
 behind it. It comes to `orders@cuerunner.app`, the address the
-[trial page](https://cuerunner.app/trial.html) publishes, and the request is
+[pricing page](https://cuerunner.app/pricing.html) publishes, and the request is
 answered like any other message. The key is minted with `--expires` set to the trial's last
 day — 14 days out, the length the adopted model in
 `_bmad-output/specs/spec-cuerunner/market-and-business.md` decides — delivered by email, and
@@ -987,9 +987,8 @@ configuration set and the two simulator addresses, and nothing else), stored at
 ## Support
 
 - **The app, and the licence**: write to `orders@cuerunner.app` — the address the
-  [support page](https://cuerunner.app/support.html) publishes — and a reply
-  comes back within one business day. Orders, trial requests and support are all answered from
-  that one inbox.
+  [support page](https://cuerunner.app/support.html) publishes. Orders, trial requests and
+  support are all answered from that one inbox, and it is one person reading it.
 - **Issues**: [GitHub Issues](https://github.com/Huckcity/cuerunner/issues)
 - **Feedback**: The fastest way to shape Cuerunner is to file an issue with your use case — "I run sound for X and need Y" directly drives the roadmap.
 

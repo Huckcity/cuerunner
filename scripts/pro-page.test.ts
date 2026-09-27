@@ -1,9 +1,10 @@
-// The free-versus-Pro page, held to the record it states and to the claims it makes.
+// The free-versus-Pro line, held to the record it states and to the claims it makes.
 //
-// `website/pro.html` is the page a buyer reads before choosing, and nothing read it: the
-// catalogue is held to the gates by src/main/license/classification.test.ts, while the page's
-// free/Pro rows were its own words. The tables are declared rows now (website/docs/pro.mjs),
-// so this guard can hold that declaration both ways — every identifier and cue type a column
+// `website/pricing.html` is the one commercial page a buyer reads before choosing, and nothing
+// read its free/Pro half: the catalogue is held to the gates by
+// src/main/license/classification.test.ts, while the page's free/Pro rows were its own words.
+// The tables are declared rows now (website/docs/pro.mjs), so this guard can hold that
+// declaration both ways — every identifier and cue type a column
 // names carries the class the record gives it, every Pro class the record holds is named in a
 // Pro column, and the free cue types are the ones `CUE_TYPES` minus `PRO_CUE_TYPES` declares —
 // and can hold the claims no lane in this project can prove to the phrase the page carries
@@ -32,7 +33,9 @@ import { BOUNDARY_HEADER, boundaryItems, classOf, readRecord, recordPath, tableR
 import type { BoundaryItem, GateClass } from '../src/main/license/catalog'
 
 // @ts-ignore — js file, no type declarations
-import { FREE_ROWS, HERO_NOUNS, NOT_YET_PROVED, PRO, PRO_MARKS, PRO_ROWS, cueSentence } from '../website/docs/pro.mjs'
+import { FREE_ROWS, HERO_NOUNS, NOT_YET_PROVED, PRO_MARKS, PRO_ROWS, cueSentence } from '../website/docs/pro.mjs'
+// @ts-ignore — js file, no type declarations
+import { PRICING } from '../website/docs/pricing.mjs'
 // @ts-ignore — js file, no type declarations
 import { renderPage } from '../website/build-docs.mjs'
 
@@ -116,9 +119,9 @@ interface Reading {
 }
 
 /** The page this guard reads, found by its own path rather than by where it sits in the list. */
-const PRO_PAGE = PRO.find((page: { path: string }) => page.path === 'pro.html')
+const PRO_PAGE = PRICING.find((page: { path: string }) => page.path === 'pricing.html')
 if (PRO_PAGE === undefined) {
-  throw new Error('website/docs/pro.mjs no longer declares pro.html: this guard reads the buyer page by its path')
+  throw new Error('website/docs/pricing.mjs no longer declares pricing.html: this guard reads the buyer page by its path')
 }
 
 /**
@@ -642,9 +645,9 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a chip the tree grows that no declaration carries', () => {
-    const grown = [...LIVE.tree, { page: 'pro.html', words: 'The second machine' }]
+    const grown = [...LIVE.tree, { page: 'pricing.html', words: 'The second machine' }]
     expect(markProblems({ ...LIVE, tree: grown })).toEqual([
-      expect.stringContaining('the served tree carries pro.html\'s Pro mark on "The second machine" and website/docs/pro.mjs declares no such mark')
+      expect.stringContaining('the served tree carries pricing.html\'s Pro mark on "The second machine" and website/docs/pro.mjs declares no such mark')
     ])
   })
 
@@ -760,10 +763,10 @@ describe('the page the checks exist to refuse', () => {
 
   it('names a served page that grows a fetch', () => {
     const fetching = LIVE.pages.map(page =>
-      page.page === 'pro.html' ? { ...page, text: page.text.replace('<h1>', '<h1 data-x="fetch(">') } : page
+      page.page === 'support.html' ? { ...page, text: page.text.replace('<h1>', '<h1 data-x="fetch(">') } : page
     )
     expect(scriptProblems({ ...LIVE, pages: fetching })).toEqual([
-      expect.stringContaining('website/pro.html carries a script or a `fetch(`')
+      expect.stringContaining('website/support.html carries a script or a `fetch(`')
     ])
   })
 

@@ -1,43 +1,25 @@
-// The support page: who answers, what is covered, and how a key comes off a machine.
+// The support page: where to write, and what to read first.
 //
-// Procurement asks this before it buys — is there a person, and how long do they take — and a
-// page that answers with a phone line that rings nowhere is worse than no page. So every fact
-// here is one the seller can hold: one address, declared in `website/docs/contact.mjs` with the
-// reply that goes with it, the app's own words for deactivation, and the rule the README states
-// for a refund — the row the key was sold under is marked refunded, and the machine it was
-// entered on is deactivated — published as a route rather than as terms, because there is no
-// window and no policy to state.
+// This page used to promise things — what is covered, and how quickly an answer comes. Both are
+// gone. A support page owes a reader two facts: the address, and where to look before writing
+// to it. A turnaround is a promise about how fast a person works, and a promise on a page is
+// something a buyer is entitled to hold the seller to; the guides and the reference answer most
+// of what arrives anyway.
 //
-// scripts/support-page.test.ts holds the page to each of those sources, refuses a second
-// address or a turnaround the seller never agreed to, refuses a refund window or a set of
-// refund terms on either page, and fails by name when the page drops one half of the coverage
-// it owes a reader. The two coverage rows are the page's own statement — what a licence buys
-// and what a question costs are the seller's commitments, and the guard holds them to being
-// present, whole and rendered, not to a phrase in another file.
+// What stays is what a reader acts on: the one address, declared in `website/docs/contact.mjs`,
+// the places to look first, and the two things that otherwise arrive as mail — taking a key off
+// a machine, in the app's own words, and where a refund is asked for, in the README's own rule.
+//
+// scripts/support-page.test.ts holds the page to each of those sources: one address and no
+// second one, the app's labels read back out of `src/shared/fileMenu.ts` and
+// `SettingsDialog.tsx`, the refund rule's two halves read back out of the README, and no reply
+// time, refund window or set of terms on the page.
 import { attr } from './attr.mjs'
-import { ORDER_EMAIL, REPLY_WITHIN } from './contact.mjs'
-import { table } from './table.mjs'
-
-/**
- * What support covers, one row per half of the app, in the order a buyer meets them: the free
- * app first, then what a licence adds to the conversation. Both rows are rendered, and the
- * guard refuses a page that carries one and not the other: "the free app is supported" and
- * "a licence question is answered" are two different promises.
- */
-export const COVERAGE = [
-  {
-    who: 'The free app',
-    prose: `No key is needed to ask, and nothing about the free half is out of scope: a cue that will not fire, a device that will not open, an import that arrives wrong, or a show file you want to understand. The <a href="guide.html">guides</a> and the <a href="reference/index.html">reference</a> come first because they answer most of it in a minute, but there is a person at the address, not a form.`
-  },
-  {
-    who: 'Cuerunner Pro',
-    prose: `A licence question is answered by the same person, at the same address, within ${REPLY_WITHIN}: activating a key, moving one to another machine, a key that has run out or will not be accepted, a renewal, an invoice, a W-9, or a refund. A key does not buy a faster answer or a place in a queue — there is one inbox, and everyone who writes to it is in it.`
-  }
-]
+import { ORDER_EMAIL } from './contact.mjs'
 
 /**
  * The app's own words for taking a key off a machine: where the switch is — the menu item and
- * the tab, the same two labels the trial page's steps walk a reader through — the button, and
+ * the tab, the same two labels the pricing page's steps walk a reader through — the button, and
  * the note the License tab puts under it. The page renders the note verbatim, and the guard
  * reads every label back out of `src/shared/fileMenu.ts`, `SettingsDialog.tsx` and
  * `LicenseSection.tsx`, so the page cannot send anyone looking for a control that has moved.
@@ -64,36 +46,40 @@ export const DEACTIVATION_PATH = `A key can be taken off a machine without askin
  * sentence, and refuses a refund bound to a number of days, dressed as a policy, or stated as a
  * guarantee.
  */
-export const REFUND_ROUTE = `A refund is the row the key was sold under marked refunded, plus your request to deactivate the machine it was entered on. There is no window to catch and no form to fill in, and nothing in the app has to check a key for it to be so — the ledger is what keeps the sale honest.`
+export const REFUND_ROUTE = `A refund is the row the key was sold under marked refunded, plus a request to deactivate the machine it was entered on. There is no window to catch.`
 
 export const SUPPORT = [
   {
     path: 'support.html',
     title: 'Support',
-    blurb: `One address and a person behind it: what support covers for the free app and for Pro, a reply within ${REPLY_WITHIN}, how to deactivate a machine, and where a refund is asked for.`,
+    blurb: `One address and a person behind it, the guides and the reference to look at first, how to take a key off a machine, and where a refund is asked for.`,
     body: `
     <section class="panel reveal">
       <h1>Support</h1>
       <p class="doc-lede">
-        One address, and a person behind it. Write to
-        <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> and a reply comes back
-        within ${REPLY_WITHIN} — whether you run the free app, are weighing up the trial, or
-        hold a licence.
+        Write to <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a>. One person
+        reads it — an order, a trial request, a licence, or something in the app that is not
+        doing what it should.
       </p>
     </section>
 
     <section class="panel reveal delay-1">
-      <h2>What support covers</h2>
-      <p>
-        Neither half of the app is left to a forum, and a licence does not move you to the
-        front of anything. What changes with a key is which questions are about the licence
-        itself.
+      <h2>Look here first</h2>
+      <ul class="tight-list">
+        <li>The <a href="reference/troubleshooting.html">troubleshooting reference</a>: a cue
+          that will not fire, a file that has moved, a device that dropped out mid-show, a
+          trigger that is not being heard.</li>
+        <li>The <a href="guide.html">guides</a> build a show from nothing, and the
+          <a href="reference/index.html">reference</a> has every cue type, field and setting.</li>
+      </ul>
+      <p class="note">
+        A message that says what you did and what happened is answered in one pass rather than
+        three, and a line from the log is worth more than a description of the sound it made.
       </p>
-${table(['Who is asking', 'What is covered'], COVERAGE.map(row => [row.who, row.prose]))}
     </section>
 
     <section class="panel reveal delay-2">
-      <h2>Taking a key off a machine, and refunds</h2>
+      <h2>Keys</h2>
       <p>
         ${DEACTIVATION_PATH}
       </p>
@@ -101,24 +87,14 @@ ${table(['Who is asking', 'What is covered'], COVERAGE.map(row => [row.who, row.
         ${DEACTIVATION}
       </p>
       <p>
-        <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> is also where a refund
-        is asked for. ${REFUND_ROUTE}
+        Activating a key, moving one to another machine, a key that has run out, a renewal, an
+        invoice or a W-9: ask at
+        <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a>. So is a refund.
+        ${REFUND_ROUTE}
       </p>
-    </section>
-
-    <section class="panel reveal delay-3">
-      <h2>Before you write</h2>
-      <ul class="tight-list">
-        <li>The <a href="reference/troubleshooting.html">troubleshooting reference</a> collects
-          what most messages turn out to be: a cue that does not fire, a file that has moved, a
-          device that dropped out mid-show, a trigger that is not being heard.</li>
-        <li>A message that says what the app is, what you did and what happened is answered in
-          one pass rather than three, and a line from the log is worth more than a description
-          of the sound it made.</li>
-      </ul>
       <p class="note">
-        The trial page has the <a href="trial.html">activation steps</a> if the question is how
-        to enter a key, and the <a href="pricing.html">price page</a> has the ways to buy.
+        Buying Pro, the prices and the trial are on the
+        <a href="pricing.html">pricing page</a>, which also walks through entering a key.
       </p>
     </section>
 `
