@@ -8,6 +8,24 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # Code, and only code. A change to the ledger, a story record or the release checklist
+    # cannot move the engine, the e2e suite or the packaged install, and running sixteen jobs
+    # on a one-line bookkeeping edit is what put fourteen pull requests in one queue. Those
+    # changes go to `records.yml`, which runs the suites that actually read them; everything
+    # listed here is something a heavy lane builds, runs or consumes.
+    paths:
+      - 'src/**'
+      - 'native/**'
+      - 'e2e/**'
+      - 'integration/**'
+      - 'scripts/**'
+      - 'website/**'
+      - 'resources/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'electron.vite.config.*'
+      - '.github/workflows/**'
 
 
 jobs:

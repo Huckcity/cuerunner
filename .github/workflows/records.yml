@@ -1,0 +1,44 @@
+# The records lane: everything the code lanes deliberately do not run.
+#
+# `ci.yml` is scoped to paths that can move what it builds — the engine, the app, the site, the
+# installer. This workflow takes the rest: the ledger, the story records, the architecture and
+# planning documents, and the prose that describes them. They cannot break a build, and running
+# sixteen jobs on a one-line ledger edit is what put fourteen pull requests in one queue on
+# 2026-09-27.
+#
+# They *can* break a guard, and that is the whole job here: twelve suites under `scripts/` read
+# the records as text (`lane-claims` reads the claims record, `wave3-adoption` the candidate
+# register, `showfile-prose` the README and the served pages, `published-*` the numbers), and
+# `src/main/license/` parses the capability catalogue at runtime. One linux machine, one job,
+# seconds rather than minutes — no engine build, no Electron download, no ASIO SDK, because
+# none of them reads a document.
+name: Records
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '_bmad-output/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'ENGINE-REVIEW-2-AND-ROADMAP.md'
+      - '.github/RELEASE_CHECKLIST.md'
+      - '.agents/**'
+
+jobs:
+  records:
+    runs-on: [self-hosted, linux, x64, ubox]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: npm ci --legacy-peer-deps
+
+      # No `npm test`: its pretest hook builds the C++ engine, and no document can change what
+      # that build produces. These are the suites that open the records, and the module that
+      # reads the capability catalogue as its own input.
+      - name: The records, read by the suites that hold them
+        run: npx vitest run scripts/ src/main/license/
