@@ -67,14 +67,14 @@ its artifacts are.
       installer's state, and that the Windows, macOS and Linux installers on the release page and
       in `latest/` are exactly the files that section accounts for, with the `SHA256SUMS` the
       section names sitting beside them on the page.
-- [ ] **Check that the mirror the site's cards point at serves them.** `pub.winslabapp.com` is
+- [ ] **Check that the mirror the site's cards point at serves them.** `pub.cuerunner.app` is
       the buyer-facing host, and nothing in the pipeline can see it from the inside:
 
       ```bash
-      curl -sI https://pub.winslabapp.com/latest/Cuerunner-Setup.exe
-      curl -sI https://pub.winslabapp.com/latest/Cuerunner.dmg
-      curl -sI https://pub.winslabapp.com/latest/Cuerunner.AppImage
-      curl -sI https://pub.winslabapp.com/latest/SHA256SUMS
+      curl -sI https://pub.cuerunner.app/latest/Cuerunner-Setup.exe
+      curl -sI https://pub.cuerunner.app/latest/Cuerunner.dmg
+      curl -sI https://pub.cuerunner.app/latest/Cuerunner.AppImage
+      curl -sI https://pub.cuerunner.app/latest/SHA256SUMS
       ```
 
       The four names are the mirror's, not the notes' build names: the cards link these, and a
@@ -87,7 +87,7 @@ its artifacts are.
       of each file it wrote under the name the cards link. Check the served bytes against it:
 
       ```bash
-      curl -s https://pub.winslabapp.com/latest/Cuerunner.dmg | sha256sum
+      curl -s https://pub.cuerunner.app/latest/Cuerunner.dmg | sha256sum
       ```
 
       The digest that prints has to be the one `latest/SHA256SUMS` carries for `Cuerunner.dmg`;
