@@ -391,6 +391,20 @@ function refuseForeignValue(
       ` — ${source} was probably saved by another build`
     )
   }
+  if (typeof shape === 'object' && shape !== null && 'bounded' in shape) {
+    // A number with the bounds the form writes: the value's own kind is still `number`, so the
+    // sentence names what the file did carry and what this build writes instead. `NaN` and
+    // `Infinity` fail every comparison, which is the other half of what this arm is for.
+    const bounds = shape.bounded as unknown
+    const [min, max] =
+      Array.isArray(bounds) && bounds.length === 2 ? (bounds as [number, number]) : [0, 0]
+    if (typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max) return
+    throw new Refusal(
+      `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
+      ` where this version of WinsLab writes a number from ${min} to ${max}` +
+      ` — ${source} was probably saved by another build`
+    )
+  }
   if (typeof shape === 'object' && shape !== null && 'oneOf' in shape) {
     // A value whose type allows more than one kind has no single tag to be compared against,
     // so it is read against every kind the declaration lists: the kinds are the types', and a

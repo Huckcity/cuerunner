@@ -284,6 +284,13 @@ function valueDifferences(value: unknown, node: unknown, path: string): string[]
     if (admitsKind(shape, value)) return []
     return [`${path} is ${typeof value}, not the ${shape} the declaration writes`]
   }
+  if (typeof shape === 'object' && shape !== null && 'bounded' in shape) {
+    // The mirrored arm: a bounded number is refused when it is not a finite number inside its
+    // own bounds, which is what the funnel refuses a document for on this half of the walk.
+    const bounds = Array.isArray(shape.bounded) ? (shape.bounded as [number, number]) : [0, 0]
+    if (typeof value === 'number' && Number.isFinite(value) && value >= bounds[0] && value <= bounds[1]) return []
+    return [`${path} is ${String(value)}, outside the ${bounds[0]}..${bounds[1]} the declaration writes`]
+  }
   if (typeof shape === 'object' && shape !== null && 'oneOf' in shape) {
     const kinds = Array.isArray(shape.oneOf) ? (shape.oneOf as unknown[]) : []
     return kinds.some(kind => admitsKind(kind as ShapeLeaf, value))
