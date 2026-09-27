@@ -181,6 +181,24 @@ describe('the showfile on disk', () => {
     expect(third).toBe(first)
   })
 
+  it('keeps a route the file spells its own way, rather than rewriting it to this machine’s', async () => {
+    // A show written elsewhere may spell the same route `./walk-in.wav`, with a doubled
+    // separator, or with the other platform's separator. Every one of those names the file
+    // this session resolved, so every one of them is the show's own record: a save that
+    // compared the text instead would rewrite the route and replace the pair's absolute
+    // half — the other machine's path — with this one's, on a file nobody edited.
+    const respelled = LEGACY_SHOW.replace('"path": "walk-in.wav"', '"path": "./walk-in.wav"')
+    expect(respelled).not.toBe(LEGACY_SHOW)
+    writeFileSync(file, respelled)
+
+    const after = await openAndSave()
+
+    expect(JSON.parse(after).cues[0].media).toEqual({
+      path: './walk-in.wav',
+      originalPath: '/shows/press-night/walk-in.wav'
+    })
+  })
+
   it('leaves a file this version wrote byte-for-byte alone', async () => {
     await openAndSave()
     const settled = readFileSync(file, 'utf-8')
