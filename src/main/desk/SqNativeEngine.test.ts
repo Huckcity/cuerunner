@@ -12,7 +12,7 @@ import { EventEmitter } from 'node:events'
 import { createConnection, createServer, type Server, type Socket } from 'node:net'
 import { createSocket, type Socket as DatagramSocket } from 'node:dgram'
 import { setImmediate as yieldTurn } from 'node:timers/promises'
-import { RETRY_MS, SqNativeEngine, type SqSessionCause } from './SqNativeEngine'
+import { CONNECT_DEADLINE_MS, RETRY_MS, SqNativeEngine, type SqSessionCause } from './SqNativeEngine'
 import { GOODBYE, NATIVE_KEEPALIVE_PORT, NATIVE_LEAVE_PORT, NATIVE_TCP_PORT, sessionFrames } from './frames'
 import { drainMainErrors } from '../errors'
 
@@ -705,6 +705,71 @@ describe('a dial that reaches nothing', () => {
       vi.useRealTimers()
     }
   })
+
+  it('gives one attempt a deadline, and dials again after it', async () => {
+    // A connect the kernel never answers — a desk gone away mid-handshake, a network that
+    // dropped the SYN — hangs for a minute and a half without one, and until then there is
+    // no session to lose and no retry armed.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    let dials = 0
+    const attempts: Array<EventEmitter & Socket> = []
+    try {
+      const { engine: session, statuses } = engine(() => {
+        dials += 1
+        // A connection that is open at the socket layer and never reaches `connect`: the
+        // deadline is the only thing that can end the attempt.
+        const socket = silentSocket()
+        attempts.push(socket)
+        return socket
+      })
+      session.open(HOST)
+
+      // Nothing is reported while the attempt is in flight: an attempt is not a refusal.
+      await vi.advanceTimersByTimeAsync(CONNECT_DEADLINE_MS - 100)
+      expect(statuses).toHaveLength(0)
+
+      await vi.advanceTimersByTimeAsync(200)
+      expect(statuses).toHaveLength(1)
+      expect(statuses[0].online).toBe(false)
+      expect(statuses[0].cause).toBe('unreachable')
+      expect(statuses[0].detail).toContain('did not answer within 500 ms')
+
+      // The attempt was let go of, and the desk is tried again rather than left wedged.
+      expect(attempts[0].destroyed).toBe(true)
+      await vi.advanceTimersByTimeAsync(RETRY_MS)
+      expect(dials).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not leave a connector that throws with a dial in flight', async () => {
+    // The connector is a seam a test drives and the platform owns in production: a factory
+    // that throws before it returns a socket is an attempt that never started, and the flag
+    // it would have set is what `open()` reads as a dial already running — with nothing
+    // left to clear it, that desk is never dialled again.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    let dials = 0
+    try {
+      const { engine: session, statuses } = engine((host, port) => {
+        dials += 1
+        if (dials === 1) throw new Error('getaddrinfo ENOTFOUND the-desk')
+        return createConnection({ host, port })
+      })
+      session.open(HOST)
+
+      await until(() => statuses.length === 1)
+      expect(statuses[0].online).toBe(false)
+      expect(statuses[0].cause).toBe('unreachable')
+      expect(statuses[0].detail).toBe('getaddrinfo ENOTFOUND the-desk')
+
+      // The next attempt is a real dial: the wedge would keep this at one.
+      await vi.advanceTimersByTimeAsync(RETRY_MS)
+      expect(dials).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('the faults', () => {
@@ -803,4 +868,29 @@ function brokenSocket(): EventEmitter & Socket {
     throw new Error('write EPIPE')
   }
   return socket as unknown as EventEmitter & Socket
+}
+
+/**
+ * A connection that never reaches `connect`: what a desk which has gone away mid-handshake
+ * or a network that dropped the SYN looks like from here, where only the deadline can end
+ * the attempt. It records its own destruction, so a case can say the attempt was let go of.
+ */
+function silentSocket(): EventEmitter & Socket & { destroyed: boolean } {
+  const socket = new EventEmitter() as EventEmitter & {
+    destroyed: boolean
+    writable: boolean
+    unref: () => void
+    end: () => void
+    destroy: () => void
+    write: () => boolean
+  }
+  socket.destroyed = false
+  socket.writable = true
+  socket.unref = () => {}
+  socket.end = () => {}
+  socket.destroy = () => {
+    socket.destroyed = true
+  }
+  socket.write = () => true
+  return socket as unknown as EventEmitter & Socket & { destroyed: boolean }
 }

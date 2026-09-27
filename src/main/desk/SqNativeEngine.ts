@@ -39,6 +39,15 @@ export const RETRY_MS = 2000
 export const KEEPALIVE_MS = 1000
 
 /**
+ * How long one attempt at the desk's control port is given before it is a desk that did not
+ * answer. The same figure the MIDI half of the desk link uses: a connect nobody answers
+ * hangs for the kernel's own minute and a half, and until it times out there is no session
+ * to lose and no retry armed — the operator would be looking at the last status for as long
+ * as that takes.
+ */
+export const CONNECT_DEADLINE_MS = 500
+
+/**
  * The socket ping's cadence, and how long the desk's answer to one is watched for. §6's
  * prose again; see `KEEPALIVE_MS` for what the capture does and does not hold.
  */
@@ -92,6 +101,8 @@ export class SqNativeEngine {
   /** The keepalive's own socket, sent from rather than bound. */
   private datagram: DatagramSocket | null = null
   private dialling = false
+  /** The dial's own deadline, while an attempt is in flight. */
+  private dialDeadline: ReturnType<typeof setTimeout> | null = null
   /**
    * The session's frames are written, and the desk has not said anything yet. It is not a
    * session until it answers: the state §6 measures is a desk that takes the connection and
@@ -267,23 +278,48 @@ export class SqNativeEngine {
     clearInterval(this.ping ?? undefined)
     clearTimeout(this.deadline ?? undefined)
     clearTimeout(this.retry ?? undefined)
+    clearTimeout(this.dialDeadline ?? undefined)
     this.keepalive = null
     this.ping = null
     this.deadline = null
     this.retry = null
+    this.dialDeadline = null
   }
 
   /** One attempt at the desk the show names. */
   private dial(): void {
     const host = this.host
     if (host === null || !this.wanted || this.dialling || this.socket !== null) return
+    let socket: Socket
+    try {
+      socket = this.connect(host, NATIVE_TCP_PORT)
+    } catch (error) {
+      // A connector that throws before it returns an attempt that never started, and the
+      // flag is what everything else reads as "a dial is in flight": left up, it would keep
+      // `open()` idempotent against a desk that is not being dialled, with nothing left to
+      // clear it. Reported as the unreachable desk it is, so the retry cadence owns it.
+      this.sessionOver(error instanceof Error ? error.message : String(error))
+      return
+    }
     this.dialling = true
-    const socket = this.connect(host, NATIVE_TCP_PORT)
     this.socket = socket
     const reader = createFrameReader()
 
+    // The attempt itself gets a deadline. A connect the kernel never answers — a desk that
+    // has gone away mid-handshake, a network that drops the SYN — hangs for its own minute
+    // and a half otherwise, and until then there is no session to lose and no retry armed:
+    // the same deadline the desk link's MIDI half carries, for the same reason.
+    const opened = setTimeout(() => {
+      if (this.socket !== socket) return
+      this.sessionOver(`the desk at ${host}:${NATIVE_TCP_PORT} did not answer within ${CONNECT_DEADLINE_MS} ms`)
+    }, CONNECT_DEADLINE_MS)
+    opened.unref?.()
+    this.dialDeadline = opened
+
     socket.once('connect', () => {
       if (this.socket !== socket) return
+      clearTimeout(opened)
+      this.dialDeadline = null
       this.dialling = false
       this.startSession(socket)
     })
