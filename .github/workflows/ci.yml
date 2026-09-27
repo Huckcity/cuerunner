@@ -191,6 +191,17 @@ jobs:
   # helper through its pre-hook; the helper is cached so an unchanged pin costs nothing.
   native-engine:
     runs-on: [self-hosted, linux, x64, ubox]
+    # One at a time, across every run. Half of this job measures time rather than asserting
+    # a value: `stream-stall.mjs` bounds how fast a starved stream may fall behind, and
+    # `matrix-bench.mjs` floors the realtime factor — both of which read the host's spare
+    # cores as much as the engine's behaviour. Observed three times on 2026-09-27, on three
+    # different pull requests at three different code states, each while eight lanes shared
+    # twelve cores: `the starvation stopped rather than running away — 7979 → 76697 over
+    # 1.36 s (50671/s)`. Serialised, the measurement means what it says; in parallel it
+    # measures the queue. The job is minutes long, so the queue this costs is small.
+    concurrency:
+      group: native-engine
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
