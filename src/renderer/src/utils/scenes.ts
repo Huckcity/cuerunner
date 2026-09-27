@@ -121,6 +121,22 @@ export function channelDcas(scene: MicScene | null, channelId: string, cast: Cas
   return dcas
 }
 
+/**
+ * The faders a recall would use for one channel: what the scene places it on, collapsed to the
+ * lowest place in the show's own order while the show keeps one fader per channel. A file
+ * written while the rule was on — or by a hand — may place a channel on several, and a recall
+ * writes the first of them.
+ */
+export function recallFaders(
+  scene: MicScene | null,
+  channelId: string,
+  cast: CastSettings,
+  allowDuplicates: boolean
+): string[] {
+  const dcas = channelDcas(scene, channelId, cast)
+  return allowDuplicates ? dcas : dcas.slice(0, 1)
+}
+
 /** Every channel a scene carries anywhere, in the show's channel order: what its rows have between them. */
 export function sceneChannelIds(scene: MicScene | null, cast: CastSettings): string[] {
   if (scene === null) return []
@@ -313,11 +329,11 @@ export function sceneChanges(
 ): DeskChange[] {
   const changes: DeskChange[] = []
   for (const channel of show.cast.channels) {
-    const dcas = channelDcas(scene, channel.id, show.cast)
     // A residual duplicate — a file written with more than one fader per channel while the
     // show now keeps one — collapses to the lowest-numbered fader, which is the lowest place
-    // in the show's own order.
-    const target = show.scenes.allowDuplicateAssignment ? dcas : dcas.slice(0, 1)
+    // in the show's own order. The grid reads the same helper, so what it draws and what a
+    // recall writes cannot disagree.
+    const target = recallFaders(scene, channel.id, show.cast, show.scenes.allowDuplicateAssignment)
     const open = target.length > 0
 
     const muted = deskState.mutes[channel.id]

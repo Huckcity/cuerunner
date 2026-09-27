@@ -6,6 +6,7 @@ import { stripLabel } from '../../utils/cast'
 import {
   addScene,
   placementFor,
+  recallFaders,
   removeScene,
   rowChannels,
   rowEnsemble,
@@ -93,6 +94,17 @@ function SceneCell({
   scene, dca, fader, cast, scenes, changes, deskState, isCurrent, locked, writeList, onAdd
 }: CellProps) {
   const placement = placementFor(scene, dca.id)
+  // Whether a recall would write anything at this row. A residual duplicate — a file written
+  // while the show allowed more than one fader per channel, read with the rule off — collapses
+  // to the lowest-numbered fader, so a block drawn on the higher row would be a cell no recall
+  // ever writes. The grid says what the show does, not what the file once said.
+  const written =
+    placement === null
+      ? false
+      : placement.kind !== 'channel'
+        ? true
+        : scenes.allowDuplicateAssignment ||
+          recallFaders(scene, placement.memberId, cast, false).includes(dca.id)
   const pending = cellPending(changes, dca.id, deskState)
   // How every press in this cell and every sentence about it names the fader: its number,
   // which is the only name a fader has.
@@ -117,13 +129,13 @@ function SceneCell({
   return (
     <div
       className="matrix-cell"
-      data-placed={placement !== null}
-      data-kind={placement?.kind ?? 'none'}
+      data-placed={written}
+      data-kind={written ? placement?.kind ?? 'none' : 'none'}
       data-current={isCurrent}
       data-pending={pending}
       aria-label={`${where} in ${scene.name}`}
     >
-      {placement !== null && member !== '' ? (
+      {written && placement !== null && member !== '' ? (
         /* What the row holds takes the whole cell: its name is the press that changes it, and
            the ✕ beside it empties the row. There is no second box to imply a row can hold
            more than one thing — the row holds one, and this is it. */
