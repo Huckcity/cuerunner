@@ -122,11 +122,11 @@ export const GUIDES = [
       <div class="cards two-col">
         <article class="card download-card">
           <h3>Windows</h3>
-          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/Cuerunner-Setup.exe">Download .exe</a>
+          <a class="action action-ghost" href="https://pub.cuerunner.app/latest/Cuerunner-Setup.exe">Download .exe</a>
         </article>
         <article class="card download-card">
           <h3>macOS</h3>
-          <a class="action action-ghost" href="https://pub.winslabapp.com/latest/Cuerunner.dmg">Download .dmg</a>
+          <a class="action action-ghost" href="https://pub.cuerunner.app/latest/Cuerunner.dmg">Download .dmg</a>
         </article>
       </div>
       <p>
@@ -134,11 +134,11 @@ export const GUIDES = [
         <a href="https://github.com/Huckcity/cuerunner/releases/latest">release notes</a> name
         whether a build is signed. Windows warns when an unsigned installer is run, and macOS
         warns about an unidentified developer at first launch. Downloads come from
-        <code>pub.winslabapp.com</code>, and these links are the newest release's files. A Linux
+        <code>pub.cuerunner.app</code>, and these links are the newest release's files. A Linux
         AppImage is published too, and is experimental.
       </p>
       <p>
-        <a href="https://pub.winslabapp.com/latest/SHA256SUMS">SHA256SUMS</a> carries the
+        <a href="https://pub.cuerunner.app/latest/SHA256SUMS">SHA256SUMS</a> carries the
         SHA-256 digest of each file the release serves, so a download can be checked against
         the release that describes it.
       </p>

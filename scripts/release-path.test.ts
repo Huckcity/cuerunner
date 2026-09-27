@@ -60,7 +60,7 @@ const INDEX = 'website/index.html'
 const GUIDES = 'website/docs/guides.mjs'
 
 /** The host the download links point at, and the release notes' own address. */
-const DOWNLOADS = 'https://pub.winslabapp.com/latest/'
+const DOWNLOADS = 'https://pub.cuerunner.app/latest/'
 const RELEASE_NOTES = 'https://github.com/Huckcity/cuerunner/releases/latest'
 
 /** The jobs that package, the job that runs the two guards they wait on, and the mirror. */
@@ -1167,7 +1167,7 @@ function cardProblems(reading: Reading): string[] {
     [INDEX, reading.index],
     [GUIDES, reading.guides]
   ] as Array<[string, string]>) {
-    const found = [...text.matchAll(/https:\/\/pub\.winslabapp\.com\/latest\/([\w.-]+)/g)].map((link) => link[1])
+    const found = [...text.matchAll(/https:\/\/pub\.cuerunner\.app\/latest\/([\w.-]+)/g)].map((link) => link[1])
     if (found.length === 0) {
       problems.push(
         `${file} links no \`${DOWNLOADS}…\` file, so a buyer is handed nothing to download and the mirror's names are held to nothing`
@@ -1247,7 +1247,7 @@ function releaseStatements(reading: Reading): Statement[] {
     {
       file: CHECKLIST,
       says: 'the mirror is checked at the buyer-facing host the site\'s cards point at',
-      patterns: [/pub\.winslabapp\.com/, /curl -sI/]
+      patterns: [/pub\.cuerunner\.app/, /curl -sI/]
     },
     {
       file: CHECKLIST,
@@ -1297,8 +1297,8 @@ function releaseStatements(reading: Reading): Statement[] {
     },
     {
       file: README,
-      says: 'the download host the site\'s cards point at is `pub.winslabapp.com`',
-      patterns: [/pub\.winslabapp\.com/]
+      says: 'the download host the site\'s cards point at is `pub.cuerunner.app`',
+      patterns: [/pub\.cuerunner\.app/]
     },
     {
       file: PROOF,
@@ -2081,20 +2081,20 @@ describe('the release path the checks exist to refuse', () => {
   it('names a card that links a file the mirror does not write', () => {
     const renamed = doctored(
       LIVE,
-      'https://pub.winslabapp.com/latest/Cuerunner.dmg',
-      'https://pub.winslabapp.com/latest/Cuerunner-universal.dmg',
+      'https://pub.cuerunner.app/latest/Cuerunner.dmg',
+      'https://pub.cuerunner.app/latest/Cuerunner-universal.dmg',
       'guides'
     )
     expect(cardProblems(renamed)).toEqual([
-      expect.stringContaining('links `https://pub.winslabapp.com/latest/Cuerunner-universal.dmg`')
+      expect.stringContaining('links `https://pub.cuerunner.app/latest/Cuerunner-universal.dmg`')
     ])
   })
 
   it('names a mirror name the cards stopped linking', () => {
     const renamed = doctored(LIVE, 'AppImage=Cuerunner.AppImage', 'AppImage=Cuerunner-test.AppImage', 'build')
     expect(cardProblems(renamed)).toEqual([
-      expect.stringContaining('links `https://pub.winslabapp.com/latest/Cuerunner.AppImage`'),
-      expect.stringContaining('no card links `https://pub.winslabapp.com/latest/Cuerunner-test.AppImage`')
+      expect.stringContaining('links `https://pub.cuerunner.app/latest/Cuerunner.AppImage`'),
+      expect.stringContaining('no card links `https://pub.cuerunner.app/latest/Cuerunner-test.AppImage`')
     ])
   })
 
@@ -2111,7 +2111,7 @@ describe('the release path the checks exist to refuse', () => {
     const scripted = doctored(
       LIVE,
       '        Cuerunner is distributed outside the app stores: the',
-      '        <script>fetch("https://pub.winslabapp.com/latest/SHA256SUMS")</script>\n        Cuerunner is distributed outside the app stores: the',
+      '        <script>fetch("https://pub.cuerunner.app/latest/SHA256SUMS")</script>\n        Cuerunner is distributed outside the app stores: the',
       'guides'
     )
     expect(cardProblems(scripted)).toEqual([expect.stringContaining('carries a script or a `fetch(`')])

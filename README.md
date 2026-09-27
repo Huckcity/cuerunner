@@ -6,10 +6,10 @@ Built with Electron, React, TypeScript, and Zustand. Source-available under the 
 
 **Documentation lives on the site**, not here:
 
-- [Guides](https://huckcity.github.io/cuerunner/guide.html) — first show, building a cue
+- [Guides](https://cuerunner.app/guide.html) — first show, building a cue
   list, working with sound, running the show, and the Pro features. Source in
   [`website/docs/guides.mjs`](./website/docs/guides.mjs).
-- [Reference](https://huckcity.github.io/cuerunner/reference/index.html) — every cue type
+- [Reference](https://cuerunner.app/reference/index.html) — every cue type
   and field, every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers
   to, the script API and the file formats. Source in
   [`website/docs/reference.mjs`](./website/docs/reference.mjs).
@@ -133,7 +133,10 @@ leaves red until it has been run.
 `npm run site` serves `website/` with no dependencies, so a page can be reviewed locally
 before it deploys. Pass a port to override the default: `npm run site -- 3000`. The
 [GitHub Pages workflow](./.github/workflows/deploy-website.yml) publishes the same directory
-on every push to `main` that touches `website/**`.
+on every push to `main` that touches `website/**` — at `https://cuerunner.app`, the
+repository's custom Pages domain. Its apex `A`/`AAAA` records and the `www` `CNAME` are
+**DNS-only** in Cloudflare: GitHub issues that certificate itself, and a proxied record in
+front of the origin is how the issuance fails.
 
 ## Linux
 
@@ -661,9 +664,9 @@ GitHub Actions workflows in `.github/workflows/`:
     name
   - Each surface publishes the digests of what it carries, composed from those bytes rather
     than typed: the release page attaches a `SHA256SUMS` beside the assets the notes list, and
-    the mirror writes its own as it copies, at `pub.winslabapp.com/latest/SHA256SUMS`. A sums
+    the mirror writes its own as it copies, at `pub.cuerunner.app/latest/SHA256SUMS`. A sums
     file is a way to check a download, not a signature
-  - Uploads that list to R2 (Cloudflare) and GitHub Releases: the `pub.winslabapp.com/latest/`
+  - Uploads that list to R2 (Cloudflare) and GitHub Releases: the `pub.cuerunner.app/latest/`
     files the site's download cards point at, with the digests the cards link beside them
 - **`release.yml`**: Semantic versioning with `semantic-release` — run it by hand from
   `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
@@ -711,7 +714,7 @@ before that dispatch, including the check that keeps this file's limitations hon
 ## Known limitations
 
 The operator-facing list is in the
-[reference](https://huckcity.github.io/cuerunner/reference/troubleshooting.html#limitations).
+[reference](https://cuerunner.app/reference/troubleshooting.html#limitations).
 These are the ones that matter when building or packaging the app.
 
 Playback and platform limits:
@@ -838,7 +841,7 @@ Redundant playback:
   machines of a pair run the same workspace file, so a role written into the show would be
   read as the same answer by both of them
 
-The [reference](https://huckcity.github.io/cuerunner/reference/troubleshooting.html#limitations)
+The [reference](https://cuerunner.app/reference/troubleshooting.html#limitations)
 carries the operator-facing half of this list, in the words an operator would look it up in.
 
 ## Contributing
@@ -942,7 +945,7 @@ never read, written or shown. E2E specs that need the Pro surfaces launch with
 
 Every order is worked the same three steps, whether it came through the storefront's card
 link or as a purchase order to the address on the
-[pricing page](https://huckcity.github.io/cuerunner/pricing.html). None of them needs the
+[pricing page](https://cuerunner.app/pricing.html). None of them needs the
 app, and nothing between them needs a server:
 
 1. **Mint the key** for the sale, using the order's own id so the key can be matched back to
@@ -963,17 +966,28 @@ app, and nothing between them needs a server:
 
 **A trial request is the same three steps**, and the only order that arrives without money
 behind it. It comes to `orders@cuerunner.app`, the address the
-[trial page](https://huckcity.github.io/cuerunner/trial.html) publishes, and the request is
+[trial page](https://cuerunner.app/trial.html) publishes, and the request is
 answered like any other message. The key is minted with `--expires` set to the trial's last
 day — 14 days out, the length the adopted model in
 `_bmad-output/specs/spec-cuerunner/market-and-business.md` decides — delivered by email, and
 recorded as a trial row in the ledger, with that same day in the expiry column. Nothing about
 a request is automatic: a person reads it, mints, and replies.
 
+**Sending as the domain is provisioned; nothing sends through it yet.** The reply is a human
+one from an operator mailbox, and `orders@cuerunner.app` arrives by Cloudflare Email Routing.
+SES is ready for the first thing that does send: `cuerunner.app` is a verified identity in
+eu-west-1 with DKIM passing, custom MAIL FROM `mail.cuerunner.app`, and `_dmarc` at `p=none`
+reporting to `orders@cuerunner.app`. A send names configuration set `cuerunner`, which
+publishes bounces and complaints to the SNS topic `cuerunner-ses-events` — a topic with no
+subscriber, so a bounce is published and dropped until one is added. The credential is the
+least-privilege user `cuerunner-ses` (`ses:SendEmail`/`SendRawEmail` on the identity, the
+configuration set and the two simulator addresses, and nothing else), stored at
+`~/.config/cuerunner/aws-ses`.
+
 ## Support
 
 - **The app, and the licence**: write to `orders@cuerunner.app` — the address the
-  [support page](https://huckcity.github.io/cuerunner/support.html) publishes — and a reply
+  [support page](https://cuerunner.app/support.html) publishes — and a reply
   comes back within one business day. Orders, trial requests and support are all answered from
   that one inbox.
 - **Issues**: [GitHub Issues](https://github.com/Huckcity/cuerunner/issues)

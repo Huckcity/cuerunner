@@ -33,7 +33,7 @@ jobs:
       # next nightly. Restore the live file first; a first-ever deploy simply has none.
       - name: Restore the published soak figures
         run: |
-          curl -fsSL -o website/soak-latest.json https://huckcity.github.io/cuerunner/soak-latest.json \
+          curl -fsSL -o website/soak-latest.json https://cuerunner.app/soak-latest.json \
             || echo 'no published soak figures yet; the reliability page shows its empty state'
 
       - uses: actions/upload-pages-artifact@v5
