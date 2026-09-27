@@ -7,9 +7,9 @@
 // spine's prose, where a new writer, or a change to one, could disagree with the others
 // with nothing to fail. This is the one place the flows are named in code: the claims are
 // data, and `writers.test.ts` drives each row's entry and holds it. The spine's
-// "Saved-artifact writers" conventions row still restates these claims — a second copy
-// owned by the architecture workflow — and reconciling the two is logged in the
-// deferred-work ledger.
+// "Saved-artifact writers" conventions row and `epics.md`'s FR48 both point here rather than
+// restating the claims: the spine's copy had drifted from this one, which is why the
+// enumeration lives in code and the prose names where it lives.
 //
 // The writes that go through `writeFileAtomically` — save, Save As, merge and the
 // recovery snapshot — leave the version they replaced beside the file as `<name>.bak`
