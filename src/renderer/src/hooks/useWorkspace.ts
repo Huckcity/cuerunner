@@ -40,7 +40,15 @@ async function guardDirty(): Promise<boolean> {
     })
     let saved: { path: string; history: ShowHistoryEntry[] } | null
     try {
-      saved = await window.cuerunner.workspace.save(sent, workspacePath)
+      const answer = await window.cuerunner.workspace.save(sent, workspacePath)
+      // A save this build refused is an answer rather than a fault: the file the save
+      // would have replaced is exactly as it was, and the sentence is what the operator
+      // has to read before the close can mean anything.
+      if (!answer.ok) {
+        reportFailure(`Could not save before closing: ${answer.error}`)
+        return false
+      }
+      saved = answer.saved
     } catch (e) {
       // Closing without a save would lose the show, so the close stops here and says why.
       reportFailure(`Could not save before closing: ${message(e)}`)
@@ -389,7 +397,15 @@ export function useWorkspace() {
       cues
     })
     try {
-      const saved = await window.cuerunner.workspace.save(ws, workspacePath)
+      const answer = await window.cuerunner.workspace.save(ws, workspacePath)
+      // This build refusing its own file is an answer — the show it would have written is
+      // not one it will read back — so the sentence goes to the operator and the file on
+      // disk is left alone.
+      if (!answer.ok) {
+        reportFailure(`Could not save the workspace: ${answer.error}`)
+        return false
+      }
+      const saved = answer.saved
       if (!saved) return false
       // A load replaced the session while the write was out: this answer belongs to the
       // show that was on screen then, and adopting its path over the loaded show's would
@@ -429,7 +445,14 @@ export function useWorkspace() {
       cues
     })
     try {
-      const saved = await window.cuerunner.workspace.saveAs(ws)
+      const answer = await window.cuerunner.workspace.saveAs(ws)
+      // Same regime as save: a refusal is an answer, and the name the operator picked is
+      // not written to.
+      if (!answer.ok) {
+        reportFailure(`Could not save the workspace: ${answer.error}`)
+        return false
+      }
+      const saved = answer.saved
       if (!saved) return false
       // A load replaced the session while the write was out: see save.
       if (useStore.getState().workspaceId !== workspaceId) return false

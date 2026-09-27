@@ -104,7 +104,17 @@ export function RecoveryNotice() {
             triggerGuard: store.triggerGuard,
             cues: store.cues
           })
-          const saved = await window.cuerunner.workspace.save(ws, store.workspacePath)
+          const answer = await window.cuerunner.workspace.save(ws, store.workspacePath)
+          // A save this build refused is an answer rather than a fault, and recovering
+          // over a session that is not on disk would throw the operator's work away — so
+          // the sentence goes to the log and nothing moves.
+          if (!answer.ok) {
+            useStore
+              .getState()
+              .appendLog([{ level: 'error', message: `Could not save before recovering: ${answer.error}` }])
+            return
+          }
+          const saved = answer.saved
           if (!saved) return
           store.saveSucceeded(saved.path, store.workspaceName, saved.history)
           // The same in-flight witness every other save keeps — mechanism, not outcome:

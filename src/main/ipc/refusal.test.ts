@@ -17,7 +17,7 @@
 // pinned beside their modules.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { dialog } from 'electron'
 import { AUDIO_CHANNELS } from '../../shared/audio'
@@ -184,7 +184,7 @@ describe('a refusal is a value', () => {
 
     const result = await handler(WORKSPACE_CHANNELS.openPath)('event', file)
 
-    expect(result).toMatchObject({ ok: false, error: 'that workspace file is larger than this app will open' })
+    expect(result).toMatchObject({ ok: false, error: `that workspace file is larger than this app will open — ${file}` })
   })
 
   it('answers an oversize file chosen through the dialog with its refusal arm', async () => {
@@ -196,7 +196,49 @@ describe('a refusal is a value', () => {
 
     const result = await handler(WORKSPACE_CHANNELS.open)('event')
 
-    expect(result).toMatchObject({ ok: false, error: 'that workspace file is larger than this app will open' })
+    expect(result).toMatchObject({ ok: false, error: `that workspace file is larger than this app will open — ${file}` })
+  })
+
+  it('answers a save this build will not read back with its refusal arm, and writes nothing', async () => {
+    // A save is the one workspace flow that reads back the bytes it is about to write, so a
+    // show the window holds and this build will not read back is refused here like any other
+    // ordinary state: the answer is the sentence, and the name the operator picked is not
+    // written to. Without the channel's own regime this rejected as a fault instead, and the
+    // window had no arm to render it with.
+    const target = join(ends.userData.path, 'kept.cuerunner')
+    const workspace = {
+      version: 1,
+      id: 'w1',
+      name: 'Press Night',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      audioSettings: { outputDeviceId: 'default' },
+      midiSettings: { outputPortName: '' },
+      cues: [{
+        id: 'm1',
+        number: '12',
+        name: 'Strings',
+        type: 'midi',
+        colorLabel: 'none',
+        parentId: null,
+        preWait: 0,
+        postWait: 0,
+        timelineOffset: 0,
+        duration: 0,
+        advance: 'auto',
+        isArmed: true,
+        notes: '',
+        portName: '',
+        messages: 3
+      }]
+    } as unknown as Workspace
+
+    const result = await handler(WORKSPACE_CHANNELS.save)('event', { workspace, existingPath: target })
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/has messages as a number/)
+    })
+    expect(existsSync(target)).toBe(false)
   })
 
   it('answers a file that is not JSON with a sentence naming it, not the parse text', async () => {

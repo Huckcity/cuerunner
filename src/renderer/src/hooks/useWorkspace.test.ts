@@ -198,13 +198,16 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
   /**
    * Holds the flow's bridge promise until the returned function releases it: the write
    * stays in flight, which is the window an edit can land in. What it releases is
-   * whatever the save answered — a saved file, or the null the prompt's Abandon gives.
+   * whatever the save answered — a saved file, or the null the prompt's Abandon gives —
+   * wrapped as the channel answers it, since a save reports a refusal in the same shape.
    */
   function hold(
     flow: 'save' | 'saveAs'
   ): (saved: { path: string; history: ShowHistoryEntry[] } | null) => void {
     const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[] } | null>()
-    ;(window.cuerunner.workspace[flow] as unknown as Mock).mockImplementation(() => gate.promise)
+    ;(window.cuerunner.workspace[flow] as unknown as Mock).mockImplementation(() =>
+      gate.promise.then(saved => ({ ok: true as const, saved }))
+    )
     return gate.resolve
   }
 

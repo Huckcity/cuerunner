@@ -73,6 +73,19 @@ export interface SavedWorkspace {
   history: ShowHistoryEntry[]
 }
 
+/**
+ * What a save answered: the file it wrote, a cancel, or why this build would not write.
+ *
+ * A save is the one workspace flow that reads back the bytes it is about to write — the
+ * history pass puts them through the same funnel every load does — so this is where a
+ * show this build will not read back is refused, while the file it would have replaced
+ * is left exactly as it was. The operator's answer is the sentence, which is why the
+ * channel declares the refusal rather than letting it reject as a fault.
+ */
+export type WorkspaceSaveResult =
+  | Refusal
+  | { ok: true; saved: SavedWorkspace | null }
+
 /** A show and its media as one file, for handover. */
 export interface ExportedBundle {
   path: string
@@ -187,8 +200,8 @@ export interface WorkspaceBridge {
   openDemo(): Promise<WorkspaceDemoResult>
   /** Points one cue's missing media at a file the operator picked. */
   relink(workspace: Workspace, workspacePath: string | null, cueId: string): Promise<RelinkedWorkspace>
-  save(workspace: Workspace, existingPath: string | null): Promise<SavedWorkspace | null>
-  saveAs(workspace: Workspace): Promise<SavedWorkspace | null>
+  save(workspace: Workspace, existingPath: string | null): Promise<WorkspaceSaveResult>
+  saveAs(workspace: Workspace): Promise<WorkspaceSaveResult>
   exportBundle(workspace: Workspace, workspacePath: string | null): Promise<WorkspaceExportResult>
   importBundle(): Promise<WorkspaceImportResult>
   merge(
