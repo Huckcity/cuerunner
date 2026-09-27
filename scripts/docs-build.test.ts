@@ -84,19 +84,19 @@ describe('the committed site pages', () => {
   })
 
   it('names a page the renderer no longer produces from its body', () => {
-    const page = PAGES.find((entry: { path: string }) => entry.path === 'pro.html')
+    const page = PAGES.find((entry: { path: string }) => entry.path === 'pricing.html')
     expect(
       page,
-      'website/docs/pages.mjs no longer renders pro.html: this case edits the page that ships as website/pro.html'
+      'website/docs/pages.mjs no longer renders pricing.html: this case edits the page that ships as website/pricing.html'
     ).toBeDefined()
     const edited = [{ ...page, body: `${page.body}\n    <p>An edit nobody rebuilt.</p>` }]
     expect(stalePages(edited, renderPage)).toEqual([
-      expect.stringContaining('website/pro.html is not what website/docs renders from it')
+      expect.stringContaining('website/pricing.html is not what website/docs renders from it')
     ])
   })
 
   it('names a page whose entry left PAGES', () => {
-    const without = PAGES.filter((entry: { path: string }) => entry.path !== 'pro.html')
-    expect(orphanPages(without)).toEqual([expect.stringContaining('website/pro.html')])
+    const without = PAGES.filter((entry: { path: string }) => entry.path !== 'pricing.html')
+    expect(orphanPages(without)).toEqual([expect.stringContaining('website/pricing.html')])
   })
 })

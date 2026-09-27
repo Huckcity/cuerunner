@@ -8,9 +8,9 @@
 /**
  * One table as the site serves it: the header row and the rows it was handed, each as a list
  * of cells. Pure string work, so a caller renders a page without writing anything and
- * scripts/docs-build.test.ts can hold the committed HTML to it. The markup is what
- * website/pro.html has always served, so the site's own classes carry it and a page needs
- * nothing added to the stylesheet.
+ * scripts/docs-build.test.ts can hold the committed HTML to it. The markup is what the site's
+ * tables already serve, so the site's own classes carry it and a page needs nothing added to
+ * the stylesheet.
  */
 export function table(headers, rows) {
   const head = `<tr>${headers.map(header => `<th>${header}</th>`).join('')}</tr>`

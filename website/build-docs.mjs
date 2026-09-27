@@ -26,9 +26,7 @@ const site = path.dirname(fileURLToPath(import.meta.url))
 export const NAV = [
   ['guide.html', 'Guides'],
   ['reference/index.html', 'Reference'],
-  ['pro.html', 'Free and Pro'],
   ['pricing.html', 'Pricing'],
-  ['trial.html', 'Trial'],
   ['support.html', 'Support'],
   ['interop.html', 'Other programs'],
   ['reliability.html', 'Reliability']

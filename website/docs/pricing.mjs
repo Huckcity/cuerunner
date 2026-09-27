@@ -1,4 +1,10 @@
-// The price page: what Cuerunner Pro costs, and the routes that buy it.
+// The one commercial page: the free/Pro line, what Pro costs, and the trial.
+//
+// Three pages used to say this — "Free and Pro", "Pricing" and "Trial" — and a buyer had to
+// read all three to answer one question, because each of them assumed the other two. They are
+// one page now: the rows come from `website/docs/pro.mjs`, the trial's facts from
+// `website/docs/trial.mjs`, and the prices from here, so the modules still declare and a single
+// page renders.
 //
 // Money is the one thing on this page a buyer must be able to trust, so no figure is written
 // here that the record does not set: the adopted model in
@@ -10,12 +16,11 @@
 //
 // The routes are declared once for the same reason. Each is the seller's own and live: the
 // card links are the storefront's per-SKU payment links, the address is the inbox a purchase
-// order goes to — declared in `website/docs/contact.mjs`, where the trial and support pages
-// take it from too, so the shop front names one address from one place — and the guard fails
-// by name on a route that is empty, a placeholder or carries markup: the page never ships a
-// checkout or an address that does not exist. The W-9 is not a value and needs no fill: it
-// comes back by email, so its route is the words that say so, declared once and rendered from
-// here.
+// order goes to — declared in `website/docs/contact.mjs`, where the support page takes it from
+// too, so the shop front names one address from one place — and the guard fails by name on a
+// route that is empty, a placeholder or carries markup: the page never ships a checkout or an
+// address that does not exist. The W-9 is not a value and needs no fill: it comes back by
+// email, so its route is the words that say so, declared once and rendered from here.
 //
 // The app's own labels are declared here for the same reason: the sentence that sends a reader to
 // the control a key is entered in names four words the app owns — the toolbar's brand and its
@@ -24,17 +29,25 @@
 // app rename fails the guard rather than leaving the page pointing at a control that moved.
 import { attr } from './attr.mjs'
 import { ORDER_EMAIL } from './contact.mjs'
+import { FREE_ROWS, PRO_ROWS } from './pro.mjs'
 import { table } from './table.mjs'
+import {
+  ACTIVATION_STEPS,
+  ENTRY_NOTE,
+  END_OF_KEY,
+  KEY_DELIVERY,
+  KEY_NAME,
+  TRIAL_LENGTH,
+  TRIAL_STARTS
+} from './trial.mjs'
 
 /**
  * The card routes, one live Stripe payment link per SKU, declared once and interpolated by the
- * row that sells it, so a moved link is one edit here and the guard can hold the rendered page
- * to the declaration. Each link sells that one thing — the $249 licence, the $49 renewal, a
- * day's rental, the 90-day rental — in US dollars, one-time, with no subscription behind it.
- *
- * The guard holds every one to a live `https://` link: an empty value, a placeholder and a
- * markup-bearing one all fail by name, and a declared link no row sells (or two rows selling
- * one link) fails too.
+ * rows below. A row's link sells that row's SKU and nothing else, so a link is never shared and
+ * never typed twice — the guard reads every `href` on the rendered page back against this table,
+ * and fails a card row that offers something the declaration does not hold (or nothing at all).
+ * Each value is the seller's own live checkout: an empty string, a placeholder host like
+ * `example.com`, or a value that carries markup all fail by name.
  */
 export const CARD_LINKS = {
   licence: 'https://buy.stripe.com/dRm5kD1l7gru2L8ciV5ZC01',
@@ -160,51 +173,93 @@ export const PRICING = [
     path: 'pricing.html',
     title: 'Pricing',
     blurb:
-      'What Cuerunner Pro costs, and the routes that buy it: a storefront link for cards, purchase orders with a numbered invoice and a W-9, and education at half price.',
+      'Cuerunner is free to run a show. Cuerunner Pro is one paid tier — the desk, the radios, the tablet and the second machine — with a trial before you pay, by card or on a purchase order.',
     body: `
     <section class="panel reveal">
       <h1>Pricing</h1>
       <p class="doc-lede">
-        The free half of Cuerunner costs nothing: no key, no account, no expiry, on as many of
-        your own machines as you like. Cuerunner Pro is the show around it — the desk, the
-        radios, the tablet, the second machine and the handover — and it is one paid tier, sold
-        two ways: by card, or on a purchase order.
+        The app is free to run a show: no key, no account, no expiry, on as many of your own
+        machines as you like. Cuerunner Pro is one paid tier — the desk, the radios, the
+        tablet and the second machine — and the whole of it can be tried first.
       </p>
     </section>
 
     <section class="panel reveal delay-1">
-      <h2>What Pro costs</h2>
-      <p>
-        Every way of buying Pro turns on the same things. There is no subscription, no cue cap
-        and no watermark, and a licence is not a lease: what the price decides is how long
-        updates come and how many machines it covers.
-      </p>
-${table(['What you buy', 'Price', 'What it includes', 'How to buy'], PRICED_SKUS.map(rowCells))}
+      <h2>What is free</h2>
+${table(['What you get', 'Details'], FREE_ROWS.map(row => [row.label, row.free.prose]))}
     </section>
 
     <section class="panel reveal delay-2">
-      <h2>Buying on paper</h2>
+      <h2>What Pro adds</h2>
+${table(['Capability', 'Free', 'Pro'], PRO_ROWS.map(row => [row.label, row.free.prose, row.pro.prose]))}
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Prices</h2>
+${table(['What you buy', 'Price', 'What it includes', 'How to buy'], PRICED_SKUS.map(rowCells))}
       <p>
-        Purchase orders are welcome, and nothing here needs an account first. Send yours to
-        <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> and we reply with a
+        A purchase order works as well as a card. Send one to
+        <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> and the reply is a
         numbered invoice for your finance office. ${W9_ROUTE}
       </p>
       <p class="note">
-        The venue, the campus and the education rows are a conversation rather than a checkout:
-        that address is the one place to ask about an order, an invoice or a W-9, and one
-        person answers it.
+        A venue, a campus and a school are a conversation rather than a checkout, and the
+        same address answers all three.
       </p>
     </section>
 
     <section class="panel reveal delay-3">
-      <h2>After you pay</h2>
+      <h2>Try it for ${TRIAL_LENGTH} days</h2>
       <p>
-        We email your key after the payment or the purchase order is settled — nothing to
-        activate online, and no account to make first. Enter it once in
-        <strong>${KEY_PATH}</strong>: the key is checked on the machine it
-        is entered on, and using it tells nobody that it was used, so a venue machine with no
-        internet unlocks exactly like any other. A key is not bound to one computer, and the
-        free half keeps working whatever happens to it.
+        Write to <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> and say what
+        you run and what you want to try. ${KEY_NAME} ${KEY_DELIVERY}
+      </p>
+      <ul class="tight-list">
+        <li><strong>Full Pro, ${TRIAL_LENGTH} days.</strong> Everything a key turns on, so
+          what you test is what you would buy.</li>
+        <li><strong>Self-serve.</strong> Nothing to book: you write, the key is minted, and it
+          arrives by email. No call, no card, no account first.</li>
+        <li><strong>Offline.</strong> The key is checked on the machine it is entered on,
+          against keys compiled into the app, so a venue machine with no internet unlocks like
+          any other.</li>
+      </ul>
+      <p>
+        ${TRIAL_STARTS}
+      </p>
+      <ol class="steps">
+${ACTIVATION_STEPS.map(step => `        <li>${step}</li>`).join('\n')}
+      </ol>
+      <p class="note">
+        ${ENTRY_NOTE}
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>When a key ends</h2>
+      <p>
+        ${END_OF_KEY[0]}
+      </p>
+      <p>
+        ${END_OF_KEY[1]}
+      </p>
+      <p class="note">
+        ${END_OF_KEY[2]}
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Buying it, and entering it</h2>
+      <p>
+        The key is emailed once the payment or the purchase order is settled — there is nothing
+        to activate online and no account to make first. Enter it in
+        <strong>${KEY_PATH}</strong>: it is checked on the machine it is entered on, and
+        entering it tells nobody, so a venue machine with no internet unlocks exactly like any
+        other.
+      </p>
+      <p class="note">
+        One key covers two machines — the one you run from and the one standing by — and the
+        free half keeps working whatever happens to it. The rest, including taking a key off a
+        machine, is on the <a href="support.html">support page</a>.
       </p>
     </section>
 `

@@ -1,11 +1,12 @@
-// The trial page, held to the app it walks a reader through and to the record it quotes.
+// The trial, held to the app it walks a reader through and to the record it quotes.
 //
-// `website/trial.html` is the only page that tells a buyer how to try Cuerunner Pro, and
-// nothing read it: its steps were its own words, so a menu item renamed in the app, a tab moved
-// or a sentence reworded in the licence panel would have shipped as a page that sends a reader
-// looking for a control that is not there — and the length of the trial, which the record
-// decides, would have drifted the same way. The page's facts are declarations now
-// (website/docs/trial.mjs), so this guard can read each one against the file it comes from:
+// The trial's facts live on `website/pricing.html` — the one commercial page, rendered from
+// `website/docs/pricing.mjs` — and nothing read that half of it: its steps were its own words,
+// so a menu item renamed in the app, a tab moved or a sentence reworded in the licence panel
+// would have shipped as a page that sends a reader looking for a control that is not there —
+// and the length of the trial, which the record decides, would have drifted the same way. The
+// page's facts are declarations now (website/docs/trial.mjs), so this guard can read each one
+// against the file it comes from:
 //
 // - the app's own strings — the toolbar's `Cuerunner ▾` button, the `Settings…` item, the
 //   `License` tab, the key field's placeholder, the `Activate` button, and the two sentences
@@ -22,10 +23,11 @@
 // page must state it — the declared string where the page renders the app's words, the declared
 // sentence where the page says it in its own, with the source's own words inside it. Beyond the
 // facts, the page's promises are held: the address (the one live value, the only address on the
-// page, and the only route off the site), the reply (`contact.mjs`'s one phrase, and no other
-// turnaround anywhere on the page), every link (a relative href has to resolve, and the page
-// names no channel that is not the address), and the primary nav of every page the site serves
-// (the page must be one of its links).
+// page, and the only route off the site that is not a card route the price rows sell through),
+// and every link (a relative href has to resolve, and the page names no channel that is not the
+// address or a declared card route). The primary nav of every page the site serves — the
+// merged page must be one of its links — is held by `scripts/pricing-page.test.ts`, which owns
+// the page's prices and routes now.
 //
 // Every check is a pure function of what it reads, so the second describe can hand it a page
 // the repository would never commit and get the failure back by name. The failure paths are
@@ -43,15 +45,16 @@ import {
   ENTRY_NOTE,
   KEY_DELIVERY,
   KEY_NAME,
-  TRIAL,
   TRIAL_LENGTH,
   TRIAL_STARTS,
   TRIAL_TERMS
 } from '../website/docs/trial.mjs'
 // @ts-ignore — js file, no type declarations
-import { ORDER_EMAIL, REPLY_WITHIN } from '../website/docs/contact.mjs'
+import { CARD_LINKS, PRICING } from '../website/docs/pricing.mjs'
 // @ts-ignore — js file, no type declarations
-import { NAV, renderPage } from '../website/build-docs.mjs'
+import { ORDER_EMAIL } from '../website/docs/contact.mjs'
+// @ts-ignore — js file, no type declarations
+import { renderPage } from '../website/build-docs.mjs'
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -78,10 +81,9 @@ interface Reading {
   facts: Fact[]
   /** The facts the page and its source state in different words, held by a pattern on each side. */
   pairs: PairFact[]
-  /** What the module declares and the page renders: the steps, the sentences, and the app's own two. */
+  /** What the module declares and the page renders: the steps, the sentences, and the app's own words. */
   declared: string[]
   address: string
-  reply: string
   /** The adopted model's bullets, which is every length and term the page may state. */
   bullets: string[]
   /** The README's trial-request paragraph, which is where the seller's own account of one lives. */
@@ -90,10 +92,6 @@ interface Reading {
   files: Record<string, string>
   page: string
   rendered: string
-  /** Every page the site serves, read as the file `deploy-website.yml` uploads. */
-  pages: Array<{ file: string; text: string }>
-  /** The links across the top of every generated page. */
-  nav: string[][]
 }
 
 /** The file the toolbar's file menu lives in. */
@@ -310,7 +308,7 @@ function readSource(relative: string): string {
     return fs.readFileSync(path.join(root, relative), 'utf-8')
   } catch (cause) {
     throw new Error(
-      `the trial page states facts out of ${relative}, which cannot be read — ${(cause as Error).message}`
+      `the trial's facts are stated out of ${relative}, which cannot be read — ${(cause as Error).message}`
     )
   }
 }
@@ -352,7 +350,7 @@ function readRecord(at: string = recordPath): string {
     return fs.readFileSync(at, 'utf-8')
   } catch (error) {
     throw new Error(
-      `the market record could not be read at ${at} (${error instanceof Error ? error.message : String(error)}): the trial page's length and terms are read from its adopted model, so a run that cannot open it must not pass`
+      `the market record could not be read at ${at} (${error instanceof Error ? error.message : String(error)}): the trial's length and terms are read from its adopted model, so a run that cannot open it must not pass`
     )
   }
 }
@@ -388,31 +386,10 @@ function adoptedModel(markdown: string): string[] {
   return bullets
 }
 
-/** Every page the site serves, as `deploy-website.yml` uploads them: the tree as it stands. */
-function servedPages(): Array<{ file: string; text: string }> {
-  let entries: string[]
-  try {
-    entries = fs.readdirSync(path.join(root, 'website'), { recursive: true, encoding: 'utf-8' })
-  } catch (cause) {
-    throw new Error(`the trial page's nav check: website/ cannot be walked — ${(cause as Error).message}`)
-  }
-  const pages = entries.map(entry => entry.split(path.sep).join('/')).filter(entry => entry.endsWith('.html')).sort()
-  if (pages.length === 0) {
-    throw new Error("the trial page's nav check: website/ holds no page to read, so a pass here would mean nothing")
-  }
-  return pages.map(file => {
-    try {
-      return { file, text: fs.readFileSync(path.join(root, 'website', file), 'utf-8') }
-    } catch (cause) {
-      throw new Error(`the trial page's nav check: website/${file} cannot be read — ${(cause as Error).message}`)
-    }
-  })
-}
-
 /** The page this guard reads, found by its own path rather than by where it sits in the list. */
-const TRIAL_PAGE = TRIAL.find((page: { path: string }) => page.path === 'trial.html')
+const TRIAL_PAGE = PRICING.find((page: { path: string }) => page.path === 'pricing.html')
 if (TRIAL_PAGE === undefined) {
-  throw new Error('website/docs/trial.mjs no longer declares trial.html: this guard reads the buyer page by its path')
+  throw new Error('website/docs/pricing.mjs no longer declares pricing.html: this guard reads the trial facts on the merged buyer page by its path')
 }
 
 /** The page as the repository holds it, the record as the record states it. */
@@ -421,16 +398,13 @@ const LIVE: Reading = {
   terms: TRIAL_TERMS,
   facts: FACTS,
   pairs: PAIRS,
-  declared: [...ACTIVATION_STEPS, ...END_OF_KEY, KEY_DELIVERY, ENTRY_NOTE, TRIAL_STARTS, KEY_NAME, APP.offline, APP.ended],
+  declared: [...ACTIVATION_STEPS, ...END_OF_KEY, KEY_DELIVERY, ENTRY_NOTE, TRIAL_STARTS, KEY_NAME, APP.offline],
   address: ORDER_EMAIL,
-  reply: REPLY_WITHIN,
   bullets: adoptedModel(readRecord()).map(bullet => bullet.replace(/\*\*/g, '')),
   request: trialRequest(readSource(README)),
   files: sources(),
-  page: 'trial.html',
-  rendered: renderPage(TRIAL_PAGE),
-  pages: servedPages(),
-  nav: NAV
+  page: 'pricing.html',
+  rendered: renderPage(TRIAL_PAGE)
 }
 
 /**
@@ -448,7 +422,7 @@ function factProblems(reading: Reading): string[] {
     const said = fact.read(source)
     if (said === undefined) {
       return [
-        `${fact.file} no longer carries ${fact.what}: the trial page states it, so the file a reader meets it in has to say it ("website/docs/trial.mjs" and ${fact.file} have to agree)`
+        `${fact.file} no longer carries ${fact.what}: the page states it, so the file a reader meets it in has to say it ("website/docs/trial.mjs" and ${fact.file} have to agree)`
       ]
     }
     if (fact.hold === 'exactly') {
@@ -562,7 +536,7 @@ function trialProblems(reading: Reading): string[] {
       problems.push(`the record's trial bullet no longer states "${term}": the page states it, so the record is where it comes from`)
     }
     if (!reading.rendered.toLowerCase().includes(term.toLowerCase())) {
-      problems.push(`the trial page does not state "${term}", which the record's trial bullet sets`)
+      problems.push(`the rendered page does not state "${term}", which the record's trial bullet sets`)
     }
   }
   return problems
@@ -576,15 +550,12 @@ function trialProblems(reading: Reading): string[] {
 const PLACEHOLDER =
   /\b(?:placeholder|todo|tbd|fixme|changeme|example|foo|bar|yoursite|xxx|your-(?:store|link|domain|address|site))\b|\.(?:test|invalid)\b/i
 
-/** A reply time a sentence can promise: the phrase the pages write after "within". */
-const REPLY_TIME = /^(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)(?: business)? (?:hour|day|week|month)s?$/i
-
-/** Everything the page's promises are held to: the address and the reply the shop front declares once. */
+/** Everything the page's promises are held to: the one address the shop front declares. */
 function promiseProblems(reading: Reading): string[] {
   const problems: string[] = []
   if (reading.address.trim() === '') {
     problems.push(
-      'website/docs/contact.mjs declares no value for ORDER_EMAIL (the one address): fill it with the inbox that answers — while it is empty the trial page offers no way to ask for a key'
+      'website/docs/contact.mjs declares no value for ORDER_EMAIL (the one address): fill it with the inbox that answers — while it is empty the page offers no way to ask for a key'
     )
   } else if (PLACEHOLDER.test(reading.address)) {
     problems.push(`ORDER_EMAIL reads "${reading.address}", which is a placeholder rather than one live address`)
@@ -592,17 +563,6 @@ function promiseProblems(reading: Reading): string[] {
     problems.push(`ORDER_EMAIL reads "${reading.address}", which carries markup: the address is rendered into the page's markup`)
   } else if (!/^\S+@\S+\.\S+$/.test(reading.address)) {
     problems.push(`ORDER_EMAIL reads "${reading.address}", which is not one email address`)
-  }
-  if (reading.reply.trim() === '') {
-    problems.push(
-      'website/docs/contact.mjs declares no value for REPLY_WITHIN (the reply the seller commits to): fill it with the turnaround the seller will keep — while it is empty the page promises nothing'
-    )
-  } else if (PLACEHOLDER.test(reading.reply)) {
-    problems.push(`REPLY_WITHIN reads "${reading.reply}", which is a placeholder rather than a reply time`)
-  } else if (/[<>"]/.test(reading.reply)) {
-    problems.push(`REPLY_WITHIN reads "${reading.reply}", which carries markup: the reply is rendered into the page's prose`)
-  } else if (!REPLY_TIME.test(reading.reply)) {
-    problems.push(`REPLY_WITHIN reads "${reading.reply}", which is not a reply time a sentence can promise (the shape is "one business day")`)
   }
   return problems
 }
@@ -615,14 +575,11 @@ function decoded(html: string): string {
 /** An address as the page carries it, in words or behind a mailto. */
 const ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 
-/** A turnaround a sentence promises: the phrase after "within". */
-const TURNAROUND = /\bwithin\s+((?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s+business)?\s+(?:hour|day|week|month)s?)/gi
-
 /**
- * What the rendered page promises, held to the two declarations. The address is the only
- * address on the page and the only place a mailto leads; the reply is the only turnaround any
- * sentence on it promises, and it is promised. A second address, a reply the seller never made,
- * or a page that names an address and never says how long an answer takes, each fails by name.
+ * What the rendered page promises, held to the declaration. The address is the only address on
+ * the page and the only place a mailto leads; a second address, or a page that names one and
+ * carries no way to write to it, each fails by name. The reply-time promise the trial page once
+ * made was dropped by the owner, so no turnaround is read here any more.
  */
 function renderedPromiseProblems(reading: Reading): string[] {
   const rendered = decoded(reading.rendered)
@@ -631,36 +588,19 @@ function renderedPromiseProblems(reading: Reading): string[] {
   for (const address of [...new Set(addresses)]) {
     if (address.toLowerCase() !== reading.address.toLowerCase()) {
       problems.push(
-        `the rendered page names the address ${address}, and the only one the trial page may name is the address the shop front declares (${reading.address})`
+        `the rendered page names the address ${address}, and the only one the page may name is the address the shop front declares (${reading.address})`
       )
     }
   }
   const mailtos = [...rendered.matchAll(/href="(mailto:[^"]*)"/gi)].map(match => mailAddress(match[1]))
   if (!mailtos.some(address => address.toLowerCase() === reading.address.toLowerCase())) {
     problems.push(
-      `the rendered page carries no mailto link to the address the trial page declares (${reading.address}): a request needs somewhere to go`
-    )
-  }
-  const turnarounds = [...rendered.matchAll(TURNAROUND)].map(match => oneLine(match[1]))
-  for (const phrase of [...new Set(turnarounds)]) {
-    if (phrase.toLowerCase() !== reading.reply.toLowerCase()) {
-      problems.push(`the rendered page promises "${phrase}", and the reply the seller commits to is "${reading.reply}"`)
-    }
-  }
-  if (!turnarounds.some(phrase => phrase.toLowerCase() === reading.reply.toLowerCase())) {
-    problems.push(
-      `the rendered page does not state the reply the seller commits to ("${reading.reply}"): a page that names an address has to say how long an answer takes`
+      `the rendered page carries no mailto link to the address the page declares (${reading.address}): a request needs somewhere to go`
     )
   }
   return problems
 }
 
-/**
- * Every link the rendered page carries, held to something that exists: a relative href has to
- * resolve to a file the site serves, and the only route off the site is the declared address.
- * A typo'd href, a link to a page nothing generates, and a second channel dressed as a link are
- * all failures by name — the check a reader makes by clicking, made on every run.
- */
 /** The address behind a mailto, with the query and the fragment a prefilled message may carry taken off. */
 function mailAddress(href: string): string {
   return href.slice('mailto:'.length).split('?')[0].split('#')[0]
@@ -678,12 +618,16 @@ function resolveLink(reading: Reading, href: string): string {
     : path.resolve(path.dirname(path.join(root, 'website', reading.page)), target)
 }
 
+/** The card routes the price rows sell through: the only links off the site the merged page may offer besides the address. */
+const CARD_ROUTES: string[] = Object.values(CARD_LINKS)
+
 /**
  * Every link the rendered page carries, held to something that exists: a relative href — the
- * site's own root included — has to resolve to a file the site serves, and the only route off
- * the site is the declared address, however a mailto is dressed. A typo'd href, a link to a
- * page nothing generates, and a second channel are all failures by name — the check a reader
- * makes by clicking, made on every run.
+ * site's own root included — has to resolve to a file the site serves, a mailto has to lead to
+ * the declared address, and the only links off the site are that address and the card routes
+ * the price rows sell through (`CARD_LINKS`, which scripts/pricing-page.test.ts holds to the
+ * rows). A typo'd href, a link to a page nothing generates, and a second channel are all
+ * failures by name — the check a reader makes by clicking, made on every run.
  */
 function deadLinkProblems(reading: Reading): string[] {
   return [...decoded(reading.rendered).matchAll(/href="([^"]*)"/g)].flatMap(match => {
@@ -693,13 +637,15 @@ function deadLinkProblems(reading: Reading): string[] {
       return mailAddress(href).toLowerCase() === reading.address.toLowerCase()
         ? []
         : [
-            `the rendered page carries the link ${href}: the trial page's only route off the site is the address it declares (${reading.address})`
+            `the rendered page carries the link ${href}: the page's only route off the site to a person is the address it declares (${reading.address})`
           ]
     }
     if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-      return [
-        `the rendered page carries the link ${href}: the trial page offers no channel that is not the address it declares, so a link off the site is not one it can offer`
-      ]
+      return CARD_ROUTES.includes(href)
+        ? []
+        : [
+            `the rendered page carries the link ${href}: the page offers no channel that is not the address it declares or one of the card routes its rows sell through, so a link off the site is not one it can offer`
+          ]
     }
     return fs.existsSync(resolveLink(reading, href))
       ? []
@@ -707,47 +653,7 @@ function deadLinkProblems(reading: Reading): string[] {
   })
 }
 
-/** The primary nav of a page, as the markup that carries it — a page without one fails loudly rather than skipping. */
-function primaryNav(file: string, html: string): string {
-  const nav = /<nav class="top-nav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)
-  if (nav === null) {
-    throw new Error(
-      `the trial page's nav check: website/${file} carries no <nav class="top-nav">, so the nav it serves cannot be read`
-    )
-  }
-  return nav[1]
-}
-
-/** The trial page's link, as the nav carries it from the root and from a page a directory down. */
-const TRIAL_LINK = /<a href="(?:\.\/|\.\.\/)?trial\.html"[^>]*>Trial<\/a>/
-
-/**
- * The pages whose primary nav does not carry the trial page's link, and the NAV list behind
- * them. A nav that offers the page on some pages and not on others is the trial half-published,
- * so every page the site serves is read — the generated ones through the list the renderer used,
- * the hand-written ones as the files they are.
- */
-function navProblems(reading: Reading): string[] {
-  const problems: string[] = []
-  if (!reading.pages.some(page => page.file === 'trial.html')) {
-    problems.push('website/trial.html is not among the pages the site serves: the nav links to a page a buyer cannot open')
-  }
-  if (!reading.nav.some(([href, label]) => href === 'trial.html' && label === 'Trial')) {
-    problems.push(
-      "website/build-docs.mjs's NAV carries no ['trial.html', 'Trial'] entry, so no page the docs build writes can reach the trial page"
-    )
-  }
-  return problems.concat(
-    reading.pages
-      .filter(page => !TRIAL_LINK.test(primaryNav(page.file, page.text)))
-      .map(
-        page =>
-          `website/${page.file}'s primary nav carries no link to website/trial.html: the trial page must be one of the links on every page the site serves`
-      )
-  )
-}
-
-describe('the trial page', () => {
+describe('the trial on the pricing page', () => {
   it('states each of its facts in the words its source uses for them', () => {
     expect(factProblems(LIVE)).toEqual([])
   })
@@ -768,20 +674,16 @@ describe('the trial page', () => {
     expect(requestProblems(LIVE)).toEqual([])
   })
 
-  it('declares the address and the reply as live values', () => {
+  it('declares the address as a live value', () => {
     expect(promiseProblems(LIVE)).toEqual([])
   })
 
-  it('names the declared address and no other, and the declared reply as the only turnaround', () => {
+  it('names the declared address and no other, and carries the mailto that reaches it', () => {
     expect(renderedPromiseProblems(LIVE)).toEqual([])
   })
 
   it('links nothing a reader cannot open', () => {
     expect(deadLinkProblems(LIVE)).toEqual([])
-  })
-
-  it('is one of the links on every page the site serves', () => {
-    expect(navProblems(LIVE)).toEqual([])
   })
 })
 
@@ -789,9 +691,8 @@ describe('the trial page', () => {
  * The page the repository would never commit, one failure at a time: each case changes one
  * thing in the live reading and asserts the check names it. These are the states the checks
  * exist to refuse — a label the app has moved, a sentence the page drops, a length that drifts,
- * a term the record has stopped setting, a second address, a turnaround nobody agreed to, a
- * link that goes nowhere, a nav that loses the page — and nothing else in the suite exercises
- * them.
+ * a term the record has stopped setting, a second address, a link that goes nowhere — and
+ * nothing else in the suite exercises them.
  */
 describe('the page the checks exist to refuse', () => {
   /** The live reading with one fact's declared words or one source's text replaced. */
@@ -959,7 +860,7 @@ describe('the page the checks exist to refuse', () => {
   it('names a term the rendered page has stopped stating', () => {
     const dropped = { ...LIVE, rendered: LIVE.rendered.replace('Self-serve.', 'On request.') }
     expect(trialProblems(dropped)).toEqual([
-      expect.stringContaining('the trial page does not state "self-serve"')
+      expect.stringContaining('the rendered page does not state "self-serve"')
     ])
   })
 
@@ -970,7 +871,7 @@ describe('the page the checks exist to refuse', () => {
     ])
     expect(renderedPromiseProblems(empty)).toEqual([
       expect.stringContaining('the rendered page names the address orders@cuerunner.app'),
-      expect.stringContaining('the rendered page carries no mailto link to the address the trial page declares')
+      expect.stringContaining('the rendered page carries no mailto link to the address the page declares')
     ])
   })
 
@@ -995,17 +896,6 @@ describe('the page the checks exist to refuse', () => {
     ])
   })
 
-  it('names a reply the seller has not committed to, and the shape it has to have', () => {
-    const empty = { ...LIVE, reply: '' }
-    expect(promiseProblems(empty)).toEqual([
-      expect.stringContaining('website/docs/contact.mjs declares no value for REPLY_WITHIN')
-    ])
-    const vague = { ...LIVE, reply: 'as soon as we can' }
-    expect(promiseProblems(vague)).toEqual([
-      expect.stringContaining('REPLY_WITHIN reads "as soon as we can", which is not a reply time a sentence can promise')
-    ])
-  })
-
   it('names a second address on the rendered page', () => {
     const copied = { ...LIVE, rendered: `${LIVE.rendered}\n<a href="mailto:support@cuerunner.app">support@cuerunner.app</a>` }
     expect(renderedPromiseProblems(copied)).toEqual([
@@ -1013,25 +903,10 @@ describe('the page the checks exist to refuse', () => {
     ])
   })
 
-  it('names a page that names an address and never says how long an answer takes', () => {
-    const silent = { ...LIVE, rendered: LIVE.rendered.replace(`a request is answered within ${REPLY_WITHIN}.`, 'a request is answered.') }
-    expect(renderedPromiseProblems(silent)).toEqual([
-      expect.stringContaining('the rendered page does not state the reply the seller commits to ("one business day")')
-    ])
-  })
-
-  it('names a turnaround the seller never made', () => {
-    const invented = { ...LIVE, rendered: LIVE.rendered.replace(`within ${REPLY_WITHIN}`, 'within 48 hours') }
-    expect(renderedPromiseProblems(invented)).toEqual([
-      expect.stringContaining('the rendered page promises "48 hours", and the reply the seller commits to is "one business day"'),
-      expect.stringContaining('the rendered page does not state the reply the seller commits to ("one business day")')
-    ])
-  })
-
   it('names a link a reader cannot open', () => {
-    const dead = { ...LIVE, rendered: LIVE.rendered.replace('href="pro.html"', 'href="pro-features.html"') }
+    const dead = { ...LIVE, rendered: LIVE.rendered.replace('href="./guide.html"', 'href="./the-guide.html"') }
     expect(deadLinkProblems(dead)).toEqual([
-      expect.stringContaining('the rendered page links to pro-features.html, which the site does not hold')
+      expect.stringContaining('the rendered page links to ./the-guide.html, which the site does not hold')
     ])
   })
 
@@ -1058,31 +933,6 @@ describe('the page the checks exist to refuse', () => {
     const elsewhere = { ...LIVE, rendered: `${LIVE.rendered}\n<a href="https://github.com/Huckcity/cuerunner/issues">Ask on GitHub</a>` }
     expect(deadLinkProblems(elsewhere)).toEqual([
       expect.stringContaining('the rendered page carries the link https://github.com/Huckcity/cuerunner/issues')
-    ])
-  })
-
-  it('names the hand-written page whose nav loses the trial page link', () => {
-    const drifted = LIVE.pages.map(page =>
-      page.file === 'reliability.html'
-        ? { ...page, text: page.text.replace('        <a href="./trial.html">Trial</a>\n', '') }
-        : page
-    )
-    expect(navProblems({ ...LIVE, pages: drifted })).toEqual([
-      expect.stringContaining("website/reliability.html's primary nav carries no link to website/trial.html")
-    ])
-  })
-
-  it('names the NAV list a generated page would lose the link from', () => {
-    const without = LIVE.nav.filter(([href]) => href !== 'trial.html')
-    expect(navProblems({ ...LIVE, nav: without })).toEqual([
-      expect.stringContaining("NAV carries no ['trial.html', 'Trial'] entry")
-    ])
-  })
-
-  it('names the site that serves no trial page at all', () => {
-    const without = LIVE.pages.filter(page => page.file !== 'trial.html')
-    expect(navProblems({ ...LIVE, pages: without })).toEqual([
-      expect.stringContaining('website/trial.html is not among the pages the site serves')
     ])
   })
 })
