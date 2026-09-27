@@ -1261,6 +1261,60 @@ describe('store — undo/redo', () => {
     ])
   })
 
+  it('forgets what the desk was told about a strip the show no longer has', () => {
+    // The record is what Cuerunner was last told it wrote, per channel. A strip the show
+    // does not have is not one a recall can write, so its entries are facts about nothing —
+    // and left behind they would be read as facts about the *next* strip to carry that id,
+    // a count re-grown or a show merged in.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith(), scenes: defaults.scenes },
+      deskState: { mutes: { 'ch-1': true, 'ch-2': false }, assignments: { 'ch-1': ['dca-1'] } }
+    })
+
+    useStore.getState().removeChannel('ch-1')
+
+    expect(useStore.getState().deskState).toEqual({ mutes: { 'ch-2': false }, assignments: {} })
+  })
+
+  it('forgets the strips a fader count dropped, and keeps the rest of the record', () => {
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: { ...defaults, cast: castWith(), scenes: defaults.scenes },
+      deskState: { mutes: { 'ch-1': true }, assignments: { 'ch-1': ['dca-1'] } }
+    })
+
+    useStore.getState().setDcaCount(0)
+
+    // The channel keeps its own entry with an empty list: what it was last written onto is
+    // the faders that are left, and none are. An absent entry would say the desk's state
+    // was never told — which the next recall would rewrite, for a place that is gone.
+    expect(useStore.getState().deskState).toEqual({ mutes: { 'ch-1': true }, assignments: { 'ch-1': [] } })
+  })
+
+  it('takes a departed fader out of what each channel was written onto, and nothing else', () => {
+    // The channel keeps its own entry: an empty list is a fact too — the desk was told it
+    // rides nothing — and a fader that is gone cannot be one of the places it rides.
+    const defaults = defaultShowSettings()
+    useStore.setState({
+      showSettings: {
+        ...defaults,
+        cast: castWith({ dcas: [{ id: 'dca-1', deskNumber: null }, { id: 'dca-2', deskNumber: null }] })
+      },
+      deskState: {
+        mutes: { 'ch-1': false },
+        assignments: { 'ch-1': ['dca-1', 'dca-2'], 'ch-9': ['dca-2'] }
+      }
+    })
+
+    useStore.getState().setDcaCount(1)
+
+    expect(useStore.getState().deskState).toEqual({
+      mutes: { 'ch-1': false },
+      assignments: { 'ch-1': ['dca-1'], 'ch-9': [] }
+    })
+  })
+
   it('never undoes what the desk was told: the record is session state, not an edit', () => {
     // Where the desk was left is what Cuerunner last sent, and an undo puts a show back
     // rather than a desk: a record an undo could rewind would describe a desk nobody has
