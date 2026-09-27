@@ -139,9 +139,25 @@ check(
   JSON.stringify(declaration).slice(0, 200)
 )
 check(
-  'it declares the event set, each type with its fields',
+  'it declares the event set, each type with its fields and the kind each carries',
+  // The declaration writes one entry per field, and the entry is the field's kind — with
+  // `nullable` exactly where a null is a meaning of its own. The walk further down holds the
+  // kinds to the lines the engine really emits; this holds the shape of the printout.
   Object.keys(declaredEvents).length > 0 &&
-    Object.values(declaredEvents).every(fields => Array.isArray(fields) && fields.length > 0 && fields.every(field => typeof field === 'string')),
+    Object.values(declaredEvents).every(
+      fields =>
+        typeof fields === 'object' &&
+        fields !== null &&
+        !Array.isArray(fields) &&
+        Object.keys(fields).length > 0 &&
+        Object.values(fields).every(
+          node =>
+            typeof node === 'object' &&
+            node !== null &&
+            ['string', 'number', 'boolean', 'object', 'array'].includes(node.type) &&
+            (node.nullable === undefined || node.nullable === true)
+        )
+    ),
   JSON.stringify(declaredEvents).slice(0, 200)
 )
 check(
@@ -456,9 +472,30 @@ try {
         continue
       }
       const observed = Object.keys(event).sort()
-      const declared = [...fields].sort()
+      // The declaration writes each field with its kind: the names are its keys, and the kind
+      // is held to the value the engine really sent — the same reading the client reports a
+      // wrong kind with, checked here against the engine that emits them.
+      const declared = Object.keys(fields).sort()
       if (JSON.stringify(observed) !== JSON.stringify(declared)) {
         mismatched.push(`${event.type}: [${observed}] instead of declared [${declared}]`)
+        continue
+      }
+      for (const [field, node] of Object.entries(fields)) {
+        const value = event[field]
+        if (value === null && node.nullable === true) continue
+        const kind =
+          typeof value === 'string'
+            ? 'string'
+            : typeof value === 'number'
+              ? 'number'
+              : typeof value === 'boolean'
+                ? 'boolean'
+                : Array.isArray(value)
+                  ? 'array'
+                  : 'object'
+        if (kind !== node.type) {
+          mismatched.push(`${event.type}.${field}: sent as ${kind}, declared ${node.type}`)
+        }
       }
     }
     check(

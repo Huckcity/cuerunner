@@ -105,27 +105,98 @@ const AUDIO_WIRE_DEVICE_OPTIONS = {
  * completeness is checked against this declaration's own type rather than stated beside it.
  */
 const AUDIO_WIRE_EVENTS = {
-  ended: ['type', 'cueId', 'runId', 'at', 'reason', 'loopsCompleted', 'sessionId'],
-  error: ['type', 'at', 'cueId', 'runId', 'code', 'message', 'sessionId'],
-  panic: ['type', 'at', 'fadeMs', 'sessionId'],
-  state: ['type', 'at', 'active', 'cueId', 'runId', 'playing', 'state', 'sessionId']
-} as const satisfies { [Name in AudioEventType]: readonly (keyof Extract<AudioEngineEvent, { type: Name }>)[] }
+  ended: {
+    type: { type: 'string' },
+    cueId: { type: 'string' },
+    runId: { type: 'string' },
+    at: { type: 'number' },
+    reason: { type: 'string' },
+    loopsCompleted: { type: 'number' },
+    sessionId: { type: 'string' }
+  },
+  error: {
+    type: { type: 'string' },
+    at: { type: 'number' },
+    // The fault belongs to the engine rather than to one cue, so both ids are null here:
+    // a meaning of its own, which is what `nullable` marks and what a wrong kind is not.
+    cueId: { type: 'string', nullable: true },
+    runId: { type: 'string', nullable: true },
+    code: { type: 'string' },
+    message: { type: 'string' },
+    sessionId: { type: 'string' }
+  },
+  panic: {
+    type: { type: 'string' },
+    at: { type: 'number' },
+    fadeMs: { type: 'number' },
+    sessionId: { type: 'string' }
+  },
+  state: {
+    type: { type: 'string' },
+    at: { type: 'number' },
+    active: { type: 'boolean' },
+    cueId: { type: 'string', nullable: true },
+    runId: { type: 'string', nullable: true },
+    playing: { type: 'boolean' },
+    // Null on a purely global transition.
+    state: { type: 'string', nullable: true },
+    sessionId: { type: 'string' }
+  }
+} as const satisfies {
+  readonly [Name in AudioEventType]: WireEventFields<Extract<AudioEngineEvent, { type: Name }>>
+}
 
-/** The fields of an event interface that the declared set leaves out — nothing at all when
- *  every list is complete. */
-type MissingEventFields<Declared extends { [Name in AudioEventType]: readonly string[] }> = {
-  [Name in AudioEventType]: Exclude<keyof Extract<AudioEngineEvent, { type: Name }>, Declared[Name][number]>
+/** The wire kind a field's own TypeScript type is written as — the five the requests use. */
+type WireKindOf<T> = Exclude<T, null> extends string
+  ? 'string'
+  : Exclude<T, null> extends number
+    ? 'number'
+    : Exclude<T, null> extends boolean
+      ? 'boolean'
+      : Exclude<T, null> extends readonly unknown[]
+        ? 'array'
+        : 'object'
+
+/**
+ * One field of an event: the kind it must have, and `nullable` exactly where the interface
+ * allows `null`. Both directions are the type's own — a field that omits `nullable` where
+ * `null` is allowed, and one that declares it where `null` is not, fail to compile.
+ *
+ * What this buys is the fact a coercion used to invent: `reason: null` on an `ended` event
+ * passed every check and was normalised to `'complete'`, so a line carrying no reason read
+ * as a natural finish. A field present with the wrong kind — or with a null the interface
+ * does not allow — is now reported where the other two directions already are.
+ */
+type WireEventField<T> = null extends T
+  ? { readonly type: WireKindOf<Exclude<T, null>>; readonly nullable: true }
+  : { readonly type: WireKindOf<T>; readonly nullable?: never }
+
+/** Every field an event interface carries, with the kind each one's own type writes it as. */
+type WireEventFields<T> = { [K in keyof T]-?: WireEventField<T[K]> }
+
+/** The fields of an event interface that the declared set leaves out — nothing at all while
+ *  the two agree. */
+type MissingEventFields<Declared extends { [Name in AudioEventType]: object }> = {
+  [Name in AudioEventType]: Exclude<keyof Extract<AudioEngineEvent, { type: Name }>, keyof Declared[Name]>
+}[AudioEventType]
+
+/** The fields the declared set carries that the interface has not got — nothing at all while
+ *  the two agree. */
+type ExtraEventFields<Declared extends { [Name in AudioEventType]: object }> = {
+  [Name in AudioEventType]: Exclude<keyof Declared[Name], keyof Extract<AudioEngineEvent, { type: Name }>>
 }[AudioEventType]
 
 /**
- * `unknown` while the declared set names every field of every event interface, and the
- * fields left out otherwise: a missing field then makes `events` unsatisfiable at
- * `AUDIO_WIRE`, naming itself, so a field or a type added to the interfaces can never ship
- * this declaration stale. The other direction — a name an interface does not carry, or a
- * type outside the union — is the `satisfies` on `AUDIO_WIRE_EVENTS`.
+ * `unknown` while the declared set names every field of every event interface and nothing
+ * else; the fields left out or carried that no interface has otherwise, which makes `events`
+ * unsatisfiable at `AUDIO_WIRE` and names itself. The kinds are held by the `satisfies` on
+ * the declaration above, so a field or a type added to the interfaces can never ship either
+ * half stale.
  */
 type EventSetCheck = [MissingEventFields<typeof AUDIO_WIRE_EVENTS>] extends [never]
-  ? unknown
+  ? [ExtraEventFields<typeof AUDIO_WIRE_EVENTS>] extends [never]
+    ? unknown
+    : { extraEventFields: ExtraEventFields<typeof AUDIO_WIRE_EVENTS> }
   : { missingEventFields: MissingEventFields<typeof AUDIO_WIRE_EVENTS> }
 
 /**
@@ -248,13 +319,43 @@ export const AUDIO_WIRE = {
 /** Every verb the wire carries, as a union of its names. */
 export type AudioWireVerb = keyof typeof AUDIO_WIRE.verbs
 
-/** The fields the declaration carries for an event type, or null when it names no such
- *  type. The recognition rule, read by every site that checks an engine event: a type is
- *  known when the declaration names it, a field when the declaration names it for that
- *  type — never a second list beside the declaration. */
-export function declaredEventFields(type: unknown): readonly string[] | null {
+/** What the declaration says about one event field: the kind it must have, and whether a
+ *  `null` is a meaning of its own there. */
+export interface DeclaredEventField {
+  readonly type: AudioWireFieldType
+  readonly nullable?: boolean
+}
+
+/** The fields the declaration carries for an event type, with each one's kind — or null when
+ *  it names no such type. The recognition rule, read by every site that checks an engine
+ *  event: a type is known when the declaration names it, a field when the declaration names
+ *  it for that type, and a value when it is the kind the declaration writes — never a second
+ *  list beside the declaration. */
+export function declaredEventFields(type: unknown): Record<string, DeclaredEventField> | null {
   if (typeof type !== 'string' || !Object.hasOwn(AUDIO_WIRE.events, type)) return null
-  return (AUDIO_WIRE.events as Record<string, readonly string[]>)[type]
+  return (AUDIO_WIRE.events as Record<string, Record<string, DeclaredEventField>>)[type]
+}
+
+/**
+ * Whether a value is what a declared kind writes. The native engine carries its own copy of
+ * this reading — `wireValueMatches` in `native/audio/src/protocol.cpp`, where a request's
+ * field is held to the same kinds — and the declaration test holds the two tables (not the
+ * two functions) to each other: what a field must be is declared once, and both ends read
+ * the same declaration.
+ */
+export function admitsWireKind(kind: AudioWireFieldType, value: unknown): boolean {
+  switch (kind) {
+    case 'string':
+      return typeof value === 'string'
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+    case 'boolean':
+      return typeof value === 'boolean'
+    case 'array':
+      return Array.isArray(value)
+    case 'object':
+      return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
 }
 
 /** Default stream format. The engine reports what it actually achieved in `info()`. */
