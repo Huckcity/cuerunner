@@ -40,6 +40,8 @@ import {
   setDcaCount as setDcaCountInCast
 } from '../utils/cast'
 import {
+  forgetChannels,
+  forgetDcas,
   removeChannelsFromScenes,
   removeDcasFromScenes,
   removeEnsembleFromScenes,
@@ -1542,6 +1544,9 @@ export const useStore = create<CueListState>((set) => ({
       cast: removeChannelFromCast(s.showSettings.cast, channelId),
       scenes: removeChannelsFromScenes(s.showSettings.scenes, [channelId])
     },
+    // The desk record goes with it: what Cuerunner was last told it wrote about this strip
+    // is a fact about nothing once the show has no such strip.
+    deskState: forgetChannels(s.deskState, [channelId]),
     past: pushPast(s.past, snapshotOf(s)),
     future: [],
     isDirty: true
@@ -1565,6 +1570,9 @@ export const useStore = create<CueListState>((set) => ({
         cast: next,
         scenes: removeChannelsFromScenes(s.showSettings.scenes, dropped)
       },
+      // And the record of what the desk was told about the strips that went, for the same
+      // reason the scenes are pruned in this edit: nothing can write them again.
+      deskState: forgetChannels(s.deskState, dropped),
       past: pushPast(s.past, snapshotOf(s)),
       future: [],
       isDirty: true
@@ -1586,6 +1594,9 @@ export const useStore = create<CueListState>((set) => ({
         cast: next,
         scenes: removeDcasFromScenes(s.showSettings.scenes, gone)
       },
+      // A channel last written onto a fader that is gone was written onto the faders that
+      // are left; the record follows the show in the same edit it reshapes.
+      deskState: forgetDcas(s.deskState, gone),
       past: pushPast(s.past, snapshotOf(s)),
       future: [],
       isDirty: true

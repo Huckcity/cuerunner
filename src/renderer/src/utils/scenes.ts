@@ -208,6 +208,43 @@ export function removeDcasFromScenes(settings: ScenesSettings, dcaIds: string[])
   }
 }
 
+/**
+ * What is left of the desk record when strips leave the show.
+ *
+ * The record is what Cuerunner was last told it wrote, per channel. A channel the show no
+ * longer has is not a channel a recall can write, so its entries are facts about nothing:
+ * left behind, they are read the next time a strip of that id appears — a count re-grown,
+ * a show merged in — as though the desk had already been told something about it.
+ */
+export function forgetChannels(deskState: DeskState, channelIds: readonly string[]): DeskState {
+  if (channelIds.length === 0) return deskState
+  const gone = new Set(channelIds)
+  const mutes: Record<string, boolean> = {}
+  const assignments: Record<string, string[]> = {}
+  for (const [channel, muted] of Object.entries(deskState.mutes)) {
+    if (!gone.has(channel)) mutes[channel] = muted
+  }
+  for (const [channel, faders] of Object.entries(deskState.assignments)) {
+    if (!gone.has(channel)) assignments[channel] = faders
+  }
+  return { mutes, assignments }
+}
+
+/**
+ * The same for a fader: a channel last written onto a fader the show no longer has was
+ * written onto the faders that are left. The channel's own entry survives, because an
+ * empty list is a fact too — the desk was told it rides nothing.
+ */
+export function forgetDcas(deskState: DeskState, dcaIds: readonly string[]): DeskState {
+  if (dcaIds.length === 0) return deskState
+  const gone = new Set(dcaIds)
+  const assignments: Record<string, string[]> = {}
+  for (const [channel, faders] of Object.entries(deskState.assignments)) {
+    assignments[channel] = faders.filter(fader => !gone.has(fader))
+  }
+  return { mutes: deskState.mutes, assignments }
+}
+
 /** Empties every row that was holding an ensemble, once it has left the cast. */
 export function removeEnsembleFromScenes(settings: ScenesSettings, ensembleId: string): ScenesSettings {
   return {
