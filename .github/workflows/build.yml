@@ -606,8 +606,15 @@ jobs:
               echo "::error::$file is published under a name this mirror cannot place"
               exit 1
             fi
-            aws s3 cp "$file" "s3://$R2_BUCKET/versions/$TAG/$name" --endpoint-url "$R2_ENDPOINT"
-            aws s3 cp "$file" "s3://$R2_BUCKET/latest/$name" --endpoint-url "$R2_ENDPOINT"
+            # A version's own name never changes meaning, so it may be cached for as long as a
+            # client likes; `latest/` is the name every card hands out and it is overwritten by
+            # the next release, so it is short-lived. Both are stated by the copy: nothing else
+            # in this repository (or at the mirror) sets a caching header, and a CDN in front of
+            # the bucket keeps whatever it was first told.
+            aws s3 cp "$file" "s3://$R2_BUCKET/versions/$TAG/$name" \
+              --cache-control "public, max-age=31536000, immutable" --endpoint-url "$R2_ENDPOINT"
+            aws s3 cp "$file" "s3://$R2_BUCKET/latest/$name" \
+              --cache-control "public, max-age=300" --endpoint-url "$R2_ENDPOINT"
             # The buyer's digests, composed from the bytes just copied and under the name this
             # mirror wrote them by: the file a card hands out is the file these lines name, and a
             # file the copy did not reach fails here rather than leaving a short list.
@@ -635,4 +642,7 @@ jobs:
           # Last, so that the served digests and the served names agree: a refused removal fails
           # the step above with the previous release's `latest/SHA256SUMS` still standing beside
           # the name it does not match, rather than a new sums file naming files this run deleted.
-          aws s3 cp SHA256SUMS "s3://$R2_BUCKET/latest/SHA256SUMS" --endpoint-url "$R2_ENDPOINT"
+          # The digests are read by whoever checks a download, so they carry `latest/`'s own
+          # short lifetime rather than a version's.
+          aws s3 cp SHA256SUMS "s3://$R2_BUCKET/latest/SHA256SUMS" \
+            --cache-control "public, max-age=300" --endpoint-url "$R2_ENDPOINT"
