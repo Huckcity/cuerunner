@@ -103,11 +103,18 @@ function savedMedia(cue: AudioCue, workspaceDir: string): MediaReference {
     if (route !== held) {
       // A pair whose own route names the very file this session resolved is kept — the pair
       // is the show's record, which is what keeps a show that ships beside its media
-      // byte-identical on every machine — but only when that route is already the route this
-      // save would write. A pair recording an absolute path for a file the folder being saved
-      // into holds is not: `storedMediaPath` has the portable answer for that file, and
-      // writing the pair back would turn it into one machine's path.
-      if (stored && stored.path === route && resolve(workspaceDir, stored.path) === held) return stored
+      // byte-identical on every machine — but only while that route is a route *into this
+      // folder*: a pair recording an absolute path for a file the folder being saved into
+      // holds is not, because `storedMediaPath` has the portable answer for exactly that
+      // file, and writing the pair back would turn it into one machine's path.
+      //
+      // The route is resolved rather than compared as text. A show written elsewhere may
+      // spell the same route `./walk-in.wav`, with a doubled separator, or with the other
+      // platform's separator, and all three name the file this session resolved: comparing
+      // the text would call that a route this save would not write and replace the show's
+      // own record — the absolute half included — with this machine's path, on the first
+      // save of a file that had not been touched.
+      if (stored && !isAbsolute(stored.path) && resolve(workspaceDir, stored.path) === held) return stored
       return { path: route, originalPath: held }
     }
   }
