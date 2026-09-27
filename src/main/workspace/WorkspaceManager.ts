@@ -2,7 +2,7 @@ import { app, dialog, BrowserWindow } from 'electron'
 import { createHash } from 'crypto'
 import { readFile, mkdir, stat, writeFile } from 'fs/promises'
 import { statSync } from 'fs'
-import { asRefusal, Refusal } from '../ipc/refusal'
+import { isRefusal, Refusal } from '../ipc/refusal'
 import { hostname, userInfo } from 'os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path'
 import {
@@ -956,7 +956,7 @@ export async function readWorkspaceFile(
   try {
     const { size } = await stat(filePath)
     if (size > MAX_WORKSPACE_BYTES) {
-      throw new Refusal('that workspace file is larger than this app will open')
+      throw new Refusal(`that workspace file is larger than this app will open — ${filePath}`)
     }
     if (remember) {
       const bytes = await readFile(filePath)
@@ -969,7 +969,15 @@ export async function readWorkspaceFile(
       text = await readFile(filePath, 'utf-8')
     }
   } catch (error) {
-    throw asRefusal(error)
+    // A refusal raised above is already the answer, and carries its own sentence.
+    if (isRefusal(error)) throw error
+    // A path the operator picked that cannot be read is an ordinary state — a directory, a
+    // file this process may not read, a drive that went away — and the operating system's
+    // text names neither the file nor which of those it was. Both are said here, in the
+    // family the recovery funnel already writes, because this is the place that has the
+    // path: the window's banner shows the sentence and nothing else.
+    const code = (error as NodeJS.ErrnoException).code
+    throw new Refusal(`that file is not a show — ${filePath} could not be read (${code ?? 'unreadable'})`)
   }
   let parsed: Workspace
   try {
@@ -1053,9 +1061,10 @@ async function historyForSave(
   // both sides are compared as the window holds them — `heldShowSettings`, the one place that
   // rule lives — so the defaults are what such a file already meant, while a setting somebody
   // changed inside them is still the change it is.
-  // `contents` is this build's own serialisation, so the funnel has nothing to refuse here;
-  // the file being replaced went through it above, where a refusal is the
-  // nothing-to-compare-against answer.
+  // The window's side is this build's own serialisation, and `saveWorkspace` has already
+  // read these same bytes back through the funnel before anything was written, so what the
+  // funnel does here is produce the held form the diff compares against — the label is the
+  // file the save would have replaced, which is where a difference in it would land.
   const diff = diffWorkspaces(
     { ...previous, showSettings: heldShowSettings(previous.showSettings) },
     asHeld(migrateWorkspace(JSON.parse(contents) as Workspace, filePath))
@@ -1365,6 +1374,12 @@ export async function saveWorkspace(
   // instead of at a relative path that would not exist.
   const workspaceDir = dirname(filePath)
   const contents = serialiseWorkspace(workspace, workspaceDir)
+  // What is about to be written is read back first, through the same funnel the next launch
+  // reads it through, so a document this build will not open can never replace the file the
+  // operator has. It is a refusal rather than a fault — the window shows the sentence and
+  // the file on disk is left exactly as it was — and the label is the document rather than
+  // a path, because nothing on disk produced these bytes: they came from this window.
+  migrateWorkspace(JSON.parse(contents) as Workspace, 'the show on screen')
   // What this save changed, written into the file as the file's own history. An
   // unchanged save adds no entry and writes the same bytes back.
   const history = await historyForSave(filePath, workspace, contents)
@@ -1427,11 +1442,13 @@ export async function compareWithFile(
   otherPath: string
 ): Promise<WorkspaceComparison> {
   const other = await readWorkspaceFile(otherPath)
-  // Both sides go through the one funnel, which is what makes a comparison honest; the
-  // window's side is this build's own serialisation, so there is nothing there to refuse.
+  // Both sides go through the one funnel, which is what makes a comparison honest. The
+  // window's side is not a file on disk at all — it is the document being compared — so a
+  // refusal on those bytes names the open show rather than the file it is being compared
+  // with, which is the file the operator would otherwise be told to go and look at.
   const mine = migrateWorkspace(
     JSON.parse(serialiseWorkspace(workspace, dirname(otherPath))) as Workspace,
-    otherPath
+    'the open show'
   )
   // And both sides are compared as the window holds them: a document that has never written
   // a settings section is read as this build's defaults for the sections it leaves out, so a

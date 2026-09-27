@@ -19,7 +19,8 @@ import type {
   WorkspaceImportResult,
   WorkspaceMergeResult,
   WorkspaceOpenPathResult,
-  WorkspaceOpenResult
+  WorkspaceOpenResult,
+  WorkspaceSaveResult
 } from '../shared/ipc/workspace'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { ScriptDocument } from '../shared/show'
@@ -226,8 +227,8 @@ Object.defineProperty(window, 'cuerunner', {
         workspace: emptyWorkspace(),
         missingMedia: []
       })),
-      save: vi.fn(() => Promise.resolve(null)),
-      saveAs: vi.fn(() => Promise.resolve(null)),
+      save: vi.fn((): Promise<WorkspaceSaveResult> => Promise.resolve({ ok: true, saved: null })),
+      saveAs: vi.fn((): Promise<WorkspaceSaveResult> => Promise.resolve({ ok: true, saved: null })),
       compare: vi.fn((): Promise<WorkspaceCompareResult> => Promise.resolve({ ok: true, comparison: null })),
       exportBundle: vi.fn((): Promise<WorkspaceExportResult> => Promise.resolve({ ok: true, exported: null })),
       merge: vi.fn((): Promise<WorkspaceMergeResult> => Promise.resolve({ ok: true, merged: null })),

@@ -504,6 +504,44 @@ describe('the funnel, through every entry point', () => {
     expect(written.history).toBeUndefined()
   })
 
+  it('refuses a save whose own bytes this build will not read back, and leaves the file alone', async () => {
+    // The window's document goes through the funnel too: the save's history pass puts the
+    // bytes it is about to write through the same walk every load does. A show the app is
+    // holding but will not read back is refused here rather than written, because a file
+    // the next launch cannot open is worse than a save that said why — and the file this
+    // save would have replaced is left exactly as it was found.
+    const target = join(dir, 'Kept.cuerunner')
+    const good = show({ name: 'Press Night' }) as unknown as Workspace
+    await saveWorkspace({} as never, good, target)
+    const before = readFileSync(target, 'utf-8')
+    // The same wrong-kind leaf the funnel refuses on load, this time produced by the show
+    // the window is holding: a MIDI cue writing a number where this build writes a list.
+    const ours = show({
+      name: 'Hamlet',
+      cues: [{
+        id: 'm1',
+        number: '12',
+        name: 'Strings',
+        type: 'midi',
+        colorLabel: 'none',
+        parentId: null,
+        preWait: 0,
+        postWait: 0,
+        timelineOffset: 0,
+        duration: 0,
+        advance: 'auto',
+        isArmed: true,
+        notes: '',
+        portName: '',
+        messages: 3
+      }]
+    }) as unknown as Workspace
+
+    await expect(saveWorkspace({} as never, ours, target)).rejects.toThrow(/has messages as a number/)
+
+    expect(readFileSync(target, 'utf-8')).toBe(before)
+  })
+
   it('leaves every refused file exactly as it was found', async () => {
     // Loading never writes: the refusal is a value the window shows, and what the operator
     // picked is theirs — bytes and mtime both. Each shape is driven through every loading

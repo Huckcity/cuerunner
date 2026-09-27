@@ -55,7 +55,6 @@ import {
   WORKSPACE_CHANNELS,
   type MergeInputs,
   type RelinkedWorkspace,
-  type SavedWorkspace,
   type WorkspaceAutosavePayload,
   type WorkspaceCompareResult,
   type WorkspaceDemoResult,
@@ -68,7 +67,8 @@ import {
   type WorkspaceOpenResult,
   type WorkspaceRecoveryResult,
   type WorkspaceRelinkPayload,
-  type WorkspaceSavePayload
+  type WorkspaceSavePayload,
+  type WorkspaceSaveResult
 } from '../../shared/ipc/workspace'
 import type { EventChannel } from '../../shared/ipc'
 import { asRefusal, refusalValue } from './refusal'
@@ -569,15 +569,20 @@ export function registerIpcHandlers(): void {
   ): Promise<RelinkedWorkspace> =>
     relinkWorkspaceMedia(getWin(event), payload.workspace, payload.workspacePath, payload.cueId))
 
-  ipcMain.handle(WORKSPACE_CHANNELS.save, async (
-    event, payload: WorkspaceSavePayload
-  ): Promise<SavedWorkspace | null> =>
-    saveWorkspace(getWin(event), payload.workspace, payload.existingPath))
+  // A save is where this build checks the bytes it is about to write by reading them back,
+  // so a refusal belongs to this channel like any other ordinary state: the answer is the
+  // sentence, and the file the save would have replaced is untouched.
+  ipcMain.handle(WORKSPACE_CHANNELS.save, (event, payload: WorkspaceSavePayload): Promise<WorkspaceSaveResult> =>
+    refusalValue(async (): Promise<WorkspaceSaveResult> => ({
+      ok: true,
+      saved: await saveWorkspace(getWin(event), payload.workspace, payload.existingPath)
+    })))
 
-  ipcMain.handle(WORKSPACE_CHANNELS.saveAs, async (
-    event, workspace: Workspace
-  ): Promise<SavedWorkspace | null> =>
-    saveWorkspaceAs(getWin(event), workspace))
+  ipcMain.handle(WORKSPACE_CHANNELS.saveAs, (event, workspace: Workspace): Promise<WorkspaceSaveResult> =>
+    refusalValue(async (): Promise<WorkspaceSaveResult> => ({
+      ok: true,
+      saved: await saveWorkspaceAs(getWin(event), workspace)
+    })))
 
   // Reading a show's history — and comparing two of them — is the Pro half of the
   // showfile work. The file records its history either way: the data belongs to the show,

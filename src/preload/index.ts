@@ -67,7 +67,6 @@ import {
 import {
   WORKSPACE_CHANNELS,
   type RelinkedWorkspace,
-  type SavedWorkspace,
   type WorkspaceCompareResult,
   type WorkspaceDemoResult,
   type WorkspaceExportPayload,
@@ -80,7 +79,8 @@ import {
   type WorkspaceOpenResult,
   type WorkspaceRecoveryResult,
   type WorkspaceRelinkPayload,
-  type WorkspaceSavePayload
+  type WorkspaceSavePayload,
+  type WorkspaceSaveResult
 } from '../shared/ipc/workspace'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
@@ -306,13 +306,17 @@ contextBridge.exposeInMainWorld('cuerunner', {
       cueId: string
     ): Promise<RelinkedWorkspace> =>
       invoke(WORKSPACE_CHANNELS.relink, { workspace, workspacePath, cueId } satisfies WorkspaceRelinkPayload),
-    /** A save writes the file and returns, with the path, the history it wrote into it. */
+    /**
+     * A save writes the file and answers with the path and the history it wrote into it, a
+     * `null` inside the `ok` arm when the operator cancelled the dialog, or the refusal of
+     * a show this build will not read back — the file it would have replaced untouched.
+     */
     save: (
       workspace: Workspace,
       existingPath: string | null
-    ): Promise<SavedWorkspace | null> =>
+    ): Promise<WorkspaceSaveResult> =>
       invoke(WORKSPACE_CHANNELS.save, { workspace, existingPath } satisfies WorkspaceSavePayload),
-    saveAs: (workspace: Workspace): Promise<SavedWorkspace | null> =>
+    saveAs: (workspace: Workspace): Promise<WorkspaceSaveResult> =>
       invoke(WORKSPACE_CHANNELS.saveAs, workspace),
     /**
      * A show and its media as one file, and back again. Both dialogs belong to the OS and

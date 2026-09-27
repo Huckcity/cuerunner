@@ -600,7 +600,7 @@ describe('saving and reopening a show folder', () => {
     const refused = await openWorkspace({} as never).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(Refusal)
-    expect((refused as Error).message).toBe('that workspace file is larger than this app will open')
+    expect((refused as Error).message).toBe(`that workspace file is larger than this app will open — ${huge}`)
   })
 })
 
