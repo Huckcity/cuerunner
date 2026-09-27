@@ -10,7 +10,8 @@
  * No audio bytes cross this boundary — file paths do — and every verb is an execution
  * verb: the engine schedules it on its own sample clock.
  */
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess, type ChildProcessByStdio } from 'node:child_process'
+import type { Readable } from 'node:stream'
 import { connect, type Socket } from 'node:net'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -199,7 +200,21 @@ function socketPath(): string {
     : join(tmpdir(), `cuerunner-audio-${suffix}.sock`)
 }
 
+/**
+ * Starts the engine executable, with the pipes this client reads it through. Injectable
+ * so a test can put a connection of its own on the other end — one that never declares
+ * itself, or one that declares another protocol — without a real process behind it; the
+ * app always spawns.
+ */
+export type SpawnAudioEngine = (
+  binaryPath: string,
+  args: string[],
+  options: { stdio: ['ignore', 'pipe', 'pipe'] }
+) => ChildProcessByStdio<null, Readable, Readable>
+
 export class NativeAudioEngine {
+  constructor(private readonly spawnEngine: SpawnAudioEngine = spawn) {}
+
   private child: ChildProcess | null = null
   private socket: Socket | null = null
   private startPromise: Promise<void> | null = null
@@ -444,10 +459,6 @@ export class NativeAudioEngine {
     const args = ['--socket', path, '--backend', readEnv('CUERUNNER_AUDIO_BACKEND') ?? 'auto']
     const capture = readEnv('CUERUNNER_TEST_AUDIO_CAPTURE')
     if (capture !== undefined && !appIsPackaged()) args.push('--capture', capture)
-    // Dev/test only, like the capture tee: an engine that declares another protocol is
-    // how the refusal this build makes is exercised against a real process.
-    const declaredProtocol = readEnv('CUERUNNER_TEST_AUDIO_PROTOCOL')
-    if (declaredProtocol !== undefined && !appIsPackaged()) args.push('--declare-protocol', declaredProtocol)
     const deviceId = readEnv('CUERUNNER_AUDIO_DEVICE')
     if (deviceId !== undefined) args.push('--device', deviceId)
     const exclusive = readEnv('CUERUNNER_AUDIO_EXCLUSIVE')
@@ -455,7 +466,7 @@ export class NativeAudioEngine {
     const sampleRate = readEnv('CUERUNNER_AUDIO_SAMPLE_RATE')
     if (sampleRate !== undefined) args.push('--sample-rate', sampleRate)
 
-    const child = spawn(binaryPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = this.spawnEngine(binaryPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     this.child = child
     child.stdout.on('data', (chunk: Buffer) => this.handleStdout(chunk))
     child.stderr.on('data', (chunk: Buffer) => {
