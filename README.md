@@ -223,6 +223,7 @@ Main Process Layer
   │   ├─ MidiEngine (using 'midi' npm package)
   │   ├─ OscEngine (using 'node-osc')
   │   └─ WorkspaceManager (fs + file dialogs)
+  └─ src/main/ipc/windowHandlers.ts (the per-window channels: close request, menu action)
 ```
 
 **Key principle**: The renderer has **no direct Node.js access**. All I/O (file operations, MIDI, OSC, audio loading) goes through the IPC bridge.
@@ -292,7 +293,7 @@ files you trust.
 
 ### Playback Engine
 
-`CueRunner` (in `src/renderer/src/engine/CueRunner.ts`) is a singleton that sequences cue execution:
+`CueEngine` (in `src/renderer/src/engine/CueEngine.ts`, one instance held as `cueEngine`) is a singleton that sequences cue execution:
 
 1. **Execution sequence**: pre-wait → execute → post-wait → onDone callback
 2. **Groups**: Can run children sequentially or randomly
@@ -462,14 +463,16 @@ cuerunner/
 ├── src/
 │   ├── main/
 │   │   ├── ipc/
-│   │   │   └── handlers.ts          # Main process IPC handlers
+│   │   │   ├── handlers.ts          # Main process IPC handlers, one per declared channel
+│   │   │   ├── windowHandlers.ts    # The two channels registered per window
+│   │   │   └── parity.test.ts       # Fails the build when the declaration and the registrations disagree
 │   │   └── index.ts                 # Electron main process entry
 │   ├── preload/
 │   │   └── index.ts                 # IPC bridge (context isolation)
 │   └── renderer/
 │       └── src/
 │           ├── components/          # React components
-│           ├── engine/              # CueRunner, AudioPlayer
+│           ├── engine/              # CueEngine, scheduler, triggers, the desk send
 │           ├── store/               # Zustand state management
 │           ├── types/               # TypeScript definitions (Cue, Workspace)
 │           ├── utils/               # Helpers (cueDefaults, formatDuration)
@@ -594,7 +597,7 @@ and the sentences here, among the sites `scripts/showfile-prose.test.ts` reads.
 ## Testing
 
 - **Unit Tests**: `npm test` (Vitest, jsdom environment)
-  - Covers: CueRunner sequencing, store actions, audio playback, utilities
+  - Covers: CueEngine sequencing, store actions, audio playback, utilities
   - Location: `src/**/*.test.ts`, and the repository guards beside them in `scripts/**/*.test.ts`
     — `scripts/showfile-prose.test.ts` holds the workspace-format sentences above
   - Fakes timers for deterministic timing tests
