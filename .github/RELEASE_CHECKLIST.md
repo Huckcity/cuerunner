@@ -108,3 +108,10 @@ its artifacts are.
       as they were. A run that reached the mirror and failed in it is the other case — the page
       may already carry the release while `latest/` holds part of it — so re-run that job (or
       dispatch `build.yml` for the tag again) rather than assuming nothing landed.
+      **A re-cut leaves one duplicate to remove.** The recovery — delete the empty release and
+      the tag, dispatch `release.yml` again — makes `@semantic-release/changelog` write the
+      version's entry a second time from the same commit range, and it prepends rather than
+      replaces: `CHANGELOG.md` then carries two `# [<version>]` sections with the older one cut
+      short (this happened three times on 2026-09-21, and PR #146 kept only the newest). Check
+      the top of the file after any re-cut and delete the older copy in the same PR as whatever
+      else the release needed.
