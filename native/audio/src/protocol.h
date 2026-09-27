@@ -28,9 +28,10 @@ std::string eventLine(const Event& event, const std::string& sessionId);
 // both ends share with their values and regimes. This is the native copy of
 // src/shared/audio.ts's AUDIO_WIRE and AUDIO_LIMITS, carried as the data
 // handleRequestLine validates and reads defaults from; the two are held to each other by
-// src/main/audio/audioWire.test.ts, and this is what `--protocol` prints — of the
-// protocol the process would declare, which `--declare-protocol` may have changed.
-std::string wireDeclarationJson(int protocol);
+// src/main/audio/audioWire.test.ts, and this is what `--protocol` prints. The protocol it
+// carries is `kWireProtocolVersion`, the same constant the greeting opens a connection
+// with: there is one home for the number, and no way to declare another at runtime.
+std::string wireDeclarationJson();
 
 // The line a connection is opened with, before any request is read: the protocol this
 // engine declares, so a client can refuse a build it does not speak while the

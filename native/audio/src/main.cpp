@@ -33,7 +33,6 @@ std::atomic<int> g_clientCount{0};
 constexpr int kClientGraceSeconds = 3;
 
 /** A dev declaration's ceiling. A protocol number is a small count; past this it is a typo. */
-constexpr int kMaxDeclaredProtocol = 1000000;
 
 void onSignal(int) {
   if (g_server != nullptr) g_server->requestStop();
@@ -65,7 +64,6 @@ void usage() {
                "  --schedule-horizon-ms <n>  how far ahead a stamped verb may be scheduled\n"
                "  --frames <n>               offline: render exactly this many frames\n"
                "  --protocol                 print the wire declaration: the protocol, every verb, every event and the shared bounds\n"
-               "  --declare-protocol <n>     declare another protocol on the wire (dev/test)\n"
                "  --version\n",
                ws::kEngineVersion);
 }
@@ -136,17 +134,6 @@ bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& so
       listDevices = true;
     } else if (arg == "--protocol") {
       protocol = true;
-    } else if (arg == "--declare-protocol") {
-      if (!nextValue(argc, argv, i, value)) return false;
-      // A whole number, not atoi's prefix: "3x" is a typo, not protocol 3.
-      char* end = nullptr;
-      errno = 0;
-      const long declared = std::strtol(value.c_str(), &end, 10);
-      if (end == value.c_str() || *end != '\0' || errno == ERANGE || declared < 1 || declared > kMaxDeclaredProtocol) {
-        std::fprintf(stderr, "--declare-protocol needs a whole protocol number from 1 to %d\n", kMaxDeclaredProtocol);
-        return false;
-      }
-      engine.declaredProtocol = static_cast<int>(declared);
     } else if (arg == "--version") {
       version = true;
     } else if (arg == "--help" || arg == "-h") {
@@ -182,7 +169,7 @@ int main(int argc, char** argv) {
     // The declaration this engine carries, as JSON — the verbs it validates requests
     // with, the bounds both ends share and the protocol connections open with.
     // src/main/audio/audioWire.test.ts compares it with the ones in src/shared/audio.ts.
-    const std::string declaration = ws::wireDeclarationJson(engineOptions.declaredProtocol);
+    const std::string declaration = ws::wireDeclarationJson();
     std::printf("%s\n", declaration.c_str());
     return 0;
   }

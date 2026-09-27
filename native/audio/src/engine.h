@@ -33,12 +33,6 @@ struct EngineOptions {
   bool exclusive = false;
   int bufferFrames = 512;
   std::string capturePath;
-  /**
-   * The protocol this engine declares: the greeting it opens every connection with and
-   * the `protocol` in `info()`. `--declare-protocol` sets another one, which is how the
-   * app's refusal of a build it does not speak is exercised against a real process.
-   */
-  int declaredProtocol = kWireProtocolVersion;
   // The declared bounds (native/audio/src/wsaudio.h, the copy of AUDIO_LIMITS): each
   // default below is the declaration's value, and a flag only moves what is in force.
   int64_t cacheMaxBytes = limitValue(LimitId::CacheMaxBytes);

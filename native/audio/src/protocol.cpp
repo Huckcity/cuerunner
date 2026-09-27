@@ -721,8 +721,8 @@ std::string infoJson(const InfoDTO& info) {
   return out;
 }
 
-std::string wireDeclarationJson(int protocol) {
-  std::string out = "{\"protocol\":" + std::to_string(protocol) + ",\"verbs\":{";
+std::string wireDeclarationJson() {
+  std::string out = "{\"protocol\":" + std::to_string(kWireProtocolVersion) + ",\"verbs\":{";
   for (size_t i = 0; i < kWireVerbCount; i++) {
     const WireVerb& verb = kWireVerbs[i];
     if (i > 0) out += ',';

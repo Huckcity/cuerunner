@@ -10,8 +10,8 @@
  * src/main/audio/audioWire.test.ts, which spawns this same `--protocol` output; this
  * harness walks the declaration against the live engine: every verb it carries is answered
  * (nothing is routed by the chain and missing from the table), every event the engine
- * emits carries exactly the fields its type declares, an engine told to declare another
- * protocol says so in its greeting and in `info()`, and the bounds the declaration
+ * emits carries exactly the fields its type declares, the greeting a connection opens with
+ * and `info()` report the one protocol the declaration carries, and the bounds the declaration
  * carries are enforced — a stamped verb beyond the schedule horizon is refused naming it,
  * a streaming voice reports the ring it holds, and the total streaming budget refuses the
  * voice that would exceed it.
@@ -476,30 +476,29 @@ try {
   await stopEngine(engine)
 }
 
-// The declaration is what the engine says it is: an engine asked to declare another
-// protocol says so in its greeting and in what `info()` reports, so the two can never
-// disagree about which set of verbs the connection is speaking.
+// The declaration is what the engine says it is: the protocol a greeting opens a
+// connection with and the one `info()` reports are the same number the declaration
+// carries, because the build has one home for it and nothing can be told another.
 {
-  const declared = declaration.protocol + 1
-  const other = await startEngine(['--declare-protocol', String(declared)])
+  const own = await startEngine([])
   try {
-    check('an engine told to declare another protocol starts', other.connected, other.connected ? '' : `${other.error?.message}\n${other.stderr()}`)
-    if (other.connected) {
-      const greeting = other.client.greetings[0]
+    check('an engine starts', own.connected, own.connected ? '' : `${own.error?.message}\n${own.stderr()}`)
+    if (own.connected) {
+      const greeting = own.client.greetings[0]
       check(
-        'its greeting declares that protocol',
-        greeting !== undefined && greeting.protocol === declared,
+        'the greeting a connection opens with declares the protocol --protocol prints',
+        greeting !== undefined && greeting.protocol === declaration.protocol,
         JSON.stringify(greeting)
       )
-      const info = await other.client.request('info')
+      const info = await own.client.request('info')
       check(
         'and info() reports the same one',
-        info.ok === true && info.result?.protocol === declared,
+        info.ok === true && info.result?.protocol === declaration.protocol,
         JSON.stringify(info?.result?.protocol)
       )
     }
   } finally {
-    await stopEngine(other)
+    await stopEngine(own)
   }
 }
 

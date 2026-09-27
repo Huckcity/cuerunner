@@ -1298,7 +1298,7 @@ InfoDTO Engine::info() const {
   std::lock_guard<std::mutex> lock(deviceMutex_);
   InfoDTO out;
   out.version = kEngineVersion;
-  out.protocol = options_.declaredProtocol;
+  out.protocol = kWireProtocolVersion;
   out.sessionId = sessionId_;
   MixSnapshot snapshot;
   copySnapshot(snapshot);

@@ -79,21 +79,50 @@ describe('the wire declaration', () => {
     expect(JSON.parse(output)).toEqual({ ...AUDIO_WIRE, limits: AUDIO_LIMITS })
   })
 
-  it('refuses an engine that declares another protocol, before a verb is written', async () => {
-    // An engine whose declaration is not this build's is refused while the connection is
-    // still empty — no `info`, no verb — and the refusal names both versions. The engine
-    // is the real one, declaring another protocol on request: only the greeting differs.
+  it('refuses a connection that declares another protocol, before a verb is written', async () => {
+    // An engine whose declaration is not this build's speaks another meaning of the
+    // number, and it is refused while the connection is still empty — no `info`, no verb —
+    // with both versions named. The connection is the test's own: a process that declared
+    // another protocol needed a flag in the shipped engine to do it, and a socket answers
+    // the same question without one.
     const binary = ensureBinary()
+    const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-wire-stale-'))
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\cuerunner-wire-stale-${process.pid}`
+        : join(workDir, 'engine.sock')
+    let received = 0
+    const sockets: Socket[] = []
+    const server: Server = createServer((socket) => {
+      sockets.push(socket)
+      socket.on('data', (chunk: Buffer) => {
+        received += chunk.length
+      })
+      // The line the engine opens with, before any request is read.
+      socket.write(
+        `${JSON.stringify({
+          greeting: true,
+          name: 'stale-engine',
+          version: '0.0.0',
+          protocol: AUDIO_PROTOCOL_VERSION + 1
+        })}\n`
+      )
+    })
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen)
+      server.listen(socketPath, resolveListen)
+    })
+
     const previousBin = process.env.CUERUNNER_AUDIO_BIN
-    const previousDeclared = process.env.CUERUNNER_TEST_AUDIO_PROTOCOL
+    const previousSocket = process.env.CUERUNNER_AUDIO_SOCKET
     const previousBackend = process.env.CUERUNNER_AUDIO_BACKEND
     process.env.CUERUNNER_AUDIO_BIN = binary
-    process.env.CUERUNNER_TEST_AUDIO_PROTOCOL = String(AUDIO_PROTOCOL_VERSION + 1)
+    process.env.CUERUNNER_AUDIO_SOCKET = socketPath
     // What is being refused is a *declaration*, not a device: the silent backend is the one
     // that starts on a machine with no output endpoint at all, which is what a headless
-    // Windows runner is. Without it the engine exits during startup and the client — rightly
-    // — reports that instead of the protocol it never got to hear.
+    // Windows runner is. Without it the client reports the machine instead of the protocol.
     process.env.CUERUNNER_AUDIO_BACKEND = 'silent'
+    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
     const stale = new NativeAudioEngine()
     try {
       const failure = await stale.ensureStarted().then(
@@ -104,18 +133,23 @@ describe('the wire declaration', () => {
       expect((failure as AudioEngineError).code).toBe('engine')
       expect((failure as Error).message).toContain(`protocol ${AUDIO_PROTOCOL_VERSION + 1}`)
       expect((failure as Error).message).toContain(`(${AUDIO_PROTOCOL_VERSION})`)
-      // `snapshot()` is filled by `info()`, the first verb the client writes once a
+      expect((failure as Error).message).toContain('(stale-engine 0.0.0)')
+      // `snapshot()` is filled by `info()`, the first verb this client writes once a
       // connection is verified: a refusal that had written anything would have left one.
       expect(stale.snapshot()).toBeNull()
       expect(stale.status().connected).toBe(false)
       expect(stale.status().started).toBe(false)
+      expect(received).toBe(0)
     } finally {
       restoreEnv('CUERUNNER_AUDIO_BIN', previousBin)
-      restoreEnv('CUERUNNER_TEST_AUDIO_PROTOCOL', previousDeclared)
+      restoreEnv('CUERUNNER_AUDIO_SOCKET', previousSocket)
       restoreEnv('CUERUNNER_AUDIO_BACKEND', previousBackend)
       await stale.shutdown()
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolveClosed) => server.close(() => resolveClosed()))
+      rmSync(workDir, { recursive: true, force: true })
     }
-  })
+  }, 15_000)
 
   it('refuses a connection that never declares itself, before a verb is written', async () => {
     // An engine built before the greeting exists accepts the connection and says nothing.
