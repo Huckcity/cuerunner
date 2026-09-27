@@ -281,8 +281,11 @@ matching language.
 integration/
   playwright.config.ts        per-suite config; testDir 'specs'; workers 1 anywhere, retries 1 in CI
   deskRelay.ts                the relay that holds the desk's single connection: the app and a
-                              spec's own wire both attach to it, and the desk's bytes go to all
-                              (§6)
+                              spec's own wire both attach to it, and the desk's bytes go to all.
+                              With `native` it carries the desk's own control service too — its
+                              session, its leave channel and its keepalive datagrams, at the
+                              relay's host and dialled on the desk's — and keeps a bounded record
+                              of the control service's own socket, each direction (§6)
   sqCapture.mjs               the script a desk session is captured through, kept beside the
                               recording it made
   peers/
@@ -301,6 +304,11 @@ integration/
                               its capture — with no app running
     harness-desk-relay.spec.ts the relay held to being a relay, against a peer told to refuse a
                               second client exactly as the desk does, so the case fails without it
+                              — and, at the end of the file, the carriage of the desk's own
+                              control service held to a native peer on an address of its own
+    desk-relayed.spec.ts      Cuerunner ↔ the relay ↔ the desk's two models, with no desk: the
+                              show names the relay's host, and a recall's membership and its mic
+                              read on those models' own records
     eos.spec.ts               Cuerunner ↔ the Eos peer: fire a cue, answer the console
     eos-vendor.spec.ts        @vendor: the same chain against a real console — or against
                               a recording of one — and it skips itself when neither is named
@@ -452,6 +460,27 @@ relay. This is the one place the desk peer is knowingly wider than the desk: it 
 clients by default, because the app lane stands in for the desk's side of a conversation rather
 than for its connection rule, and `DeskPeerOptions.singleClient` says which of the two a spec
 means.
+
+**The relay carries the desk's own control service too, where a caller asks for it** (`native`,
+opt-in — leaving it out is every case that predates it, and means nothing is dialled and nothing
+listens): the session on **51326**, the leave channel on **51321** and the keepalive datagrams on
+**51324**, the three ports an SQ's show dials on the desk's address and the same three
+`src/main/desk/frames.ts` names. They are the desk's own numbers rather than any show setting, so
+the carriage's listeners take them at the relay's host and its dials take them on the desk's — one
+upstream connection per service, a client's bytes forwarded verbatim, the desk's own bytes
+broadcast to every client attached, and a bounded record of the last bytes in each direction. The
+record exists because a client cannot see another client's writes: what an app recalls on 51326 is
+nowhere else on a lane, and the relay's own view of that wire is what `desk-relayed.spec.ts` and
+the hardware lane's case about a fader's membership read. It is a ring rather than a prefix,
+because the session opens with an 8192-byte layout push and a recall's frames land after it. What
+it covers is that one socket, and nothing else: the leave channel's four bytes are forwarded
+unrecorded, the keepalive datagrams are forwarded and witnessed at the desk rather than recorded
+there, and every client shares the relay's one session — nothing is replayed, so a client that
+attaches later sees only what crosses the relay after it. A **manual run against a real desk** is
+`npm run relay:desk -- --desk <host:port> --native`: the relay prints the address it listens on, a
+show is pointed at that address, and the desk is in front of you — without `--native` the app dials
+51326 on the show's desk host and reaches nothing, which is what a run against a desk has to know
+before it reads anything into a recall.
 
 **The desk's other services (measured on the same run).** The same SQ-6 exposes a second TCP
 service on **51326** that accepts several clients at once and answers neither a MIDI get nor a
@@ -721,10 +750,11 @@ by `DESK_HOST`/`DESK_PROFILE`, and at a console's cable by `MSC_HOST`:
    because a desk that does not answer is a desk setting.
 2. A scene recall moves the desk, and the desk's own value says so: the open and the close of the
    mic, each read back with a fresh get, on an SQ (an Avantis publishes no mute read-back, and
-   the case reports itself skipped there). What is *not* readable here is the membership: an SQ's
-   goes over the desk's own control service on 51326, which this lane's relay does not carry, and
-   an Avantis's takes the same link but the range publishes no read for an assignment — so that
-   half's claim stays where the record left it.
+   the case reports itself skipped there). What the desk *makes* of a membership is still not
+   readable here: an SQ's goes over the desk's own control service on 51326 — which this lane's
+   relay carries (`native`, §6) — and the desk publishes no answer for an assignment, so the
+   frames a recall wrote are read on the relay's own record while the desk's own state stays the
+   operator's to look at; an Avantis's assignment goes over the desk link and has no read either.
 3. A key pressed at the desk runs the show, and the desk moves with it. The operator assigns a
    spare mute group to the key and presses it; the show's walk lands on the scene, and the
    desk's own value changes with it. It needs a hand, and its failure message is the
@@ -739,11 +769,14 @@ by `DESK_HOST`/`DESK_PROFILE`, and at a console's cable by `MSC_HOST`:
    named another range reports it skipped with its reason. The show carries two mics and two
    scenes that hand one fader between them, and the desk's own value is read for both inputs at
    either end of that walk — the mic the scene places is open, the mic it places nowhere is
-   silent — so what a recall does to the *mics* is read off the desk. The membership itself
-   does not reach this lane's desk at all: the relay carries the MIDI service, so no frame is
-   written on 51326 and nothing here can fail for one, and its failure message says so — the
-   fader is the operator's to look at, beside the desk's own I/O patch, which no route here
-   writes and which has to be left where the run's operator left it.
+   silent — so what a recall does to the *mics* is read off the desk. The membership is read
+   beside them, on the route the relay carries: the two recalls' frames, decoded with the app's
+   own codec out of the relay's record of what went to 51326, are the pair and the flag the
+   recalled scenes' own placements make — so a recall that never wrote a membership fails this
+   case now, where it used to pass on the mutes the desk link writes either way. What stays the
+   operator's is what the *desk* made of that write — no SQ publishes an answer for an
+   assignment — beside the desk's I/O patch, which no route here writes and which has to be left
+   where the run's operator left it.
 
 **The A&H lane, through the bridge** (`desk-midi-control.spec.ts`, `@ah`) — the desk
 conversation over MIDI Control's virtual port instead of the desk's socket, with the peer
@@ -936,15 +969,19 @@ goes — a key pressed on the surface, and the console's GO below — and their 
 instruction; those two read the app's log line, which names the desk or the console it came
 from, because a hand is the one thing no wire view can see. Against an SQ the key case also
 reads the desk's own value moving, which is the app's message for the recalled scene arriving.
-The membership is not readable here: an SQ's is written on the desk's own control service on
-51326, which this lane's relay does not carry and which nothing in this lane reaches the peer
-that models it, and an Avantis publishes no read for an assignment — so both stay where §6 and §11
+The membership's own frames are readable now, on the route the relay carries: an SQ's is written
+on the desk's own control service on 51326, the relay's `native` carriage sends it to the desk the
+run named, and the case reads what a recall wrote there out of the relay's record — decoded with
+the app's codec, so a recall that never wrote a membership fails it where it used to pass on the
+mutes the desk link writes either way. What the *desk* made of that write is still outside every
+peer — an SQ publishes no read for an assignment and the capture holds no such frame, and an
+Avantis's assignment goes over the desk link with no read either — so both stay where §6 and §11
 decision 6 leave them. A fifth case asks the desk for two mics' own values at either end of a
 scene that hands one fader between them, so the mics a recall moves are read off the desk
 itself: the mic the scene places is open and the mic it places nowhere is silent. What a recall
-did to the *fader* is not readable there — the relay carries the MIDI service, so no membership
-frame leaves the runner — and the case's failure message is the walkthrough: the fader is the
-operator's to look at, beside the desk's I/O patch, which has to be left alone.
+did to the *fader* is still the operator's to look at — the frames left the runner, and what the
+desk did with them is not readable — and the case's failure message is the walkthrough: the fader
+is the operator's to check, beside the desk's I/O patch, which has to be left alone.
 **MSC landed** with B4: `msc.spec.ts` drives a Show Control cue into the peer's SQ and fires a
 cue from a soft key the operator assigned. What the *desk* does not do is transmit MSC — G2 —
 so an `msc` trigger's end-to-end home is a console on a cable, which is the hardware lane: the
@@ -1039,7 +1076,14 @@ are MIDI bytes" assumption, and this model's own reading of 51326 stay unproven 
    `integration/deskRelay.ts` holds the desk's single connection and both clients connect there;
    its own spec (`specs/harness-desk-relay.spec.ts`, in the peers lane, so it runs on every pull
    request) holds it to being a relay rather than a desk. What the lane asserts is still the desk's
-   own bytes — relayed verbatim, one hop that belongs to the harness rather than to the desk.
+   own bytes — relayed verbatim, one hop that belongs to the harness rather than to the desk. And
+   the same relay carries the desk's own control service where a run asks for it (`native`, §6):
+   the session on 51326, the leave channel and the keepalive datagrams, dialled on the desk the
+   run named — so an SQ's recall now writes its membership over the desk it was aimed at rather
+   than into a port nothing is on, and the fifth case reads those frames on the relay's own record
+   instead of asking an operator to look. `specs/desk-relayed.spec.ts` proves the whole of that
+   route with no desk anywhere, on the peers lane, with the two models behind the relay; what a
+   dispatch still has to carry is the desk's own side of it, which is what decision 6 leaves open.
 3. **Where the vendor lane runs. — answered: `win-ci`, with a fallback.** ETCnomad is
    installed there (§9), and the machine is Windows with a logged-in session, which is what
    a GUI application needs. The caveats that came with the guest — Server 2025 outside
@@ -1086,10 +1130,15 @@ are MIDI bytes" assumption, and this model's own reading of 51326 stay unproven 
    the MIDI peer, and `harness-desk.spec.ts` holds the model itself to the capture with no app at
    all. Story 11.2 is the write's caller: the renderer sends the intent — channel, fader, placed
    or cleared, and whether the channel rides a fader after the write — through `show:command` to
-   the `sq-native` service, and the frames are built in main from `src/main/desk/frames.ts`. What
-   that peer cannot carry is the desk's own side of the read: the capture holds no frame in which
-   the desk reports a membership, so the model says nothing about one and a client still knows
-   only what it sent.
+   the `sq-native` service, and the frames are built in main from `src/main/desk/frames.ts`. The
+   **carriage** is what makes that route usable on a lane at all: `integration/deskRelay.ts`'s
+   `native` sends the session, the leave channel and the keepalive datagrams to the desk the run
+   named (§6), so the peers lane proves the app's own frames at a model of the desk
+   (`desk-relayed.spec.ts`) and a lane with a desk reads what a recall wrote out of the relay's
+   record — and a manual run takes the same path with `--native`. What that peer cannot carry, and
+   what the carriage cannot read, is the desk's own side of the read: the capture holds no frame in
+   which the desk reports a membership, so the model says nothing about one and a client still
+   knows only what it sent.
 
 **Risks**
 
@@ -1104,9 +1153,13 @@ are MIDI bytes" assumption, and this model's own reading of 51326 stay unproven 
   to a build instead of to Cuerunner.
 - **A peer is not a desk.** The Eos peer is a model of a console we wrote from a manual;
   its value is regression detection, not truth. The fixtures are what keep it near the
-  truth, and the hardware lane is what the fixtures are checked against — built and **not yet
-  run**, so nothing here says the model is right until a desk run happens (§10 M3, §11 decision
-  2).
+  truth, and the hardware lane is what the fixtures are checked against — it has run once
+  (2026-09-26, §10 M3: four of its five cases passing, the console case reporting skipped for want
+  of a cable), which is what put the read-back, the recall and a real key press in front of a desk.
+  What that run did not carry is the route this change adds: its show dialled the relay's MIDI
+  service alone, so a membership never left the runner, and no dispatch has carried the relay's
+  `native` carriage to a desk yet — so what a real SQ makes of those frames stays where §11
+  decision 6 and the record leave it (§10 M3, §11 decision 2).
 - **The A&H MIDI Control lane is assumed to bridge to a peer. — answered by the job, not yet
   measured.** MIDI Control is a virtual port joined to a TCP endpoint, and nothing in it should
   care whether the far end is a desk or `desk.ts` — but that is an expectation, and `ah-windows`
