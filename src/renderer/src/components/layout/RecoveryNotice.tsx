@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../store'
 import type { MissingMedia } from '../../../../shared/media'
 import type { LoadNote, Workspace } from '../../../../shared/workspace'
@@ -22,8 +22,15 @@ interface Snapshot {
 export function RecoveryNotice() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
+  /** Whether this mount has already asked: see the effect below. */
+  const asked = useRef(false)
 
   useEffect(() => {
+    // StrictMode's second pass mounts this effect twice; the ask is idempotent but the
+    // sentence it logs is not, and the log is the operator's record rather than the
+    // harness's. One ask per mount.
+    if (asked.current) return
+    asked.current = true
     // `recovery: null` is the ordinary "nothing to offer"; a snapshot this build cannot
     // read is the refusal arm, and it is said rather than offered as nothing. It is said
     // here, on the recovery lane's own bar, rather than through `reportFailure`: that
@@ -39,6 +46,15 @@ export function RecoveryNotice() {
         // Main writes the refusal — a lowercase fragment naming what it could not read —
         // and this is the action the window attempted, in front of it.
         const message = `Could not bring the unsaved work back: ${answer.error}`
+        useStore.getState().appendLog([{ level: 'error', message }])
+        setRefusal(message)
+      })
+      .catch((error: unknown) => {
+        // A fault rather than an ordinary state: main rejected, which means something
+        // broke. Left unhandled it produced no bar and no line — nothing at all, on the
+        // one lane whose whole job is to tell the operator their unsaved work is or is not
+        // there. The sentence lands on the same bar, which needs no decision from them.
+        const message = `Could not look for unsaved work: ${error instanceof Error ? error.message : String(error)}`
         useStore.getState().appendLog([{ level: 'error', message }])
         setRefusal(message)
       })
