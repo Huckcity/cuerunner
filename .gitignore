@@ -11,6 +11,10 @@ coverage/
 # TypeScript incremental build info (composite projects)
 *.tsbuildinfo
 
+# A pinned tool's own download: `scripts/lint-workflows.mjs` unpacks the workflow linter's
+# release here, the way the engine's FFmpeg source is cached under native/audio/.cache/.
+.cache/
+
 # Native engine: the downloaded FFmpeg source cache and the built decoder helper.
 # (The engine itself lands in native/audio/build/, already covered by build/ above.)
 native/audio/.cache/
