@@ -1,0 +1,92 @@
+name: Download report
+
+# Whether anyone is downloading the installers, and from where — the one signal the app makes
+# outside this repository, said before anyone is told about it.
+#
+# Nothing in the pipeline can see a download: the site's cards point at `pub.cuerunner.app`, a
+# Cloudflare R2 bucket, and the app itself sends nothing (a promise the README makes). The edge
+# that serves the files counts every request, so this reads those counts from Cloudflare's
+# GraphQL Analytics API and comments them on one standing `Download report` issue. A zero stays
+# silent and green: no comment, nothing to read.
+#
+# The counts are edge requests, not people — a resumed or ranged download, a re-click or a
+# scanner adds requests — so the comment reads as "someone is downloading" rather than a
+# headcount, and only paths and country codes are read (never an IP or a user agent).
+#
+# `CF_ANALYTICS_TOKEN` is a one-time human step, and the first step below fails with the
+# instructions when it is missing: Cloudflare → My Profile → API Tokens → Create Token, the
+# `Zone Analytics:Read` permission scoped to the `cuerunner.app` zone, then
+# `gh secret set CF_ANALYTICS_TOKEN`. The job needs it because the repository's own Cloudflare
+# token is DNS-only and the analytics permission is refused by it.
+
+on:
+  schedule:
+    # Daily, at an off-hour minute and clear of the other nights' slots (`integration-vendor`
+    # fires on the hour, `soak` at 02:43), in UTC as GitHub's cron always is.
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+# One report at a time: a dispatch should wait behind a nightly run rather than race it into
+# counting the same window twice and posting the second comment over the first.
+concurrency:
+  group: download-report
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: [self-hosted, linux, x64, ubox]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # A missing secret reaches the script as a named error too, but saying it here makes the
+      # run's own log carry the fix rather than a stack trace: this failure is one command away
+      # from being configured, and it will otherwise repeat every night.
+      - name: Refuse a missing analytics token with the one-time fix
+        env:
+          CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
+        run: |
+          if [ -z "${CF_ANALYTICS_TOKEN}" ]; then
+            echo "::error::CF_ANALYTICS_TOKEN is not set — create a Cloudflare API token (My Profile → API Tokens → Create Token, permission 'Zone Analytics:Read', scoped to the cuerunner.app zone) and store it with: gh secret set CF_ANALYTICS_TOKEN"
+            exit 1
+          fi
+
+      - name: Read the window's downloads from Cloudflare
+        id: count
+        env:
+          CF_ANALYTICS_TOKEN: ${{ secrets.CF_ANALYTICS_TOKEN }}
+        run: |
+          node scripts/download-report.mjs --json --out download-report.json
+          node scripts/download-report.mjs --render download-report.json > comment.md
+          total=$(node -p 'JSON.parse(require("fs").readFileSync("download-report.json","utf8")).total')
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "installer downloads in the window: $total"
+
+      # Zero downloads is the ordinary state of an app nobody has been told about, and it is not
+      # a failure: the step is skipped and the run stays green. When there are counts, the issue
+      # is the record — one comment per run on the same issue, created by the run that finds the
+      # first downloads, with its first line saying so.
+      - name: Post the report
+        if: steps.count.outputs.total != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          existing=$(gh issue list --search '"Download report" in:title' --state all --limit 50 \
+            --json number,title --jq '.[] | select(.title == "Download report") | .number' | head -n 1)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file comment.md
+            exit 0
+          fi
+          # No issue means this run's post is the first one: it starts the record, names itself
+          # the first downloads, and gets the `downloads` label so the issue is findable by it.
+          node scripts/download-report.mjs --render download-report.json --first > comment.md
+          gh label create downloads --force --description 'The standing download report' --color '0e8a16'
+          gh issue create --title 'Download report' --body-file comment.md --label downloads
