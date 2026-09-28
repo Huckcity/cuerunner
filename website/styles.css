@@ -481,6 +481,14 @@ kbd {
   text-align: center;
 }
 
+/* Who the buyer is dealing with: the company's own record, in the muted tone rather than the
+   dim one, because it is a fact a buyer may need to read rather than a line of navigation. */
+.site-footer .seller {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
 /* ─── Guide page ─────────────────────────────────────────────────────────── */
 
 .guide-layout {
