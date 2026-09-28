@@ -45,7 +45,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
+        # runs — the eight `ubox` runners between them.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
@@ -124,7 +125,8 @@ jobs:
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
-        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
+        # runs — the eight `ubox` runners between them.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
@@ -224,7 +226,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
+        # runs — the eight `ubox` runners between them.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
@@ -279,7 +282,8 @@ jobs:
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
-        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
+        # runs — the eight `ubox` runners between them.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
@@ -406,7 +410,8 @@ jobs:
           node-version: 24
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock for six jobs.
+        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
+        # runs — the eight `ubox` runners between them.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev

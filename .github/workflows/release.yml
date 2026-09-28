@@ -38,7 +38,7 @@ jobs:
 
       - name: Install ALSA dev headers
         # Here the headers are the hosted image's; the check and the timeout are the same
-        # ones the homelab runner needs, where six jobs share one dpkg lock.
+        # ones the homelab runner needs, where every slot shares one dpkg lock.
         run: |
           dpkg -s libasound2-dev >/dev/null 2>&1 ||
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
