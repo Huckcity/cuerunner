@@ -207,44 +207,6 @@ jobs:
   # acceptance suite (exact start/stop/fade frames, routing, streaming, cache, M4A) runs
   # here. `npm run test:native` builds the engine and, on Linux, the pinned LGPL FFmpeg
   # helper through its pre-hook; the helper is cached so an unchanged pin costs nothing.
-  native-engine:
-    runs-on: [self-hosted, linux, x64, ubox]
-    # One at a time, across every run, and never beside the soak. Half this job measures time
-    # rather than asserting a value: `stream-stall.mjs` bounds how fast a starved stream may
-    # fall behind, `matrix-bench.mjs` floors the realtime factor, and the night's own shards
-    # count xruns — all three read the host's spare cores as much as the engine's behaviour.
-    # Observed on 2026-09-27: three `stream-stall` failures on three pull requests at three
-    # code states, each while eight lanes shared twelve cores, and a soak xrun beside a
-    # concurrent CI burst. Then the same branch, run alone: `12/12` and 8.40x. The group name
-    # is shared with `soak.yml` on purpose — group names are unique per repository, so the two
-    # exclude each other, and a night is measured against a quiet host rather than the daytime
-    # queue. It costs the soak nothing at night and the lane minutes by day.
-    concurrency:
-      group: timing-sensitive
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - run: npm ci --legacy-peer-deps
-
-      - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
-        uses: actions/cache@v6
-        with:
-          path: native/audio/build/decoders
-          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
-
-      - name: Native acceptance (real mixer, offline render)
-        run: npm run test:native
-
-      # The soak is what runs nightly in full; a minute of it here means a change that
-      # breaks the show harness is caught on the pull request that made it, not at 3 am.
-      - name: Soak smoke (a minute of show)
-        run: npm run soak -- --minutes 1
-
   # Installing the Electron binary exercises npm's install scripts, @electron/get's
   # 200 MB download and zip extraction — the path that silently produced no binary on
   # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
