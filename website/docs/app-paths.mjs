@@ -119,6 +119,12 @@ export const APP_PATHS = [
     printed: `${CARET} → Export Bundle…`,
     names: [{ menu: 'export-bundle' }]
   },
+  // The support page's report: a path under the brand caret to the File menu item.
+  {
+    page: 'support.html',
+    printed: `${CARET} → Report a Problem…`,
+    names: [{ menu: 'report-problem' }]
+  },
   // The fifth of that page's app words is a label on its own rather than a path: the handover
   // section names the item a reader picks, with no caret and no keys in front of it.
   {

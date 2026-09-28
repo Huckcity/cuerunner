@@ -48,6 +48,14 @@ export const DEACTIVATION_PATH = `A key can be taken off a machine without askin
  */
 export const REFUND_ROUTE = `A refund is the row the key was sold under marked refunded, plus a request to deactivate the machine it was entered on. There is no window to catch.`
 
+/**
+ * The app's own words for the report: the menu item that opens it and the three buttons under
+ * it. The guard reads each back out of `src/shared/fileMenu.ts` and `ReportDialog.tsx`, so the
+ * page cannot send anyone looking for a control that has moved.
+ */
+export const REPORT_ITEM = 'Report a Problem…'
+export const REPORT_BUTTONS = ['Copy', 'Save…', 'Email…']
+
 export const SUPPORT = [
   {
     path: 'support.html',
@@ -75,6 +83,27 @@ export const SUPPORT = [
       <p class="note">
         A message that says what you did and what happened is answered in one pass rather than
         three, and a line from the log is worth more than a description of the sound it made.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Report a problem</h2>
+      <p>
+        <strong>Cuerunner ▾ → ${REPORT_ITEM}</strong> builds the report for you and shows it
+        in full before anything leaves: the version, the machine, what the audio engine says
+        about itself, whether a key is active, the crash dumps Windows or macOS left, and the
+        end of the session log. Say what happened in the box above it.
+      </p>
+      <p>
+        <strong>${REPORT_BUTTONS[0]}</strong> and <strong>${REPORT_BUTTONS[1]}</strong> keep it
+        on your machine. <strong>${REPORT_BUTTONS[2]}</strong> puts it on the clipboard and opens
+        a message to <a href="mailto:${attr(ORDER_EMAIL)}">${attr(ORDER_EMAIL)}</a> for you to
+        paste it into and send.
+      </p>
+      <p class="note">
+        Cuerunner sends nothing itself, ever: no crash uploads, no usage counts. Your home
+        folder is replaced by <code>~</code>; the report holds no cue names, no show contents
+        and no key. Crash dumps are listed by name and are not included — attach one if asked.
       </p>
     </section>
 

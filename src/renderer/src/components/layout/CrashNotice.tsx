@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatClock } from '../../utils/cueDefaults'
+import { useStore } from '../../store'
 import { NoticeBar } from './NoticeBar'
 
 interface RendererCrash {
@@ -11,6 +12,7 @@ interface RendererCrash {
 // the in-memory cues are gone. This is the only place that says so.
 export function CrashNotice() {
   const [crash, setCrash] = useState<RendererCrash | null>(null)
+  const openReport = useStore(s => s.openReport)
 
   useEffect(() => {
     window.cuerunner.app
@@ -22,7 +24,11 @@ export function CrashNotice() {
   if (!crash) return null
 
   return (
-    <NoticeBar kind="crash" onDismiss={() => setCrash(null)}>
+    <NoticeBar
+      kind="crash"
+      onDismiss={() => setCrash(null)}
+      actions={<button className="app-notice-action" onClick={openReport}>Report this</button>}
+    >
       The interface stopped unexpectedly at {formatClock(crash.at)} ({crash.reason}) and was
       reloaded, which resets the show. The workspace file on disk is untouched, and unsaved work
       from before the crash is offered back when the autosave caught it.

@@ -10,6 +10,7 @@ import type {
 } from '../shared/audio'
 import { AUDIO_PROTOCOL_VERSION } from '../shared/audio'
 import type { CuerunnerBridge } from '../shared/ipc'
+import type { ReportEmailResult, ReportInput, ReportSaveResult } from '../shared/ipc/app'
 import type { RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import type {
   RelinkedWorkspace,
@@ -110,6 +111,9 @@ Object.defineProperty(window, 'cuerunner', {
       rendererCrash: vi.fn(() => Promise.resolve(null)),
       onMainError: vi.fn(() => () => {}),
       drainMainErrors: vi.fn(() => Promise.resolve([])),
+      composeReport: vi.fn((input: ReportInput) => Promise.resolve(`REPORT\n${input.description}`)),
+      saveReport: vi.fn((): Promise<ReportSaveResult> => Promise.resolve({ ok: true, path: null })),
+      emailReport: vi.fn((): Promise<ReportEmailResult> => Promise.resolve({ ok: true })),
       onCloseRequested: vi.fn(() => () => {}),
       onMenuAction: vi.fn(() => () => {}),
       confirmClose: vi.fn(() => Promise.resolve())

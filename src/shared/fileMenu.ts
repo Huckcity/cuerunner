@@ -13,6 +13,7 @@ export type FileMenuAction =
   | 'merge'
   | 'export-bundle'
   | 'import-bundle'
+  | 'report-problem'
   | 'show-settings'
   | 'settings'
 
@@ -45,6 +46,10 @@ export const FILE_MENU: FileMenuEntry[] = [
   // Handover: the show and the audio it plays as one file, in and out.
   { action: 'export-bundle', label: 'Export Bundle…' },
   { action: 'import-bundle', label: 'Import Bundle…' },
+  'separator',
+  // Something went wrong, or is not clear: the report is built here, shown in full, and
+  // goes nowhere until the operator copies it, saves it or mails it.
+  { action: 'report-problem', label: 'Report a Problem…' },
   'separator',
   // The show's own setup, beside the app's: one travels with the workspace, the other
   // with the machine.

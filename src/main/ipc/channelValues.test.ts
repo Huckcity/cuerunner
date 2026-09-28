@@ -16,11 +16,14 @@ import { CHANNEL_TABLES, EVENT_CHANNELS } from '../../shared/ipc'
 /** Every declared channel, sorted: the invoke channels and the push channels together. */
 const FROZEN_CHANNELS = [
   'app:close-requested',
+  'app:compose-report',
   'app:confirm-close',
   'app:drainMainErrors',
+  'app:email-report',
   'app:main-error',
   'app:menu-action',
   'app:renderer-crash',
+  'app:save-report',
   'audio:cancel',
   'audio:clock',
   'audio:configure',

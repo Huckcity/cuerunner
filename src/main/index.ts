@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, Menu } from 'electron'
+import { app, BrowserWindow, crashReporter, shell, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -43,6 +43,12 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason) => {
   reportMainError(`[main] unhandled rejection: ${describeError(reason)}`)
 })
+
+// Chromium's own crash reporter, kept local: with `uploadToServer: false` it writes a minidump
+// beside the profile when a process dies and sends it nowhere. The problem report lists what
+// it left, so a crash is something the operator can attach on request — the app still tells
+// nobody anything on its own. Started before `ready`, as Electron requires.
+crashReporter.start({ uploadToServer: false, compress: true })
 
 // Menu accelerators swallow the keystroke before the renderer sees it, so the
 // renderer decides whether the action belongs to a focused text field or to the

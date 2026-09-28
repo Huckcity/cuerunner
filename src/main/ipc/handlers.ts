@@ -72,6 +72,8 @@ import {
 } from '../../shared/ipc/workspace'
 import type { EventChannel } from '../../shared/ipc'
 import { asRefusal, refusalValue } from './refusal'
+import { compose as composeProblemReport, saveReport, emailReport } from '../report/session'
+import type { ReportInput } from '../../shared/ipc/app'
 import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { deviceFaultAlert } from '../safety/engineFaults'
@@ -416,6 +418,17 @@ export function registerIpcHandlers(): void {
   // Failures the main process reported before the window was listening. The renderer
   // takes them on startup so a broken launch is explained rather than silent.
   ipcMain.handle(APP_CHANNELS.drainMainErrors, () => drainMainErrors())
+
+  // The problem report: composed on request, shown by the window, and sent nowhere by the
+  // app. Saving and mailing take back the text the window showed, so what leaves is what
+  // was read. An ordinary refusal (nothing to send, a report past its ceiling) is an answer.
+  const reportSources = { engine: audioEngine, license: () => license.status() }
+  ipcMain.handle(APP_CHANNELS.composeReport, (_, input: ReportInput) =>
+    composeProblemReport(reportSources, input))
+  ipcMain.handle(APP_CHANNELS.saveReport, (event, text: unknown) =>
+    refusalValue(() => saveReport(getWin(event), text)))
+  ipcMain.handle(APP_CHANNELS.emailReport, (_, text: unknown) =>
+    refusalValue(() => emailReport(text)))
 
   ipcMain.handle(SHOW_CHANNELS.configure, async (_, settings: ShowSettings) => {
     lastShowSettings = settings

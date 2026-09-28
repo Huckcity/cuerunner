@@ -373,6 +373,10 @@ interface CueListState {
    * to this show, and what did the other version do differently.
    */
   changesTab: ChangesTab | null
+  /** The Report a Problem dialog is open. */
+  reportOpen: boolean
+  openReport: () => void
+  closeReport: () => void
   openChanges: (tab: ChangesTab) => void
   closeChanges: () => void
 
@@ -781,6 +785,7 @@ export const useStore = create<CueListState>((set) => ({
   settingsTab: null,
   showSettingsTab: null,
   changesTab: null,
+  reportOpen: false,
   mergeReport: null,
 
   addCue: (type, afterId) => set(s => {
@@ -1370,6 +1375,10 @@ export const useStore = create<CueListState>((set) => ({
   closeShowSettings: () => set({ showSettingsTab: null }),
 
   openChanges: (changesTab) => set({ changesTab }),
+
+  openReport: () => set({ reportOpen: true }),
+
+  closeReport: () => set({ reportOpen: false }),
 
   closeChanges: () => set({ changesTab: null }),
 
