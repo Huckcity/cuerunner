@@ -677,6 +677,16 @@ GitHub Actions workflows in `.github/workflows/`:
   own: a release published with the repository's own token starts no workflow, so this
   workflow dispatches `build.yml` for the tag it cut, which is what uploads the installers
   and fills the mirror — a release with no installers means that dispatch did not happen.
+- **`download-report.yml`**: Says whether anyone is downloading the installers, and from
+  where. Runs daily (and by hand) and reads Cloudflare's analytics for the host the
+  download cards point at, `pub.cuerunner.app`, then comments the counts on the standing
+  `Download report` issue — the run that finds the first downloads starts it, with *First
+  downloads* as the post's first line, and a zero posts nothing and stays green. It needs
+  the `CF_ANALYTICS_TOKEN` secret: a Cloudflare API token with *Zone Analytics:Read* on the
+  `cuerunner.app` zone, stored with `gh secret set CF_ANALYTICS_TOKEN`. These are edge
+  requests, not people — a resumed or ranged download, a re-click or a scanner adds counts
+  — and only request paths and country codes are read. The app itself sends nothing; this
+  is the download host counting what it served.
 
 ### Running the lanes yourself
 

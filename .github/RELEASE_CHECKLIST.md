@@ -101,6 +101,17 @@ its artifacts are.
       packaging run points at the R2 bucket or its public hostname — the `R2_*` secrets and
       Cloudflare's side — rather than at this pipeline, and is to be reported rather than worked
       around.
+
+**Whether anyone is downloading is reported for you, from the host rather than the app.**
+`download-report.yml` runs daily and, when the window has counts, comments them on the standing
+`Download report` issue — the run that finds the first downloads starts it, with *First
+downloads* as the post's first line. It reads Cloudflare's analytics for `pub.cuerunner.app` and
+needs the `CF_ANALYTICS_TOKEN` secret to do it: a one-time
+Cloudflare → My Profile → API Tokens → Create Token with *Zone Analytics:Read* on the
+`cuerunner.app` zone, stored with `gh secret set CF_ANALYTICS_TOKEN`. The counts are edge
+requests, not people — a resumed or ranged download, a re-click or a scanner adds requests — and
+the app sends nothing itself; only request paths and country codes are read.
+
 - [ ] **A release page with no assets means no packaging run happened, or the one that ran
       failed before its publishing jobs.** Check `gh run list --workflow=build.yml --limit 2` for
       a run against the tag before announcing anything, and read a red run as the cause: a run
