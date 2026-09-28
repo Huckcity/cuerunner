@@ -440,7 +440,16 @@ function onDisk(): Map<Refused, string> {
   return paths
 }
 
-describe('the funnel, through every entry point', () => {
+describe(
+  'the funnel, through every entry point',
+  // These cases drive every refused fixture through every entry point — dozens of writes and
+  // reads, each through the whole funnel — which makes them the heaviest in the suite. Five
+  // seconds, vitest's default, is enough on an idle machine and is not on a runner carrying a
+  // burst: two of them timed out on four pull requests on 2026-09-28, each time with every
+  // other file in the run passing. The budget is stated on the describe rather than raised for
+  // the whole project, and no assertion changed: a case that hangs still fails, later.
+  { timeout: 60_000 },
+  () => {
   it('refuses a file a recent entry names, and names that file', async () => {
     for (const [entry, path] of onDisk()) {
       await refusedFrom(entry, path, () => openWorkspaceFromPath(path))
@@ -542,42 +551,32 @@ describe('the funnel, through every entry point', () => {
     expect(readFileSync(target, 'utf-8')).toBe(before)
   })
 
-  it(
-    'leaves every refused file exactly as it was found',
-    // This case walks every refused fixture through every entry point — dozens of writes and
-    // reads, each through the whole funnel — and it is the heaviest thing in the suite. The
-    // default five seconds is enough on an idle machine and is not on a runner carrying a
-    // burst: it timed out on three pull requests on 2026-09-28 while every other file passed.
-    // The budget is stated here rather than raised suite-wide, and the assertion is unchanged:
-    // a case that hangs still fails, ten times later than before.
-    { timeout: 60_000 },
-    async () => {
-      // Loading never writes: the refusal is a value the window shows, and what the operator
-      // picked is theirs — bytes and mtime both. Each shape is driven through every loading
-      // entry point before the file is read back.
-      for (const [entry, path] of onDisk()) {
-        const before = readFileSync(path)
-        const beforeStat = statSync(path)
+  it('leaves every refused file exactly as it was found', async () => {
+    // Loading never writes: the refusal is a value the window shows, and what the operator
+    // picked is theirs — bytes and mtime both. Each shape is driven through every loading
+    // entry point before the file is read back.
+    for (const [entry, path] of onDisk()) {
+      const before = readFileSync(path)
+      const beforeStat = statSync(path)
 
-        await refusedFrom(entry, path, () => openWorkspaceFromPath(path))
-        vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [path] })
-        await refusedFrom(entry, path, () => openWorkspace({} as never))
-        await writeRecovery(entry.show as unknown as Workspace, null)
-        await refusedFrom(entry, join(ends.userData.path, 'recovery.cuerunner'), () => openRecovery())
-        const bundle = join(dir, 'Handover.cuerunnerx')
-        await writeZip(bundle, [{
-          name: 'show.cuerunner',
-          data: Buffer.from(JSON.stringify(entry.show), 'utf8')
-        }])
-        await refusedFrom(entry, `${bundle}’s show.cuerunner entry`, () => readBundle(bundle))
-        await refusedFrom(entry, path, () => compareWithFile(show() as unknown as Workspace, path))
-        await refusedFrom(entry, path, () => openDemoWorkspace(path))
+      await refusedFrom(entry, path, () => openWorkspaceFromPath(path))
+      vi.mocked(dialog.showOpenDialog).mockResolvedValue({ canceled: false, filePaths: [path] })
+      await refusedFrom(entry, path, () => openWorkspace({} as never))
+      await writeRecovery(entry.show as unknown as Workspace, null)
+      await refusedFrom(entry, join(ends.userData.path, 'recovery.cuerunner'), () => openRecovery())
+      const bundle = join(dir, 'Handover.cuerunnerx')
+      await writeZip(bundle, [{
+        name: 'show.cuerunner',
+        data: Buffer.from(JSON.stringify(entry.show), 'utf8')
+      }])
+      await refusedFrom(entry, `${bundle}’s show.cuerunner entry`, () => readBundle(bundle))
+      await refusedFrom(entry, path, () => compareWithFile(show() as unknown as Workspace, path))
+      await refusedFrom(entry, path, () => openDemoWorkspace(path))
 
-        expect(readFileSync(path).equals(before)).toBe(true)
-        expect(statSync(path).mtimeMs).toBe(beforeStat.mtimeMs)
-      }
+      expect(readFileSync(path).equals(before)).toBe(true)
+      expect(statSync(path).mtimeMs).toBe(beforeStat.mtimeMs)
     }
-  )
+  })
 })
 
 /** A wait cue in this build's own shape: the base every cue carries, and whatever the case adds. */
