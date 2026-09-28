@@ -264,25 +264,55 @@ constexpr size_t kWireVerbCount = sizeof(kWireVerbs) / sizeof(kWireVerbs[0]);
  * `--protocol` prints beside the verbs, and src/main/audio/audioWire.test.ts holds the two
  * ends to each other.
  */
+struct WireEventField {
+  const char* name;
+  WireFieldType type;
+  /** A null is a meaning of its own for this field — an `error`'s ids, a `state`'s voice. */
+  bool nullable;
+};
+
 struct WireEvent {
   const char* name;
-  const char* const* fields;
+  const WireEventField* fields;
   size_t count;
 };
 
 template <size_t N>
-constexpr WireEvent wireEvent(const char* name, const char* const (&fields)[N]) {
+constexpr WireEvent wireEvent(const char* name, const WireEventField (&fields)[N]) {
   return {name, fields, N};
 }
 
-const char* const kEndedEventFields[] = {
-    "type", "cueId", "runId", "at", "reason", "loopsCompleted", "sessionId"};
-const char* const kErrorEventFields[] = {
-    "type", "at", "cueId", "runId", "code", "message", "sessionId"};
-const char* const kPanicEventFields[] = {
-    "type", "at", "fadeMs", "sessionId"};
-const char* const kStateEventFields[] = {
-    "type", "at", "active", "cueId", "runId", "playing", "state", "sessionId"};
+const WireEventField kEndedEventFields[] = {
+    {"type", WireFieldType::String, false},
+    {"cueId", WireFieldType::String, false},
+    {"runId", WireFieldType::String, false},
+    {"at", WireFieldType::Number, false},
+    {"reason", WireFieldType::String, false},
+    {"loopsCompleted", WireFieldType::Number, false},
+    {"sessionId", WireFieldType::String, false}};
+const WireEventField kErrorEventFields[] = {
+    {"type", WireFieldType::String, false},
+    {"at", WireFieldType::Number, false},
+    // The fault belongs to the engine rather than to one cue: null is the meaning here.
+    {"cueId", WireFieldType::String, true},
+    {"runId", WireFieldType::String, true},
+    {"code", WireFieldType::String, false},
+    {"message", WireFieldType::String, false},
+    {"sessionId", WireFieldType::String, false}};
+const WireEventField kPanicEventFields[] = {
+    {"type", WireFieldType::String, false},
+    {"at", WireFieldType::Number, false},
+    {"fadeMs", WireFieldType::Number, false},
+    {"sessionId", WireFieldType::String, false}};
+const WireEventField kStateEventFields[] = {
+    {"type", WireFieldType::String, false},
+    {"at", WireFieldType::Number, false},
+    {"active", WireFieldType::Boolean, false},
+    {"cueId", WireFieldType::String, true},
+    {"runId", WireFieldType::String, true},
+    {"playing", WireFieldType::Boolean, false},
+    {"state", WireFieldType::String, true},
+    {"sessionId", WireFieldType::String, false}};
 
 const WireEvent kWireEvents[] = {
     wireEvent("ended", kEndedEventFields),
@@ -745,14 +775,19 @@ std::string wireDeclarationJson() {
     if (i > 0) out += ',';
     out += '"';
     out += event.name;
-    out += "\":[";
+    out += "\":{";
     for (size_t j = 0; j < event.count; j++) {
+      const WireEventField& field = event.fields[j];
       if (j > 0) out += ',';
       out += '"';
-      out += event.fields[j];
+      out += field.name;
+      out += "\":{\"type\":\"";
+      out += wireTypeName(field.type);
       out += '"';
+      if (field.nullable) out += ",\"nullable\":true";
+      out += '}';
     }
-    out += ']';
+    out += '}';
   }
   out += "},\"limits\":";
   out += limitsJson();

@@ -275,6 +275,11 @@ describe('the wire declaration', () => {
           // A declared type carrying a field the declaration does not name must still be
           // delivered exactly as before.
           JSON.stringify({ event: { type: 'panic', at: 3, fadeMs: 0, why: 'because', sessionId: 'feed-session' } }),
+          // A declared field carrying another kind. `normalizeEvent` reads it as absent — the
+          // same answer the interface's own default gives — and the line goes on; what was
+          // missing is the report, because a `reason: null` on an `ended` used to arrive as
+          // `'complete'`, a natural finish the engine never sent.
+          JSON.stringify({ event: { type: 'panic', at: 6, fadeMs: '0', sessionId: 'feed-session' } }),
           // A type that is present but not a name is named as the value that arrived, and
           // an event with no type at all is its own report — neither reads as the other.
           JSON.stringify({ event: { type: 7, sessionId: 'feed-session', at: 4 } }),
@@ -286,13 +291,18 @@ describe('the wire declaration', () => {
       // Nothing reaches a listener for a type the declaration does not name, and the
       // declared event goes through exactly as it does today — its declared fields, the
       // undeclared one reported rather than carried.
-      expect(events).toEqual([{ type: 'panic', at: 3, fadeMs: 0, sessionId: 'feed-session' }])
+      expect(events).toEqual([
+        { type: 'panic', at: 3, fadeMs: 0, sessionId: 'feed-session' },
+        // The second panic: delivered, with the wrong-kind field read as absent.
+        { type: 'panic', at: 6, fadeMs: 0, sessionId: 'feed-session' }
+      ])
       // The repeated type is one entry whose count climbed; the field is its own report,
       // written as the caller wrote it since it has not repeated; and each line whose type
       // is not a name is named by what arrived.
       expect(drainMainErrors()).toEqual([
         "[main] audio engine sent an unrecognised event type 'fly' (×2)",
         "[main] audio engine sent an unrecognised field 'why' on event type 'panic'",
+        "[main] audio engine sent 'fadeMs' on event type 'panic' as string, where the declaration writes number",
         '[main] audio engine sent an unrecognised event type 7',
         '[main] audio engine sent an event with no type'
       ])

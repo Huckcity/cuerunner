@@ -43,7 +43,7 @@ import type {
   AudioWireVerb,
   DeviceOptions
 } from '../../shared/audio'
-import { AUDIO_PROTOCOL_VERSION, declaredEventFields } from '../../shared/audio'
+import { admitsWireKind, AUDIO_PROTOCOL_VERSION, declaredEventFields } from '../../shared/audio'
 import { reportMainError } from '../errors'
 
 const REQUEST_TIMEOUT_MS = 15_000
@@ -651,17 +651,33 @@ export class NativeAudioEngine {
     if (fields !== null) {
       const type = event.type as string
       for (const field of Object.keys(event)) {
-        if (fields.includes(field)) continue
+        if (Object.hasOwn(fields, field)) continue
         reportMainError(
           `[main] audio engine sent an unrecognised field '${field}' on event type '${type}'`,
           `audio-event-field:${type}.${field}`
         )
       }
-      for (const field of fields) {
-        if (Object.hasOwn(event, field)) continue
+      for (const [field, declared] of Object.entries(fields)) {
+        if (!Object.hasOwn(event, field)) {
+          reportMainError(
+            `[main] audio engine sent an event of type '${type}' with no '${field}'`,
+            `audio-event-field-missing:${type}.${field}`
+          )
+          continue
+        }
+        const value = event[field]
+        // A `null` where the interface means one — an `error`'s ids, a `state`'s voice — is
+        // the declaration's own, and the only null this arm admits.
+        if (value === null && declared.nullable === true) continue
+        if (admitsWireKind(declared.type, value)) continue
+        // The third direction, and the one that used to read as a fact: a field present with
+        // another kind passes both loops above, and `normalizeEvent` then invents the value —
+        // `reason: null` on an `ended` became `'complete'`, a natural finish the engine never
+        // reported. The event still goes on, as one with a field left out does.
         reportMainError(
-          `[main] audio engine sent an event of type '${type}' with no '${field}'`,
-          `audio-event-field-missing:${type}.${field}`
+          `[main] audio engine sent '${field}' on event type '${type}' as ` +
+            `${value === null ? 'null' : typeof value}, where the declaration writes ${declared.type}`,
+          `audio-event-field-kind:${type}.${field}`
         )
       }
     }
