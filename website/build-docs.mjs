@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PAGES } from './docs/pages.mjs'
+import { SELLER_BLOCK } from './docs/contact.mjs'
 
 const site = path.dirname(fileURLToPath(import.meta.url))
 
@@ -90,6 +91,7 @@ ${crumb}${page.body.trimEnd()}
 
   <footer class="site-footer">
     <p>Cuerunner — show control for Windows, macOS and Linux. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a></p>
+    <p class="seller">${esc(SELLER_BLOCK)}</p>
   </footer>
 </body>
 </html>
