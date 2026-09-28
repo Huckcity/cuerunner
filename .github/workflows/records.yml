@@ -25,6 +25,15 @@ on:
       - '.github/RELEASE_CHECKLIST.md'
       - '.agents/**'
 
+# A push supersedes the run before it: what a pull request needs is the answer for its
+# newest commit, and without this every push queues a whole extra run beside the one already
+# running — three pushes, three full matrices, all competing for the same slots. Cancelling is
+# per branch and per workflow, so `soak.yml`'s night is untouched (it holds its own group and
+# runs on a schedule rather than a push).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   records:
     runs-on: [self-hosted, linux, x64, ubox]

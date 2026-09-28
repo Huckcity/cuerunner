@@ -1205,12 +1205,18 @@ describe('the record and the copy the checks exist to refuse', () => {
   it('names a lane whose job never runs the integration suite', () => {
     // A job that states one runner: the `unit-test` job runs on a per-platform matrix now, so
     // pointing this case at it would earn a second, unrelated refusal — which of the three
-    // runners — and this case is about the suite. `native-engine` is a job with one `runs-on:`
-    // that has never run the integration suite, which is the whole of what is wanted here.
-    const joined = LIVE.lanes.map((entry) => (entry.lane === 'peers' ? { ...entry, job: 'native-engine' } : entry))
+    // runners — and this case is about the suite. `electron-install` is a job with one
+    // `runs-on:` that has never run the integration suite, which is the whole of what is
+    // wanted here.
+    //
+    // It was `native-engine` until 2026-09-28, when that lane moved into its own workflow
+    // (`native.yml`, scoped to the changes that can move the engine). This case noticed: a
+    // workflow restructure has to run the `scripts/` suite, because these guards read the
+    // workflows as text.
+    const joined = LIVE.lanes.map((entry) => (entry.lane === 'peers' ? { ...entry, job: 'electron-install' } : entry))
     expect(laneProblems(joined, LIVE.workflows)).toEqual([
       expect.stringContaining(
-        "the record's `peers` lane row names `npm run test:integration` as the suite, and no `run:` step of .github/workflows/ci.yml's `native-engine` job runs it"
+        "the record's `peers` lane row names `npm run test:integration` as the suite, and no `run:` step of .github/workflows/ci.yml's `electron-install` job runs it"
       )
     ])
   })

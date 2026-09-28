@@ -19,7 +19,7 @@
 //   linux  this machine. The whole gate, e2e included: `scripts/run-e2e.js` gives Electron a
 //          private Xvfb display, which is why Linux is the one platform that can run that lane
 //          from a terminal at all.
-//   win    `adam@192.168.0.210` — the NUC that runs the Windows lanes for CI (`nuc-win-1`),
+//   win    `adam@nuc-win-1` — the NUC that runs the Windows lanes for CI (`nuc-win-1`),
 //          key `~/.ssh/id_ed25519_winvm`. It already holds the runner's Node tool cache and its
 //          MSVC/ASIO provisioning, so the native build works there without setting anything up.
 //   mac    `adam@mac.local` — the Mac mini (`mac-mini-1`). It needs Remote Login on before this
@@ -97,7 +97,7 @@ export function hosts(env = process.env) {
     },
     win: {
       key: 'win', platform: 'win32', label: 'windows',
-      ssh: env.LOCAL_CI_WIN ?? 'adam@192.168.0.210',
+      ssh: env.LOCAL_CI_WIN ?? 'adam@nuc-win-1',
       keyFile: env.LOCAL_CI_WIN_KEY ?? '~/.ssh/id_ed25519_winvm',
       lanes: ['typecheck', 'unit']
     },

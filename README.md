@@ -698,7 +698,7 @@ prints one `[host lane]` stream per step and a summary that says what each host 
 | Host | Where | Default lanes |
 | --- | --- | --- |
 | `linux` | this machine, taken as Linux — run the command from that box: the local host's platform is not read, so the Linux lanes are planned wherever it starts | typecheck, unit, native, integration, e2e |
-| `win` | `adam@192.168.0.210` — the NUC that runs the Windows lanes (`nuc-win-1`), with the runner's Node and MSVC already provisioned | typecheck, unit |
+| `win` | `adam@nuc-win-1` — the NUC that runs the Windows lanes (`nuc-win-1`), with the runner's Node and MSVC already provisioned | typecheck, unit |
 | `mac` | `adam@mac.local` — the Mac mini (`mac-mini-1`), which needs Remote Login on before anything can reach it | typecheck, unit |
 
 `LOCAL_CI_WIN`, `LOCAL_CI_MAC`, `LOCAL_CI_LINUX`, `LOCAL_CI_WIN_KEY` and `LOCAL_CI_MAC_KEY`
