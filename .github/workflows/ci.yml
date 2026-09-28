@@ -65,6 +65,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint the workflows
+        # Once, not once per Node version: a workflow is not Node's business. The tool is
+        # pinned and fetched by the script itself, which also says what it does and does not
+        # catch (`scripts/lint-workflows.mjs`). Without this step the workflow files are the
+        # one part of the repository no lane reads — an edit with a misspelled key is first
+        # noticed by a release that does not start.
+        if: matrix.node-version == 24
+        run: node scripts/lint-workflows.mjs
+
   # The suite runs on all three platforms the app ships to, not only where it is convenient:
   # most of it is the main process — the workspace and its atomic write, the audio wire, the
   # redundancy service — and those are exactly the places a platform shows up. It ran on
