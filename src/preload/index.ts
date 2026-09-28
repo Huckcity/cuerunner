@@ -43,7 +43,13 @@ import {
   type DeviceOptions
 } from '../shared/audio'
 import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
-import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
+import {
+  APP_CHANNELS,
+  type ReportEmailResult,
+  type ReportInput,
+  type ReportSaveResult,
+  type RendererCrash
+} from '../shared/ipc/app'
 import { PLAYBACK_CHANNELS } from '../shared/ipc/playback'
 import { LICENSE_CHANNELS } from '../shared/ipc/license'
 import { MIDI_CHANNELS, type MidiSendPayload, type MidiSendResult, type MidiSendTcpPayload } from '../shared/ipc/midi'
@@ -135,7 +141,13 @@ contextBridge.exposeInMainWorld('cuerunner', {
     onMainError: (callback: (message: string) => void): (() => void) =>
       subscribe(APP_CHANNELS.mainError, callback),
     drainMainErrors: (): Promise<string[]> =>
-      invoke(APP_CHANNELS.drainMainErrors)
+      invoke(APP_CHANNELS.drainMainErrors),
+    composeReport: (input: ReportInput): Promise<string> =>
+      invoke(APP_CHANNELS.composeReport, input),
+    saveReport: (text: string): Promise<ReportSaveResult> =>
+      invoke(APP_CHANNELS.saveReport, text),
+    emailReport: (text: string): Promise<ReportEmailResult> =>
+      invoke(APP_CHANNELS.emailReport, text)
   },
   playback: {
     /**

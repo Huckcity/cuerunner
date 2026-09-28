@@ -6,6 +6,7 @@
 // about — so this file names the channels for both places rather than owning them.
 
 import type { MenuAction } from '../fileMenu'
+import type { Refusal } from './refusal'
 
 /** The IPC channels. Main owns the handlers; preload owns the bridge to them. */
 export const APP_CHANNELS = {
@@ -19,7 +20,13 @@ export const APP_CHANNELS = {
   confirmClose: 'app:confirm-close',
   rendererCrash: 'app:renderer-crash',
   /** Failures main reported before the window was listening. */
-  drainMainErrors: 'app:drainMainErrors'
+  drainMainErrors: 'app:drainMainErrors',
+  /** The problem report as text: what the operator wrote, the log, and what main knows. */
+  composeReport: 'app:compose-report',
+  /** The composed report, written to a file the operator names. */
+  saveReport: 'app:save-report',
+  /** The composed report onto the clipboard, and a message to the support address opened. */
+  emailReport: 'app:email-report'
 } as const
 
 /** The last renderer crash, kept by main and handed to the window that reloaded after it. */
@@ -27,6 +34,19 @@ export interface RendererCrash {
   reason: string
   at: number
 }
+
+/** What the window knows that main does not: the operator's words and the session log. */
+export interface ReportInput {
+  description: string
+  /** The session log as lines, oldest first. Main keeps the tail and bounds each line. */
+  log: string[]
+}
+
+/** Where a saved report went; `path` is `null` when the operator cancelled the dialog. */
+export type ReportSaveResult = Refusal | { ok: true; path: string | null }
+
+/** The report is on the clipboard and the mail program has been asked to open. */
+export type ReportEmailResult = Refusal | { ok: true }
 
 /** The window lifecycle, as the renderer reads it (`window.cuerunner.app`). */
 export interface AppBridge {
@@ -38,4 +58,11 @@ export interface AppBridge {
   rendererCrash(): Promise<RendererCrash | null>
   onMainError(callback: (message: string) => void): () => void
   drainMainErrors(): Promise<string[]>
+  /** The whole report as text, home folder redacted. The window shows this text and hands
+   *  the same text back to the two verbs below, so what leaves is what was read. */
+  composeReport(input: ReportInput): Promise<string>
+  /** Writes `text` where the operator says; nothing is sent anywhere. */
+  saveReport(text: string): Promise<ReportSaveResult>
+  /** Puts `text` on the clipboard and opens a message to the support address beside it. */
+  emailReport(text: string): Promise<ReportEmailResult>
 }

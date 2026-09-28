@@ -714,6 +714,18 @@ own session — the script reports that reason rather than pretending to try.
 [`RELEASE_CHECKLIST.md`](./.github/RELEASE_CHECKLIST.md) is what a release engineer walks
 before that dispatch, including the check that keeps this file's limitations honest.
 
+## Problem reports
+
+*Cuerunner ▾ → Report a Problem…* composes a report (`src/main/report/report.ts`) and shows
+all of it before anything leaves: versions, platform, the audio engine's state and last
+words, the licence *state* (never the key or its holder), the crash dumps Chromium left
+beside the profile (named, not included), and the tail of the session log, with the home
+folder replaced by `~`. Copy and Save stay on the machine; Email puts the text on the
+clipboard and opens a `mailto:` to `orders@cuerunner.app` — a `mailto:` body cannot carry a
+report, so the operator pastes it. The app sends nothing on its own:
+`crashReporter.start({ uploadToServer: false })` keeps Chromium's dumps local, and
+`scripts/report-address.test.ts` holds the app's address equal to the support page's.
+
 ## Known limitations
 
 The operator-facing list is in the

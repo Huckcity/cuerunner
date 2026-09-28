@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { CrashNotice } from './CrashNotice'
+import { useStore } from '../../store'
 
 describe('CrashNotice', () => {
   let container: HTMLDivElement
@@ -55,5 +56,16 @@ describe('CrashNotice', () => {
     await act(async () => { dismiss.click() })
 
     expect(container.querySelector('.app-notice')).toBeNull()
+  })
+
+  it('offers the report, because a crash is when one is worth sending', async () => {
+    await renderCrash({ reason: 'crashed', at: Date.parse('2026-01-01T20:30:00Z') })
+    useStore.setState({ reportOpen: false })
+
+    const report = [...container.querySelectorAll('.app-notice-action')].find(b => b.textContent === 'Report this')
+    await act(async () => { (report as HTMLButtonElement).click() })
+
+    expect(useStore.getState().reportOpen).toBe(true)
+    useStore.setState({ reportOpen: false })
   })
 })

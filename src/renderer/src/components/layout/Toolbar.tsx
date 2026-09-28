@@ -67,6 +67,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const openSettings = useStore(s => s.openSettings)
   const openShowSettings = useStore(s => s.openShowSettings)
   const openChanges = useStore(s => s.openChanges)
+  const openReport = useStore(s => s.openReport)
 
   const handleAddCue = (type: CueType) => {
     // A scene cue belongs to the scenes the license unlocks: without one there is
@@ -146,6 +147,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'merge': mergeAnotherShow,
     'export-bundle': exportShowBundle,
     'import-bundle': importShowBundle,
+    'report-problem': openReport,
     'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings
   }
