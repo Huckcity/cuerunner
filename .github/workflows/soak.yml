@@ -26,7 +26,14 @@ on:
 
 
 concurrency:
-  group: soak
+  # Shared with `ci.yml`'s native lane (group names are unique per repository, so the two
+  # exclude each other). A workflow run holds its group from start to finish, which is what
+  # keeps a night and a native-engine job off the host at the same time — the 2026-09-27 xrun
+  # was measured beside a concurrent CI burst — while the eight shards *inside* the night still
+  # run together, because a night's numbers are meant to be the engine under load. Named for
+  # what it protects rather than for the workflow: `soak` alone said only who *else* it was
+  # serialising against.
+  group: timing-sensitive
   cancel-in-progress: false
 
 jobs:
