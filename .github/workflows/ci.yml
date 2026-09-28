@@ -209,16 +209,18 @@ jobs:
   # helper through its pre-hook; the helper is cached so an unchanged pin costs nothing.
   native-engine:
     runs-on: [self-hosted, linux, x64, ubox]
-    # One at a time, across every run. Half of this job measures time rather than asserting
-    # a value: `stream-stall.mjs` bounds how fast a starved stream may fall behind, and
-    # `matrix-bench.mjs` floors the realtime factor — both of which read the host's spare
-    # cores as much as the engine's behaviour. Observed three times on 2026-09-27, on three
-    # different pull requests at three different code states, each while eight lanes shared
-    # twelve cores: `the starvation stopped rather than running away — 7979 → 76697 over
-    # 1.36 s (50671/s)`. Serialised, the measurement means what it says; in parallel it
-    # measures the queue. The job is minutes long, so the queue this costs is small.
+    # One at a time, across every run, and never beside the soak. Half this job measures time
+    # rather than asserting a value: `stream-stall.mjs` bounds how fast a starved stream may
+    # fall behind, `matrix-bench.mjs` floors the realtime factor, and the night's own shards
+    # count xruns — all three read the host's spare cores as much as the engine's behaviour.
+    # Observed on 2026-09-27: three `stream-stall` failures on three pull requests at three
+    # code states, each while eight lanes shared twelve cores, and a soak xrun beside a
+    # concurrent CI burst. Then the same branch, run alone: `12/12` and 8.40x. The group name
+    # is shared with `soak.yml` on purpose — group names are unique per repository, so the two
+    # exclude each other, and a night is measured against a quiet host rather than the daytime
+    # queue. It costs the soak nothing at night and the lane minutes by day.
     concurrency:
-      group: native-engine
+      group: timing-sensitive
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
