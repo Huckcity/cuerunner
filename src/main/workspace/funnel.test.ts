@@ -238,6 +238,25 @@ const REFUSED: readonly Refused[] = [
       'where this version of WinsLab writes an object'
   },
   {
+    what: 'a cue field carrying a number outside the bounds this build writes',
+    // `volume: 5` is a number no control in the app can produce — the inspector's slider is
+    // `min={0} max={1}` — and the engine reads it as a gain of five. The declaration says the
+    // bounds, so the file is refused here rather than played loudly.
+    show: show({ cues: [audioCue('a1', { number: '9', name: 'Walk-in', volume: 5 })] }),
+    fact: 'cue 9 Walk-in (audio) has volume as a number, ' +
+      'where this version of WinsLab writes a number from 0 to 1'
+  },
+  {
+    what: 'a bounded cue field carrying a null',
+    // `NaN` is a number and is not inside any range, but it cannot reach a file: JSON writes it
+    // as `null`, and a `null` is refused here as nothing. The finite check stays in the arm for
+    // the walk that reads the window's own bytes at save time, where a `NaN` in the store is
+    // still a `NaN` when the walk sees it.
+    show: show({ cues: [audioCue('a1', { number: '9', name: 'Walk-in', pan: null })] }),
+    fact: 'cue 9 Walk-in (audio) has pan as nothing, ' +
+      'where this version of WinsLab writes a number from -1 to 1'
+  },
+  {
     what: 'a cue field inside a list of objects carrying another kind',
     show: show({
       cues: [audioCue('a1', {

@@ -259,7 +259,18 @@ type ObjectNodeOf<T> = IsUnion<T> extends true
  */
 type LeafNodeOf<T> = IsUnion<AllowedKinds<T>> extends true
   ? { readonly oneOf: readonly AllowedKinds<T>[] }
-  : LeafTagOf<T>
+  : LeafTagOf<T> | (T extends number ? BoundedNumber : never)
+
+/**
+ * A number the form writes within bounds — the one thing a type cannot say, so it is written
+ * where it applies rather than derived: a value of this kind's type is still `number`, and
+ * `volume: 5` is a number the app's own control cannot produce (its range is `min={0} max={1}`)
+ * and the engine reads as a gain of five.
+ *
+ * The bounds are inclusive and the value must be finite, so `NaN` and `Infinity` are refused
+ * here as well as being outside every range a field declares.
+ */
+export type BoundedNumber = { readonly bounded: readonly [min: number, max: number] }
 
 /**
  * A show's settings, field by field: the one declaration of the field shape the load
@@ -479,8 +490,11 @@ export const CUE_FIELD_SHAPE = {
     startTime: 'number',
     endTime: { nothing: true, of: 'number' },
     fadeInDuration: 'number',
-    volume: 'number',
-    pan: 'number',
+    // Bounded where the app's own controls bound them: the inspector's sliders are min={0}
+    // max={1} and min={-1} max={1}, and a hand-edited file reached the engine as a gain of
+    // five before this was declared.
+    volume: { bounded: [0, 1] },
+    pan: { bounded: [-1, 1] },
     // Crosspoints, or `null` for the automatic routing this build reads as spread across the
     // pair — so the wrapper is around the list and not around its entries.
     outputs: {
