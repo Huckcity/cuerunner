@@ -1,0 +1,64 @@
+# The engine's own lane, on the changes that can move it.
+#
+# This job is half measurement: `stream-stall.mjs` bounds how fast a starved stream may fall
+# behind, `matrix-bench.mjs` floors the realtime factor, and the minute of soak here runs the
+# show harness against real audio. All three read the host's spare cores as much as the
+# engine's behaviour, which on 2026-09-27 showed on three pull requests at three code states
+# whose diffs touched no native file at all — `the starvation stopped rather than running
+# away — 7891 → 51102 (22719/s)` — while the same branch run alone gave `12/12` and 8.40x.
+#
+# Two things follow, and both are in this file rather than in a policy.
+#
+# *It runs when the engine can have changed*: `native/`, the wire declaration it is held to
+# (`src/shared/audio.ts`), and the scripts that build it. A pull request that edits the
+# ledger, a test fixture or the renderer no longer queues a lane that measures cores.
+#
+# *It runs alone*: the `timing-sensitive` group is shared with `soak.yml`, and group names
+# are unique per repository, so a night and this lane exclude each other. It still shares the
+# host with whatever else is running — a group cannot isolate cores — but it no longer shares
+# it with a soak.
+name: Native
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'src/shared/audio.ts'
+      - 'scripts/ensure-native.mjs'
+      - 'scripts/build-native*.mjs'
+      - 'scripts/build-ffmpeg*.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/native.yml'
+
+jobs:
+  native-engine:
+    runs-on: [self-hosted, linux, x64, ubox]
+    # The shared group, for the reason in the header: one lane at a time, and never beside a
+    # soak night.
+    concurrency:
+      group: timing-sensitive
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Cache the packaged M4A decoder (pinned FFmpeg release build)
+        uses: actions/cache@v6
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Native acceptance (real mixer, offline render)
+        run: npm run test:native
+
+      # The soak is what runs nightly in full; a minute of it here means a change that
+      # breaks the show harness is caught on the pull request that made it, not at 3 am.
+      - name: Soak smoke (a minute of show)
+        run: npm run soak -- --minutes 1
