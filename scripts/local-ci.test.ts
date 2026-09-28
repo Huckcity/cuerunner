@@ -25,7 +25,7 @@ describe('the lanes and the hosts they run on', () => {
     // The remotes say what *their* platform says about the code, and no more.
     expect(table.win.lanes).toEqual(['typecheck', 'unit'])
     expect(table.mac.lanes).toEqual(['typecheck', 'unit'])
-    expect(table.win.ssh).toBe('adam@192.168.0.210')
+    expect(table.win.ssh).toBe('adam@nuc-win-1')
     expect(table.mac.ssh).toBe('adam@mac.local')
   })
 
