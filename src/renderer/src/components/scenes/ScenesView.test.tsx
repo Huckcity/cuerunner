@@ -136,6 +136,8 @@ describe('ScenesView', () => {
     deskSceneId?: string | null
     /** Most of these tests are about editing, so they start in edit mode. */
     editing?: boolean
+    /** Whether the show keeps more than one fader per channel; on unless a case says so. */
+    allowDuplicates?: boolean
   }
 
   async function show(state: ViewState = {}): Promise<void> {
@@ -146,7 +148,7 @@ describe('ScenesView', () => {
           ...defaults,
           desk: { ...defaults.desk, ...state.desk },
           cast: state.cast ?? cast(),
-          scenes: { list: state.scenes ?? [], allowDuplicateAssignment: true }
+          scenes: { list: state.scenes ?? [], allowDuplicateAssignment: state.allowDuplicates ?? true }
         },
         deskState: {
           mutes: state.deskState?.mutes ?? {},
@@ -296,6 +298,45 @@ describe('ScenesView', () => {
       ].click()
     })
   }
+
+  it('draws no block on a row a recall would not write', async () => {
+    // A file written while the show allowed more than one fader per channel, read now that it
+    // does not: a recall collapses the pair to the lowest place in the show's own order, so a
+    // block on the higher row would be a cell nothing ever writes. The grid says what the show
+    // does — and the same helper decides both, so the two cannot drift apart.
+    await show({
+      allowDuplicates: false,
+      scenes: [
+        scene('s1', 'Opening', [
+          placed('dca-1', 'channel', 'ch-ada'),
+          placed('dca-2', 'channel', 'ch-ada')
+        ])
+      ]
+    })
+
+    // The lowest place is the one it holds; the other row is empty, as a recall leaves it.
+    expect(blockName(cellFor('1', 'Opening'))).toBe('Ada')
+    expect(blockName(cellFor('2', 'Opening'))).toBeNull()
+    expect(cellFor('2', 'Opening').getAttribute('data-placed')).toBe('false')
+    expect(cellFor('2', 'Opening').getAttribute('data-kind')).toBe('none')
+  })
+
+  it('draws both blocks while the show keeps more than one fader per channel', async () => {
+    // The other half of the rule: with duplicates allowed the scene really does place the
+    // strip twice, and the grid says so.
+    await show({
+      allowDuplicates: true,
+      scenes: [
+        scene('s1', 'Opening', [
+          placed('dca-1', 'channel', 'ch-ada'),
+          placed('dca-2', 'channel', 'ch-ada')
+        ])
+      ]
+    })
+
+    expect(blockName(cellFor('1', 'Opening'))).toBe('Ada')
+    expect(blockName(cellFor('2', 'Opening'))).toBe('Ada')
+  })
 
   it('gives every fader a row, and every scene a named column', async () => {
     await show({
