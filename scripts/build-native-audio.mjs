@@ -34,7 +34,11 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const audioRoot = join(repoRoot, 'native', 'audio')
 const srcDir = join(audioRoot, 'src')
 const thirdPartyDir = join(audioRoot, 'third_party')
-const buildDir = join(audioRoot, 'build')
+// Redirectable so a sanitizer build (native/audio/tests/tsan.mjs) can sit beside the engine
+// the other lanes use instead of replacing it.
+const buildDir = process.env.CUERUNNER_NATIVE_BUILD_DIR
+  ? resolve(process.env.CUERUNNER_NATIVE_BUILD_DIR)
+  : join(audioRoot, 'build')
 const objectDir = join(buildDir, 'obj')
 // The ASIO state this build was made with; ensure-native.mjs reads it, because an SDK
 // that appeared, moved or vanished is invisible to an mtime scan of the tree.

@@ -67,6 +67,12 @@ jobs:
       - name: Native acceptance (real mixer, offline render)
         run: npm run test:native
 
+      # The races that crash a show one run in a dozen pass every check above: only the
+      # sanitizer sees the access. It builds beside the engine those steps used, so nothing
+      # after this reads a different binary. #172 is what it was added for.
+      - name: Engine under ThreadSanitizer (soak, stops under load)
+        run: npm run test:native:tsan
+
       # The soak is what runs nightly in full; a minute of it here means a change that
       # breaks the show harness is caught on the pull request that made it, not at 3 am.
       - name: Soak smoke (a minute of show)

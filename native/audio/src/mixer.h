@@ -6,6 +6,7 @@
 
 #include "cache.h"
 #include "ring.h"
+#include "snapshot_cell.h"
 #include "stream.h"
 #include "wsaudio.h"
 
@@ -111,8 +112,9 @@ class Mixer {
 
   void advanceClock(int frames) { clockFrames_ += frames; }
 
-  // Publishes the externally visible state under a seqlock (odd = being written).
-  void writeSnapshot(MixSnapshot& target, std::atomic<uint32_t>& seq, double clockMs,
+  // Builds the externally visible state in `staging` — which only the writing thread
+  // touches — and publishes it through `cell`, where readers copy it out whole.
+  void writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell, double clockMs,
                      uint64_t renderedFrames) const;
 
   int64_t clockFrames() const { return clockFrames_; }

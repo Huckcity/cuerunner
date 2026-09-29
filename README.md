@@ -421,6 +421,8 @@ npm run ensure:native       # the pre-step itself: engine + (on Linux) M4A decod
 npm run build:native        # force an engine build into native/audio/build/
 npm run build:ffmpeg        # force the packaged Linux M4A decoder (LGPL-only FFmpeg)
 npm run test:native         # deterministic offline-render acceptance on real samples
+npm run test:native:tsan    # the engine built with ThreadSanitizer: a minute of soak, then stops
+                            # under load; any report fails (Linux)
 npm run test:native:device  # live-device smoke (needs a real output device)
 npm run test:native:asio    # ASIO smoke: enumerates drivers, then runs the device smoke
                             # against the first one (Windows, needs a driver installed)
@@ -441,7 +443,11 @@ bounds, note (onset) detection and M4A decoding. Its first check is a compiler-b
 with no engine in it — `native/audio/tests/asio-rules.mjs` compiles and runs
 `tests/asio-rules.cpp`, which asserts the exact bytes ASIO's sample types are written in
 and the buffer sizes a driver's min/max/granularity will accept, because every way of
-getting those wrong is silent. It is the acceptance proof for playback behaviour, and it
+getting those wrong is silent. The next is the cell the engine publishes its state through,
+hammered by a writer and readers in a compiler-backed test of its own (`snapshot-cell.mjs`,
+also built with ThreadSanitizer where the compiler has it). `test:native:tsan` builds the whole
+engine that way and runs the soak and `shutdown-race.mjs` against it: the races it finds
+pass every functional check and show up as a crash one run in a dozen. It is the acceptance proof for playback behaviour, and it
 needs no audio hardware. `npm run test:native:device` adds the live-device checks (real
 channel counts, exclusive refusal, capture tee, panic silence), and
 `npm run test:native:asio` is the same smoke against a real ASIO driver on Windows.
