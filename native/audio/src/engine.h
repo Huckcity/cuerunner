@@ -7,6 +7,7 @@
 #include "cache.h"
 #include "capture.h"
 #include "mixer.h"
+#include "snapshot_cell.h"
 #include "source.h"
 #include "stream.h"
 #include "wsaudio.h"
@@ -467,8 +468,9 @@ class Engine {
   };
   std::map<std::string, PreparedFile> prepared_;
 
+  // `snapshot_` is the writer's own staging copy; readers only ever see `snapshotCell_`.
   mutable MixSnapshot snapshot_;
-  mutable std::atomic<uint32_t> snapshotSeq_{0};
+  mutable SnapshotCell<MixSnapshot> snapshotCell_;
   std::atomic<bool> running_{false};
   std::atomic<bool> backgroundStop_{false};
   std::thread background_;

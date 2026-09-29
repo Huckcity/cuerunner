@@ -232,10 +232,10 @@ struct VoiceSnapshot {
   int64_t streamBytes = 0;
 };
 
-// Snapshot of everything the mixer publishes each block, read under a seqlock so a
-// reader never waits on the audio thread and never sees a torn record.
+// Snapshot of everything the mixer publishes each block, carried by a SnapshotCell
+// (snapshot_cell.h) so a reader never waits on the audio thread and never sees a torn
+// record. It is copied as 8-byte words, so everything in it is trivially copyable.
 struct MixSnapshot {
-  uint32_t seq = 0;
   double clockMs = 0.0;
   uint64_t renderedFrames = 0;
   int activeVoices = 0;

@@ -4,6 +4,7 @@
 #include "util.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 
@@ -37,7 +38,9 @@ int socketSendFlags() {
 
 struct SocketServer::Client {
   std::mutex writeMutex;
-  bool alive = true;
+  // Written by the connection's own thread when it ends and read by `broadcast` and
+  // `close` under the clients' lock, which the thread does not take to write it.
+  std::atomic<bool> alive{true};
   /**
    * File work handed to the server's worker threads that has not been answered yet —
    * a probe and a scan both count here. Their replies are written from those threads, so
@@ -109,7 +112,9 @@ struct SocketServer::Client {
 
 SocketServer::SocketServer(Engine& engine) : engine_(engine) {}
 
-SocketServer::~SocketServer() {
+SocketServer::~SocketServer() { drain(); }
+
+void SocketServer::drain() {
   close();
   // A scan a long file is in the middle of stops here rather than being waited for: a
   // twelve-hour pass would hold the process open for minutes after the client that
@@ -117,6 +122,12 @@ SocketServer::~SocketServer() {
   engine_.cancelAnalysis();
   stopFileWork(scans_);
   stopFileWork(probes_);
+  // Every connection was shut down above, so each thread is on its way out. The wait is
+  // bounded: a verb stuck inside the engine must not be what keeps a quit from finishing.
+  std::unique_lock<std::mutex> lock(threadsMutex_);
+  if (!threadsDone_.wait_for(lock, std::chrono::seconds(5), [this] { return liveClientThreads_ == 0; })) {
+    std::fprintf(stderr, "[cuerunner-audio] %d connection thread(s) still running at shutdown\n", liveClientThreads_);
+  }
 }
 
 bool SocketServer::listen(const std::string& path, std::string& error) {
@@ -172,7 +183,7 @@ bool SocketServer::listen(const std::string& path, std::string& error) {
 
 void SocketServer::serve() {
   acceptLoop();
-  close();
+  drain();
 }
 
 void SocketServer::acceptLoop() {
@@ -264,7 +275,17 @@ void SocketServer::acceptLoop() {
       std::lock_guard<std::mutex> lock(clientsMutex_);
       clients_.push_back(client);
     }
-    std::thread([this, client] { handleClient(client); }).detach();
+    {
+      std::lock_guard<std::mutex> lock(threadsMutex_);
+      liveClientThreads_++;
+    }
+    std::thread([this, client] {
+      handleClient(client);
+      // The last thing this thread does with `this`, and under the lock: `drain()` cannot
+      // return, nor the server be destroyed, until the lock is let go.
+      std::lock_guard<std::mutex> lock(threadsMutex_);
+      if (--liveClientThreads_ == 0) threadsDone_.notify_all();
+    }).detach();
     noteClientCount();
   }
 #if defined(_WIN32)

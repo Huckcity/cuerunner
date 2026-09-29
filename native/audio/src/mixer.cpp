@@ -851,29 +851,23 @@ void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
   }
 }
 
-void Mixer::writeSnapshot(MixSnapshot& target, std::atomic<uint32_t>& seq, double clockMs,
+void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell, double clockMs,
                           uint64_t renderedFrames) const {
-  const uint32_t value = seq.load(std::memory_order_relaxed) + 1;
-  seq.store(value, std::memory_order_relaxed);  // odd: being written
-  std::atomic_thread_fence(std::memory_order_release);
-
-  target.clockMs = clockMs;
-  target.renderedFrames = renderedFrames;
-  target.activeVoices = 0;
-  target.streamingVoices = 0;
-  target.underruns = underruns_.load(std::memory_order_relaxed);
-  target.voiceCount = 0;
+  staging.clockMs = clockMs;
+  staging.renderedFrames = renderedFrames;
+  staging.activeVoices = 0;
+  staging.streamingVoices = 0;
+  staging.underruns = underruns_.load(std::memory_order_relaxed);
+  staging.voiceCount = 0;
   for (const Voice& voice : voices_) {
     if (!voice.active) continue;
-    snapshotVoice(voice, target.voices[target.voiceCount]);
-    target.voiceCount++;
-    target.activeVoices++;
-    if (voice.streamSlot >= 0) target.streamingVoices++;
+    snapshotVoice(voice, staging.voices[staging.voiceCount]);
+    staging.voiceCount++;
+    staging.activeVoices++;
+    if (voice.streamSlot >= 0) staging.streamingVoices++;
   }
-  target.active = target.activeVoices > 0;
-
-  std::atomic_thread_fence(std::memory_order_release);
-  seq.store(value + 1, std::memory_order_release);  // even: stable
+  staging.active = staging.activeVoices > 0;
+  cell.publish(staging);
 }
 
 }  // namespace ws

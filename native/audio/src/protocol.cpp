@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 
 #include "cJSON.h"
@@ -861,8 +862,24 @@ std::string eventLine(const Event& event, const std::string& sessionId) {
   return out;
 }
 
+namespace {
+
+// Every connection parses its own requests on its own thread, and cJSON keeps where the last
+// parse failed in one global that every parse writes — a data race between connections that
+// nothing here reads, since a bad request is answered with the same sentence wherever it
+// broke. The library is vendored with its digest pinned, so the parse is serialised here
+// rather than the library patched; a request line is small and the lock is held for the
+// parse alone.
+cJSON* parseRequest(const std::string& line) {
+  static std::mutex parseMutex;
+  std::lock_guard<std::mutex> lock(parseMutex);
+  return cJSON_Parse(line.c_str());
+}
+
+}  // namespace
+
 std::string requestVerb(const std::string& line) {
-  cJSON* root = cJSON_Parse(line.c_str());
+  cJSON* root = parseRequest(line);
   if (root == nullptr) return std::string();
   const std::string verb = text(root, "verb", "");
   cJSON_Delete(root);
@@ -871,7 +888,7 @@ std::string requestVerb(const std::string& line) {
 
 std::string handleRequestLine(Engine& engine, const std::string& line, bool& shutdown) {
   shutdown = false;
-  cJSON* root = cJSON_Parse(line.c_str());
+  cJSON* root = parseRequest(line);
   if (root == nullptr) return replyError(0, "invalid", "request is not valid JSON");
   const int id = integer(root, "id", 0);
   const std::string verb = text(root, "verb", "");

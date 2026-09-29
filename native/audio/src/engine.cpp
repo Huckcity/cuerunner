@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -715,7 +716,7 @@ bool Engine::drainLostDevice() {
   // playing a moment ago — so the published state is written here, the way a rendered
   // block writes it: `info()` and `progress()` read that snapshot, and on a device-backend
   // loss there is no block left to refresh it.
-  mixer_.writeSnapshot(snapshot_, snapshotSeq_,
+  mixer_.writeSnapshot(snapshot_, snapshotCell_,
                        static_cast<double>(mixer_.clockFrames()) * 1000.0 /
                            static_cast<double>(mixer_.sampleRate()),
                        renderedFrames_.load(std::memory_order_relaxed));
@@ -862,7 +863,7 @@ void Engine::renderAudio(float* out, int frames) {
   }
   const double blockMs = 1000.0 * static_cast<double>(frames) / static_cast<double>(mixer_.sampleRate());
   if (steadyNowMs() - startedMs > blockMs) xruns_.fetch_add(1, std::memory_order_relaxed);
-  mixer_.writeSnapshot(snapshot_, snapshotSeq_,
+  mixer_.writeSnapshot(snapshot_, snapshotCell_,
                        static_cast<double>(mixer_.clockFrames()) * 1000.0 / static_cast<double>(mixer_.sampleRate()),
                        renderedFrames_.load(std::memory_order_relaxed));
 }
@@ -872,24 +873,10 @@ void Engine::renderOfflineBlock(float* out, int frames) { renderAudio(out, frame
 void Engine::pump() { handleBackgroundWork(); }
 
 double Engine::snapshotClockMs() const {
-  for (;;) {
-    const uint32_t first = snapshotSeq_.load(std::memory_order_acquire);
-    if ((first & 1u) != 0u) continue;
-    const double value = snapshot_.clockMs;
-    const uint32_t second = snapshotSeq_.load(std::memory_order_acquire);
-    if (first == second) return value;
-  }
+  return snapshotCell_.readMember<double>(offsetof(MixSnapshot, clockMs));
 }
 
-void Engine::copySnapshot(MixSnapshot& out) const {
-  for (;;) {
-    const uint32_t first = snapshotSeq_.load(std::memory_order_acquire);
-    if ((first & 1u) != 0u) continue;
-    out = snapshot_;
-    const uint32_t second = snapshotSeq_.load(std::memory_order_acquire);
-    if (first == second) return;
-  }
-}
+void Engine::copySnapshot(MixSnapshot& out) const { snapshotCell_.read(out); }
 
 double Engine::clockMs() const { return snapshotClockMs(); }
 

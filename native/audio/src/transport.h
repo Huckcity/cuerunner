@@ -64,6 +64,12 @@ class SocketServer {
   void handleClient(Client* client);
   void removeClient(Client* client);
   void noteClientCount();
+  /**
+   * Ends every connection and waits for the threads that served them. Those threads run
+   * the engine's verbs, so none of them may outlive the engine or this object: a request
+   * in flight when the process was told to stop would otherwise be a use-after-free.
+   */
+  void drain();
 
   void enqueueFileWork(FileWork& worker, Client* client, std::string line);
   void fileWorkLoop(FileWork& worker);
@@ -76,6 +82,10 @@ class SocketServer {
   std::atomic<bool> listening_{false};
   mutable std::mutex clientsMutex_;
   std::vector<Client*> clients_;
+  /** Connection threads still running, counted from before one starts to after its last touch of `this`. */
+  std::mutex threadsMutex_;
+  std::condition_variable threadsDone_;
+  int liveClientThreads_ = 0;
   std::function<void(int)> clientCountCallback_;
   /** `probe` reads a file to measure it; `waveform` and `onsets` read it end to end. */
   FileWork probes_;
