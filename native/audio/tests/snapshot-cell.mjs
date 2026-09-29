@@ -46,6 +46,11 @@ try {
 }
 process.exit(status)
 
+/** The sanitizer runtime giving up before a line of the test ran, as opposed to a report. */
+function refusedToStart(result) {
+  return result.status !== 0 && /unexpected memory mapping/.test(`${result.stderr ?? ''}${result.stdout ?? ''}`)
+}
+
 /** Builds and runs one flavour; `optional` lets a compiler without the sanitizer pass. */
 function run(name, extra, optional = false) {
   const binary = join(workDir, `snapshot-cell-${name}${isMsvc ? '.exe' : ''}`)
@@ -66,7 +71,18 @@ function run(name, extra, optional = false) {
     console.error(`snapshot-cell: ${command} failed with status ${compile.status}`)
     return 1
   }
-  const result = spawnSync(binary, [], { encoding: 'utf8', env: { ...process.env, TSAN_OPTIONS: 'halt_on_error=1' } })
+  const env = { ...process.env, TSAN_OPTIONS: 'halt_on_error=1' }
+  let result = spawnSync(binary, [], { encoding: 'utf8', env })
+  if (name === 'thread' && refusedToStart(result)) {
+    // An older sanitizer runtime cannot map its shadow memory under the kernel's address
+    // randomisation; the same binary runs with it off, which needs no privilege.
+    const arch = spawnSync('uname', ['-m'], { encoding: 'utf8' }).stdout?.trim()
+    if (arch) result = spawnSync('setarch', [arch, '-R', binary], { encoding: 'utf8', env })
+    if (refusedToStart(result)) {
+      console.log('snapshot-cell: ThreadSanitizer cannot start on this host (memory mapping); skipped')
+      return 0
+    }
+  }
   process.stdout.write(`[${name}] ${result.stdout ?? ''}`)
   if (result.status !== 0) process.stderr.write(result.stderr ?? '')
   return result.status ?? 1

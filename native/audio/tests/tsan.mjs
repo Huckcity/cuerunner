@@ -45,6 +45,20 @@ function wrapper(name, real) {
   return path
 }
 
+/**
+ * The engine, started with address randomisation off where `setarch` can do it: an older
+ * ThreadSanitizer runtime dies with "unexpected memory mapping" under the kernel's default,
+ * and the soak and the stop test both start whatever `--binary` names.
+ */
+function unrandomised(binary) {
+  const arch = spawnSync('uname', ['-m'], { encoding: 'utf8' }).stdout?.trim()
+  if (!arch || spawnSync('setarch', [arch, '-R', 'true']).status !== 0) return binary
+  const path = join(workDir, 'engine-tsan')
+  writeFileSync(path, `#!/bin/sh\nexec setarch ${arch} -R "${binary}" "$@"\n`)
+  chmodSync(path, 0o755)
+  return path
+}
+
 function step(label, command, args, env = {}) {
   console.log(`tsan — ${label}`)
   const result = spawnSync(command, args, {
@@ -66,7 +80,7 @@ try {
   if (built !== 0) {
     console.error('tsan: the sanitizer build failed')
   } else {
-    const binary = join(buildDir, 'cuerunner-audio')
+    const binary = unrandomised(join(buildDir, 'cuerunner-audio'))
     const env = { TSAN_OPTIONS: `halt_on_error=0:log_path=${join(logDir, 'tsan')}` }
     const soak = step(`the soak, ${minutes} min`, process.execPath, ['native/audio/tests/soak.mjs', '--minutes', minutes, '--binary', binary], env)
     const race = step('stopping under load', process.execPath, ['native/audio/tests/shutdown-race.mjs', '--binary', binary], env)
