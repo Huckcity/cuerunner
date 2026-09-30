@@ -339,7 +339,11 @@ jobs:
           # Gatekeeper's own assessment: this is what a venue machine runs, and it fails
           # for an unnotarised build even when the signature itself is good.
           spctl --assess --type execute --verbose=2 "$APP"
+          # The app is notarised and stapled by electron-builder; the dmg is built afterwards
+          # and never gets a ticket, so a buyer who validates the download finds none. Staple
+          # the dmg before checking it — the ticket has to travel with the file that is served.
           DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
+          xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
 
       # The recording the Windows job does, from this platform's own secrets: `MAC_CSC_LINK`
