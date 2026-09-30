@@ -92,38 +92,40 @@ jobs:
           Write-Host "probe compiled: $(Test-Path $probe)"
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  before: $($_.Status) $($_.SignerCertificate.Subject)" }
 
-          # Two questions left, and this answers both in one dispatch.
+          # The cause, found. `Azure.CodeSigning.Dlib.dll` ships with a
+          # `Azure.CodeSigning.Dlib.runtimeconfig.json` beside it, which makes it a .NET
+          # **Core** assembly; signtool loads it in its own process, so it needs a CoreCLR
+          # runtime installed. This machine has none: no `dotnet` on PATH, no
+          # `C:\Program Files\dotnet`, and the only thing present is .NET **Framework** 4.8.1
+          # (Release 533325), which cannot host a Core-targeted assembly. PowerShell reporting
+          # "runtime 10.0.12" is the runtime bundled with PowerShell, not one signtool resolves.
+          # So signtool starts, cannot load its signing provider, and exits 3 — and the module's
+          # "The system cannot find the file specified" is another symptom of the same absence.
           #
-          # First, what signtool itself says. Everything above ran clean: the binary is present,
-          # validly signed, and launches with exit 0 — yet `/dlib` by hand exited 3 with nothing
-          # captured, because signtool is a console application whose output does not travel
-          # through the PowerShell stream the way `Write-Host` does. Redirect to a file and read
-          # the file back.
-          Write-Host '=== signtool sign, output captured to a file'
+          # The version installed is the one the config names, not a guess.
+          $config = Join-Path (Split-Path $dlib.FullName) 'Azure.CodeSigning.Dlib.runtimeconfig.json'
+          Write-Host "=== runtimeconfig: $config"
+          $runtime = Get-Content $config -Raw | ConvertFrom-Json
+          Write-Host "  framework: $($runtime.runtimeOptions.framework.version)"
+          $channel = $runtime.runtimeOptions.framework.version.Split('.')[0]
+
+          $installer = Join-Path $env:TEMP 'dotnet-install.ps1'
+          Write-Host "=== installing the .NET $channel runtime"
+          Invoke-WebRequest -Uri 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installer -UseBasicParsing
+          & $installer -Channel $channel -Quality GA -InstallDir 'C:\Program Files\dotnet' -NoPath 2>&1 |
+            ForEach-Object { Write-Host "  install: $_" }
+          $dotnet = 'C:\Program Files\dotnet\dotnet.exe'
+          Write-Host "  dotnet present: $(Test-Path $dotnet)"
+          if (Test-Path $dotnet) { & $dotnet --list-runtimes 2>&1 | ForEach-Object { Write-Host "  runtime: $_" } }
+
+          # The proof, on a binary this job compiled, unsigned a moment ago.
+          Write-Host '=== signtool sign, after the runtime install'
           $out = Join-Path $env:TEMP 'signtool-out.txt'
           & $signtool.FullName sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib "$($dlib.FullName)" /dmdf "$($metadata.FullName)" "$probe" > $out 2>&1
           Write-Host "  exit code: $LASTEXITCODE"
-          Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
+          Get-Content $out -ErrorAction SilentlyContinue | Select-Object -Last 12 | ForEach-Object { Write-Host "  $_" }
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  after: $($_.Status) $($_.SignerCertificate.Subject)" }
-
-          # Second, and the likelier cause of that exit 3: the Dlib is Microsoft's .NET-backed
-          # signing provider. A build box with MSVC, Node and Python but no .NET cannot load it,
-          # and the module's own failure would be another symptom of the same absence.
-          Write-Host '=== .NET inventory'
-          Write-Host "  PowerShell $($PSVersionTable.PSVersion) on runtime $([System.Environment]::Version)"
-          Write-Host "  dotnet on PATH: $([bool](Get-Command dotnet -ErrorAction SilentlyContinue))"
-          Write-Host "  C:\Program Files\dotnet exists: $(Test-Path 'C:\Program Files\dotnet')"
-          foreach ($key in 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\NET Framework Setup\NDP\v4\Full') {
-            if (Test-Path $key) {
-              Write-Host "  $key Release=$((Get-ItemProperty $key -ErrorAction SilentlyContinue).Release)"
-            } else {
-              Write-Host "  $key absent"
-            }
-          }
-          Write-Host '=== beside the Dlib'
-          Get-ChildItem (Split-Path $dlib.FullName) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name | ForEach-Object { Write-Host "  $_" }
-          Write-Host "  Dlib length: $((Get-Item $dlib.FullName).Length)"
-          Remove-Item $probe, $source, "${probe}.obj", $out -Force -ErrorAction SilentlyContinue
+          Remove-Item $probe, $source, "${probe}.obj", $out, $installer -Force -ErrorAction SilentlyContinue
 
   test:
     runs-on: [self-hosted, linux, x64, ubox]
