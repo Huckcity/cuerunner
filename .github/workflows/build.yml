@@ -31,6 +31,12 @@ jobs:
 
       - name: Diagnose the signing tooling
         shell: pwsh
+        env:
+          # The same three the packaging step is handed: without them the probe would fail on
+          # authentication and a tooling failure would be indistinguishable from a 403.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
           $root = Join-Path $env:LOCALAPPDATA 'TrustedSigning'
           $x64 = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue |
@@ -65,8 +71,21 @@ jobs:
           # that installs — behaves differently from the second, which finds everything in
           # place. Nothing is cleared here: the question is what the module does, not what a
           # fresh cache looks like.
+          #
+          # The probe is compiled here rather than copied from the machine, because every
+          # system binary carries Microsoft's own signature: signing a copy of one and reading
+          # `Valid` back would prove nothing. This starts unsigned, so the subject afterwards
+          # is the only thing that can say whether our certificate was applied.
           $probe = Join-Path $env:TEMP 'cuerunner-signing-probe.exe'
-          Copy-Item "$env:WINDIR\System32\where.exe" $probe -Force -ErrorAction SilentlyContinue
+          $source = Join-Path $env:TEMP 'cuerunner-signing-probe.c'
+          'int main(void) { return 0; }' | Set-Content -Path $source -Encoding ascii
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          Write-Host "=== toolchain: $vs"
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && cl /nologo /Fe:`"$probe`" `"$source`"" | ForEach-Object { Write-Host "  cl: $_" }
+          Write-Host "probe compiled: $(Test-Path $probe)"
+          Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  before: $($_.Status) $($_.SignerCertificate.Subject)" }
+
           Import-Module TrustedSigning -ErrorAction SilentlyContinue
           foreach ($attempt in 1, 2) {
             Write-Host "=== attempt $attempt from $(Get-Location)"
@@ -78,11 +97,10 @@ jobs:
               Write-Host "  attempt $attempt threw: $($_.Exception.Message)"
               Write-Host "    inner: $($_.Exception.InnerException)"
             }
-            Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  probe signature: $($_.Status) $($_.SignerCertificate.Subject)" }
-            $still = Test-Path $x64.FullName
-            Write-Host "  signtool still present: $still"
+            Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  after: $($_.Status) $($_.SignerCertificate.Subject)" }
+            Write-Host "  signtool still present: $(Test-Path $x64.FullName)"
           }
-          Remove-Item $probe -Force -ErrorAction SilentlyContinue
+          Remove-Item $probe, $source, "${probe}.obj" -Force -ErrorAction SilentlyContinue
 
   test:
     runs-on: [self-hosted, linux, x64, ubox]
