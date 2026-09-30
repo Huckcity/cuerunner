@@ -92,40 +92,30 @@ jobs:
           Write-Host "probe compiled: $(Test-Path $probe)"
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  before: $($_.Status) $($_.SignerCertificate.Subject)" }
 
-          # The cause, found. `Azure.CodeSigning.Dlib.dll` ships with a
-          # `Azure.CodeSigning.Dlib.runtimeconfig.json` beside it, which makes it a .NET
-          # **Core** assembly; signtool loads it in its own process, so it needs a CoreCLR
-          # runtime installed. This machine has none: no `dotnet` on PATH, no
-          # `C:\Program Files\dotnet`, and the only thing present is .NET **Framework** 4.8.1
-          # (Release 533325), which cannot host a Core-targeted assembly. PowerShell reporting
-          # "runtime 10.0.12" is the runtime bundled with PowerShell, not one signtool resolves.
-          # So signtool starts, cannot load its signing provider, and exits 3 — and the module's
-          # "The system cannot find the file specified" is another symptom of the same absence.
-          #
-          # The version installed is the one the config names, not a guess.
+          # The cause, found and fixed on the machine. `Azure.CodeSigning.Dlib.dll` ships with a
+          # `Azure.CodeSigning.Dlib.runtimeconfig.json` targeting `net8.0` /
+          # `Microsoft.NETCore.App`, so signtool needs a CoreCLR runtime to load its signing
+          # provider into. win-ci had none — no `dotnet` on PATH, no `C:\Program Files\dotnet`,
+          # only .NET Framework 4.8.1, which cannot host a Core-targeted assembly. signtool
+          # therefore started, failed to load the provider, and exited 3; the PowerShell module
+          # reported the same absence as "The system cannot find the file specified". The .NET 8
+          # runtime is now installed there, so this lane only checks the consequence.
           $config = Join-Path (Split-Path $dlib.FullName) 'Azure.CodeSigning.Dlib.runtimeconfig.json'
-          Write-Host "=== runtimeconfig: $config"
           $runtime = Get-Content $config -Raw | ConvertFrom-Json
-          Write-Host "  framework: $($runtime.runtimeOptions.framework.version)"
-          $channel = $runtime.runtimeOptions.framework.version.Split('.')[0]
+          Write-Host "=== Dlib targets: $($runtime.runtimeOptions.framework.name) $($runtime.runtimeOptions.framework.version)"
+          Write-Host "=== runtimes on this machine"
+          Write-Host "  dotnet present: $(Test-Path 'C:\Program Files\dotnet\dotnet.exe')"
+          & 'C:\Program Files\dotnet\dotnet.exe' --list-runtimes 2>&1 | ForEach-Object { Write-Host "  $_" }
 
-          $installer = Join-Path $env:TEMP 'dotnet-install.ps1'
-          Write-Host "=== installing the .NET $channel runtime"
-          Invoke-WebRequest -Uri 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installer -UseBasicParsing
-          & $installer -Channel $channel -Quality GA -InstallDir 'C:\Program Files\dotnet' -NoPath 2>&1 |
-            ForEach-Object { Write-Host "  install: $_" }
-          $dotnet = 'C:\Program Files\dotnet\dotnet.exe'
-          Write-Host "  dotnet present: $(Test-Path $dotnet)"
-          if (Test-Path $dotnet) { & $dotnet --list-runtimes 2>&1 | ForEach-Object { Write-Host "  runtime: $_" } }
-
-          # The proof, on a binary this job compiled, unsigned a moment ago.
-          Write-Host '=== signtool sign, after the runtime install'
+          # The proof, on a binary this job compiled, unsigned a moment ago, signed with the
+          # build's own credentials in the environment.
+          Write-Host '=== signtool sign, with the runtime present'
           $out = Join-Path $env:TEMP 'signtool-out.txt'
           & $signtool.FullName sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib "$($dlib.FullName)" /dmdf "$($metadata.FullName)" "$probe" > $out 2>&1
           Write-Host "  exit code: $LASTEXITCODE"
           Get-Content $out -ErrorAction SilentlyContinue | Select-Object -Last 12 | ForEach-Object { Write-Host "  $_" }
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  after: $($_.Status) $($_.SignerCertificate.Subject)" }
-          Remove-Item $probe, $source, "${probe}.obj", $out, $installer -Force -ErrorAction SilentlyContinue
+          Remove-Item $probe, $source, "${probe}.obj", $out -Force -ErrorAction SilentlyContinue
 
   test:
     runs-on: [self-hosted, linux, x64, ubox]
