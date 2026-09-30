@@ -33,79 +33,54 @@ jobs:
         shell: pwsh
         run: |
           $root = Join-Path $env:LOCALAPPDATA 'TrustedSigning'
-          Write-Host "=== cache root: $root exists=$(Test-Path $root)"
-
-          # What the last failed run left behind. The signing call re-extracts these packages
-          # immediately before launching signtool, so this is the state it saw.
-          $tools = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue
-          if ($tools) {
-            foreach ($t in $tools) {
-              Write-Host "signtool: $($t.FullName)"
-              Write-Host "  exists=$($t.Exists) length=$($t.Length) attributes=$($t.Attributes)"
-              Write-Host "  hash=$((Get-FileHash $t.FullName -Algorithm SHA256).Hash)"
-              Get-AuthenticodeSignature $t.FullName | ForEach-Object { Write-Host "  signature: $($_.Status)" }
-            }
-          } else {
-            Write-Host 'signtool: none present anywhere under the cache root'
+          $x64 = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          Write-Host "=== computed path: $($x64.FullName)"
+          Write-Host "  Test-Path: $(Test-Path $x64.FullName)"
+          Write-Host "  length: $($x64.Length)"
+          # A Mark of the Web stream rides along with anything a download drops on disk; it
+          # blocks some launch paths and not others, which is the shape of this failure.
+          $ads = Get-Item $x64.FullName -Stream * -ErrorAction SilentlyContinue
+          $ads | ForEach-Object { Write-Host "  stream: $($_.Stream) length=$($_.Length)" }
+          Get-AuthenticodeSignature $x64.FullName | ForEach-Object { Write-Host "  signature: $($_.Status)" }
+          try {
+            $p = Start-Process -FilePath $x64.FullName -ArgumentList '/?' -NoNewWindow -Wait -PassThru -ErrorAction Stop
+            Write-Host "  direct Start-Process exit: $($p.ExitCode)"
+          } catch {
+            Write-Host "  direct Start-Process threw: $($_.Exception.Message)"
           }
 
           Write-Host '=== real-time protection'
           try {
             $status = Get-MpComputerStatus -ErrorAction Stop
-            Write-Host "  enabled=$($status.RealTimeProtectionEnabled) antivirus=$($status.AntivirusEnabled)"
+            Write-Host "  enabled=$($status.RealTimeProtectionEnabled)"
             (Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath | ForEach-Object { Write-Host "  exclusion: $_" }
           } catch {
             Write-Host "  defender query failed: $($_.Exception.Message)"
           }
 
-          Write-Host '=== detections in the last 12 hours'
-          try {
-            $detections = Get-MpThreatDetection -ErrorAction Stop | Where-Object { $_.InitialDetectionTime -gt (Get-Date).AddHours(-12) }
-            if ($detections) {
-              foreach ($d in $detections) {
-                Write-Host "detection: $($d.InitialDetectionTime) threat=$($d.ThreatID)"
-                $d.Resources | ForEach-Object { Write-Host "  resource: $_" }
-              }
-            } else {
-              Write-Host 'none'
-            }
-          } catch {
-            Write-Host "detection query failed: $($_.Exception.Message)"
-          }
-
-          # The failure under investigation: `Start-Process` reports a file it cannot find, for
-          # a signtool.exe that is demonstrably there. Launch it here, outside the module, and
-          # read what Windows actually says.
-          $x64 = $tools | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
-          if ($x64) {
-            Write-Host '=== direct launch of the x64 signtool'
-            try {
-              $p = Start-Process -FilePath $x64.FullName -ArgumentList '/?' -NoNewWindow -Wait -PassThru -ErrorAction Stop
-              Write-Host "direct launch exit code: $($p.ExitCode)"
-            } catch {
-              Write-Host "direct launch threw: $($_.Exception.Message)"
-              Write-Host "  type: $($_.Exception.GetType().FullName)"
-              Write-Host "  inner: $($_.Exception.InnerException)"
-            }
-          }
-
-          # And the call the build makes, against a throwaway copy of a PE file, so the log says
-          # whether the identity is authorised as well as whether the tool starts at all.
-          Write-Host '=== Invoke-TrustedSigning against a throwaway copy'
+          # The experiment. The signing call installs its packages and then launches
+          # signtool.exe out of the tree it just wrote, and the launch is what fails. Call it
+          # exactly as electron-builder does, twice, and see whether the first call — the one
+          # that installs — behaves differently from the second, which finds everything in
+          # place. Nothing is cleared here: the question is what the module does, not what a
+          # fresh cache looks like.
           $probe = Join-Path $env:TEMP 'cuerunner-signing-probe.exe'
           Copy-Item "$env:WINDIR\System32\where.exe" $probe -Force -ErrorAction SilentlyContinue
-          Write-Host "probe file: $probe exists=$(Test-Path $probe)"
           Import-Module TrustedSigning -ErrorAction SilentlyContinue
-          try {
-            Invoke-TrustedSigning -Endpoint 'https://neu.codesigning.azure.net/' -CertificateProfileName 'cuerunner' -CodeSigningAccountName 'cuerunner-signing' -Files $probe -ErrorAction Stop 4>&1 |
-              ForEach-Object { Write-Host "sign: $_" }
-            Write-Host 'signing call returned without throwing'
-          } catch {
-            Write-Host "signing call threw: $($_.Exception.Message)"
-            Write-Host "  inner: $($_.Exception.InnerException)"
-          }
-          if (Test-Path $probe) {
-            Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "probe signature: $($_.Status) $($_.SignerCertificate.Subject)" }
+          foreach ($attempt in 1, 2) {
+            Write-Host "=== attempt $attempt from $(Get-Location)"
+            try {
+              Invoke-TrustedSigning -Endpoint 'https://neu.codesigning.azure.net/' -CertificateProfileName 'cuerunner' -CodeSigningAccountName 'cuerunner-signing' -TimestampRfc3161 'http://timestamp.acs.microsoft.com' -TimestampDigest 'SHA256' -FileDigest 'SHA256' -Files $probe -ErrorAction Stop 4>&1 |
+                ForEach-Object { Write-Host "  out: $_" }
+              Write-Host "  attempt $attempt returned without throwing"
+            } catch {
+              Write-Host "  attempt $attempt threw: $($_.Exception.Message)"
+              Write-Host "    inner: $($_.Exception.InnerException)"
+            }
+            Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  probe signature: $($_.Status) $($_.SignerCertificate.Subject)" }
+            $still = Test-Path $x64.FullName
+            Write-Host "  signtool still present: $still"
           }
           Remove-Item $probe -Force -ErrorAction SilentlyContinue
 
