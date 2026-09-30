@@ -1,0 +1,65 @@
+name: Repair Trusted Signing tooling
+
+# One-off, and scaffolding: the win-ci runner caches the TrustedSigning PowerShell
+# module and its NuGet packages under %LOCALAPPDATA%, and electron-builder re-runs
+# `Install-Module` against that cache on every build. A cache left by an earlier SDK
+# package is never refreshed, so `Invoke-TrustedSigning` builds a path that no longer
+# exists and fails with `Start-Process: The system cannot find the file specified`
+# before any request reaches Azure.
+#
+# This workflow reports what the cache actually holds, clears it, and reinstalls the
+# module the way electron-builder installs it. Run by hand, then delete: the repair
+# belongs on the machine, not in the release path.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  repair:
+    runs-on: [self-hosted, windows, x64, win-ci]
+    steps:
+      - name: Report, clear and reinstall the signing tooling
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA 'TrustedSigning'
+          Write-Host "=== cache root: $root"
+
+          if (Test-Path $root) {
+            Get-ChildItem -Directory $root | ForEach-Object { Write-Host "package: $($_.Name)" }
+            $signtools = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue
+            if ($signtools) {
+              $signtools | ForEach-Object { Write-Host "signtool: $($_.FullName)" }
+            } else {
+              Write-Host 'signtool: none present anywhere under the cache root'
+            }
+            Get-ChildItem -Recurse -Directory $root -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match 'BuildTools.*\\bin' } |
+              ForEach-Object { Write-Host "bin folder: $($_.FullName)" }
+          } else {
+            Write-Host 'no cache directory at all'
+          }
+
+          $before = Get-Module -ListAvailable TrustedSigning | Sort-Object Version -Descending
+          Write-Host "=== module before: $(($before | Select-Object -First 1).Version)"
+          $before | ForEach-Object { Write-Host "  $($_.Version) $($_.Path)" }
+
+          # Clear the module and its package cache. Nothing else writes here, and
+          # electron-builder reinstalls both on the next build.
+          Get-Module -ListAvailable TrustedSigning | ForEach-Object {
+            Remove-Item -Recurse -Force $_.ModuleBase -ErrorAction SilentlyContinue
+          }
+          if (Test-Path $root) { Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue }
+          Write-Host '=== cleared'
+
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue
+          Install-Module -Name TrustedSigning -MinimumVersion 0.5.0 -Force -Repository PSGallery -Scope CurrentUser
+
+          $after = Get-Module -ListAvailable TrustedSigning | Sort-Object Version -Descending
+          Write-Host "=== module after: $(($after | Select-Object -First 1).Version)"
+
+          # The same dependency install the signing call triggers, so the next build
+          # finds the packages already laid out.
+          Import-Module TrustedSigning
+          Write-Host "=== cmdlet: $((Get-Command Invoke-TrustedSigning -ErrorAction SilentlyContinue).Source)"
