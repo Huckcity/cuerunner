@@ -92,19 +92,38 @@ jobs:
           Write-Host "probe compiled: $(Test-Path $probe)"
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  before: $($_.Status) $($_.SignerCertificate.Subject)" }
 
-          Write-Host '=== signtool sign, invoked directly'
-          & $signtool.FullName sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib "$($dlib.FullName)" /dmdf "$($metadata.FullName)" "$probe" 2>&1 |
-            ForEach-Object { Write-Host "  signtool: $_" }
-          Write-Host "  signtool exit code: $LASTEXITCODE"
+          # Two questions left, and this answers both in one dispatch.
+          #
+          # First, what signtool itself says. Everything above ran clean: the binary is present,
+          # validly signed, and launches with exit 0 — yet `/dlib` by hand exited 3 with nothing
+          # captured, because signtool is a console application whose output does not travel
+          # through the PowerShell stream the way `Write-Host` does. Redirect to a file and read
+          # the file back.
+          Write-Host '=== signtool sign, output captured to a file'
+          $out = Join-Path $env:TEMP 'signtool-out.txt'
+          & $signtool.FullName sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib "$($dlib.FullName)" /dmdf "$($metadata.FullName)" "$probe" > $out 2>&1
+          Write-Host "  exit code: $LASTEXITCODE"
+          Get-Content $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  after: $($_.Status) $($_.SignerCertificate.Subject)" }
 
-          Write-Host '=== dotnet'
-          try {
-            Write-Host "  dotnet: $(& dotnet --version 2>&1)"
-          } catch {
-            Write-Host "  dotnet absent: $($_.Exception.Message)"
+          # Second, and the likelier cause of that exit 3: the Dlib is Microsoft's .NET-backed
+          # signing provider. A build box with MSVC, Node and Python but no .NET cannot load it,
+          # and the module's own failure would be another symptom of the same absence.
+          Write-Host '=== .NET inventory'
+          Write-Host "  PowerShell $($PSVersionTable.PSVersion) on runtime $([System.Environment]::Version)"
+          Write-Host "  dotnet on PATH: $([bool](Get-Command dotnet -ErrorAction SilentlyContinue))"
+          Write-Host "  C:\Program Files\dotnet exists: $(Test-Path 'C:\Program Files\dotnet')"
+          foreach ($key in 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\NET Framework Setup\NDP\v4\Full') {
+            if (Test-Path $key) {
+              Write-Host "  $key Release=$((Get-ItemProperty $key -ErrorAction SilentlyContinue).Release)"
+            } else {
+              Write-Host "  $key absent"
+            }
           }
-          Remove-Item $probe, $source, "${probe}.obj" -Force -ErrorAction SilentlyContinue
+          Write-Host '=== beside the Dlib'
+          Get-ChildItem (Split-Path $dlib.FullName) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name | ForEach-Object { Write-Host "  $_" }
+          Write-Host "  Dlib length: $((Get-Item $dlib.FullName).Length)"
+          Remove-Item $probe, $source, "${probe}.obj", $out -Force -ErrorAction SilentlyContinue
 
   test:
     runs-on: [self-hosted, linux, x64, ubox]
