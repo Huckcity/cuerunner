@@ -65,40 +65,44 @@ jobs:
             Write-Host "  defender query failed: $($_.Exception.Message)"
           }
 
-          # The experiment. The signing call installs its packages and then launches
-          # signtool.exe out of the tree it just wrote, and the launch is what fails. Call it
-          # exactly as electron-builder does, twice, and see whether the first call — the one
-          # that installs — behaves differently from the second, which finds everything in
-          # place. Nothing is cleared here: the question is what the module does, not what a
-          # fresh cache looks like.
-          #
-          # The probe is compiled here rather than copied from the machine, because every
-          # system binary carries Microsoft's own signature: signing a copy of one and reading
-          # `Valid` back would prove nothing. This starts unsigned, so the subject afterwards
-          # is the only thing that can say whether our certificate was applied.
+          # What the module printed before it failed, run by hand. Everything above has already
+          # cleared the file itself — present, no Mark of the Web, validly signed, and it runs:
+          # exit 0. So the two things left are the module's wrapper and signtool's own
+          # invocation, and this tests the second by performing it. If this signs, the release
+          # path can call signtool itself and the module is the only thing in the way; if it
+          # fails identically, running signtool out of that directory is what is refused.
+          $signtool = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          $dlib = Get-ChildItem -Recurse -Filter 'Azure.CodeSigning.Dlib.dll' -Path $root -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          $metadata = Get-ChildItem -Recurse -Filter 'metadata.json' -Path $root -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          Write-Host "=== signtool: $($signtool.FullName)"
+          Write-Host "=== dlib:     $($dlib.FullName)"
+          Write-Host "=== metadata: $($metadata.FullName)"
+          Get-Content $metadata.FullName -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  metadata: $_" }
+
+          # An unsigned PE of our own, so any signature afterwards is ours to read.
           $probe = Join-Path $env:TEMP 'cuerunner-signing-probe.exe'
           $source = Join-Path $env:TEMP 'cuerunner-signing-probe.c'
           'int main(void) { return 0; }' | Set-Content -Path $source -Encoding ascii
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          Write-Host "=== toolchain: $vs"
           cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && cl /nologo /Fe:`"$probe`" `"$source`"" | ForEach-Object { Write-Host "  cl: $_" }
           Write-Host "probe compiled: $(Test-Path $probe)"
           Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  before: $($_.Status) $($_.SignerCertificate.Subject)" }
 
-          Import-Module TrustedSigning -ErrorAction SilentlyContinue
-          foreach ($attempt in 1, 2) {
-            Write-Host "=== attempt $attempt from $(Get-Location)"
-            try {
-              Invoke-TrustedSigning -Endpoint 'https://neu.codesigning.azure.net/' -CertificateProfileName 'cuerunner' -CodeSigningAccountName 'cuerunner-signing' -TimestampRfc3161 'http://timestamp.acs.microsoft.com' -TimestampDigest 'SHA256' -FileDigest 'SHA256' -Files $probe -ErrorAction Stop 4>&1 |
-                ForEach-Object { Write-Host "  out: $_" }
-              Write-Host "  attempt $attempt returned without throwing"
-            } catch {
-              Write-Host "  attempt $attempt threw: $($_.Exception.Message)"
-              Write-Host "    inner: $($_.Exception.InnerException)"
-            }
-            Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  after: $($_.Status) $($_.SignerCertificate.Subject)" }
-            Write-Host "  signtool still present: $(Test-Path $x64.FullName)"
+          Write-Host '=== signtool sign, invoked directly'
+          & $signtool.FullName sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib "$($dlib.FullName)" /dmdf "$($metadata.FullName)" "$probe" 2>&1 |
+            ForEach-Object { Write-Host "  signtool: $_" }
+          Write-Host "  signtool exit code: $LASTEXITCODE"
+          Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "  after: $($_.Status) $($_.SignerCertificate.Subject)" }
+
+          Write-Host '=== dotnet'
+          try {
+            Write-Host "  dotnet: $(& dotnet --version 2>&1)"
+          } catch {
+            Write-Host "  dotnet absent: $($_.Exception.Message)"
           }
           Remove-Item $probe, $source, "${probe}.obj" -Force -ErrorAction SilentlyContinue
 
