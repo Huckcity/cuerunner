@@ -422,6 +422,12 @@ processes and the engine speak.
   sign". `electron-builder` 26.8.1 admits only `EnvironmentCredential`, so a federated or
   `az login` session is not an alternative here. macOS is unaffected and still signs from
   `MAC_CSC_LINK`.
+  **The Windows runner needs the .NET 8 runtime.** Microsoft's signing provider
+  (`Azure.CodeSigning.Dlib.dll`) is a .NET Core assembly, and signtool can only load it into
+  a CoreCLR runtime; a machine with only .NET Framework fails every signing call while
+  reporting `SignTool failed with exit code 3` and `The system cannot find the file specified`
+  for a `signtool.exe` that is present and runs. `win-ci` has it installed
+  (`C:\Program Files\dotnet`); a new runner needs the same before the first signed build.
 - **macOS universal dmg**: the dmg carries one app per architecture, and the engine is one
   binary for both — `-arch x86_64 -arch arm64`, compiled at the floor
   `build.mac.minimumSystemVersion` declares — so `build.mac.x64ArchFiles` names
