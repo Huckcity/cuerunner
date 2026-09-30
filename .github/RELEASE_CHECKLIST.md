@@ -32,16 +32,30 @@ its artifacts are.
       rewritten or deleted before dispatching, and the new wording names the behaviour the
       code now has. No release ships a limitation its own commits removed.
 - [ ] **Read what the release notes say each installer is — and act on it rather than
-      restating it.** `build.yml` signs from repository secrets and verifies its own work:
-      Windows uses `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` and checks the result with
-      `Get-AuthenticodeSignature`; macOS uses `MAC_CSC_LINK` / `MAC_CSC_KEY_PASSWORD` and
-      notarises with `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, then checks
-      with `codesign`, `spctl` and `stapler validate`. A build with no certificates is *not*
-      failed: it logs a `::warning::`, produces unsigned installers, and the `release` job's
-      section names them — signed, signed and notarised, or unsigned, every artifact the
-      release page carries and the mirror serves. An unsigned binary will not be installed on
-      a venue machine, whatever this list says, so an unsigned release is one to announce as
-      unsigned or not to announce.
+      restating it.** `build.yml` signs and verifies its own work, and the two platforms are
+      configured differently. **Windows signs through Azure Trusted Signing** and checks the
+      result with `Get-AuthenticodeSignature`, which also fails when the certificate that
+      signed is not the publisher the release claims. macOS still signs from a certificate in
+      the repository secrets — `MAC_CSC_LINK` / `MAC_CSC_KEY_PASSWORD` — and notarises with
+      `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, then checks with `codesign`,
+      `spctl` and `stapler validate`.
+      **What decides a Windows build is signed is a configuration, not a certificate that can
+      expire:** four repository variables — `TRUSTED_SIGNING_PUBLISHER`,
+      `TRUSTED_SIGNING_ENDPOINT` (the region the account and its profile were created in),
+      `TRUSTED_SIGNING_ACCOUNT`, `TRUSTED_SIGNING_PROFILE` — and three secrets,
+      `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`. `build-windows` decides
+      from all seven through `scripts/trusted-signing.ts` before it packages anything, and
+      hands electron-builder the `azureSignOptions` flags only when all seven are there.
+      **Set all seven or none:** an identity configured halfway fails the job rather than
+      shipping unsigned. With none of them the build is *not* failed — it logs a
+      `::warning::`, produces unsigned installers, and the `release` job's section names them:
+      signed, signed and notarised, or unsigned, every artifact the release page carries and
+      the mirror serves. An unsigned binary will not be installed on a venue machine,
+      whatever this list says, so an unsigned release is one to announce as unsigned or not
+      to announce. The signing key itself never leaves Azure, so there is no certificate in
+      this repository to renew, leak or revoke; what the `win-ci` runner does need is reach to
+      PowerShell Gallery and to the regional endpoint, because electron-builder installs the
+      `TrustedSigning` module per build.
 - [ ] **The Steinberg agreement is signed before any ASIO-linked installer is published.**
       The engine hosts ASIO drivers only when Steinberg's ASIO SDK was present at build time
       (`CUERUNNER_ASIO_SDK`; see *Packaging prerequisites* in `README.md`), and the SDK's
