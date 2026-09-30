@@ -1,3 +1,71 @@
+# [0.15.0](https://github.com/Huckcity/cuerunner/compare/v0.14.0...v0.15.0) (2026-09-30)
+
+
+### Bug Fixes
+
+* a refusal speaks, an event field is reported, and a held socket is named ([a71d032](https://github.com/Huckcity/cuerunner/commit/a71d032f400cb3b07ebb478712de8d22a2d17a45))
+* an offline desk port drops its latch, a quit states its platform truth, a showless file is refused, a held socket is driven ([bf6f87e](https://github.com/Huckcity/cuerunner/commit/bf6f87e57eb84cee13b65f4450c9712d4fa30417))
+* **audio:** a stream slot is published only once its ring is real, and the pool has one lock ([21f178c](https://github.com/Huckcity/cuerunner/commit/21f178cec2aa68621288b50c1834e0051d4e6f39))
+* **audio:** an event field is declared with its kind, and a wrong one is reported ([81782a7](https://github.com/Huckcity/cuerunner/commit/81782a794fca265ead4b1e5d33465d83e02f63b4))
+* **audio:** the engine's shared state has no data races, and a stop waits for its connections ([7eccb24](https://github.com/Huckcity/cuerunner/commit/7eccb244ac86c74bff92f4b120d8d03ff68e0779)), closes [#172](https://github.com/Huckcity/cuerunner/issues/172)
+* **build:** fd-slicer's ReadStream closes, so the zip extraction finishes ([311cffd](https://github.com/Huckcity/cuerunner/commit/311cffd059d52dfe5cd8904db7bec538e6080bed))
+* **ci:** Electron's binary, which npm 12 will not fetch by itself ([df9d2aa](https://github.com/Huckcity/cuerunner/commit/df9d2aadaeece8767c357ec2fc2940f0f87e18e0))
+* **ci:** every checkout is LF, and the desk goodbye gets headroom ([87ef8d1](https://github.com/Huckcity/cuerunner/commit/87ef8d13d4fae5206f8389edc1edf97fa1500d05))
+* **ci:** normalise the checkout, and state the one macOS retry ([79595f8](https://github.com/Huckcity/cuerunner/commit/79595f81e020a950d95411b24dce8edafe0ab994))
+* **ci:** removing a file is what makes git write it again ([6f3a647](https://github.com/Huckcity/cuerunner/commit/6f3a647b50aa9dd5ab66693ae09d62e97b9477b0))
+* **ci:** the Electron download gets a bounded retry ([99601e1](https://github.com/Huckcity/cuerunner/commit/99601e1288adf5ec6c957d8e631e27f505343240))
+* **desk:** a section's absent button fields are unassigned, not a clash ([5c4eb2c](https://github.com/Huckcity/cuerunner/commit/5c4eb2ca2284f9697b0c8e39e26c0c9a36ac6d2d))
+* **desk:** one attempt at the desk has a deadline, and a throw is not a wedge ([4e98d94](https://github.com/Huckcity/cuerunner/commit/4e98d9474c27b02e0be7137bd8df9617946c2009))
+* **integration:** hold the desk through a relay in the hardware lane ([275180e](https://github.com/Huckcity/cuerunner/commit/275180e38cab89793e5f60935fcbeab925e1a092))
+* **integration:** the capture tool refuses a port argument it cannot sweep ([3aa8677](https://github.com/Huckcity/cuerunner/commit/3aa86776b879ca501c21ee5233cfcacaaa84bc87))
+* **integration:** the desk fixtures write the shape the show has now ([8eb9f8f](https://github.com/Huckcity/cuerunner/commit/8eb9f8f4f342ac7fc428a57162f16296594ccfa0))
+* **recovery:** the lane answers a fault, and asks once per mount ([19aaab7](https://github.com/Huckcity/cuerunner/commit/19aaab7f51e3fe001bffea923d4ec23cdc51008f))
+* **release:** give the verify step the Apple credentials it needs ([2964c5f](https://github.com/Huckcity/cuerunner/commit/2964c5f992b5601882825d658c3530c1755f9392))
+* **release:** notarise the dmg before stapling it ([018e5ac](https://github.com/Huckcity/cuerunner/commit/018e5ac97ebb0ca2a710396eb4708c1217c1c69b))
+* **release:** staple the dmg before validating it ([e50d955](https://github.com/Huckcity/cuerunner/commit/e50d9553f79de3a602a4a2284678934a890a1ad0))
+* **review:** the aliases macOS has, and the box the menu hangs from ([dc08a84](https://github.com/Huckcity/cuerunner/commit/dc08a84d385aff6512eff792ea5934deb8a75508))
+* **review:** the fold press says what it does, and the fold follow is what the words say ([e3eef99](https://github.com/Huckcity/cuerunner/commit/e3eef994ca1445ee4ea2e829b2701aaa2a6fc2d9))
+* **review:** the picker case measures what it claims, on every platform ([52cc2c2](https://github.com/Huckcity/cuerunner/commit/52cc2c26e0faa44f548f7ba7edd038fd5924cb39))
+* **scenes:** a scene-less grid keeps its columns ([458e86e](https://github.com/Huckcity/cuerunner/commit/458e86e1d809d459fd155778414b4930a2b8c937))
+* **scenes:** the desk record follows the show when a strip or a fader leaves ([685139c](https://github.com/Huckcity/cuerunner/commit/685139c7a29b78a0da0c2a91d2d18bf73579b6ea))
+* **scenes:** the grid draws the row a recall writes, not one the file once held ([d46236a](https://github.com/Huckcity/cuerunner/commit/d46236abef1f6427bf3665b32f2b620f0137e39c))
+* **scripts:** a local run ships the tree it is looking at ([f87435a](https://github.com/Huckcity/cuerunner/commit/f87435a2b989d393a511ef04b1332dfe7419bd6e))
+* **workspace:** a media route the show spells its own way is kept, not rewritten ([231be80](https://github.com/Huckcity/cuerunner/commit/231be80d6b13b29b6903070fe225b94979d78ba5))
+* **workspace:** a number the form writes has bounds, and a file outside them is refused ([e755441](https://github.com/Huckcity/cuerunner/commit/e755441676bcff310d3f24a9c682030a086918f0))
+* **workspace:** a save writes nothing it will not read back, and says why in a sentence ([8f7c96a](https://github.com/Huckcity/cuerunner/commit/8f7c96a6e5e3dc63174a36d219254a30e9736982))
+* **workspace:** the funnel checks a declared cue field's kind ([19a9750](https://github.com/Huckcity/cuerunner/commit/19a97508819316043bdd2970c863de82961f9478))
+* **workspace:** the funnel refuses a declared leaf of the wrong kind ([cca9b78](https://github.com/Huckcity/cuerunner/commit/cca9b78c87410d814ba6b2170718187e2daa8978))
+
+
+### Features
+
+* **demo:** the demo ships its scenes and its writer, and a new workspace folds the dock ([8234fa4](https://github.com/Huckcity/cuerunner/commit/8234fa4fcc8d5476af02ca1b527bc9c8a8baa913))
+* **desk:** a press that only means “next cue” does not have to latch ([b66a65b](https://github.com/Huckcity/cuerunner/commit/b66a65b709d5dd17541b28a24d0cbee04cca29a2))
+* **desk:** a scene owns the assignment, and a recall writes only what it names ([95a8499](https://github.com/Huckcity/cuerunner/commit/95a84993cbc62b0756ce56820f4d4d202a034702))
+* **desk:** the SQ's native control service speaks its measured frames ([9894d6e](https://github.com/Huckcity/cuerunner/commit/9894d6e2cd1f289d7ad01c13a4128d95e99bd770))
+* **harness:** the SQ's native service is captured, and a DCA assignment measured ([60e9377](https://github.com/Huckcity/cuerunner/commit/60e9377dca0accec3e58e2ac948e45ee5d024b85))
+* **integration:** the capture runs in the fast lane, and the SQ claim stays unproven ([d57ffed](https://github.com/Huckcity/cuerunner/commit/d57ffedb1277dda318e70b57eca584c1175517a1))
+* **release:** the mirror serves one release, and the digests ship beside it ([373eb52](https://github.com/Huckcity/cuerunner/commit/373eb52727da3cbe301ed405929990fd9e81f445))
+* **release:** the Windows installer signs through Azure Trusted Signing ([3c7c9b4](https://github.com/Huckcity/cuerunner/commit/3c7c9b40b90115eda42293e17ca2185457c328f6))
+* **report:** Report a Problem builds a report the operator reads before it leaves ([3a59f7e](https://github.com/Huckcity/cuerunner/commit/3a59f7ea06381ebc3d50b7583b46e93fed5cdc34))
+* **scenes:** a group holds strips, so any strip can be grouped ([968b157](https://github.com/Huckcity/cuerunner/commit/968b157b4cc8f11264e35a93528048fe440f18ec))
+* **scenes:** a row holds one thing, and a fader is its number ([d9fe38c](https://github.com/Huckcity/cuerunner/commit/d9fe38ca0179b30e5b2c80d6d8dd2674a2e20d3c))
+* **scenes:** a row that holds something is its name, and the columns are narrower ([19dd39e](https://github.com/Huckcity/cuerunner/commit/19dd39eb05e8cd357d741a2e5ce852d11b322522))
+* **scenes:** keep grid readable and clarify ensemble creation ([93a5e35](https://github.com/Huckcity/cuerunner/commit/93a5e357a16b8f77553e440dea028e75d4b3a6cd))
+* **scenes:** one box per cell, and an ensemble built from the strips it names ([5a0e95a](https://github.com/Huckcity/cuerunner/commit/5a0e95ae7fd4e453db1268df596cc6b233f3561a))
+* **scenes:** the builder holds its size, and its place ([423ae65](https://github.com/Huckcity/cuerunner/commit/423ae65b48034e44eed2cbc20ca7063e991e5fb6))
+* **scenes:** the grid is the whole view ([f5a78c6](https://github.com/Huckcity/cuerunner/commit/f5a78c635f734770aa9f7e35714e9c56005f83ff))
+* **scenes:** the grid's chrome is the grid, and the colour is free ([e67e21e](https://github.com/Huckcity/cuerunner/commit/e67e21ed91006c09e94c7793b8866e06e7a1eae6))
+* **show:** the channel set is a count, and a shrink takes what named it ([e3c96e1](https://github.com/Huckcity/cuerunner/commit/e3c96e14d442c29c1cd1547319a965f57ae3e829))
+* **site:** the code samples keep their lines and mark their edges, a printed table fits its column, and the served pages' app words are the app's own ([ba72773](https://github.com/Huckcity/cuerunner/commit/ba72773225056a4916609c95c5d3cdecfe38bbc3))
+* **site:** the Pro marks and the app's labels are held to the record, and the reference covers the License tab ([82d4ee1](https://github.com/Huckcity/cuerunner/commit/82d4ee1938204b5aeb423b20a22397db5d006fc9))
+* **workspace:** the funnel checks the shape instead of carrying the old ones ([e0ab583](https://github.com/Huckcity/cuerunner/commit/e0ab583d726025d73d5ce746c9295de0a684ab6f))
+
+
+### Reverts
+
+* **ci:** the macOS retry, which a deterministic failure ignores ([d72493f](https://github.com/Huckcity/cuerunner/commit/d72493f5cf6a7e2740863f6b7f8fc315465217b6))
+
 # Unreleased
 
 ### Bug Fixes
