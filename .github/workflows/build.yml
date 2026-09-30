@@ -317,6 +317,9 @@ jobs:
       - name: Verify the floor, the signature and the notarisation ticket
         env:
           SIGNING_LINK: ${{ secrets.MAC_CSC_LINK }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           APP=$(find dist -maxdepth 3 -name '*.app' -type d | head -1)
           # The floor the package declares has to be the floor the bundle carries: this key is
