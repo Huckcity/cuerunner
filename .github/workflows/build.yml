@@ -19,6 +19,96 @@ jobs:
   # Linux and the packaging on ubox, the macOS half on the Mac mini, the Windows installer
   # on the NUC (provisioning: ~/homelab/ci/). Nothing publishes from GitHub's runners, and
   # nothing here waits on them.
+
+  # TEMPORARY — a standalone lane on win-ci that diagnoses why `Invoke-TrustedSigning` cannot
+  # start signtool.exe there. It waits for nothing, so it reports in a couple of minutes rather
+  # than behind the e2e gate, and it publishes nothing. Removed once the cause is named; the
+  # repair, whatever it turns out to be, belongs on the machine and not in the release path.
+  diagnose-signing:
+    runs-on: [self-hosted, windows, x64, win-ci]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Diagnose the signing tooling
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA 'TrustedSigning'
+          Write-Host "=== cache root: $root exists=$(Test-Path $root)"
+
+          # What the last failed run left behind. The signing call re-extracts these packages
+          # immediately before launching signtool, so this is the state it saw.
+          $tools = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue
+          if ($tools) {
+            foreach ($t in $tools) {
+              Write-Host "signtool: $($t.FullName)"
+              Write-Host "  exists=$($t.Exists) length=$($t.Length) attributes=$($t.Attributes)"
+              Write-Host "  hash=$((Get-FileHash $t.FullName -Algorithm SHA256).Hash)"
+              Get-AuthenticodeSignature $t.FullName | ForEach-Object { Write-Host "  signature: $($_.Status)" }
+            }
+          } else {
+            Write-Host 'signtool: none present anywhere under the cache root'
+          }
+
+          Write-Host '=== real-time protection'
+          try {
+            $status = Get-MpComputerStatus -ErrorAction Stop
+            Write-Host "  enabled=$($status.RealTimeProtectionEnabled) antivirus=$($status.AntivirusEnabled)"
+            (Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath | ForEach-Object { Write-Host "  exclusion: $_" }
+          } catch {
+            Write-Host "  defender query failed: $($_.Exception.Message)"
+          }
+
+          Write-Host '=== detections in the last 12 hours'
+          try {
+            $detections = Get-MpThreatDetection -ErrorAction Stop | Where-Object { $_.InitialDetectionTime -gt (Get-Date).AddHours(-12) }
+            if ($detections) {
+              foreach ($d in $detections) {
+                Write-Host "detection: $($d.InitialDetectionTime) threat=$($d.ThreatID)"
+                $d.Resources | ForEach-Object { Write-Host "  resource: $_" }
+              }
+            } else {
+              Write-Host 'none'
+            }
+          } catch {
+            Write-Host "detection query failed: $($_.Exception.Message)"
+          }
+
+          # The failure under investigation: `Start-Process` reports a file it cannot find, for
+          # a signtool.exe that is demonstrably there. Launch it here, outside the module, and
+          # read what Windows actually says.
+          $x64 = $tools | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if ($x64) {
+            Write-Host '=== direct launch of the x64 signtool'
+            try {
+              $p = Start-Process -FilePath $x64.FullName -ArgumentList '/?' -NoNewWindow -Wait -PassThru -ErrorAction Stop
+              Write-Host "direct launch exit code: $($p.ExitCode)"
+            } catch {
+              Write-Host "direct launch threw: $($_.Exception.Message)"
+              Write-Host "  type: $($_.Exception.GetType().FullName)"
+              Write-Host "  inner: $($_.Exception.InnerException)"
+            }
+          }
+
+          # And the call the build makes, against a throwaway copy of a PE file, so the log says
+          # whether the identity is authorised as well as whether the tool starts at all.
+          Write-Host '=== Invoke-TrustedSigning against a throwaway copy'
+          $probe = Join-Path $env:TEMP 'cuerunner-signing-probe.exe'
+          Copy-Item "$env:WINDIR\System32\where.exe" $probe -Force -ErrorAction SilentlyContinue
+          Write-Host "probe file: $probe exists=$(Test-Path $probe)"
+          Import-Module TrustedSigning -ErrorAction SilentlyContinue
+          try {
+            Invoke-TrustedSigning -Endpoint 'https://neu.codesigning.azure.net/' -CertificateProfileName 'cuerunner' -CodeSigningAccountName 'cuerunner-signing' -Files $probe -ErrorAction Stop 4>&1 |
+              ForEach-Object { Write-Host "sign: $_" }
+            Write-Host 'signing call returned without throwing'
+          } catch {
+            Write-Host "signing call threw: $($_.Exception.Message)"
+            Write-Host "  inner: $($_.Exception.InnerException)"
+          }
+          if (Test-Path $probe) {
+            Get-AuthenticodeSignature $probe | ForEach-Object { Write-Host "probe signature: $($_.Status) $($_.SignerCertificate.Subject)" }
+          }
+          Remove-Item $probe -Force -ErrorAction SilentlyContinue
+
   test:
     runs-on: [self-hosted, linux, x64, ubox]
     steps:
@@ -179,43 +269,6 @@ jobs:
           # as its own argument: a publisher name carries spaces and an `=`, and a
           # re-joined string would break it in two.
           "args=$(ConvertTo-Json -Compress -InputObject @($plan.args))" >> $env:GITHUB_OUTPUT
-
-      # TEMPORARY — scaffolding for the signing-cache repair, removed in the next commit.
-      # Reports what the runner's TrustedSigning cache holds, clears it, and reinstalls the
-      # module the way electron-builder does. The packaging run that follows is the proof.
-      - name: Repair the Trusted Signing cache
-        shell: pwsh
-        run: |
-          $root = Join-Path $env:LOCALAPPDATA 'TrustedSigning'
-          Write-Host "=== cache root: $root"
-          if (Test-Path $root) {
-            Get-ChildItem -Directory $root | ForEach-Object { Write-Host "package: $($_.Name)" }
-            Get-ChildItem -Recurse -Directory $root -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -match 'BuildTools[^\\]*\\bin' } |
-              ForEach-Object {
-                Write-Host "bin folder: $($_.FullName)"
-                Get-ChildItem $_.FullName -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
-              }
-            $tools = Get-ChildItem -Recurse -Filter 'signtool.exe' -Path $root -ErrorAction SilentlyContinue
-            if ($tools) { $tools | ForEach-Object { Write-Host "signtool: $($_.FullName)" } }
-            else { Write-Host 'signtool: none anywhere under the cache root' }
-          } else {
-            Write-Host 'no cache directory at all'
-          }
-          $before = Get-Module -ListAvailable TrustedSigning | Sort-Object Version -Descending
-          Write-Host "=== module before: $(($before | Select-Object -First 1).Version)"
-          $before | ForEach-Object { Write-Host "  $($_.Version) $($_.Path)" }
-
-          Get-Module -ListAvailable TrustedSigning | ForEach-Object {
-            Remove-Item -Recurse -Force $_.ModuleBase -ErrorAction SilentlyContinue
-          }
-          if (Test-Path $root) { Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue }
-          Write-Host '=== cleared'
-
-          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue
-          Install-Module -Name TrustedSigning -MinimumVersion 0.5.0 -Force -Repository PSGallery -Scope CurrentUser
-          $after = Get-Module -ListAvailable TrustedSigning | Sort-Object Version -Descending
-          Write-Host "=== module after: $(($after | Select-Object -First 1).Version)"
 
       # The engine is a separate binary; a build that ships one the user cannot identify
       # as theirs is a build a venue will refuse to install. The installer is signed by the
