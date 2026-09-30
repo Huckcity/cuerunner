@@ -396,6 +396,32 @@ processes and the engine speak.
   signed; its absence is the "not recorded" state the gate reads, and it is never committed
   as a placeholder. An unsigned build can still be built, tested and used internally; it is
   published only with the record in place.
+- **Windows signing: Azure Trusted Signing.** The Windows installer is signed by Microsoft's
+  Artifact Signing service, and the private key never leaves Azure — there is no certificate,
+  no `.pfx` and no password for one in this repository. `electron-builder` does the signing
+  through `win.azureSignOptions`, which cannot be declared in `package.json`: electron-builder's
+  Windows signer *refuses the build* when it cannot authenticate rather than shipping unsigned
+  (electron-builder#9623), so a repository with no identity configured would fail instead of
+  producing the unsigned installer this pipeline promises. It is therefore configured per run,
+  and the decision is `scripts/trusted-signing.ts` (`scripts/trusted-signing.test.ts` holds it
+  to its states). Give the build:
+
+  ```bash
+  # repository variables — they name the service and authenticate nothing
+  TRUSTED_SIGNING_PUBLISHER=CN=<the certificate's publisher>
+  TRUSTED_SIGNING_ENDPOINT=https://<region>.codesigning.azure.net   # where the account was created
+  TRUSTED_SIGNING_ACCOUNT=<the code signing account>
+  TRUSTED_SIGNING_PROFILE=<the public-trust certificate profile>
+  # repository secrets — a service principal with Trusted Signing Certificate Profile Signer
+  AZURE_TENANT_ID=… AZURE_CLIENT_ID=… AZURE_CLIENT_SECRET=…
+  ```
+
+  and `npm run dist:win` signs the packaged binaries, the uninstaller and the installer;
+  `build.yml` then checks the result with `Get-AuthenticodeSignature` and with the publisher it
+  expects. All seven, or none: half of an identity is refused rather than treated as "do not
+  sign". `electron-builder` 26.8.1 admits only `EnvironmentCredential`, so a federated or
+  `az login` session is not an alternative here. macOS is unaffected and still signs from
+  `MAC_CSC_LINK`.
 - **macOS universal dmg**: the dmg carries one app per architecture, and the engine is one
   binary for both — `-arch x86_64 -arch arm64`, compiled at the floor
   `build.mac.minimumSystemVersion` declares — so `build.mac.x64ArchFiles` names
@@ -659,7 +685,8 @@ GitHub Actions workflows in `.github/workflows/`:
   - Normally started by `release.yml`, which dispatches it for the tag it just cut; if a release
     ends up with no packaging run, start one by hand — `gh workflow run build.yml --ref <tag>` —
     because a release page with no assets means neither happened
-  - Each packaging job records what it built — whether a certificate signed it, whether the
+  - Each packaging job records what it built — whether it was signed (Windows through Azure
+    Trusted Signing, macOS from the certificate in the release secrets), whether the
     Windows build linked Steinberg's ASIO SDK — and the `release` job composes that into the
     release notes, appended to `semantic-release`'s own body: the notes name every installer
     signed, signed and notarised, or unsigned, and say that a venue machine refuses an

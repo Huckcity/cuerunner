@@ -6,8 +6,8 @@
 // nowhere; the Steinberg agreement that permits publishing a build linked against the ASIO SDK
 // was a sentence in the checklist that nothing enforced; and a `workflow_dispatch` from a branch
 // was enough to manufacture a release. The workflow now records what each artifact is — from the
-// secret that gates its signing, never from text written beside it — composes a section into the
-// notes from those recordings, withholds the ASIO-linked installer until the agreement's record
+// configuration that gates its signing, never from text written beside it — composes a section into
+// the notes from those recordings, withholds the ASIO-linked installer until the agreement's record
 // is committed, and publishes only from a tag ref. The packaging run itself is started by
 // `release.yml`, which dispatches it for the tag semantic-release just cut, because a release
 // published with the repository's own token creates no workflow run: that is why no release since
@@ -34,6 +34,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { CREDENTIALS, IDENTIFIERS } from './trusted-signing.ts'
+
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Reads a file the guard cannot run without: an absent one is a failure, never a skip. */
@@ -53,6 +55,7 @@ const PROOF = '_bmad-output/specs/spec-cuerunner/quality-and-proof.md'
 const DEPENDENCIES = 'native/audio/third_party/DEPENDENCIES.json'
 const VITEST = 'vitest.config.ts'
 const DOCS_GUARD = 'scripts/docs-build.test.ts'
+const PACKAGE = 'package.json'
 const NUMBERS_GUARD = 'scripts/published-numbers.test.ts'
 
 /** The two surfaces that link the mirror, one hand-written and one rendered from `docs/`. */
@@ -71,11 +74,20 @@ const PUBLISH_STEP = 'Publish the release'
 const MIRROR_STEP = 'Upload to R2'
 
 /**
- * The step each packaging job records what it built in, and the outputs the release job reads
- * off it. The names are the workflow's; a job that records nothing fails the check below with
- * the line its job sits on.
+ * One packaging job's recording: the step that states what it built, and the outputs the release
+ * job reads off it. The names are the workflow's; a job that records nothing fails the check
+ * below with the line its job sits on.
  */
-const RECORDINGS = [
+interface Recording {
+  job: string
+  step: string
+  outputs: Record<string, string>
+}
+
+/** The script that decides what a Windows build signs with, and the only thing that may. */
+const SIGNING_DECISION = 'scripts/trusted-signing.ts'
+
+const RECORDINGS: Recording[] = [
   {
     job: 'build-windows',
     step: 'Record what this installer is',
@@ -130,9 +142,24 @@ const STATE_VOCABULARY = [
   { job: 'build-mac', output: 'notarised', subject: '$MAC_CERTIFICATE:$MAC_NOTARISED', position: 1 }
 ]
 
-const CERTIFICATE_SECRETS: Record<string, string> = {
-  'build-windows': 'WIN_CSC_LINK',
-  'build-mac': 'MAC_CSC_LINK'
+/**
+ * What gates each platform's signing, and therefore what a recording has to read before it may
+ * call a build signed.
+ *
+ * macOS gates on the certificate secret itself: electron-builder reads an empty `CSC_LINK` as
+ * "do not sign", so the secret's presence is the whole of the decision. Windows cannot work
+ * that way — `win.azureSignOptions` makes electron-builder's signer refuse the build when it
+ * cannot authenticate rather than skip signing (electron-builder#9623), so the identity is
+ * decided in one step, by `scripts/trusted-signing.ts`, from the four resource identifiers and
+ * the three Entra credentials. That step's `signed` answer is what the recording, the
+ * verification and the packaging step all read, and it is a record in the same sense the macOS
+ * secret is: it can say no.
+ */
+type CertificateGate = { secret: string } | { decision: string }
+
+const CERTIFICATE_GATES: Record<string, CertificateGate> = {
+  'build-mac': { secret: 'MAC_CSC_LINK' },
+  'build-windows': { decision: SIGNING_DECISION }
 }
 
 /** The whole reading the checks are functions of: two workflows, the prose held to them, and the
@@ -147,6 +174,8 @@ interface Reading {
   dependencies: string
   index: string
   guides: string
+  /** The packaged build config, because what it declares is one of the release path's facts. */
+  package: string
 }
 
 const LIVE: Reading = {
@@ -158,7 +187,8 @@ const LIVE: Reading = {
   vitest: read(VITEST),
   dependencies: read(DEPENDENCIES),
   index: read(INDEX),
-  guides: read(GUIDES)
+  guides: read(GUIDES),
+  package: read(PACKAGE)
 }
 
 /**
@@ -524,12 +554,11 @@ function guardGateProblems(reading: Reading): string[] {
 }
 
 /**
- * Each packaging job records what it built, and each recording reads the secret that gates its
- * platform's signing: the certificate state comes from `WIN_CSC_LINK` on Windows and
- * `MAC_CSC_LINK` on macOS — the same secrets the build steps are handed — so no release can
- * call a build signed on any other ground. The three states a certificate can be in are written
- * down here as the branches the recording makes, because a recording that cannot say `no` is
- * how a hand-written `signed` gets into a release.
+ * Each packaging job records what it built, and each recording reads the configuration that
+ * gates its platform's signing — `MAC_CSC_LINK` on macOS, the Trusted Signing decision on
+ * Windows — so no release can call a build signed on any other ground. The three states a
+ * certificate can be in are written down here as the branches the recording makes, because a
+ * recording that cannot say `no` is how a hand-written `signed` gets into a release.
  */
 function recordingProblems(reading: Reading): string[] {
   const problems: string[] = []
@@ -566,8 +595,8 @@ function recordingProblems(reading: Reading): string[] {
         )
       }
     }
-    const secret = CERTIFICATE_SECRETS[recording.job]
-    if (secret === undefined) {
+    const gate = CERTIFICATE_GATES[recording.job]
+    if (gate === undefined) {
       // The AppImage is the artifact this pipeline cannot sign, and the guard's other half —
       // that this job names no signing tool or secret — is what keeps the sentence true. The
       // comments in the job are left out of this reading, so explaining the absence of a
@@ -588,16 +617,19 @@ function recordingProblems(reading: Reading): string[] {
         )
       }
     }
-    if ((step.env[secret] ?? '') !== `\${{ secrets.${secret} }}`) {
-      problems.push(
-        `${BUILD}:${step.line}'s \`${recording.step}\` step does not read \`secrets.${secret}\`, the secret that gates this platform's signing: a state recorded from anywhere else is a claim, not a record`
-      )
-    }
-    const reads = new RegExp(`(\\$env:|\\$\\{?)${secret}\\b`).test(commands(step.run))
-    if (!reads) {
-      problems.push(
-        `${BUILD}:${step.line}'s \`${recording.step}\` step is handed \`secrets.${secret}\` and never reads it, so its certificate state says nothing about whether this build was signed`
-      )
+    if ('secret' in gate) {
+      if ((step.env[gate.secret] ?? '') !== `\${{ secrets.${gate.secret} }}`) {
+        problems.push(
+          `${BUILD}:${step.line}'s \`${recording.step}\` step does not read \`secrets.${gate.secret}\`, the secret that gates this platform's signing: a state recorded from anywhere else is a claim, not a record`
+        )
+      }
+      if (!new RegExp(`(\\$env:|\\$\\{?)${gate.secret}\\b`).test(commands(step.run))) {
+        problems.push(
+          `${BUILD}:${step.line}'s \`${recording.step}\` step is handed \`secrets.${gate.secret}\` and never reads it, so its certificate state says nothing about whether this build was signed`
+        )
+      }
+    } else {
+      problems.push(...decisionProblems(reading, job, recording, step))
     }
     for (const word of ['yes', 'no']) {
       if (!new RegExp(`['"]${word}['"]`).test(commands(step.run))) {
@@ -607,6 +639,91 @@ function recordingProblems(reading: Reading): string[] {
           } is a state the notes can never name`
         )
       }
+    }
+  }
+  return problems
+}
+
+/**
+ * The Windows gate. Signing is configured per run by `scripts/trusted-signing.ts`, from the four
+ * resource identifiers the Trusted Signing account is named by and the three Entra credentials
+ * its signer authenticates with; the step that runs it answers `yes` or `no`, and the packaging
+ * step, the signature check and the recording all read that answer. This holds those three to it,
+ * and holds the tree to the reason the decision exists at all: `win.azureSignOptions` cannot be
+ * declared in `package.json`, because electron-builder's Windows signer refuses the build when it
+ * cannot authenticate rather than shipping unsigned — so a static declaration turns every
+ * unsigned build into a failed one, which is the opposite of the promise this pipeline makes.
+ */
+function decisionProblems(reading: Reading, job: Job, recording: Recording, step: Step): string[] {
+  const problems: string[] = []
+  if (!fs.existsSync(path.join(root, SIGNING_DECISION))) {
+    problems.push(
+      `${SIGNING_DECISION} is not in the tree, and \`${recording.job}\` decides what it signs by running it: nothing else in this repository is allowed to make that decision`
+    )
+    return problems
+  }
+  const packaged = JSON.parse(reading.package) as { build?: { win?: { azureSignOptions?: unknown } } }
+  if (packaged.build?.win?.azureSignOptions != null) {
+    problems.push(
+      `${PACKAGE} declares \`build.win.azureSignOptions\`, so every build is configured to sign and a build with no identity configured fails electron-builder's pre-flight instead of shipping unsigned: the identity is decided per run, by \`${SIGNING_DECISION}\``
+    )
+  }
+  const decision = stepsOf(job).find((each) => commands(each.run).includes(SIGNING_DECISION))
+  if (decision === undefined) {
+    problems.push(
+      `${BUILD}:${job.line}'s \`${recording.job}\` job runs no \`${SIGNING_DECISION}\`, so nothing decides what this build signs with: the service is configured for every run or for none, and neither is a decision this pipeline can record`
+    )
+    return problems
+  }
+  const name = decision.name === '' ? 'unnamed' : `\`${decision.name}\``
+  if (decision.id === '') {
+    problems.push(
+      `${BUILD}:${decision.line}'s ${name} step runs \`${SIGNING_DECISION}\` with no \`id:\`, so the packaging, verification and recording steps below it have nothing to read`
+    )
+    return problems
+  }
+  for (const identifier of Object.keys(IDENTIFIERS)) {
+    if ((decision.env[identifier] ?? '') !== `\${{ vars.${identifier} }}`) {
+      problems.push(
+        `${BUILD}:${decision.line}'s ${name} step does not read \`vars.${identifier}\`, one of the four resource identifiers \`${SIGNING_DECISION}\` decides from: a decision that is missing one is a refused build, not an unsigned one`
+      )
+    }
+  }
+  for (const credential of CREDENTIALS) {
+    if ((decision.env[credential] ?? '') !== `\${{ secrets.${credential} }}`) {
+      problems.push(
+        `${BUILD}:${decision.line}'s ${name} step does not read \`secrets.${credential}\`, one of the three credentials \`${SIGNING_DECISION}\` decides from: a decision that is missing one is a refused build, not an unsigned one`
+      )
+    }
+  }
+  const answer = `\${{ steps.${decision.id}.outputs.signed }}`
+  if ((step.env.SIGNED ?? '') !== answer) {
+    problems.push(
+      `${BUILD}:${step.line}'s \`${recording.step}\` step does not read \`${answer}\`, the state the signing decision answered: a certificate state recorded from anywhere else is a claim, not a record`
+    )
+  }
+  if (!/\$env:SIGNED\b/.test(commands(step.run))) {
+    problems.push(
+      `${BUILD}:${step.line}'s \`${recording.step}\` step is handed \`${answer}\` and never reads it, so its certificate state says nothing about whether this build was signed`
+    )
+  }
+  const packaging = stepsOf(job).find((each) => /\bnpm run dist:win\b/.test(commands(each.run)))
+  if (packaging === undefined) {
+    problems.push(
+      `${BUILD}:${job.line}'s \`${recording.job}\` job runs no \`npm run dist:win\`, so nothing in it is packaged and the state this recording reports describes no file`
+    )
+    return problems
+  }
+  if (!packaging.run.includes(`\${{ steps.${decision.id}.outputs.args }}`)) {
+    problems.push(
+      `${BUILD}:${packaging.line}'s \`${packaging.name}\` step configures Trusted Signing itself rather than taking the flags \`${SIGNING_DECISION}\` decided on, so what signs this build is whatever that step happens to hard-code — and the decision the recording reads says nothing about it`
+    )
+  }
+  for (const credential of CREDENTIALS) {
+    if ((packaging.env[credential] ?? '') !== `\${{ secrets.${credential} }}`) {
+      problems.push(
+        `${BUILD}:${packaging.line}'s \`${packaging.name}\` step does not read \`secrets.${credential}\`: the signer authenticates with the three credentials, and a build handed fewer of them refuses to sign rather than shipping unsigned`
+      )
     }
   }
   return problems
@@ -1605,7 +1722,7 @@ describe('the release path the repository holds', () => {
     expect(guardGateProblems(LIVE)).toEqual([])
   })
 
-  it('records what each build is, from the secret that gates its signing', () => {
+  it('records what each build is, from the configuration that gates its signing', () => {
     expect(recordingProblems(LIVE)).toEqual([])
   })
 
@@ -1678,19 +1795,19 @@ describe.skipIf(process.platform === 'win32')('the notes the composer writes', (
     expect(notes, 'the notes do not name the sums file they are attached with').toContain('SHA256SUMS')
     expect(notes).toContain('https://github.com/owner/repo/actions/runs/4242')
     expect(notes, 'the section carries a line from the previous run').not.toContain('a previous run wrote this line')
-    expect(notes).toMatch(/no Windows certificate is configured/)
+    expect(notes).toMatch(/no Azure Trusted Signing identity is configured/)
     expect(notes).toMatch(/no macOS certificate is configured/)
-    expect(notes, 'an unsigned installer is named as signed').not.toMatch(/signed with the certificate/)
+    expect(notes, 'an unsigned installer is named as signed').not.toMatch(/signed by Azure Trusted Signing/)
     expect(notes, 'an unsigned installer is named as signed').not.toMatch(/signed and notarised/)
   })
 
   it('names a signed build signed, and a notarised one notarised, from the same recording', () => {
     const { notes, status } = compose(script, SIGNED)
     expect(status).toBe(0)
-    expect(notes).toMatch(/signed with the certificate in `WIN_CSC_LINK`/)
+    expect(notes).toMatch(/signed by Azure Trusted Signing/)
     expect(notes).toMatch(/signed and notarised with the certificate and the Apple credentials/)
     expect(notes).toMatch(/It links Steinberg's ASIO SDK/)
-    expect(notes).not.toMatch(/no Windows certificate is configured/)
+    expect(notes).not.toMatch(/no Azure Trusted Signing identity is configured/)
   })
 
   it('publishes no exe and names it withheld when the SDK is linked and nothing is recorded', () => {
@@ -1930,21 +2047,56 @@ describe('the release path the checks exist to refuse', () => {
     ])
   })
 
-  it('names a recording that is no longer handed the secret that gates signing', () => {
+  it('names a recording that is no longer handed what the signing decision answered', () => {
     const hidden = doctored(
       LIVE,
-      '          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}\n          ASIO: ${{ steps.asio.outputs.found }}',
+      '          SIGNED: ${{ steps.signing.outputs.signed }}\n          ASIO: ${{ steps.asio.outputs.found }}',
       '          ASIO: ${{ steps.asio.outputs.found }}'
     )
     expect(recordingProblems(hidden)).toEqual([
-      expect.stringContaining('does not read `secrets.WIN_CSC_LINK`')
+      expect.stringContaining('does not read `${{ steps.signing.outputs.signed }}`')
     ])
   })
 
-  it('names a certificate state that is no longer read from the secret that gates signing', () => {
+  it('names a signing decision that is no longer handed what it decides from', () => {
+    const missing = doctored(
+      LIVE,
+      '          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}\n          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}\n          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}\n        run: |\n          $plan =',
+      '          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}\n        run: |\n          $plan ='
+    )
+    expect(recordingProblems(missing)).toEqual([
+      expect.stringContaining('does not read `secrets.AZURE_CLIENT_ID`, one of the three credentials'),
+      expect.stringContaining('does not read `secrets.AZURE_CLIENT_SECRET`, one of the three credentials')
+    ])
+  })
+
+  it('names a packaging step that configures its own signing rather than asking', () => {
+    const own = doctored(
+      LIVE,
+      "          $signArgs = @(ConvertFrom-Json '${{ steps.signing.outputs.args }}' | Where-Object { $_ })",
+      "          $signArgs = @('--config.win.azureSignOptions.publisherName=CN=Cuerunner Ltd')"
+    )
+    expect(recordingProblems(own)).toEqual([
+      expect.stringContaining('configures Trusted Signing itself rather than taking the flags')
+    ])
+  })
+
+  it('names a packaged config that configures signing for every build in the tree', () => {
+    const declared = doctored(
+      LIVE,
+      '    "win": {\n      "target": [',
+      '    "win": {\n      "azureSignOptions": {\n        "publisherName": "CN=Cuerunner Ltd",\n        "endpoint": "https://weu.codesigning.azure.net",\n        "certificateProfileName": "cuerunner",\n        "codeSigningAccountName": "cuerunner"\n      },\n      "target": [',
+      'package'
+    )
+    expect(recordingProblems(declared)).toEqual([
+      expect.stringContaining('declares `build.win.azureSignOptions`')
+    ])
+  })
+
+  it('names a certificate state that is no longer read from the configuration that gates signing', () => {
     const hardcoded = doctored(
       LIVE,
-      "$certificate = if ($env:WIN_CSC_LINK) { 'yes' } else { 'no' }",
+      "$certificate = if ($env:SIGNED -eq 'yes') { 'yes' } else { 'no' }",
       "$certificate = 'yes'"
     )
     expect(recordingProblems(hardcoded)).toEqual([
@@ -2144,8 +2296,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names a POSIX script left to run under the Windows default shell', () => {
     const posix = doctored(
       LIVE,
-      '      - name: Build and package\n        shell: pwsh\n        env:\n          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}\n          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}\n        run: |\n          if (-not $env:WIN_CSC_LINK) {',
-      '      - name: Build and package\n        env:\n          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}\n          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}\n        run: |\n          if [ -z "$WIN_CSC_LINK" ]; then'
+      '      - name: Build and package\n        shell: pwsh\n        env:\n          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}\n          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}\n          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}\n        run: |',
+      '      - name: Build and package\n        env:\n          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}\n        run: |\n          if [ -z "$AZURE_CLIENT_SECRET" ]; then'
     )
     expect(shellProblems(posix)).toEqual([
       expect.stringContaining("runs a POSIX shell script with no `shell:`")
@@ -2186,7 +2338,7 @@ describe('the release path the checks exist to refuse', () => {
   it('names a recording whose state this guard cannot read at all', () => {
     const unreadable = doctored(
       LIVE,
-      "          $certificate = if ($env:WIN_CSC_LINK) { 'yes' } else { 'no' }",
+      "          $certificate = if ($env:SIGNED -eq 'yes') { 'yes' } else { 'no' }",
       '          $certificate = "signed"'
     )
     expect(vocabularyProblems(unreadable)).toEqual([
@@ -2299,7 +2451,7 @@ describe('the release path the checks exist to refuse', () => {
   it('names the sentence that said the workflow ships unsigned without saying so', () => {
     const stale = doctored(
       LIVE,
-      'verifies signatures when\n  certificates are supplied',
+      'verifies signatures when\n  the signing configuration is supplied',
       'warns and ships unsigned without them',
       'proof'
     )

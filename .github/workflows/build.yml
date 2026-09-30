@@ -84,8 +84,8 @@ jobs:
     # What this build is, for the release job's notes and for the file list the release page
     # and the mirror are composed from: the installer it published — empty when it published
     # none — whether a certificate signed it, and whether it linked the ASIO SDK. Every one
-    # of them is recorded from the environment that produced it, the secret that gates signing
-    # and the SDK probe, never written into the notes by hand.
+    # of them is recorded from the environment that produced it, the signing configuration
+    # this run decided on and the SDK probe, never written into the notes by hand.
     outputs:
       installer: ${{ steps.publish.outputs.installer }}
       certificate: ${{ steps.publish.outputs.certificate }}
@@ -133,12 +133,59 @@ jobs:
           echo found=yes>>"%GITHUB_OUTPUT%"
           echo Using the ASIO SDK at %ASIO%
 
+      # What this build signs with is decided here, once, and every other step in this job
+      # asks: the packaging step takes the electron-builder flags this step prints, and the
+      # recording takes the `yes`/`no` this step answers, so a build that signs nothing can
+      # never be recorded as a build that signed. `scripts/trusted-signing.ts` is that
+      # decision and `scripts/trusted-signing.test.ts` holds it to the four states an
+      # environment can be in; this step is the plumbing around it.
+      #
+      # Azure Trusted Signing keeps the signing key in Azure, so the four resource identifiers
+      # — the account, its certificate profile, the region's endpoint and the publisher the
+      # certificate carries — are repository *variables* rather than secrets: they name the
+      # service and authenticate nothing. The three Entra credentials the signer
+      # authenticates with are the secrets. There is no certificate and no `.pfx` anywhere in
+      # this repository, and nothing to expire or leak from it.
+      #
+      # macOS decides the same thing in `scripts/signing-env.sh`, which exports `CSC_LINK` for
+      # a builder that treats an absent certificate as "do not sign". This one exports
+      # nothing, because electron-builder's Windows signer does not: with
+      # `win.azureSignOptions` configured it refuses to build at all when it cannot
+      # authenticate (electron-builder#9623 is the upstream report), so a configuration that
+      # is present without credentials is a failed build rather than an unsigned one. Asking
+      # first, in one place, is what keeps a build with no identity a green build that says so.
+      - name: Decide what this build can sign with
+        id: signing
+        shell: pwsh
+        env:
+          TRUSTED_SIGNING_PUBLISHER: ${{ vars.TRUSTED_SIGNING_PUBLISHER }}
+          TRUSTED_SIGNING_ENDPOINT: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_PROFILE: ${{ vars.TRUSTED_SIGNING_PROFILE }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          $plan = node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/trusted-signing.ts | ConvertFrom-Json
+          if ($plan.error) {
+            Write-Host "::error::$($plan.error)"
+            exit 1
+          }
+          if ($plan.warning) {
+            Write-Host "::warning::$($plan.warning)"
+          }
+          "signed=$($plan.signed)" >> $env:GITHUB_OUTPUT
+          # The flags as one JSON array, so the packaging step hands each to electron-builder
+          # as its own argument: a publisher name carries spaces and an `=`, and a
+          # re-joined string would break it in two.
+          "args=$(ConvertTo-Json -Compress -InputObject @($plan.args))" >> $env:GITHUB_OUTPUT
+
       # The engine is a separate binary; a build that ships one the user cannot identify
-      # as theirs is a build a venue will refuse to install. Signing happens when the
-      # release secrets exist — `WIN_CSC_LINK` (the certificate, base64 or a path) and
-      # `WIN_CSC_KEY_PASSWORD` — and electron-builder skips it, without failing, when
-      # they are empty: its Windows signer checks for the empty string, which is why this
-      # job needs none of `scripts/signing-env.sh`.
+      # as theirs is a build a venue will refuse to install. The installer is signed by the
+      # service the step above decided on, which is configured for this run only: the flags
+      # arrive as electron-builder's own `-c.win.azureSignOptions.*` options, and with no
+      # identity configured they are an empty array, so this is the same unsigned build the
+      # release notes will name as unsigned.
       #
       # `shell: pwsh` is spelled out because it is what a Windows runner defaults to:
       # the POSIX `if [ -z ... ]` this step used to carry would die at its first line
@@ -146,36 +193,47 @@ jobs:
       - name: Build and package
         shell: pwsh
         env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
-          if (-not $env:WIN_CSC_LINK) {
-            Write-Host '::warning::No Windows certificate is configured (WIN_CSC_LINK); the installer will be unsigned.'
-          }
-          npm run dist:win
+          # `@()` and the filter together, because an empty `[]` and a `$null` are not the same
+          # thing to splat: this step has to hand electron-builder nothing at all when no
+          # identity is configured, not one empty argument.
+          $signArgs = @(ConvertFrom-Json '${{ steps.signing.outputs.args }}' | Where-Object { $_ })
+          & npm run dist:win -- @signArgs
 
       # `secrets` is not available to a step's `if:` — GitHub rejects the whole workflow
       # when one is asked for there, and the run fails with no jobs and nothing to read.
-      # The step runs, and decides for itself whether there is a signature to check.
+      # The step runs, and decides for itself whether there is a signature to check: this is
+      # the state the decision step answered, not the secrets behind it, so a build that was
+      # configured to sign and produced nothing signed fails here.
       - name: Verify the signature
         shell: pwsh
         env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          TRUSTED_SIGNING_PUBLISHER: ${{ vars.TRUSTED_SIGNING_PUBLISHER }}
         run: |
-          if (-not $env:WIN_CSC_LINK) {
-            Write-Host 'No certificate configured; nothing to verify.'
+          if ($env:SIGNED -ne 'yes') {
+            Write-Host 'No Trusted Signing identity is configured; nothing to verify.'
             exit 0
           }
           $installer = Get-ChildItem dist\*.exe | Select-Object -First 1
+          if (-not $installer) { throw 'no installer was built in dist\' }
           $signature = Get-AuthenticodeSignature $installer.FullName
           Write-Host "$($installer.Name): $($signature.Status) — $($signature.SignerCertificate.Subject)"
           if ($signature.Status -ne 'Valid') {
             throw "the installer is not validly signed: $($signature.Status)"
           }
+          # Valid is not the same as ours: the notes name this service, so the certificate
+          # that signed the installer has to carry the publisher it was configured with.
+          if (-not $signature.SignerCertificate.Subject.Contains($env:TRUSTED_SIGNING_PUBLISHER)) {
+            throw "the installer is signed by $($signature.SignerCertificate.Subject), not by $env:TRUSTED_SIGNING_PUBLISHER"
+          }
 
       # What this installer is, recorded for the release notes rather than described to them:
-      # the certificate state comes from the secret that gates signing, the ASIO half from the
-      # probe above. The probe answers whether it found an SDK with `yes`/`no` — its own
+      # the certificate state comes from the decision the first step made, the ASIO half from
+      # the probe above. The probe answers whether it found an SDK with `yes`/`no` — its own
       # contract — and the state this job publishes is the engine's own word for it, `on`/`off`,
       # which is what the release notes' composer and the build log both speak; the mapping
       # happens here and nowhere else. Steinberg's agreement is an external input this repository
@@ -189,12 +247,12 @@ jobs:
         id: publish
         shell: pwsh
         env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
           ASIO: ${{ steps.asio.outputs.found }}
         run: |
           $installer = Get-ChildItem dist\*.exe | Select-Object -First 1
           if (-not $installer) { throw 'no installer was built in dist\' }
-          $certificate = if ($env:WIN_CSC_LINK) { 'yes' } else { 'no' }
+          $certificate = if ($env:SIGNED -eq 'yes') { 'yes' } else { 'no' }
           $asio = if ($env:ASIO -eq 'yes') { 'on' } else { 'off' }
           $agreement = Get-Item native/audio/third_party/ASIO-AGREEMENT.md -ErrorAction SilentlyContinue
           $recorded = $null -ne $agreement -and $agreement.Length -gt 0
@@ -407,10 +465,12 @@ jobs:
           path: artifacts
 
       # The notes, the file list and the digests are composed together, from what each packaging
-      # job recorded: whether a certificate signed an installer comes from the secret that gated
-      # signing, and whether the Windows build linked the SDK comes from its probe — never from
-      # text written here. One recording decides what this page carries, what the notes say
-      # about it, what the mirror copies and what the digests name, so they cannot disagree.
+      # job recorded: whether a certificate signed an installer comes from the configuration
+      # that gated that build — the Trusted Signing identity on Windows, the certificate
+      # secret on macOS — and whether the Windows build linked the SDK comes from its probe,
+      # never from text written here. One recording decides what this page carries, what the
+      # notes say about it, what the mirror copies and what the digests name, so they cannot
+      # disagree.
       - name: Compose the state section and the file list
         id: notes
         env:
@@ -472,7 +532,7 @@ jobs:
 
           Composed by the run that built these files —
           $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — from what its jobs
-          recorded: the certificate secrets that gate signing, and the ASIO SDK probe. So an
+          recorded: the signing configuration each build was given, and the ASIO SDK probe. So an
           installer nobody signed says so here, and the files this page carries, and the ones the
           download mirror serves, are exactly the list below — the \`SHA256SUMS\` attached beside
           them carries each file's digest, so a download can be checked against this page.
@@ -481,8 +541,8 @@ jobs:
 
           if [ -n "$WINDOWS_INSTALLER" ]; then
             case "$WINDOWS_CERTIFICATE" in
-              yes) windows='signed with the certificate in `WIN_CSC_LINK`, and verified by the build with `Get-AuthenticodeSignature`' ;;
-              no) windows='unsigned: no Windows certificate is configured, so Windows warns about this installer and a venue machine will refuse it' ;;
+              yes) windows='signed by Azure Trusted Signing, and verified by the build with `Get-AuthenticodeSignature`' ;;
+              no) windows='unsigned: no Azure Trusted Signing identity is configured, so Windows warns about this installer and a venue machine will refuse it' ;;
               *)
                 echo "::error::build-windows recorded the certificate state \"$WINDOWS_CERTIFICATE\", which is neither yes nor no; the notes are composed from that recording and cannot be written from one they do not understand"
                 exit 1
