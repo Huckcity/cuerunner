@@ -8,7 +8,7 @@ import { startFakeReceiver } from './fakeReceiver'
 import type { FakeReceiver } from './fakeReceiver'
 import { FIXTURE_SERIAL } from './fixtures'
 import { ewDxChannelId } from './mapping'
-import { OTHER_CERT, OTHER_FINGERPRINT, OTHER_KEY, TEST_CERT, TEST_FINGERPRINT, TEST_KEY } from './testCertificate'
+import { makeTestCertificate } from './testCertificate'
 
 const PASSWORD = 'correct horse'
 let receiver: FakeReceiver | null = null
@@ -156,24 +156,33 @@ describe('describeNetworkError', () => {
 // `checkServerIdentity`: a pin kept there pins nothing. These run over real TLS with a
 // certificate nothing trusts, so the pin is held to what a receiver actually presents.
 describe('EwDxClient certificate pin', () => {
-  const tlsReceiver = { tls: { key: TEST_KEY, cert: TEST_CERT } }
+  // Made fresh for the run: there is no key in the repository to leak, and the two
+  // certificates are different the way a replaced receiver's would be.
+  const first = makeTestCertificate('cuerunner-test-receiver')
+  const other = makeTestCertificate('cuerunner-test-receiver-2')
+  const tlsReceiver = { tls: { key: first.key, cert: first.cert } }
+
+  it('makes a certificate whose fingerprint is the one a connection sees', async () => {
+    expect(first.fingerprint).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/)
+    expect(first.fingerprint).not.toBe(other.fingerprint)
+  })
 
   it('trusts the first certificate a receiver shows and says which it was', async () => {
     const seen: string[] = []
     const live = await connect({ onFingerprint: fp => seen.push(fp) }, tlsReceiver)
     expect(await live.snapshot(2000)).toHaveLength(1)
-    expect(seen).toEqual([TEST_FINGERPRINT])
+    expect(seen).toEqual([first.fingerprint])
   })
 
   it('connects when the certificate is the one that was pinned, without asking to pin it again', async () => {
     const seen: string[] = []
-    const live = await connect({ pinnedFingerprint: TEST_FINGERPRINT.toLowerCase(), onFingerprint: fp => seen.push(fp) }, tlsReceiver)
+    const live = await connect({ pinnedFingerprint: first.fingerprint.toLowerCase(), onFingerprint: fp => seen.push(fp) }, tlsReceiver)
     expect(await live.snapshot(2000)).toHaveLength(1)
     expect(seen).toEqual([])
   })
 
   it('refuses a certificate that is not the pinned one, and sends it nothing — not even the password', async () => {
-    const live = await connect({ pinnedFingerprint: OTHER_FINGERPRINT }, tlsReceiver)
+    const live = await connect({ pinnedFingerprint: other.fingerprint }, tlsReceiver)
     await expect(live.snapshot(2000)).rejects.toThrow('certificate changed since it was trusted')
     expect(receiver?.requests).toEqual([])
     expect(receiver?.sawCredentials()).toBe(false)
@@ -186,7 +195,7 @@ describe('EwDxClient certificate pin', () => {
     // The same address, a different certificate: a replaced receiver, or someone in the way.
     const port = Number(new URL(receiver!.origin).port)
     await receiver!.close()
-    receiver = await startFakeReceiver({ password: PASSWORD, port, tls: { key: OTHER_KEY, cert: OTHER_CERT } })
+    receiver = await startFakeReceiver({ password: PASSWORD, port, tls: { key: other.key, cert: other.cert } })
 
     await until(async () => await live.snapshot(0).then(() => false, error => /certificate changed/.test(error.message)), 'the new certificate to be refused')
     expect(receiver.sawCredentials()).toBe(false)
