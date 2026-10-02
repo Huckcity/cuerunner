@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { rename, rm, writeFile } from 'node:fs/promises'
+import { rm, writeFile } from 'node:fs/promises'
+import { replaceFile } from '../replaceFile'
 import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -226,7 +227,7 @@ async function writePrivately(filePath: string, contents: string): Promise<void>
   const temp = join(dirname(filePath), `.${basename(filePath)}.${randomUUID()}.tmp`)
   await writeFile(temp, contents, { encoding: 'utf-8', mode: 0o600 })
   try {
-    await rename(temp, filePath)
+    await replaceFile(temp, filePath)
   } catch (error) {
     await rm(temp, { force: true })
     throw error
