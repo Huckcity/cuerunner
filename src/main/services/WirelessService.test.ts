@@ -878,6 +878,56 @@ function ewDxHarness(session: FakeSession): Harness & { ewDx: Mock } {
 // A source that has just been added has no address and no password yet. That is the operator
 // part-way through setting it up, not a receiver failing, so it is said in the status and
 // never raised as an alarm: an alarm is for something that was asked to be watched.
+describe('WirelessService with a record of earlier shows', () => {
+  const stubLog = (lastUsed: number | undefined): { observe: Mock; lastUsed: Mock; flush: Mock } => ({
+    observe: vi.fn(),
+    lastUsed: vi.fn(() => lastUsed),
+    flush: vi.fn(() => Promise.resolve())
+  })
+
+  async function run(log: ReturnType<typeof stubLog> | undefined, fields: Partial<TelemetryChannel>) {
+    const fetchJson = vi.fn().mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', ...fields }))))
+    const service = new WirelessService({ fetchJson, readText: vi.fn() }, log as never)
+    const bus = new ShowBus({ now: () => 1000 })
+    service.start({ bus, setState: vi.fn() }, settings([httpSource()]))
+    await flush()
+    return { service, bus }
+  }
+
+  it('records each battery reading against the channel, and what the pack used last time rides on the device', async () => {
+    const log = stubLog(24)
+    const { service, bus } = await run(log, { batteryPercent: 61 })
+
+    expect(log.observe).toHaveBeenCalledWith('ch-1', 61)
+    expect(device(bus, 'ch-1')?.history).toMatchObject({ lastUsedPercent: 24, dropouts: 0 })
+    service.stop()
+  })
+
+  it('says nothing of the past for a pack that has none, and records nothing for a channel with no battery', async () => {
+    const log = stubLog(undefined)
+    const { service, bus } = await run(log, { rfDbm: -60 })
+
+    expect(log.observe).not.toHaveBeenCalled()
+    expect(device(bus, 'ch-1')).not.toHaveProperty('history')
+    service.stop()
+  })
+
+  it('writes the record when it stops, so a quit does not lose the last of it', async () => {
+    const log = stubLog(undefined)
+    const { service } = await run(log, { batteryPercent: 61 })
+    log.flush.mockClear() // starting stops first, which writes too
+
+    service.stop()
+    expect(log.flush).toHaveBeenCalledTimes(1)
+  })
+
+  it('works with no record at all', async () => {
+    const { service, bus } = await run(undefined, { batteryPercent: 61 })
+    expect(device(bus, 'ch-1')?.battery?.percent).toBe(61)
+    service.stop()
+  })
+})
+
 describe('WirelessService with a device that complains', () => {
   const clip = { text: 'audio clipping' }
   const keys = { text: 'encryption error — no audio', critical: true }

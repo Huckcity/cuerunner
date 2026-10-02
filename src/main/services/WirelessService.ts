@@ -14,6 +14,7 @@ import type {
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import type { EwDxCredentials } from '../ewdx/credentials'
 import { EwDxClient } from '../ewdx/EwDxClient'
+import type { BatteryLog } from './BatteryLog'
 import { EwDxReceiver } from '../ewdx/EwDxReceiver'
 import { discoverEwDx } from '../ewdx/discovery'
 import type { DiscoverResult } from '../ewdx/discovery'
@@ -216,7 +217,11 @@ export class WirelessService implements ShowService {
   /** Source ids that are not finished, mapped to what they are waiting for: not failures. */
   private waiting = new Map<string, string>()
 
-  constructor(private readonly ports: TelemetryPorts = telemetryPorts()) {}
+  constructor(
+    private readonly ports: TelemetryPorts = telemetryPorts(),
+    /** What each pack used in the shows before this one: the machine's, and optional. */
+    private readonly log?: BatteryLog
+  ) {}
 
   start(context: ServiceContext, settings: ShowSettings): void {
     this.stop()
@@ -288,6 +293,8 @@ export class WirelessService implements ShowService {
     // than the stopped service's.
     this.failed.clear()
     this.waiting.clear()
+    // A quit stops the services, and the last ten seconds of a pack's battery is worth keeping.
+    void this.log?.flush()
   }
 
   /**
@@ -408,6 +415,7 @@ export class WirelessService implements ShowService {
     // Each group is present only when the channel reported it: a wired pack has no RF
     // line, and a receiver with telemetry off has no battery rather than a zero.
     if (percent !== undefined) {
+      this.log?.observe(channel.id, percent)
       // The floor belongs to the pack rather than the poll: a reading above it leaves it
       // where it was, and it keeps the time the lowest reading arrived, not the time of
       // the poll that followed. A recovered battery does not un-drain.
@@ -543,10 +551,12 @@ export class WirelessService implements ShowService {
     const history = this.history.get(channelId)
     if (!history) return undefined
     const { floor } = history
-    if (floor === undefined && history.dropouts === 0) return undefined
+    const lastUsed = this.log?.lastUsed(channelId)
+    if (floor === undefined && history.dropouts === 0 && lastUsed === undefined) return undefined
     return {
       ...(floor === undefined ? {} : { lowestPercent: floor.percent, lowestAt: floor.at }),
-      dropouts: history.dropouts
+      dropouts: history.dropouts,
+      ...(lastUsed === undefined ? {} : { lastUsedPercent: lastUsed })
     }
   }
 

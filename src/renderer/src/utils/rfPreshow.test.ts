@@ -75,6 +75,31 @@ describe('preshowCheck', () => {
     expect(check.items[0].reasons).toEqual(['signal weak — -40 dBm'])
   })
 
+  describe('what the pack used last time', () => {
+    const withPast = (percent: number, used?: number): PreshowEntry =>
+      entry('1', { battery: { percent }, ...(used === undefined ? {} : { history: { dropouts: 0, lastUsedPercent: used } }) })
+
+    it('flags a charge that a show would use up, at the exact line: a quarter more than last time, and the urgent line spare', () => {
+      // 24% used, a quarter more is 30; to end above the urgent line (10) it has to start above 40.
+      expect(preshowCheck([withPast(40, 24)], thresholds).items[0]?.reasons).toEqual(['battery 40% — a show used 24% last time'])
+      expect(preshowCheck([withPast(41, 24)], thresholds).items).toEqual([])
+    })
+
+    it('says nothing for a pack with no past, or one that used little', () => {
+      expect(preshowCheck([withPast(40)], thresholds).items).toEqual([])
+      expect(preshowCheck([withPast(40, 3)], thresholds).items).toEqual([])
+    })
+
+    it('does not say it twice when the reading alone has already said the battery is low', () => {
+      const check = preshowCheck([withPast(20, 24)], thresholds)
+      expect(check.items[0].reasons).toEqual(['battery 20%'])
+    })
+
+    it('is worth a look and never a failure: the past is not a promise', () => {
+      expect(preshowCheck([withPast(40, 24)], thresholds).verdict).toBe('attention')
+    })
+  })
+
   it('flags a pack muted at the receiver, which nobody wants to learn from the stalls', () => {
     const check = preshowCheck([entry('1', { audio: { level: 0, muted: true } })], thresholds)
     expect(check.items[0]).toMatchObject({ readiness: 'attention', reasons: ['muted at the receiver'] })

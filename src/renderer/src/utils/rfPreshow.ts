@@ -30,6 +30,9 @@ export interface PreshowCheck {
   items: PreshowItem[]
 }
 
+/** A show that ran long, a colder night: what it used last time is not a promise, so a quarter more. */
+const SAFETY = 1.25
+
 interface Reason {
   readiness: Readiness
   text: string
@@ -52,6 +55,17 @@ function reasonsFor({ pack, device }: PreshowEntry, thresholds: RfThresholds): R
     reasons.push({ readiness: 'not-ready', text: `battery ${percent}%` })
   } else if (percent !== undefined && percent <= thresholds.batteryWarning) {
     reasons.push({ readiness: 'attention', text: `battery ${percent}%` })
+  }
+  // A charge that is fine now may not be enough for a show: the pack's own past says what one
+  // cost it, and a show that took 24% from a pack at 30% leaves it at the urgent line before the
+  // curtain. Only said when the reading alone has not already said it.
+  const used = device.history?.lastUsedPercent
+  if (
+    percent !== undefined && used !== undefined && percent > thresholds.batteryWarning &&
+    // At or below the urgent line is urgent, as everywhere else: ending the show on it is ending it there.
+    percent - Math.ceil(used * SAFETY) <= thresholds.batteryCritical
+  ) {
+    reasons.push({ readiness: 'attention', text: `battery ${percent}% — a show used ${used}% last time` })
   }
   const rf = device.rf
   if (rf !== undefined && (rf.weak ?? rf.level <= thresholds.rfWarningDbm)) {

@@ -64,6 +64,12 @@ export interface DeviceHistory {
   lowestAt?: number
   /** How many times this channel has gone quiet. */
   dropouts: number
+  /**
+   * The most the pack used in a recent show on this machine, in percent: what it did the last time
+   * it was worn, which is what tonight's starting charge has to be enough for. Absent until it has
+   * a past that says anything.
+   */
+  lastUsedPercent?: number
 }
 
 /**
