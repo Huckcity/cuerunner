@@ -51,7 +51,14 @@ import {
   type ScriptShellPayload,
   type ScriptShellResult
 } from '../../shared/ipc/script'
-import { SHOW_CHANNELS, type ShowCommandPayload, type ShowCommandResult } from '../../shared/ipc/show'
+import {
+  SHOW_CHANNELS,
+  type EwDxCredentialResult,
+  type EwDxCredentialStatus,
+  type EwDxSetPasswordPayload,
+  type ShowCommandPayload,
+  type ShowCommandResult
+} from '../../shared/ipc/show'
 import {
   WORKSPACE_CHANNELS,
   type MergeInputs,
@@ -72,7 +79,7 @@ import {
   type WorkspaceSaveResult
 } from '../../shared/ipc/workspace'
 import type { EventChannel } from '../../shared/ipc'
-import { asRefusal, refusalValue } from './refusal'
+import { Refusal, asRefusal, refusalValue } from './refusal'
 import { compose as composeProblemReport, saveReport, emailReport } from '../report/session'
 import type { ReportInput } from '../../shared/ipc/app'
 import { liveWindow, sendToWindow } from './broadcast'
@@ -458,6 +465,69 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(SHOW_CHANNELS.restart, async (_, service: string): Promise<ShowCommandResult> =>
     show.restart(service))
+
+  // What this machine holds for an EW-DX receiver. The password is the machine's, never
+  // the show's, so it has channels of its own rather than a field in the settings the
+  // window saves; and what comes back is never the password — only whether there is one.
+  // Reading is open, like the redundancy settings: a locked app can say what it holds,
+  // and the gate is on the change.
+  const ewDxStatus = (sourceId: string): EwDxCredentialStatus => {
+    const held = ewDxCredentials.get(sourceId)
+    return {
+      hasPassword: held !== undefined,
+      encrypted: ewDxCredentials.encrypted(),
+      fingerprint: held?.fingerprint ?? null
+    }
+  }
+
+  // A change to what is held is a restart of the one service that reads it: the session
+  // for that receiver is opened with the password it was given when the service starts.
+  const ewDxApplied = async (): Promise<void> => {
+    if (settingsReceived) await show.restart('rf')
+    else await show.configure(lastShowSettings)
+  }
+
+  const ewDxSourceId = (value: unknown): string => {
+    if (typeof value !== 'string' || value === '' || value.length > 128) {
+      throw new Error('EW-DX credentials need a source id')
+    }
+    return value
+  }
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxCredentials, (_, sourceId: string): EwDxCredentialStatus =>
+    ewDxStatus(ewDxSourceId(sourceId)))
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxSetPassword, (_, payload: EwDxSetPasswordPayload): Promise<EwDxCredentialResult> =>
+    refusalValue(async () => {
+      const sourceId = ewDxSourceId(payload.sourceId)
+      if (!isPro(license.status())) throw new Refusal(PRO_REQUIRED)
+      // The field is typed by a person: a blank is an answer to give, and the bound is
+      // what keeps a pasted file from becoming a password.
+      if (typeof payload.password !== 'string' || payload.password === '') {
+        throw new Refusal('Enter the password set for this receiver in WSM')
+      }
+      if (payload.password.length > 256) throw new Refusal('That password is too long to be one')
+      await ewDxCredentials.setPassword(sourceId, payload.password)
+      await ewDxApplied()
+      return { ok: true as const, ...ewDxStatus(sourceId) }
+    }))
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxTrustAgain, (_, sourceId: string): Promise<EwDxCredentialResult> =>
+    refusalValue(async () => {
+      const id = ewDxSourceId(sourceId)
+      if (!isPro(license.status())) throw new Refusal(PRO_REQUIRED)
+      await ewDxCredentials.unpin(id)
+      await ewDxApplied()
+      return { ok: true as const, ...ewDxStatus(id) }
+    }))
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxForget, async (_, sourceId: string): Promise<EwDxCredentialStatus> => {
+    const id = ewDxSourceId(sourceId)
+    // Forgetting is housekeeping for a source that is already gone from the show, so it
+    // is not behind the licence: a lapsed key must not leave a password behind.
+    await ewDxCredentials.forget(id)
+    return ewDxStatus(id)
+  })
 
   // Redundant playback. Which half of a pair this machine is, and where its partner is,
   // are the machine's own settings — the showfile travels between the two — so they are

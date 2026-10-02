@@ -49,11 +49,11 @@
     <section class="panel reveal delay-1">
       <h2>1. Point it at the rack</h2>
       <p>
-        Settings → <strong>Wireless</strong> → <strong>Add source</strong>. A source is
-        either an <strong>HTTP</strong> address that returns the readings, or a
-        <strong>file</strong> on disk that something else keeps up to date. Cuerunner does
-        not speak any receiver's own protocol — it reads one simple JSON document, and
-        anything that can produce it will do.
+        Settings → <strong>Wireless</strong> → <strong>Add source</strong>. A source is a
+        <strong>Sennheiser EW-DX</strong> receiver, an <strong>HTTP</strong> address that
+        returns the readings, or a <strong>file</strong> on disk that something else keeps
+        up to date. An EW-DX receiver needs nothing in between; for anything else
+        Cuerunner reads one simple JSON document, and anything that can produce it will do.
         <a href="../reference/formats.html#telemetry">The format is here</a>; it is about
         ten lines.
       </p>
@@ -61,6 +61,30 @@
         <strong>Demo</strong> is a simulated twelve-pack rack with a pack in trouble, one
         low and one that never reports. It is there to see what the panel does without a
         receiver on the bench.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>Sennheiser EW-DX</h2>
+      <p>
+        Cuerunner talks to the receiver over the network, so the receiver and the show
+        computer have to be on the same one. In <strong>WSM</strong>, turn on third-party
+        access for the receiver and set its password. Then add a source here, choose
+        <strong>Sennheiser EW-DX</strong>, type the receiver's address, and enter the
+        password under it. It is kept on this computer, not in the show, so a copy of the
+        show does not carry it.
+      </p>
+      <p>
+        Each receiver is one source, and every channel with a transmitter linked to it
+        appears as a pack: name, battery, signal and frequency. A channel with nothing
+        linked shows nothing, so a pack patched to it counts as offline until it is
+        switched on. Packs on AA cells report a percentage and no minutes remaining.
+      </p>
+      <p>
+        The first time Cuerunner connects it remembers the receiver's certificate, and it
+        shows a short form of it under the source. If the receiver is later replaced, or
+        its certificate is, Cuerunner refuses to connect rather than trust it silently —
+        press <strong>Trust again</strong> once you know why it changed.
       </p>
     </section>
 

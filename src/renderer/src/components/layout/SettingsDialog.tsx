@@ -8,6 +8,7 @@ import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { PlaybackWarnings } from './PlaybackWarnings'
 import { NumberField, TextField } from '../common/Field'
 import { ServiceStatus } from '../common/ServiceStatus'
+import { EwDxCredentials } from '../rf/EwDxCredentials'
 import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { currentPlatform } from '../../utils/shortcuts'
@@ -172,6 +173,11 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   }
 
   const removeSource = (id: string): void => {
+    // The password and the trusted certificate are this machine's, not the show's, so they
+    // do not leave with the source on their own: a removed receiver forgets them here.
+    if (showSettings.rf.sources.find(source => source.id === id)?.kind === 'ew-dx') {
+      void window.cuerunner.show.ewDxForget(id)
+    }
     updateRfSettings({
       sources: showSettings.rf.sources.filter(source => source.id !== id)
     })
@@ -698,39 +704,52 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               ) : (
                 <div className="settings-source-list">
                   {showSettings.rf.sources.map(source => (
-                    <div key={source.id} className="settings-source-row">
-                      <TextField
-                        when="typed"
-                        className="settings-source-label"
-                        value={source.label}
-                        aria-label="Source name"
-                        onValue={label => updateSource(source.id, { label })}
-                      />
-                      <select
-                        value={source.kind}
-                        aria-label="Source kind"
-                        onChange={e => updateSource(source.id, { kind: e.target.value as TelemetrySourceKind })}
-                      >
-                        <option value="http">HTTP</option>
-                        <option value="file">File</option>
-                        <option value="demo">Demo</option>
-                      </select>
-                      <TextField
-                        when="typed"
-                        className="settings-source-target"
-                        value={source.target}
-                        aria-label="Source address"
-                        placeholder={source.kind === 'file' ? '/path/to/telemetry.json' : 'http://10.0.0.20/telemetry'}
-                        disabled={source.kind === 'demo'}
-                        onValue={target => updateSource(source.id, { target })}
-                      />
-                      <button
-                        className="settings-source-remove"
-                        onClick={() => removeSource(source.id)}
-                        aria-label={`Remove ${source.label}`}
-                      >
-                        ✕
-                      </button>
+                    <div key={source.id} className="settings-source-entry">
+                      <div className="settings-source-row">
+                        <TextField
+                          when="typed"
+                          className="settings-source-label"
+                          value={source.label}
+                          aria-label="Source name"
+                          onValue={label => updateSource(source.id, { label })}
+                        />
+                        <select
+                          value={source.kind}
+                          aria-label="Source kind"
+                          onChange={e => updateSource(source.id, { kind: e.target.value as TelemetrySourceKind })}
+                        >
+                          <option value="http">HTTP</option>
+                          <option value="file">File</option>
+                          <option value="ew-dx">Sennheiser EW-DX</option>
+                          <option value="demo">Demo</option>
+                        </select>
+                        <TextField
+                          when="typed"
+                          className="settings-source-target"
+                          value={source.target}
+                          aria-label="Source address"
+                          placeholder={
+                            source.kind === 'file' ? '/path/to/telemetry.json'
+                              : source.kind === 'ew-dx' ? '192.168.0.50'
+                                : 'http://10.0.0.20/telemetry'
+                          }
+                          disabled={source.kind === 'demo'}
+                          onValue={target => updateSource(source.id, { target })}
+                        />
+                        <button
+                          className="settings-source-remove"
+                          onClick={() => removeSource(source.id)}
+                          aria-label={`Remove ${source.label}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {source.kind === 'ew-dx' && (
+                        <EwDxCredentials
+                          sourceId={source.id}
+                          serviceKey={`${rfService?.state ?? ''}:${rfService?.detail ?? ''}`}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>

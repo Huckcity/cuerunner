@@ -630,17 +630,21 @@ describe('the page the checks exist to refuse', () => {
     if (engine === undefined) {
       throw new Error('website/docs/pro.mjs declares no claim on the engine row: this case edits the row whose phrase it drops')
     }
+    // The count is the declaration's own, not a literal: each claim the page gains moves it,
+    // and a number written here would have to be found and bumped by whoever added one.
+    const claims = CELLS.filter(entry => entry.notYetProved !== undefined).length
     const missing = LIVE.rendered.replace(`${engine.notYetProved} ${NOT_YET_PROVED}`, `${engine.notYetProved}`)
     expect(phraseProblems({ ...LIVE, rendered: missing })).toEqual([
       expect.stringContaining(`the page states "${engine.notYetProved}" in its "The engine" row and the phrase is not at the claim`),
-      expect.stringContaining('the page carries the phrase 3 time(s) for the 4 claim(s)')
+      expect.stringContaining(`the page carries the phrase ${claims - 1} time(s) for the ${claims} claim(s)`)
     ])
   })
 
   it('fails a phrase a row carries without declaring the claim', () => {
+    const claims = CELLS.filter(entry => entry.notYetProved !== undefined).length
     const undeclared = LIVE.rendered.replace('<td>The waveform</td>', `<td>${NOT_YET_PROVED} The waveform</td>`)
     expect(phraseProblems({ ...LIVE, rendered: undeclared })).toEqual([
-      expect.stringContaining('the page carries the phrase 5 time(s) for the 4 claim(s)')
+      expect.stringContaining(`the page carries the phrase ${claims + 1} time(s) for the ${claims} claim(s)`)
     ])
   })
 
