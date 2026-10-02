@@ -3,7 +3,10 @@
 // clock is fake so the offline window can be waited out in a millisecond.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { WirelessService } from './WirelessService'
+import { WirelessService, ewDxOrigin, telemetryPorts } from './WirelessService'
+import type { EwDxSession } from './WirelessService'
+import { ewDxChannelId } from '../ewdx/mapping'
+import { createEwDxCredentials } from '../ewdx/credentials'
 import type { ServiceContext } from '../bus/ServiceHost'
 import { ShowBus } from '../bus/ShowBus'
 import {
@@ -839,5 +842,153 @@ describe('WirelessService', () => {
     expect(fetchJson).toHaveBeenCalledTimes(1)
     expect(bus.snapshot().devices).toEqual([])
     expect(messages(bus)).toEqual([])
+  })
+})
+
+// ── EW-DX ────────────────────────────────────────────────────────────────────
+//
+// A receiver pushes, so the service holds a session per EW-DX source and asks it for the
+// channels on each poll. Everything the service does with what comes back is the same
+// code every other source goes through; these tests hold the seam, not the alarms again.
+
+function ewDxSource(pollMs = DEFAULT_POLL_MS, timeoutMs = DEFAULT_TIMEOUT_MS): TelemetrySource {
+  return { id: 'rack-a', label: 'Rack A', kind: 'ew-dx', target: '10.0.0.40', pollMs, timeoutMs }
+}
+
+const RACK_CHANNEL = ewDxChannelId('5364000906', 0)
+
+interface FakeSession extends EwDxSession {
+  start: Mock
+  stop: Mock
+  snapshot: Mock
+}
+
+function fakeSession(): FakeSession {
+  return { start: vi.fn(), stop: vi.fn(), snapshot: vi.fn().mockResolvedValue([]) }
+}
+
+function ewDxHarness(session: FakeSession): Harness & { ewDx: Mock } {
+  const ewDx = vi.fn(() => session)
+  const service = new WirelessService({ fetchJson: vi.fn(), readText: vi.fn(), ewDx })
+  const bus = new ShowBus({ now: () => 1000 })
+  const setState = vi.fn()
+  return { service, fetchJson: vi.fn(), readText: vi.fn(), context: { bus, setState }, setState, bus, ewDx }
+}
+
+describe('WirelessService with an EW-DX source', () => {
+  it('opens a session for the source, asks it for the channels, and publishes them', async () => {
+    const session = fakeSession()
+    session.snapshot.mockResolvedValue([channel(RACK_CHANNEL, { name: '37', batteryPercent: 76, rfDbm: -83 })])
+    const { service, context, bus, ewDx } = ewDxHarness(session)
+
+    service.start(context, settings([ewDxSource(2000, 1500)]))
+    await flush()
+
+    expect(ewDx).toHaveBeenCalledWith(expect.objectContaining({ id: 'rack-a', kind: 'ew-dx' }))
+    expect(session.start).toHaveBeenCalledTimes(1)
+    // The wait for a first connection is the source's own timeout, nothing the service invents.
+    expect(session.snapshot).toHaveBeenCalledWith(1500)
+    expect(device(bus, RACK_CHANNEL)).toMatchObject({
+      name: '37',
+      online: true,
+      battery: { percent: 76 },
+      rf: { level: -83, unit: 'dBm' }
+    })
+  })
+
+  it('stops the session with the service, and opens a fresh one on a settings change', async () => {
+    const first = fakeSession()
+    const second = fakeSession()
+    const sessions = [first, second]
+    const service = new WirelessService({ fetchJson: vi.fn(), readText: vi.fn(), ewDx: () => sessions.shift()! })
+    const bus = new ShowBus({ now: () => 1000 })
+    const context = { bus, setState: vi.fn() }
+
+    service.start(context, settings([ewDxSource()]))
+    await flush()
+    service.start(context, settings([ewDxSource()]))
+    await flush()
+    expect(first.stop).toHaveBeenCalledTimes(1)
+    expect(second.start).toHaveBeenCalledTimes(1)
+    service.stop()
+    expect(second.stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('says why once when the receiver cannot be reached, and clears when it can', async () => {
+    const session = fakeSession()
+    session.snapshot.mockRejectedValue(new Error('connection lost'))
+    const { service, context, setState, bus } = ewDxHarness(session)
+
+    service.start(context, settings([ewDxSource(1000)]))
+    await flush()
+    await vi.advanceTimersByTimeAsync(3000)
+
+    expect(messages(bus).filter(message => message.includes('Rack A'))).toEqual(['Rack A: connection lost'])
+    expect(setState).toHaveBeenLastCalledWith('degraded', 'Rack A: connection lost')
+
+    session.snapshot.mockResolvedValue([])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(setState).toHaveBeenLastCalledWith('running', 'polling Rack A')
+    service.stop()
+  })
+
+  it('goes quiet for a pack patched to a channel with nobody linked, which is the alarm that matters', async () => {
+    const session = fakeSession() // answers with no channels: the receiver's channel has no transmitter
+    const { service, context, bus } = ewDxHarness(session)
+    const plot: RfPlot = {
+      packs: [{ id: 'p1', label: 'Aldonza', channelId: RACK_CHANNEL, performerId: null, notes: '' }]
+    }
+
+    service.start(context, settings([ewDxSource(1000)], plot))
+    await flush()
+    await vi.advanceTimersByTimeAsync(7000)
+
+    expect(messages(bus)).toContain('Aldonza went quiet')
+    service.stop()
+  })
+
+  it('reports a service built without EW-DX as unable, rather than silently showing nothing', async () => {
+    const service = new WirelessService({ fetchJson: vi.fn(), readText: vi.fn() })
+    const bus = new ShowBus({ now: () => 1000 })
+
+    service.start({ bus, setState: vi.fn() }, settings([ewDxSource()]))
+    await flush()
+
+    expect(messages(bus)).toContain('Rack A: EW-DX is not available')
+    service.stop()
+  })
+})
+
+describe('telemetryPorts for EW-DX', () => {
+  it('says the password is missing when this machine has none for the source', async () => {
+    const credentials = createEwDxCredentials({
+      filePath: '/nonexistent/ew-dx.json',
+      cipher: { available: () => false, encrypt: t => t, decrypt: t => t },
+      readFile: () => {
+        throw new Error('missing')
+      }
+    })
+    const session = telemetryPorts(credentials).ewDx!(ewDxSource())
+    await expect(session.snapshot(0)).rejects.toThrow(/no password set/)
+  })
+
+  it('refuses an http address, because the password would cross the network in the clear', async () => {
+    const session = telemetryPorts().ewDx!({ ...ewDxSource(), target: 'http://10.0.0.40' })
+    await expect(session.snapshot(0)).rejects.toThrow('EW-DX receivers use https')
+  })
+})
+
+describe('ewDxOrigin', () => {
+  it('reads a bare host or address as https and keeps an explicit port', () => {
+    expect(ewDxOrigin('192.168.0.194')).toEqual({ origin: 'https://192.168.0.194' })
+    expect(ewDxOrigin(' rack-a.local ')).toEqual({ origin: 'https://rack-a.local' })
+    expect(ewDxOrigin('https://10.0.0.40:8443/api')).toEqual({ origin: 'https://10.0.0.40:8443' })
+  })
+
+  it('refuses what is not an address a receiver can be at', () => {
+    expect(ewDxOrigin('')).toEqual({ error: 'no address' })
+    expect(ewDxOrigin('http://10.0.0.40')).toEqual({ error: 'EW-DX receivers use https' })
+    expect(ewDxOrigin('ftp://10.0.0.40')).toEqual({ error: 'EW-DX receivers use https' })
+    expect(ewDxOrigin('https://')).toEqual({ error: 'not a valid address' })
   })
 })

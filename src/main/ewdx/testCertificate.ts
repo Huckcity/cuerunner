@@ -1,0 +1,51 @@
+// A self-signed certificate for the fake receiver to present, so the pin can be tested
+// against what a real receiver does: a chain nothing trusts. TEST ONLY — the key is public
+// by being here, protects nothing, and is not used by the app.
+// Subject CN=cuerunner-test-receiver, EC P-256, valid until 2126.
+
+export const TEST_KEY = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAkmkgAmR6rNPO36N
+aCgtyFcQlJvJz4LtfbFnfc5GP3uhRANCAAQaExnNLRlM3/Ys2TBDh0j6AOzuiKES
+TT48EiA9uqx3/NxeRM1eW0YvRUFetLgRhL7ioVQTRx127KdMDq2glvAG
+-----END PRIVATE KEY-----
+`
+
+export const TEST_CERT = `-----BEGIN CERTIFICATE-----
+MIIBnDCCAUGgAwIBAgIUdv/rXcWkDnNgKIWvnb+GxLa7HVQwCgYIKoZIzj0EAwIw
+IjEgMB4GA1UEAwwXY3VlcnVubmVyLXRlc3QtcmVjZWl2ZXIwIBcNMjYxMDAyMTY0
+ODQ0WhgPMjEyNjA5MDgxNjQ4NDRaMCIxIDAeBgNVBAMMF2N1ZXJ1bm5lci10ZXN0
+LXJlY2VpdmVyMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGhMZzS0ZTN/2LNkw
+Q4dI+gDs7oihEk0+PBIgPbqsd/zcXkTNXltGL0VBXrS4EYS+4qFUE0cdduynTA6t
+oJbwBqNTMFEwHQYDVR0OBBYEFLSIfZpuzr7sYESDAx46vgweLjR9MB8GA1UdIwQY
+MBaAFLSIfZpuzr7sYESDAx46vgweLjR9MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZI
+zj0EAwIDSQAwRgIhAInPUKKlvfy40ff6kOJnocazsKbiBAM6QK6f6ugSQUmmAiEA
+3DmJNLX4CfetEsOdZlC5giQSfmKxC2scCBQAchmNIds=
+-----END CERTIFICATE-----
+`
+
+export const TEST_FINGERPRINT =
+  '21:13:7E:09:0D:8D:6B:E9:FD:6E:24:A0:5F:C8:EC:86:2A:7E:BA:60:17:A2:1C:BD:09:8E:54:72:49:F8:F8:4F'
+
+/** A second, different certificate: what a replaced or impersonated receiver would present. */
+export const OTHER_KEY = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg7awABbHY8MmgwaeM
+zMz79HWlja2inSzAngMd2bMjPw6hRANCAATm59JYA0gMymIDAWNDbueAcpyaEVhE
+jt5bADvHAVXm3w678FwpIDp0mxLKfrynELQnW1+Q2q9hQ3gOrDEZAs6n
+-----END PRIVATE KEY-----
+`
+
+export const OTHER_CERT = `-----BEGIN CERTIFICATE-----
+MIIBnzCCAUWgAwIBAgIUCdY50r3H8ksQMXAS0PCplNpmWNowCgYIKoZIzj0EAwIw
+JDEiMCAGA1UEAwwZY3VlcnVubmVyLXRlc3QtcmVjZWl2ZXItMjAgFw0yNjEwMDIx
+NjQ5MTlaGA8yMTI2MDkwODE2NDkxOVowJDEiMCAGA1UEAwwZY3VlcnVubmVyLXRl
+c3QtcmVjZWl2ZXItMjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABObn0lgDSAzK
+YgMBY0Nu54BynJoRWESO3lsAO8cBVebfDrvwXCkgOnSbEsp+vKcQtCdbX5Dar2FD
+eA6sMRkCzqejUzBRMB0GA1UdDgQWBBTo+aWdH/+PNDyP8GmR++Afsx504jAfBgNV
+HSMEGDAWgBTo+aWdH/+PNDyP8GmR++Afsx504jAPBgNVHRMBAf8EBTADAQH/MAoG
+CCqGSM49BAMCA0gAMEUCIDy2b89RrjO5sXcI0vFjvrbNWwMYWLEHEbZLrk0H7woY
+AiEAx3zYuwpUFmPzDAGOHGOYVCCKmEcWc6bBdxykaADffjk=
+-----END CERTIFICATE-----
+`
+
+export const OTHER_FINGERPRINT =
+  '3B:CD:4D:60:DF:14:B3:A5:50:AE:6A:07:3F:F7:1A:8F:8C:F7:75:45:10:47:0C:E3:1D:19:B2:9E:63:AD:67:23'

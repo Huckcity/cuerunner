@@ -1,10 +1,11 @@
-import { app, ipcMain, dialog, BrowserWindow, net } from 'electron'
+import { app, ipcMain, dialog, BrowserWindow, net, safeStorage } from 'electron'
 import { readFile } from 'fs/promises'
 import { exec } from 'child_process'
 import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
+import { createEwDxCredentials } from '../ewdx/credentials'
 import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../shared/network'
 import { audioEngine } from '../audio/AudioEngine'
@@ -118,8 +119,21 @@ const machineRedundancy = createMachineRedundancy({
   filePath: path.join(app.getPath('userData'), 'redundancy.json')
 })
 
+// The receivers' passwords and the certificates they were first seen with. Beside the
+// licence for the same reason as the pair's settings, and for a plainer one too: the
+// showfile is emailed and copied between machines, and a password has no business in it.
+// `safeStorage` is the OS's own keychain, so a copied file is not a copied password.
+const ewDxCredentials = createEwDxCredentials({
+  filePath: path.join(app.getPath('userData'), 'ew-dx.json'),
+  cipher: {
+    available: () => safeStorage.isEncryptionAvailable(),
+    encrypt: text => safeStorage.encryptString(text).toString('base64'),
+    decrypt: text => safeStorage.decryptString(Buffer.from(text, 'base64'))
+  }
+})
+
 const show = createShowRuntime(
-  defaultServices({ redundancy: () => machineRedundancy.current() }),
+  defaultServices({ redundancy: () => machineRedundancy.current(), ewDx: ewDxCredentials }),
   () => isPro(license.status())
 )
 
