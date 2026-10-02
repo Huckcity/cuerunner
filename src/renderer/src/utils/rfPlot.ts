@@ -1,4 +1,6 @@
 import { formatClock } from './cueDefaults'
+import { cueWords } from './rfIncidents'
+import type { RfIncident } from './rfIncidents'
 import type { DeviceState, Performer, RfPack, RfPlot, RfSwap } from '../../../shared/show'
 
 /**
@@ -120,6 +122,8 @@ export interface RfReportRow {
   /** What the pack used in the show before this one, on this machine; null until it has a past. */
   lastUsedPercent: number | null
   dropouts: number
+  /** What went wrong with this pack and what was playing when, in the order it happened. */
+  incidents: RfIncident[]
   swaps: RfSwap[]
 }
 
@@ -127,31 +131,52 @@ export interface RfReportRow {
  * What happened to each pack over the session: the battery it got down to, how many
  * times it went quiet, and every time it changed hands. Read the morning after, which
  * is why it does not depend on anything being on right now.
+ *
+ * The plot is optional, so the report is too: a channel that reported but is in no pack's plot
+ * is a row of its own, under the name its receiver gives it — a show that never entered a plot
+ * still gets to ask what the night did to its packs.
  */
 export function buildReport(
   plot: RfPlot,
   performers: Performer[],
   devices: DeviceState[],
-  swaps: RfSwap[]
+  swaps: RfSwap[],
+  incidents: RfIncident[] = []
 ): RfReportRow[] {
   const byChannel = new Map(devices.map(device => [device.id, device]))
-  return plot.packs.map(pack => {
-    const device = pack.channelId ? byChannel.get(`rf:${pack.channelId}`) : undefined
-    const performer = performers.find(candidate => candidate.id === pack.performerId)
+  const row = (
+    packId: string,
+    label: string,
+    channelId: string | null,
+    performer: Performer | undefined
+  ): RfReportRow => {
+    const device = channelId ? byChannel.get(`rf:${channelId}`) : undefined
     return {
-      packId: pack.id,
-      label: pack.label,
+      packId,
+      label,
       performer: performer?.name ?? null,
       role: performer?.role ?? null,
-      channelId: pack.channelId,
+      channelId,
       device,
       lowestPercent: device?.history?.lowestPercent ?? null,
       lowestAt: device?.history?.lowestAt ?? null,
       lastUsedPercent: device?.history?.lastUsedPercent ?? null,
       dropouts: device?.history?.dropouts ?? 0,
-      swaps: swaps.filter(swap => swap.packId === pack.id)
+      incidents: channelId === null ? [] : incidents.filter(incident => incident.channelId === channelId),
+      swaps: swaps.filter(swap => swap.packId === packId)
     }
-  })
+  }
+
+  const claimed = new Set(plot.packs.flatMap(pack => (pack.channelId ? [pack.channelId] : [])))
+  const strays = devices.filter(
+    device => device.service === 'rf' && device.id.startsWith('rf:') && !claimed.has(device.id.slice(3))
+  )
+  return [
+    ...plot.packs.map(pack =>
+      row(pack.id, pack.label, pack.channelId, performers.find(candidate => candidate.id === pack.performerId))
+    ),
+    ...strays.map(device => row(device.id, device.name, device.id.slice(3), undefined))
+  ]
 }
 
 /** The report as text, for the clipboard and for pasting into a show file. */
@@ -166,6 +191,9 @@ export function reportText(rows: RfReportRow[], generatedAt: number): string {
     const used = row.lastUsedPercent === null ? '' : `, last show used ${row.lastUsedPercent}%`
     const dropouts = row.dropouts === 0 ? 'no dropouts' : `${row.dropouts} dropout${row.dropouts === 1 ? '' : 's'}`
     lines.push(`${row.label} — ${who}, ${battery}${used}, ${dropouts}`)
+    for (const incident of row.incidents) {
+      lines.push(`  ${formatClock(incident.at)} ${incident.text} during ${cueWords(incident.cue)}`)
+    }
   }
 
   const swaps = rows.flatMap(row => row.swaps).sort((a, b) => a.at - b.at)

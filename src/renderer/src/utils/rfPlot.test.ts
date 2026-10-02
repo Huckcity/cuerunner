@@ -163,6 +163,37 @@ describe('buildReport', () => {
     expect(reportText([second], AT)).not.toContain('last show used')
   })
 
+  it('gives each pack the incidents on its own channel, in order, with the cue that was playing', () => {
+    const incidents = [
+      { at: AT, channelId: 'ch-1', name: 'Pack 1', kind: 'dropout' as const, text: 'went quiet', cue: { number: '47', name: 'Walk-in' } },
+      { at: AT + 5, channelId: 'ch-2', name: 'Pack 2', kind: 'weak' as const, text: 'signal weak', cue: null }
+    ]
+    const [first, second] = buildReport(plot(), PERFORMERS, [], [], incidents)
+
+    expect(first.incidents).toEqual([incidents[0]])
+    expect(second.incidents).toEqual([incidents[1]])
+    const text = reportText([first, second], AT)
+    expect(text).toContain('went quiet during cue 47 Walk-in')
+    expect(text).toContain('signal weak during between cues')
+  })
+
+  it('reports a channel that reported with no plot naming it, and does not repeat one the plot has', () => {
+    const rows = buildReport(plot(), PERFORMERS, [
+      device('rf:ch-1', { history: { lowestPercent: 40, lowestAt: AT, dropouts: 1 } }),
+      device('rf:spare', { name: 'Spare', history: { lowestPercent: 12, lowestAt: AT, dropouts: 0 } }),
+      { ...device('presence:amp'), service: 'presence' }
+    ], [])
+
+    expect(rows.map(row => row.label)).toEqual(['Pack 1', 'Pack 2', 'Spare'])
+    expect(rows[2]).toMatchObject({ channelId: 'spare', performer: null, lowestPercent: 12 })
+  })
+
+  it('reports a show that never entered a plot', () => {
+    const rows = buildReport({ packs: [] }, [], [device('rf:ew-dx:1:0', { name: '37', history: { lowestPercent: 6, lowestAt: AT, dropouts: 2 } })], [])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ label: '37', dropouts: 2, lowestPercent: 6 })
+  })
+
   it('reports the floor for a pack that ended the night quiet', () => {
     // The case the report exists for: nobody is hearing it now, and that is exactly the
     // pack someone asks about the next morning.

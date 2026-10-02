@@ -161,12 +161,25 @@
   grid-template-columns: 90px 1fr 110px 190px 120px 80px;
   align-items: center;
   gap: var(--space-2);
-  height: 22px;
+  min-height: 22px;
   padding: 0 var(--space-2);
   font-size: var(--text-sm);
   color: var(--fg-body);
   border-bottom: 1px solid var(--border-soft);
 }
+
+/* What went wrong with a pack and what was playing, a line each, under the row it is about. */
+.rf-report-incidents {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 var(--space-1) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.rf-report-incident[data-critical='true'] { color: var(--cue-color-red); }
 
 .rf-report-label { color: var(--fg-primary); font-weight: var(--fw-medium); }
 .rf-report-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

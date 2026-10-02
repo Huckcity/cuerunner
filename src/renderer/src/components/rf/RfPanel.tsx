@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../../../shared/show'
 import { demoPacks, demoPerformers, demoSource } from '../../utils/rfDemo'
 import { buildReport, reportText } from '../../utils/rfPlot'
+import { cueWords } from '../../utils/rfIncidents'
 import { preshowCheck, preshowText } from '../../utils/rfPreshow'
 import type { PreshowCheck } from '../../utils/rfPreshow'
 import { formatClock } from '../../utils/cueDefaults'
@@ -127,6 +128,7 @@ export function RfPanel({ onClose }: Props) {
   const cast = useStore(s => s.showSettings.cast)
   const devices = useStore(s => s.showDevices)
   const alerts = useStore(s => s.showAlerts)
+  const incidents = useStore(s => s.rfIncidents)
   const updateRfSettings = useStore(s => s.updateRfSettings)
   const updateCastSettings = useStore(s => s.updateCastSettings)
   const dismissAlert = useStore(s => s.dismissAlert)
@@ -143,8 +145,8 @@ export function RfPanel({ onClose }: Props) {
   const editPlot = (): void => openShowSettings('mic-plot')
 
   const report = useMemo(
-    () => buildReport(rf.plot, cast.performers, devices, rf.swaps),
-    [rf.plot, cast.performers, devices, rf.swaps]
+    () => buildReport(rf.plot, cast.performers, devices, rf.swaps, incidents),
+    [rf.plot, cast.performers, devices, rf.swaps, incidents]
   )
 
   const copyReport = (): void => {
@@ -293,6 +295,20 @@ export function RfPanel({ onClose }: Props) {
                     ? ''
                     : `${row.swaps.length} swap${row.swaps.length === 1 ? '' : 's'}`}
                 </span>
+                {row.incidents.length > 0 && (
+                  <span className="rf-report-incidents">
+                    {row.incidents.map(incident => (
+                      <span
+                        key={`${incident.at}-${incident.kind}-${incident.text}`}
+                        className="rf-report-incident"
+                        data-kind={incident.kind}
+                        data-critical={incident.critical === true}
+                      >
+                        {formatClock(incident.at)} {incident.text} during {cueWords(incident.cue)}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </div>
             ))
           )

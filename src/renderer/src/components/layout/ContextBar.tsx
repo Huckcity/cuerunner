@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useStore, type RunningCue } from '../../store'
+import { useStore } from '../../store'
 import type { Cue, SceneCue } from '../../../../shared/cue'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { groupDurationMs } from '../../utils/cueDuration'
+import { outermostRuns } from '../../utils/liveCue'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import './ContextBar.css'
 
@@ -18,21 +19,7 @@ export function standbyCue(cues: Cue[], selectedId: string | null): Cue | null {
   return cues.find(cue => cue.id === selectedId) ?? null
 }
 
-/**
- * The runs worth a place on the line: the outermost ones, oldest first. A child of a
- * running group is already inside the group's time.
- */
-export function outermostRuns(cues: Cue[], running: Map<string, RunningCue>): Array<{ cue: Cue; run: RunningCue }> {
-  const byId = new Map(cues.map(cue => [cue.id, cue]))
-  const runs: Array<{ cue: Cue; run: RunningCue }> = []
-  for (const run of running.values()) {
-    const cue = byId.get(run.cueId)
-    if (!cue) continue
-    if (cue.parentId !== null && running.has(cue.parentId)) continue
-    runs.push({ cue, run })
-  }
-  return runs.sort((a, b) => a.run.startedAt - b.run.startedAt)
-}
+export { outermostRuns }
 
 function firstLine(text: string): string {
   return text.split('\n').find(line => line.trim() !== '')?.trim() ?? ''

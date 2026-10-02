@@ -50,6 +50,9 @@ import {
   type DeskState
 } from '../utils/scenes'
 import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlot'
+import { incidentsFrom, MAX_INCIDENTS } from '../utils/rfIncidents'
+import type { RfIncident } from '../utils/rfIncidents'
+import { liveCue } from '../utils/liveCue'
 import type { LicenseStatus } from '../../../shared/license'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
@@ -281,6 +284,12 @@ interface CueListState {
   showServices: ServiceStatus[]
   showDevices: DeviceState[]
   showAlerts: ShowAlert[]
+  /**
+   * What went wrong with a pack this session, and what was playing when it did: the report's
+   * answer to "when". Session state — it is the night, not the show — and it starts over with the
+   * app, like the service's own count of dropouts that it explains.
+   */
+  rfIncidents: RfIncident[]
   showEvents: ShowEvent[]
   /** Folds a batch from the main process into state; alarms also reach the session log. */
   applyShowEvents: (events: ShowEvent[]) => void
@@ -763,6 +772,7 @@ export const useStore = create<CueListState>((set) => ({
   showServices: [],
   showDevices: [],
   showAlerts: [],
+  rfIncidents: [],
   showEvents: [],
   redundancy: null,
   redundancySettings: null,
@@ -1274,7 +1284,16 @@ export const useStore = create<CueListState>((set) => ({
     if (events.length === 0) return s
 
     const alerts = events.flatMap(event => event.kind === 'alert' ? [event.alert] : [])
+    // A pack going quiet is noted against what is playing now: only the window knows that.
+    const playing = liveCue(s.cues, s.running)
+    const incidents = incidentsFrom(
+      s.showDevices,
+      events,
+      s.showSettings.rf.thresholds,
+      playing === null ? null : { number: playing.number, name: playing.name }
+    )
     return {
+      rfIncidents: incidents.length === 0 ? s.rfIncidents : [...s.rfIncidents, ...incidents].slice(-MAX_INCIDENTS),
       showEvents: [...s.showEvents, ...events].slice(-SHOW_EVENT_LIMIT),
       showServices: mergeServices(s.showServices, events),
       showDevices: mergeDevices(s.showDevices, events),
