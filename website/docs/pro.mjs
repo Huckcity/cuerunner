@@ -133,8 +133,7 @@ export const PRO_ROWS = [
     },
     pro: {
       identifiers: ['rf', 'show:ewdx-set-password', 'show:ewdx-trust-again'],
-      notYetProved: 'Sennheiser EW-DX receivers',
-      prose: `Battery and RF for every transmitter, in the Monitor and the mic plot; alarms when a pack or an aerial misbehaves; the session report afterwards. Reads Sennheiser EW-DX receivers ${NOT_YET_PROVED} directly, any other receiver over a telemetry document, or the demo rack on the bench.`
+      prose: `Battery and RF for every transmitter, in the Monitor and the mic plot; alarms when a pack or an aerial misbehaves; the session report afterwards. Reads Sennheiser EW-DX receivers directly, any other receiver over a telemetry document, or the demo rack on the bench.`
     }
   },
   {

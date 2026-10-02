@@ -17,7 +17,7 @@
 // A lane's status is about the run (AD-24): `passed` when everything of that lane the job
 // selected ran and passed, `skipped` when the lane did not run — nothing of it ran, or what ran
 // did not pass. That is deliberately *not* the record's claim vocabulary (`proved`, `unproven`,
-// `unclaimed`; `_bmad-output/specs/spec-cuerunner/quality-and-proof.md`): a run says what it
+// `witnessed`, `unclaimed`; `_bmad-output/specs/spec-cuerunner/quality-and-proof.md`): a run says what it
 // did, the record says what may be claimed, and a lane that skipped leaves its claim standing
 // exactly where the record left it.
 //
@@ -62,7 +62,7 @@ export const LANE_STATUSES = ['passed', 'skipped']
  * the machine it ran on; the record states the standing status. Declared here so the words have
  * one home the suite and the lane both read, and held to the record by the guard.
  */
-export const CLAIM_STATUSES = ['proved', 'unproven', 'unclaimed']
+export const CLAIM_STATUSES = ['proved', 'witnessed', 'unproven', 'unclaimed']
 
 /** The claim the ASIO lane's report states — the record's own row name for it. */
 export const ASIO_CLAIM = 'ASIO hosting'

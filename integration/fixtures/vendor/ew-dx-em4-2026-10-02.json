@@ -1,0 +1,703 @@
+{
+ "provenance": {
+  "kind": "ew-dx",
+  "target": "192.168.0.194:443",
+  "device": "Sennheiser EW-DX EM 4 Dante (EWDX4CHDS, hardware revision 0596716-09)",
+  "version": "4.0.0",
+  "versionSource": "device",
+  "versionNote": "the receiver's own GET /api/firmware/update/state `deviceVersion`; Dante firmware 1.4.2.1; SSC protocol 2.4, schema 1.7",
+  "recordedAt": "2026-10-02T17:49:00Z",
+  "recordedBy": "a hand run from the dev machine (the recorder is not kept: it was one subscription, read with curl)",
+  "method": [
+   "One authenticated SSCv2 subscription (GET /api/ssc/state/subscriptions, then PUT .../add of the 28 paths the source subscribes to for a four-channel receiver),",
+   "read for nine seconds with two EW_DX_SK bodypacks on AA cells linked to channels 0 and 1 and channels 2 and 3 unlinked.",
+   "The subscription was then deleted; the identity, version and firmware answers were read in separate requests."
+  ],
+  "note": [
+   "441 pushes were captured; the first of each path is the snapshot (28 paths) and the next 60 are kept as events.",
+   "Audio level arrives at about 20 events a second per linked channel; every other path was silent after its snapshot."
+  ]
+ },
+ "identity": {
+  "product": "EWDX4CHDS",
+  "hardwareRevision": "0596716-09",
+  "serial": "5364000906",
+  "vendor": "Sennheiser electronic SE & Co. KG"
+ },
+ "protocol": {
+  "protocol": "2.4",
+  "schema": "1.7"
+ },
+ "firmware": {
+  "deviceVersion": "4.0.0",
+  "danteVersion": "1.4.2.1",
+  "state": "Idle",
+  "progress": 0,
+  "lastStatus": "None"
+ },
+ "mdns": {
+  "service": "_ssc-https._tcp.local",
+  "reply": "0000840000010006000000000a5f7373632d6874747073045f746370056c6f63616c00000c0001c00c000c00010000000a00181545574458454d34442d303031423636334244443133c00cc033001000010000000a000100c033002100010000000a001f0000000001bb164557445834434844532d303031423636334244443133c01cc06a001c00010000000a00102a0aef4007e8b601dacec8fdf5322b07c06a001c00010000000a00102a0aef4007e8b601021b66fffe3bdd13c06a000100010000000a0004c0a800c2",
+  "replyFrom": "192.168.0.194"
+ },
+ "snapshot": [
+  [
+   "/api/channel/0",
+   {
+    "name": "37",
+    "mute": false,
+    "mates": [
+     "TX1"
+    ],
+    "gain": 21,
+    "audio": [
+     "Out1"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  ],
+  [
+   "/api/channel/0/level",
+   {
+    "value": -87.4
+   }
+  ],
+  [
+   "/api/channel/0/signalStrengthIndicator",
+   {
+    "value": -76.0
+   }
+  ],
+  [
+   "/api/channel/0/warnings",
+   []
+  ],
+  [
+   "/api/rf/channels/0",
+   {
+    "frequency": 606200,
+    "presets": {
+     "type": "Factory",
+     "bank": 0,
+     "channel": 0
+    }
+   }
+  ],
+  [
+   "/api/transmitters/0",
+   {
+    "type": "EW_DX_SK",
+    "capsule": "Unknown",
+    "version": "3.0.2",
+    "mute": false,
+    "identification": false,
+    "lowcut": "Off",
+    "name": "37",
+    "trim": 0,
+    "cableEmulation": "Off",
+    "led": true,
+    "lock": false,
+    "muteConfig": "AfMute"
+   }
+  ],
+  [
+   "/api/transmitters/0/battery",
+   {
+    "type": "PrimaryCell",
+    "gauge": 39
+   }
+  ],
+  [
+   "/api/channel/1",
+   {
+    "name": "38",
+    "mute": false,
+    "mates": [
+     "TX2"
+    ],
+    "gain": 21,
+    "audio": [
+     "Out2"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  ],
+  [
+   "/api/channel/1/level",
+   {
+    "value": -51.1
+   }
+  ],
+  [
+   "/api/channel/1/signalStrengthIndicator",
+   {
+    "value": -79.0
+   }
+  ],
+  [
+   "/api/channel/1/warnings",
+   []
+  ],
+  [
+   "/api/rf/channels/1",
+   {
+    "frequency": 606800,
+    "presets": {
+     "type": "Factory",
+     "bank": 0,
+     "channel": 1
+    }
+   }
+  ],
+  [
+   "/api/transmitters/1",
+   {
+    "type": "EW_DX_SK",
+    "capsule": "Unknown",
+    "version": "3.0.2",
+    "mute": false,
+    "identification": false,
+    "lowcut": "Off",
+    "name": "38",
+    "trim": 0,
+    "cableEmulation": "Off",
+    "led": true,
+    "lock": false,
+    "muteConfig": "AfMute"
+   }
+  ],
+  [
+   "/api/transmitters/1/battery",
+   {
+    "type": "PrimaryCell",
+    "gauge": 6
+   }
+  ],
+  [
+   "/api/channel/2",
+   {
+    "name": "39",
+    "mute": false,
+    "mates": [],
+    "gain": 21,
+    "audio": [
+     "Out3"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  ],
+  [
+   "/api/channel/2/level",
+   {
+    "value": -138.5
+   }
+  ],
+  [
+   "/api/channel/2/signalStrengthIndicator",
+   {
+    "value": -107.0
+   }
+  ],
+  [
+   "/api/channel/2/warnings",
+   [
+    "NoLink"
+   ]
+  ],
+  [
+   "/api/rf/channels/2",
+   {
+    "frequency": 607400,
+    "presets": {
+     "type": "Factory",
+     "bank": 0,
+     "channel": 2
+    }
+   }
+  ],
+  [
+   "/api/transmitters/2",
+   {}
+  ],
+  [
+   "/api/transmitters/2/battery",
+   {}
+  ],
+  [
+   "/api/channel/3",
+   {
+    "name": "40",
+    "mute": false,
+    "mates": [],
+    "gain": 21,
+    "audio": [
+     "Out4"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  ],
+  [
+   "/api/channel/3/level",
+   {
+    "value": -138.5
+   }
+  ],
+  [
+   "/api/channel/3/signalStrengthIndicator",
+   {
+    "value": -107.0
+   }
+  ],
+  [
+   "/api/channel/3/warnings",
+   [
+    "NoLink"
+   ]
+  ],
+  [
+   "/api/rf/channels/3",
+   {
+    "frequency": 608000,
+    "presets": {
+     "type": "Factory",
+     "bank": 0,
+     "channel": 3
+    }
+   }
+  ],
+  [
+   "/api/transmitters/3",
+   {}
+  ],
+  [
+   "/api/transmitters/3/battery",
+   {}
+  ]
+ ],
+ "events": [
+  {
+   "atMs": 187,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.9
+   }
+  },
+  {
+   "atMs": 193,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -71.7
+   }
+  },
+  {
+   "atMs": 200,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.8
+   }
+  },
+  {
+   "atMs": 206,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -73.0
+   }
+  },
+  {
+   "atMs": 213,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.4
+   }
+  },
+  {
+   "atMs": 219,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -74.3
+   }
+  },
+  {
+   "atMs": 226,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.3
+   }
+  },
+  {
+   "atMs": 232,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -75.9
+   }
+  },
+  {
+   "atMs": 239,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.9
+   }
+  },
+  {
+   "atMs": 246,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -73.8
+   }
+  },
+  {
+   "atMs": 288,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -89.9
+   }
+  },
+  {
+   "atMs": 295,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -74.0
+   }
+  },
+  {
+   "atMs": 324,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.6
+   }
+  },
+  {
+   "atMs": 331,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -73.0
+   }
+  },
+  {
+   "atMs": 381,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.9
+   }
+  },
+  {
+   "atMs": 388,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -69.4
+   }
+  },
+  {
+   "atMs": 424,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.6
+   }
+  },
+  {
+   "atMs": 430,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -71.6
+   }
+  },
+  {
+   "atMs": 473,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -92.7
+   }
+  },
+  {
+   "atMs": 480,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -70.9
+   }
+  },
+  {
+   "atMs": 534,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.3
+   }
+  },
+  {
+   "atMs": 541,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -71.9
+   }
+  },
+  {
+   "atMs": 581,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.5
+   }
+  },
+  {
+   "atMs": 588,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -72.9
+   }
+  },
+  {
+   "atMs": 624,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 630,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -70.1
+   }
+  },
+  {
+   "atMs": 681,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -70.0
+   }
+  },
+  {
+   "atMs": 731,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -89.8
+   }
+  },
+  {
+   "atMs": 739,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -68.7
+   }
+  },
+  {
+   "atMs": 774,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 780,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -71.7
+   }
+  },
+  {
+   "atMs": 827,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.7
+   }
+  },
+  {
+   "atMs": 834,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -73.7
+   }
+  },
+  {
+   "atMs": 887,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 894,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -67.4
+   }
+  },
+  {
+   "atMs": 932,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -92.2
+   }
+  },
+  {
+   "atMs": 938,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -67.9
+   }
+  },
+  {
+   "atMs": 976,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 983,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -70.0
+   }
+  },
+  {
+   "atMs": 1041,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.3
+   }
+  },
+  {
+   "atMs": 1047,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -69.6
+   }
+  },
+  {
+   "atMs": 1074,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.7
+   }
+  },
+  {
+   "atMs": 1081,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -58.0
+   }
+  },
+  {
+   "atMs": 1134,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 1141,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -66.7
+   }
+  },
+  {
+   "atMs": 1184,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.7
+   }
+  },
+  {
+   "atMs": 1191,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -72.6
+   }
+  },
+  {
+   "atMs": 1224,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 1230,
+   "path": "/api/channel/1/signalStrengthIndicator",
+   "value": {
+    "value": -79.5
+   }
+  },
+  {
+   "atMs": 1237,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -69.8
+   }
+  },
+  {
+   "atMs": 1286,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.2
+   }
+  },
+  {
+   "atMs": 1293,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -66.7
+   }
+  },
+  {
+   "atMs": 1324,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -92.1
+   }
+  },
+  {
+   "atMs": 1331,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -69.8
+   }
+  },
+  {
+   "atMs": 1373,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.8
+   }
+  },
+  {
+   "atMs": 1380,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -73.6
+   }
+  },
+  {
+   "atMs": 1431,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -89.5
+   }
+  },
+  {
+   "atMs": 1438,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -72.1
+   }
+  },
+  {
+   "atMs": 1483,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -88.8
+   }
+  },
+  {
+   "atMs": 1490,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -73.2
+   }
+  }
+ ]
+}

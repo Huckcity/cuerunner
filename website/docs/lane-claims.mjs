@@ -69,11 +69,5 @@ export const COPY_CLAIMS = [
     claim: 'Live discovery',
     lane: '—',
     words: 'the devices that announce themselves'
-  },
-  {
-    page: 'pricing.html',
-    claim: 'Sennheiser EW-DX receivers',
-    lane: '—',
-    words: 'Sennheiser EW-DX receivers'
   }
 ]

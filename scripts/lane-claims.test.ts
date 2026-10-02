@@ -51,9 +51,23 @@ const RECORD = path.join(root, '_bmad-output', 'specs', 'spec-cuerunner', 'quali
 /** The lanes table's header, as the record spells it: a renamed column is not this table. */
 const LANES_HEADER = ['Lane', 'Workflow', 'Job', 'Trigger', 'Runner', 'Tag', 'Suite'] as const
 
-/** The claims table's header, and the three words its status column may hold. */
+/** The claims table's header, and the four words its status column may hold. */
 const CLAIMS_HEADER = ['Claim', 'Lane', 'Status', 'Evidence'] as const
-const STATUSES: Record<string, true> = { proved: true, unproven: true, unclaimed: true }
+const STATUSES: Record<string, true> = { proved: true, witnessed: true, unproven: true, unclaimed: true }
+
+/**
+ * The statuses that stand on evidence rather than on a promise: a lane ran it (`proved`), or a
+ * person ran it on real hardware and the repository holds what they saw (`witnessed`). Copy that
+ * states such a claim carries no phrase, because the phrase says "nothing has run this".
+ */
+const STANDING = ['proved', 'witnessed']
+
+/**
+ * The statuses with no lane behind them: `unclaimed` stands nowhere, and `witnessed` stands on
+ * a capture rather than on a job — which is the point of it. No lane will ever run every
+ * receiver and desk a show meets, so a claim that was measured on one is not made to wait for one.
+ */
+const NO_LANE_STATUSES = ['unclaimed', 'witnessed']
 
 /** The mark the lane column carries for a claim no lane carries, and the paths evidence names. */
 const NO_LANE = '—'
@@ -576,7 +590,7 @@ function laneEvidenceProblems(claims: Claim[], lanes: Lane[], workflows: Map<str
   })
 }
 
-/** Every claim's status, held to the three words the record's claims table states. */
+/** Every claim's status, held to the four words the record's claims table states. */
 function statusProblems(claims: Claim[]): string[] {
   const words = Object.keys(STATUSES).join(', ')
   return claims
@@ -588,16 +602,16 @@ function statusProblems(claims: Claim[]): string[] {
 function laneNameProblems(claims: Claim[], lanes: Lane[]): string[] {
   const named = [...new Set(lanes.map((entry) => entry.lane))]
   return claims.flatMap((claim) => {
-    if (statusOf(claim) === 'unclaimed') {
+    if (NO_LANE_STATUSES.includes(statusOf(claim))) {
       return claim.lane === NO_LANE
         ? []
         : [
-            `the record's "${claim.claim}" row is unclaimed and names ${claim.lane} as its lane: no lane carries it, so the lane column is \`${NO_LANE}\``
+            `the record's "${claim.claim}" row is ${statusOf(claim)} and names ${claim.lane} as its lane: no lane carries it, so the lane column is \`${NO_LANE}\``
           ]
     }
     if (claim.lane === NO_LANE) {
       return [
-        `the record's "${claim.claim}" row names no lane and is not unclaimed: the lane that would carry it is one of ${named.join(', ')}`
+        `the record's "${claim.claim}" row names no lane and is not unclaimed or witnessed: the lane that would carry it is one of ${named.join(', ')}`
       ]
     }
     return named.includes(claim.lane)
@@ -648,10 +662,24 @@ function provedEvidenceProblems(
   lanes: Lane[]
 ): string[] {
   return claims.flatMap((claim) => {
-    if (statusOf(claim) !== 'proved') return []
+    const status = statusOf(claim)
+    if (!STANDING.includes(status)) return []
     const files = [...new Set([...claim.evidence.matchAll(CAPTURE)].map((match) => match[0]))]
     const reports = [...new Set([...claim.evidence.matchAll(REPORT)].map((match) => match[0]))]
-    if (files.length === 0 && reports.length === 0) {
+    if (status === 'witnessed') {
+      // Nothing ran it in a lane, so a lane's report cannot be what it rests on: what a person
+      // saw is held by the capture, and by the capture alone.
+      if (files.length === 0) {
+        return [
+          `the record's "${claim.claim}" row is witnessed and its evidence names no capture under integration/fixtures: a run nobody kept is not evidence, and no lane runs it to stand in`
+        ]
+      }
+      if (reports.length > 0) {
+        return [
+          `the record's "${claim.claim}" row is witnessed and its evidence names a report a lane writes: no lane carries it, so the row rests on a capture or it is \`proved\``
+        ]
+      }
+    } else if (files.length === 0 && reports.length === 0) {
       return [
         `the record's "${claim.claim}" row is proved and its evidence names neither a capture under integration/fixtures nor a report a lane writes: nothing in the repository is held to it`
       ]
@@ -661,39 +689,41 @@ function provedEvidenceProblems(
     return [...files.flatMap((file) => {
       const text = captures.get(file)
       if (text === undefined) {
-        return [`the record's "${claim.claim}" row is proved on ${file}, which the repository does not hold`]
+        return [`the record's "${claim.claim}" row is ${status} on ${file}, which the repository does not hold`]
       }
       let capture: { provenance?: Record<string, unknown> }
       try {
         capture = JSON.parse(text)
       } catch (cause) {
-        return [`the record's "${claim.claim}" row is proved on ${file}, which cannot be read as JSON (${(cause as Error).message})`]
+        return [`the record's "${claim.claim}" row is ${status} on ${file}, which cannot be read as JSON (${(cause as Error).message})`]
       }
       const provenance = capture?.provenance
       if (typeof provenance !== 'object' || provenance === null) {
         return [
-          `the record's "${claim.claim}" row is proved on ${file}, and that file carries no provenance: a capture whose origin is unknown cannot be evidence`
+          `the record's "${claim.claim}" row is ${status} on ${file}, and that file carries no provenance: a capture whose origin is unknown cannot be evidence`
         ]
       }
       const field = (name: string): string => (typeof provenance[name] === 'string' ? (provenance[name] as string) : '')
       const problems = ['version', 'versionSource', 'recordedAt', 'recordedBy']
         .filter((name) => field(name) === '')
-        .map((name) => `the record's "${claim.claim}" row is proved on ${file}, whose provenance names no \`${name}\``)
+        .map((name) => `the record's "${claim.claim}" row is ${status} on ${file}, whose provenance names no \`${name}\``)
       const source = field('versionSource')
-      if (source !== '' && source !== 'console') {
+      // The console for a desk, the device for anything else that answers for itself: the
+      // thing measured is the thing that gave the version.
+      if (source !== '' && source !== 'console' && source !== 'device') {
         problems.push(
-          `the record's "${claim.claim}" row is proved on ${file}, whose provenance reads the version from \`${source}\`: the console's own answer is what carries "${claim.claim}", never what the app reported`
+          `the record's "${claim.claim}" row is ${status} on ${file}, whose provenance reads the version from \`${source}\`: the console's own answer is what carries "${claim.claim}", never what the app reported`
         )
       }
       const version = field('version')
       if (version !== '' && !claim.evidence.includes(version)) {
         problems.push(
-          `the record's "${claim.claim}" row is proved and states no \`${version}\`, the version ${file}'s provenance records`
+          `the record's "${claim.claim}" row is ${status} and states no \`${version}\`, the version ${file}'s provenance records`
         )
       }
       const day = field('recordedAt').slice(0, 10)
       if (day !== '' && !claim.evidence.includes(day)) {
-        problems.push(`the record's "${claim.claim}" row is proved and states no \`${day}\`, the day ${file} was recorded`)
+        problems.push(`the record's "${claim.claim}" row is ${status} and states no \`${day}\`, the day ${file} was recorded`)
       }
       return problems
     }), ...reportEvidenceProblems(claim, reports, lanes)]
@@ -976,7 +1006,12 @@ function declarationProblems(declarations: Declaration[], claims: Claim[], pages
         `the copy's "${entry.claim}" claim is proved on the ${row.lane} lane, and ${entry.page} carries the phrase behind its words: "${entry.words} ${NOT_YET_PROVED}"`
       )
     }
-    if (statusOf(row) !== 'proved' && !carried) {
+    if (statusOf(row) === 'witnessed' && carried) {
+      problems.push(
+        `the copy's "${entry.claim}" claim is witnessed on real hardware, and ${entry.page} carries the phrase behind its words: "${entry.words} ${NOT_YET_PROVED}"`
+      )
+    }
+    if (!STANDING.includes(statusOf(row)) && !carried) {
       problems.push(
         `the record's "${entry.claim}" row is ${statusOf(row)} and ${entry.page} carries no phrase behind its words: expected "${entry.words} ${NOT_YET_PROVED}"`
       )
@@ -993,7 +1028,7 @@ function phraseCountProblems(declarations: Declaration[], claims: Claim[], pages
       .filter((entry) => entry.page === page)
       .filter((entry) => {
         const row = claims.find((candidate) => candidate.claim === entry.claim)
-        return row !== undefined && statusOf(row) !== 'proved'
+        return row !== undefined && !STANDING.includes(statusOf(row))
       }).length
     return carried === expected
       ? []
@@ -1221,13 +1256,13 @@ describe('the record and the copy the checks exist to refuse', () => {
     ])
   })
 
-  it('names a status outside the record three words', () => {
+  it('names a status outside the record four words', () => {
     const strong = LIVE.claims.map((claim) =>
       claim.claim === 'A&H desk acceptance' ? { ...claim, status: 'proven' } : claim
     )
     expect(statusProblems(strong)).toEqual([
       expect.stringContaining(
-        'the record\'s "A&H desk acceptance" row states the status "proven", which is none of proved, unproven, unclaimed'
+        'the record\'s "A&H desk acceptance" row states the status "proven", which is none of proved, witnessed, unproven, unclaimed'
       )
     ])
   })
@@ -1302,13 +1337,14 @@ describe('the record and the copy the checks exist to refuse', () => {
     )
     expect(claimVocabularyProblems(invented)).toEqual([
       expect.stringContaining(
-        'the record states the claim status "unverified", and scripts/lane-status.mjs declares no word of that name (proved, unproven, unclaimed)'
+        'the record states the claim status "unverified", and scripts/lane-status.mjs declares no word of that name (proved, witnessed, unproven, unclaimed)'
       )
     ])
-    // A record that writes only one of the three: the ASIO lane would report statuses no row of
+    // A record that writes only one of the four: the ASIO lane would report statuses no row of
     // the record can be looked up under.
     const thin = [{ claim: ASIO_CLAIM, lane: ASIO_LANE, status: 'proved', evidence: '' }]
     expect(claimVocabularyProblems(thin)).toEqual([
+      expect.stringContaining('scripts/lane-status.mjs states the claim status "witnessed", and the record\'s claims table writes no row in it'),
       expect.stringContaining('scripts/lane-status.mjs states the claim status "unproven", and the record\'s claims table writes no row in it'),
       expect.stringContaining('scripts/lane-status.mjs states the claim status "unclaimed", and the record\'s claims table writes no row in it')
     ])
@@ -1472,6 +1508,92 @@ describe('the record and the copy the checks exist to refuse', () => {
       problems.some((problem) => problem.includes('names no machine that run happened on')),
       'and so is the report half'
     ).toBe(true)
+  })
+
+  describe('a witnessed claim', () => {
+    const EW_DX = 'Sennheiser EW-DX receivers'
+    const CAPTURE_FILE = 'integration/fixtures/vendor/ew-dx-em4-2026-10-02.json'
+    const witnessed = (change: Partial<Claim>): Claim[] =>
+      LIVE.claims.map((claim) => (claim.claim === EW_DX ? { ...claim, ...change } : claim))
+
+    it('is in the record with no lane, and its evidence holds', () => {
+      const row = LIVE.claims.find((claim) => claim.claim === EW_DX)
+      expect(row && statusOf(row)).toBe('witnessed')
+      expect(row?.lane).toBe(NO_LANE)
+      expect(provedEvidenceProblems(LIVE.claims, LIVE.captures, LIVE.lanes)).toEqual([])
+    })
+
+    it('names a witnessed row that names a lane: no lane carries it, that is the point', () => {
+      expect(laneNameProblems(witnessed({ lane: 'peers' }), LIVE.lanes)).toEqual([
+        expect.stringContaining('the record\'s "Sennheiser EW-DX receivers" row is witnessed and names peers as its lane')
+      ])
+    })
+
+    it('names a witnessed row that rests on nothing the repository keeps', () => {
+      expect(provedEvidenceProblems(witnessed({ evidence: 'somebody saw it work' }), LIVE.captures, LIVE.lanes)).toEqual([
+        expect.stringContaining('the record\'s "Sennheiser EW-DX receivers" row is witnessed and its evidence names no capture under integration/fixtures')
+      ])
+    })
+
+    it('names a witnessed row that rests on a lane\'s report: a lane would make it proved, not witnessed', () => {
+      const evidence = `${CAPTURE_FILE} and test-results/asio-lane.json, firmware 4.0.0, 2026-10-02`
+      expect(provedEvidenceProblems(witnessed({ evidence }), LIVE.captures, LIVE.lanes)).toEqual([
+        expect.stringContaining('row is witnessed and its evidence names a report a lane writes')
+      ])
+    })
+
+    it('names a witnessed row whose capture has gone', () => {
+      expect(provedEvidenceProblems(LIVE.claims, new Map(), LIVE.lanes).filter((p) => p.includes('witnessed'))).toEqual([
+        expect.stringContaining(`row is witnessed on ${CAPTURE_FILE}, which the repository does not hold`)
+      ])
+    })
+
+    it('names a witnessed row that does not state the version the device gave', () => {
+      const row = LIVE.claims.find((claim) => claim.claim === EW_DX)!
+      const problems = provedEvidenceProblems(
+        witnessed({ evidence: row.evidence.replaceAll('4.0.0', 'x') }),
+        LIVE.captures,
+        LIVE.lanes
+      )
+      expect(problems).toEqual([expect.stringContaining('row is witnessed and states no `4.0.0`')])
+    })
+
+    it('names a witnessed row that does not state the day its capture was recorded', () => {
+      // The file's own name carries the day, so the day is moved in the capture and not in the row.
+      const moved = JSON.parse(LIVE.captures.get(CAPTURE_FILE) ?? '{}')
+      moved.provenance.recordedAt = '2027-01-01T00:00:00Z'
+      const captures = new Map(LIVE.captures).set(CAPTURE_FILE, JSON.stringify(moved))
+
+      expect(provedEvidenceProblems(LIVE.claims, captures, LIVE.lanes)).toEqual([
+        expect.stringContaining('row is witnessed and states no `2027-01-01`')
+      ])
+    })
+
+    it('names a witnessed capture whose version came from the app and not the device', () => {
+      const moved = JSON.parse(LIVE.captures.get(CAPTURE_FILE) ?? '{}')
+      moved.provenance.versionSource = 'app'
+      const captures = new Map(LIVE.captures).set(CAPTURE_FILE, JSON.stringify(moved))
+
+      expect(provedEvidenceProblems(LIVE.claims, captures, LIVE.lanes)).toEqual([
+        expect.stringContaining('whose provenance reads the version from `app`')
+      ])
+    })
+
+    it('needs no phrase behind its words, and refuses one', () => {
+      const declaration = { page: 'pricing.html', claim: EW_DX, lane: NO_LANE, words: EW_DX }
+      expect(declarationProblems([declaration], LIVE.claims, LIVE.pages)).toEqual([])
+
+      const phrased = new Map(LIVE.pages)
+      phrased.set('pricing.html', (phrased.get('pricing.html') ?? '').replace(EW_DX, `${EW_DX} ${NOT_YET_PROVED}`))
+      expect(declarationProblems([declaration], LIVE.claims, phrased)).toEqual([
+        expect.stringContaining('the copy\'s "Sennheiser EW-DX receivers" claim is witnessed on real hardware')
+      ])
+    })
+
+    it('is not counted among the claims a page owes a phrase for', () => {
+      const declaration = { page: 'pricing.html', claim: EW_DX, lane: NO_LANE, words: EW_DX }
+      expect(phraseCountProblems([...LIVE.declarations, declaration], LIVE.claims, LIVE.pages)).toEqual([])
+    })
   })
 
   it('names a claim marked unclaimed that still names a lane', () => {
