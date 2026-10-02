@@ -263,3 +263,59 @@ describe('EwDxClient serial', () => {
     expect(error.message).toBe('connection refused')
   })
 })
+
+// The one thing the source writes to a receiver. A mute that did not happen is a mic that is open on
+// a stage, so these hold what it sends, that the receiver is asked afterwards, and what it says when
+// it could not be done.
+describe('EwDxClient setMute', () => {
+  it('mutes a channel, sends the one boolean and nothing else, and the cache follows', async () => {
+    const live = await connect()
+    await live.snapshot(2000)
+
+    await live.setMute(0, true)
+
+    expect(receiver?.writes).toEqual(['PUT /api/channel/0 {"mute":true}'])
+    await until(async () => (await live.snapshot(0))[0].muted === true, 'the mute to arrive on the stream')
+  })
+
+  it('unmutes it, and muting something already muted is the state that was asked for, not an error', async () => {
+    const live = await connect()
+    await live.snapshot(2000)
+
+    await live.setMute(0, true)
+    await live.setMute(0, true)
+    await live.setMute(0, false)
+
+    await until(async () => (await live.snapshot(0))[0].muted === false, 'the unmute to arrive')
+    expect(receiver?.writes).toHaveLength(3)
+  })
+
+  it('does not take a receiver\'s yes for the mute: it asks, and says when it said yes and did not', async () => {
+    const live = await connect({}, { ignoreWrites: true })
+    await live.snapshot(2000)
+
+    await expect(live.setMute(0, true)).rejects.toThrow('receiver said yes and is not muted')
+    await expect(live.setMute(0, false)).resolves.toBeUndefined() // it already is not muted: that is the state asked for
+  })
+
+  it('refuses a channel the receiver does not have, before and after asking it', async () => {
+    const live = await connect()
+    await live.snapshot(2000)
+
+    await expect(live.setMute(7, true)).rejects.toThrow('this receiver has no channel 7')
+    await expect(live.setMute(-1, true)).rejects.toThrow('has no channel -1')
+    await expect(live.setMute(1.5, true)).rejects.toThrow('has no channel 1.5')
+    // Channel 3 is a real EM 4 channel the fixture receiver does not carry. The real receiver answers a
+    // write for a channel it lacks with 400, not 404 (see the capture), and says nothing more.
+    await expect(live.setMute(3, true)).rejects.toThrow('receiver refused the mute (HTTP 400)')
+    expect(receiver?.writes).toEqual([])
+  })
+
+  it('says what is wrong when the receiver is not there, rather than muting nothing quietly', async () => {
+    const live = await connect()
+    await live.snapshot(2000)
+    receiver?.stall(true)
+
+    await expect(live.setMute(0, true)).rejects.toThrow('receiver did not answer in time')
+  })
+})

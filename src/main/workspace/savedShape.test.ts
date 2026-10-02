@@ -529,6 +529,13 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     cueList: '',
     destination: 'desk',
     portName: ''
+  },
+  mic: {
+    ...cueBase('mi1'),
+    type: 'mic',
+    channelId: 'ew-dx:5364000906:0',
+    label: 'Aldonza (37)',
+    action: 'mute'
   }
 }
 

@@ -351,6 +351,42 @@ export class EwDxClient {
     })
   }
 
+  /**
+   * Mutes or unmutes the audio output of a channel at the receiver.
+   *
+   * This is the one thing the source writes to a receiver, and it writes one boolean and nothing
+   * else: no name, no gain, no level. A receiver answers 200 to what it means to do, and a mute
+   * that did not happen is a mic that is open on a stage, so what it says is not taken on trust:
+   * the channel is read back, and a receiver that is not in the state asked for is an error.
+   * Muting something already muted is not one — it is the state that was asked for.
+   */
+  async setMute(channel: number, mute: boolean): Promise<void> {
+    if (!Number.isInteger(channel) || channel < 0 || channel >= MAX_CHANNELS) {
+      throw new Error(`this receiver has no channel ${channel}`)
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(new Error('receiver did not answer in time')), (this.options.requestTimeoutMs ?? 5000) * 2)
+    timer.unref?.()
+    const path = `/api/channel/${channel}`
+    try {
+      const put = await this.send('PUT', path, { authorised: true, body: JSON.stringify({ mute }), signal: controller.signal })
+      const answer = (await this.readBody(put)).slice(0, 120)
+      if (put.statusCode === 401 || put.statusCode === 403) throw this.refusal(put.statusCode)
+      if (put.statusCode === 404) throw new Error(`this receiver has no channel ${channel}`)
+      if (put.statusCode !== 200) {
+        throw new Error(`receiver refused the ${mute ? 'mute' : 'unmute'} (HTTP ${put.statusCode}${answer ? `: ${answer}` : ''})`)
+      }
+      const now = await this.getJson(path, true, controller.signal)
+      if ((now as { mute?: unknown } | null)?.mute !== mute) {
+        throw new Error(`receiver said yes and is not ${mute ? 'muted' : 'unmuted'}`)
+      }
+    } catch (error) {
+      throw error instanceof EwDxError ? error : new Error(describeNetworkError(error))
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   // ── Requests ──────────────────────────────────────────────────────────────
 
   private send(

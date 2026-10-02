@@ -16,9 +16,10 @@ import { SceneInspector } from './SceneInspector'
 import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
 import { MscInspector } from './MscInspector'
+import { MicInspector } from './MicInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue
+  MscCue, MicCue
 } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
@@ -38,7 +39,8 @@ const TYPE_TABS: Record<string, string[]> = {
   script: ['Basics', 'Script'],
   scene: ['Basics', 'Scene'],
   devamp: ['Basics', 'Devamp'],
-  msc: ['Basics', 'Show Control']
+  msc: ['Basics', 'Show Control'],
+  mic: ['Basics', 'Mic']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -71,6 +73,17 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   if (tab === 'Show Control') return <MscInspector cue={cue as MscCue} />
+  if (tab === 'Mic') {
+    return pro ? (
+      <MicInspector cue={cue as MicCue} />
+    ) : (
+      <ProLock
+        variant="inspector"
+        feature="Mic cues"
+        blurb="A cue that mutes or unmutes a radio mic at its receiver, so a pack is closed by the cue list and not by a hand on a fader."
+      />
+    )
+  }
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

@@ -10,7 +10,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { closeApp, launchApp, mintLicense } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, mintLicense } from './helpers'
 import { startFakeReceiver, type FakeReceiver } from '../src/main/ewdx/fakeReceiver'
 import { makeTestCertificate, type TestCertificate } from '../src/main/ewdx/testCertificate'
 import { FIXTURE_SERIAL } from '../src/main/ewdx/fixtures'
@@ -239,6 +239,106 @@ test('a pack that drops out is reported against the cue that was playing, with n
   await page.getByRole('button', { name: 'Report', exact: true }).click()
   await expect(page.locator('.rf-report-label')).toHaveText('37')
   await expect(page.locator('.rf-report-incident')).toHaveText(/\d\d:\d\d:\d\d went quiet during cue 10 Interval$/)
+})
+
+/**
+ * GO until the receiver has been written to again. The firing guard reads the show clock, and on
+ * the silent test backend that clock can step back after an idle pause, so a press can land inside
+ * the guard's 300 ms window and be dropped. An operator presses again; so does this. It never
+ * presses past a write, so a cue that fired once is not fired twice.
+ */
+async function goUntilWritten(from: number): Promise<void> {
+  for (let press = 0; press < 6; press += 1) {
+    await page.getByRole('button', { name: /GO/ }).click()
+    for (let wait = 0; wait < 12; wait += 1) {
+      if (receiver.writes.length > from) return
+      await page.waitForTimeout(50)
+    }
+  }
+  throw new Error('GO never wrote to the receiver')
+}
+
+/** A receiver added, a pack reporting, and a Mic cue made and aimed at it through the real menus. */
+async function receiverWithMicCue(action: 'Mute' | 'Unmute' = 'Mute'): Promise<void> {
+  const dialog = await openWireless()
+  await addReceiver(dialog)
+  await dialog.getByLabel('Password').fill(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.ewdx-fingerprint')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).toBeVisible()
+
+  await addCueFromMoreMenu(page, 'Mic')
+  await page.locator('.inspector-tab', { hasText: 'Mic' }).click()
+  await page.locator('#mic-cue-channel').selectOption({ label: '37' })
+  await page.locator('#mic-cue-action').selectOption({ label: action })
+}
+
+test('a mic cue mutes the pack at its receiver when GO fires it, and the panel shows it muted', async () => {
+  await receiverWithMicCue()
+  expect(receiver.writes).toEqual([])
+
+  await goUntilWritten(0)
+
+  // One request, one boolean, to the channel the cue names: nothing wider.
+  await expect.poll(() => receiver.writes).toEqual(['PUT /api/channel/0 {"mute":true}'])
+  await expect(page.locator('.rf-row', { hasText: '37' })).toContainText('muted')
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toContainText('muted 37')
+})
+
+test('a mic cue unmutes it again, and a mute run twice is not an error', async () => {
+  await receiverWithMicCue()
+  await goUntilWritten(0)
+  await expect(page.locator('.rf-row', { hasText: '37' })).toContainText('muted')
+
+  // The same cue fired again: the state it asks for, so nothing to complain about.
+  await page.locator('.cue-row', { hasText: 'Mic Cue' }).click()
+  await goUntilWritten(1)
+  expect(receiver.writes).toHaveLength(2)
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toContainText('muted 37')
+  await expect(page.locator('.log-panel')).not.toContainText('is not muted')
+
+  // GO moved the selection on, which resets the inspector: choose the cue and its tab again.
+  await page.locator('.cue-row', { hasText: 'Mic Cue' }).click()
+  await page.locator('.inspector-tab', { hasText: 'Mic' }).click()
+  await page.locator('#mic-cue-action').selectOption({ label: 'Unmute' })
+  await expect(page.locator('#mic-cue-action')).toHaveValue('unmute')
+  const before = receiver.writes.length
+  await goUntilWritten(before)
+  expect(receiver.writes.at(-1)).toBe('PUT /api/channel/0 {"mute":false}')
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).not.toContainText('muted')
+})
+
+test('a mic cue says so on its row and in the log when the receiver said yes and did not mute', async () => {
+  await receiverWithMicCue()
+  // The receiver answers 200 and does nothing: a mic that is still open.
+  receiver.ignoreWrites(true)
+
+  await goUntilWritten(0)
+
+  await expect.poll(() => receiver.writes).toEqual(['PUT /api/channel/0 {"mute":true}'])
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toContainText('receiver said yes and is not muted')
+  // The dock shows one panel at a time: back to the wireless one to see the mic is still open.
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).not.toContainText('muted')
+})
+
+test('a mic cue aimed at nothing does nothing and says so, rather than guessing which pack was meant', async () => {
+  const dialog = await openWireless()
+  await addReceiver(dialog)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+
+  await addCueFromMoreMenu(page, 'Mic')
+  await page.getByRole('button', { name: /GO/ }).click()
+
+  await page.locator('.btn-log').click()
+  await expect(page.locator('.log-panel')).toContainText('no mic chosen')
+  expect(receiver.writes).toEqual([])
 })
 
 test('a wrong password is refused by name, and nothing is shown as a pack', async () => {

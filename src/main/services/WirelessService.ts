@@ -52,6 +52,10 @@ export interface EwDxSession {
   start(): void
   stop(): void
   snapshot(waitMs: number): Promise<TelemetryChannel[]>
+  /** The serial of the receiver behind it, once this machine has reached it: how a command finds the right one. */
+  serial?(): string | undefined
+  /** Mutes or unmutes a channel's output at the receiver. Optional: a session that cannot be reached cannot. */
+  setMute?(channel: number, mute: boolean): Promise<void>
 }
 
 /**
@@ -301,13 +305,34 @@ export class WirelessService implements ShowService {
    * Poll every source now rather than waiting out its interval, and answer with what the
    * pass published — the operator asking again wants a reading, not a promise.
    */
-  command(action: string): unknown {
+  command(action: string, payload?: unknown): unknown {
+    if (action === 'mute') return this.mute(payload)
     if (action !== 'repoll') throw new Error(`Unknown action "${action}"`)
     const context = this.context
     if (!context) return { channels: 0 }
     return Promise.all(this.sources.map(source => this.poll(source, context))).then(counts => ({
       channels: counts.reduce((total, count) => total + count, 0)
     }))
+  }
+
+  /**
+   * Mutes or unmutes one channel, found by the serial its id carries. It is the one thing this
+   * service writes, so it is as narrow as it can be: a channel of a receiver this show has set up
+   * and this machine has reached, one boolean, and an answer only once the receiver is in the
+   * state asked for. Anything else is an error the cue says, never a mic left open in silence.
+   */
+  private async mute(payload: unknown): Promise<{ channelId: string; mute: boolean }> {
+    const { channelId, mute } = (payload ?? {}) as { channelId?: unknown; mute?: unknown }
+    if (typeof channelId !== 'string' || typeof mute !== 'boolean') throw new Error('a mute needs a channel and on or off')
+    const match = /^ew-dx:([^:]+):(\d+)$/.exec(channelId)
+    if (match === null) throw new Error('that channel is not one this can mute: only EW-DX receivers take it')
+    const [, serial, index] = match
+    const session = [...this.sessions.values()].find(candidate => candidate.serial?.() === serial)
+    if (session?.setMute === undefined) {
+      throw new Error(`no EW-DX receiver with serial ${serial} is set up here and reachable`)
+    }
+    await session.setMute(Number(index), mute)
+    return { channelId, mute }
   }
 
   private async poll(source: TelemetrySource, context: ServiceContext): Promise<number> {

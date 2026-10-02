@@ -1,5 +1,5 @@
 import type {
-  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue,
+  AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
   MscCue, Cue, CueType, AudioCrosspoint
 } from '../../../shared/cue'
 
@@ -196,6 +196,16 @@ export function createCue(type: CueType): Cue {
         type: 'msc',
         ...MSC_DEFAULTS
       } satisfies MscCue
+    case 'mic':
+      return {
+        ...base('Mic Cue'),
+        type: 'mic',
+        // Empty until it is pointed at one: a mic cue aimed at nothing must do nothing rather
+        // than guess which pack was meant.
+        channelId: '',
+        label: '',
+        action: 'mute'
+      } satisfies MicCue
   }
 }
 

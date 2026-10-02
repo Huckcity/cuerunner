@@ -315,6 +315,10 @@ export const REFERENCE = [
               <td><strong>Script</strong> and <strong>Timeout</strong> (60000 ms; 0 waits for ever). See the <a href="./script-api.html">script API</a>.</td>
             </tr>
             <tr>
+              <td><strong>Mic</strong><span class="pro">Pro</span></td>
+              <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
+            </tr>
+            <tr>
               <td><strong>Scene</strong><span class="pro">Pro</span></td>
               <td><strong>Scene</strong> — the one to recall. It answers for the whole show rather than for its placements: a channel the scene leaves off every fader is closed by the recall. Two facts go out, in this order — the <strong>membership</strong> (the channels the scene places on each fader, and the faders it takes them off) and then each mic's <strong>mute</strong> — and no message names a channel outside the show's own set. A mute carries the channel's own number, never a fader's. The membership goes over the route the desk takes it on — an SQ's own control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no such route reports the gap while the mutes go anyway. With no scene chosen the cue does nothing.</td>
             </tr>
@@ -637,6 +641,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
+            <tr><td>Mic cue<span class="pro">Pro</span></td><td>One request to the receiver: <code>{ "mute": true }</code> or <code>false</code>, for one channel, and nothing else — no name, no gain, no level. Then a read of that channel to confirm it took. Muting a channel that is already muted is not an error; it is the state asked for.</td></tr>
             <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. Nothing outside the show's own channels is named: a mute carries the channel's own number, never a fader's, and a channel the scene leaves off every fader is closed. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position. The membership goes over the desk's own route — an SQ's control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no membership route reports the gap while the mutes go anyway.</td></tr>
           </tbody>
         </table>

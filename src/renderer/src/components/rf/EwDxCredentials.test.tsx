@@ -177,6 +177,61 @@ describe('EwDxCredentials', () => {
     expect(text()).not.toContain('Now at')
   })
 
+  // A first connection teaches the machine the certificate and the serial and emits no event, so
+  // the row looks again by itself while it is waiting to know them — and not for ever.
+  describe('waiting to learn the receiver', () => {
+    const learned = { ...held, serial: '5364000906' }
+    const unknown = { ...held, fingerprint: null, serial: null }
+    const passMs = async (ms: number): Promise<void> => {
+      await act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+    }
+
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('looks again a second later, and shows the certificate and serial when the first connection has taught them', async () => {
+      vi.mocked(show().ewDxCredentials).mockResolvedValueOnce(unknown).mockResolvedValue(learned)
+      await render()
+      expect(container.querySelector('.ewdx-fingerprint')).toBeNull()
+
+      await passMs(1000)
+
+      expect(container.querySelector('.ewdx-fingerprint')).not.toBeNull()
+      expect(container.querySelector('.ewdx-serial')?.textContent).toBe('5364000906')
+    })
+
+    it('stops asking once it knows both', async () => {
+      vi.mocked(show().ewDxCredentials).mockResolvedValueOnce(unknown).mockResolvedValue(learned)
+      await render()
+      await passMs(1000)
+      const asked = vi.mocked(show().ewDxCredentials).mock.calls.length
+
+      await passMs(10_000)
+
+      expect(vi.mocked(show().ewDxCredentials).mock.calls.length).toBe(asked)
+    })
+
+    it('does not ask for ever of a receiver that never answers', async () => {
+      vi.mocked(show().ewDxCredentials).mockResolvedValue(unknown)
+      await render()
+
+      // A second at a time, as real time passes: each look is set up by the render before it.
+      for (let second = 0; second < 120; second += 1) await passMs(1000)
+
+      // The first look is the row's own, then sixty more, and then it leaves it alone.
+      expect(vi.mocked(show().ewDxCredentials).mock.calls.length).toBe(61)
+    })
+
+    it('does not poll at all for a receiver this machine has no password for', async () => {
+      vi.mocked(show().ewDxCredentials).mockResolvedValue(none)
+      await render()
+
+      await passMs(10_000)
+
+      expect(vi.mocked(show().ewDxCredentials)).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('says so when the password is stored without a keychain', async () => {
     vi.mocked(show().ewDxCredentials).mockResolvedValue({ ...held, encrypted: false, fingerprint: null })
     await render()

@@ -24,17 +24,23 @@ export interface FakeReceiverOptions {
   port?: number
   /** The serial it gives in its identity: another value is a different receiver at the same address. */
   serial?: string
+  /** Answers a write with 200 and changes nothing: a receiver that says yes and does not do it. */
+  ignoreWrites?: boolean
 }
 
 export interface FakeReceiver {
   /** `http://127.0.0.1:port`, or `https://` when it presents a certificate; the client picks the protocol from this. */
   origin: string
+  /** The writes it has been asked for, as `PUT path body`: what a cue is held to sending, and nothing wider. */
+  writes: string[]
   /** Whether any request has carried credentials: what a receiver that should not have them must never see. */
   sawCredentials(): boolean
   /** Changes a resource and pushes it to every open session that subscribed to it. */
   push(path: string, value: unknown): void
   /** Ends every open event stream the way a rebooting receiver would. */
   dropStreams(): void
+  /** From now on, answers a write with 200 and changes nothing (or stops doing so): a receiver that says yes and does not do it. */
+  ignoreWrites(on: boolean): void
   /** Stops answering anything, with the sockets left open: a receiver that has gone quiet. */
   stall(on: boolean): void
   sessions(): number
@@ -55,7 +61,9 @@ export async function startFakeReceiver(options: FakeReceiverOptions): Promise<F
   const state = new Map<string, unknown>(options.state ?? LINKED_EM4)
   const sessions = new Map<string, Session>()
   const requests: string[] = []
+  const writes: string[] = []
   let stalled = false
+  let ignoring = options.ignoreWrites ?? false
   let credentials = false
 
   const json = (res: ServerResponse, status: number, body?: unknown): void => {
@@ -140,6 +148,31 @@ export async function startFakeReceiver(options: FakeReceiverOptions): Promise<F
     }
 
     const channel = /^\/api\/channel\/(\d+)$/.exec(path)
+    if (req.method === 'PUT' && channel && state.has(path)) {
+      void readBody(req).then(text => {
+        writes.push(`PUT ${path} ${text}`)
+        let body: { mute?: unknown }
+        try {
+          body = JSON.parse(text)
+        } catch {
+          return json(res, 400)
+        }
+        // The real receiver's 400 carries no body at all, whatever is wrong with the request.
+        if (typeof body.mute !== 'boolean') return json(res, 400)
+        if (!ignoring) {
+          const next = { ...(state.get(path) as Record<string, unknown>), mute: body.mute }
+          state.set(path, next)
+          for (const session of sessions.values()) if (session.paths.has(path)) emit(session, path)
+        }
+        return json(res, 200)
+      })
+      return undefined
+    }
+    // The real receiver answers 400, not 404, to a write for a channel it does not have.
+    if (req.method === 'PUT' && channel) {
+      void readBody(req).then(() => json(res, 400))
+      return undefined
+    }
     if (req.method === 'GET' && channel && state.has(path)) return json(res, 200, state.get(path))
     json(res, 404)
     return undefined
@@ -152,6 +185,7 @@ export async function startFakeReceiver(options: FakeReceiverOptions): Promise<F
   return {
     origin: `${options.tls ? 'https' : 'http'}://127.0.0.1:${port}`,
     sawCredentials: () => credentials,
+    writes,
     push(path, value) {
       state.set(path, value)
       for (const session of sessions.values()) if (session.paths.has(path)) emit(session, path)
@@ -162,6 +196,9 @@ export async function startFakeReceiver(options: FakeReceiverOptions): Promise<F
     },
     stall(on) {
       stalled = on
+    },
+    ignoreWrites(on) {
+      ignoring = on
     },
     sessions: () => sessions.size,
     requests,

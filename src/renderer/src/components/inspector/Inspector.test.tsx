@@ -100,6 +100,20 @@ describe('Inspector', () => {
     expect(sceneTab.querySelector('.pro-mark')).not.toBeNull()
   })
 
+  it('locks a mic cue on an unlicensed machine, as it locks a scene cue, and marks the tab', () => {
+    useStore.setState({ license: { state: 'unlicensed' } })
+    const mic = cue('mic')
+    show([mic], mic)
+
+    openTab('Mic')
+    expect(container.querySelector('.pro-lock[data-feature="Mic cues"]')).not.toBeNull()
+    expect(container.querySelector('#mic-cue-channel')).toBeNull()
+    const micTab = [...container.querySelectorAll('.inspector-tab')]
+      .find(tab => tab.textContent?.startsWith('Mic'))!
+    expect(micTab.getAttribute('data-locked')).toBe('true')
+    expect(micTab.querySelector('.pro-mark')).not.toBeNull()
+  })
+
   it('asks for a timeline offset only inside a timeline group, and in seconds', () => {
     const loose = cue('wait')
     show([loose], loose)
