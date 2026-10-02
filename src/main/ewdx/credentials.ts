@@ -26,6 +26,19 @@ export interface Cipher {
   decrypt(text: string): string
 }
 
+/**
+ * The platform's keychain would not keep a password: it is locked, or there is none to ask.
+ * An ordinary state of a machine rather than a bug, so it has a class of its own for the
+ * channel to say as a sentence — and the password is not written down in the clear to get
+ * round it, which would turn a refusal into a leak.
+ */
+export class KeychainRefusedError extends Error {
+  constructor(reason: string) {
+    super(reason)
+    this.name = 'KeychainRefusedError'
+  }
+}
+
 export interface EwDxCredentials {
   get(sourceId: string): SourceCredentials | undefined
   setPassword(sourceId: string, password: string): Promise<void>
@@ -113,9 +126,18 @@ export function createEwDxCredentials(options: EwDxCredentialsOptions): EwDxCred
 
     async setPassword(sourceId, password) {
       const encrypted = options.cipher.available()
+      let stored = password
+      if (encrypted) {
+        try {
+          stored = options.cipher.encrypt(password)
+        } catch (error) {
+          // Nothing has been changed yet: the old password, if there was one, still stands.
+          throw new KeychainRefusedError(error instanceof Error ? error.message : String(error))
+        }
+      }
       const previous = sources.get(sourceId)
       sources.set(sourceId, {
-        password: encrypted ? options.cipher.encrypt(password) : password,
+        password: stored,
         encrypted,
         // A new password may belong to a replaced receiver, but the pin is about the
         // certificate and not the password; changing one does not forget the other.

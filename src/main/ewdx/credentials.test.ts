@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, it, expect } from 'vitest'
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createEwDxCredentials } from './credentials'
+import { KeychainRefusedError, createEwDxCredentials } from './credentials'
 import type { Cipher } from './credentials'
 
 const reverse = (text: string): string => [...text].reverse().join('')
@@ -51,6 +51,24 @@ describe('createEwDxCredentials', () => {
     await store.setPassword('rack-a', 'second')
     if (process.platform !== 'win32') expect((await stat(file)).mode & 0o077).toBe(0)
     expect(await readdir(dir)).toEqual(['ew-dx.json'])
+  })
+
+  it('refuses, and writes nothing, when the keychain will not keep the password', async () => {
+    const locked: Cipher = {
+      available: () => true,
+      encrypt: () => {
+        throw new Error('the keychain is locked')
+      },
+      decrypt: text => text
+    }
+    const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await store.setPassword('rack-a', 'old')
+    const stricter = createEwDxCredentials({ filePath: file, cipher: { ...locked, decrypt: protectedCipher.decrypt } })
+
+    await expect(stricter.setPassword('rack-a', 'new')).rejects.toBeInstanceOf(KeychainRefusedError)
+    // The old password stands, and the new one is nowhere on disk.
+    expect(stricter.get('rack-a')?.password).toBe('old')
+    expect(await readFile(file, 'utf8')).not.toContain('new')
   })
 
   it('pins a certificate for a receiver it has a password for, and keeps the pin through a new password', async () => {

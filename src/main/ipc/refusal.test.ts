@@ -55,6 +55,9 @@ const ends = vi.hoisted(() => {
  */
 const licenseGate = vi.hoisted(() => ({ pro: false }))
 
+/** The one password the mocked keychain refuses to keep, so a test can lock it on demand. */
+const keychain = vi.hoisted(() => ({ refuse: '' }))
+
 vi.mock('../../shared/license', async importOriginal => ({
   ...(await importOriginal()) as Record<string, unknown>,
   isPro: () => licenseGate.pro
@@ -99,7 +102,10 @@ vi.mock('electron', async () => {
     // what the cipher made of the password and not the password as typed.
     safeStorage: {
       isEncryptionAvailable: () => true,
-      encryptString: (text: string) => Buffer.from(`sealed:${text}`),
+      encryptString: (text: string) => {
+        if (text === keychain.refuse) throw new Error('the keychain is locked')
+        return Buffer.from(`sealed:${text}`)
+      },
       decryptString: (bytes: Buffer) => bytes.toString().replace(/^sealed:/, '')
     },
     BrowserWindow: { getAllWindows: () => [], fromWebContents: () => null }
@@ -509,6 +515,21 @@ describe('the EW-DX credential channels', () => {
       expect(onDisk).not.toContain(PASSWORD)
       expect(onDisk).toContain('rack-held')
     } finally {
+      licenseGate.pro = false
+    }
+  })
+
+  it('answers a locked keychain with a sentence, and keeps nothing', async () => {
+    licenseGate.pro = true
+    keychain.refuse = 'locked-out-password'
+    try {
+      expect(await setPassword('rack-locked-keychain', 'locked-out-password')).toEqual({
+        ok: false,
+        error: "This computer's keychain would not keep the password: the keychain is locked"
+      })
+      expect(await status('rack-locked-keychain')).toMatchObject({ hasPassword: false })
+    } finally {
+      keychain.refuse = ''
       licenseGate.pro = false
     }
   })

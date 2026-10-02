@@ -5,7 +5,7 @@ import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
-import { createEwDxCredentials } from '../ewdx/credentials'
+import { KeychainRefusedError, createEwDxCredentials } from '../ewdx/credentials'
 import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../shared/network'
 import { audioEngine } from '../audio/AudioEngine'
@@ -507,7 +507,16 @@ export function registerIpcHandlers(): void {
         throw new Refusal('Enter the password set for this receiver in WSM')
       }
       if (payload.password.length > 256) throw new Refusal('That password is too long to be one')
-      await ewDxCredentials.setPassword(sourceId, payload.password)
+      try {
+        await ewDxCredentials.setPassword(sourceId, payload.password)
+      } catch (error) {
+        // A locked or absent keychain is a state of this computer, and the window can say
+        // so; a disk that will not take the write is a fault and keeps rejecting.
+        if (error instanceof KeychainRefusedError) {
+          throw new Refusal(`This computer's keychain would not keep the password: ${error.message}`)
+        }
+        throw error
+      }
       await ewDxApplied()
       return { ok: true as const, ...ewDxStatus(sourceId) }
     }))
