@@ -353,6 +353,103 @@ describe('RfPanel', () => {
     expect(rowFor('Aldonza').querySelector('.rf-warnings')).toBeNull()
   })
 
+  describe('the check', () => {
+    const rack = (devices: DeviceState[]): PanelState => ({
+      plot: {
+        packs: [
+          pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' }),
+          pack({ id: 'p-2', label: 'Lead', channelId: 'ch-2' })
+        ]
+      },
+      devices
+    })
+    const verdict = (): string => container.querySelector('.rf-check-verdict')?.textContent ?? ''
+    const checkRows = (): string[] => [...container.querySelectorAll('.rf-check-row')].map(row => row.textContent ?? '')
+
+    it('is a button that swaps the list for the check and back, and says Live while it is open', async () => {
+      await show(rack([device({ id: 'rf:ch-1' }), device({ id: 'rf:ch-2' })]))
+      expect(headerButton('Check')).toBeDefined()
+
+      await act(async () => { headerButton('Check').click() })
+      expect(container.querySelector('.rf-check')).not.toBeNull()
+      expect(container.querySelector('.rf-row')).toBeNull()
+
+      await act(async () => { headerButton('Live').click() })
+      expect(container.querySelector('.rf-check')).toBeNull()
+      expect(container.querySelectorAll('.rf-row')).toHaveLength(2)
+    })
+
+    it('says every pack is ready, and nothing under it, when they are', async () => {
+      await show(rack([device({ id: 'rf:ch-1' }), device({ id: 'rf:ch-2' })]))
+      await act(async () => { headerButton('Check').click() })
+
+      expect(verdict()).toBe('All 2 packs ready.')
+      expect(checkRows()).toEqual([])
+      expect(container.querySelector('.rf-check')!.getAttribute('data-verdict')).toBe('ready')
+    })
+
+    it('lists what is not ready, worst first, with the performer and why', async () => {
+      await show({
+        ...rack([
+          device({ id: 'rf:ch-1', battery: { percent: 20 } }),
+          device({ id: 'rf:ch-2', warnings: [{ text: 'encryption error — no audio', critical: true }] })
+        ]),
+        performers: [{ id: 'who', name: 'Aldonza Test', role: '', notes: '', channelId: null }]
+      })
+      await act(async () => { headerButton('Check').click() })
+
+      expect(verdict()).toBe('0 of 2 packs ready — 1 not ready.')
+      expect(checkRows()).toEqual(['Leadencryption error — no audio', 'Aldonzabattery 20%'])
+      expect(container.querySelector('.rf-check')!.getAttribute('data-verdict')).toBe('not-ready')
+      expect(container.querySelectorAll('.rf-check-row')[0].getAttribute('data-readiness')).toBe('not-ready')
+    })
+
+    it('says worth a look, not not ready, when nothing is worse than that', async () => {
+      await show(rack([device({ id: 'rf:ch-1', battery: { percent: 20 } }), device({ id: 'rf:ch-2' })]))
+      await act(async () => { headerButton('Check').click() })
+
+      expect(verdict()).toBe('1 of 2 packs ready — worth a look at the rest.')
+      expect(container.querySelector('.rf-check')!.getAttribute('data-verdict')).toBe('attention')
+    })
+
+    it('changes as the readings do, which is how it goes green', async () => {
+      await show(rack([device({ id: 'rf:ch-1', battery: { percent: 5 } }), device({ id: 'rf:ch-2' })]))
+      await act(async () => { headerButton('Check').click() })
+      expect(verdict()).toContain('not ready')
+
+      await act(async () => {
+        useStore.setState({ showDevices: [device({ id: 'rf:ch-1', battery: { percent: 100 } }), device({ id: 'rf:ch-2' })] })
+      })
+      expect(verdict()).toBe('All 2 packs ready.')
+    })
+
+    it('asks about a channel that is reporting even when no plot names it', async () => {
+      await show({ devices: [device({ id: 'rf:spare', name: 'Spare', battery: { percent: 4 } })] })
+      await act(async () => { headerButton('Check').click() })
+
+      expect(verdict()).toBe('0 of 1 pack ready — 1 not ready.')
+      expect(checkRows()).toEqual(['Sparebattery 4%'])
+    })
+
+    it('says there is nothing to check for an empty rack, rather than that it is ready', async () => {
+      await show()
+      await act(async () => { headerButton('Check').click() })
+
+      expect(verdict()).toBe('No packs to check. Add a source or enter the plot.')
+    })
+
+    it('copies the check as text when it is the check that is open', async () => {
+      const writeText = vi.fn(() => Promise.resolve())
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+      await show(rack([device({ id: 'rf:ch-1', battery: { percent: 5 } }), device({ id: 'rf:ch-2' })]))
+      await act(async () => { headerButton('Check').click() })
+
+      await act(async () => { headerButton('Copy').click() })
+
+      expect(writeText).toHaveBeenCalledWith(['1 of 2 packs ready.', 'NOT READY Aldonza: battery 5%'].join('\n'))
+    })
+  })
+
   it('notes the pack beside its row', async () => {
     await show({ plot: { packs: [pack({ notes: 'Spare — swap with 4' })] } })
 

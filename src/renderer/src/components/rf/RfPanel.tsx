@@ -3,6 +3,8 @@ import { useStore } from '../../store'
 import type { DeviceState, RfPack, RfPlot, RfThresholds, ShowAlert } from '../../../../shared/show'
 import { demoPacks, demoPerformers, demoSource } from '../../utils/rfDemo'
 import { buildReport, reportText } from '../../utils/rfPlot'
+import { preshowCheck, preshowText } from '../../utils/rfPreshow'
+import type { PreshowCheck } from '../../utils/rfPreshow'
 import { formatClock } from '../../utils/cueDefaults'
 import './RfPanel.css'
 
@@ -133,7 +135,7 @@ export function RfPanel({ onClose }: Props) {
   // Two views of the same plot: what the packs are doing now, and what the night did to
   // them. The second one is what gets read the next morning, so it is a view rather
   // than something you have to export before closing the app.
-  const [mode, setMode] = useState<'live' | 'report'>('live')
+  const [mode, setMode] = useState<'live' | 'report' | 'check'>('live')
   const openShowSettings = useStore(s => s.openShowSettings)
   // The plot editor is a tab of Show Settings rather than a second dialog over this
   // panel: a pack assignment is show content, and everything that edits the show's setup
@@ -146,7 +148,10 @@ export function RfPanel({ onClose }: Props) {
   )
 
   const copyReport = (): void => {
-    navigator.clipboard.writeText(reportText(report, Date.now())).catch(() => {
+    const text = mode === 'check'
+      ? preshowText(preshowCheck(rows.map(({ pack, device }) => ({ pack, device })), rf.thresholds))
+      : reportText(report, Date.now())
+    navigator.clipboard.writeText(text).catch(() => {
       // A clipboard the app cannot reach is worth saying once, in the log where the
       // operator will look if the paste comes out empty.
       appendLog([{ level: 'error', message: 'Could not copy the wireless report to the clipboard' }])
@@ -184,6 +189,14 @@ export function RfPanel({ onClose }: Props) {
     // band changes, never because a neighbour's did.
     .sort((a, b) => BAND_ORDER[a.state] - BAND_ORDER[b.state] || a.index - b.index)
 
+  // Is every pack ready? Answered from the rows the live view already shows, and live: it
+  // changes as a pack is switched on or a battery is changed, which is how it goes green.
+  const check = preshowCheck(rows.map(({ pack, device }) => ({ pack, device })), rf.thresholds)
+  const performerNameOf = (packId: string): string | null => {
+    const found = rows.find(row => row.pack.id === packId)
+    return cast.performers.find(p => p.id === found?.pack.performerId)?.name ?? null
+  }
+
   // The demo rack is offered only while the plot is empty — it is how the feature is
   // seen before there is a show, not a control the show needs — so it brings its own
   // cast and packs, and replaces the source list rather than adding a rack beside a
@@ -200,15 +213,23 @@ export function RfPanel({ onClose }: Props) {
         <span className="rf-count">{rows.length === 0 ? 'empty' : `${rows.length} packs`}</span>
         <div className="rf-actions">
           <button
+            className="rf-btn rf-check-btn"
+            data-active={mode === 'check'}
+            onClick={() => setMode(current => current === 'check' ? 'live' : 'check')}
+            title={mode === 'check' ? 'Back to live readings' : 'Is every pack ready to be worn?'}
+          >
+            {mode === 'check' ? 'Live' : 'Check'}
+          </button>
+          <button
             className="rf-btn rf-mode"
             data-active={mode === 'report'}
-            onClick={() => setMode(current => current === 'live' ? 'report' : 'live')}
-            title={mode === 'live' ? 'What the night did to each pack' : 'Back to live readings'}
+            onClick={() => setMode(current => current === 'report' ? 'live' : 'report')}
+            title={mode === 'report' ? 'Back to live readings' : 'What the night did to each pack'}
           >
-            {mode === 'live' ? 'Report' : 'Live'}
+            {mode === 'report' ? 'Live' : 'Report'}
           </button>
-          {mode === 'report' && (
-            <button className="rf-btn rf-copy" onClick={copyReport} title="Copy the report">
+          {mode !== 'live' && (
+            <button className="rf-btn rf-copy" onClick={copyReport} title={mode === 'check' ? 'Copy the check' : 'Copy the report'}>
               Copy
             </button>
           )}
@@ -243,7 +264,9 @@ export function RfPanel({ onClose }: Props) {
       )}
 
       <div className="rf-list">
-        {mode === 'report' ? (
+        {mode === 'check' ? (
+          <CheckView check={check} performerOf={packId => performerNameOf(packId)} />
+        ) : mode === 'report' ? (
           report.length === 0 ? (
             <div className="rf-empty">
               <span>No packs in the plot yet. Enter the cast and their packs to keep a report.</span>
@@ -312,6 +335,44 @@ export function RfPanel({ onClose }: Props) {
           })
         )}
       </div>
+    </div>
+  )
+}
+
+interface CheckViewProps {
+  check: PreshowCheck
+  performerOf: (packId: string) => string | null
+}
+
+/** The words over the list: what the rack is, in the one sentence a person reads before the rest. */
+function headline(check: PreshowCheck): string {
+  const noun = check.total === 1 ? 'pack' : 'packs'
+  switch (check.verdict) {
+    case 'nothing': return 'No packs to check. Add a source or enter the plot.'
+    case 'ready': return `All ${check.total} ${noun} ready.`
+    case 'attention': return `${check.ready} of ${check.total} ${noun} ready — worth a look at the rest.`
+    case 'not-ready': {
+      const failing = check.items.filter(item => item.readiness === 'not-ready').length
+      return `${check.ready} of ${check.total} ${noun} ready — ${failing} not ready.`
+    }
+  }
+}
+
+/**
+ * Is every pack ready to be worn? It lists what is not, worst first, and it never stops a GO:
+ * it is the question asked at the half, and the person who can see the stage decides.
+ */
+function CheckView({ check, performerOf }: CheckViewProps) {
+  return (
+    <div className="rf-check" data-verdict={check.verdict}>
+      <div className="rf-check-verdict">{headline(check)}</div>
+      {check.items.map(item => (
+        <div key={item.packId} className="rf-check-row" data-readiness={item.readiness}>
+          <span className="rf-check-label">{item.label}</span>
+          <span className="rf-check-who">{performerOf(item.packId) ?? ''}</span>
+          <span className="rf-check-reasons">{item.reasons.join(' · ')}</span>
+        </div>
+      ))}
     </div>
   )
 }
