@@ -875,6 +875,109 @@ function ewDxHarness(session: FakeSession): Harness & { ewDx: Mock } {
   return { service, fetchJson: vi.fn(), readText: vi.fn(), context: { bus, setState }, setState, bus, ewDx }
 }
 
+// A source that has just been added has no address and no password yet. That is the operator
+// part-way through setting it up, not a receiver failing, so it is said in the status and
+// never raised as an alarm: an alarm is for something that was asked to be watched.
+describe('WirelessService with a source that is not finished', () => {
+  it('does not poll, and does not alarm, for a source with no address, and says what it waits for', async () => {
+    const { service, fetchJson, context, setState, bus } = harness()
+
+    service.start(context, settings([{ ...httpSource(), target: '' }]))
+    await flush()
+
+    expect(fetchJson).not.toHaveBeenCalled()
+    expect(messages(bus)).toEqual([])
+    expect(setState).toHaveBeenLastCalledWith('running', 'Shure rack: no address')
+    service.stop()
+  })
+
+  it('says a file source has no file, rather than no address', async () => {
+    const { service, context, setState, bus } = harness()
+
+    service.start(context, settings([{ ...fileSource(), target: '   ' }]))
+    await flush()
+
+    expect(messages(bus)).toEqual([])
+    expect(setState).toHaveBeenLastCalledWith('running', 'Bridge file: no file chosen')
+    service.stop()
+  })
+
+  it('does not alarm for an EW-DX source that has no password yet, and the status says so', async () => {
+    const credentials = createEwDxCredentials({
+      filePath: '/nonexistent/ew-dx.json',
+      cipher: { available: () => false, encrypt: t => t, decrypt: t => t },
+      readFile: () => {
+        throw new Error('missing')
+      }
+    })
+    const service = new WirelessService(telemetryPorts(credentials))
+    const bus = new ShowBus({ now: () => 1000 })
+    const setState = vi.fn()
+
+    service.start({ bus, setState }, settings([ewDxSource()]))
+    await flush()
+
+    expect(messages(bus)).toEqual([])
+    expect(setState).toHaveBeenLastCalledWith('running', 'Rack A: no password set — add it in Settings › Wireless')
+    service.stop()
+  })
+
+  it('keeps polling the sources that are finished beside one that is not', async () => {
+    const { service, fetchJson, context, setState, bus } = harness()
+    fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead' }))))
+
+    service.start(context, settings([httpSource(), { ...fileSource(), target: '' }]))
+    await flush()
+
+    expect(device(bus, 'ch-1')).toBeDefined()
+    expect(messages(bus)).toEqual([])
+    expect(setState).toHaveBeenLastCalledWith('running', 'polling Shure rack; Bridge file: no file chosen')
+    service.stop()
+  })
+
+  it('still alarms for a source that is finished and failing', async () => {
+    const { service, fetchJson, context, bus } = harness()
+    fetchJson.mockRejectedValue(new Error('connection refused'))
+
+    service.start(context, settings([httpSource()]))
+    await flush()
+
+    expect(messages(bus)).toEqual(['Shure rack: connection refused'])
+    service.stop()
+  })
+})
+
+describe('WirelessService with a source that judges its own signal', () => {
+  async function run(fields: Partial<TelemetryChannel>): Promise<ReturnType<typeof harness>> {
+    const h = harness()
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', ...fields }))))
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+    return h
+  }
+
+  it('does not call a link weak that its receiver says is fine, whatever the number is', async () => {
+    const { bus } = await run({ rfDbm: -83, rfWeak: false })
+
+    expect(messages(bus)).toEqual([])
+    expect(device(bus, 'ch-1')?.rf).toEqual({ level: -83, unit: 'dBm', weak: false })
+  })
+
+  it('calls a link weak that its receiver says is weak, however strong the number looks', async () => {
+    const { bus } = await run({ rfDbm: -40, rfWeak: true })
+
+    expect(messages(bus)).toEqual(['Lead RF low — -40 dBm'])
+    expect(device(bus, 'ch-1')?.rf?.weak).toBe(true)
+  })
+
+  it('uses the show\'s own line for a source that gives only a number', async () => {
+    const { bus } = await run({ rfDbm: -83 })
+
+    expect(messages(bus)).toEqual(['Lead RF low — -83 dBm'])
+    expect(device(bus, 'ch-1')?.rf).toEqual({ level: -83, unit: 'dBm' })
+  })
+})
+
 describe('WirelessService with an EW-DX source', () => {
   it('opens a session for the source, asks it for the channels, and publishes them', async () => {
     const session = fakeSession()

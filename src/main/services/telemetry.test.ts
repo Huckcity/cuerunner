@@ -31,6 +31,20 @@ describe('banding', () => {
   })
 })
 
+describe('parseTelemetry, rfWeak', () => {
+  it('keeps a receiver\'s own verdict on its signal when it is a boolean, and drops anything else', () => {
+    const parsed = parseTelemetry({
+      channels: [
+        { id: 'a', rfWeak: true },
+        { id: 'b', rfWeak: false },
+        { id: 'c', rfWeak: 'yes' },
+        { id: 'd', rfWeak: 1 }
+      ]
+    })
+    expect(parsed?.channels.map(entry => entry.rfWeak)).toEqual([true, false, undefined, undefined])
+  })
+})
+
 describe('parseTelemetry', () => {
   it('keeps the contract fields and drops the ones that are not readings', () => {
     const parsed = parseTelemetry({

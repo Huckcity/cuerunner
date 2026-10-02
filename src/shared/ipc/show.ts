@@ -17,6 +17,8 @@ export const SHOW_CHANNELS = {
   ewDxSetPassword: 'show:ewdx-set-password',
   ewDxTrustAgain: 'show:ewdx-trust-again',
   ewDxForget: 'show:ewdx-forget',
+  /** Looks for receivers on the network. Open to a locked app: it reads, and changes nothing. */
+  ewDxDiscover: 'show:ewdx-discover',
   /** The host's own events, batched; preload subscribes with `onEvents`. */
   events: 'show:events'
 } as const
@@ -49,6 +51,28 @@ export interface EwDxCredentialStatus {
   fingerprint: string | null
 }
 
+/** One receiver found on the network, named by what it said about itself without a password. */
+export interface EwDxFound {
+  /** Where to reach it, and on which port: what goes in the source's address. */
+  address: string
+  port: number
+  /** The instance name it announced, e.g. `EWDXEM4D-001B663BDD13`. */
+  name: string
+  /** Its product code, and the model that code is known as. */
+  product: string
+  model: string
+  serial: string
+}
+
+/**
+ * What a look at the network found. `error` is set only when the network could not be
+ * asked at all, so "nothing found" and "could not look" are not the same sentence.
+ */
+export interface EwDxDiscoverResult {
+  receivers: EwDxFound[]
+  error: string | null
+}
+
 export interface EwDxSetPasswordPayload {
   sourceId: string
   password: string
@@ -74,5 +98,6 @@ export interface ShowBridge {
   ewDxTrustAgain(sourceId: string): Promise<EwDxCredentialResult>
   /** Forgets everything held for a receiver, for a source that has been removed. */
   ewDxForget(sourceId: string): Promise<EwDxCredentialStatus>
+  ewDxDiscover(): Promise<EwDxDiscoverResult>
   onEvents(callback: (events: ShowEvent[]) => void): () => void
 }

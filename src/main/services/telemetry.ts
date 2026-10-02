@@ -47,6 +47,7 @@ interface RawChannel {
   batteryMinutes?: unknown
   charging?: unknown
   rfDbm?: unknown
+  rfWeak?: unknown
   audioLevel?: unknown
   muted?: unknown
   frequencyMhz?: unknown
@@ -97,6 +98,7 @@ export function parseTelemetry(value: unknown): TelemetryDocument | null {
     // A boolean is either reported or not: "yes", 1 and "false" are not mute states.
     if (typeof raw.charging === 'boolean') channel.charging = raw.charging
     if (typeof raw.muted === 'boolean') channel.muted = raw.muted
+    if (typeof raw.rfWeak === 'boolean') channel.rfWeak = raw.rfWeak
 
     parsed.push(channel)
   }

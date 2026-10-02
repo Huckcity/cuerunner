@@ -69,6 +69,7 @@ import {
   SHOW_CHANNELS,
   type EwDxCredentialResult,
   type EwDxCredentialStatus,
+  type EwDxDiscoverResult,
   type EwDxSetPasswordPayload,
   type ShowCommandPayload,
   type ShowCommandResult
@@ -278,6 +279,8 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(SHOW_CHANNELS.ewDxTrustAgain, sourceId),
     ewDxForget: (sourceId: string): Promise<EwDxCredentialStatus> =>
       invoke(SHOW_CHANNELS.ewDxForget, sourceId),
+    ewDxDiscover: (): Promise<EwDxDiscoverResult> =>
+      invoke(SHOW_CHANNELS.ewDxDiscover),
     onEvents: (callback: (events: ShowEvent[]) => void): (() => void) =>
       subscribe(SHOW_CHANNELS.events, callback)
   },

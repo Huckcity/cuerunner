@@ -61,7 +61,7 @@ export function packState(
   if (device.battery && device.battery.percent <= thresholds.batteryCritical) return 'critical'
   if (
     (device.battery && device.battery.percent <= thresholds.batteryWarning) ||
-    (device.rf && device.rf.level <= thresholds.rfWarningDbm)
+    (device.rf && (device.rf.weak ?? device.rf.level <= thresholds.rfWarningDbm))
   ) {
     return 'low'
   }
@@ -155,13 +155,27 @@ export function RfPanel({ onClose }: Props) {
   const rfAlerts = alerts.filter(isRfAlert)
 
   const plot: RfPlot = rf.plot
-  const rows = plot.packs
+  // The plot is who is wearing what, and it is optional: a channel that is reporting but is
+  // in no pack's plot is still a pack somebody can see, under the name its receiver gives
+  // it, until they decide it is worth a performer. Without this a receiver found on the
+  // network would show nothing at all until a plot had been typed in.
+  const claimed = new Set(plot.packs.flatMap(pack => (pack.channelId ? [RF_DEVICE_PREFIX + pack.channelId] : [])))
+  const strays: RfPack[] = devices
+    .filter(device => device.service === 'rf' && device.id.startsWith(RF_DEVICE_PREFIX) && !claimed.has(device.id))
+    .map(device => ({
+      id: device.id,
+      label: device.name,
+      channelId: device.id.slice(RF_DEVICE_PREFIX.length),
+      performerId: null,
+      notes: ''
+    }))
+  const rows = [...plot.packs, ...strays]
     .map((pack, index) => {
       const channelId = pack.channelId
       const device = channelId
         ? devices.find(d => d.id === RF_DEVICE_PREFIX + channelId)
         : undefined
-      return { pack, index, device, state: packState(pack, device, rf.thresholds) }
+      return { pack, index, device, state: packState(pack, device, rf.thresholds), inPlot: index < plot.packs.length }
     })
     // A stable sort keeps a band's packs in plot order: a row only moves when its own
     // band changes, never because a neighbour's did.
@@ -180,7 +194,7 @@ export function RfPanel({ onClose }: Props) {
     <div className="rf-panel">
       <div className="rf-header">
         <span className="rf-title">Wireless</span>
-        <span className="rf-count">{plot.packs.length === 0 ? 'empty' : `${plot.packs.length} packs`}</span>
+        <span className="rf-count">{rows.length === 0 ? 'empty' : `${rows.length} packs`}</span>
         <div className="rf-actions">
           <button
             className="rf-btn rf-mode"
@@ -255,7 +269,7 @@ export function RfPanel({ onClose }: Props) {
               </div>
             ))
           )
-        ) : plot.packs.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="rf-empty">
             <span>No packs in the plot. Enter them, or load the demo rack.</span>
             <button className="rf-edit-btn" onClick={editPlot}>
@@ -266,12 +280,14 @@ export function RfPanel({ onClose }: Props) {
             </button>
           </div>
         ) : (
-          rows.map(({ pack, device, state }) => {
+          rows.map(({ pack, device, state, inPlot }) => {
             const performer = cast.performers.find(p => p.id === pack.performerId)
             return (
-              <div key={pack.id} className="rf-row" data-state={state}>
+              <div key={pack.id} className="rf-row" data-state={state} data-plot={inPlot}>
                 <span className="rf-name">{pack.label}</span>
-                <span className="rf-performer">{performer?.name ?? 'unassigned'}</span>
+                {/* A channel in no plot has no one to be unassigned from: saying so on a
+                    show with no plot at all would be noise on every row. */}
+                <span className="rf-performer">{inPlot ? (performer?.name ?? 'unassigned') : ''}</span>
                 <span className="rf-role">{performer?.role ?? ''}</span>
                 <span className="rf-battery">{batteryCell(device)}</span>
                 <span className="rf-rf">{rfCell(device)}</span>

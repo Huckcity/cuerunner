@@ -13,6 +13,9 @@ describe('channelsFrom', () => {
         id: ewDxChannelId(FIXTURE_SERIAL, 0),
         name: '37',
         rfDbm: -83,
+        // The receiver raised no LowSignal, so its link is fine at a level the show's own
+        // line would have called weak.
+        rfWeak: false,
         audioLevel: audioPercent(-91.9),
         muted: false,
         batteryPercent: 76,
@@ -48,6 +51,20 @@ describe('channelsFrom', () => {
     third.set('/api/transmitters/2/battery', { type: 'PrimaryCell', gauge: 55 })
     const channel = channelsFrom(FIXTURE_SERIAL, third).find(c => c.name === 'LEAD')
     expect(channel).toMatchObject({ id: ewDxChannelId(FIXTURE_SERIAL, 2), batteryPercent: 55, rfDbm: -70 })
+  })
+
+  it('takes the receiver\'s own LowSignal warning as its verdict that the signal is weak', () => {
+    const weak = resources()
+    weak.set('/api/channel/0/warnings', ['LowSignal'])
+    expect(channelsFrom(FIXTURE_SERIAL, weak)[0].rfWeak).toBe(true)
+  })
+
+  it('gives no verdict when the receiver has not said what its warnings are', () => {
+    const unknown = resources()
+    unknown.delete('/api/channel/0/warnings')
+    // Its mate says it is linked, so it is reported; with no warnings there is no verdict on
+    // the signal, and none is guessed.
+    expect(channelsFrom(FIXTURE_SERIAL, unknown)[0]).not.toHaveProperty('rfWeak')
   })
 
   it('reports muted when either end is muted', () => {

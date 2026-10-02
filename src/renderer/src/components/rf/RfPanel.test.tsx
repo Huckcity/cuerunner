@@ -279,10 +279,77 @@ describe('RfPanel', () => {
     expect(container.querySelector('.rf-alerts')).toBeNull()
   })
 
+  it('shows a channel that is reporting with no plot at all, under the name its receiver gives it', async () => {
+    // A receiver found on the network and nothing typed in: the panel is not empty.
+    await show({
+      // -83 dBm is below the show's line, and the receiver says the link is fine: its word stands.
+      devices: [device({ id: 'rf:ew-dx:5364000906:0', name: '37', battery: { percent: 76 }, rf: { level: -83, unit: 'dBm', weak: false } })]
+    })
+
+    expect(container.querySelector('.rf-empty')).toBeNull()
+    expect(texts('.rf-count')).toEqual(['1 packs'])
+    expect(texts('.rf-name')).toEqual(['37'])
+    // Nobody is "unassigned" on a show that has no plot: that would be noise on every row.
+    expect(texts('.rf-performer')).toEqual([''])
+    expect(rowsByState()).toEqual(['ok'])
+    expect(rowFor('37').getAttribute('data-plot')).toBe('false')
+  })
+
+  it('shows a reporting channel beside a plot that does not mention it, and sorts it by its band', async () => {
+    await show({
+      plot: { packs: [pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' })] },
+      devices: [
+        device({ id: 'rf:ch-1', name: 'Aldonza', battery: { percent: 80 } }),
+        device({ id: 'rf:spare', name: 'Spare', battery: { percent: 4 } })
+      ]
+    })
+
+    // The spare pack is in trouble, so it leads, plot or no plot.
+    expect(texts('.rf-name')).toEqual(['Spare', 'Aldonza'])
+    expect(rowFor('Spare').getAttribute('data-state')).toBe('critical')
+    expect(rowFor('Spare').getAttribute('data-plot')).toBe('false')
+    expect(rowFor('Aldonza').getAttribute('data-plot')).toBe('true')
+    expect(texts('.rf-count')).toEqual(['2 packs'])
+  })
+
+  it('does not show a channel twice when the plot already claims it', async () => {
+    await show({
+      plot: { packs: [pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' })] },
+      devices: [device({ id: 'rf:ch-1', name: 'Aldonza', battery: { percent: 80 } })]
+    })
+
+    expect(texts('.rf-name')).toEqual(['Aldonza'])
+  })
+
+  it('leaves another service\'s devices out of the wireless panel', async () => {
+    await show({ devices: [device({ id: 'presence:amp', service: 'presence', name: 'Amp 1' })] })
+
+    expect(container.querySelector('.rf-empty')).not.toBeNull()
+  })
+
   it('notes the pack beside its row', async () => {
     await show({ plot: { packs: [pack({ notes: 'Spare — swap with 4' })] } })
 
     expect(texts('.rf-notes')).toEqual(['Spare — swap with 4'])
+  })
+})
+
+describe('packState, a source\'s own verdict', () => {
+  const linked = pack()
+
+  it('trusts a receiver that says its link is fine over the show\'s dBm line', () => {
+    const fine = device({ rf: { level: -90, unit: 'dBm', weak: false } })
+    expect(packState(linked, fine, THRESHOLDS)).toBe('ok')
+  })
+
+  it('trusts a receiver that says its link is weak over a strong-looking number', () => {
+    const weak = device({ rf: { level: -40, unit: 'dBm', weak: true } })
+    expect(packState(linked, weak, THRESHOLDS)).toBe('low')
+  })
+
+  it('falls back to the show\'s line when the source gave no verdict', () => {
+    expect(packState(linked, device({ rf: { level: -90, unit: 'dBm' } }), THRESHOLDS)).toBe('low')
+    expect(packState(linked, device({ rf: { level: -60, unit: 'dBm' } }), THRESHOLDS)).toBe('ok')
   })
 })
 

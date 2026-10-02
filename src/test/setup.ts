@@ -197,6 +197,8 @@ Object.defineProperty(window, 'cuerunner', {
         ok: true as const, hasPassword: true, encrypted: true, fingerprint: null
       })),
       ewDxForget: vi.fn(() => Promise.resolve({ hasPassword: false, encrypted: true, fingerprint: null })),
+      // A network with no receivers on it: what a laptop at home finds.
+      ewDxDiscover: vi.fn(() => Promise.resolve({ receivers: [], error: null })),
       onEvents: vi.fn(() => () => {})
     },
     license: {

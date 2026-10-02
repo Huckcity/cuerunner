@@ -534,6 +534,17 @@ describe('the EW-DX credential channels', () => {
     }
   })
 
+  it('looks for receivers with no licence, because it reads and changes nothing', async () => {
+    // A harness names the announcements itself, as the packaged app never lets it; nothing is
+    // listening on the port, so identifying it finds no receiver and the answer is empty.
+    process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] = JSON.stringify(['127.0.0.1:9'])
+    try {
+      expect(await Promise.resolve(handler(SHOW_CHANNELS.ewDxDiscover)('event'))).toEqual({ receivers: [], error: null })
+    } finally {
+      delete process.env['CUERUNNER_TEST_EWDX_ANNOUNCED']
+    }
+  })
+
   it('refuses to trust a certificate again without a Pro licence', async () => {
     expect(await handler(SHOW_CHANNELS.ewDxTrustAgain)('event', 'rack-held')).toEqual({
       ok: false,

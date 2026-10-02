@@ -4,6 +4,8 @@ import './EwDxCredentials.css'
 
 interface Props {
   sourceId: string
+  /** Puts the cursor in the password box: a receiver was just added and this is what it needs next. */
+  autoFocus?: boolean
   /**
    * Changes when the Wireless service does. A receiver's certificate is first seen by the
    * first connection, which happens after the password is saved, so the row has to look
@@ -27,7 +29,7 @@ export function shortFingerprint(fingerprint: string): string {
  * to the window, which is why the box is only ever empty or being typed into: it shows
  * whether one is held, not what it is. Everything it says is from main.
  */
-export function EwDxCredentials({ sourceId, serviceKey }: Props): React.JSX.Element {
+export function EwDxCredentials({ sourceId, autoFocus, serviceKey }: Props): React.JSX.Element {
   const [held, setHeld] = useState<EwDxCredentialStatus | null>(null)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -86,6 +88,7 @@ export function EwDxCredentials({ sourceId, serviceKey }: Props): React.JSX.Elem
         <input
           id={inputId}
           type="password"
+          autoFocus={autoFocus}
           autoComplete="off"
           spellCheck={false}
           value={password}

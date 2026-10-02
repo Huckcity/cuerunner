@@ -69,6 +69,7 @@ const FROZEN_CHANNELS = [
   'show:configure',
   'show:events',
   'show:ewdx-credentials',
+  'show:ewdx-discover',
   'show:ewdx-forget',
   'show:ewdx-set-password',
   'show:ewdx-trust-again',

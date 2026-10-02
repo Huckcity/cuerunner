@@ -20,19 +20,24 @@ let page: Page
 let userDataDir: string
 let receiver: FakeReceiver
 
+/** `https://127.0.0.1:port` as an operator types it: the address, with no scheme. */
+const address = (): string => receiver.origin.replace(/^https:\/\//, '')
+
 test.beforeEach(async () => {
   const certificate = makeTestCertificate('cuerunner-e2e-receiver')
   receiver = await startFakeReceiver({ password: PASSWORD, tls: { key: certificate.key, cert: certificate.cert } })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  // There is no multicast to rely on in a harness, so the receiver is announced by name instead
+  // of by mDNS. It is still identified over HTTPS, which is the part worth testing here.
+  ;({ app, page, userDataDir } = await launchApp({
+    license: mintLicense(),
+    env: { CUERUNNER_TEST_EWDX_ANNOUNCED: JSON.stringify([address()]) }
+  }))
 })
 
 test.afterEach(async () => {
   await closeApp(app)
   await receiver.close()
 })
-
-/** `https://127.0.0.1:port` as an operator types it: the address, with no scheme. */
-const address = (): string => receiver.origin.replace(/^https:\/\//, '')
 
 async function openWireless(): Promise<ReturnType<Page['getByRole']>> {
   await page.locator('.toolbar-brand').click()
@@ -83,6 +88,9 @@ test('an operator adds a receiver, enters its password, and the linked pack appe
   await expect(pack).toContainText('606.200 MHz')
   // A channel with no transmitter on it is not a pack: it does not appear as one.
   await expect(page.locator('.monitor-device', { hasText: '38' })).toHaveCount(0)
+  // -83 dBm is under the show's own "weak signal" line, and the receiver says the link is fine
+  // (quality 100, no LowSignal): its word stands, so a healthy pack raises no alarm.
+  await expect(page.locator('.monitor-alert')).toHaveCount(0)
 })
 
 test('a battery falling through the line raises the same alarm every other source does', async () => {
@@ -138,4 +146,48 @@ test('a receiver that goes away is reported, and comes back by itself', async ()
   await expect(dialog.locator('.settings-service[data-service="rf"]')).toHaveAttribute('data-state', 'running', {
     timeout: 30_000
   })
+})
+
+test('a receiver on the network is found, added in one click, and shown without a plot', async () => {
+  const dialog = await openWireless()
+
+  // Nobody typed an address: the receiver is offered by the model it identified itself as.
+  const found = dialog.locator('.ewdx-found')
+  await expect(found).toHaveCount(1)
+  await expect(found).toContainText('EW-DX EM 4 Dante')
+  await expect(found).toContainText('127.0.0.1')
+
+  await found.getByRole('button', { name: 'Add' }).click()
+
+  // It is a source now and no longer offered; the cursor is where the one missing thing goes.
+  await expect(dialog.locator('.ewdx-found')).toHaveCount(0)
+  await expect(dialog.getByLabel('Source kind')).toHaveValue('ew-dx')
+  await expect(dialog.getByLabel('Password')).toBeFocused()
+
+  await page.keyboard.type(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.settings-service[data-service="rf"]')).toHaveAttribute('data-state', 'running')
+  await dialog.getByRole('button', { name: 'Close' }).click()
+
+  // No plot was entered, and the panel is not empty: a reporting channel shows by itself.
+  await page.locator('.btn-rf').click()
+  const row = page.locator('.rf-row', { hasText: '37' })
+  await expect(row).toBeVisible()
+  await expect(row).toContainText('76%')
+  await expect(page.locator('.rf-empty')).toHaveCount(0)
+})
+
+test('a machine with nothing configured has nothing to say about wireless', async () => {
+  // No source, no plot: the wireless service is off, nothing is on the panel but how to start,
+  // and no alarm has been raised about a receiver nobody asked it to watch.
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-empty')).toBeVisible()
+  await expect(page.locator('.rf-row')).toHaveCount(0)
+  await expect(page.locator('.rf-alert')).toHaveCount(0)
+
+  await page.locator('.btn-monitor').click()
+  await expect(page.locator('.monitor-alert')).toHaveCount(0)
+  // The receiver the harness announced was not looked for, so it was not added or logged into.
+  expect(receiver.requests).toEqual([])
+  expect(receiver.sawCredentials()).toBe(false)
 })

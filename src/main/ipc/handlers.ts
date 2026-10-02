@@ -6,6 +6,7 @@ import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
 import { KeychainRefusedError, createEwDxCredentials } from '../ewdx/credentials'
+import { discoverEwDx } from '../ewdx/discovery'
 import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../shared/network'
 import { audioEngine } from '../audio/AudioEngine'
@@ -55,6 +56,7 @@ import {
   SHOW_CHANNELS,
   type EwDxCredentialResult,
   type EwDxCredentialStatus,
+  type EwDxDiscoverResult,
   type EwDxSetPasswordPayload,
   type ShowCommandPayload,
   type ShowCommandResult
@@ -529,6 +531,23 @@ export function registerIpcHandlers(): void {
       await ewDxApplied()
       return { ok: true as const, ...ewDxStatus(id) }
     }))
+
+  // A look at the network, made when the settings window asks and not before: a show that
+  // never opens that page sends nothing. It only reads — nothing is added, and nothing
+  // logs in — so it is open to a locked app like the rest of what only reads.
+  ipcMain.handle(SHOW_CHANNELS.ewDxDiscover, (): Promise<EwDxDiscoverResult> => {
+    // A harness has no multicast to rely on, so it may name the announcements itself. The
+    // receivers it names are still identified over HTTPS; only the mDNS step is skipped.
+    const raw = !app.isPackaged ? process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] : undefined
+    if (raw !== undefined) {
+      const announced = (JSON.parse(raw) as string[]).map(entry => {
+        const [address, port] = entry.split(':')
+        return { address, port: Number(port), name: `announced-${address}` }
+      })
+      return discoverEwDx({ announced })
+    }
+    return discoverEwDx()
+  })
 
   ipcMain.handle(SHOW_CHANNELS.ewDxForget, async (_, sourceId: string): Promise<EwDxCredentialStatus> => {
     const id = ewDxSourceId(sourceId)

@@ -50,12 +50,20 @@ export interface EwDxSession {
   snapshot(waitMs: number): Promise<TelemetryChannel[]>
 }
 
+/**
+ * A source that is not finished: no address yet, no password yet. It is a state of the
+ * settings and not a fault of the rack, so it is said where the operator is looking — the
+ * status beside the source — and is never raised as an alarm in the show. An alarm is for a
+ * receiver that was asked to be watched and is not answering.
+ */
+export class NotConfiguredError extends Error {}
+
 /** A session that can never connect, which says why on every poll instead of failing silently. */
-function unavailable(reason: string): EwDxSession {
+function unavailable(reason: string, unfinished = false): EwDxSession {
   return {
     start: () => undefined,
     stop: () => undefined,
-    snapshot: () => Promise.reject(new Error(reason))
+    snapshot: () => Promise.reject(unfinished ? new NotConfiguredError(reason) : new Error(reason))
   }
 }
 
@@ -88,9 +96,9 @@ export function telemetryPorts(credentials?: EwDxCredentials): TelemetryPorts {
     readText: path => readFile(path, 'utf-8'),
     ewDx: source => {
       const address = ewDxOrigin(source.target)
-      if ('error' in address) return unavailable(address.error)
+      if ('error' in address) return unavailable(address.error, true)
       const stored = credentials?.get(source.id)
-      if (!stored) return unavailable('no password set — add it in Settings › Wireless')
+      if (!stored) return unavailable('no password set — add it in Settings › Wireless', true)
       return new EwDxClient({
         origin: address.origin,
         password: stored.password,
@@ -163,6 +171,8 @@ export class WirelessService implements ShowService {
   private history = new Map<string, ChannelHistory>()
   /** Source ids whose last poll failed, mapped to the reason they gave. */
   private failed = new Map<string, string>()
+  /** Source ids that are not finished, mapped to what they are waiting for: not failures. */
+  private waiting = new Map<string, string>()
 
   constructor(private readonly ports: TelemetryPorts = telemetryPorts()) {}
 
@@ -237,6 +247,7 @@ export class WirelessService implements ShowService {
     // every service, and the floor and the dropout count are the show's record rather
     // than the stopped service's.
     this.failed.clear()
+    this.waiting.clear()
   }
 
   /**
@@ -262,11 +273,21 @@ export class WirelessService implements ShowService {
       if (this.context !== context) return 0
 
       this.recover(source.id, context)
+      if (this.waiting.delete(source.id)) this.refresh(context)
       for (const channel of document.channels) this.report(channel, context)
       return document.channels.length
     } catch (error) {
       if (this.context !== context) return 0
       const reason = error instanceof Error ? error.message : String(error)
+      if (error instanceof NotConfiguredError) {
+        // Said once, in the status, and no alarm: see NotConfiguredError.
+        const changed = this.waiting.get(source.id) !== reason
+        this.waiting.set(source.id, reason)
+        this.failed.delete(source.id)
+        if (changed) this.refresh(context)
+        return 0
+      }
+      this.waiting.delete(source.id)
       const wasFailing = this.failed.has(source.id)
       this.failed.set(source.id, reason)
       // One alarm per outage: a receiver that is down is not news every poll, and the
@@ -284,6 +305,10 @@ export class WirelessService implements ShowService {
       const session = this.sessions.get(source.id)
       if (!session) throw new Error('EW-DX is not available')
       return { channels: await session.snapshot(source.timeoutMs) }
+    }
+    // A source just added has no address, and asking for nothing is not a failure of anyone.
+    if (source.target.trim() === '') {
+      throw new NotConfiguredError(source.kind === 'file' ? 'no file chosen' : 'no address')
     }
     if (source.kind === 'file') {
       const text = await this.ports.readText(source.target)
@@ -359,7 +384,13 @@ export class WirelessService implements ShowService {
     // The night goes on every reading, including the one a pack sends after a silence.
     const night = this.nightOf(channel.id)
     if (night) device.history = night
-    if (channel.rfDbm !== undefined) device.rf = { level: channel.rfDbm, unit: 'dBm' }
+    if (channel.rfDbm !== undefined) {
+      device.rf = {
+        level: channel.rfDbm,
+        unit: 'dBm',
+        ...(channel.rfWeak === undefined ? {} : { weak: channel.rfWeak })
+      }
+    }
     if (channel.audioLevel !== undefined) {
       device.audio = {
         level: channel.audioLevel,
@@ -386,15 +417,14 @@ export class WirelessService implements ShowService {
       }
       state.battery = band
     }
+    // A receiver that judges its own link has the last word on whether it is weak; the show's
+    // dBm line is for sources that only report a number. The verdict rides with the number it
+    // is about, so the panel and the alarm always have the same thing to read.
     if (channel.rfDbm !== undefined) {
-      const band = rfBand(channel.rfDbm, this.thresholds)
+      const weak = channel.rfWeak ?? rfBand(channel.rfDbm, this.thresholds) === 'warning'
+      const band: Band = weak ? 'warning' : 'ok'
       if (isWorse(band, state.rf)) {
-        context.bus.alert(
-          'warning',
-          this.id,
-          `${who} RF low — ${Math.round(channel.rfDbm)} dBm`,
-          device.id
-        )
+        context.bus.alert('warning', this.id, `${who} RF low — ${Math.round(channel.rfDbm)} dBm`, device.id)
       }
       state.rf = band
     }
@@ -477,7 +507,11 @@ export class WirelessService implements ShowService {
   }
 
   private detail(): string {
-    return `polling ${this.sources.map(source => source.label).join(', ')}`
+    const polling = this.sources.filter(source => !this.waiting.has(source.id)).map(source => source.label)
+    const waiting = this.sources
+      .filter(source => this.waiting.has(source.id))
+      .map(source => `${source.label}: ${this.waiting.get(source.id)}`)
+    return [...(polling.length === 0 ? [] : [`polling ${polling.join(', ')}`]), ...waiting].join('; ')
   }
 
   /** A source that answered again has nothing more to report about its outage. */

@@ -81,7 +81,16 @@ export interface DeviceState {
   lastSeen: number
   battery?: BatteryState
   /** Signal strength, in the unit the device reports it in. */
-  rf?: { level: number; unit: 'dBm' | 'percent' }
+  rf?: {
+    level: number
+    unit: 'dBm' | 'percent'
+    /**
+     * The source's own verdict on whether the signal is weak, when it gives one. It replaces
+     * the show's dBm line for this channel: a receiver that judges its own link knows its
+     * scale, and a line chosen for other gear would call a healthy link weak.
+     */
+    weak?: boolean
+  }
   /** Audio level for the channel, 0-100, in the unit the device reports it in. */
   audio?: { level: number; muted?: boolean }
   /** Carrier frequency in MHz. */
@@ -536,6 +545,8 @@ export interface TelemetryChannel {
   batteryMinutes?: number
   charging?: boolean
   rfDbm?: number
+  /** The receiver's own verdict that the signal is weak, which replaces the dBm line for this channel. */
+  rfWeak?: boolean
   audioLevel?: number
   muted?: boolean
   frequencyMhz?: number

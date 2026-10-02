@@ -9,12 +9,15 @@ import { PlaybackWarnings } from './PlaybackWarnings'
 import { NumberField, TextField } from '../common/Field'
 import { ServiceStatus } from '../common/ServiceStatus'
 import { EwDxCredentials } from '../rf/EwDxCredentials'
+import { EwDxFinder } from '../rf/EwDxFinder'
+import { labelFor, targetFor } from '../../utils/ewdx'
 import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { currentPlatform } from '../../utils/shortcuts'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../../../shared/show'
 import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../../../shared/workspace'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
+import type { EwDxFound } from '../../../../shared/ipc/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../../../shared/show'
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
@@ -170,6 +173,28 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
         timeoutMs: DEFAULT_TIMEOUT_MS
       }]
     })
+  }
+
+  /** The receiver whose password box has the cursor: the one just added from what was found. */
+  const [focusSource, setFocusSource] = useState<string | null>(null)
+
+  /**
+   * A found receiver becomes a source with what it told us about itself. The password is the
+   * one thing it could not tell us, so the cursor goes there.
+   */
+  const addFound = (found: EwDxFound): void => {
+    const id = crypto.randomUUID()
+    updateRfSettings({
+      sources: [...showSettings.rf.sources, {
+        id,
+        label: labelFor(found, showSettings.rf.sources.map(source => source.label)),
+        kind: 'ew-dx',
+        target: targetFor(found),
+        pollMs: DEFAULT_POLL_MS,
+        timeoutMs: DEFAULT_TIMEOUT_MS
+      }]
+    })
+    setFocusSource(id)
   }
 
   const removeSource = (id: string): void => {
@@ -747,6 +772,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                       {source.kind === 'ew-dx' && (
                         <EwDxCredentials
                           sourceId={source.id}
+                          autoFocus={focusSource === source.id}
                           serviceKey={`${rfService?.state ?? ''}:${rfService?.detail ?? ''}`}
                         />
                       )}
@@ -758,6 +784,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <label />
                 <button className="add-row" onClick={addSource}>+ Add source</button>
               </div>
+              <EwDxFinder sources={showSettings.rf.sources} onAdd={addFound} />
               <ServiceStatus service={rfService} />
 
               <div className="field-section-title">Warn me when</div>

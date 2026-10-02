@@ -398,6 +398,39 @@ describe('SettingsDialog, wireless sources', () => {
     expect(container.querySelector('.ewdx-credentials')).not.toBeNull()
   })
 
+  it('looks for receivers when the page is opened, and not before', async () => {
+    vi.mocked(window.cuerunner.show.ewDxDiscover).mockClear()
+    render()
+    await settle()
+    expect(window.cuerunner.show.ewDxDiscover).not.toHaveBeenCalled()
+
+    openSection('Wireless')
+    await settle()
+    expect(window.cuerunner.show.ewDxDiscover).toHaveBeenCalledTimes(1)
+  })
+
+  it('adds a receiver that was found as a source, and puts the cursor in its password box', async () => {
+    vi.mocked(window.cuerunner.show.ewDxDiscover).mockResolvedValue({
+      receivers: [{
+        address: '192.168.0.194', port: 443, name: 'EWDXEM4D-001B663BDD13',
+        product: 'EWDX4CHDS', model: 'EW-DX EM 4 Dante', serial: '5364000906'
+      }],
+      error: null
+    })
+    render()
+    openSection('Wireless')
+    await settle()
+
+    click('.ewdx-found button')
+    await settle()
+
+    const [added] = useStore.getState().showSettings.rf.sources
+    expect(added).toMatchObject({ kind: 'ew-dx', label: 'EW-DX EM 4 Dante', target: '192.168.0.194' })
+    // The receiver is no longer offered, and the one thing it could not say is what is asked for.
+    expect(container.querySelector('.ewdx-found')).toBeNull()
+    expect(document.activeElement).toBe(container.querySelector(`#ewdx-password-${added.id}`))
+  })
+
   it('forgets what this machine holds for an EW-DX receiver when its source is removed', async () => {
     withSources(source('ew-dx'))
     render()
