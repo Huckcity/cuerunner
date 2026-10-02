@@ -201,7 +201,7 @@ function sameBattery(a: DeviceState, b: DeviceState): boolean {
 
 function sameRf(a: DeviceState, b: DeviceState): boolean {
   if (!a.rf || !b.rf) return !a.rf === !b.rf
-  return a.rf.level === b.rf.level && a.rf.unit === b.rf.unit
+  return a.rf.level === b.rf.level && a.rf.unit === b.rf.unit && a.rf.weak === b.rf.weak
 }
 
 function sameAudio(a: DeviceState, b: DeviceState): boolean {

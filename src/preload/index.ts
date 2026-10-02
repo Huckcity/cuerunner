@@ -67,6 +67,10 @@ import {
 } from '../shared/ipc/script'
 import {
   SHOW_CHANNELS,
+  type EwDxCredentialResult,
+  type EwDxCredentialStatus,
+  type EwDxDiscoverResult,
+  type EwDxSetPasswordPayload,
   type ShowCommandPayload,
   type ShowCommandResult
 } from '../shared/ipc/show'
@@ -267,6 +271,16 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(SHOW_CHANNELS.command, { service, action, payload } satisfies ShowCommandPayload),
     restart: (service: string): Promise<ShowCommandResult> =>
       invoke(SHOW_CHANNELS.restart, service),
+    ewDxCredentials: (sourceId: string): Promise<EwDxCredentialStatus> =>
+      invoke(SHOW_CHANNELS.ewDxCredentials, sourceId),
+    ewDxSetPassword: (sourceId: string, password: string): Promise<EwDxCredentialResult> =>
+      invoke(SHOW_CHANNELS.ewDxSetPassword, { sourceId, password } satisfies EwDxSetPasswordPayload),
+    ewDxTrustAgain: (sourceId: string): Promise<EwDxCredentialResult> =>
+      invoke(SHOW_CHANNELS.ewDxTrustAgain, sourceId),
+    ewDxForget: (sourceId: string): Promise<EwDxCredentialStatus> =>
+      invoke(SHOW_CHANNELS.ewDxForget, sourceId),
+    ewDxDiscover: (): Promise<EwDxDiscoverResult> =>
+      invoke(SHOW_CHANNELS.ewDxDiscover),
     onEvents: (callback: (events: ShowEvent[]) => void): (() => void) =>
       subscribe(SHOW_CHANNELS.events, callback)
   },

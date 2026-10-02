@@ -188,6 +188,17 @@ Object.defineProperty(window, 'cuerunner', {
       configure: vi.fn(() => Promise.resolve()),
       command: vi.fn(() => Promise.resolve({ ok: true })),
       restart: vi.fn(() => Promise.resolve({ ok: true })),
+      // A machine that holds nothing for any receiver: the answer a fresh install gives.
+      ewDxCredentials: vi.fn(() => Promise.resolve({ hasPassword: false, encrypted: true, fingerprint: null, serial: null, moved: null })),
+      ewDxSetPassword: vi.fn(() => Promise.resolve({
+        ok: true as const, hasPassword: true, encrypted: true, fingerprint: null, serial: null, moved: null
+      })),
+      ewDxTrustAgain: vi.fn(() => Promise.resolve({
+        ok: true as const, hasPassword: true, encrypted: true, fingerprint: null, serial: null, moved: null
+      })),
+      ewDxForget: vi.fn(() => Promise.resolve({ hasPassword: false, encrypted: true, fingerprint: null, serial: null, moved: null })),
+      // A network with no receivers on it: what a laptop at home finds.
+      ewDxDiscover: vi.fn(() => Promise.resolve({ receivers: [], error: null })),
       onEvents: vi.fn(() => () => {})
     },
     license: {

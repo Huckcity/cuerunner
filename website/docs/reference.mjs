@@ -414,7 +414,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>Sources</td><td>none</td><td>Where readings come from: an HTTP address, a file on disk, or the demo rack. <a href="./formats.html#telemetry">The document format</a>.</td></tr>
+            <tr><td>Sources</td><td>none</td><td>Where readings come from: a Sennheiser EW-DX receiver, an HTTP address, a file on disk, or the demo rack. An EW-DX source takes the receiver's address and its password, receivers on the network are found and offered, and a receiver whose address changes is found again by its serial; the others read <a href="./formats.html#telemetry">the document format</a>.</td></tr>
             <tr><td>Battery below</td><td>25%</td><td>Warns at this level.</td></tr>
             <tr><td>Battery urgent</td><td>10%</td><td>Raises an alarm at this level.</td></tr>
             <tr><td>Signal below</td><td>−75 dBm</td><td>Warns when RF is weaker than this.</td></tr>
@@ -826,8 +826,9 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="telemetry">
       <h2>Wireless telemetry</h2>
       <p>
-        Cuerunner does not speak any receiver's own protocol. A source — an HTTP address or a
-        file on disk — returns this document:
+        Apart from Sennheiser EW-DX receivers, which Cuerunner reads directly, it does not
+        speak any receiver's own protocol. A source — an HTTP address or a file on disk —
+        returns this document:
       </p>
       <div class="code"><code>{
   "channels": [
@@ -845,6 +846,7 @@ await rig.blackout()</code></div>
             <tr><td><code>batteryPercent</code></td><td>0–100.</td></tr>
             <tr><td><code>batteryMinutes</code></td><td>Runtime left, if the receiver reports it.</td></tr>
             <tr><td><code>rfDbm</code></td><td>Signal strength, negative dBm.</td></tr>
+            <tr><td><code>rfWeak</code></td><td>Whether the receiver itself calls the signal weak. When it is present it replaces the <strong>Signal below</strong> line for that channel, and it goes with <code>rfDbm</code>.</td></tr>
             <tr><td><code>audioLevel</code></td><td>0–100.</td></tr>
             <tr><td><code>muted</code></td><td>Whether the channel is muted.</td></tr>
             <tr><td><code>frequencyMhz</code></td><td>The frequency it is on.</td></tr>

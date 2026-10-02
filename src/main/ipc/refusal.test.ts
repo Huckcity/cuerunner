@@ -19,9 +19,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { dialog } from 'electron'
 import { AUDIO_CHANNELS } from '../../shared/audio'
 import { SCRIPT_CHANNELS } from '../../shared/ipc/script'
+import { SHOW_CHANNELS } from '../../shared/ipc/show'
 import { WORKSPACE_CHANNELS } from '../../shared/ipc/workspace'
 import type { Workspace } from '../../shared/workspace'
 import { registerIpcHandlers } from './handlers'
@@ -52,6 +54,9 @@ const ends = vi.hoisted(() => {
  * what flips it.
  */
 const licenseGate = vi.hoisted(() => ({ pro: false }))
+
+/** The one password the mocked keychain refuses to keep, so a test can lock it on demand. */
+const keychain = vi.hoisted(() => ({ refuse: '' }))
 
 vi.mock('../../shared/license', async importOriginal => ({
   ...(await importOriginal()) as Record<string, unknown>,
@@ -93,6 +98,16 @@ vi.mock('electron', async () => {
       showMessageBox: vi.fn()
     },
     net: { fetch: () => Promise.resolve(undefined) },
+    // The OS keychain, as a reversible scramble: enough that a test can tell the file holds
+    // what the cipher made of the password and not the password as typed.
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString: (text: string) => {
+        if (text === keychain.refuse) throw new Error('the keychain is locked')
+        return Buffer.from(`sealed:${text}`)
+      },
+      decryptString: (bytes: Buffer) => bytes.toString().replace(/^sealed:/, '')
+    },
     BrowserWindow: { getAllWindows: () => [], fromWebContents: () => null }
   }
 })
@@ -455,6 +470,106 @@ describe('the Pro channels refuse through the dialogs too', () => {
     } finally {
       licenseGate.pro = false
     }
+  })
+})
+
+describe('the EW-DX credential channels', () => {
+  const PASSWORD = 'Hunter2!-not-a-real-receiver'
+  const status = (sourceId: string): Promise<unknown> => Promise.resolve(handler(SHOW_CHANNELS.ewDxCredentials)('event', sourceId))
+  const setPassword = (sourceId: string, password: unknown): Promise<unknown> =>
+    Promise.resolve(handler(SHOW_CHANNELS.ewDxSetPassword)('event', { sourceId, password }))
+
+  it('refuses a password without a Pro licence, with the sentence the other Pro services use, and keeps nothing', async () => {
+    const result = await setPassword('rack-locked', PASSWORD)
+
+    expect(result).toEqual({ ok: false, error: 'Cuerunner Pro is required for the show services' })
+    expect(await status('rack-locked')).toMatchObject({ hasPassword: false })
+  })
+
+  it('refuses a blank or an absurd password as a value, because a person typed it', async () => {
+    licenseGate.pro = true
+    try {
+      expect(await setPassword('rack-blank', '')).toEqual({
+        ok: false,
+        error: 'Enter the password set for this receiver in WSM'
+      })
+      expect(await setPassword('rack-long', 'x'.repeat(257))).toEqual({
+        ok: false,
+        error: 'That password is too long to be one'
+      })
+      expect(await status('rack-blank')).toMatchObject({ hasPassword: false })
+    } finally {
+      licenseGate.pro = false
+    }
+  })
+
+  it('keeps a password, says it holds one, and never says what it is', async () => {
+    licenseGate.pro = true
+    try {
+      const result = await setPassword('rack-held', PASSWORD)
+
+      expect(result).toEqual({ ok: true, hasPassword: true, encrypted: true, fingerprint: null, serial: null, moved: null })
+      expect(JSON.stringify(await status('rack-held'))).not.toContain(PASSWORD)
+      // What is on disk is what the keychain made of it, not what was typed.
+      const onDisk = readFileSync(join(ends.userData.path, 'ew-dx.json'), 'utf-8')
+      expect(onDisk).not.toContain(PASSWORD)
+      expect(onDisk).toContain('rack-held')
+    } finally {
+      licenseGate.pro = false
+    }
+  })
+
+  it('answers a locked keychain with a sentence, and keeps nothing', async () => {
+    licenseGate.pro = true
+    keychain.refuse = 'locked-out-password'
+    try {
+      expect(await setPassword('rack-locked-keychain', 'locked-out-password')).toEqual({
+        ok: false,
+        error: "This computer's keychain would not keep the password: the keychain is locked"
+      })
+      expect(await status('rack-locked-keychain')).toMatchObject({ hasPassword: false })
+    } finally {
+      keychain.refuse = ''
+      licenseGate.pro = false
+    }
+  })
+
+  it('looks for receivers with no licence, because it reads and changes nothing', async () => {
+    // A harness names the announcements itself, as the packaged app never lets it; nothing is
+    // listening on the port, so identifying it finds no receiver and the answer is empty.
+    process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] = JSON.stringify(['127.0.0.1:9'])
+    try {
+      expect(await Promise.resolve(handler(SHOW_CHANNELS.ewDxDiscover)('event'))).toEqual({ receivers: [], error: null })
+    } finally {
+      delete process.env['CUERUNNER_TEST_EWDX_ANNOUNCED']
+    }
+  })
+
+  it('refuses to trust a certificate again without a Pro licence', async () => {
+    expect(await handler(SHOW_CHANNELS.ewDxTrustAgain)('event', 'rack-held')).toEqual({
+      ok: false,
+      error: 'Cuerunner Pro is required for the show services'
+    })
+  })
+
+  it('forgets a removed receiver even when the licence has lapsed', async () => {
+    licenseGate.pro = true
+    try {
+      await setPassword('rack-gone', PASSWORD)
+    } finally {
+      licenseGate.pro = false
+    }
+
+    expect(await handler(SHOW_CHANNELS.ewDxForget)('event', 'rack-gone')).toMatchObject({ hasPassword: false })
+    expect(await status('rack-gone')).toMatchObject({ hasPassword: false })
+  })
+
+  it('rejects a source id that is not one, because that is a bug and not an answer', async () => {
+    // `ipcMain.handle` turns a throw into a rejection whether the handler is async or not,
+    // so the call is made inside an async function the way Electron makes it.
+    const call = async (channel: string, id: unknown): Promise<unknown> => handler(channel)('event', id)
+    await expect(call(SHOW_CHANNELS.ewDxCredentials, 42)).rejects.toThrow(/source id/)
+    await expect(call(SHOW_CHANNELS.ewDxForget, '')).rejects.toThrow(/source id/)
   })
 })
 

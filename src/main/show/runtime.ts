@@ -7,6 +7,7 @@ import { MidiTcpService } from '../services/MidiTcpService'
 import { SqNativeService } from '../services/SqNativeService'
 import { WirelessService, telemetryPorts } from '../services/WirelessService'
 import type { EwDxCredentials } from '../ewdx/credentials'
+import type { DiscoverResult } from '../ewdx/discovery'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
 import { RedundancyService } from '../services/RedundancyService'
@@ -23,6 +24,8 @@ export interface ServiceOptions {
   redundancy?: () => RedundancySettings
   /** The receivers' passwords and pinned certificates, which are the machine's and not the show's. */
   ewDx?: EwDxCredentials
+  /** How a receiver that has left its address is found by its serial. */
+  discoverReceivers?: () => Promise<DiscoverResult>
 }
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
@@ -37,7 +40,7 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     // The SQ's own control service, beside the desk link: the membership is written there
     // and the desk's mutes stay on the MIDI socket.
     new SqNativeService(),
-    new WirelessService(telemetryPorts(options.ewDx)),
+    new WirelessService(telemetryPorts(options.ewDx, options.discoverReceivers)),
     new PresenceService(),
     new CompanionService(),
     new RedundancyService({ settings: options.redundancy })

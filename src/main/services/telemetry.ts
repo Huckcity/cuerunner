@@ -35,6 +35,32 @@ export function rfBand(dbm: number, thresholds: RfThresholds): Band {
   return dbm <= thresholds.rfWarningDbm ? 'warning' : 'ok'
 }
 
+/**
+ * How far a reading has to clear a line before a channel is let back under it. A gauge on AA
+ * cells moves a point or two between two reads and RSSI drifts a few dB, so a pack sitting on
+ * a line would otherwise cross it and announce itself every poll. Entering a band is immediate;
+ * leaving one needs this much room.
+ */
+export const BATTERY_MARGIN = 3
+export const RF_MARGIN_DB = 3
+
+/**
+ * The band a battery is in, given the one it was in. Worse is immediate; better has to clear
+ * the line by `BATTERY_MARGIN`, so 9, 11, 9, 12 is one pack that is dying and not four events.
+ */
+export function settledBatteryBand(percent: number, previous: Band, thresholds: RfThresholds): Band {
+  const raw = batteryBand(percent, thresholds)
+  if (!isWorse(previous, raw)) return raw
+  if (previous === 'critical' && percent <= thresholds.batteryCritical + BATTERY_MARGIN) return 'critical'
+  if (previous === 'warning' && percent <= thresholds.batteryWarning + BATTERY_MARGIN) return 'warning'
+  return raw
+}
+
+/** Whether a signal is weak by the show's own dBm line, with the same room to recover. */
+export function settledRfWeak(dbm: number, previouslyWeak: boolean, thresholds: RfThresholds): boolean {
+  return rfBand(dbm, thresholds) === 'warning' || (previouslyWeak && dbm <= thresholds.rfWarningDbm + RF_MARGIN_DB)
+}
+
 /** The document as it arrives, before any of it has been checked or trusted. */
 interface RawDocument {
   channels?: unknown
@@ -47,6 +73,7 @@ interface RawChannel {
   batteryMinutes?: unknown
   charging?: unknown
   rfDbm?: unknown
+  rfWeak?: unknown
   audioLevel?: unknown
   muted?: unknown
   frequencyMhz?: unknown
@@ -97,6 +124,7 @@ export function parseTelemetry(value: unknown): TelemetryDocument | null {
     // A boolean is either reported or not: "yes", 1 and "false" are not mute states.
     if (typeof raw.charging === 'boolean') channel.charging = raw.charging
     if (typeof raw.muted === 'boolean') channel.muted = raw.muted
+    if (typeof raw.rfWeak === 'boolean') channel.rfWeak = raw.rfWeak
 
     parsed.push(channel)
   }

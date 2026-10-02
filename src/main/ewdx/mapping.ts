@@ -102,6 +102,9 @@ export function channelsFrom(serial: string, resources: Resources): TelemetryCha
 
     const rf = measurement(resources.get(`${path}/signalStrengthIndicator`))
     if (rf !== undefined) channel.rfDbm = rf
+    // The receiver judges its own link, on a scale its maker calibrated; a healthy pack read
+    // -77 dBm beside it reporting quality 100, which a line chosen for other gear calls weak.
+    if (Array.isArray(warnings)) channel.rfWeak = warnings.includes('LowSignal')
     const level = measurement(resources.get(`${path}/level`))
     if (level !== undefined) channel.audioLevel = audioPercent(level)
 

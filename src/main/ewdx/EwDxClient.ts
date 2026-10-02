@@ -26,6 +26,14 @@ export interface EwDxOptions {
   pinnedFingerprint?: string
   /** Called once with the fingerprint of a receiver nobody has pinned yet. */
   onFingerprint?: (fingerprint: string) => void
+  /**
+   * The serial of the receiver this is meant to be. An address says where a receiver was, and a
+   * lease that changed can hand it to another one: when what answers has a different serial it is
+   * refused before the password is sent, rather than logged into as if it were the same.
+   */
+  expectedSerial?: string
+  /** Called with the serial of whatever answered, once it has been checked. */
+  onSerial?: (serial: string) => void
   heartbeatMs?: number
   requestTimeoutMs?: number
   /** First and longest wait before a dropped session is reopened. */
@@ -38,6 +46,38 @@ const MAX_CHANNELS = 4
 const MAX_BODY = 1024 * 1024
 
 class RefusedError extends Error {}
+
+/** A different receiver is at the address: not a fault of the link, and not the one that was asked for. */
+class WrongReceiverError extends RefusedError {}
+
+/**
+ * Why a session is down, for the layer above: a receiver that has *gone from where it was* is
+ * worth looking for elsewhere; one that refused (a wrong password, a certificate that changed) is
+ * not, because moving does not change its answer.
+ */
+export type FailureKind = 'unreachable' | 'wrong-receiver' | 'refused' | 'other'
+
+export class EwDxError extends Error {
+  constructor(message: string, readonly kind: FailureKind) {
+    super(message)
+    this.name = 'EwDxError'
+  }
+}
+
+/** What the words `describeNetworkError` says mean for finding the receiver again. */
+const UNREACHABLE = new Set([
+  'connection refused',
+  'receiver unreachable',
+  'connection lost',
+  'receiver did not answer in time',
+  'receiver closed the connection'
+])
+
+function classify(error: unknown, described: string): FailureKind {
+  if (error instanceof WrongReceiverError) return 'wrong-receiver'
+  if (error instanceof RefusedError) return 'refused'
+  return UNREACHABLE.has(described) ? 'unreachable' : 'other'
+}
 
 /**
  * An agent that does not hand a connection to the HTTP layer until the certificate has been
@@ -108,6 +148,7 @@ export class EwDxClient {
   private ready = false
   /** Why the session is not up, or undefined while the first connection is still being made. */
   private failure: string | undefined
+  private failureKind: FailureKind = 'other'
   private stopped = true
   private abort: AbortController | null = null
   private waiters: Array<() => void> = []
@@ -120,12 +161,20 @@ export class EwDxClient {
    * rest of the run, so a reconnect cannot quietly accept a different one.
    */
   private trusted: string | undefined
+  /**
+   * Which receiver this client is for. It starts as the serial the machine remembered, or as
+   * nothing for one never reached; and the first receiver it reaches becomes the one it is for,
+   * for the rest of the run — so a lease that changes under a running client cannot hand it a
+   * stranger that it then logs into.
+   */
+  private meant: string | undefined
   private readonly agent = new PinnedAgent(certificate => this.check(certificate))
 
   constructor(options: EwDxOptions) {
     this.options = options
     this.delay = options.retryMs?.[0] ?? 1000
     this.trusted = options.pinnedFingerprint
+    this.meant = options.expectedSerial
   }
 
   start(): void {
@@ -160,7 +209,9 @@ export class EwDxClient {
         })
       })
     }
-    if (!this.ready) throw new Error(this.failure ?? 'receiver did not answer in time')
+    if (!this.ready) {
+      throw new EwDxError(this.failure ?? 'receiver did not answer in time', this.failure === undefined ? 'unreachable' : this.failureKind)
+    }
     return channelsFrom(this.serial, this.resources as Resources)
   }
 
@@ -173,9 +224,11 @@ export class EwDxClient {
       try {
         await this.session(controller.signal)
         this.failure = 'receiver closed the connection'
+        this.failureKind = 'unreachable'
       } catch (error) {
         if (this.stopped) return
         this.failure = describeNetworkError(error)
+        this.failureKind = classify(error, this.failure)
         // A refusal is a decision the receiver made, not a fault in the link; waiting
         // longer does not change the answer, so it is retried at the slowest pace.
         if (error instanceof RefusedError) this.delay = this.options.retryMs?.[1] ?? 10_000
@@ -198,6 +251,15 @@ export class EwDxClient {
     const identity = await this.getJson('/api/device/identity', false, signal)
     const serial = (identity as { serial?: unknown } | null)?.serial
     if (typeof serial !== 'string' || serial === '') throw new RefusedError('not an EW-DX receiver')
+    // The identity is public, so this is learned before any credential leaves: a receiver that is
+    // not the one this source was made for never sees the password.
+    if (this.meant !== undefined && serial !== this.meant) {
+      throw new WrongReceiverError(
+        `a different receiver answers here (serial ${serial}, not ${this.meant}) — press Trust again if you replaced it`
+      )
+    }
+    this.meant = serial
+    this.options.onSerial?.(serial)
 
     const version = await this.getJson('/api/ssc/version', false, signal)
     const protocol = String((version as { protocol?: unknown } | null)?.protocol ?? '')

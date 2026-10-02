@@ -2,7 +2,17 @@
 // tested with no service, no clock and no source behind them — and the demo rack's
 // readings have to stay inside the ranges the panel is promised.
 import { describe, it, expect } from 'vitest'
-import { batteryBand, demoRack, isWorse, parseTelemetry, rfBand } from './telemetry'
+import {
+  BATTERY_MARGIN,
+  RF_MARGIN_DB,
+  batteryBand,
+  demoRack,
+  isWorse,
+  parseTelemetry,
+  rfBand,
+  settledBatteryBand,
+  settledRfWeak
+} from './telemetry'
 import { DEMO_PACK_COUNT, defaultRfThresholds, demoChannelId } from '../../shared/show'
 import type { TelemetryChannel, TelemetryDocument } from '../../shared/show'
 
@@ -28,6 +38,53 @@ describe('banding', () => {
     expect(isWorse('critical', 'ok')).toBe(true)
     expect(isWorse('warning', 'warning')).toBe(false)
     expect(isWorse('ok', 'critical')).toBe(false)
+  })
+})
+
+describe('settling', () => {
+  it('goes worse at once and better only with room to spare', () => {
+    const critical = thresholds.batteryCritical
+    // Entering a band is immediate.
+    expect(settledBatteryBand(critical, 'ok', thresholds)).toBe('critical')
+    // Leaving it needs the margin: on the line, just over it, and just short of the margin all stay.
+    expect(settledBatteryBand(critical + 1, 'critical', thresholds)).toBe('critical')
+    expect(settledBatteryBand(critical + BATTERY_MARGIN, 'critical', thresholds)).toBe('critical')
+    expect(settledBatteryBand(critical + BATTERY_MARGIN + 1, 'critical', thresholds)).toBe('warning')
+  })
+
+  it('holds the warning band the same way, and lets a pack that is nowhere near it go', () => {
+    const warning = thresholds.batteryWarning
+    expect(settledBatteryBand(warning + BATTERY_MARGIN, 'warning', thresholds)).toBe('warning')
+    expect(settledBatteryBand(warning + BATTERY_MARGIN + 1, 'warning', thresholds)).toBe('ok')
+    // A fresh set of cells is not held back by having been low a moment ago.
+    expect(settledBatteryBand(100, 'critical', thresholds)).toBe('ok')
+  })
+
+  it('does not change a band that has not moved', () => {
+    expect(settledBatteryBand(80, 'ok', thresholds)).toBe('ok')
+    expect(settledBatteryBand(5, 'critical', thresholds)).toBe('critical')
+  })
+
+  it('calls a signal weak at the line and keeps calling it weak until it has cleared it by the margin', () => {
+    const line = thresholds.rfWarningDbm
+    expect(settledRfWeak(line, false, thresholds)).toBe(true)
+    expect(settledRfWeak(line + 1, false, thresholds)).toBe(false)
+    expect(settledRfWeak(line + RF_MARGIN_DB, true, thresholds)).toBe(true)
+    expect(settledRfWeak(line + RF_MARGIN_DB + 1, true, thresholds)).toBe(false)
+  })
+})
+
+describe('parseTelemetry, rfWeak', () => {
+  it('keeps a receiver\'s own verdict on its signal when it is a boolean, and drops anything else', () => {
+    const parsed = parseTelemetry({
+      channels: [
+        { id: 'a', rfWeak: true },
+        { id: 'b', rfWeak: false },
+        { id: 'c', rfWeak: 'yes' },
+        { id: 'd', rfWeak: 1 }
+      ]
+    })
+    expect(parsed?.channels.map(entry => entry.rfWeak)).toEqual([true, false, undefined, undefined])
   })
 })
 

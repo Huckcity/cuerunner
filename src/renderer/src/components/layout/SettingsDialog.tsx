@@ -8,12 +8,16 @@ import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { PlaybackWarnings } from './PlaybackWarnings'
 import { NumberField, TextField } from '../common/Field'
 import { ServiceStatus } from '../common/ServiceStatus'
+import { EwDxCredentials } from '../rf/EwDxCredentials'
+import { EwDxFinder } from '../rf/EwDxFinder'
+import { labelFor, targetFor } from '../../utils/ewdx'
 import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { currentPlatform } from '../../utils/shortcuts'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../../../shared/show'
 import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../../../shared/workspace'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
+import type { EwDxFound } from '../../../../shared/ipc/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../../../shared/show'
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
@@ -171,7 +175,34 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
     })
   }
 
+  /** The receiver whose password box has the cursor: the one just added from what was found. */
+  const [focusSource, setFocusSource] = useState<string | null>(null)
+
+  /**
+   * A found receiver becomes a source with what it told us about itself. The password is the
+   * one thing it could not tell us, so the cursor goes there.
+   */
+  const addFound = (found: EwDxFound): void => {
+    const id = crypto.randomUUID()
+    updateRfSettings({
+      sources: [...showSettings.rf.sources, {
+        id,
+        label: labelFor(found, showSettings.rf.sources.map(source => source.label)),
+        kind: 'ew-dx',
+        target: targetFor(found),
+        pollMs: DEFAULT_POLL_MS,
+        timeoutMs: DEFAULT_TIMEOUT_MS
+      }]
+    })
+    setFocusSource(id)
+  }
+
   const removeSource = (id: string): void => {
+    // The password and the trusted certificate are this machine's, not the show's, so they
+    // do not leave with the source on their own: a removed receiver forgets them here.
+    if (showSettings.rf.sources.find(source => source.id === id)?.kind === 'ew-dx') {
+      void window.cuerunner.show.ewDxForget(id)
+    }
     updateRfSettings({
       sources: showSettings.rf.sources.filter(source => source.id !== id)
     })
@@ -698,39 +729,55 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               ) : (
                 <div className="settings-source-list">
                   {showSettings.rf.sources.map(source => (
-                    <div key={source.id} className="settings-source-row">
-                      <TextField
-                        when="typed"
-                        className="settings-source-label"
-                        value={source.label}
-                        aria-label="Source name"
-                        onValue={label => updateSource(source.id, { label })}
-                      />
-                      <select
-                        value={source.kind}
-                        aria-label="Source kind"
-                        onChange={e => updateSource(source.id, { kind: e.target.value as TelemetrySourceKind })}
-                      >
-                        <option value="http">HTTP</option>
-                        <option value="file">File</option>
-                        <option value="demo">Demo</option>
-                      </select>
-                      <TextField
-                        when="typed"
-                        className="settings-source-target"
-                        value={source.target}
-                        aria-label="Source address"
-                        placeholder={source.kind === 'file' ? '/path/to/telemetry.json' : 'http://10.0.0.20/telemetry'}
-                        disabled={source.kind === 'demo'}
-                        onValue={target => updateSource(source.id, { target })}
-                      />
-                      <button
-                        className="settings-source-remove"
-                        onClick={() => removeSource(source.id)}
-                        aria-label={`Remove ${source.label}`}
-                      >
-                        ✕
-                      </button>
+                    <div key={source.id} className="settings-source-entry">
+                      <div className="settings-source-row">
+                        {/* Taken when the field is left, not as it is typed: a source is live the
+                            moment it changes, and a name or address typed a letter at a time would
+                            restart the service, and reconnect to the receiver, on every letter. */}
+                        <TextField
+                          className="settings-source-label"
+                          value={source.label}
+                          aria-label="Source name"
+                          onValue={label => updateSource(source.id, { label })}
+                        />
+                        <select
+                          value={source.kind}
+                          aria-label="Source kind"
+                          onChange={e => updateSource(source.id, { kind: e.target.value as TelemetrySourceKind })}
+                        >
+                          <option value="http">HTTP</option>
+                          <option value="file">File</option>
+                          <option value="ew-dx">Sennheiser EW-DX</option>
+                          <option value="demo">Demo</option>
+                        </select>
+                        <TextField
+                          className="settings-source-target"
+                          value={source.target}
+                          aria-label="Source address"
+                          placeholder={
+                            source.kind === 'file' ? '/path/to/telemetry.json'
+                              : source.kind === 'ew-dx' ? '192.168.0.50'
+                                : 'http://10.0.0.20/telemetry'
+                          }
+                          disabled={source.kind === 'demo'}
+                          onValue={target => updateSource(source.id, { target })}
+                        />
+                        <button
+                          className="settings-source-remove"
+                          onClick={() => removeSource(source.id)}
+                          aria-label={`Remove ${source.label}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {source.kind === 'ew-dx' && (
+                        <EwDxCredentials
+                          sourceId={source.id}
+                          target={source.target}
+                          autoFocus={focusSource === source.id}
+                          serviceKey={`${rfService?.state ?? ''}:${rfService?.detail ?? ''}`}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -739,6 +786,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <label />
                 <button className="add-row" onClick={addSource}>+ Add source</button>
               </div>
+              <EwDxFinder sources={showSettings.rf.sources} onAdd={addFound} />
               <ServiceStatus service={rfService} />
 
               <div className="field-section-title">Warn me when</div>

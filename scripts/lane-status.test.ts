@@ -92,7 +92,7 @@ function lanesOf(at: string): Map<string, { lane: string; status: string; failur
 describe('the vocabulary a run states its lanes in', () => {
   it('holds two lane words and the record three claim words, and never confuses them', () => {
     expect(LANE_STATUSES).toEqual(['passed', 'skipped'])
-    expect(CLAIM_STATUSES).toEqual(['proved', 'unproven', 'unclaimed'])
+    expect(CLAIM_STATUSES).toEqual(['proved', 'witnessed', 'unproven', 'unclaimed'])
     expect(LANE_STATUSES.filter((word: string) => CLAIM_STATUSES.includes(word))).toEqual([])
   })
 

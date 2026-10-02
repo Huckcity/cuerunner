@@ -14,7 +14,10 @@ import type {
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 import type { EwDxCredentials } from '../ewdx/credentials'
 import { EwDxClient } from '../ewdx/EwDxClient'
-import { batteryBand, demoRack, isWorse, parseTelemetry, rfBand } from './telemetry'
+import { EwDxReceiver } from '../ewdx/EwDxReceiver'
+import { discoverEwDx } from '../ewdx/discovery'
+import type { DiscoverResult } from '../ewdx/discovery'
+import { demoRack, isWorse, parseTelemetry, settledBatteryBand, settledRfWeak } from './telemetry'
 import type { Band } from './telemetry'
 
 // A response reduced to what a telemetry source actually has to provide. fetch's real
@@ -50,12 +53,20 @@ export interface EwDxSession {
   snapshot(waitMs: number): Promise<TelemetryChannel[]>
 }
 
+/**
+ * A source that is not finished: no address yet, no password yet. It is a state of the
+ * settings and not a fault of the rack, so it is said where the operator is looking — the
+ * status beside the source — and is never raised as an alarm in the show. An alarm is for a
+ * receiver that was asked to be watched and is not answering.
+ */
+export class NotConfiguredError extends Error {}
+
 /** A session that can never connect, which says why on every poll instead of failing silently. */
-function unavailable(reason: string): EwDxSession {
+function unavailable(reason: string, unfinished = false): EwDxSession {
   return {
     start: () => undefined,
     stop: () => undefined,
-    snapshot: () => Promise.reject(new Error(reason))
+    snapshot: () => Promise.reject(unfinished ? new NotConfiguredError(reason) : new Error(reason))
   }
 }
 
@@ -80,7 +91,11 @@ export function ewDxOrigin(target: string): { origin: string } | { error: string
  * The service's ports as the app wires them. The credentials are the machine's own — a
  * receiver's password never travels with the showfile — and are read when a source starts.
  */
-export function telemetryPorts(credentials?: EwDxCredentials): TelemetryPorts {
+export function telemetryPorts(
+  credentials?: EwDxCredentials,
+  /** How a receiver that has left its address is looked for by serial. */
+  discover: () => Promise<DiscoverResult> = () => discoverEwDx()
+): TelemetryPorts {
   return {
     fetchJson: (url, signal) => fetch(url, { signal }),
     // A bridge is free to rewrite the file between two reads; utf-8 is the only encoding
@@ -88,15 +103,30 @@ export function telemetryPorts(credentials?: EwDxCredentials): TelemetryPorts {
     readText: path => readFile(path, 'utf-8'),
     ewDx: source => {
       const address = ewDxOrigin(source.target)
-      if ('error' in address) return unavailable(address.error)
+      if ('error' in address) return unavailable(address.error, true)
       const stored = credentials?.get(source.id)
-      if (!stored) return unavailable('no password set — add it in Settings › Wireless')
-      return new EwDxClient({
+      if (!stored) return unavailable('no password set — add it in Settings › Wireless', true)
+      const store = credentials!
+      return new EwDxReceiver({
+        sourceId: source.id,
+        target: source.target.trim(),
         origin: address.origin,
-        password: stored.password,
-        pinnedFingerprint: stored.fingerprint,
-        // The first certificate a receiver shows is the one trusted from then on.
-        onFingerprint: fingerprint => void credentials?.pin(source.id, fingerprint)
+        credentials: store,
+        discover,
+        // Made afresh for each address the receiver is followed to, and read from the store each
+        // time: what is trusted about it is the machine's, and it changes as it is learned.
+        makeClient: parts => {
+          const held = store.get(source.id) ?? stored
+          return new EwDxClient({
+            origin: parts.origin,
+            password: held.password,
+            pinnedFingerprint: held.fingerprint,
+            // The first certificate a receiver shows is the one trusted from then on.
+            onFingerprint: fingerprint => void store.pin(source.id, fingerprint),
+            expectedSerial: parts.expectedSerial,
+            onSerial: parts.onSerial
+          })
+        }
       })
     }
   }
@@ -115,10 +145,16 @@ type Timer = ReturnType<typeof setInterval>
 interface ChannelState {
   name: string
   lastSeen: number
-  battery: Band
-  rf: Band
   offline: boolean
 }
+
+/**
+ * How soon a receiver's own weak-signal verdict may be announced again for the same channel. It is
+ * a boolean that flips as a pack moves, and there is no margin to give a boolean the way there is
+ * to a dB or a percent: a pack that flips back and forth is told once a minute at most. Readings
+ * with a number have the margin instead, so a pack that really recovers is told straight away.
+ */
+const REANNOUNCE_MS = 60_000
 
 /**
  * What a channel did over the whole night rather than in its last poll: the floor its
@@ -131,6 +167,15 @@ interface ChannelHistory {
   /** The lowest reading the pack has shown, and when it arrived. Absent until it reports one. */
   floor?: { percent: number; at: number }
   dropouts: number
+  /**
+   * What the pack has already been announced as, and when. It lives here because a settings change
+   * stops the service and starts it again, and a pack that was told to the operator as dying a
+   * moment ago is not dying afresh: a restart must not say it a second time.
+   */
+  battery: Band
+  rf: Band
+  /** When a receiver's own weak-signal verdict was last announced, for `REANNOUNCE_MS`. */
+  rfVerdictAt?: number
 }
 
 /**
@@ -163,6 +208,8 @@ export class WirelessService implements ShowService {
   private history = new Map<string, ChannelHistory>()
   /** Source ids whose last poll failed, mapped to the reason they gave. */
   private failed = new Map<string, string>()
+  /** Source ids that are not finished, mapped to what they are waiting for: not failures. */
+  private waiting = new Map<string, string>()
 
   constructor(private readonly ports: TelemetryPorts = telemetryPorts()) {}
 
@@ -190,8 +237,6 @@ export class WirelessService implements ShowService {
       this.channels.set(pack.channelId, {
         name: pack.label,
         lastSeen: now,
-        battery: 'ok',
-        rf: 'ok',
         offline: false
       })
     }
@@ -237,6 +282,7 @@ export class WirelessService implements ShowService {
     // every service, and the floor and the dropout count are the show's record rather
     // than the stopped service's.
     this.failed.clear()
+    this.waiting.clear()
   }
 
   /**
@@ -262,11 +308,21 @@ export class WirelessService implements ShowService {
       if (this.context !== context) return 0
 
       this.recover(source.id, context)
+      if (this.waiting.delete(source.id)) this.refresh(context)
       for (const channel of document.channels) this.report(channel, context)
       return document.channels.length
     } catch (error) {
       if (this.context !== context) return 0
       const reason = error instanceof Error ? error.message : String(error)
+      if (error instanceof NotConfiguredError) {
+        // Said once, in the status, and no alarm: see NotConfiguredError.
+        const changed = this.waiting.get(source.id) !== reason
+        this.waiting.set(source.id, reason)
+        this.failed.delete(source.id)
+        if (changed) this.refresh(context)
+        return 0
+      }
+      this.waiting.delete(source.id)
       const wasFailing = this.failed.has(source.id)
       this.failed.set(source.id, reason)
       // One alarm per outage: a receiver that is down is not news every poll, and the
@@ -284,6 +340,10 @@ export class WirelessService implements ShowService {
       const session = this.sessions.get(source.id)
       if (!session) throw new Error('EW-DX is not available')
       return { channels: await session.snapshot(source.timeoutMs) }
+    }
+    // A source just added has no address, and asking for nothing is not a failure of anyone.
+    if (source.target.trim() === '') {
+      throw new NotConfiguredError(source.kind === 'file' ? 'no file chosen' : 'no address')
     }
     if (source.kind === 'file') {
       const text = await this.ports.readText(source.target)
@@ -323,8 +383,6 @@ export class WirelessService implements ShowService {
       state = {
         name: channel.name ?? channel.id,
         lastSeen: now,
-        battery: 'ok',
-        rf: 'ok',
         offline: false
       }
       this.channels.set(channel.id, state)
@@ -359,7 +417,13 @@ export class WirelessService implements ShowService {
     // The night goes on every reading, including the one a pack sends after a silence.
     const night = this.nightOf(channel.id)
     if (night) device.history = night
-    if (channel.rfDbm !== undefined) device.rf = { level: channel.rfDbm, unit: 'dBm' }
+    if (channel.rfDbm !== undefined) {
+      device.rf = {
+        level: channel.rfDbm,
+        unit: 'dBm',
+        ...(channel.rfWeak === undefined ? {} : { weak: channel.rfWeak })
+      }
+    }
     if (channel.audioLevel !== undefined) {
       device.audio = {
         level: channel.audioLevel,
@@ -371,11 +435,12 @@ export class WirelessService implements ShowService {
     context.bus.device(device)
     const who = this.plotName(channel.id, channel.name ?? state.name)
 
-    // A band is only worth an alarm on the way in: a pack that sits at 8% for an hour
-    // says so once, and re-arms when it comes back up.
+    // A band is only worth an alarm on the way in: a pack that sits at 8% for an hour says so
+    // once. It re-arms when it has really come back up — with room, see `settledBatteryBand` —
+    // and not when a noisy gauge brushes the line, and a restart does not forget what was said.
     if (percent !== undefined) {
-      const band = batteryBand(percent, this.thresholds)
-      if (isWorse(band, state.battery)) {
+      const band = settledBatteryBand(percent, history.battery, this.thresholds)
+      if (isWorse(band, history.battery)) {
         const left = `${Math.round(percent)}% left`
         context.bus.alert(
           band === 'critical' ? 'critical' : 'warning',
@@ -384,20 +449,27 @@ export class WirelessService implements ShowService {
           device.id
         )
       }
-      state.battery = band
+      history.battery = band
     }
+    // A receiver that judges its own link has the last word on whether it is weak; the show's
+    // dBm line is for sources that only report a number. The verdict rides with the number it
+    // is about, so the panel and the alarm always have the same thing to read.
     if (channel.rfDbm !== undefined) {
-      const band = rfBand(channel.rfDbm, this.thresholds)
-      if (isWorse(band, state.rf)) {
-        context.bus.alert(
-          'warning',
-          this.id,
-          `${who} RF low — ${Math.round(channel.rfDbm)} dBm`,
-          device.id
-        )
+      const weak = channel.rfWeak ?? settledRfWeak(channel.rfDbm, history.rf === 'warning', this.thresholds)
+      const band: Band = weak ? 'warning' : 'ok'
+      // Only a verdict is held to the cooldown: a dBm reading has its margin and is told at once.
+      const verdict = channel.rfWeak !== undefined
+      if (isWorse(band, history.rf) && (!verdict || this.mayAnnounce(history.rfVerdictAt, now))) {
+        context.bus.alert('warning', this.id, `${who} RF low — ${Math.round(channel.rfDbm)} dBm`, device.id)
+        if (verdict) history.rfVerdictAt = now
       }
-      state.rf = band
+      history.rf = band
     }
+  }
+
+  /** Whether trouble of one kind may be said again for a channel, or was said a moment ago. */
+  private mayAnnounce(lastAt: number | undefined, now: number): boolean {
+    return lastAt === undefined || now - lastAt >= REANNOUNCE_MS
   }
 
   /**
@@ -439,7 +511,7 @@ export class WirelessService implements ShowService {
   private historyOf(channelId: string): ChannelHistory {
     let history = this.history.get(channelId)
     if (!history) {
-      history = { dropouts: 0 }
+      history = { dropouts: 0, battery: 'ok', rf: 'ok' }
       this.history.set(channelId, history)
     }
     return history
@@ -477,7 +549,11 @@ export class WirelessService implements ShowService {
   }
 
   private detail(): string {
-    return `polling ${this.sources.map(source => source.label).join(', ')}`
+    const polling = this.sources.filter(source => !this.waiting.has(source.id)).map(source => source.label)
+    const waiting = this.sources
+      .filter(source => this.waiting.has(source.id))
+      .map(source => `${source.label}: ${this.waiting.get(source.id)}`)
+    return [...(polling.length === 0 ? [] : [`polling ${polling.join(', ')}`]), ...waiting].join('; ')
   }
 
   /** A source that answered again has nothing more to report about its outage. */

@@ -1,51 +1,88 @@
-// A self-signed certificate for the fake receiver to present, so the pin can be tested
-// against what a real receiver does: a chain nothing trusts. TEST ONLY — the key is public
-// by being here, protects nothing, and is not used by the app.
-// Subject CN=cuerunner-test-receiver, EC P-256, valid until 2126.
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 
-export const TEST_KEY = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgAkmkgAmR6rNPO36N
-aCgtyFcQlJvJz4LtfbFnfc5GP3uhRANCAAQaExnNLRlM3/Ys2TBDh0j6AOzuiKES
-TT48EiA9uqx3/NxeRM1eW0YvRUFetLgRhL7ioVQTRx127KdMDq2glvAG
------END PRIVATE KEY-----
-`
+// A self-signed certificate for the fake receiver to present, made when a test asks for one.
+// A real receiver's certificate is a chain nothing trusts, and the pin has to be tested
+// against exactly that — but the key behind one has no business in the repository, even a
+// throwaway, so there is none: each call makes a fresh key and signs its own certificate.
+//
+// X.509 is a small, rigid DER structure, and a certificate that Node's TLS will present needs
+// only the fields below, so this writes them rather than carrying a dependency for it. TEST
+// ONLY: nothing here is used by the app.
 
-export const TEST_CERT = `-----BEGIN CERTIFICATE-----
-MIIBnDCCAUGgAwIBAgIUdv/rXcWkDnNgKIWvnb+GxLa7HVQwCgYIKoZIzj0EAwIw
-IjEgMB4GA1UEAwwXY3VlcnVubmVyLXRlc3QtcmVjZWl2ZXIwIBcNMjYxMDAyMTY0
-ODQ0WhgPMjEyNjA5MDgxNjQ4NDRaMCIxIDAeBgNVBAMMF2N1ZXJ1bm5lci10ZXN0
-LXJlY2VpdmVyMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGhMZzS0ZTN/2LNkw
-Q4dI+gDs7oihEk0+PBIgPbqsd/zcXkTNXltGL0VBXrS4EYS+4qFUE0cdduynTA6t
-oJbwBqNTMFEwHQYDVR0OBBYEFLSIfZpuzr7sYESDAx46vgweLjR9MB8GA1UdIwQY
-MBaAFLSIfZpuzr7sYESDAx46vgweLjR9MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZI
-zj0EAwIDSQAwRgIhAInPUKKlvfy40ff6kOJnocazsKbiBAM6QK6f6ugSQUmmAiEA
-3DmJNLX4CfetEsOdZlC5giQSfmKxC2scCBQAchmNIds=
------END CERTIFICATE-----
-`
+/** DER's definite length: one byte under 128, otherwise the byte count and then the bytes. */
+function length(size: number): Buffer {
+  if (size < 0x80) return Buffer.from([size])
+  const bytes: number[] = []
+  for (let rest = size; rest > 0; rest = Math.floor(rest / 256)) bytes.unshift(rest % 256)
+  return Buffer.from([0x80 | bytes.length, ...bytes])
+}
 
-export const TEST_FINGERPRINT =
-  '21:13:7E:09:0D:8D:6B:E9:FD:6E:24:A0:5F:C8:EC:86:2A:7E:BA:60:17:A2:1C:BD:09:8E:54:72:49:F8:F8:4F'
+function der(tag: number, ...parts: Buffer[]): Buffer {
+  const body = Buffer.concat(parts)
+  return Buffer.concat([Buffer.from([tag]), length(body.length), body])
+}
 
-/** A second, different certificate: what a replaced or impersonated receiver would present. */
-export const OTHER_KEY = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg7awABbHY8MmgwaeM
-zMz79HWlja2inSzAngMd2bMjPw6hRANCAATm59JYA0gMymIDAWNDbueAcpyaEVhE
-jt5bADvHAVXm3w678FwpIDp0mxLKfrynELQnW1+Q2q9hQ3gOrDEZAs6n
------END PRIVATE KEY-----
-`
+/** A positive INTEGER: DER reads a leading 1 bit as a sign, so one is padded with a zero byte. */
+function integer(bytes: Buffer): Buffer {
+  return der(0x02, bytes[0] & 0x80 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes)
+}
 
-export const OTHER_CERT = `-----BEGIN CERTIFICATE-----
-MIIBnzCCAUWgAwIBAgIUCdY50r3H8ksQMXAS0PCplNpmWNowCgYIKoZIzj0EAwIw
-JDEiMCAGA1UEAwwZY3VlcnVubmVyLXRlc3QtcmVjZWl2ZXItMjAgFw0yNjEwMDIx
-NjQ5MTlaGA8yMTI2MDkwODE2NDkxOVowJDEiMCAGA1UEAwwZY3VlcnVubmVyLXRl
-c3QtcmVjZWl2ZXItMjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABObn0lgDSAzK
-YgMBY0Nu54BynJoRWESO3lsAO8cBVebfDrvwXCkgOnSbEsp+vKcQtCdbX5Dar2FD
-eA6sMRkCzqejUzBRMB0GA1UdDgQWBBTo+aWdH/+PNDyP8GmR++Afsx504jAfBgNV
-HSMEGDAWgBTo+aWdH/+PNDyP8GmR++Afsx504jAPBgNVHRMBAf8EBTADAQH/MAoG
-CCqGSM49BAMCA0gAMEUCIDy2b89RrjO5sXcI0vFjvrbNWwMYWLEHEbZLrk0H7woY
-AiEAx3zYuwpUFmPzDAGOHGOYVCCKmEcWc6bBdxykaADffjk=
------END CERTIFICATE-----
-`
+/** ecdsa-with-SHA256, 1.2.840.10045.4.3.2: what the certificate is signed with. */
+const SIGNATURE_ALGORITHM = der(0x30, der(0x06, Buffer.from('2a8648ce3d040302', 'hex')))
 
-export const OTHER_FINGERPRINT =
-  '3B:CD:4D:60:DF:14:B3:A5:50:AE:6A:07:3F:F7:1A:8F:8C:F7:75:45:10:47:0C:E3:1D:19:B2:9E:63:AD:67:23'
+/** commonName, 2.5.4.3, in a one-attribute distinguished name. */
+function name(commonName: string): Buffer {
+  return der(0x30, der(0x31, der(0x30, der(0x06, Buffer.from('550403', 'hex')), der(0x0c, Buffer.from(commonName)))))
+}
+
+/**
+ * RFC 5280's rule for a date: UTCTime up to 2049 and GeneralizedTime from 2050. Node's own
+ * OpenSSL forgives a certificate that mixes them up and Electron's BoringSSL does not, and
+ * the app's side of the handshake is Electron's.
+ */
+function time(date: Date): Buffer {
+  const iso = date.toISOString().replace(/[-:]|\.\d{3}/g, '') // YYYYMMDDTHHMMSSZ
+  const stamp = iso.replace('T', '')
+  return date.getUTCFullYear() < 2050
+    ? der(0x17, Buffer.from(stamp.slice(2)))
+    : der(0x18, Buffer.from(stamp))
+}
+
+function pem(label: string, body: Buffer): string {
+  const lines = body.toString('base64').match(/.{1,64}/g) ?? []
+  return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`
+}
+
+export interface TestCertificate {
+  key: string
+  cert: string
+  /** SHA-256 of the certificate, colon-separated, as Node's own `fingerprint256` reads. */
+  fingerprint: string
+}
+
+export function makeTestCertificate(commonName: string): TestCertificate {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const now = new Date()
+  const until = new Date(now.getTime() + 100 * 365 * 24 * 3600 * 1000)
+  const subject = name(commonName)
+
+  const tbs = der(
+    0x30,
+    der(0xa0, der(0x02, Buffer.from([2]))), // version 3
+    integer(Buffer.from(createHash('sha256').update(commonName + now.getTime()).digest().subarray(0, 16))),
+    SIGNATURE_ALGORITHM,
+    subject, // issuer: self-signed
+    der(0x30, time(now), time(until)),
+    subject,
+    publicKey.export({ type: 'spki', format: 'der' })
+  )
+  const signature = sign('sha256', tbs, privateKey)
+  const certificate = der(0x30, tbs, SIGNATURE_ALGORITHM, der(0x03, Buffer.concat([Buffer.from([0]), signature])))
+
+  const fingerprint = (createHash('sha256').update(certificate).digest('hex').toUpperCase().match(/../g) ?? []).join(':')
+  return {
+    key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    cert: pem('CERTIFICATE', certificate),
+    fingerprint
+  }
+}

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, it, expect } from 'vitest'
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createEwDxCredentials } from './credentials'
+import { KeychainRefusedError, createEwDxCredentials } from './credentials'
 import type { Cipher } from './credentials'
 
 const reverse = (text: string): string => [...text].reverse().join('')
@@ -53,12 +53,90 @@ describe('createEwDxCredentials', () => {
     expect(await readdir(dir)).toEqual(['ew-dx.json'])
   })
 
+  it('refuses, and writes nothing, when the keychain will not keep the password', async () => {
+    const locked: Cipher = {
+      available: () => true,
+      encrypt: () => {
+        throw new Error('the keychain is locked')
+      },
+      decrypt: text => text
+    }
+    const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await store.setPassword('rack-a', 'old')
+    const stricter = createEwDxCredentials({ filePath: file, cipher: { ...locked, decrypt: protectedCipher.decrypt } })
+
+    await expect(stricter.setPassword('rack-a', 'new')).rejects.toBeInstanceOf(KeychainRefusedError)
+    // The old password stands, and the new one is nowhere on disk.
+    expect(stricter.get('rack-a')?.password).toBe('old')
+    expect(await readFile(file, 'utf8')).not.toContain('new')
+  })
+
   it('pins a certificate for a receiver it has a password for, and keeps the pin through a new password', async () => {
     const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
     await store.setPassword('rack-a', 'one')
     await store.pin('rack-a', 'AA:BB')
     await store.setPassword('rack-a', 'two')
     expect(store.get('rack-a')).toEqual({ password: 'two', fingerprint: 'AA:BB' })
+  })
+
+  it('remembers which receiver it is and where it was found, across a restart', async () => {
+    const first = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await first.setPassword('rack-a', 'one')
+    await first.remember('rack-a', { serial: '5364000906', moved: { from: '192.168.0.194', to: '192.168.0.210' } })
+
+    expect(createEwDxCredentials({ filePath: file, cipher: protectedCipher }).get('rack-a')).toEqual({
+      password: 'one',
+      serial: '5364000906',
+      moved: { from: '192.168.0.194', to: '192.168.0.210' }
+    })
+  })
+
+  it('keeps what it knows of the receiver through a new password, and drops a move when told it is home', async () => {
+    const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await store.setPassword('rack-a', 'one')
+    await store.remember('rack-a', { serial: '5364000906', moved: { from: 'a', to: 'b' } })
+    await store.setPassword('rack-a', 'two')
+    expect(store.get('rack-a')).toMatchObject({ password: 'two', serial: '5364000906', moved: { from: 'a', to: 'b' } })
+
+    await store.remember('rack-a', { moved: null })
+    expect(store.get('rack-a')?.moved).toBeUndefined()
+    expect(store.get('rack-a')?.serial).toBe('5364000906')
+  })
+
+  it('does not write when it is told what it already knows', async () => {
+    const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await store.setPassword('rack-a', 'one')
+    await store.remember('rack-a', { serial: '5364000906' })
+    const before = (await stat(file)).mtimeMs
+
+    await new Promise(resolve => setTimeout(resolve, 15))
+    await store.remember('rack-a', { serial: '5364000906' })
+    expect((await stat(file)).mtimeMs).toBe(before)
+  })
+
+  it('does not invent a receiver for facts about one it has no password for', async () => {
+    const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await store.remember('rack-a', { serial: '5364000906' })
+    expect(store.get('rack-a')).toBeUndefined()
+  })
+
+  it('forgets the certificate, the serial and the move together: that is what "I replaced it" means', async () => {
+    const store = createEwDxCredentials({ filePath: file, cipher: protectedCipher })
+    await store.setPassword('rack-a', 'one')
+    await store.pin('rack-a', 'AA:BB')
+    await store.remember('rack-a', { serial: '5364000906', moved: { from: 'a', to: 'b' } })
+
+    await store.unpin('rack-a')
+
+    expect(store.get('rack-a')).toEqual({ password: 'one' })
+  })
+
+  it('reads a file from before it knew serials, and treats a bad serial as no entry', async () => {
+    await writeFile(file, JSON.stringify({ version: 1, sources: { old: { password: 'p', encrypted: false, fingerprint: 'AA' } } }))
+    expect(createEwDxCredentials({ filePath: file, cipher: bareCipher }).get('old')).toEqual({ password: 'p', fingerprint: 'AA' })
+
+    await writeFile(file, JSON.stringify({ version: 1, sources: { bad: { password: 'p', encrypted: false, serial: 5 } } }))
+    expect(createEwDxCredentials({ filePath: file, cipher: bareCipher }).get('bad')).toBeUndefined()
   })
 
   it('forgets a pin on request, and a receiver entirely', async () => {

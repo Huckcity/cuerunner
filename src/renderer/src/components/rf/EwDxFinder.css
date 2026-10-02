@@ -1,0 +1,34 @@
+/* The receivers found on the network. The row that says so is a `.field-row` on the window's
+   own grid; each receiver found sits under it, lined up with the control column. */
+
+.ewdx-finder-state {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-base);
+  color: var(--fg-primary);
+}
+
+.ewdx-finder-state[data-state='error'] { color: var(--state-panic-hover); }
+
+.ewdx-found {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2) calc(var(--field-label-w) + var(--field-gap));
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.ewdx-found-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-base);
+  color: var(--fg-primary);
+}
+
+.ewdx-found-address {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}

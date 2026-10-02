@@ -5,7 +5,8 @@ import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
-import { createEwDxCredentials } from '../ewdx/credentials'
+import { KeychainRefusedError, createEwDxCredentials } from '../ewdx/credentials'
+import { discoverEwDx } from '../ewdx/discovery'
 import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../shared/network'
 import { audioEngine } from '../audio/AudioEngine'
@@ -51,7 +52,15 @@ import {
   type ScriptShellPayload,
   type ScriptShellResult
 } from '../../shared/ipc/script'
-import { SHOW_CHANNELS, type ShowCommandPayload, type ShowCommandResult } from '../../shared/ipc/show'
+import {
+  SHOW_CHANNELS,
+  type EwDxCredentialResult,
+  type EwDxCredentialStatus,
+  type EwDxDiscoverResult,
+  type EwDxSetPasswordPayload,
+  type ShowCommandPayload,
+  type ShowCommandResult
+} from '../../shared/ipc/show'
 import {
   WORKSPACE_CHANNELS,
   type MergeInputs,
@@ -72,7 +81,7 @@ import {
   type WorkspaceSaveResult
 } from '../../shared/ipc/workspace'
 import type { EventChannel } from '../../shared/ipc'
-import { asRefusal, refusalValue } from './refusal'
+import { Refusal, asRefusal, refusalValue } from './refusal'
 import { compose as composeProblemReport, saveReport, emailReport } from '../report/session'
 import type { ReportInput } from '../../shared/ipc/app'
 import { liveWindow, sendToWindow } from './broadcast'
@@ -132,8 +141,26 @@ const ewDxCredentials = createEwDxCredentials({
   }
 })
 
+// Looking for receivers on the network: for the settings window, and for a source whose receiver
+// has left its address and is looked for by its serial. A harness has no multicast to rely on, so
+// it may name the announcements itself; the receivers it names are still identified over HTTPS
+// and only the mDNS step is skipped.
+function discoverReceivers(): Promise<EwDxDiscoverResult> {
+  const raw = !app.isPackaged ? process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] : undefined
+  if (raw === undefined) return discoverEwDx()
+  const announced = (JSON.parse(raw) as string[]).map(entry => {
+    const [address, port] = entry.split(':')
+    return { address, port: Number(port), name: `announced-${address}` }
+  })
+  return discoverEwDx({ announced })
+}
+
 const show = createShowRuntime(
-  defaultServices({ redundancy: () => machineRedundancy.current(), ewDx: ewDxCredentials }),
+  defaultServices({
+    redundancy: () => machineRedundancy.current(),
+    ewDx: ewDxCredentials,
+    discoverReceivers
+  }),
   () => isPro(license.status())
 )
 
@@ -458,6 +485,85 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(SHOW_CHANNELS.restart, async (_, service: string): Promise<ShowCommandResult> =>
     show.restart(service))
+
+  // What this machine holds for an EW-DX receiver. The password is the machine's, never
+  // the show's, so it has channels of its own rather than a field in the settings the
+  // window saves; and what comes back is never the password — only whether there is one.
+  // Reading is open, like the redundancy settings: a locked app can say what it holds,
+  // and the gate is on the change.
+  const ewDxStatus = (sourceId: string): EwDxCredentialStatus => {
+    const held = ewDxCredentials.get(sourceId)
+    return {
+      hasPassword: held !== undefined,
+      encrypted: ewDxCredentials.encrypted(),
+      fingerprint: held?.fingerprint ?? null,
+      serial: held?.serial ?? null,
+      moved: held?.moved ?? null
+    }
+  }
+
+  // A change to what is held is a restart of the one service that reads it: the session
+  // for that receiver is opened with the password it was given when the service starts.
+  const ewDxApplied = async (): Promise<void> => {
+    if (settingsReceived) await show.restart('rf')
+    else await show.configure(lastShowSettings)
+  }
+
+  const ewDxSourceId = (value: unknown): string => {
+    if (typeof value !== 'string' || value === '' || value.length > 128) {
+      throw new Error('EW-DX credentials need a source id')
+    }
+    return value
+  }
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxCredentials, (_, sourceId: string): EwDxCredentialStatus =>
+    ewDxStatus(ewDxSourceId(sourceId)))
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxSetPassword, (_, payload: EwDxSetPasswordPayload): Promise<EwDxCredentialResult> =>
+    refusalValue(async () => {
+      const sourceId = ewDxSourceId(payload.sourceId)
+      if (!isPro(license.status())) throw new Refusal(PRO_REQUIRED)
+      // The field is typed by a person: a blank is an answer to give, and the bound is
+      // what keeps a pasted file from becoming a password.
+      if (typeof payload.password !== 'string' || payload.password === '') {
+        throw new Refusal('Enter the password set for this receiver in WSM')
+      }
+      if (payload.password.length > 256) throw new Refusal('That password is too long to be one')
+      try {
+        await ewDxCredentials.setPassword(sourceId, payload.password)
+      } catch (error) {
+        // A locked or absent keychain is a state of this computer, and the window can say
+        // so; a disk that will not take the write is a fault and keeps rejecting.
+        if (error instanceof KeychainRefusedError) {
+          throw new Refusal(`This computer's keychain would not keep the password: ${error.message}`)
+        }
+        throw error
+      }
+      await ewDxApplied()
+      return { ok: true as const, ...ewDxStatus(sourceId) }
+    }))
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxTrustAgain, (_, sourceId: string): Promise<EwDxCredentialResult> =>
+    refusalValue(async () => {
+      const id = ewDxSourceId(sourceId)
+      if (!isPro(license.status())) throw new Refusal(PRO_REQUIRED)
+      await ewDxCredentials.unpin(id)
+      await ewDxApplied()
+      return { ok: true as const, ...ewDxStatus(id) }
+    }))
+
+  // A look at the network, made when the settings window asks and not before: a show that
+  // never opens that page sends nothing. It only reads — nothing is added, and nothing
+  // logs in — so it is open to a locked app like the rest of what only reads.
+  ipcMain.handle(SHOW_CHANNELS.ewDxDiscover, (): Promise<EwDxDiscoverResult> => discoverReceivers())
+
+  ipcMain.handle(SHOW_CHANNELS.ewDxForget, async (_, sourceId: string): Promise<EwDxCredentialStatus> => {
+    const id = ewDxSourceId(sourceId)
+    // Forgetting is housekeeping for a source that is already gone from the show, so it
+    // is not behind the licence: a lapsed key must not leave a password behind.
+    await ewDxCredentials.forget(id)
+    return ewDxStatus(id)
+  })
 
   // Redundant playback. Which half of a pair this machine is, and where its partner is,
   // are the machine's own settings — the showfile travels between the two — so they are

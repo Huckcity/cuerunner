@@ -343,3 +343,140 @@ describe('SettingsDialog', () => {
     expect(reconnect!.disabled).toBe(false)
   })
 })
+
+describe('SettingsDialog, wireless sources', () => {
+  // The bridge mock lives in setup and is shared: what one test made it say is not history
+  // the next test may read.
+  beforeEach(() => vi.mocked(window.cuerunner.show.ewDxForget).mockClear())
+
+  const source = (kind: 'http' | 'ew-dx'): ReturnType<typeof defaultShowSettings>['rf']['sources'][number] => ({
+    id: `rack-${kind}`,
+    label: 'Rack A',
+    kind,
+    target: kind === 'ew-dx' ? '192.168.0.50' : 'http://10.0.0.20/telemetry',
+    pollMs: 2000,
+    timeoutMs: 1500
+  })
+
+  function withSources(...sources: Array<ReturnType<typeof source>>): void {
+    const settings = defaultShowSettings()
+    useStore.setState({ showSettings: { ...settings, rf: { ...settings.rf, sources } } })
+  }
+
+  it('offers Sennheiser EW-DX as a kind of source, with an address a person would type', async () => {
+    withSources(source('ew-dx'))
+    render()
+    openSection('Wireless')
+    await settle()
+
+    const kinds = [...container.querySelectorAll<HTMLOptionElement>('select[aria-label="Source kind"] option')]
+    expect(kinds.map(option => option.textContent)).toContain('Sennheiser EW-DX')
+    expect(container.querySelector<HTMLSelectElement>('select[aria-label="Source kind"]')!.value).toBe('ew-dx')
+  })
+
+  it('asks for the receiver\'s password under an EW-DX source, and under no other kind', async () => {
+    withSources(source('ew-dx'), source('http'))
+    render()
+    openSection('Wireless')
+    await settle()
+
+    const credentials = container.querySelectorAll('.ewdx-credentials')
+    expect(credentials).toHaveLength(1)
+    expect(credentials[0].getAttribute('data-source')).toBe('rack-ew-dx')
+  })
+
+  it('shows the credentials row when a source is switched to EW-DX', async () => {
+    withSources(source('http'))
+    render()
+    openSection('Wireless')
+    await settle()
+    expect(container.querySelector('.ewdx-credentials')).toBeNull()
+
+    choose(container.querySelector<HTMLSelectElement>('select[aria-label="Source kind"]')!, 'ew-dx')
+    await settle()
+
+    expect(container.querySelector('.ewdx-credentials')).not.toBeNull()
+  })
+
+  it('looks for receivers when the page is opened, and not before', async () => {
+    vi.mocked(window.cuerunner.show.ewDxDiscover).mockClear()
+    render()
+    await settle()
+    expect(window.cuerunner.show.ewDxDiscover).not.toHaveBeenCalled()
+
+    openSection('Wireless')
+    await settle()
+    expect(window.cuerunner.show.ewDxDiscover).toHaveBeenCalledTimes(1)
+  })
+
+  it('adds a receiver that was found as a source, and puts the cursor in its password box', async () => {
+    vi.mocked(window.cuerunner.show.ewDxDiscover).mockResolvedValue({
+      receivers: [{
+        address: '192.168.0.194', port: 443, name: 'EWDXEM4D-001B663BDD13',
+        product: 'EWDX4CHDS', model: 'EW-DX EM 4 Dante', serial: '5364000906'
+      }],
+      error: null
+    })
+    render()
+    openSection('Wireless')
+    await settle()
+
+    click('.ewdx-found button')
+    await settle()
+
+    const [added] = useStore.getState().showSettings.rf.sources
+    expect(added).toMatchObject({ kind: 'ew-dx', label: 'EW-DX EM 4 Dante', target: '192.168.0.194' })
+    // The receiver is no longer offered, and the one thing it could not say is what is asked for.
+    expect(container.querySelector('.ewdx-found')).toBeNull()
+    expect(document.activeElement).toBe(container.querySelector(`#ewdx-password-${added.id}`))
+  })
+
+  it('does not restart the wireless service on every letter of a source\'s address', async () => {
+    withSources(source('ew-dx'))
+    render()
+    openSection('Wireless')
+    await settle()
+    const field = container.querySelector<HTMLInputElement>('input[aria-label="Source address"]')!
+    const typeInto = (value: string): void => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setter.call(field, value)
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    const target = (): string => useStore.getState().showSettings.rf.sources[0].target
+
+    // A source is live the moment its settings change, so each letter would be a restart of the
+    // service and a new connection to the receiver. The show keeps what it had until the field is left.
+    typeInto('1')
+    typeInto('10.')
+    typeInto('10.0.0.9')
+    expect(target()).toBe('192.168.0.50')
+
+    act(() => { field.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(target()).toBe('10.0.0.9')
+  })
+
+  it('forgets what this machine holds for an EW-DX receiver when its source is removed', async () => {
+    withSources(source('ew-dx'))
+    render()
+    openSection('Wireless')
+    await settle()
+
+    click('button[aria-label="Remove Rack A"]')
+
+    expect(window.cuerunner.show.ewDxForget).toHaveBeenCalledWith('rack-ew-dx')
+    expect(useStore.getState().showSettings.rf.sources).toEqual([])
+  })
+
+  it('has nothing to forget when a source of another kind is removed', async () => {
+    withSources(source('http'))
+    render()
+    openSection('Wireless')
+    await settle()
+
+    click('button[aria-label="Remove Rack A"]')
+
+    expect(window.cuerunner.show.ewDxForget).not.toHaveBeenCalled()
+  })
+})
