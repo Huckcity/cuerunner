@@ -206,6 +206,29 @@ describe('ShowBus — device readings', () => {
       device: { detail: { frequency: '470.100' } }
     })
   })
+
+  it('reports a device when what it complains of changes, and not when it says the same again', () => {
+    const { bus, batches, clock } = setup()
+    bus.device(deviceState())
+    clock.advance(FLUSH_MS)
+
+    clock.advance(DEVICE_INTERVAL_MS)
+    bus.device(deviceState({ lastSeen: 1600, warnings: [{ text: 'audio clipping' }] }))
+    clock.advance(FLUSH_MS)
+    expect(batches).toHaveLength(2)
+    expect(batches[1][0]).toMatchObject({ device: { warnings: [{ text: 'audio clipping' }] } })
+
+    clock.advance(DEVICE_INTERVAL_MS)
+    bus.device(deviceState({ lastSeen: 2200, warnings: [{ text: 'audio clipping' }] }))
+    clock.advance(FLUSH_MS)
+    expect(batches).toHaveLength(2)
+
+    // The same words made critical are a different complaint.
+    clock.advance(DEVICE_INTERVAL_MS)
+    bus.device(deviceState({ lastSeen: 2800, warnings: [{ text: 'audio clipping', critical: true }] }))
+    clock.advance(FLUSH_MS)
+    expect(batches).toHaveLength(3)
+  })
 })
 
 describe('ShowBus — history, alerts and snapshot', () => {

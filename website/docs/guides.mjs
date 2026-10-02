@@ -1002,6 +1002,13 @@ export const GUIDES = [
         <li><strong>Offline</strong> — reported before, and has now stopped for longer than the threshold. This one raises an alarm.</li>
       </ul>
       <p>
+        A Sennheiser EW-DX receiver also says what it itself complains of, and it is shown under
+        the pack: <strong>encryption error — no audio</strong> is critical — the pack is linked
+        and nobody hears it — and <strong>RF overload</strong> and <strong>audio clipping</strong>
+        are worth knowing. Each raises one alarm when it appears, and clipping, which comes and
+        goes by the second, at most once a minute.
+      </p>
+      <p>
         Alarms appear above the panel and in the transport bar, so a battery warning finds
         you even with the dock closed. The thresholds — battery low, battery urgent, signal
         weak, how long silence counts as offline — are in Settings → Wireless.

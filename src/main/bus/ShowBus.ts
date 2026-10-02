@@ -186,6 +186,7 @@ function sameReading(a: DeviceState, b: DeviceState): boolean {
     sameBattery(a, b) &&
     sameRf(a, b) &&
     sameAudio(a, b) &&
+    sameWarnings(a, b) &&
     sameDetail(a, b)
   )
 }
@@ -207,6 +208,12 @@ function sameRf(a: DeviceState, b: DeviceState): boolean {
 function sameAudio(a: DeviceState, b: DeviceState): boolean {
   if (!a.audio || !b.audio) return !a.audio === !b.audio
   return a.audio.level === b.audio.level && a.audio.muted === b.audio.muted
+}
+
+function sameWarnings(a: DeviceState, b: DeviceState): boolean {
+  const mine = a.warnings ?? []
+  const theirs = b.warnings ?? []
+  return mine.length === theirs.length && mine.every((warning, i) => warning.text === theirs[i].text && !!warning.critical === !!theirs[i].critical)
 }
 
 function sameDetail(a: DeviceState, b: DeviceState): boolean {

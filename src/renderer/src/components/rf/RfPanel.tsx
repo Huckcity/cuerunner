@@ -46,7 +46,8 @@ export function rfPercent(dbm: number): number {
  * and is assigned, and hearing nothing from it is a fact rather than a verdict. An
  * offline device is the service's own verdict — it already waited out
  * `offlineAfterSeconds` — so the panel does no ageing of its own. A pack that is present
- * but in trouble is critical.
+ * but in trouble is critical, and one the device itself says is unusable — a key that does not
+ * match — is critical whatever its battery says.
  */
 export function packState(
   pack: RfPack,
@@ -59,8 +60,10 @@ export function packState(
   if (!device) return 'silent'
   if (!device.online) return 'offline'
   if (device.battery && device.battery.percent <= thresholds.batteryCritical) return 'critical'
+  if (device.warnings?.some(warning => warning.critical)) return 'critical'
   if (
     (device.battery && device.battery.percent <= thresholds.batteryWarning) ||
+    (device.warnings && device.warnings.length > 0) ||
     (device.rf && (device.rf.weak ?? device.rf.level <= thresholds.rfWarningDbm))
   ) {
     return 'low'
@@ -293,6 +296,17 @@ export function RfPanel({ onClose }: Props) {
                 <span className="rf-rf">{rfCell(device)}</span>
                 <span className="rf-readout">{readout(device)}</span>
                 <span className="rf-notes">{pack.notes}</span>
+                {/* On a line of its own: a complaint cut short by a narrow cell is the one thing
+                    on this row that has to be read whole. */}
+                {device?.warnings && device.warnings.length > 0 && (
+                  <span className="rf-warnings">
+                    {device.warnings.map(warning => (
+                      <span key={warning.text} className="rf-warning" data-critical={warning.critical === true}>
+                        {warning.text}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </div>
             )
           })

@@ -67,6 +67,53 @@ describe('channelsFrom', () => {
     expect(channelsFrom(FIXTURE_SERIAL, unknown)[0]).not.toHaveProperty('rfWeak')
   })
 
+  describe('what the receiver complains of', () => {
+    const complaints = (changes: Array<[string, unknown]>): unknown => {
+      const live = resources()
+      for (const [path, value] of changes) live.set(path, value)
+      return channelsFrom(FIXTURE_SERIAL, live)[0].warnings
+    }
+
+    it('says nothing when the receiver complains of nothing', () => {
+      expect(channelsFrom(FIXTURE_SERIAL, resources())[0]).not.toHaveProperty('warnings')
+    })
+
+    it('says a key that does not match is critical: the pack is linked and nobody hears it', () => {
+      expect(complaints([['/api/channel/0/warnings', ['Aes256Error']]])).toEqual([
+        { text: 'encryption error — no audio', critical: true }
+      ])
+    })
+
+    it('words an overload and clipping for the person reading, and does not call them critical', () => {
+      expect(complaints([['/api/channel/0/warnings', ['RfPeak', 'AfPeak']]])).toEqual([
+        { text: 'RF overload' },
+        { text: 'audio clipping' }
+      ])
+    })
+
+    it('counts clipping once when the pack and the receiver both say it', () => {
+      expect(complaints([
+        ['/api/channel/0/warnings', ['AfPeak']],
+        ['/api/transmitters/0/warnings', ['AfPeak']]
+      ])).toEqual([{ text: 'audio clipping' }])
+    })
+
+    it('puts what has to be dealt with first', () => {
+      expect(complaints([['/api/channel/0/warnings', ['AfPeak', 'Aes256Error']]])).toEqual([
+        { text: 'encryption error — no audio', critical: true },
+        { text: 'audio clipping' }
+      ])
+    })
+
+    it('leaves out what the panel already says in its own place, and what it does not know', () => {
+      // The battery has its own band, the signal its own verdict, and an absent pack is not a complaint.
+      expect(complaints([
+        ['/api/channel/0/warnings', ['LowSignal', 'SomethingNewInFirmware5']],
+        ['/api/transmitters/0/warnings', ['LowBattery']]
+      ])).toBeUndefined()
+    })
+  })
+
   it('reports muted when either end is muted', () => {
     const muted = resources()
     muted.set('/api/transmitters/0', { type: 'EW_DX_SK', mute: true })
@@ -100,7 +147,8 @@ describe('audioPercent', () => {
 describe('subscriptionPaths', () => {
   it('names the readings of every channel and every transmitter, with the /api prefix', () => {
     const paths = subscriptionPaths(4)
-    expect(paths).toHaveLength(28)
+    // Eight readings a channel: its own five, the radio's frequency, and the transmitter's two.
+    expect(paths).toHaveLength(4 * 8)
     expect(paths.every(path => path.startsWith('/api/'))).toBe(true)
     expect(paths).toContain('/api/transmitters/3/battery')
     expect(new Set(paths).size).toBe(paths.length)

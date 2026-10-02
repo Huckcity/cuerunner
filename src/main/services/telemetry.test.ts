@@ -74,6 +74,30 @@ describe('settling', () => {
   })
 })
 
+describe('parseTelemetry, warnings', () => {
+  it('keeps a device\'s complaints as worded, and which of them is critical', () => {
+    const parsed = parseTelemetry({
+      channels: [{ id: 'a', warnings: [{ text: 'audio clipping' }, { text: ' no audio ', critical: true }] }]
+    })
+    expect(parsed?.channels[0].warnings).toEqual([{ text: 'audio clipping' }, { text: 'no audio', critical: true }])
+  })
+
+  it('drops an entry that is not a complaint rather than showing something the device never said', () => {
+    const parsed = parseTelemetry({
+      channels: [{ id: 'a', warnings: ['clipping', null, { text: 5 }, { text: '  ' }, { text: 'ok', critical: 'yes' }] }]
+    })
+    expect(parsed?.channels[0].warnings).toEqual([{ text: 'ok' }])
+  })
+
+  it('has no warnings for a field that is not a list, and bounds how many and how long they are', () => {
+    expect(parseTelemetry({ channels: [{ id: 'a', warnings: 'clipping' }] })?.channels[0]).not.toHaveProperty('warnings')
+    const many = Array.from({ length: 30 }, (_, i) => ({ text: `w${i}` }))
+    expect(parseTelemetry({ channels: [{ id: 'a', warnings: many }] })?.channels[0].warnings).toHaveLength(8)
+    const long = parseTelemetry({ channels: [{ id: 'a', warnings: [{ text: 'x'.repeat(500) }] }] })
+    expect(long?.channels[0].warnings?.[0].text).toHaveLength(120)
+  })
+})
+
 describe('parseTelemetry, rfWeak', () => {
   it('keeps a receiver\'s own verdict on its signal when it is a boolean, and drops anything else', () => {
     const parsed = parseTelemetry({

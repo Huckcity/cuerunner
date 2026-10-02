@@ -122,7 +122,8 @@ export function telemetryPorts(
             password: held.password,
             pinnedFingerprint: held.fingerprint,
             // The first certificate a receiver shows is the one trusted from then on.
-            onFingerprint: fingerprint => void store.pin(source.id, fingerprint),
+            // The pin is kept in memory first; a write that fails is retried by the next change.
+            onFingerprint: fingerprint => { store.pin(source.id, fingerprint).catch(() => undefined) },
             expectedSerial: parts.expectedSerial,
             onSerial: parts.onSerial
           })
@@ -176,6 +177,10 @@ interface ChannelHistory {
   rf: Band
   /** When a receiver's own weak-signal verdict was last announced, for `REANNOUNCE_MS`. */
   rfVerdictAt?: number
+  /** The complaints standing against the channel as last read, so only a new one is announced. */
+  warnings: Set<string>
+  /** When each complaint was last announced, for `REANNOUNCE_MS`: clipping comes and goes. */
+  warnedAt: Map<string, number>
 }
 
 /**
@@ -431,6 +436,7 @@ export class WirelessService implements ShowService {
       }
     }
     if (channel.frequencyMhz !== undefined) device.frequency = channel.frequencyMhz
+    if (channel.warnings !== undefined && channel.warnings.length > 0) device.warnings = channel.warnings
 
     context.bus.device(device)
     const who = this.plotName(channel.id, channel.name ?? state.name)
@@ -451,6 +457,16 @@ export class WirelessService implements ShowService {
       }
       history.battery = band
     }
+    // What the device itself says is wrong: announced when it appears, not while it stands, and
+    // not again within a minute of the last time — a pack that clips comes and goes by the second.
+    for (const warning of channel.warnings ?? []) {
+      if (history.warnings.has(warning.text)) continue
+      if (!this.mayAnnounce(history.warnedAt.get(warning.text), now)) continue
+      context.bus.alert(warning.critical ? 'critical' : 'warning', this.id, `${who} ${warning.text}`, device.id)
+      history.warnedAt.set(warning.text, now)
+    }
+    history.warnings = new Set((channel.warnings ?? []).map(warning => warning.text))
+
     // A receiver that judges its own link has the last word on whether it is weak; the show's
     // dBm line is for sources that only report a number. The verdict rides with the number it
     // is about, so the panel and the alarm always have the same thing to read.
@@ -511,7 +527,7 @@ export class WirelessService implements ShowService {
   private historyOf(channelId: string): ChannelHistory {
     let history = this.history.get(channelId)
     if (!history) {
-      history = { dropouts: 0, battery: 'ok', rf: 'ok' }
+      history = { dropouts: 0, battery: 'ok', rf: 'ok', warnings: new Set(), warnedAt: new Map() }
       this.history.set(channelId, history)
     }
     return history

@@ -190,6 +190,19 @@
 
 .rf-row:hover { background: var(--bg-card); }
 
+/* What the device itself says is wrong, under the row it is about and across all of it. */
+.rf-warnings {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.rf-warning { color: var(--accent-amber); }
+.rf-warning[data-critical='true'] { color: var(--cue-color-red); font-weight: var(--fw-medium); }
+
 .rf-row[data-state='critical']  { border-left-color: var(--cue-color-red); }
 .rf-row[data-state='offline']   { border-left-color: var(--fg-subtle); }
 .rf-row[data-state='silent']    { border-left-color: var(--border-input); }

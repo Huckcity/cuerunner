@@ -1,5 +1,5 @@
 import { DEMO_PACK_COUNT, demoChannelId } from '../../shared/show'
-import type { RfThresholds, TelemetryChannel, TelemetryDocument } from '../../shared/show'
+import type { RfThresholds, TelemetryChannel, TelemetryDocument, TelemetryWarning } from '../../shared/show'
 
 // The pure half of wireless telemetry: what a source is allowed to say, and how a
 // reading maps onto the bands the service raises alarms from. The service owns the
@@ -74,6 +74,7 @@ interface RawChannel {
   charging?: unknown
   rfDbm?: unknown
   rfWeak?: unknown
+  warnings?: unknown
   audioLevel?: unknown
   muted?: unknown
   frequencyMhz?: unknown
@@ -86,6 +87,27 @@ interface RawChannel {
  */
 function reading(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** A bound on how many complaints one channel may carry: nothing a receiver says needs more. */
+const MAX_WARNINGS = 8
+const MAX_WARNING_TEXT = 120
+
+/**
+ * A channel's warnings, or nothing when the field is not a list of them. An entry that is not
+ * `{ text }` is dropped rather than shown as something the device never said, and the list is
+ * bounded because it ends up on a panel and in an alarm.
+ */
+function warningsOf(value: unknown): TelemetryWarning[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const kept: TelemetryWarning[] = []
+  for (const entry of value.slice(0, MAX_WARNINGS)) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const { text, critical } = entry as { text?: unknown; critical?: unknown }
+    if (typeof text !== 'string' || text.trim() === '') continue
+    kept.push({ text: text.trim().slice(0, MAX_WARNING_TEXT), ...(critical === true ? { critical: true } : {}) })
+  }
+  return kept
 }
 
 /**
@@ -125,6 +147,8 @@ export function parseTelemetry(value: unknown): TelemetryDocument | null {
     if (typeof raw.charging === 'boolean') channel.charging = raw.charging
     if (typeof raw.muted === 'boolean') channel.muted = raw.muted
     if (typeof raw.rfWeak === 'boolean') channel.rfWeak = raw.rfWeak
+    const warnings = warningsOf(raw.warnings)
+    if (warnings !== undefined) channel.warnings = warnings
 
     parsed.push(channel)
   }

@@ -327,10 +327,50 @@ describe('RfPanel', () => {
     expect(container.querySelector('.rf-empty')).not.toBeNull()
   })
 
+  it('puts what the device complains of under the pack, the critical ones marked', async () => {
+    await show({
+      plot: { packs: [pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' })] },
+      devices: [device({
+        id: 'rf:ch-1',
+        name: 'Aldonza',
+        battery: { percent: 90 },
+        warnings: [{ text: 'encryption error — no audio', critical: true }, { text: 'audio clipping' }]
+      })]
+    })
+
+    const warnings = [...rowFor('Aldonza').querySelectorAll('.rf-warning')]
+    expect(warnings.map(node => node.textContent)).toEqual(['encryption error — no audio', 'audio clipping'])
+    expect(warnings.map(node => node.getAttribute('data-critical'))).toEqual(['true', 'false'])
+    expect(rowFor('Aldonza').getAttribute('data-state')).toBe('critical')
+  })
+
+  it('has no line of complaints for a pack with none', async () => {
+    await show({
+      plot: { packs: [pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' })] },
+      devices: [device({ id: 'rf:ch-1', name: 'Aldonza', battery: { percent: 90 } })]
+    })
+
+    expect(rowFor('Aldonza').querySelector('.rf-warnings')).toBeNull()
+  })
+
   it('notes the pack beside its row', async () => {
     await show({ plot: { packs: [pack({ notes: 'Spare — swap with 4' })] } })
 
     expect(texts('.rf-notes')).toEqual(['Spare — swap with 4'])
+  })
+})
+
+describe('packState, what the device complains of', () => {
+  const linked = pack()
+
+  it('is critical for a complaint that makes the pack unusable, whatever its battery says', () => {
+    const keys = device({ battery: { percent: 90 }, warnings: [{ text: 'encryption error — no audio', critical: true }] })
+    expect(packState(linked, keys, THRESHOLDS)).toBe('critical')
+  })
+
+  it('is low for a complaint worth knowing about, and ok again without it', () => {
+    expect(packState(linked, device({ warnings: [{ text: 'audio clipping' }] }), THRESHOLDS)).toBe('low')
+    expect(packState(linked, device({ warnings: [] }), THRESHOLDS)).toBe('ok')
   })
 })
 
