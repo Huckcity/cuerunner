@@ -1542,10 +1542,13 @@ describe('the record and the copy the checks exist to refuse', () => {
       ])
     })
 
-    it('names a witnessed row whose capture has gone', () => {
-      expect(provedEvidenceProblems(LIVE.claims, new Map(), LIVE.lanes).filter((p) => p.includes('witnessed'))).toEqual([
-        expect.stringContaining(`row is witnessed on ${CAPTURE_FILE}, which the repository does not hold`)
-      ])
+    it('names a witnessed row whose capture has gone, each one the record holds', () => {
+      const problems = provedEvidenceProblems(LIVE.claims, new Map(), LIVE.lanes).filter((p) => p.includes('witnessed'))
+      const witnessedRows = LIVE.claims.filter((claim) => statusOf(claim) === 'witnessed')
+
+      // One for every witnessed row: not a number written here, which the next row would break.
+      expect(problems).toHaveLength(witnessedRows.length)
+      expect(problems.some((problem) => problem.includes(`row is witnessed on ${CAPTURE_FILE}, which the repository does not hold`))).toBe(true)
     })
 
     it('names a witnessed row that does not state the version the device gave', () => {

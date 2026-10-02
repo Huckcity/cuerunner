@@ -572,6 +572,7 @@ export const CUE_FIELD_SHAPE = {
   },
   scene: { ...CUE_BASE_SHAPE, type: 'string', sceneId: 'string' },
   devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string' },
+  mic: { ...CUE_BASE_SHAPE, type: 'string', channelId: 'string', label: 'string', action: 'string' },
   msc: {
     ...CUE_BASE_SHAPE,
     type: 'string',

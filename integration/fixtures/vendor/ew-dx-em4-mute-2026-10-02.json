@@ -1,0 +1,153 @@
+{
+ "provenance": {
+  "kind": "ew-dx-mute",
+  "target": "192.168.0.194:443",
+  "device": "Sennheiser EW-DX EM 4 Dante (EWDX4CHDS, hardware revision 0596716-09)",
+  "version": "4.0.0",
+  "versionSource": "device",
+  "versionNote": "the receiver's own GET /api/firmware/update/state deviceVersion; SSC protocol 2.4",
+  "recordedAt": "2026-10-02T18:47:00Z",
+  "recordedBy": "a hand run from the dev machine (the recorder is not kept: ten requests, made with Python urllib)",
+  "method": [
+   "Authenticated requests against channel 0, which had a pack linked and was in nobody's show.",
+   "The channel was read, muted, read, muted again, unmuted and read; then two things it should refuse were tried (a channel the receiver does not have, and a mute that is not a boolean).",
+   "The original state (unmuted) was written back last and read to confirm it."
+  ],
+  "note": [
+   "What this establishes: the body is exactly {\"mute\": <boolean>}; a write answers 200 with no body; the state is read back from GET /api/channel/{n} as \"mute\"; writing the state a channel is already in is not an error;",
+   "and a receiver answers 400 \u2014 not 404 \u2014 to a channel it does not have and to a mute that is not a boolean. The unmuted state was restored and read back."
+  ]
+ },
+ "exchanges": [
+  {
+   "method": "GET",
+   "path": "/api/channel/0",
+   "request": null,
+   "status": 200,
+   "response": {
+    "name": "37",
+    "mute": false,
+    "mates": [
+     "TX1"
+    ],
+    "gain": 21,
+    "audio": [
+     "Out1"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/channel/0",
+   "request": {
+    "mute": true
+   },
+   "status": 200,
+   "response": null
+  },
+  {
+   "method": "GET",
+   "path": "/api/channel/0",
+   "request": null,
+   "status": 200,
+   "response": {
+    "name": "37",
+    "mute": true,
+    "mates": [
+     "TX1"
+    ],
+    "gain": 21,
+    "audio": [
+     "Out1"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/channel/0",
+   "request": {
+    "mute": true
+   },
+   "status": 200,
+   "response": null
+  },
+  {
+   "method": "PUT",
+   "path": "/api/channel/0",
+   "request": {
+    "mute": false
+   },
+   "status": 200,
+   "response": null
+  },
+  {
+   "method": "GET",
+   "path": "/api/channel/0",
+   "request": null,
+   "status": 200,
+   "response": {
+    "name": "37",
+    "mute": false,
+    "mates": [
+     "TX1"
+    ],
+    "gain": 21,
+    "audio": [
+     "Out1"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  },
+  {
+   "method": "PUT",
+   "path": "/api/channel/9",
+   "request": {
+    "mute": true
+   },
+   "status": 400,
+   "response": null
+  },
+  {
+   "method": "PUT",
+   "path": "/api/channel/0",
+   "request": {
+    "mute": "yes"
+   },
+   "status": 400,
+   "response": null
+  },
+  {
+   "method": "PUT",
+   "path": "/api/channel/0",
+   "request": {
+    "mute": false
+   },
+   "status": 200,
+   "response": null
+  },
+  {
+   "method": "GET",
+   "path": "/api/channel/0",
+   "request": null,
+   "status": 200,
+   "response": {
+    "name": "37",
+    "mute": false,
+    "mates": [
+     "TX1"
+    ],
+    "gain": 21,
+    "audio": [
+     "Out1"
+    ],
+    "outputLevel": 6,
+    "eventCounter": 0
+   }
+  }
+ ]
+}

@@ -133,7 +133,8 @@ export const PRO_ROWS = [
     },
     pro: {
       identifiers: ['rf', 'show:ewdx-set-password', 'show:ewdx-trust-again'],
-      prose: `Battery and RF for every transmitter, in the Monitor and the mic plot; alarms when a pack or an aerial misbehaves; the session report afterwards. Reads Sennheiser EW-DX receivers directly, any other receiver over a telemetry document, or the demo rack on the bench.`
+      cues: ['mic'],
+      prose: `Battery and RF for every transmitter, in the Monitor and the mic plot; a check before the doors that every pack is ready; alarms when a pack or an aerial misbehaves; the session report afterwards, with what was playing when a pack had trouble. Reads Sennheiser EW-DX receivers directly, any other receiver over a telemetry document, or the demo rack on the bench. A Mic cue mutes or unmutes an EW-DX mic from the cue list.`
     }
   },
   {
@@ -234,6 +235,16 @@ export const PRO_MARKS = [
     page: 'reference/cue-types.html',
     words: 'Scene',
     cues: ['scene']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Mic',
+    cues: ['mic']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Mic cue',
+    cues: ['mic']
   },
   {
     page: 'reference/formats.html',

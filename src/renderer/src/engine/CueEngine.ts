@@ -1,6 +1,7 @@
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue,
-  MscCue
+  MscCue,
+  MicCue
 } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
 import { audioEngine } from './audioEngineClient'
@@ -17,6 +18,7 @@ import type { FireSurface } from './inputGuard'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
 import { sendMsc } from './showControl'
+import { sendMic } from './mic'
 import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
@@ -540,9 +542,9 @@ export class CueEngine {
         message: `${network.method} ${network.url} → ${detail.status}${statusText} (${durationMs}ms)`,
         label
       })
-    } else if (cue.type !== 'scene') {
-      // A scene recall writes its own line — what the desk was told — so a duration
-      // here would only say the same thing twice.
+    } else if (cue.type !== 'scene' && cue.type !== 'mic') {
+      // A scene recall and a mic cue write their own line — what the desk was told, which mic
+      // was closed — so a duration here would only say the same thing twice.
       this.log({ level: 'info', message: `completed in ${durationMs}ms`, label })
     }
 
@@ -651,6 +653,9 @@ export class CueEngine {
         break
       case 'msc':
         this.executeMsc(cue as MscCue, finish)
+        break
+      case 'mic':
+        this.executeMic(cue as MicCue, finish)
         break
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
@@ -923,6 +928,28 @@ export class CueEngine {
     })
   }
 
+  private executeMic(cue: MicCue, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    const verb = cue.action === 'mute' ? 'muted' : 'unmuted'
+    if (cue.channelId === '') {
+      // A cue aimed at nothing must do nothing rather than guess which pack was meant.
+      this.log({ level: 'error', message: 'no mic chosen', label })
+      finish(this.now(), { outcome: 'error', error: 'no mic chosen' })
+      return
+    }
+    void sendMic(cue).then(result => {
+      const detail: Partial<CueRunResult> = {}
+      if (result.ok) {
+        // What it did, under this cue's label: a duration here would say nothing.
+        this.log({ level: 'info', message: `${verb} ${cue.label || cue.channelId}`, label })
+      } else {
+        detail.outcome = 'error'
+        detail.error = result.error ?? 'the receiver did not take it'
+      }
+      finish(this.now(), detail)
+    })
+  }
+
   private executeMsc(cue: MscCue, finish: Finish): void {
     // The command goes out as it stands: a console's cue number is the console's, and
     // this app has nothing to check it against. Where it goes is the cue's own choice,
@@ -1053,7 +1080,7 @@ export class CueEngine {
         // Fire-and-forget types have already happened — don't replay
         if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
             child.type === 'network' || child.type === 'script' || child.type === 'stop' ||
-            child.type === 'devamp' || child.type === 'msc') continue
+            child.type === 'devamp' || child.type === 'msc' || child.type === 'mic') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }
     }

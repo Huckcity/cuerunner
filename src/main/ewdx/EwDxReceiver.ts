@@ -21,6 +21,8 @@ export interface ReceiverClient {
   start(): void
   stop(): void
   snapshot(waitMs: number): Promise<TelemetryChannel[]>
+  /** Mutes or unmutes a channel's output at the receiver, and says so if it did not take. */
+  setMute?(channel: number, mute: boolean): Promise<void>
 }
 
 export interface ClientParts {
@@ -93,8 +95,15 @@ export class EwDxReceiver implements ReceiverClient {
     }
   }
 
-  private serial(): string | undefined {
+  /** The serial of the receiver this machine has met at this source, once it has. */
+  serial(): string | undefined {
     return this.options.credentials.get(this.options.sourceId)?.serial
+  }
+
+  /** Mutes or unmutes a channel on whichever address the receiver is at now. */
+  async setMute(channel: number, mute: boolean): Promise<void> {
+    if (!this.client?.setMute) throw new Error('receiver is not started')
+    return this.client.setMute(channel, mute)
   }
 
   private open(): void {

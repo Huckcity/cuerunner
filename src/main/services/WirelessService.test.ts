@@ -1262,6 +1262,98 @@ describe('WirelessService with an EW-DX source', () => {
   })
 })
 
+// The one thing the service writes. It finds the receiver by the serial the channel id carries, and
+// it is as narrow as it can be: an EW-DX channel of a receiver this machine has reached, one boolean.
+describe('WirelessService muting a channel', () => {
+  const channelId = (serial: string, index: number): string => `ew-dx:${serial}:${index}`
+
+  type Muting = FakeSession & { serial: () => string | undefined; setMute: Mock }
+
+  function twoReceivers(): { service: WirelessService; first: Muting; second: Muting } {
+    const first = Object.assign(fakeSession(), { serial: () => '1111111111', setMute: vi.fn().mockResolvedValue(undefined) })
+    const second = Object.assign(fakeSession(), { serial: () => '2222222222', setMute: vi.fn().mockResolvedValue(undefined) })
+    const sessions = [first, second]
+    const service = new WirelessService({ fetchJson: vi.fn(), readText: vi.fn(), ewDx: () => sessions.shift()! })
+    const bus = new ShowBus({ now: () => 1000 })
+    service.start(
+      { bus, setState: vi.fn() },
+      settings([ewDxSource(), { ...ewDxSource(), id: 'rack-b', label: 'Rack B', target: '10.0.0.41' }])
+    )
+    return { service, first, second }
+  }
+
+  it('mutes the channel on the receiver whose serial the id carries, and not on the other', async () => {
+    const { service, first, second } = twoReceivers()
+
+    await expect(service.command('mute', { channelId: channelId('2222222222', 3), mute: true })).resolves.toEqual({
+      channelId: channelId('2222222222', 3),
+      mute: true
+    })
+
+    expect(second.setMute).toHaveBeenCalledWith(3, true)
+    expect(first.setMute).not.toHaveBeenCalled()
+    service.stop()
+  })
+
+  it('unmutes the same way', async () => {
+    const { service, first } = twoReceivers()
+    await service.command('mute', { channelId: channelId('1111111111', 0), mute: false })
+    expect(first.setMute).toHaveBeenCalledWith(0, false)
+    service.stop()
+  })
+
+  it('says so when no receiver set up here has that serial, rather than muting nothing', async () => {
+    const { service, first, second } = twoReceivers()
+
+    await expect(service.command('mute', { channelId: channelId('9999999999', 0), mute: true })).rejects.toThrow(
+      'no EW-DX receiver with serial 9999999999 is set up here and reachable'
+    )
+    expect(first.setMute).not.toHaveBeenCalled()
+    expect(second.setMute).not.toHaveBeenCalled()
+    service.stop()
+  })
+
+  it('says so for a receiver that has never been reached, which has no serial to be found by', async () => {
+    const unreached = Object.assign(fakeSession(), { serial: () => undefined, setMute: vi.fn() })
+    const service = new WirelessService({ fetchJson: vi.fn(), readText: vi.fn(), ewDx: () => unreached })
+    service.start({ bus: new ShowBus({ now: () => 1000 }), setState: vi.fn() }, settings([ewDxSource()]))
+
+    await expect(service.command('mute', { channelId: channelId('1111111111', 0), mute: true })).rejects.toThrow('no EW-DX receiver')
+    expect(unreached.setMute).not.toHaveBeenCalled()
+    service.stop()
+  })
+
+  it('takes only an EW-DX channel and one on or off', async () => {
+    const { service, first } = twoReceivers()
+
+    await expect(service.command('mute', { channelId: 'demo-pack-1', mute: true })).rejects.toThrow('only EW-DX receivers take it')
+    await expect(service.command('mute', { channelId: 'ew-dx:111:x', mute: true })).rejects.toThrow('only EW-DX receivers take it')
+    await expect(service.command('mute', { channelId: channelId('1111111111', 0) })).rejects.toThrow('a mute needs a channel and on or off')
+    await expect(service.command('mute', { channelId: channelId('1111111111', 0), mute: 'yes' })).rejects.toThrow('a mute needs')
+    await expect(service.command('mute', undefined)).rejects.toThrow('a mute needs')
+    expect(first.setMute).not.toHaveBeenCalled()
+    service.stop()
+  })
+
+  it('says what the receiver said when it could not be done', async () => {
+    const { service, first } = twoReceivers()
+    first.setMute.mockRejectedValue(new Error('receiver said yes and is not muted'))
+
+    await expect(service.command('mute', { channelId: channelId('1111111111', 0), mute: true })).rejects.toThrow(
+      'receiver said yes and is not muted'
+    )
+    service.stop()
+  })
+
+  it('has nothing to mute on when the service has no EW-DX source at all', async () => {
+    const service = new WirelessService({ fetchJson: vi.fn(), readText: vi.fn() })
+    service.start({ bus: new ShowBus({ now: () => 1000 }), setState: vi.fn() }, settings([demoSource()]))
+
+    await expect(service.command('mute', { channelId: channelId('1111111111', 0), mute: true })).rejects.toThrow('no EW-DX receiver')
+    service.stop()
+  })
+})
+
 describe('telemetryPorts for EW-DX', () => {
   it('says the password is missing when this machine has none for the source', async () => {
     const credentials = createEwDxCredentials({

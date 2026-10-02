@@ -32,6 +32,7 @@ class ScriptedClient implements ReceiverClient {
   start(): void { this.started = true }
   stop(): void { this.stopped = true }
   snapshot(): Promise<TelemetryChannel[]> { return this.answer() }
+  setMute?: (channel: number, mute: boolean) => Promise<void>
 }
 
 let dir = ''
@@ -245,6 +246,17 @@ describe('EwDxReceiver', () => {
 
     expect(credentials.get('rack-a')?.moved).toBeUndefined()
     expect(clients[1].parts.origin).toBe(ORIGIN)
+  })
+
+  it('mutes through the client it has now, and says so when it has none', async () => {
+    const live = receiver()
+    await expect(live.setMute(0, true)).rejects.toThrow('receiver is not started')
+
+    live.start()
+    const setMute = vi.fn().mockResolvedValue(undefined)
+    clients[0].setMute = setMute
+    await live.setMute(2, true)
+    expect(setMute).toHaveBeenCalledWith(2, true)
   })
 
   it('opens nothing once it has been stopped, even if a look finishes after', async () => {

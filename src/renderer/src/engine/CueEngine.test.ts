@@ -6,7 +6,7 @@ import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import type { ScriptRun } from './scriptHost'
-import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue, MscCue } from '../../../shared/cue'
+import type { Cue, WaitCue, AudioCue, MidiCue, OscCue, FadeCue, StopCue, NetworkCue, ScriptCue, GroupCue, SceneCue, DevampCue, MscCue, MicCue } from '../../../shared/cue'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../../../shared/show'
 import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
@@ -1433,6 +1433,76 @@ describe('CueEngine — engine failures are reported', () => {
 
 // A scene cue puts the desk where the scene says it should be, at the moment GO reaches
 // it — which is the whole point of having it in the stack rather than on a panel.
+describe('CueEngine — mic cues', () => {
+  const makeMic = (overrides: Partial<MicCue> = {}): MicCue => ({
+    id: 'mi1', number: '14', name: 'Aldonza off', type: 'mic',
+    colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+    advance: 'none', isArmed: true, notes: '',
+    channelId: 'ew-dx:5364000906:0', label: 'Aldonza (37)', action: 'mute',
+    ...overrides
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(window.cuerunner.show.command).mockResolvedValue({ ok: true })
+  })
+
+  it('mutes the mic the cue names, and says what it closed under the cue', async () => {
+    const { runner, appendLog, setLastRun } = setup([makeMic()])
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(window.cuerunner.show.command).toHaveBeenCalledWith('rf', 'mute', { channelId: 'ew-dx:5364000906:0', mute: true })
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'info', message: 'muted Aldonza (37)', label: '14 · Aldonza off' })])
+    expect(setLastRun).toHaveBeenCalledWith('mi1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('unmutes, saying so, and does not add a duration line that would say the same thing twice', async () => {
+    const { runner, appendLog, setLastRun } = setup([makeMic({ action: 'unmute' })])
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(window.cuerunner.show.command).toHaveBeenCalledWith('rf', 'mute', { channelId: 'ew-dx:5364000906:0', mute: false })
+    const lines = appendLog.mock.calls.flatMap(call => call[0].map((entry: { message: string }) => entry.message))
+    expect(lines).toContain('unmuted Aldonza (37)')
+    expect(lines.filter(line => line.startsWith('completed in'))).toEqual([])
+  })
+
+  it('reports an error on the cue, in the log and in its last run, when the mic was not muted', async () => {
+    vi.mocked(window.cuerunner.show.command).mockResolvedValue({ ok: false, error: 'receiver said yes and is not muted' })
+    const { runner, appendLog, setLastRun } = setup([makeMic()])
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(setLastRun).toHaveBeenCalledWith('mi1', expect.objectContaining({ outcome: 'error', error: 'receiver said yes and is not muted' }))
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: 'receiver said yes and is not muted' })])
+  })
+
+  it('does nothing and says so for a cue aimed at no mic, rather than guessing which pack was meant', async () => {
+    const { runner, appendLog, setLastRun } = setup([makeMic({ channelId: '', label: '' })])
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(window.cuerunner.show.command).not.toHaveBeenCalled()
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: 'no mic chosen' })])
+    expect(setLastRun).toHaveBeenCalledWith('mi1', expect.objectContaining({ outcome: 'error', error: 'no mic chosen' }))
+  })
+
+  it('is refused without a licence, and the receiver is not touched', async () => {
+    const { runner, appendLog, setLastRun } = setup([makeMic()], undefined, false)
+
+    runner.go()
+    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
+
+    expect(window.cuerunner.show.command).not.toHaveBeenCalled()
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: 'mic cues need Cuerunner Pro' })])
+  })
+})
+
 describe('CueEngine — scene cues', () => {
   function withDesk(sceneId = 's-1'): SceneCue {
     const defaults = defaultShowSettings()

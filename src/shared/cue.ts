@@ -8,7 +8,7 @@ export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' |
  */
 export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
-  'group', 'network', 'script', 'scene', 'devamp', 'msc'
+  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -18,11 +18,13 @@ export type CueType = (typeof CUE_TYPES)[number]
  * so the refusal and the published record read one fact rather than spelling the same
  * literal twice.
  *
- * `scene` is the only one. A cue that puts the desk somewhere the show can lose is a
- * production workflow; a send the operator's own hand caused is not, whichever socket it
- * uses. The runner refuses these through `isProCueType` when the machine is unlicensed.
+ * `scene` and `mic`. A cue that puts the desk somewhere the show can lose is a production
+ * workflow, and so is one that opens and closes a radio mic from the cue list: both write to
+ * live equipment on the show's behalf, where a send the operator's own hand caused is not,
+ * whichever socket it uses. The runner refuses these through `isProCueType` when the machine
+ * is unlicensed.
  */
-export const PRO_CUE_TYPES = ['scene'] as const satisfies readonly CueType[]
+export const PRO_CUE_TYPES = ['scene', 'mic'] as const satisfies readonly CueType[]
 
 export type ProCueType = (typeof PRO_CUE_TYPES)[number]
 
@@ -260,6 +262,25 @@ export interface DevampCue extends CueBase {
   targetCueId: string
 }
 
+/**
+ * A cue that mutes or unmutes a radio mic at its receiver: the pack that is offstage for the
+ * scene, closed by the cue list rather than by someone's hand on a fader.
+ *
+ * It names a channel and says which way, and nothing else — never a toggle, because a toggle
+ * run twice leaves the mic in the state the first run found it, and a cue list that can be
+ * jumped around in cannot know which state that was. Muting what is muted is the state asked
+ * for; the receiver is asked afterwards, and a mute that did not happen is an error the cue
+ * says, never a mic left open in silence.
+ */
+export interface MicCue extends CueBase {
+  type: 'mic'
+  /** The channel the receiver reports it under, or empty for a cue not yet pointed at one. */
+  channelId: string
+  /** What it was called when it was chosen: so the cue reads the same when the receiver is off. */
+  label: string
+  action: 'mute' | 'unmute'
+}
+
 export interface SceneCue extends CueBase {
   type: 'scene'
   /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
@@ -320,3 +341,4 @@ export type Cue =
   | SceneCue
   | DevampCue
   | MscCue
+  | MicCue

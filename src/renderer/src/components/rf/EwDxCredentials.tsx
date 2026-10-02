@@ -16,6 +16,10 @@ interface Props {
   serviceKey: string
 }
 
+/** How often a row that is waiting to learn the receiver looks again, and how many times it will. */
+const LOOK_AGAIN_MS = 1000
+const MAX_LOOKS = 60
+
 /** First four and last two groups of a SHA-256: enough to compare with a receiver's own screen. */
 export function shortFingerprint(fingerprint: string): string {
   const groups = fingerprint.split(':')
@@ -50,6 +54,26 @@ export function EwDxCredentials({ sourceId, target, autoFocus, serviceKey }: Pro
       current = false
     }
   }, [sourceId, serviceKey])
+
+  // A first connection teaches this machine the certificate and the serial, and says nothing
+  // else: the service is "running" before it and "running" after, so no event tells this row to
+  // look again. While a password is held and either is still unknown, it looks again — once a
+  // second, and not for ever: a receiver that never answers should not be asked about all day.
+  const waiting = held !== null && held.hasPassword && (held.fingerprint === null || held.serial === null)
+  const [looks, setLooks] = useState(0)
+  useEffect(() => {
+    if (!waiting || looks >= MAX_LOOKS) return
+    const timer = window.setTimeout(() => {
+      window.cuerunner.show.ewDxCredentials(sourceId).then(
+        status => setHeld(status),
+        () => undefined
+      )
+      setLooks(count => count + 1)
+    }, LOOK_AGAIN_MS)
+    return () => window.clearTimeout(timer)
+  }, [waiting, looks, sourceId])
+  // A new reason to wait — the service moved, a password was saved — starts the count again.
+  useEffect(() => setLooks(0), [serviceKey, sourceId])
 
   const take = (result: EwDxCredentialResult): boolean => {
     if (!result.ok) {
