@@ -7,8 +7,9 @@
 // app's side is the real thing: the Electron main process, the pinned connection, the machine's
 // own credentials file, and the window.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { closeApp, launchApp, mintLicense } from './helpers'
 import { startFakeReceiver, type FakeReceiver } from '../src/main/ewdx/fakeReceiver'
 import { makeTestCertificate, type TestCertificate } from '../src/main/ewdx/testCertificate'
@@ -175,6 +176,40 @@ test('the check says whether every pack is ready, and changes as the receiver do
   // Fixed, and it goes green without anybody pressing anything.
   receiver.push('/api/channel/0/warnings', [])
   await expect(verdict).toHaveText('All 1 pack ready.')
+})
+
+test('a pack that a show would use up is flagged by the check, from what it used last time', async () => {
+  // Last time this pack was worn it went from 95% to 35% over three hours, on this machine.
+  await closeApp(app)
+  const userData = mkdtempSync(join(tmpdir(), 'cuerunner-e2e-battery-'))
+  const startedAt = Date.now() - 2 * 24 * 3600 * 1000
+  writeFileSync(join(userData, 'rf-battery.json'), JSON.stringify({
+    version: 1,
+    packs: {
+      [`ew-dx:${FIXTURE_SERIAL}:0`]: {
+        finished: [{ start: 95, floor: 35, startedAt, endedAt: startedAt + 3 * 3600 * 1000 }]
+      }
+    }
+  }))
+  ;({ app, page, userDataDir } = await launchApp({
+    userDataDir: userData,
+    license: mintLicense(),
+    env: { CUERUNNER_TEST_EWDX_ANNOUNCED: JSON.stringify([address()]) }
+  }))
+
+  const dialog = await openWireless()
+  await addReceiver(dialog)
+  await dialog.getByLabel('Password').fill(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.ewdx-fingerprint')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).toContainText('76%')
+
+  // 76% looks healthy, and a show cost this pack 60%: it would be at the urgent line before the end.
+  await page.getByRole('button', { name: 'Check', exact: true }).click()
+  await expect(page.locator('.rf-check-verdict')).toHaveText('0 of 1 pack ready — worth a look at the rest.')
+  await expect(page.locator('.rf-check-row')).toContainText('battery 76% — a show used 60% last time')
 })
 
 test('a wrong password is refused by name, and nothing is shown as a pack', async () => {

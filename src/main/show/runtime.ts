@@ -8,6 +8,7 @@ import { SqNativeService } from '../services/SqNativeService'
 import { WirelessService, telemetryPorts } from '../services/WirelessService'
 import type { EwDxCredentials } from '../ewdx/credentials'
 import type { DiscoverResult } from '../ewdx/discovery'
+import type { BatteryLog } from '../services/BatteryLog'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
 import { RedundancyService } from '../services/RedundancyService'
@@ -26,6 +27,8 @@ export interface ServiceOptions {
   ewDx?: EwDxCredentials
   /** How a receiver that has left its address is found by its serial. */
   discoverReceivers?: () => Promise<DiscoverResult>
+  /** What each pack used in earlier shows, kept on this machine. */
+  batteryLog?: BatteryLog
 }
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
@@ -40,7 +43,7 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     // The SQ's own control service, beside the desk link: the membership is written there
     // and the desk's mutes stay on the MIDI socket.
     new SqNativeService(),
-    new WirelessService(telemetryPorts(options.ewDx, options.discoverReceivers)),
+    new WirelessService(telemetryPorts(options.ewDx, options.discoverReceivers), options.batteryLog),
     new PresenceService(),
     new CompanionService(),
     new RedundancyService({ settings: options.redundancy })

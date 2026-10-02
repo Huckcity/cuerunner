@@ -281,6 +281,7 @@ export function RfPanel({ onClose }: Props) {
                   {row.lowestPercent === null
                     ? 'no reading'
                     : `lowest ${row.lowestPercent}%${row.lowestAt === null ? '' : ` at ${formatClock(row.lowestAt)}`}`}
+                  {row.lastUsedPercent !== null && ` · last show used ${row.lastUsedPercent}%`}
                 </span>
                 <span className="rf-report-dropouts">
                   {row.dropouts === 0

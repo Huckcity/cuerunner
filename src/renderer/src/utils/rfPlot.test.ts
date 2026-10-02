@@ -151,6 +151,18 @@ describe('buildReport', () => {
     expect(second.swaps).toEqual([])
   })
 
+  it('reports what the pack used last time, from the device\'s history', () => {
+    const [first, second] = buildReport(plot(), PERFORMERS, [
+      device('rf:ch-1', { history: { lowestPercent: 40, lowestAt: AT, dropouts: 0, lastUsedPercent: 24 } })
+    ], [])
+
+    expect(first.lastUsedPercent).toBe(24)
+    expect(second.lastUsedPercent).toBeNull()
+    expect(reportText([first], AT)).toContain('lowest 40% at')
+    expect(reportText([first], AT)).toContain(', last show used 24%,')
+    expect(reportText([second], AT)).not.toContain('last show used')
+  })
+
   it('reports the floor for a pack that ended the night quiet', () => {
     // The case the report exists for: nobody is hearing it now, and that is exactly the
     // pack someone asks about the next morning.

@@ -7,6 +7,7 @@ import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
 import { KeychainRefusedError, createEwDxCredentials } from '../ewdx/credentials'
 import { discoverEwDx } from '../ewdx/discovery'
+import { BatteryLog } from '../services/BatteryLog'
 import { NetworkClient } from '../network/NetworkClient'
 import type { NetworkRequest } from '../../shared/network'
 import { audioEngine } from '../audio/AudioEngine'
@@ -155,11 +156,16 @@ function discoverReceivers(): Promise<EwDxDiscoverResult> {
   return discoverEwDx({ announced })
 }
 
+// What each pack used in the shows before this one. A fact about a pack in a case and not about a
+// show — a show is copied between machines and a pack is not — so it is kept here, beside the licence.
+const batteryLog = new BatteryLog({ filePath: path.join(app.getPath('userData'), 'rf-battery.json') })
+
 const show = createShowRuntime(
   defaultServices({
     redundancy: () => machineRedundancy.current(),
     ewDx: ewDxCredentials,
-    discoverReceivers
+    discoverReceivers,
+    batteryLog
   }),
   () => isPro(license.status())
 )

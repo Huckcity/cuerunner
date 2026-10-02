@@ -117,6 +117,8 @@ export interface RfReportRow {
   /** The lowest battery the show saw for this pack, from the wireless service. */
   lowestPercent: number | null
   lowestAt: number | null
+  /** What the pack used in the show before this one, on this machine; null until it has a past. */
+  lastUsedPercent: number | null
   dropouts: number
   swaps: RfSwap[]
 }
@@ -145,6 +147,7 @@ export function buildReport(
       device,
       lowestPercent: device?.history?.lowestPercent ?? null,
       lowestAt: device?.history?.lowestAt ?? null,
+      lastUsedPercent: device?.history?.lastUsedPercent ?? null,
       dropouts: device?.history?.dropouts ?? 0,
       swaps: swaps.filter(swap => swap.packId === pack.id)
     }
@@ -160,8 +163,9 @@ export function reportText(rows: RfReportRow[], generatedAt: number): string {
     const battery = row.lowestPercent === null
       ? 'no reading'
       : `lowest ${row.lowestPercent}%${row.lowestAt === null ? '' : ` at ${formatClock(row.lowestAt)}`}`
+    const used = row.lastUsedPercent === null ? '' : `, last show used ${row.lastUsedPercent}%`
     const dropouts = row.dropouts === 0 ? 'no dropouts' : `${row.dropouts} dropout${row.dropouts === 1 ? '' : 's'}`
-    lines.push(`${row.label} — ${who}, ${battery}, ${dropouts}`)
+    lines.push(`${row.label} — ${who}, ${battery}${used}, ${dropouts}`)
   }
 
   const swaps = rows.flatMap(row => row.swaps).sort((a, b) => a.at - b.at)
