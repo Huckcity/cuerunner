@@ -5,7 +5,8 @@ import { OscInputService } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
 import { MidiTcpService } from '../services/MidiTcpService'
 import { SqNativeService } from '../services/SqNativeService'
-import { WirelessService } from '../services/WirelessService'
+import { WirelessService, telemetryPorts } from '../services/WirelessService'
+import type { EwDxCredentials } from '../ewdx/credentials'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
 import { RedundancyService } from '../services/RedundancyService'
@@ -20,6 +21,8 @@ import type { AlertLevel, ShowEvent, ShowSettings, ShowSnapshot } from '../../sh
  */
 export interface ServiceOptions {
   redundancy?: () => RedundancySettings
+  /** The receivers' passwords and pinned certificates, which are the machine's and not the show's. */
+  ewDx?: EwDxCredentials
 }
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
@@ -34,7 +37,7 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     // The SQ's own control service, beside the desk link: the membership is written there
     // and the desk's mutes stay on the MIDI socket.
     new SqNativeService(),
-    new WirelessService(),
+    new WirelessService(telemetryPorts(options.ewDx)),
     new PresenceService(),
     new CompanionService(),
     new RedundancyService({ settings: options.redundancy })

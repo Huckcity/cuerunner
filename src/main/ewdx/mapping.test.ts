@@ -1,0 +1,91 @@
+// The mapping decides what the plot is told about a pack, so it is held to the receiver's
+// own captured words: one linked bodypack on AA cells, and channels with nobody on them.
+import { describe, it, expect } from 'vitest'
+import { audioPercent, channelsFrom, ewDxChannelId, subscriptionPaths } from './mapping'
+import { FIXTURE_SERIAL, LINKED_EM4 } from './fixtures'
+
+const resources = (entries = LINKED_EM4): Map<string, unknown> => new Map(entries)
+
+describe('channelsFrom', () => {
+  it('reads a linked bodypack into the contract and leaves unlinked channels out', () => {
+    expect(channelsFrom(FIXTURE_SERIAL, resources())).toEqual([
+      {
+        id: ewDxChannelId(FIXTURE_SERIAL, 0),
+        name: '37',
+        rfDbm: -83,
+        audioLevel: audioPercent(-91.9),
+        muted: false,
+        batteryPercent: 76,
+        frequencyMhz: 606.2
+      }
+    ])
+  })
+
+  it('has no minutes for a pack on AA cells, because the receiver gave none', () => {
+    const [channel] = channelsFrom(FIXTURE_SERIAL, resources())
+    expect(channel).not.toHaveProperty('batteryMinutes')
+  })
+
+  it('reads minutes when a rechargeable pack reports them', () => {
+    const rechargeable = resources()
+    rechargeable.set('/api/transmitters/0/battery', { type: 'Battery', gauge: 40, lifetime: 95 })
+    const [channel] = channelsFrom(FIXTURE_SERIAL, rechargeable)
+    expect(channel.batteryPercent).toBe(40)
+    expect(channel.batteryMinutes).toBe(95)
+  })
+
+  it('leaves a channel out when it names a mate but the receiver warns NoLink', () => {
+    const lost = resources()
+    lost.set('/api/channel/0/warnings', ['NoLink'])
+    expect(channelsFrom(FIXTURE_SERIAL, lost)).toEqual([])
+  })
+
+  it('takes the transmitter a mate names, counting from zero', () => {
+    const third = resources()
+    third.set('/api/channel/2', { name: 'LEAD', mute: false, mates: ['TX3'], gain: 21 })
+    third.set('/api/channel/2/warnings', [])
+    third.set('/api/channel/2/signalStrengthIndicator', { value: -70 })
+    third.set('/api/transmitters/2/battery', { type: 'PrimaryCell', gauge: 55 })
+    const channel = channelsFrom(FIXTURE_SERIAL, third).find(c => c.name === 'LEAD')
+    expect(channel).toMatchObject({ id: ewDxChannelId(FIXTURE_SERIAL, 2), batteryPercent: 55, rfDbm: -70 })
+  })
+
+  it('reports muted when either end is muted', () => {
+    const muted = resources()
+    muted.set('/api/transmitters/0', { type: 'EW_DX_SK', mute: true })
+    expect(channelsFrom(FIXTURE_SERIAL, muted)[0].muted).toBe(true)
+  })
+
+  it('drops a reading that is not a number rather than showing it', () => {
+    const odd = resources()
+    odd.set('/api/channel/0/signalStrengthIndicator', { value: 'loud' })
+    odd.set('/api/transmitters/0/battery', { gauge: null })
+    const [channel] = channelsFrom(FIXTURE_SERIAL, odd)
+    expect(channel).not.toHaveProperty('rfDbm')
+    expect(channel).not.toHaveProperty('batteryPercent')
+  })
+
+  it('says nothing before the receiver has said anything', () => {
+    expect(channelsFrom(FIXTURE_SERIAL, new Map())).toEqual([])
+  })
+})
+
+describe('audioPercent', () => {
+  it('puts silence at 0 and full scale at 100, and clamps outside them', () => {
+    expect(audioPercent(-138.5)).toBe(0)
+    expect(audioPercent(-60)).toBe(0)
+    expect(audioPercent(-30)).toBe(50)
+    expect(audioPercent(0)).toBe(100)
+    expect(audioPercent(6)).toBe(100)
+  })
+})
+
+describe('subscriptionPaths', () => {
+  it('names the readings of every channel and every transmitter, with the /api prefix', () => {
+    const paths = subscriptionPaths(4)
+    expect(paths).toHaveLength(28)
+    expect(paths.every(path => path.startsWith('/api/'))).toBe(true)
+    expect(paths).toContain('/api/transmitters/3/battery')
+    expect(new Set(paths).size).toBe(paths.length)
+  })
+})

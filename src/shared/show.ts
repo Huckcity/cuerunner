@@ -512,13 +512,13 @@ export interface RfThresholds {
   offlineAfterSeconds: number
 }
 
-export type TelemetrySourceKind = 'demo' | 'http' | 'file'
+export type TelemetrySourceKind = 'demo' | 'http' | 'file' | 'ew-dx'
 
 export interface TelemetrySource {
   id: string
   label: string
   kind: TelemetrySourceKind
-  /** URL for `http`, path for `file`. Unused by `demo`, which is generated in-process. */
+  /** URL for `http`, path for `file`, the receiver's address for `ew-dx`. Unused by `demo`, which is generated in-process. */
   target: string
   pollMs: number
   timeoutMs: number

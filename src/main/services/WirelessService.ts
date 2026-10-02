@@ -12,6 +12,8 @@ import type {
   TelemetrySource
 } from '../../shared/show'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
+import type { EwDxCredentials } from '../ewdx/credentials'
+import { EwDxClient } from '../ewdx/EwDxClient'
 import { batteryBand, demoRack, isWorse, parseTelemetry, rfBand } from './telemetry'
 import type { Band } from './telemetry'
 
@@ -30,14 +32,73 @@ interface TelemetryResponse {
 export interface TelemetryPorts {
   fetchJson(url: string, signal: AbortSignal): Promise<TelemetryResponse>
   readText(path: string): Promise<string>
+  /**
+   * A live session with one EW-DX receiver. Optional because only a show that has such a
+   * source needs it; a service built without it reports the source as unavailable.
+   */
+  ewDx?(source: TelemetrySource): EwDxSession
 }
 
-function defaultPorts(): TelemetryPorts {
+/**
+ * A receiver kept live, as the service sees it: started with the service, asked for its
+ * channels on every poll, and stopped with it. It is its own thing rather than a fetch
+ * because the receiver pushes — the poll reads what the session has already heard.
+ */
+export interface EwDxSession {
+  start(): void
+  stop(): void
+  snapshot(waitMs: number): Promise<TelemetryChannel[]>
+}
+
+/** A session that can never connect, which says why on every poll instead of failing silently. */
+function unavailable(reason: string): EwDxSession {
+  return {
+    start: () => undefined,
+    stop: () => undefined,
+    snapshot: () => Promise.reject(new Error(reason))
+  }
+}
+
+/**
+ * The address an operator typed, as an origin a receiver can be reached at: a bare host is
+ * `https://host`. An `http://` address is refused rather than honoured — a receiver's password
+ * goes in the request, and a receiver speaks TLS.
+ */
+export function ewDxOrigin(target: string): { origin: string } | { error: string } {
+  const typed = target.trim()
+  if (typed === '') return { error: 'no address' }
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(typed) ? typed : `https://${typed}`)
+    if (url.protocol !== 'https:') return { error: 'EW-DX receivers use https' }
+    return { origin: url.origin }
+  } catch {
+    return { error: 'not a valid address' }
+  }
+}
+
+/**
+ * The service's ports as the app wires them. The credentials are the machine's own — a
+ * receiver's password never travels with the showfile — and are read when a source starts.
+ */
+export function telemetryPorts(credentials?: EwDxCredentials): TelemetryPorts {
   return {
     fetchJson: (url, signal) => fetch(url, { signal }),
     // A bridge is free to rewrite the file between two reads; utf-8 is the only encoding
     // every JSON writer in the wild agrees on.
-    readText: path => readFile(path, 'utf-8')
+    readText: path => readFile(path, 'utf-8'),
+    ewDx: source => {
+      const address = ewDxOrigin(source.target)
+      if ('error' in address) return unavailable(address.error)
+      const stored = credentials?.get(source.id)
+      if (!stored) return unavailable('no password set — add it in Settings › Wireless')
+      return new EwDxClient({
+        origin: address.origin,
+        password: stored.password,
+        pinnedFingerprint: stored.fingerprint,
+        // The first certificate a receiver shows is the one trusted from then on.
+        onFingerprint: fingerprint => void credentials?.pin(source.id, fingerprint)
+      })
+    }
   }
 }
 
@@ -96,12 +157,14 @@ export class WirelessService implements ShowService {
   private timers: Timer[] = []
   private inFlight = new Set<AbortController>()
   private channels = new Map<string, ChannelState>()
+  /** The live receivers this run's EW-DX sources hold open, by source id. */
+  private sessions = new Map<string, EwDxSession>()
   /** The night's facts per channel, keyed the same way and kept across a restart. */
   private history = new Map<string, ChannelHistory>()
   /** Source ids whose last poll failed, mapped to the reason they gave. */
   private failed = new Map<string, string>()
 
-  constructor(private readonly ports: TelemetryPorts = defaultPorts()) {}
+  constructor(private readonly ports: TelemetryPorts = telemetryPorts()) {}
 
   start(context: ServiceContext, settings: ShowSettings): void {
     this.stop()
@@ -135,6 +198,13 @@ export class WirelessService implements ShowService {
 
     context.setState('running', this.detail())
     for (const source of sources) {
+      // A session is opened before the first poll asks it anything, and lives exactly as
+      // long as this run: a settings change stops it with the timers.
+      if (source.kind === 'ew-dx') {
+        const session = this.ports.ewDx?.(source) ?? unavailable('EW-DX is not available')
+        this.sessions.set(source.id, session)
+        session.start()
+      }
       void this.poll(source, context)
       const timer = setInterval(() => void this.poll(source, context), source.pollMs)
       // A poll of a rack must not be what keeps the app alive on quit.
@@ -161,6 +231,8 @@ export class WirelessService implements ShowService {
     this.context = null
     this.sources = []
     this.channels.clear()
+    for (const session of this.sessions.values()) session.stop()
+    this.sessions.clear()
     // The history is deliberately left alone: stop() is what a settings change does to
     // every service, and the floor and the dropout count are the show's record rather
     // than the stopped service's.
@@ -208,6 +280,11 @@ export class WirelessService implements ShowService {
   }
 
   private async read(source: TelemetrySource): Promise<TelemetryDocument> {
+    if (source.kind === 'ew-dx') {
+      const session = this.sessions.get(source.id)
+      if (!session) throw new Error('EW-DX is not available')
+      return { channels: await session.snapshot(source.timeoutMs) }
+    }
     if (source.kind === 'file') {
       const text = await this.ports.readText(source.target)
       let value: unknown = null
