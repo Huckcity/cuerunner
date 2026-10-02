@@ -27,7 +27,23 @@ import { drainMainErrors } from '../errors'
  * platform, and only the moving case — the one that needs two — is darwin-skipped, which is
  * the platform where the two names would collapse into one.
  */
-const ALIASES = process.platform === 'darwin' ? ['127.0.0.1'] : ['127.0.0.3', '127.0.0.4']
+const ALIASES = process.platform === 'darwin' ? ['127.0.0.1'] : processLoopbacks()
+
+/**
+ * Two loopback addresses that no other process is using. The ports are the desk's own — 51321,
+ * 51324 and 51326 are fixed by its protocol — so the only thing that can differ between two runs
+ * of this file is the address, and CI runs it under two Node versions at once on one machine.
+ * Fixed addresses made them race for the same sockets and fail with `EADDRINUSE`, a different
+ * test each time. The process id is unique among the processes running now, and spelled out as the
+ * three middle octets it names an address nobody else has; the last octet leaves room for the second.
+ */
+function processLoopbacks(): [string, string] {
+  const id = process.pid
+  const last = 2 + (id % 250)
+  const middle = Math.floor(id / 250) % 250
+  const first = Math.floor(id / 62_500) % 250
+  return [`127.${first}.${middle}.${last}`, `127.${first}.${middle}.${last + 1}`]
+}
 const [HOST, MOVED = HOST] = ALIASES
 
 const hex = (bytes: readonly number[] | Uint8Array): string => Buffer.from(bytes).toString('hex')
