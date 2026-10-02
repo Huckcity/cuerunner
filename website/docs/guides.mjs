@@ -953,10 +953,14 @@ export const GUIDES = [
         switched on. Packs on AA cells report a percentage and no minutes remaining.
       </p>
       <p>
-        The first time Cuerunner connects it remembers the receiver's certificate, and it
-        shows a short form of it under the source. If the receiver is later replaced, or
-        its certificate is, Cuerunner refuses to connect rather than trust it silently —
-        press <strong>Trust again</strong> once you know why it changed.
+        The first time Cuerunner connects it remembers which receiver it is — the serial
+        number printed on it — and the certificate it presented, and shows both under the
+        source. If the receiver's address changes, Cuerunner looks for that serial on the
+        network, carries on from wherever the receiver is now, and says so under the
+        source; nothing needs re-entering, and the show still names the old address. If a
+        <em>different</em> receiver turns up at the address, or the certificate changes,
+        Cuerunner refuses to connect rather than trust it silently, and does not send it the
+        password. Press <strong>Trust again</strong> when you have replaced the receiver.
       </p>
     </section>
 

@@ -49,6 +49,13 @@ export interface EwDxCredentialStatus {
   encrypted: boolean
   /** SHA-256, colon-separated; null until the first connection has seen a certificate. */
   fingerprint: string | null
+  /**
+   * The receiver's serial once this machine has reached it: which receiver it is, whatever its
+   * address is today. It is what lets a receiver whose lease changed be found again.
+   */
+  serial: string | null
+  /** Where it was found after it left the address the show names, and which address that was. */
+  moved: { from: string; to: string } | null
 }
 
 /** One receiver found on the network, named by what it said about itself without a password. */

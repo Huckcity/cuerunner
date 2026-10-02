@@ -508,7 +508,7 @@ describe('the EW-DX credential channels', () => {
     try {
       const result = await setPassword('rack-held', PASSWORD)
 
-      expect(result).toEqual({ ok: true, hasPassword: true, encrypted: true, fingerprint: null })
+      expect(result).toEqual({ ok: true, hasPassword: true, encrypted: true, fingerprint: null, serial: null, moved: null })
       expect(JSON.stringify(await status('rack-held'))).not.toContain(PASSWORD)
       // What is on disk is what the keychain made of it, not what was typed.
       const onDisk = readFileSync(join(ends.userData.path, 'ew-dx.json'), 'utf-8')

@@ -17,6 +17,18 @@ export interface SourceCredentials {
   password: string
   /** SHA-256 fingerprint of the certificate trusted for this receiver, once one has been seen. */
   fingerprint?: string
+  /**
+   * The serial the receiver gave the first time it was reached. An address is where a receiver is
+   * today and a serial is which one it is: with both, a receiver whose lease changed can be found
+   * again, and a different one that took its old address is not mistaken for it.
+   */
+  serial?: string
+  /**
+   * Where the receiver was found after it left the address the show names, and which address that
+   * was. It applies only while the show still names that address: an operator who types a new
+   * one has said where it is, and a stale memory must not overrule them.
+   */
+  moved?: { from: string; to: string }
 }
 
 /** Turns a password into what is written to disk and back. Electron's `safeStorage` in the app. */
@@ -44,7 +56,12 @@ export interface EwDxCredentials {
   setPassword(sourceId: string, password: string): Promise<void>
   /** Trust this certificate for this receiver, replacing whichever was trusted before. */
   pin(sourceId: string, fingerprint: string): Promise<void>
-  /** Forget the trusted certificate, so the next connection trusts whatever it is shown. */
+  /** Learn what is true of a receiver: its serial, and where it was found. Never the password. */
+  remember(sourceId: string, facts: { serial?: string; moved?: { from: string; to: string } | null }): Promise<void>
+  /**
+   * Forget the receiver this machine thinks is at the address: its certificate, its serial and
+   * where it moved. The next connection trusts whatever is there, which is what "I replaced it" means.
+   */
   unpin(sourceId: string): Promise<void>
   forget(sourceId: string): Promise<void>
   /** False when the platform has nowhere safe to put a password and it is on disk as written. */
@@ -63,11 +80,19 @@ interface StoredEntry {
   /** Whether `password` went through the cipher. Recorded per entry: the platform can change. */
   encrypted: boolean
   fingerprint?: string
+  serial?: string
+  moved?: { from: string; to: string }
 }
 
 interface StoredFile {
   version: 1
   sources: Record<string, StoredEntry>
+}
+
+function isMoved(value: unknown): value is { from: string; to: string } {
+  if (typeof value !== 'object' || value === null) return false
+  const moved = value as Record<string, unknown>
+  return typeof moved.from === 'string' && typeof moved.to === 'string'
 }
 
 function isEntry(value: unknown): value is StoredEntry {
@@ -76,7 +101,9 @@ function isEntry(value: unknown): value is StoredEntry {
   return (
     typeof entry.password === 'string' &&
     typeof entry.encrypted === 'boolean' &&
-    (entry.fingerprint === undefined || typeof entry.fingerprint === 'string')
+    (entry.fingerprint === undefined || typeof entry.fingerprint === 'string') &&
+    (entry.serial === undefined || typeof entry.serial === 'string') &&
+    (entry.moved === undefined || isMoved(entry.moved))
   )
 }
 
@@ -121,7 +148,12 @@ export function createEwDxCredentials(options: EwDxCredentialsOptions): EwDxCred
           return undefined
         }
       }
-      return { password, ...(entry.fingerprint === undefined ? {} : { fingerprint: entry.fingerprint }) }
+      return {
+        password,
+        ...(entry.fingerprint === undefined ? {} : { fingerprint: entry.fingerprint }),
+        ...(entry.serial === undefined ? {} : { serial: entry.serial }),
+        ...(entry.moved === undefined ? {} : { moved: entry.moved })
+      }
     },
 
     async setPassword(sourceId, password) {
@@ -140,8 +172,11 @@ export function createEwDxCredentials(options: EwDxCredentialsOptions): EwDxCred
         password: stored,
         encrypted,
         // A new password may belong to a replaced receiver, but the pin is about the
-        // certificate and not the password; changing one does not forget the other.
-        ...(previous?.fingerprint === undefined ? {} : { fingerprint: previous.fingerprint })
+        // certificate and not the password; changing one does not forget the other. The same is
+        // true of which receiver it is and where it was found.
+        ...(previous?.fingerprint === undefined ? {} : { fingerprint: previous.fingerprint }),
+        ...(previous?.serial === undefined ? {} : { serial: previous.serial }),
+        ...(previous?.moved === undefined ? {} : { moved: previous.moved })
       })
       await persist()
     },
@@ -154,10 +189,23 @@ export function createEwDxCredentials(options: EwDxCredentialsOptions): EwDxCred
       await persist()
     },
 
+    async remember(sourceId, facts) {
+      const entry = sources.get(sourceId)
+      // Facts about a receiver this machine has no password for would be facts about nothing.
+      if (!entry) return
+      const next: StoredEntry = { ...entry }
+      if (facts.serial !== undefined) next.serial = facts.serial
+      if (facts.moved === null) delete next.moved
+      else if (facts.moved !== undefined) next.moved = facts.moved
+      if (JSON.stringify(next) === JSON.stringify(entry)) return
+      sources.set(sourceId, next)
+      await persist()
+    },
+
     async unpin(sourceId) {
       const entry = sources.get(sourceId)
-      if (!entry?.fingerprint) return
-      const { fingerprint: _forgotten, ...rest } = entry
+      if (!entry || (entry.fingerprint === undefined && entry.serial === undefined && entry.moved === undefined)) return
+      const { fingerprint: _certificate, serial: _which, moved: _where, ...rest } = entry
       sources.set(sourceId, rest)
       await persist()
     },

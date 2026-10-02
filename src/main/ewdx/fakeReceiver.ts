@@ -22,6 +22,8 @@ export interface FakeReceiverOptions {
   tls?: { key: string; cert: string }
   /** A port to listen on, for a receiver that comes back where another one was. */
   port?: number
+  /** The serial it gives in its identity: another value is a different receiver at the same address. */
+  serial?: string
 }
 
 export interface FakeReceiver {
@@ -89,7 +91,7 @@ export async function startFakeReceiver(options: FakeReceiverOptions): Promise<F
 
     if (path === '/api/ssc/version') return json(res, 200, { protocol, schema: '1.7' })
     if (path === '/api/device/identity') {
-      return json(res, 200, { product: 'EWDX4CHDS', serial: FIXTURE_SERIAL, vendor: 'Sennheiser electronic SE & Co. KG' })
+      return json(res, 200, { product: 'EWDX4CHDS', serial: options.serial ?? FIXTURE_SERIAL, vendor: 'Sennheiser electronic SE & Co. KG' })
     }
     if (!authorised(req)) {
       res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="ssc"' })

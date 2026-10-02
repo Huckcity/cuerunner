@@ -4,6 +4,8 @@ import './EwDxCredentials.css'
 
 interface Props {
   sourceId: string
+  /** What the show names for this receiver, to tell whether a remembered move is still about it. */
+  target: string
   /** Puts the cursor in the password box: a receiver was just added and this is what it needs next. */
   autoFocus?: boolean
   /**
@@ -29,7 +31,7 @@ export function shortFingerprint(fingerprint: string): string {
  * to the window, which is why the box is only ever empty or being typed into: it shows
  * whether one is held, not what it is. Everything it says is from main.
  */
-export function EwDxCredentials({ sourceId, autoFocus, serviceKey }: Props): React.JSX.Element {
+export function EwDxCredentials({ sourceId, target, autoFocus, serviceKey }: Props): React.JSX.Element {
   const [held, setHeld] = useState<EwDxCredentialStatus | null>(null)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -114,6 +116,20 @@ export function EwDxCredentials({ sourceId, autoFocus, serviceKey }: Props): Rea
         <p className="inspector-hint">Stored without encryption: this machine has no keychain.</p>
       )}
 
+      {held?.serial != null && (
+        <>
+          <div className="field-row">
+            <label>Serial</label>
+            <span className="ewdx-serial">{held.serial}</span>
+          </div>
+          {/* Only while the show still names the address it moved from: an address typed since
+              is the operator saying where it is, and the memory of a move is not about it. */}
+          {held.moved !== null && held.moved.from === target.trim() && (
+            <p className="inspector-hint">Now at {held.moved.to}; the show names {held.moved.from}.</p>
+          )}
+        </>
+      )}
+
       {held?.fingerprint != null && (
         <>
           <div className="field-row">
@@ -123,7 +139,7 @@ export function EwDxCredentials({ sourceId, autoFocus, serviceKey }: Props): Rea
               Trust again
             </button>
           </div>
-          <p className="inspector-hint">Trust again if the receiver has a new certificate.</p>
+          <p className="inspector-hint">Trust again if you replaced the receiver.</p>
         </>
       )}
     </div>

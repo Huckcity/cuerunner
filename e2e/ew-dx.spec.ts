@@ -11,7 +11,8 @@ import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { closeApp, launchApp, mintLicense } from './helpers'
 import { startFakeReceiver, type FakeReceiver } from '../src/main/ewdx/fakeReceiver'
-import { makeTestCertificate } from '../src/main/ewdx/testCertificate'
+import { makeTestCertificate, type TestCertificate } from '../src/main/ewdx/testCertificate'
+import { FIXTURE_SERIAL } from '../src/main/ewdx/fixtures'
 
 const PASSWORD = 'wsm-third-party-password'
 
@@ -19,24 +20,33 @@ let app: ElectronApplication
 let page: Page
 let userDataDir: string
 let receiver: FakeReceiver
+/** One unit's certificate, which it keeps wherever it is on the network. */
+let certificate: TestCertificate
+/** The same receiver at another address, listening from the start: where it goes when its lease changes. */
+let moved: FakeReceiver
 
 /** `https://127.0.0.1:port` as an operator types it: the address, with no scheme. */
 const address = (): string => receiver.origin.replace(/^https:\/\//, '')
 
 test.beforeEach(async () => {
-  const certificate = makeTestCertificate('cuerunner-e2e-receiver')
-  receiver = await startFakeReceiver({ password: PASSWORD, tls: { key: certificate.key, cert: certificate.cert } })
-  // There is no multicast to rely on in a harness, so the receiver is announced by name instead
-  // of by mDNS. It is still identified over HTTPS, which is the part worth testing here.
+  certificate = makeTestCertificate('cuerunner-e2e-receiver')
+  const tls = { key: certificate.key, cert: certificate.cert }
+  receiver = await startFakeReceiver({ password: PASSWORD, tls })
+  // The same unit — same serial, same certificate — somewhere else on the network.
+  moved = await startFakeReceiver({ password: PASSWORD, tls })
+  // There is no multicast to rely on in a harness, so receivers are announced by name instead of
+  // by mDNS. Each is still identified over HTTPS, which is the part worth testing here. One serial
+  // is one receiver, so both announcements are offered as the one.
   ;({ app, page, userDataDir } = await launchApp({
     license: mintLicense(),
-    env: { CUERUNNER_TEST_EWDX_ANNOUNCED: JSON.stringify([address()]) }
+    env: { CUERUNNER_TEST_EWDX_ANNOUNCED: JSON.stringify([address(), moved.origin.replace(/^https:\/\//, '')]) }
   }))
 })
 
 test.afterEach(async () => {
   await closeApp(app)
   await receiver.close()
+  await moved.close()
 })
 
 async function openWireless(): Promise<ReturnType<Page['getByRole']>> {
@@ -190,4 +200,57 @@ test('a machine with nothing configured has nothing to say about wireless', asyn
   // The receiver the harness announced was not looked for, so it was not added or logged into.
   expect(receiver.requests).toEqual([])
   expect(receiver.sawCredentials()).toBe(false)
+})
+
+test('a receiver whose address changes is found again by its serial, with nothing touched', async () => {
+  const dialog = await openWireless()
+  await dialog.locator('.ewdx-found').getByRole('button', { name: 'Add' }).click()
+  await page.keyboard.type(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.settings-service[data-service="rf"]')).toHaveAttribute('data-state', 'running')
+  // Reaching it is how this machine learns which receiver it is.
+  await expect(dialog.locator('.ewdx-serial')).toHaveText(FIXTURE_SERIAL)
+
+  // Its lease changes: nothing answers where it was, and the same unit answers somewhere else.
+  await receiver.close()
+
+  // The show still names the old address. The machine looked for the serial, went to the new one,
+  // and says so; the service is running again and nobody entered anything.
+  await expect(dialog.locator('.ewdx-credentials')).toContainText(`Now at ${moved.origin.replace(/^https:\/\//, '')}`, {
+    timeout: 30_000
+  })
+  await expect(dialog.locator('.settings-service[data-service="rf"]')).toHaveAttribute('data-state', 'running')
+  await expect(dialog.getByLabel('Source address')).toHaveValue(address())
+  expect(moved.sawCredentials()).toBe(true)
+
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).toContainText('76%')
+})
+
+test('a different receiver at the address is refused before it is sent the password', async () => {
+  const dialog = await openWireless()
+  await dialog.locator('.ewdx-found').getByRole('button', { name: 'Add' }).click()
+  await page.keyboard.type(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.ewdx-serial')).toHaveText(FIXTURE_SERIAL)
+  await expect(dialog.locator('.settings-service[data-service="rf"]')).toHaveAttribute('data-state', 'running')
+
+  // Somebody else's receiver takes the address: a different serial, on the same certificate.
+  await receiver.close()
+  await moved.close()
+  const stranger = await startFakeReceiver({
+    password: PASSWORD,
+    port: Number(new URL(receiver.origin).port),
+    tls: { key: certificate.key, cert: certificate.cert },
+    serial: '0000000099'
+  })
+  try {
+    await expect(dialog.locator('.settings-service[data-service="rf"]')).toContainText('a different receiver answers here', {
+      timeout: 30_000
+    })
+    expect(stranger.sawCredentials()).toBe(false)
+  } finally {
+    await stranger.close()
+  }
 })

@@ -878,6 +878,96 @@ function ewDxHarness(session: FakeSession): Harness & { ewDx: Mock } {
 // A source that has just been added has no address and no password yet. That is the operator
 // part-way through setting it up, not a receiver failing, so it is said in the status and
 // never raised as an alarm: an alarm is for something that was asked to be watched.
+describe('WirelessService alarms that stand', () => {
+  async function run(...readings: Array<Partial<TelemetryChannel>>): Promise<ReturnType<typeof harness>> {
+    const h = harness()
+    for (const fields of readings.slice(0, -1)) h.fetchJson.mockResolvedValueOnce(response(document(channel('ch-1', { name: 'Lead', ...fields }))))
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', ...readings[readings.length - 1] }))))
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+    return h
+  }
+
+  it('does not announce a battery that is still critical when the service restarts', async () => {
+    const h = await run({ batteryPercent: 6 })
+    expect(messages(h.bus)).toEqual(['Lead battery critical — 6% left'])
+
+    // A settings change stops every service it touches and starts it again.
+    h.service.stop()
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+    h.service.stop()
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+
+    expect(messages(h.bus)).toEqual(['Lead battery critical — 6% left'])
+  })
+
+  it('does not announce weak RF again when the service restarts', async () => {
+    const h = await run({ rfDbm: -80 })
+    h.service.stop()
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+
+    expect(messages(h.bus)).toEqual(['Lead RF low — -80 dBm'])
+  })
+
+  it('announces again once the pack has recovered and then got worse', async () => {
+    const h = await run({ batteryPercent: 6 })
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', batteryPercent: 90 }))))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', batteryPercent: 5 }))))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+
+    expect(messages(h.bus)).toEqual(['Lead battery critical — 6% left', 'Lead battery critical — 5% left'])
+    h.service.stop()
+  })
+
+  it('does not announce a gauge that flickers across the line, only a pack that really recovered', async () => {
+    const h = await run({ batteryPercent: 9 })
+    // The gauge of a pack on AA cells is noisy: 9, 11, 9, 12, 9 is one pack that is dying.
+    for (const percent of [11, 9, 12, 9, 10]) {
+      h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', batteryPercent: percent }))))
+      await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    }
+
+    expect(messages(h.bus)).toEqual(['Lead battery critical — 9% left'])
+    h.service.stop()
+  })
+
+  it('does not announce a signal that hovers on the line, only one that really recovered', async () => {
+    const h = await run({ rfDbm: -76 })
+    // -74 and -76 either side of the -75 line is the same marginal link, not two events.
+    for (const dbm of [-74, -77, -73, -78, -74]) {
+      h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', rfDbm: dbm }))))
+      await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    }
+
+    expect(messages(h.bus)).toEqual(['Lead RF low — -76 dBm'])
+    h.service.stop()
+  })
+
+  it('does not announce a receiver\'s weak-signal verdict again within a minute of the last time', async () => {
+    const h = await run({ rfDbm: -60, rfWeak: true })
+    // The receiver's own verdict flips as a pack moves; there is no margin to give a boolean,
+    // so a pack that flips back and forth is announced once a minute at most.
+    for (const weak of [false, true, false, true]) {
+      h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', rfDbm: -60, rfWeak: weak }))))
+      await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    }
+    expect(messages(h.bus)).toEqual(['Lead RF low — -60 dBm'])
+
+    await vi.advanceTimersByTimeAsync(61_000)
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', rfDbm: -60, rfWeak: false }))))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', rfDbm: -60, rfWeak: true }))))
+    await vi.advanceTimersByTimeAsync(DEFAULT_POLL_MS)
+
+    expect(messages(h.bus)).toEqual(['Lead RF low — -60 dBm', 'Lead RF low — -60 dBm'])
+    h.service.stop()
+  })
+})
+
 describe('WirelessService with a source that is not finished', () => {
   it('does not poll, and does not alarm, for a source with no address, and says what it waits for', async () => {
     const { service, fetchJson, context, setState, bus } = harness()

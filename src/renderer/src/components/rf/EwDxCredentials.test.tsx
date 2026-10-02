@@ -11,8 +11,8 @@ import type { EwDxCredentialResult, EwDxCredentialStatus } from '../../../../sha
 const FINGERPRINT =
   '8D:24:BA:47:B0:EE:13:37:DF:E1:5A:A8:85:9D:D2:D7:7E:68:9D:9F:C4:6A:9C:FF:CB:30:21:12:A1:44:56:F1'
 
-const none: EwDxCredentialStatus = { hasPassword: false, encrypted: true, fingerprint: null }
-const held: EwDxCredentialStatus = { hasPassword: true, encrypted: true, fingerprint: FINGERPRINT }
+const none: EwDxCredentialStatus = { hasPassword: false, encrypted: true, fingerprint: null, serial: null, moved: null }
+const held: EwDxCredentialStatus = { hasPassword: true, encrypted: true, fingerprint: FINGERPRINT, serial: null, moved: null }
 
 describe('EwDxCredentials', () => {
   let container: HTMLDivElement
@@ -33,9 +33,9 @@ describe('EwDxCredentials', () => {
     vi.clearAllMocks()
   })
 
-  async function render(serviceKey = 'running:polling Rack A'): Promise<void> {
+  async function render(serviceKey = 'running:polling Rack A', target = '192.168.0.194'): Promise<void> {
     await act(async () => {
-      root.render(<EwDxCredentials sourceId="rack-a" serviceKey={serviceKey} />)
+      root.render(<EwDxCredentials sourceId="rack-a" target={target} serviceKey={serviceKey} />)
     })
   }
 
@@ -126,7 +126,7 @@ describe('EwDxCredentials', () => {
     const shown = container.querySelector<HTMLElement>('.ewdx-fingerprint')!
     expect(shown.textContent).toBe('8D:24:BA:47…56:F1')
     expect(shown.title).toBe(FINGERPRINT)
-    expect(text()).toContain('Trust again if the receiver has a new certificate.')
+    expect(text()).toContain('Trust again if you replaced the receiver.')
   })
 
   it('looks again when the service moves, because the first connection is what sees the certificate', async () => {
@@ -151,8 +151,34 @@ describe('EwDxCredentials', () => {
     expect(container.querySelector('.ewdx-fingerprint')).toBeNull()
   })
 
+  it('shows which receiver it is by the serial on its label, whatever its address is today', async () => {
+    vi.mocked(show().ewDxCredentials).mockResolvedValue({ ...held, serial: '5364000906' })
+    await render()
+
+    expect(container.querySelector('.ewdx-serial')!.textContent).toBe('5364000906')
+    expect(text()).not.toContain('Now at')
+  })
+
+  it('says where the receiver was found when this machine followed it to a new address', async () => {
+    vi.mocked(show().ewDxCredentials).mockResolvedValue({
+      ...held, serial: '5364000906', moved: { from: '192.168.0.194', to: '192.168.0.210' }
+    })
+    await render()
+
+    expect(text()).toContain('Now at 192.168.0.210; the show names 192.168.0.194.')
+  })
+
+  it('says nothing about a move once the show names another address, because that was the operator\'s word', async () => {
+    vi.mocked(show().ewDxCredentials).mockResolvedValue({
+      ...held, serial: '5364000906', moved: { from: '192.168.0.194', to: '192.168.0.210' }
+    })
+    await render('running:polling Rack A', '10.9.9.9')
+
+    expect(text()).not.toContain('Now at')
+  })
+
   it('says so when the password is stored without a keychain', async () => {
-    vi.mocked(show().ewDxCredentials).mockResolvedValue({ hasPassword: true, encrypted: false, fingerprint: null })
+    vi.mocked(show().ewDxCredentials).mockResolvedValue({ ...held, encrypted: false, fingerprint: null })
     await render()
 
     expect(text()).toContain('Stored without encryption: this machine has no keychain.')

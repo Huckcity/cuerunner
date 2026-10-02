@@ -141,8 +141,26 @@ const ewDxCredentials = createEwDxCredentials({
   }
 })
 
+// Looking for receivers on the network: for the settings window, and for a source whose receiver
+// has left its address and is looked for by its serial. A harness has no multicast to rely on, so
+// it may name the announcements itself; the receivers it names are still identified over HTTPS
+// and only the mDNS step is skipped.
+function discoverReceivers(): Promise<EwDxDiscoverResult> {
+  const raw = !app.isPackaged ? process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] : undefined
+  if (raw === undefined) return discoverEwDx()
+  const announced = (JSON.parse(raw) as string[]).map(entry => {
+    const [address, port] = entry.split(':')
+    return { address, port: Number(port), name: `announced-${address}` }
+  })
+  return discoverEwDx({ announced })
+}
+
 const show = createShowRuntime(
-  defaultServices({ redundancy: () => machineRedundancy.current(), ewDx: ewDxCredentials }),
+  defaultServices({
+    redundancy: () => machineRedundancy.current(),
+    ewDx: ewDxCredentials,
+    discoverReceivers
+  }),
   () => isPro(license.status())
 )
 
@@ -478,7 +496,9 @@ export function registerIpcHandlers(): void {
     return {
       hasPassword: held !== undefined,
       encrypted: ewDxCredentials.encrypted(),
-      fingerprint: held?.fingerprint ?? null
+      fingerprint: held?.fingerprint ?? null,
+      serial: held?.serial ?? null,
+      moved: held?.moved ?? null
     }
   }
 
@@ -535,19 +555,7 @@ export function registerIpcHandlers(): void {
   // A look at the network, made when the settings window asks and not before: a show that
   // never opens that page sends nothing. It only reads — nothing is added, and nothing
   // logs in — so it is open to a locked app like the rest of what only reads.
-  ipcMain.handle(SHOW_CHANNELS.ewDxDiscover, (): Promise<EwDxDiscoverResult> => {
-    // A harness has no multicast to rely on, so it may name the announcements itself. The
-    // receivers it names are still identified over HTTPS; only the mDNS step is skipped.
-    const raw = !app.isPackaged ? process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] : undefined
-    if (raw !== undefined) {
-      const announced = (JSON.parse(raw) as string[]).map(entry => {
-        const [address, port] = entry.split(':')
-        return { address, port: Number(port), name: `announced-${address}` }
-      })
-      return discoverEwDx({ announced })
-    }
-    return discoverEwDx()
-  })
+  ipcMain.handle(SHOW_CHANNELS.ewDxDiscover, (): Promise<EwDxDiscoverResult> => discoverReceivers())
 
   ipcMain.handle(SHOW_CHANNELS.ewDxForget, async (_, sourceId: string): Promise<EwDxCredentialStatus> => {
     const id = ewDxSourceId(sourceId)

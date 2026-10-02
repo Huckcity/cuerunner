@@ -2,7 +2,7 @@
 // what it reports once connected, what it says when the receiver refuses or goes away, and
 // that it does not hold more of the receiver's sessions than it needs.
 import { afterEach, describe, it, expect } from 'vitest'
-import { EwDxClient, describeNetworkError } from './EwDxClient'
+import { EwDxClient, EwDxError, describeNetworkError } from './EwDxClient'
 import type { EwDxOptions } from './EwDxClient'
 import { startFakeReceiver } from './fakeReceiver'
 import type { FakeReceiver } from './fakeReceiver'
@@ -199,5 +199,67 @@ describe('EwDxClient certificate pin', () => {
 
     await until(async () => await live.snapshot(0).then(() => false, error => /certificate changed/.test(error.message)), 'the new certificate to be refused')
     expect(receiver.sawCredentials()).toBe(false)
+  })
+})
+
+// An address is where a receiver was, and a lease that changed can give it to another one. The
+// serial is which receiver it is, and it is read from the public identity before a credential is sent.
+describe('EwDxClient serial', () => {
+  const failureOf = async (live: EwDxClient): Promise<EwDxError> => {
+    const error = await live.snapshot(2000).then(() => null, (thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(EwDxError)
+    return error as EwDxError
+  }
+
+  it('says which receiver it reached, so the machine can remember it', async () => {
+    const seen: string[] = []
+    const live = await connect({ onSerial: serial => seen.push(serial) })
+    await live.snapshot(2000)
+    expect(seen).toContain(FIXTURE_SERIAL)
+  })
+
+  it('connects to the receiver it was made for', async () => {
+    const live = await connect({ expectedSerial: FIXTURE_SERIAL })
+    expect(await live.snapshot(2000)).toHaveLength(1)
+  })
+
+  it('refuses a different receiver at the address, and never sends it the password', async () => {
+    const live = await connect({ expectedSerial: '9999999999' })
+
+    const error = await failureOf(live)
+    expect(error.message).toContain(`serial ${FIXTURE_SERIAL}, not 9999999999`)
+    expect(error.message).toContain('Trust again')
+    expect(error.kind).toBe('wrong-receiver')
+    // It asked who it was talking to and went no further.
+    expect(receiver?.requests).toEqual(['GET /api/device/identity'])
+    expect(receiver?.sawCredentials()).toBe(false)
+  })
+
+  it('holds to the first receiver it reaches for the rest of the run, so a stranger that takes the address is not logged into', async () => {
+    const live = await connect({ retryMs: [20, 40] })
+    await live.snapshot(2000)
+    const port = Number(new URL(receiver!.origin).port)
+
+    // Same address, another unit: a lease that changed under a client that is already running.
+    await receiver!.close()
+    receiver = await startFakeReceiver({ password: PASSWORD, port, serial: '0000000099' })
+
+    await until(async () => await live.snapshot(0).then(() => false, error => /a different receiver answers here/.test(error.message)), 'the stranger to be refused')
+    expect(receiver.sawCredentials()).toBe(false)
+  })
+
+  it('tells a receiver that has gone from one that refused, because only the first is worth looking for', async () => {
+    const refused = await connect({ password: 'wrong' })
+    expect((await failureOf(refused)).kind).toBe('refused')
+    refused.stop()
+    await receiver?.close()
+
+    // Nothing is listening where the receiver was.
+    const gone = new EwDxClient({ origin: receiver!.origin, password: PASSWORD, retryMs: [20, 40], requestTimeoutMs: 300 })
+    client = gone
+    gone.start()
+    const error = await failureOf(gone)
+    expect(error.kind).toBe('unreachable')
+    expect(error.message).toBe('connection refused')
   })
 })

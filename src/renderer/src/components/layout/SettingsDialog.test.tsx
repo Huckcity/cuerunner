@@ -431,6 +431,32 @@ describe('SettingsDialog, wireless sources', () => {
     expect(document.activeElement).toBe(container.querySelector(`#ewdx-password-${added.id}`))
   })
 
+  it('does not restart the wireless service on every letter of a source\'s address', async () => {
+    withSources(source('ew-dx'))
+    render()
+    openSection('Wireless')
+    await settle()
+    const field = container.querySelector<HTMLInputElement>('input[aria-label="Source address"]')!
+    const typeInto = (value: string): void => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setter.call(field, value)
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    const target = (): string => useStore.getState().showSettings.rf.sources[0].target
+
+    // A source is live the moment its settings change, so each letter would be a restart of the
+    // service and a new connection to the receiver. The show keeps what it had until the field is left.
+    typeInto('1')
+    typeInto('10.')
+    typeInto('10.0.0.9')
+    expect(target()).toBe('192.168.0.50')
+
+    act(() => { field.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(target()).toBe('10.0.0.9')
+  })
+
   it('forgets what this machine holds for an EW-DX receiver when its source is removed', async () => {
     withSources(source('ew-dx'))
     render()

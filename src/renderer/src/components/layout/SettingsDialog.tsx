@@ -731,8 +731,10 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   {showSettings.rf.sources.map(source => (
                     <div key={source.id} className="settings-source-entry">
                       <div className="settings-source-row">
+                        {/* Taken when the field is left, not as it is typed: a source is live the
+                            moment it changes, and a name or address typed a letter at a time would
+                            restart the service, and reconnect to the receiver, on every letter. */}
                         <TextField
-                          when="typed"
                           className="settings-source-label"
                           value={source.label}
                           aria-label="Source name"
@@ -749,7 +751,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                           <option value="demo">Demo</option>
                         </select>
                         <TextField
-                          when="typed"
                           className="settings-source-target"
                           value={source.target}
                           aria-label="Source address"
@@ -772,6 +773,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                       {source.kind === 'ew-dx' && (
                         <EwDxCredentials
                           sourceId={source.id}
+                          target={source.target}
                           autoFocus={focusSource === source.id}
                           serviceKey={`${rfService?.state ?? ''}:${rfService?.detail ?? ''}`}
                         />
