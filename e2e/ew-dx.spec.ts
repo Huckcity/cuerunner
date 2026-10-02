@@ -148,6 +148,35 @@ test('a key that does not match is critical, said once, and shown under the pack
   await expect(row).toHaveAttribute('data-state', 'ok')
 })
 
+test('the check says whether every pack is ready, and changes as the receiver does', async () => {
+  const dialog = await openWireless()
+  await addReceiver(dialog)
+  await dialog.getByLabel('Password').fill(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.ewdx-fingerprint')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Check', exact: true }).click()
+  const verdict = page.locator('.rf-check-verdict')
+  await expect(verdict).toHaveText('All 1 pack ready.')
+
+  // Clipping is worth a look and not worth stopping for.
+  receiver.push('/api/channel/0/warnings', ['AfPeak'])
+  await expect(verdict).toHaveText('0 of 1 pack ready — worth a look at the rest.')
+  await expect(page.locator('.rf-check-row')).toContainText('audio clipping')
+
+  // A key that does not match is not ready, and it outranks the clipping beside it.
+  receiver.push('/api/channel/0/warnings', ['AfPeak', 'Aes256Error'])
+  await expect(verdict).toHaveText('0 of 1 pack ready — 1 not ready.')
+  await expect(page.locator('.rf-check-row[data-readiness="not-ready"]')).toContainText('encryption error — no audio')
+
+  // Fixed, and it goes green without anybody pressing anything.
+  receiver.push('/api/channel/0/warnings', [])
+  await expect(verdict).toHaveText('All 1 pack ready.')
+})
+
 test('a wrong password is refused by name, and nothing is shown as a pack', async () => {
   const dialog = await openWireless()
   await addReceiver(dialog)
