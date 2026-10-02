@@ -26,7 +26,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ewdx-credentials-'))
   file = join(dir, 'ew-dx.json')
 })
-afterEach(() => rm(dir, { recursive: true, force: true }))
+afterEach(() => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }))
 
 describe('createEwDxCredentials', () => {
   it('keeps a password across a restart and does not write it as typed', async () => {
