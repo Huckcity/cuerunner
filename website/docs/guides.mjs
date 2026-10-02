@@ -1059,6 +1059,15 @@ export const GUIDES = [
         the thing to look at after a show that had a dropout, and the thing to hand over
         when somebody else takes the rig.
       </p>
+      <p>
+        Under a pack that had trouble, each incident has its time and what was playing:
+        <em>20:14 went quiet during cue 47 Walk-in</em>, or <em>between cues</em> when nothing
+        was. A pack going quiet, its signal turning weak and a new complaint from the receiver
+        are each noted, against the cue that was live at that moment. The report covers a
+        channel that is in no plot as well, so a show that never entered one can still ask
+        what the night did to its packs. Like the rest of the session it starts over when
+        Cuerunner does, so copy it before you quit.
+      </p>
     </section>
 `
   },

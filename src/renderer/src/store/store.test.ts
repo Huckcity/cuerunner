@@ -1792,6 +1792,57 @@ describe('store — show services', () => {
     expect(devices[0].battery?.percent).toBe(20)
   })
 
+  describe('what went wrong with a pack, and what was playing', () => {
+    const rfDevice = (overrides: Partial<DeviceState> = {}) =>
+      deviceEvent({ id: 'rf:ch-1', name: 'Pack 7', service: 'rf', ...overrides })
+
+    const playing = (number: string, name: string): void => {
+      const cue = { id: `cue-${number}`, number, name, type: 'wait', parentId: null } as never
+      useStore.setState({
+        cues: [cue],
+        running: new Map([[`cue-${number}`, { cueId: `cue-${number}`, state: 'playing', startedAt: 1, progress: 0 }]])
+      })
+    }
+
+    beforeEach(() => useStore.setState({ rfIncidents: [], showDevices: [] }))
+
+    it('notes a pack going quiet against the cue that is playing', () => {
+      useStore.getState().applyShowEvents([rfDevice()])
+      playing('47', 'Walk-in')
+
+      useStore.getState().applyShowEvents([rfDevice({ online: false })])
+
+      expect(useStore.getState().rfIncidents).toEqual([
+        expect.objectContaining({ channelId: 'ch-1', name: 'Pack 7', kind: 'dropout', text: 'went quiet', cue: { number: '47', name: 'Walk-in' } })
+      ])
+    })
+
+    it('says between cues when nothing is playing', () => {
+      useStore.getState().applyShowEvents([rfDevice()])
+      useStore.setState({ running: new Map() })
+
+      useStore.getState().applyShowEvents([rfDevice({ online: false })])
+
+      expect(useStore.getState().rfIncidents[0].cue).toBeNull()
+    })
+
+    it('notes nothing for a device it is seeing for the first time', () => {
+      useStore.getState().applyShowEvents([rfDevice({ online: false })])
+      expect(useStore.getState().rfIncidents).toEqual([])
+    })
+
+    it('keeps the incidents when the batch carries no news, and a bounded number of them', () => {
+      useStore.getState().applyShowEvents([rfDevice()])
+      const events = Array.from({ length: 250 }, () => [rfDevice({ online: false }), rfDevice({ online: true })]).flat()
+      useStore.getState().applyShowEvents(events)
+      const noted = useStore.getState().rfIncidents
+      expect(noted).toHaveLength(200)
+
+      useStore.getState().applyShowEvents([oscEvent('/go')])
+      expect(useStore.getState().rfIncidents).toBe(noted)
+    })
+  })
+
   it('replaces a service entry rather than adding a second row for it', () => {
     useStore.getState().applyShowEvents([serviceEvent('osc-in', 'starting', 'binding')])
     useStore.getState().applyShowEvents([serviceEvent('osc-in', 'running', 'listening on 0.0.0.0:53000')])

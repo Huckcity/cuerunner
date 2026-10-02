@@ -212,6 +212,35 @@ test('a pack that a show would use up is flagged by the check, from what it used
   await expect(page.locator('.rf-check-row')).toContainText('battery 76% — a show used 60% last time')
 })
 
+test('a pack that drops out is reported against the cue that was playing, with no plot entered', async () => {
+  // Interval is a 15 s wait: long enough to still be playing when a pack goes quiet six seconds on.
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
+  await page.locator('.cue-row', { hasText: 'Interval' }).waitFor()
+
+  const dialog = await openWireless()
+  await addReceiver(dialog)
+  await dialog.getByLabel('Password').fill(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.ewdx-fingerprint')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).toBeVisible()
+
+  await page.locator('.cue-row', { hasText: 'Interval' }).click()
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(page.locator('.context-bar .ctx-live .ctx-name')).toHaveText('Interval')
+
+  // The transmitter is switched off: the channel loses its link and, six seconds on, the pack
+  // is gone as far as the show can tell.
+  receiver.push('/api/channel/0/warnings', ['NoLink'])
+  await expect(page.locator('.rf-row', { hasText: '37' })).toHaveAttribute('data-state', 'offline', { timeout: 20_000 })
+
+  await page.getByRole('button', { name: 'Report', exact: true }).click()
+  await expect(page.locator('.rf-report-label')).toHaveText('37')
+  await expect(page.locator('.rf-report-incident')).toHaveText(/\d\d:\d\d:\d\d went quiet during cue 10 Interval$/)
+})
+
 test('a wrong password is refused by name, and nothing is shown as a pack', async () => {
   const dialog = await openWireless()
   await addReceiver(dialog)

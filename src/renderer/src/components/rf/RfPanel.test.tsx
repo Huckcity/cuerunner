@@ -75,7 +75,8 @@ describe('RfPanel', () => {
       showSettings: defaultShowSettings(),
       showSettingsTab: null,
       showDevices: [],
-      showAlerts: []
+      showAlerts: [],
+      rfIncidents: []
     })
   })
 
@@ -447,6 +448,49 @@ describe('RfPanel', () => {
       await act(async () => { headerButton('Copy').click() })
 
       expect(writeText).toHaveBeenCalledWith(['1 of 2 packs ready.', 'NOT READY Aldonza: battery 5%'].join('\n'))
+    })
+  })
+
+  describe('the report', () => {
+    const lines = (): string[] => [...container.querySelectorAll('.rf-report-incident')].map(node => node.textContent ?? '')
+
+    it('says what went wrong with a pack and what was playing, under the pack', async () => {
+      await show({
+        plot: { packs: [pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' })] },
+        devices: [device({ id: 'rf:ch-1', name: 'Aldonza', history: { dropouts: 1 } })]
+      })
+      useStore.setState({
+        rfIncidents: [
+          { at: AT, channelId: 'ch-1', name: 'Aldonza', kind: 'dropout', text: 'went quiet', cue: { number: '47', name: 'Walk-in' } },
+          { at: AT + 60_000, channelId: 'ch-1', name: 'Aldonza', kind: 'warning', text: 'encryption error — no audio', critical: true, cue: null }
+        ]
+      })
+      await act(async () => { headerButton('Report').click() })
+
+      expect(lines()).toEqual([
+        expect.stringMatching(/went quiet during cue 47 Walk-in$/),
+        expect.stringMatching(/encryption error — no audio during between cues$/)
+      ])
+      expect(container.querySelectorAll('.rf-report-incident')[1].getAttribute('data-critical')).toBe('true')
+    })
+
+    it('has no incident lines for a pack that had none', async () => {
+      await show({
+        plot: { packs: [pack({ id: 'p-1', label: 'Aldonza', channelId: 'ch-1' })] },
+        devices: [device({ id: 'rf:ch-1', name: 'Aldonza' })]
+      })
+      await act(async () => { headerButton('Report').click() })
+
+      expect(container.querySelector('.rf-report-incidents')).toBeNull()
+    })
+
+    it('reports a channel that is in no plot, so a show with no plot can still ask what the night did', async () => {
+      await show({ devices: [device({ id: 'rf:spare', name: 'Spare', history: { lowestPercent: 6, lowestAt: AT, dropouts: 2 } })] })
+      await act(async () => { headerButton('Report').click() })
+
+      expect(container.querySelector('.rf-report-label')?.textContent).toBe('Spare')
+      expect(container.querySelector('.rf-report-battery')?.textContent).toContain('lowest 6%')
+      expect(container.querySelector('.rf-report-dropouts')?.textContent).toBe('2 dropouts')
     })
   })
 
