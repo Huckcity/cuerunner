@@ -20,7 +20,8 @@ beforeEach(async () => {
 })
 afterEach(async () => {
   vi.useRealTimers()
-  await rm(dir, { recursive: true, force: true })
+  // A write the log started may still be open: Windows will not delete a folder with a file in it.
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
 })
 
 /** The write is real disk I/O the fake clock cannot advance, so wait for the file itself. */

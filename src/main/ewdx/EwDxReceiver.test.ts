@@ -3,7 +3,7 @@
 // and the credentials are a real file, so what is held is the decision — when to look, what to
 // believe about what was found, and what the machine is left remembering.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EwDxReceiver, addressOf } from './EwDxReceiver'
@@ -80,7 +80,9 @@ beforeEach(async () => {
   clock = 1_000_000
 })
 
-afterEach(() => rm(dir, { recursive: true, force: true }))
+// A write the test started may still be open when it ends, and Windows will not delete a folder
+// with a file open in it: the cleanup retries, as a real quit would simply wait.
+afterEach(() => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }))
 
 describe('EwDxReceiver', () => {
   it('starts a client at the address the show names, and remembers which receiver answered', async () => {
@@ -90,7 +92,11 @@ describe('EwDxReceiver', () => {
     expect(clients[0].parts.origin).toBe(ORIGIN)
     expect(clients[0].parts.expectedSerial).toBeUndefined()
     clients[0].parts.onSerial(SERIAL)
-    await vi.waitFor(() => expect(credentials.get('rack-a')?.serial).toBe(SERIAL))
+    // The artifact, not the in-memory value: what is remembered is what is on disk, and a test that
+    // stops at the memory leaves the write running under its own cleanup.
+    await vi.waitFor(async () => {
+      expect(JSON.parse(await readFile(join(dir, 'ew-dx.json'), 'utf8')).sources['rack-a'].serial).toBe(SERIAL)
+    })
 
     // The next time it is made for that receiver, and will refuse another.
     const again = receiver()
