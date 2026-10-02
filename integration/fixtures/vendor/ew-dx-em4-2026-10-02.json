@@ -6,16 +6,17 @@
   "version": "4.0.0",
   "versionSource": "device",
   "versionNote": "the receiver's own GET /api/firmware/update/state `deviceVersion`; Dante firmware 1.4.2.1; SSC protocol 2.4, schema 1.7",
-  "recordedAt": "2026-10-02T17:49:00Z",
+  "recordedAt": "2026-10-02T18:22:00Z",
   "recordedBy": "a hand run from the dev machine (the recorder is not kept: it was one subscription, read with curl)",
   "method": [
-   "One authenticated SSCv2 subscription (GET /api/ssc/state/subscriptions, then PUT .../add of the 28 paths the source subscribes to for a four-channel receiver),",
+   "One authenticated SSCv2 subscription (GET /api/ssc/state/subscriptions, then PUT .../add of the 32 paths the source subscribes to for a four-channel receiver),",
    "read for nine seconds with two EW_DX_SK bodypacks on AA cells linked to channels 0 and 1 and channels 2 and 3 unlinked.",
    "The subscription was then deleted; the identity, version and firmware answers were read in separate requests."
   ],
   "note": [
-   "441 pushes were captured; the first of each path is the snapshot (28 paths) and the next 60 are kept as events.",
-   "Audio level arrives at about 20 events a second per linked channel; every other path was silent after its snapshot."
+   "496 pushes were captured; the first of each path is the snapshot (32 paths) and the next 60 are kept as events.",
+   "Audio level arrives at about 20 events a second per linked channel; every other path was silent after its snapshot.",
+   "The receiver was saying LowBattery for transmitter 1 (a pack at single-digit percent) while this was recorded; its LowSignal for channel 1, seen minutes earlier, had cleared."
   ]
  },
  "identity": {
@@ -60,13 +61,13 @@
   [
    "/api/channel/0/level",
    {
-    "value": -87.4
+    "value": -87.3
    }
   ],
   [
    "/api/channel/0/signalStrengthIndicator",
    {
-    "value": -76.0
+    "value": -79.5
    }
   ],
   [
@@ -105,8 +106,12 @@
    "/api/transmitters/0/battery",
    {
     "type": "PrimaryCell",
-    "gauge": 39
+    "gauge": 31
    }
+  ],
+  [
+   "/api/transmitters/0/warnings",
+   []
   ],
   [
    "/api/channel/1",
@@ -127,13 +132,13 @@
   [
    "/api/channel/1/level",
    {
-    "value": -51.1
+    "value": -9.8
    }
   ],
   [
    "/api/channel/1/signalStrengthIndicator",
    {
-    "value": -79.0
+    "value": -92.0
    }
   ],
   [
@@ -172,8 +177,14 @@
    "/api/transmitters/1/battery",
    {
     "type": "PrimaryCell",
-    "gauge": 6
+    "gauge": 3
    }
+  ],
+  [
+   "/api/transmitters/1/warnings",
+   [
+    "LowBattery"
+   ]
   ],
   [
    "/api/channel/2",
@@ -227,6 +238,10 @@
    {}
   ],
   [
+   "/api/transmitters/2/warnings",
+   []
+  ],
+  [
    "/api/channel/3",
    {
     "name": "40",
@@ -276,63 +291,39 @@
   [
    "/api/transmitters/3/battery",
    {}
+  ],
+  [
+   "/api/transmitters/3/warnings",
+   []
   ]
  ],
  "events": [
   {
-   "atMs": 187,
-   "path": "/api/channel/0/level",
+   "atMs": 212,
+   "path": "/api/channel/0/signalStrengthIndicator",
    "value": {
-    "value": -91.9
-   }
-  },
-  {
-   "atMs": 193,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -71.7
-   }
-  },
-  {
-   "atMs": 200,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.8
-   }
-  },
-  {
-   "atMs": 206,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -73.0
-   }
-  },
-  {
-   "atMs": 213,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.4
+    "value": -79.0
    }
   },
   {
    "atMs": 219,
-   "path": "/api/channel/1/level",
+   "path": "/api/channel/0/level",
    "value": {
-    "value": -74.3
+    "value": -92.1
    }
   },
   {
    "atMs": 226,
-   "path": "/api/channel/0/level",
+   "path": "/api/channel/1/level",
    "value": {
-    "value": -91.3
+    "value": -75.0
    }
   },
   {
    "atMs": 232,
-   "path": "/api/channel/1/level",
+   "path": "/api/channel/0/signalStrengthIndicator",
    "value": {
-    "value": -75.9
+    "value": -79.5
    }
   },
   {
@@ -346,357 +337,385 @@
    "atMs": 246,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -73.8
+    "value": -78.4
    }
   },
   {
-   "atMs": 288,
+   "atMs": 253,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.0
+   }
+  },
+  {
+   "atMs": 260,
    "path": "/api/channel/0/level",
    "value": {
     "value": -89.9
    }
   },
   {
-   "atMs": 295,
+   "atMs": 267,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -74.0
+    "value": -77.2
    }
   },
   {
-   "atMs": 324,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -90.6
-   }
-  },
-  {
-   "atMs": 331,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -73.0
-   }
-  },
-  {
-   "atMs": 381,
+   "atMs": 274,
    "path": "/api/channel/0/level",
    "value": {
     "value": -91.9
    }
   },
   {
-   "atMs": 388,
+   "atMs": 281,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -69.4
+    "value": -77.9
    }
   },
   {
-   "atMs": 424,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.6
-   }
-  },
-  {
-   "atMs": 430,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -71.6
-   }
-  },
-  {
-   "atMs": 473,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -92.7
-   }
-  },
-  {
-   "atMs": 480,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -70.9
-   }
-  },
-  {
-   "atMs": 534,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -90.3
-   }
-  },
-  {
-   "atMs": 541,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -71.9
-   }
-  },
-  {
-   "atMs": 581,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -90.5
-   }
-  },
-  {
-   "atMs": 588,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -72.9
-   }
-  },
-  {
-   "atMs": 624,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.1
-   }
-  },
-  {
-   "atMs": 630,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -70.1
-   }
-  },
-  {
-   "atMs": 681,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -70.0
-   }
-  },
-  {
-   "atMs": 731,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -89.8
-   }
-  },
-  {
-   "atMs": 739,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -68.7
-   }
-  },
-  {
-   "atMs": 774,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.1
-   }
-  },
-  {
-   "atMs": 780,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -71.7
-   }
-  },
-  {
-   "atMs": 827,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.7
-   }
-  },
-  {
-   "atMs": 834,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -73.7
-   }
-  },
-  {
-   "atMs": 887,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.1
-   }
-  },
-  {
-   "atMs": 894,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -67.4
-   }
-  },
-  {
-   "atMs": 932,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -92.2
-   }
-  },
-  {
-   "atMs": 938,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -67.9
-   }
-  },
-  {
-   "atMs": 976,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.1
-   }
-  },
-  {
-   "atMs": 983,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -70.0
-   }
-  },
-  {
-   "atMs": 1041,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.3
-   }
-  },
-  {
-   "atMs": 1047,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -69.6
-   }
-  },
-  {
-   "atMs": 1074,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.7
-   }
-  },
-  {
-   "atMs": 1081,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -58.0
-   }
-  },
-  {
-   "atMs": 1134,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.1
-   }
-  },
-  {
-   "atMs": 1141,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -66.7
-   }
-  },
-  {
-   "atMs": 1184,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -90.7
-   }
-  },
-  {
-   "atMs": 1191,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -72.6
-   }
-  },
-  {
-   "atMs": 1224,
-   "path": "/api/channel/0/level",
-   "value": {
-    "value": -91.1
-   }
-  },
-  {
-   "atMs": 1230,
-   "path": "/api/channel/1/signalStrengthIndicator",
+   "atMs": 288,
+   "path": "/api/channel/0/signalStrengthIndicator",
    "value": {
     "value": -79.5
    }
   },
   {
-   "atMs": 1237,
-   "path": "/api/channel/1/level",
-   "value": {
-    "value": -69.8
-   }
-  },
-  {
-   "atMs": 1286,
+   "atMs": 295,
    "path": "/api/channel/0/level",
    "value": {
     "value": -91.2
    }
   },
   {
-   "atMs": 1293,
+   "atMs": 303,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -66.7
+    "value": -74.7
    }
   },
   {
-   "atMs": 1324,
+   "atMs": 309,
    "path": "/api/channel/0/level",
    "value": {
-    "value": -92.1
+    "value": -91.5
    }
   },
   {
-   "atMs": 1331,
+   "atMs": 317,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -69.8
+    "value": -78.6
    }
   },
   {
-   "atMs": 1373,
+   "atMs": 351,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.0
+   }
+  },
+  {
+   "atMs": 358,
    "path": "/api/channel/0/level",
    "value": {
-    "value": -90.8
+    "value": -89.6
    }
   },
   {
-   "atMs": 1380,
+   "atMs": 364,
+   "path": "/api/channel/1/signalStrengthIndicator",
+   "value": {
+    "value": -91.5
+   }
+  },
+  {
+   "atMs": 371,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -73.6
+    "value": -79.3
    }
   },
   {
-   "atMs": 1431,
+   "atMs": 439,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.5
+   }
+  },
+  {
+   "atMs": 450,
    "path": "/api/channel/0/level",
    "value": {
-    "value": -89.5
+    "value": -89.2
    }
   },
   {
-   "atMs": 1438,
+   "atMs": 456,
+   "path": "/api/channel/1/signalStrengthIndicator",
+   "value": {
+    "value": -92.0
+   }
+  },
+  {
+   "atMs": 463,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -72.1
+    "value": -77.5
    }
   },
   {
-   "atMs": 1483,
+   "atMs": 469,
    "path": "/api/channel/0/level",
    "value": {
-    "value": -88.8
+    "value": -91.5
    }
   },
   {
-   "atMs": 1490,
+   "atMs": 475,
    "path": "/api/channel/1/level",
    "value": {
-    "value": -73.2
+    "value": -76.8
+   }
+  },
+  {
+   "atMs": 488,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -92.4
+   }
+  },
+  {
+   "atMs": 494,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -77.7
+   }
+  },
+  {
+   "atMs": 544,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.7
+   }
+  },
+  {
+   "atMs": 551,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -79.4
+   }
+  },
+  {
+   "atMs": 602,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.0
+   }
+  },
+  {
+   "atMs": 609,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.0
+   }
+  },
+  {
+   "atMs": 615,
+   "path": "/api/channel/1/signalStrengthIndicator",
+   "value": {
+    "value": -91.5
+   }
+  },
+  {
+   "atMs": 621,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -78.2
+   }
+  },
+  {
+   "atMs": 638,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.5
+   }
+  },
+  {
+   "atMs": 644,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -89.9
+   }
+  },
+  {
+   "atMs": 651,
+   "path": "/api/channel/1/signalStrengthIndicator",
+   "value": {
+    "value": -92.0
+   }
+  },
+  {
+   "atMs": 657,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -76.8
+   }
+  },
+  {
+   "atMs": 692,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.4
+   }
+  },
+  {
+   "atMs": 699,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -78.6
+   }
+  },
+  {
+   "atMs": 745,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.9
+   }
+  },
+  {
+   "atMs": 751,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -80.2
+   }
+  },
+  {
+   "atMs": 792,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.0
+   }
+  },
+  {
+   "atMs": 798,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -77.2
+   }
+  },
+  {
+   "atMs": 848,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.5
+   }
+  },
+  {
+   "atMs": 855,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -92.0
+   }
+  },
+  {
+   "atMs": 861,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -75.9
+   }
+  },
+  {
+   "atMs": 889,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -92.3
+   }
+  },
+  {
+   "atMs": 896,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -80.4
+   }
+  },
+  {
+   "atMs": 943,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.0
+   }
+  },
+  {
+   "atMs": 950,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.0
+   }
+  },
+  {
+   "atMs": 958,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -79.8
+   }
+  },
+  {
+   "atMs": 1018,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.5
+   }
+  },
+  {
+   "atMs": 1026,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.1
+   }
+  },
+  {
+   "atMs": 1032,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -78.2
+   }
+  },
+  {
+   "atMs": 1039,
+   "path": "/api/channel/0/signalStrengthIndicator",
+   "value": {
+    "value": -79.0
+   }
+  },
+  {
+   "atMs": 1046,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -90.6
+   }
+  },
+  {
+   "atMs": 1052,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -81.0
+   }
+  },
+  {
+   "atMs": 1089,
+   "path": "/api/channel/0/level",
+   "value": {
+    "value": -91.8
+   }
+  },
+  {
+   "atMs": 1096,
+   "path": "/api/channel/1/level",
+   "value": {
+    "value": -78.1
    }
   }
  ]

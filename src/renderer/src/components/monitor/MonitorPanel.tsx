@@ -60,6 +60,7 @@ function describeDevice(device: DeviceState): string {
   if (device.audio) parts.push(`${device.audio.level}%`)
   if (device.frequency !== undefined) parts.push(`${device.frequency.toFixed(3)} MHz`)
   if (device.audio?.muted) parts.push('muted')
+  for (const warning of device.warnings ?? []) parts.push(warning.text)
   return parts.join(' ')
 }
 

@@ -1,4 +1,4 @@
-import type { TelemetryChannel } from '../../shared/show'
+import type { TelemetryChannel, TelemetryWarning } from '../../shared/show'
 
 // The pure half of the EW-DX source: what a receiver's resources say, read as telemetry
 // channels. Nothing here opens a socket or reads a clock, so "is this pack linked?" and
@@ -40,10 +40,38 @@ export function subscriptionPaths(channels: number): string[] {
       `${base}/warnings`,
       `/api/rf/channels/${channel}`,
       transmitterPath(channel),
-      `${transmitterPath(channel)}/battery`
+      `${transmitterPath(channel)}/battery`,
+      `${transmitterPath(channel)}/warnings`
     )
   }
   return paths
+}
+
+/**
+ * What the receiver can complain of that the rest of the panel does not already say, worded for
+ * the person reading it. `NoLink` is the absence of a pack, `LowSignal` is the signal verdict and
+ * `LowBattery` is the battery's own band, each said elsewhere and in its own place; a complaint a
+ * future firmware adds is left out rather than shown as a code nobody can act on.
+ */
+const COMPLAINTS: Record<string, TelemetryWarning> = {
+  // The pack is linked and nothing is heard: the keys do not match, so the audio is gone.
+  Aes256Error: { text: 'encryption error — no audio', critical: true },
+  RfPeak: { text: 'RF overload' },
+  AfPeak: { text: 'audio clipping' }
+}
+
+function complaintsOf(...lists: unknown[]): TelemetryWarning[] {
+  const kept = new Map<string, TelemetryWarning>()
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue
+    for (const code of list) {
+      const complaint = typeof code === 'string' ? COMPLAINTS[code] : undefined
+      // The pack and the receiver can both say the audio clips: it is one thing.
+      if (complaint !== undefined && !kept.has(complaint.text)) kept.set(complaint.text, complaint)
+    }
+  }
+  // The worst first, so the one a person has to act on is the one they read.
+  return [...kept.values()].sort((a, b) => Number(!!b.critical) - Number(!!a.critical))
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -111,6 +139,13 @@ export function channelsFrom(serial: string, resources: Resources): TelemetryCha
     const tx = record(resources.get(transmitterPath(transmitter)))
     // Either end muting silences the pack, and the panel has one muted flag to say so.
     if (typeof info.mute === 'boolean') channel.muted = info.mute || tx?.mute === true
+
+    // Said only when the receiver has said its warnings at all, like the verdict: a channel
+    // whose warnings have not arrived has no complaint, and none is guessed.
+    if (Array.isArray(warnings)) {
+      const complaints = complaintsOf(warnings, resources.get(`${transmitterPath(transmitter)}/warnings`))
+      if (complaints.length > 0) channel.warnings = complaints
+    }
 
     const battery = record(resources.get(`${transmitterPath(transmitter)}/battery`))
     const gauge = finite(battery?.gauge)

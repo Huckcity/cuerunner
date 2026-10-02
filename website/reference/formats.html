@@ -147,6 +147,7 @@
             <tr><td><code>rfWeak</code></td><td>Whether the receiver itself calls the signal weak. When it is present it replaces the <strong>Signal below</strong> line for that channel, and it goes with <code>rfDbm</code>.</td></tr>
             <tr><td><code>audioLevel</code></td><td>0–100.</td></tr>
             <tr><td><code>muted</code></td><td>Whether the channel is muted.</td></tr>
+            <tr><td><code>warnings</code></td><td>What the receiver itself says is wrong, as a list of <code>{ "text": "audio clipping", "critical": false }</code>. Each is announced once when it appears and shown under the pack; <code>critical</code> marks one that makes the pack unusable until it is dealt with.</td></tr>
             <tr><td><code>frequencyMhz</code></td><td>The frequency it is on.</td></tr>
           </tbody>
         </table>

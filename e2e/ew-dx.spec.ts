@@ -120,6 +120,34 @@ test('a battery falling through the line raises the same alarm every other sourc
   await expect(page.locator('.monitor-alert[data-level="critical"]')).toContainText('battery critical')
 })
 
+test('a key that does not match is critical, said once, and shown under the pack until it clears', async () => {
+  const dialog = await openWireless()
+  await addReceiver(dialog)
+  await dialog.getByLabel('Password').fill(PASSWORD)
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(dialog.locator('.ewdx-fingerprint')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await page.locator('.btn-rf').click()
+  await expect(page.locator('.rf-row', { hasText: '37' })).toBeVisible()
+  await expect(page.locator('.rf-warning')).toHaveCount(0)
+
+  // The pack is linked and the receiver cannot decrypt it: nobody would hear this one.
+  receiver.push('/api/channel/0/warnings', ['Aes256Error'])
+
+  const row = page.locator('.rf-row', { hasText: '37' })
+  await expect(row.locator('.rf-warning')).toHaveText('encryption error — no audio')
+  await expect(row).toHaveAttribute('data-state', 'critical')
+  await expect(page.locator('.rf-alert[data-level="critical"]')).toHaveCount(1)
+  await expect(page.locator('.rf-alert')).toContainText('encryption error — no audio')
+
+  // It standing is not news again; its clearing takes the line away.
+  await page.waitForTimeout(2500)
+  await expect(page.locator('.rf-alert')).toHaveCount(1)
+  receiver.push('/api/channel/0/warnings', [])
+  await expect(page.locator('.rf-warning')).toHaveCount(0)
+  await expect(row).toHaveAttribute('data-state', 'ok')
+})
+
 test('a wrong password is refused by name, and nothing is shown as a pack', async () => {
   const dialog = await openWireless()
   await addReceiver(dialog)

@@ -93,6 +93,8 @@ export interface DeviceState {
   }
   /** Audio level for the channel, 0-100, in the unit the device reports it in. */
   audio?: { level: number; muted?: boolean }
+  /** What the device itself is complaining of right now, in words an operator reads. */
+  warnings?: TelemetryWarning[]
   /** Carrier frequency in MHz. */
   frequency?: number
   /** What the night has done to this channel, once anything has been heard from it. */
@@ -538,6 +540,16 @@ export interface TelemetrySource {
  * the contract — a bridge that emits them needs no further configuration, and a source
  * that reports nothing for a field simply leaves that reading out.
  */
+/**
+ * One thing a device says is wrong with a channel, worded for the person reading it: "encryption
+ * error — no audio", "audio clipping". `critical` is for what makes the pack unusable until it is
+ * dealt with; everything else is worth knowing and is not worth stopping for.
+ */
+export interface TelemetryWarning {
+  text: string
+  critical?: boolean
+}
+
 export interface TelemetryChannel {
   id: string
   name?: string
@@ -547,6 +559,8 @@ export interface TelemetryChannel {
   rfDbm?: number
   /** The receiver's own verdict that the signal is weak, which replaces the dBm line for this channel. */
   rfWeak?: boolean
+  /** What the receiver says is wrong with the channel beyond its battery and signal: overload, clipping, a key that does not match. */
+  warnings?: TelemetryWarning[]
   audioLevel?: number
   muted?: boolean
   frequencyMhz?: number

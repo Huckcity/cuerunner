@@ -878,6 +878,66 @@ function ewDxHarness(session: FakeSession): Harness & { ewDx: Mock } {
 // A source that has just been added has no address and no password yet. That is the operator
 // part-way through setting it up, not a receiver failing, so it is said in the status and
 // never raised as an alarm: an alarm is for something that was asked to be watched.
+describe('WirelessService with a device that complains', () => {
+  const clip = { text: 'audio clipping' }
+  const keys = { text: 'encryption error — no audio', critical: true }
+
+  async function run(...readings: Array<Partial<TelemetryChannel>>): Promise<ReturnType<typeof harness>> {
+    const h = harness()
+    for (const fields of readings.slice(0, -1)) h.fetchJson.mockResolvedValueOnce(response(document(channel('ch-1', { name: 'Lead', ...fields }))))
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', ...readings[readings.length - 1] }))))
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+    return h
+  }
+
+  const next = async (h: Awaited<ReturnType<typeof run>>, fields: Partial<TelemetryChannel>, ms = DEFAULT_POLL_MS): Promise<void> => {
+    h.fetchJson.mockResolvedValue(response(document(channel('ch-1', { name: 'Lead', ...fields }))))
+    await vi.advanceTimersByTimeAsync(ms)
+  }
+
+  it('says a complaint once when it appears, critical for a key that does not match, and puts it on the device', async () => {
+    const h = await run({ warnings: [keys, clip] })
+
+    expect(h.bus.snapshot().alerts.map(alert => [alert.level, alert.message])).toEqual([
+      ['critical', 'Lead encryption error — no audio'],
+      ['warning', 'Lead audio clipping']
+    ])
+    expect(device(h.bus, 'ch-1')?.warnings).toEqual([keys, clip])
+    h.service.stop()
+  })
+
+  it('does not say it again while it stands, or when the service restarts', async () => {
+    const h = await run({ warnings: [keys] })
+    await next(h, { warnings: [keys] })
+    h.service.stop()
+    h.service.start(h.context, settings([httpSource()]))
+    await flush()
+
+    expect(messages(h.bus)).toEqual(['Lead encryption error — no audio'])
+    h.service.stop()
+  })
+
+  it('does not say clipping again each time it comes and goes inside a minute, and says it once a minute has passed', async () => {
+    const h = await run({ warnings: [clip] })
+    for (const warnings of [[], [clip], [], [clip]]) await next(h, { warnings })
+    expect(messages(h.bus)).toEqual(['Lead audio clipping'])
+
+    await next(h, { warnings: [] }, 61_000)
+    await next(h, { warnings: [clip] })
+    expect(messages(h.bus)).toEqual(['Lead audio clipping', 'Lead audio clipping'])
+    h.service.stop()
+  })
+
+  it('shows no complaint once the device stops making it', async () => {
+    const h = await run({ warnings: [clip] })
+    await next(h, {})
+
+    expect(device(h.bus, 'ch-1')).not.toHaveProperty('warnings')
+    h.service.stop()
+  })
+})
+
 describe('WirelessService alarms that stand', () => {
   async function run(...readings: Array<Partial<TelemetryChannel>>): Promise<ReturnType<typeof harness>> {
     const h = harness()

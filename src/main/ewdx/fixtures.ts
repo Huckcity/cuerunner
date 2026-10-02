@@ -14,13 +14,15 @@ export const LINKED_EM4: ReadonlyArray<readonly [string, unknown]> = [
   ['/api/rf/channels/0', { frequency: 606200, presets: { type: 'Factory', bank: 0, channel: 0 } }],
   ['/api/transmitters/0', { type: 'EW_DX_SK', capsule: 'Unknown', version: '3.0.2', mute: false, identification: false, lowcut: 'Off', name: '37', trim: 0, cableEmulation: 'Off', led: true, lock: false, muteConfig: 'AfMute' }],
   ['/api/transmitters/0/battery', { type: 'PrimaryCell', gauge: 76 }],
+  ['/api/transmitters/0/warnings', []],
   ['/api/channel/1', { name: '38', mute: false, mates: [], gain: 21, audio: ['Out2'], outputLevel: 6, eventCounter: 0 }],
   ['/api/channel/1/level', { value: -138.5 }],
   ['/api/channel/1/signalStrengthIndicator', { value: -107.0 }],
   ['/api/channel/1/warnings', ['NoLink']],
   ['/api/rf/channels/1', { frequency: 606800, presets: { type: 'Factory', bank: 0, channel: 1 } }],
   ['/api/transmitters/1', {}],
-  ['/api/transmitters/1/battery', {}]
+  ['/api/transmitters/1/battery', {}],
+  ['/api/transmitters/1/warnings', []]
 ]
 
 /** The wire form of the same snapshot: one SSE `data:` line per path, as the receiver sent them. */
