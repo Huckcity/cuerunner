@@ -127,7 +127,8 @@ export function telemetryPorts(
             password: held.password,
             pinnedFingerprint: held.fingerprint,
             // The first certificate a receiver shows is the one trusted from then on.
-            onFingerprint: fingerprint => void store.pin(source.id, fingerprint),
+            // The pin is kept in memory first; a write that fails is retried by the next change.
+            onFingerprint: fingerprint => { store.pin(source.id, fingerprint).catch(() => undefined) },
             expectedSerial: parts.expectedSerial,
             onSerial: parts.onSerial
           })

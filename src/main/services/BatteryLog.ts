@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { rename, rm, writeFile } from 'node:fs/promises'
+import { rm, writeFile } from 'node:fs/promises'
+import { replaceFile } from '../replaceFile'
 import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -161,7 +162,7 @@ export class BatteryLog {
       const temp = join(dirname(this.options.filePath), `.${basename(this.options.filePath)}.${randomUUID()}.tmp`)
       await writeFile(temp, text, 'utf-8')
       try {
-        await rename(temp, this.options.filePath)
+        await replaceFile(temp, this.options.filePath)
       } catch (error) {
         await rm(temp, { force: true })
         throw error
