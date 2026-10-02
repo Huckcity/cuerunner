@@ -102,7 +102,11 @@ export class EwDxReceiver implements ReceiverClient {
       origin: this.current,
       expectedSerial: this.serial(),
       onSerial: serial => {
-        if (serial !== this.serial()) void this.options.credentials.remember(this.options.sourceId, { serial })
+        // Learning a serial is a convenience: a write that fails (a full disk, a file held open) is
+        // the next connection's to try again, and must not become an unhandled rejection.
+        if (serial !== this.serial()) {
+          this.options.credentials.remember(this.options.sourceId, { serial }).catch(() => undefined)
+        }
       }
     })
     this.client.start()

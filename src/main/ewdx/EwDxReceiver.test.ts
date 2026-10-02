@@ -103,6 +103,31 @@ describe('EwDxReceiver', () => {
     expect(clients[1].parts.expectedSerial).toBe(SERIAL)
   })
 
+  it('does not let a write that failed while remembering a serial become an unhandled rejection', async () => {
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const failing = { ...credentials, remember: () => Promise.reject(new Error('EPERM: the file is held')) } as unknown as EwDxCredentials
+      const live = new EwDxReceiver({
+        sourceId: 'rack-a', target: TARGET, origin: ORIGIN, credentials: failing,
+        makeClient: parts => {
+          const client = new ScriptedClient(parts, answers)
+          clients.push(client)
+          return client
+        },
+        discover: discover as () => Promise<DiscoverResult>
+      })
+      live.start()
+
+      clients[0].parts.onSerial(SERIAL)
+      await new Promise(resolve => setTimeout(resolve, 30))
+
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
+  })
+
   it('follows the serial to a new address when the old one stops answering, and says where it went', async () => {
     await credentials.remember('rack-a', { serial: SERIAL })
     discover.mockResolvedValue({ receivers: [found('192.168.0.210')], error: null })
