@@ -18,18 +18,18 @@
       "Removing input 1 from DCA 1 and re-adding it at the desk produced no MIDI at all: membership changes are not reported on 51325.",
       "An NRPN get (B0 63 mm, B0 62 ll, B0 60 7F) is answered with the parameter echoed and its value within 5-40 ms, for 4F 20-27 and 02 00-07.",
       "DCA 2 is 4F 21: it read 10289 with the fader at about -40 dB and 0 at -inf. DCAs 3-8 (4F 22-27) read 0 at -inf; DCA mutes 02 00-07 read 0 (off).",
-      "4F 00-07 read 15196 (76 5C) and 4F 08 read 15213 (76 6D) with the aux masters at their reset 0 dB; 4F 09-0C did not answer. A DCA and an input set to 0 dB by hand read 15120-15165 and 15135-15150: neighbouring steps of the same table near the top of travel (about 15-17 per step).",
+      "4F 00 is LR and 4F 01-08 are auxes 1-8: with aux 8 moved to about -40 dB, 4F 08 read 10485 and 4F 00-07 stayed 15196 (76 5C), auxes 1-7 at their reset 0 dB and LR set to about 0 dB by hand. 4F 09-0C did not answer. A DCA and an input set to 0 dB by hand read 15120-15165 and 15135-15150: neighbouring steps of the same table near the top of travel (about 15-17 per step).",
       "The desk takes one MIDI TCP client: a second connection to 51325 was reset at once while the passive listener held one, and accepted once it was gone.",
-      "On 51326, with Cuerunner's own session frames, a membership switch written as assign-new, flag, clear-old, flag and then a hello was followed by the hello's answer in 3.5-7.6 ms over ten switches. The desk sent no frame that answers the membership itself; its 7f 08 pushes kept their own cadence (61 B about every 500 ms, 165 B about every second).",
-      "TCP 51321 refused connections on this desk before any session was opened, so no BYE. could be sent; a hello on 51326 a few seconds after the session ended was still answered in 14 ms."
+      "On 51326, with Cuerunner's own session frames, a membership switch written as assign-new, flag, clear-old, flag and then a hello was followed by the hello's answer in 3.5-7.6 ms over ten switches 1.5 s apart, and in 2.6-3.9 ms over five of six switches 3 s apart; the sixth took 28.4 ms, written just after a 165 B 7f 08 push had begun. The desk sent no frame that answers the membership itself; its 7f 08 pushes kept their own cadence (61 B about every 500 ms, 165 B about every second).",
+      "Watched at the desk on the second run: input 1 moved DCA 1 -> DCA 2 -> DCA 1 three times, and was left on DCA 1.",
+      "TCP 51321 refused connections on this desk before any session was opened, so neither native session could send BYE.; a hello on 51326 a few seconds after the first ended was answered in 14 ms, and the second session opened normally."
     ],
     "inferred": [
       "DCAs 2-8 are 4F 21-27 and their mutes 02 01-07 (DCA 2 level measured moving; the rest only read at rest).",
-      "Unity is 15196 (76 5C), from eight masters at their reset value; which of 4F 00-08 is LR and which are auxes 1-8 is not established here.",
+      "Unity is 15196 (76 5C), the value seven aux masters hold at their reset 0 dB.",
       "The hello answer bounds when the desk had read the membership frames, assuming it reads its socket in order; when the audio follows is not measured."
     ],
     "open": [
-      "Visual confirmation at the desk that input 1 moved between DCA 1 and DCA 2 on each switch.",
       "Whether a make-before-break switch (briefly on both DCAs, offsets summed) or break-before-make (briefly on none, at the channel fader alone) is audible; needs an audio capture.",
       "Why 51321 refused, and whether the 2026-09-22 mute-after-no-goodbye measurement still holds on this desk."
     ]
@@ -14651,10 +14651,25 @@
     "set to 0 dB by hand": {
       "4f 20": 15120,
       "40 00": 15135
+    },
+    "aux 8 at about -40 dB": {
+      "4f 00": 15196,
+      "4f 01": 15196,
+      "4f 02": 15196,
+      "4f 03": 15196,
+      "4f 04": 15196,
+      "4f 05": 15196,
+      "4f 06": 15196,
+      "4f 07": 15196,
+      "4f 08": 10485,
+      "4f 09": null,
+      "4f 0a": null,
+      "4f 0b": null,
+      "4f 0c": null
     }
   },
   "nativeSwitch": {
-    "note": "Input 1 switched DCA 1 -> DCA 2 and back five times, 1.5 s apart, then left on DCA 1 only. deskFrames.dt is ms after the write.",
+    "note": "First run: input 1 switched DCA 1 -> DCA 2 and back five times, 1.5 s apart, not watched. deskFrames.dt is ms after the write.",
     "switches": [
       {
         "label": "c1 input1 -> DCA2",
@@ -15573,6 +15588,953 @@
       },
       {
         "t": 18484.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      }
+    ]
+  },
+  "nativeSwitchWatched": {
+    "note": "Second run, watched at the desk: three cycles, 3 s apart, input 1 left on DCA 1 only. deskFrames.dt is ms after the write.",
+    "switches": [
+      {
+        "label": "c1 input1 -> DCA2",
+        "deskFrames": [
+          {
+            "dt": 3.4,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 57.6,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 255.5,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 760.5,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1052.9,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 1254.7,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1737.1,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2051,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 2235.9,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2741,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2902.3,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          }
+        ]
+      },
+      {
+        "label": "c1 input1 -> DCA1",
+        "deskFrames": [
+          {
+            "dt": 2.6,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 44.3,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 235.2,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 734.5,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1042.1,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 1234.2,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1736.8,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2034.7,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 2235,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2737.2,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2901.5,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          }
+        ]
+      },
+      {
+        "label": "c2 input1 -> DCA2",
+        "deskFrames": [
+          {
+            "dt": 3.3,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 30.5,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 218.2,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 714.1,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1027,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 1222.1,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1715.1,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2023,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 2213.5,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2715.7,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2900.2,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          }
+        ]
+      },
+      {
+        "label": "c2 input1 -> DCA1",
+        "deskFrames": [
+          {
+            "dt": 3.1,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 15,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 223.9,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 714,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1012.4,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 1217,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1694.7,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2008.3,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 2193.3,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2694.6,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2902.1,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          }
+        ]
+      },
+      {
+        "label": "c3 input1 -> DCA2",
+        "deskFrames": [
+          {
+            "dt": 1.9,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 3.9,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 193.8,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 692.7,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 996.9,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 1194.9,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1696.3,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1996.1,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 2192.1,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2694.3,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2898.8,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 2988.8,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          }
+        ]
+      },
+      {
+        "label": "c3 input1 -> DCA1",
+        "deskFrames": [
+          {
+            "dt": 28.4,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 173.6,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 672.4,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 988.3,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 1173.4,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1673.4,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 1983.1,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          },
+          {
+            "dt": 2177.9,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2674.4,
+            "len": 61,
+            "head": "7f 08 37 00 00 00 19 1a"
+          },
+          {
+            "dt": 2898.5,
+            "len": 8,
+            "head": "7f 00 02 00 00 00 7c c8"
+          },
+          {
+            "dt": 2978.4,
+            "len": 165,
+            "head": "7f 08 9f 00 00 00 27 27"
+          }
+        ]
+      }
+    ],
+    "wire": [
+      {
+        "t": 9.5,
+        "dir": "->",
+        "label": "session frames"
+      },
+      {
+        "t": 16.7,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 23.4,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 0c 02 00 00 00 01 00"
+      },
+      {
+        "t": 23.6,
+        "dir": "<-",
+        "len": 18,
+        "head": "7f 02 0c 00 00 00 02 01 06 01 0a 13"
+      },
+      {
+        "t": 23.7,
+        "dir": "<-",
+        "len": 726,
+        "head": "7f 15 d0 02 00 00 ff ff ff ff ff ff"
+      },
+      {
+        "t": 144.6,
+        "dir": "<-",
+        "len": 8,
+        "head": "f7 7f 5c 58 30 80 64 a1"
+      },
+      {
+        "t": 144.8,
+        "dir": "<-",
+        "len": 8,
+        "head": "f7 80 a9 98 f5 b8 32 80"
+      },
+      {
+        "t": 145.3,
+        "dir": "<-",
+        "len": 8,
+        "head": "f7 00 ff ff ff ff 00 00"
+      },
+      {
+        "t": 151.8,
+        "dir": "<-",
+        "len": 8206,
+        "head": "7f 0e 08 20 00 00 00 00 00 00 10 00"
+      },
+      {
+        "t": 151.8,
+        "dir": "<-",
+        "len": 38,
+        "head": "7f 12 20 00 00 00 00 00 00 00 00 00"
+      },
+      {
+        "t": 152,
+        "dir": "<-",
+        "len": 5413,
+        "head": "7f 08 1f 15 00 00 02 02 21 00 00 00"
+      },
+      {
+        "t": 152,
+        "dir": "<-",
+        "len": 6,
+        "head": "7f 19 00 00 00 00"
+      },
+      {
+        "t": 180.8,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 364.8,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 865.4,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 1177.7,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 1365.9,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 1866.5,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 2172.8,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 2365.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 2867.1,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 3015.5,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 3112.3,
+        "dir": "->",
+        "label": "c1 input1 -> DCA2",
+        "hex": "f7 07 07 1d 00 01 01 00 f7 07 07 0c 00 00 00 00 f7 07 07 1d 00 00 00 00 f7 07 07 0c 00 00 00 00 7f 00 02 00 00 00 66 ae"
+      },
+      {
+        "t": 3115.5,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 3169.7,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 3367.6,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 3872.6,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 4165,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 4366.8,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 4849.2,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 5163.2,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 5348,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 5853.1,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 6014.4,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 6114,
+        "dir": "->",
+        "label": "c1 input1 -> DCA1",
+        "hex": "f7 07 07 1d 00 00 01 00 f7 07 07 0c 00 00 00 00 f7 07 07 1d 00 01 00 00 f7 07 07 0c 00 00 00 00 7f 00 02 00 00 00 66 ae"
+      },
+      {
+        "t": 6116.6,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 6158.2,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 6349.1,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 6848.5,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 7156,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 7348.1,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 7850.7,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 8148.6,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 8349,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 8851.1,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 9015.4,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 9116.3,
+        "dir": "->",
+        "label": "c2 input1 -> DCA2",
+        "hex": "f7 07 07 1d 00 01 01 00 f7 07 07 0c 00 00 00 00 f7 07 07 1d 00 00 00 00 f7 07 07 0c 00 00 00 00 7f 00 02 00 00 00 66 ae"
+      },
+      {
+        "t": 9119.5,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 9146.7,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 9334.4,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 9830.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 10143.2,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 10338.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 10831.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 11139.2,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 11329.7,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 11831.9,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 12016.5,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 12117.6,
+        "dir": "->",
+        "label": "c2 input1 -> DCA1",
+        "hex": "f7 07 07 1d 00 00 01 00 f7 07 07 0c 00 00 00 00 f7 07 07 1d 00 01 00 00 f7 07 07 0c 00 00 00 00 7f 00 02 00 00 00 66 ae"
+      },
+      {
+        "t": 12120.7,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 12132.6,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 12341.4,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 12831.6,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 13129.9,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 13334.5,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 13812.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 14125.9,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 14310.8,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 14812.1,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 15019.6,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 15119.7,
+        "dir": "->",
+        "label": "c3 input1 -> DCA2",
+        "hex": "f7 07 07 1d 00 01 01 00 f7 07 07 0c 00 00 00 00 f7 07 07 1d 00 00 00 00 f7 07 07 0c 00 00 00 00 7f 00 02 00 00 00 66 ae"
+      },
+      {
+        "t": 15121.5,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 15123.6,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 15313.5,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 15812.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 16116.5,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 16314.5,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 16815.9,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 17115.8,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 17311.8,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 17813.9,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 18018.4,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 18108.4,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 18120.9,
+        "dir": "->",
+        "label": "c3 input1 -> DCA1",
+        "hex": "f7 07 07 1d 00 00 01 00 f7 07 07 0c 00 00 00 00 f7 07 07 1d 00 01 00 00 f7 07 07 0c 00 00 00 00 7f 00 02 00 00 00 66 ae"
+      },
+      {
+        "t": 18149.2,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 18294.4,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 18793.2,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 19109.1,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 19294.2,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 19794.3,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 20103.9,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 20298.7,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 20795.2,
+        "dir": "<-",
+        "len": 61,
+        "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
+      },
+      {
+        "t": 21019.3,
+        "dir": "<-",
+        "len": 8,
+        "head": "7f 00 02 00 00 00 7c c8"
+      },
+      {
+        "t": 21099.2,
+        "dir": "<-",
+        "len": 165,
+        "head": "7f 08 9f 00 00 00 27 27 0c 00 00 00"
+      },
+      {
+        "t": 21295.3,
         "dir": "<-",
         "len": 61,
         "head": "7f 08 37 00 00 00 19 1a 1b 00 00 00"
