@@ -7,7 +7,7 @@ import {
   membershipWrite,
   ridesWrite
 } from '../utils/desk'
-import { sendDeskMessage } from './deskSend'
+import { sendDeskMessage, type DeskSendResult } from './deskSend'
 import { sceneChanges, type DeskChange, type DeskState } from '../utils/scenes'
 import { ALL_CLOSED_SCENE_ID } from '../../../shared/show'
 import type { Dca, DeskMessage, ShowSettings } from '../../../shared/show'
@@ -249,8 +249,24 @@ async function writeChanges(
     if (!muted.has(channelId)) outcome.moved += 1
   }
 
+  // An SQ's pairs go as one write, sent where the first of them would have gone: a channel
+  // moving from one fader to another is a clear and a place, and written apart the desk
+  // sometimes applies one on a tick of its own — measured as a dip of the whole fader offset,
+  // up to ~190 ms, in nearly half of such switches. One write is applied together. Each pair
+  // still answers for itself below, with the batch's answer.
+  const pairs = attempts.flatMap(({ message }) => message.kind === 'sq-native' ? [message] : [])
+  let batch: Promise<DeskSendResult> | null = null
+  const sendOne = (message: DeskMessage): Promise<DeskSendResult> => {
+    if (message.kind !== 'sq-native' || pairs.length < 2) return sendDeskMessage(message)
+    batch ??= sendDeskMessage({
+      kind: 'sq-native-batch',
+      memberships: pairs.map(({ channel, dca, placed, rides }) => ({ channel, dca, placed, rides }))
+    })
+    return batch
+  }
+
   for (const { write, message } of attempts) {
-    const sent = await sendDeskMessage(message)
+    const sent = await sendOne(message)
     if (!sent.ok) {
       // The write and where it was addressed are one half of a failed recall; why it did
       // not get there is the other, and the engine is the one that wrote it. A recall

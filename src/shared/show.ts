@@ -220,6 +220,9 @@ export interface RfPack {
  * the intent — which channel, which fader, placed or cleared, and whether the channel rides
  * any fader after this write (the per-channel flag the capture measures).
  *
+ * `sq-native-batch` is several of those intents as one write, which is how a recall sends its
+ * pairs: the desk applies them together, so a channel moving fader is never caught between.
+ *
  * `sq-native-rides` is the same route for a show where the highest fader wins: one channel and
  * every fader the scene places it on, and main decides which of them the desk is told.
  */
@@ -229,6 +232,7 @@ export type DeskMessage =
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
   | ({ kind: 'sq-native' } & SqMembershipIntent)
   | ({ kind: 'sq-native-rides' } & SqRidesIntent)
+  | { kind: 'sq-native-batch'; memberships: SqMembershipIntent[] }
 
 /**
  * One (channel, fader) pair as the SQ's native control service is asked to write it — the

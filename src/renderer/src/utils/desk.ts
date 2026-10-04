@@ -454,6 +454,9 @@ export function describeDeskMessage(message: DeskMessage | null): string {
     const where = message.placed ? 'onto' : 'off'
     return `SQ assign ch${message.channel} ${where} DCA ${message.dca}`
   }
+  if (message.kind === 'sq-native-batch') {
+    return `SQ assign ${message.memberships.length} pair${message.memberships.length === 1 ? '' : 's'} as one write`
+  }
   if (message.kind === 'sq-native-rides') {
     const faders = message.dcas.length === 0 ? 'no DCA' : `DCA ${message.dcas.join(', ')}`
     return `SQ ch${message.channel} rides ${message.highest ? 'the highest of ' : ''}${faders}`

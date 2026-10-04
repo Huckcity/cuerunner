@@ -160,6 +160,10 @@ function said(message: DeskMessage): string {
   if (message.kind === 'sq-native') {
     return `SQ ch${message.channel} ${message.placed ? 'onto' : 'off'} fader ${message.dca}`
   }
+  // A batch is one write, so it is one line: its pairs joined, in the order they went.
+  if (message.kind === 'sq-native-batch') {
+    return message.memberships.map(pair => said({ kind: 'sq-native', ...pair })).join(' + ')
+  }
   if (message.kind === 'sq-native-rides') {
     return `SQ ch${message.channel} rides ${message.highest ? 'highest of ' : ''}[${message.dcas.join(',')}] was [${message.wrote.join(',')}]`
   }
@@ -216,7 +220,9 @@ describe('recallScene', () => {
     // wrong — the service never took it, or it took it and had no session to write on.
     command = vi.mocked(window.cuerunner.show.command).mockImplementation((_service, action, payload) => {
       if (action === 'rides') sent.push(said({ kind: 'sq-native-rides', ...(payload as SqRidesIntent) }))
-      else sent.push(said({ kind: 'sq-native', ...(payload as SqMembershipIntent) }))
+      else if (action === 'memberships') {
+        sent.push(said({ kind: 'sq-native-batch', ...(payload as { memberships: SqMembershipIntent[] }) }))
+      } else sent.push(said({ kind: 'sq-native', ...(payload as SqMembershipIntent) }))
       return Promise.resolve(refused.includes(sent.length)
         ? { ok: true, result: { ok: false, error: refusal } }
         : { ok: true, result: { ok: true, frames: 4 } })
@@ -232,10 +238,14 @@ describe('recallScene', () => {
   function named(): { channels: number[]; faders: number[] } {
     const channels: number[] = []
     const faders: number[] = []
-    for (const call of command.mock.calls.filter(call => call[1] === 'membership')) {
-      const intent = call[2] as SqMembershipIntent
-      channels.push(intent.channel)
-      faders.push(intent.dca)
+    for (const call of command.mock.calls) {
+      const pairs = call[1] === 'membership'
+        ? [call[2] as SqMembershipIntent]
+        : call[1] === 'memberships' ? (call[2] as { memberships: SqMembershipIntent[] }).memberships : []
+      for (const intent of pairs) {
+        channels.push(intent.channel)
+        faders.push(intent.dca)
+      }
     }
     for (const call of tcpSend.mock.calls) {
       const messages = call[0].messages as MidiMessageKind[]
@@ -267,7 +277,7 @@ describe('recallScene', () => {
     return useStore.getState().log.map(entry => entry.message)
   }
 
-  it('sends the membership first, in the faders’ own order, one awaited send at a time', async () => {
+  it('sends the membership first, as one write in the faders’ own order, one awaited send at a time', async () => {
     // The membership goes first because it is what the mute is a state *of*, and in the
     // faders' own order because that is the order the desk's DCAs are numbered in. The
     // sequence below is the whole of it: two placements, then a mute per channel that
@@ -275,17 +285,16 @@ describe('recallScene', () => {
     let landed = 0
     const first = Promise.withResolvers<{ ok: boolean; result?: unknown }>()
     command.mockImplementationOnce((_service, _action, payload) => {
-      const intent = payload as SqMembershipIntent
-      sent.push(said({ kind: 'sq-native', ...intent }))
+      sent.push(said({ kind: 'sq-native-batch', ...(payload as { memberships: SqMembershipIntent[] }) }))
       landed += 1
       return first.promise
     })
 
     const recall = recallScene('s-2')
     for (let i = 0; i < 10; i++) await Promise.resolve()
-    // One awaited send at a time: the second write has not left while the first is owed an
-    // answer, which is also what keeps the record meaningful.
-    expect(sent).toEqual(['SQ ch2 onto fader 2'])
+    // The pairs are one write, so the desk applies them together; and one awaited send at a
+    // time: no mute has left while the pairs are owed an answer.
+    expect(sent).toEqual(['SQ ch2 onto fader 2 + SQ ch3 onto fader 3'])
     expect(landed).toBe(1)
 
     first.resolve({ ok: true, result: { ok: true, frames: 4 } })
@@ -293,8 +302,7 @@ describe('recallScene', () => {
 
     expect(result.failures).toEqual([])
     expect(sent).toEqual([
-      'SQ ch2 onto fader 2',
-      'SQ ch3 onto fader 3',
+      'SQ ch2 onto fader 2 + SQ ch3 onto fader 3',
       // One mute per channel, in the order of the first fader each rides: the two the
       // scene places, then the two it does not, in the show's own channel order.
       'cc 63 0 | cc 62 1 | cc 6 0 | cc 26 0',
@@ -312,30 +320,29 @@ describe('recallScene', () => {
     // The record therefore follows the desk as the sends land — a record written from the
     // copy read before them belongs to whichever recall finishes last, which is not the
     // order the desk heard, and a fact it gets wrong is never told anything again.
-    const first = Promise.withResolvers<{ ok: boolean; result?: unknown }>()
-    const second = Promise.withResolvers<{ ok: boolean; result?: unknown }>()
-    command
-      .mockImplementationOnce((_service, _action, payload) => {
-        sent.push(said({ kind: 'sq-native', ...(payload as SqMembershipIntent) }))
-        return first.promise
-      })
-      .mockImplementationOnce((_service, _action, payload) => {
-        sent.push(said({ kind: 'sq-native', ...(payload as SqMembershipIntent) }))
-        return second.promise
-      })
-
-    const recall = recallScene('s-2')
-    first.resolve({ ok: true, result: { ok: true, frames: 4 } })
-    for (let i = 0; i < 10; i++) await Promise.resolve()
-
-    // The first placement is on the desk and said so, while the seconds' mutes are still
-    // owed: what landed is what the record holds, mid-recall.
-    expect(useStore.getState().deskState).toEqual({
-      mutes: {},
-      assignments: { 'ch-2': ['dca-2'] }
+    const pairs = Promise.withResolvers<{ ok: boolean; result?: unknown }>()
+    const firstMute = Promise.withResolvers<{ ok: boolean; error?: string }>()
+    command.mockImplementationOnce((_service, _action, payload) => {
+      sent.push(said({ kind: 'sq-native-batch', ...(payload as { memberships: SqMembershipIntent[] }) }))
+      return pairs.promise
+    })
+    tcpSend.mockImplementationOnce(request => {
+      sent.push(said({ kind: 'midi-tcp', host: request.host, port: request.port, messages: request.messages }))
+      return firstMute.promise
     })
 
-    second.resolve({ ok: true, result: { ok: true, frames: 4 } })
+    const recall = recallScene('s-2')
+    pairs.resolve({ ok: true, result: { ok: true, frames: 4 } })
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+
+    // The placements are on the desk and said so, while the mutes are still owed: what
+    // landed is what the record holds, mid-recall.
+    expect(useStore.getState().deskState).toEqual({
+      mutes: {},
+      assignments: { 'ch-2': ['dca-2'], 'ch-3': ['dca-3'] }
+    })
+
+    firstMute.resolve({ ok: true })
     await recall
     expect(useStore.getState().deskState).toEqual({
       mutes: { 'ch-2': false, 'ch-3': false, 'ch-1': true, 'ch-4': true },
@@ -352,40 +359,39 @@ describe('recallScene', () => {
     await recallScene('s-6')
 
     expect(sent.filter(line => line.startsWith('SQ '))).toEqual([
-      'SQ ch2 onto fader 2',
-      'SQ ch2 onto fader 4'
+      'SQ ch2 onto fader 2 + SQ ch2 onto fader 4'
     ])
     expect(useStore.getState().deskState.assignments['ch-2']).toEqual(['dca-2', 'dca-4'])
   })
 
-  it('leaves the first write recorded when a later one fails, and the next recall retries only the rest', async () => {
-    // The state that was remembered is only the state that got there, so the next recall
-    // tries again for the rest — and not for what already landed.
-    refused = [2]
+  it('records none of the pairs when their one write fails, and the next recall retries only those', async () => {
+    // The pairs go as one write, so they land together or not at all, and each answers for
+    // itself with the write's answer. The state that was remembered is only the state that
+    // got there: the next recall tries the pairs again — and not the mutes, which landed.
+    refused = [1]
     refusal = 'no session'
 
     const result = await recallScene('s-2')
 
     expect(result.failures).toEqual([
+      'Ch 2 · Sancho → DCA 2: SQ assign ch2 onto DCA 2 — no session',
       'Ch 3 · Nell → DCA 3: SQ assign ch3 onto DCA 3 — no session'
     ])
     expect(useStore.getState().deskState).toEqual({
       mutes: { 'ch-2': false, 'ch-3': false, 'ch-1': true, 'ch-4': true },
-      assignments: { 'ch-2': ['dca-2'] }
+      assignments: {}
     })
     expect(logMessages()).toEqual([
       'Scene "Finale" — 2 opened, 2 closed',
-      'Could not reach the desk: Ch 3 · Nell → DCA 3: SQ assign ch3 onto DCA 3; why: no session'
+      'Could not reach the desk: Ch 2 · Sancho → DCA 2: SQ assign ch2 onto DCA 2, Ch 3 · Nell → DCA 3: SQ assign ch3 onto DCA 3; why: no session'
     ])
 
-    // The desk is willing now: what is left is the one placement that never landed, and
-    // neither the placement that did nor any of the four mutes is sent again.
     refused = []
     sent.length = 0
     const second = await recallScene('s-2')
 
     expect(second.failures).toEqual([])
-    expect(sent).toEqual(['SQ ch3 onto fader 3'])
+    expect(sent).toEqual(['SQ ch2 onto fader 2 + SQ ch3 onto fader 3'])
     expect(useStore.getState().deskState.assignments).toEqual({
       'ch-2': ['dca-2'],
       'ch-3': ['dca-3']
@@ -438,8 +444,8 @@ describe('recallScene', () => {
   it('sends no mute for a channel that changes fader while it stays open', async () => {
     // "Keeps playing" is the app's half only: the desk moves a channel between faders
     // without a mute, so the recall must not compose one. The sequence is the assertion —
-    // the record says Ruth is open, the scene opens her on another fader, and the two
-    // writes that go are the clear and the place.
+    // the record says Ruth is open, the scene opens her on another fader, and what goes is
+    // the clear and the place as one write, so the desk never holds her on neither fader.
     seed({
       mutes: { 'ch-1': false, 'ch-2': true, 'ch-3': true, 'ch-4': true },
       assignments: { 'ch-1': ['dca-1'], 'ch-2': [], 'ch-3': [], 'ch-4': [] }
@@ -447,7 +453,7 @@ describe('recallScene', () => {
 
     const result = await recallScene('s-3')
 
-    expect(sent).toEqual(['SQ ch1 off fader 1', 'SQ ch1 onto fader 3'])
+    expect(sent).toEqual(['SQ ch1 off fader 1 + SQ ch1 onto fader 3'])
     expect(tcpSend).not.toHaveBeenCalled()
     expect(result.changes).toEqual([
       { channelId: 'ch-1', label: 'Ch 1 · Ruth', open: true, dcas: ['dca-3'] }
@@ -487,8 +493,7 @@ describe('recallScene', () => {
     // The two channels the record had on faders are taken off them, and the two the record
     // believes are open are muted: the ones it already knows are closed are not told again.
     expect(sent).toEqual([
-      'SQ ch1 off fader 1',
-      'SQ ch3 off fader 3',
+      'SQ ch1 off fader 1 + SQ ch3 off fader 3',
       'cc 63 0 | cc 62 0 | cc 6 0 | cc 26 1',
       'cc 63 0 | cc 62 2 | cc 6 0 | cc 26 1'
     ])

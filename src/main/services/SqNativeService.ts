@@ -327,6 +327,7 @@ export class SqNativeService implements ShowService {
    */
   command(action: string, payload?: unknown): SqMembershipAnswer {
     if (action === 'rides') return this.rides(payload)
+    if (action === 'memberships') return this.memberships(payload)
     if (action !== 'membership') throw new Error(`Unknown action "${action}"`)
     const intent = membershipOf(payload)
     if (typeof intent === 'string') return { ok: false, error: intent }
@@ -348,6 +349,37 @@ export class SqNativeService implements ShowService {
       }
     }
     this.resolver?.landed(intent)
+    return { ok: true, frames }
+  }
+
+  /**
+   * `memberships` writes a recall's pairs as one write, so the desk applies them together: a
+   * channel moving from one fader to another is a clear and a place, and written apart an SQ
+   * sometimes applies the first on a tick of its own — the channel on neither fader, or on
+   * both, for up to ~190 ms (measured 2026-10-04). Every pair is checked before anything goes:
+   * a payload with one bad pair writes none of them.
+   */
+  private memberships(payload: unknown): SqMembershipAnswer {
+    const list = (payload as { memberships?: unknown } | null)?.memberships
+    if (!Array.isArray(list) || list.length === 0 || list.length > MAX_FRAME_NUMBER * 8) {
+      return { ok: false, error: 'a recall’s memberships need a list of them' }
+    }
+    const intents: SqMembershipIntent[] = []
+    for (const entry of list) {
+      const intent = membershipOf(entry)
+      if (typeof intent === 'string') return { ok: false, error: intent }
+      intents.push(intent)
+    }
+    // Pairs written by a recall are the show taking those channels back from highest wins.
+    for (const intent of intents) this.resolver?.release(intent.channel)
+    const frames = this.session.sendMemberships(intents)
+    if (frames === 0) {
+      return {
+        ok: false,
+        error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+      }
+    }
+    for (const intent of intents) this.resolver?.landed(intent)
     return { ok: true, frames }
   }
 

@@ -52,6 +52,17 @@ export async function sendDeskMessage(message: DeskMessage): Promise<DeskSendRes
       }
       return { ok: true }
     }
+    if (message.kind === 'sq-native-batch') {
+      const answer = await window.cuerunner.show.command('sq-native', 'memberships', {
+        memberships: message.memberships
+      })
+      if (!answer.ok) return { ok: false, error: answer.error ?? 'the SQ service did not take it' }
+      const written = answer.result as SqMembershipAnswer | undefined
+      if (written?.ok !== true) {
+        return { ok: false, error: written?.error ?? 'the SQ service answered and wrote nothing' }
+      }
+      return { ok: true }
+    }
     if (message.kind === 'sq-native-rides') {
       const answer = await window.cuerunner.show.command('sq-native', 'rides', {
         channel: message.channel,

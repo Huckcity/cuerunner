@@ -368,6 +368,17 @@ describe('highest wins', () => {
     expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 3'])
   })
 
+  it('lets a channel go when a recall writes its pairs as one write', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    service.command('memberships', { memberships: [
+      { channel: 1, dca: 1, placed: false, rides: true },
+      { channel: 1, dca: 3, placed: true, rides: true }
+    ] })
+    level(tap, 2, 16000)
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 off 1 + ch1 onto 3'])
+  })
+
   it('asks again when the link comes back, because the faders may have moved while it was gone', () => {
     const { traffic, service, tap } = started()
     service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
@@ -423,5 +434,46 @@ describe('highest wins', () => {
     expect(switchOrderFromEnv(undefined)).toBe('assign-first')
     expect(switchOrderFromEnv('clear-first')).toBe('clear-first')
     expect(switchOrderFromEnv('sideways')).toBe('assign-first')
+  })
+})
+
+describe('a recall’s memberships', () => {
+  it('writes every pair as one write, and answers how many frames went', () => {
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    const pairs = [
+      { channel: 1, dca: 1, placed: false, rides: true },
+      { channel: 1, dca: 3, placed: true, rides: true }
+    ]
+    expect(service.command('memberships', { memberships: pairs })).toEqual({ ok: true, frames: 4 })
+    expect(session.sendMemberships).toHaveBeenCalledTimes(1)
+    expect(session.sendMemberships).toHaveBeenCalledWith(pairs)
+    expect(session.sendMembership).not.toHaveBeenCalled()
+  })
+
+  it('writes none of them when any pair is not one, naming what was wrong', () => {
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    expect(service.command('memberships', {
+      memberships: [{ channel: 1, dca: 1, placed: true, rides: true }, { channel: 0, dca: 1, placed: true, rides: true }]
+    })).toEqual({ ok: false, error: 'a membership needs a channel as a whole number at or past 1, not 0' })
+    expect(service.command('memberships', { memberships: [] }))
+      .toEqual({ ok: false, error: 'a recall’s memberships need a list of them' })
+    expect(service.command('memberships', undefined))
+      .toEqual({ ok: false, error: 'a recall’s memberships need a list of them' })
+    expect(session.sendMemberships).not.toHaveBeenCalled()
+  })
+
+  it('answers that the session is not up when nothing went', () => {
+    const { service, context } = harness(0)
+    service.start(context, settings())
+
+    expect(service.command('memberships', { memberships: [{ channel: 1, dca: 1, placed: true, rides: true }] }))
+      .toEqual({
+        ok: false,
+        error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+      })
   })
 })
