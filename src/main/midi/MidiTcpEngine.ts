@@ -44,6 +44,12 @@ function defaultConnect(host: string, port: number): Socket {
  */
 export type DeskLinkCause = 'unreachable' | 'reset'
 
+/** A reader of the desk's traffic beside the desk service: either half may be left out. */
+export interface DeskLinkTap {
+  message?: (device: string, message: MidiMessageKind) => void
+  status?: (device: string, online: boolean) => void
+}
+
 /**
  * One recall's bytes while they wait for a socket, and whether they have gone out. The
  * flag is what lets a recall answer for *its own* bytes: a failure on the link takes the
@@ -101,6 +107,20 @@ export class MidiTcpEngine {
 
   /** Called when a link comes up or goes down, so the panel can say which it is. */
   onStatus: ((device: string, online: boolean, detail?: string, cause?: DeskLinkCause) => void) | null = null
+
+  /**
+   * The other readers of a desk's traffic: what main does with a message itself, before the
+   * show bus batches it for the window. The two callbacks above are the desk service's, and a
+   * second reader that took them over would leave the show deaf; a tap hears the same
+   * messages and the same changes of state beside it.
+   */
+  private readonly taps = new Set<DeskLinkTap>()
+
+  /** Adds a reader of every desk's messages and status; the returned function removes it. */
+  tap(tap: DeskLinkTap): () => void {
+    this.taps.add(tap)
+    return () => { this.taps.delete(tap) }
+  }
 
   /**
    * The dial and the retry interval are the two things a test has to be able to stand in
@@ -279,7 +299,7 @@ export class MidiTcpEngine {
           link.dialling = null
           if (link.online !== true) {
             link.online = true
-            this.onStatus?.(name, true)
+            this.status(name, true)
           }
           this.flush(link)
         }
@@ -306,8 +326,8 @@ export class MidiTcpEngine {
           link.reset = taken
           if (link.online !== false) {
             link.online = false
-            if (taken) this.onStatus?.(name, false, 'the connection was taken or reset', 'reset')
-            else this.onStatus?.(name, false, error.message, 'unreachable')
+            if (taken) this.status(name, false, 'the connection was taken or reset', 'reset')
+            else this.status(name, false, error.message, 'unreachable')
           }
         }
         settle()
@@ -317,7 +337,7 @@ export class MidiTcpEngine {
         if (link.socket !== socket) return
         for (const bytes of stream.push(chunk)) {
           const decoded = decodeMidiMessage(bytes)
-          if (decoded) this.onMessage?.(name, decoded)
+          if (decoded) this.message(name, decoded)
         }
       })
 
@@ -334,7 +354,7 @@ export class MidiTcpEngine {
           // so it dials, and that attempt's own fate is the sentence it returns.
           if (wasConnected && link.online !== false) {
             link.online = false
-            this.onStatus?.(name, false, 'the connection was taken or reset', 'reset')
+            this.status(name, false, 'the connection was taken or reset', 'reset')
           }
           this.scheduleRetry(link)
         }
@@ -344,6 +364,33 @@ export class MidiTcpEngine {
 
     link.dialling = dialling
     return dialling
+  }
+
+  /**
+   * One message from a desk, to the service and every tap. A tap that throws is its own
+   * fault and not the socket's: the next reader still hears the message.
+   */
+  private message(device: string, message: MidiMessageKind): void {
+    this.onMessage?.(device, message)
+    for (const tap of this.taps) {
+      try {
+        tap.message?.(device, message)
+      } catch {
+        // A reader's failure is the reader's to report; the desk's traffic goes on.
+      }
+    }
+  }
+
+  /** A link's change of state, to the service and every tap. */
+  private status(device: string, online: boolean, detail?: string, cause?: DeskLinkCause): void {
+    this.onStatus?.(device, online, detail, cause)
+    for (const tap of this.taps) {
+      try {
+        tap.status?.(device, online)
+      } catch {
+        // As above: one reader cannot stop another hearing the link go.
+      }
+    }
   }
 
   private scheduleRetry(link: Link): void {

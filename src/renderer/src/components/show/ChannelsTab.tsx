@@ -160,6 +160,7 @@ export function ChannelsTab() {
   const cast = useStore(s => s.showSettings.cast)
   const scenes = useStore(s => s.showSettings.scenes.list)
   const allowDuplicates = useStore(s => s.showSettings.scenes.allowDuplicateAssignment)
+  const highestWins = useStore(s => s.showSettings.scenes.highestWins === true)
   const desk = useStore(s => s.showSettings.desk)
   const midiOutPort = useStore(s => s.midiSettings.outputPortName)
   const updateCastSettings = useStore(s => s.updateCastSettings)
@@ -593,6 +594,25 @@ export function ChannelsTab() {
             onChange={e => updateScenesSettings({ allowDuplicateAssignment: e.target.checked })}
           />
           <span>Allow a channel to ride more than one fader</span>
+        </label>
+
+        {/* Which of a channel's faders the desk listens to. An SQ adds every DCA a channel is
+            on, so one fader at -inf silences it; with this on, main keeps the channel on the
+            highest of them and moves it as they cross. It needs the duplicate rule — one
+            fader per channel leaves nothing to choose between — and an SQ over the network,
+            the one desk whose DCA levels have been measured. */}
+        <label className="dca-rule">
+          <input
+            type="checkbox"
+            className="dca-highest"
+            checked={highestWins}
+            disabled={!allowDuplicates || !(desk.kind === 'midi-tcp' && desk.profile === 'sq')}
+            title={!(desk.kind === 'midi-tcp' && desk.profile === 'sq')
+              ? 'Needs an SQ over the network: it is the desk whose DCA levels Cuerunner can read'
+              : 'A channel on several faders rides the highest of them, moving as the faders cross'}
+            onChange={e => updateScenesSettings({ highestWins: e.target.checked })}
+          />
+          <span>Highest fader wins</span>
         </label>
       </div>
     </div>

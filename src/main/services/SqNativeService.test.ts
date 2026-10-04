@@ -3,7 +3,9 @@
 // desk in SqNativeEngine.test.ts — here the session is a stand-in, because what this class
 // decides is when to open, what to publish, what a payload is, and when to let go.
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import { SqNativeService, type NativeSession } from './SqNativeService'
+import { SqNativeService, switchOrderFromEnv, type DeskTraffic, type NativeSession } from './SqNativeService'
+import type { DeskLinkTap } from '../midi/MidiTcpEngine'
+import type { MidiMessageKind } from '../../shared/cue'
 import { ShowBus } from '../bus/ShowBus'
 import type { ServiceContext } from '../bus/ServiceHost'
 import type { DeviceState, ShowSettings } from '../../shared/show'
@@ -255,5 +257,152 @@ describe('a membership command', () => {
 
     expect(() => service.command('reboot')).toThrow('Unknown action "reboot"')
     expect(session.sendMembership).not.toHaveBeenCalled()
+  })
+})
+
+describe('highest wins', () => {
+  /**
+   * The desk's MIDI link as the service sees it: one tap to hear the masters through, and a
+   * send that records the gets rather than dialling anything.
+   */
+  function fakeTraffic(): DeskTraffic & { tapped: DeskLinkTap[]; sent: MidiMessageKind[][] } {
+    const tapped: DeskLinkTap[] = []
+    const sent: MidiMessageKind[][] = []
+    return {
+      tapped,
+      sent,
+      tap: vi.fn((tap: DeskLinkTap) => {
+        tapped.push(tap)
+        return () => { tapped.splice(tapped.indexOf(tap), 1) }
+      }),
+      send: vi.fn((_host: string, _port: number, messages: MidiMessageKind[]) => {
+        sent.push(messages)
+        return Promise.resolve({ ok: true })
+      })
+    }
+  }
+
+  /** The MIDI link's own name for the desk: the show's default MIDI port, 51325. */
+  const LINK = `${DESK}:51325`
+
+  /** One DCA master's level as the desk reports it, on the show's channel. */
+  function level(tap: DeskLinkTap, dca: number, value: number, device = LINK): void {
+    for (const [controller, data] of [[0x63, 0x4f], [0x62, 0x1f + dca], [0x06, value >> 7], [0x26, value & 0x7f]]) {
+      tap.message?.(device, { kind: 'cc', channel: 1, controller, value: data })
+    }
+  }
+
+  function written(session: NativeSession): string[] {
+    return (session.sendMembership as Mock).mock.calls.map(([write]) =>
+      `ch${write.channel} ${write.placed ? 'onto' : 'off'} ${write.dca}`)
+  }
+
+  function started(frames = 2) {
+    const session = fakeSession(frames)
+    const traffic = fakeTraffic()
+    const service = new SqNativeService(session, traffic)
+    const { context } = harness()
+    service.start(context, settings())
+    return { session, traffic, service, tap: traffic.tapped[0] }
+  }
+
+  it('puts a followed channel on its first fader, and asks the desk where the masters stand', async () => {
+    const { session, traffic, service } = started()
+
+    expect(service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true }))
+      .toEqual({ ok: true, frames: 2 })
+
+    expect(written(session)).toEqual(['ch1 onto 1'])
+    expect(traffic.send).toHaveBeenCalledTimes(1)
+    expect(traffic.send).toHaveBeenCalledWith(DESK, 51325, expect.arrayContaining([
+      { kind: 'cc', channel: 1, controller: 0x60, value: 0x7f }
+    ]))
+    // A second followed channel does not ask again: one link asks once.
+    service.command('rides', { channel: 2, dcas: [1, 2], wrote: [], highest: true })
+    await Promise.resolve()
+    expect(traffic.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves the channel to whichever fader the desk reports highest, as it reports it', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    level(tap, 1, 13000)
+    level(tap, 2, 10000)
+    expect(written(session)).toEqual(['ch1 onto 1'])
+
+    level(tap, 1, 9000)
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 2', 'ch1 off 1'])
+  })
+
+  it('hears only the desk the show names', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    level(tap, 2, 16000, '10.0.0.9:51325')
+    expect(written(session)).toEqual(['ch1 onto 1'])
+  })
+
+  it('lets a channel go when a recall writes it as a pair', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    service.command('membership', { channel: 1, dca: 3, placed: true, rides: true })
+    level(tap, 2, 16000)
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 3'])
+  })
+
+  it('asks again when the link comes back, because the faders may have moved while it was gone', () => {
+    const { traffic, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    tap.status?.(LINK, false)
+    tap.status?.(LINK, true)
+    expect(traffic.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('answers a session that is not up, and switches when it is', () => {
+    const { session, service, tap } = started(0)
+    expect(service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })).toEqual({
+      ok: false,
+      error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+    })
+    ;(session.sendMembership as Mock).mockReturnValue(2)
+    level(tap, 2, 12000)
+    expect(written(session).at(-1)).toBe('ch1 onto 2')
+  })
+
+  it('refuses a payload that is not one channel’s faders', () => {
+    const { session, service } = started()
+    expect(service.command('rides', { channel: 1, dcas: [0], wrote: [], highest: true })).toEqual({
+      ok: false,
+      error: 'a channel’s faders need whole numbers from 1 to 256, not 0'
+    })
+    expect(service.command('rides', { channel: 1, dcas: [1], wrote: 'all', highest: true })).toEqual({
+      ok: false,
+      error: 'a channel’s last-told faders need to be a list of fader numbers'
+    })
+    expect(service.command('rides', { channel: 1, dcas: [1], wrote: [] })).toEqual({
+      ok: false,
+      error: 'a channel’s faders need highest to be true or false'
+    })
+    expect(session.sendMembership).not.toHaveBeenCalled()
+  })
+
+  it('refuses when the show drives no SQ, and stops listening when the show stops', () => {
+    const session = fakeSession()
+    const traffic = fakeTraffic()
+    const service = new SqNativeService(session, traffic)
+    const { context } = harness()
+    service.start(context, settings({ profile: 'avantis' }))
+    expect(service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true }))
+      .toEqual({ ok: false, error: 'the show drives no SQ over its own control service' })
+
+    service.start(context, settings())
+    expect(traffic.tapped).toHaveLength(1)
+    service.stop()
+    expect(traffic.tapped).toHaveLength(0)
+  })
+
+  it('reads the switch order from the machine, placing first unless told otherwise', () => {
+    expect(switchOrderFromEnv(undefined)).toBe('assign-first')
+    expect(switchOrderFromEnv('clear-first')).toBe('clear-first')
+    expect(switchOrderFromEnv('sideways')).toBe('assign-first')
   })
 })

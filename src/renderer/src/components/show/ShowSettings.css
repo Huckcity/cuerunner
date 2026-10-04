@@ -237,13 +237,18 @@
   padding: 0 6px;
 }
 
-/* The grid's one show-wide rule, under the faders it is about. */
+/* The grid's show-wide rules, under the faders they are about. */
 .dca-rule {
   margin-top: var(--space-2);
   padding-left: var(--space-1);
   font-size: var(--text-sm);
   color: var(--fg-muted);
   cursor: pointer;
+}
+
+/* A rule this show cannot use says so by not taking the press. */
+.dca-rule:has(input:disabled) {
+  cursor: default;
 }
 
 /* ── Channels ───────────────────────────────────────────────────────────────── */

@@ -22,7 +22,8 @@ import {
   type DeskMessage,
   type DeskSettings,
   type MicScene,
-  type SqMembershipIntent
+  type SqMembershipIntent,
+  type SqRidesIntent
 } from '../../../shared/show'
 import type { DeskState } from '../utils/scenes'
 
@@ -159,6 +160,9 @@ function said(message: DeskMessage): string {
   if (message.kind === 'sq-native') {
     return `SQ ch${message.channel} ${message.placed ? 'onto' : 'off'} fader ${message.dca}`
   }
+  if (message.kind === 'sq-native-rides') {
+    return `SQ ch${message.channel} rides ${message.highest ? 'highest of ' : ''}[${message.dcas.join(',')}] was [${message.wrote.join(',')}]`
+  }
   if (message.kind === 'osc') return `OSC ${message.address} ${message.args.join(' ')}`
   return message.messages.map(frame => {
     if (frame.kind === 'cc') return `cc ${frame.controller.toString(16)} ${frame.value.toString(16)}`
@@ -210,9 +214,9 @@ describe('recallScene', () => {
     })
     // The SQ's membership is a service command: two answers, because two things can be
     // wrong — the service never took it, or it took it and had no session to write on.
-    command = vi.mocked(window.cuerunner.show.command).mockImplementation((_service, _action, payload) => {
-      const intent = payload as SqMembershipIntent
-      sent.push(said({ kind: 'sq-native', ...intent }))
+    command = vi.mocked(window.cuerunner.show.command).mockImplementation((_service, action, payload) => {
+      if (action === 'rides') sent.push(said({ kind: 'sq-native-rides', ...(payload as SqRidesIntent) }))
+      else sent.push(said({ kind: 'sq-native', ...(payload as SqMembershipIntent) }))
       return Promise.resolve(refused.includes(sent.length)
         ? { ok: true, result: { ok: false, error: refusal } }
         : { ok: true, result: { ok: true, frames: 4 } })
@@ -228,7 +232,7 @@ describe('recallScene', () => {
   function named(): { channels: number[]; faders: number[] } {
     const channels: number[] = []
     const faders: number[] = []
-    for (const call of command.mock.calls) {
+    for (const call of command.mock.calls.filter(call => call[1] === 'membership')) {
       const intent = call[2] as SqMembershipIntent
       channels.push(intent.channel)
       faders.push(intent.dca)
@@ -671,5 +675,95 @@ describe('recallScene', () => {
     expect(sent).toEqual([])
     expect(useStore.getState().deskState.assignments).toEqual({ 'ch-1': ['dca-1'] })
     expect(useStore.getState().deskSceneId).toBe('s-3')
+  })
+
+  describe('when the highest fader wins', () => {
+    /** The show with highest wins asked for, on whatever desk and list the case seeded. */
+    function highest(): void {
+      const { showSettings } = useStore.getState()
+      useStore.setState({
+        showSettings: { ...showSettings, scenes: { ...showSettings.scenes, highestWins: true } }
+      })
+    }
+
+    /** Sancho alone, on the third fader: a channel main was following, taken back to one. */
+    const SINGLE: MicScene = {
+      id: 's-7',
+      name: 'Single',
+      dcas: [{ dcaId: 'dca-3', kind: 'channel', memberId: 'ch-2' }],
+      notes: ''
+    }
+
+    it('hands main a channel on two faders as one write naming both, then the mutes', async () => {
+      // An SQ adds the offsets of every DCA a channel is on; main keeps it on the highest
+      // one instead, so the recall's word for it is the faders rather than the pairs.
+      seed(EMPTY, null, cast(), SQ, [DOUBLE])
+      highest()
+
+      await recallScene('s-6')
+
+      expect(sent).toEqual([
+        'SQ ch2 rides highest of [2,4] was []',
+        'cc 63 0 | cc 62 1 | cc 6 0 | cc 26 0',
+        'cc 63 0 | cc 62 0 | cc 6 0 | cc 26 1',
+        'cc 63 0 | cc 62 2 | cc 6 0 | cc 26 1',
+        'cc 63 0 | cc 62 3 | cc 6 0 | cc 26 1'
+      ])
+      // The record keeps what the scene asked — both faders — because that is what the next
+      // recall is a difference from; which one the desk holds this moment is main's.
+      expect(useStore.getState().deskState.assignments['ch-2']).toEqual(['dca-2', 'dca-4'])
+      expect(logMessages()).toEqual(['Scene "Double" — 1 opened, 3 closed'])
+    })
+
+    it('puts a followed channel back through main when the scene takes it to one fader', async () => {
+      // The record says both faders, but main may have taken the channel off either: the
+      // pairs a diff would write here are against a fader the desk may not hold, so the
+      // channel goes back through main, which knows which one it is on.
+      seed(
+        { mutes: { 'ch-2': false }, assignments: { 'ch-2': ['dca-2', 'dca-4'] } },
+        's-6', cast(), SQ, [DOUBLE, SINGLE]
+      )
+      highest()
+
+      await recallScene('s-7')
+
+      expect(sent.filter(line => line.startsWith('SQ '))).toEqual(['SQ ch2 rides highest of [3] was [2,4]'])
+      expect(useStore.getState().deskState.assignments['ch-2']).toEqual(['dca-3'])
+    })
+
+    it('writes pairs as before for a channel on one fader', async () => {
+      seed()
+      highest()
+
+      await recallScene('s-1')
+
+      expect(sent.filter(line => line.startsWith('SQ '))).toEqual(['SQ ch1 onto fader 1'])
+    })
+
+    it('writes pairs on a desk main cannot follow', async () => {
+      // An Avantis's DCA levels have not been measured, so the show's ask is not acted on:
+      // the channel rides both faders, as the desk adds them.
+      seed(EMPTY, null, cast(), AVANTIS, [DOUBLE])
+      highest()
+
+      await recallScene('s-6')
+
+      expect(command).not.toHaveBeenCalled()
+      expect(useStore.getState().deskState.assignments['ch-2']).toEqual(['dca-2', 'dca-4'])
+    })
+
+    it('leaves the record alone when main does not take the channel', async () => {
+      seed(EMPTY, null, cast(), SQ, [DOUBLE])
+      highest()
+      refused = [1]
+      refusal = 'the SQ session is not up'
+
+      const result = await recallScene('s-6')
+
+      expect(result.failures).toEqual([
+        'Ch 2 · Sancho: SQ ch2 rides the highest of DCA 2, 4 — the SQ session is not up'
+      ])
+      expect(useStore.getState().deskState.assignments['ch-2']).toBeUndefined()
+    })
   })
 })

@@ -364,7 +364,8 @@ export const SHOW_SETTINGS_SHAPE = {
         notes: 'string'
       }
     },
-    allowDuplicateAssignment: 'boolean'
+    allowDuplicateAssignment: 'boolean',
+    highestWins: { absent: true, of: 'boolean' }
   },
   cast: {
     channels: { elements: { id: 'string', name: 'string' } },

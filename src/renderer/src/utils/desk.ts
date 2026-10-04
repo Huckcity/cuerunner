@@ -1,5 +1,5 @@
 import type { MidiMessageKind } from '../../../shared/cue'
-import type { Dca, DeskMessage, DeskProfile, DeskSettings } from '../../../shared/show'
+import type { Dca, DeskMessage, DeskProfile, DeskSettings, ShowSettings } from '../../../shared/show'
 
 /**
  * How the desk is driven.
@@ -381,6 +381,47 @@ export function membershipWrite(
 }
 
 /**
+ * Whether a channel on several faders rides only the highest of them on this show's desk: the
+ * show allows a channel more than one fader, asks for highest wins, and drives an SQ over the
+ * network — the one desk whose DCA levels have been measured, and the one main can follow.
+ */
+export function highestWinsActive(show: ShowSettings): boolean {
+  const { scenes, desk } = show
+  return scenes.allowDuplicateAssignment && scenes.highestWins === true &&
+    desk.kind === 'midi-tcp' && desk.profile === 'sq' && desk.host.trim() !== ''
+}
+
+/**
+ * One channel's faders as main's highest-wins route takes them: the desk numbers of the
+ * faders the scene places it on and of the faders the record says it was last told, or null
+ * when the show does not route through it. A fader that cannot be addressed is left out of
+ * both lists; its pair write is what reports it.
+ */
+export function ridesWrite(
+  channelIndex: number,
+  target: readonly string[],
+  wrote: readonly string[],
+  highest: boolean,
+  show: ShowSettings
+): DeskMessage | null {
+  const { desk, cast } = show
+  if (desk.kind !== 'midi-tcp' || desk.profile !== 'sq' || desk.host.trim() === '') return null
+  const numbers = (ids: readonly string[]): number[] => ids.flatMap(id => {
+    const index = cast.dcas.findIndex(dca => dca.id === id)
+    if (index === -1) return []
+    const send = membershipWrite(channelIndex, cast.dcas[index], index, true, true, desk)
+    return send !== null && send.ok && send.message.kind === 'sq-native' ? [send.message.dca] : []
+  })
+  return {
+    kind: 'sq-native-rides',
+    channel: channelIndex + 1,
+    dcas: numbers(target),
+    wrote: numbers(wrote),
+    highest
+  }
+}
+
+/**
  * Any sequence of MIDI messages addressed at the show's desk, or null when the show
  * drives no desk that takes MIDI at all.
  *
@@ -412,6 +453,10 @@ export function describeDeskMessage(message: DeskMessage | null): string {
   if (message.kind === 'sq-native') {
     const where = message.placed ? 'onto' : 'off'
     return `SQ assign ch${message.channel} ${where} DCA ${message.dca}`
+  }
+  if (message.kind === 'sq-native-rides') {
+    const faders = message.dcas.length === 0 ? 'no DCA' : `DCA ${message.dcas.join(', ')}`
+    return `SQ ch${message.channel} rides ${message.highest ? 'the highest of ' : ''}${faders}`
   }
   const where = message.kind === 'midi-tcp'
     ? `${message.host}:${message.port}`

@@ -1,5 +1,12 @@
 import { useStore } from '../store'
-import { channelMutes, describeDeskMessage, faderLabel, membershipWrite } from '../utils/desk'
+import {
+  channelMutes,
+  describeDeskMessage,
+  faderLabel,
+  highestWinsActive,
+  membershipWrite,
+  ridesWrite
+} from '../utils/desk'
 import { sendDeskMessage } from './deskSend'
 import { sceneChanges, type DeskChange, type DeskState } from '../utils/scenes'
 import { ALL_CLOSED_SCENE_ID } from '../../../shared/show'
@@ -76,10 +83,13 @@ export async function recallScene(sceneId: string | null, label = 'Desk'): Promi
   return { sceneName: scene?.name ?? null, changes, failures: outcome.failures }
 }
 
-/** One write a recall makes, in the order it makes them. */
-type DeskWrite =
+/** One write a recall works out from the difference, in the order it makes them. */
+type PlannedWrite =
   | { kind: 'membership'; change: DeskChange; dca: Dca; index: number; placed: boolean }
   | { kind: 'mute'; change: DeskChange; close: boolean }
+
+/** One write a recall makes: a planned one, or a followed channel's pairs folded into one. */
+type DeskWrite = PlannedWrite | { kind: 'rides'; change: DeskChange }
 
 /**
  * The writes a recall makes, in the order it makes them.
@@ -94,8 +104,8 @@ type DeskWrite =
  * and the record's where the scene places it nowhere — and the channels that ride nothing at
  * all keep the show's own channel order behind the ones that do.
  */
-function deskWrites(show: ShowSettings, changes: DeskChange[], deskState: DeskState): DeskWrite[] {
-  const writes: DeskWrite[] = []
+function deskWrites(show: ShowSettings, changes: DeskChange[], deskState: DeskState): PlannedWrite[] {
+  const writes: PlannedWrite[] = []
 
   show.cast.dcas.forEach((dca, index) => {
     for (const change of changes) {
@@ -134,7 +144,7 @@ function deskWrites(show: ShowSettings, changes: DeskChange[], deskState: DeskSt
 /** What one write is on this show's desk, or why it cannot be made. */
 function addressed(
   show: ShowSettings,
-  write: DeskWrite,
+  write: PlannedWrite,
   channelIndex: number
 ): { message: DeskMessage } | { error: string } | null {
   if (write.kind === 'mute') {
@@ -226,6 +236,13 @@ async function writeChanges(
       placed.add(write.change.channelId)
     }
   }
+  // Highest wins hands main a channel's faders rather than its pairs: main decides which of
+  // them the desk holds, and keeps deciding as they move. A channel goes that way when the
+  // scene places it on more than one fader, and when the record says it was on more than one
+  // — a channel main was following is put back by main, because the pairs a diff would write
+  // are against faders main may already have taken it off.
+  if (highestWinsActive(show)) collapseRides(show, attempts, deskState)
+
   // A channel whose fader moved without its mute moving kept playing: that is the one the
   // move must not have silenced, so it is counted on its own.
   for (const channelId of placed) {
@@ -241,9 +258,9 @@ async function writeChanges(
       // address nobody is at, so dropping that sentence leaves the operator reading an
       // address that was never the problem. Each write answers for its own failure: two of
       // them can fail for two different reasons.
-      const where = write.kind === 'mute'
-        ? write.change.label
-        : `${write.change.label} → ${faderLabel(show.cast.dcas, write.dca.id)}`
+      const where = write.kind === 'membership'
+        ? `${write.change.label} → ${faderLabel(show.cast.dcas, write.dca.id)}`
+        : write.change.label
       outcome.failed.push({
         described: `${where}: ${describeDeskMessage(message)}`,
         cause: sent.error ?? null
@@ -258,6 +275,13 @@ async function writeChanges(
       useStore.getState().mergeDeskState({ mutes: { [write.change.channelId]: write.close } })
       continue
     }
+    // The record keeps what the scene asked of a followed channel — every fader it rides —
+    // because that is what the next recall is a difference from; which one the desk holds
+    // this moment is main's.
+    if (write.kind === 'rides') {
+      useStore.getState().mergeDeskState({ assignments: { [write.change.channelId]: write.change.dcas } })
+      continue
+    }
     const wrote = useStore.getState().deskState.assignments[write.change.channelId] ?? []
     const next = write.placed
       ? (wrote.includes(write.dca.id) ? wrote : [...wrote, write.dca.id])
@@ -268,6 +292,42 @@ async function writeChanges(
   outcome.failures = outcome.failed.map(({ described, cause }) =>
     cause === null ? described : `${described} — ${cause}`)
   return outcome
+}
+
+/**
+ * Folds a followed channel's pair writes into the one `rides` write main takes for it, in
+ * the place its first pair had: the faders the scene places it on, and the ones the record
+ * says it was last told.
+ */
+function collapseRides(
+  show: ShowSettings,
+  attempts: Array<{ write: DeskWrite; message: DeskMessage }>,
+  deskState: DeskState
+): void {
+  const follows = (change: DeskChange): boolean =>
+    change.dcas.length > 1 || (deskState.assignments[change.channelId] ?? []).length > 1
+  const folded = new Set<string>()
+  for (let index = 0; index < attempts.length; index++) {
+    const { write } = attempts[index]
+    if (write.kind !== 'membership' || !follows(write.change)) continue
+    const channelId = write.change.channelId
+    if (folded.has(channelId)) {
+      attempts.splice(index, 1)
+      index -= 1
+      continue
+    }
+    folded.add(channelId)
+    const channelIndex = show.cast.channels.findIndex(channel => channel.id === channelId)
+    const message = ridesWrite(
+      channelIndex,
+      write.change.dcas,
+      deskState.assignments[channelId] ?? [],
+      true,
+      show
+    )
+    if (message === null) continue
+    attempts[index] = { write: { kind: 'rides', change: write.change }, message }
+  }
 }
 
 /** Not a connection that failed but a desk that has no such route: the show has to change. */

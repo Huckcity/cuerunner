@@ -178,6 +178,35 @@ test('turning the duplicate rule off keeps the grid to one fader per channel', a
   await expect(second.locator('.matrix-block')).toHaveCount(0)
 })
 
+test('highest fader wins is offered only to an SQ over the network that allows duplicates', async () => {
+  await openShowSettings(page)
+  const dialog = page.locator('.show-settings-dialog')
+  const highest = dialog.locator('.dca-highest')
+
+  // Off until asked for, and not on offer to a desk whose DCA levels Cuerunner cannot read.
+  await dialog.locator('.desk-kind').selectOption('osc')
+  await expect(highest).not.toBeChecked()
+  await expect(highest).toBeDisabled()
+
+  await dialog.locator('.desk-kind').selectOption('midi-tcp')
+  await dialog.locator('.desk-profile').selectOption('sq')
+  await dialog.locator('.dca-duplicates').check()
+  await expect(highest).toBeEnabled()
+  await highest.check()
+  await expect(highest).toBeChecked()
+
+  // One fader per channel leaves nothing to choose between.
+  await dialog.locator('.dca-duplicates').uncheck()
+  await expect(highest).toBeDisabled()
+  await dialog.locator('.dca-duplicates').check()
+  await expect(highest).toBeChecked()
+
+  // Left as the previous case left the show: the rule off, and highest wins with it.
+  await highest.uncheck()
+  await dialog.locator('.dca-duplicates').uncheck()
+  await dialog.locator('.show-settings-done').click()
+})
+
 test('a fader carries one desk number, for a desk that counts them differently', async () => {
   test.setTimeout(60_000)
   await openShowSettings(page)

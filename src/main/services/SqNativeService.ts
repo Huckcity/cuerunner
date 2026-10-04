@@ -1,9 +1,18 @@
 import { sqNative, type SqSessionCause } from '../desk/SqNativeEngine'
 import { NATIVE_TCP_PORT } from '../desk/frames'
+import { DcaReportReader, dcaGets } from '../desk/dcaReports'
+import { HighestWins, type SwitchOrder } from '../desk/HighestWins'
+import { midiTcp, type DeskLinkTap } from '../midi/MidiTcpEngine'
 import { reportMainError } from '../errors'
 import { deskLinkName } from '../../shared/deskLink'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
-import type { ShowSettings, SqMembershipAnswer, SqMembershipIntent } from '../../shared/show'
+import type { MidiMessageKind } from '../../shared/cue'
+import type {
+  ShowSettings,
+  SqMembershipAnswer,
+  SqMembershipIntent,
+  SqRidesIntent
+} from '../../shared/show'
 
 /**
  * What this service needs of the session. The engine behind it owns a socket, the channel to
@@ -23,6 +32,26 @@ export interface NativeSession {
    * was holding and is not, which is the state that leaves a desk mute until it is reset.
    */
   onStatus: ((online: boolean, detail?: string, cause?: SqSessionCause) => void) | null
+}
+
+/**
+ * What this service needs of the desk's MIDI link, beside the session: to hear the DCA masters
+ * report, and to ask them where they stand. The link is the desk service's (`midiTcp`), and the
+ * desk takes one MIDI client, so the asking goes down the same socket rather than a second one.
+ */
+export interface DeskTraffic {
+  tap(tap: DeskLinkTap): () => void
+  send(host: string, port: number, messages: MidiMessageKind[]): Promise<{ ok: boolean }>
+}
+
+/**
+ * Which half of a highest-wins switch goes first, from `CUERUNNER_DCA_SWITCH`: `clear-first`
+ * or the default, `assign-first`. A machine fact for measuring the switch with audio, not a
+ * show setting — the order that is inaudible is the desk's, and when it is known it is a
+ * constant.
+ */
+export function switchOrderFromEnv(value = process.env.CUERUNNER_DCA_SWITCH): SwitchOrder {
+  return value === 'clear-first' ? 'clear-first' : 'assign-first'
 }
 
 /**
@@ -51,6 +80,31 @@ function membershipOf(payload: unknown): SqMembershipIntent | string {
   if (typeof placed !== 'boolean') return `a membership needs placed to be true or false${found(placed)}`
   if (typeof rides !== 'boolean') return `a membership needs rides to be true or false${found(rides)}`
   return { channel, dca, placed, rides }
+}
+
+/**
+ * One channel's faders a payload names, or the sentence saying what about it was not one —
+ * the same checks a membership's numbers get, for every number in both lists.
+ */
+function ridesOf(payload: unknown): SqRidesIntent | string {
+  if (typeof payload !== 'object' || payload === null) {
+    return 'a channel’s faders need a payload naming the channel, its faders, and what the desk was last told'
+  }
+  const { channel, dcas, wrote, highest } = payload as Record<string, unknown>
+  if (!isCount(channel) || channel > MAX_FRAME_NUMBER) {
+    return `a channel’s faders need a channel from 1 to ${MAX_FRAME_NUMBER}${found(channel)}`
+  }
+  for (const [name, list] of [['faders', dcas], ['last-told faders', wrote]] as const) {
+    if (!Array.isArray(list) || list.length > MAX_FRAME_NUMBER) {
+      return `a channel’s ${name} need to be a list of fader numbers`
+    }
+    const wrong = list.find(dca => !isCount(dca) || dca > MAX_FRAME_NUMBER)
+    if (wrong !== undefined) {
+      return `a channel’s ${name} need whole numbers from 1 to ${MAX_FRAME_NUMBER}${found(wrong)}`
+    }
+  }
+  if (typeof highest !== 'boolean') return `a channel’s faders need highest to be true or false${found(highest)}`
+  return { channel, dcas: dcas as number[], wrote: wrote as number[], highest }
 }
 
 /**
@@ -93,7 +147,23 @@ export class SqNativeService implements ShowService {
   /** The desk this service published, so stopping can take that same row offline. */
   private desk: string | null = null
 
-  constructor(private readonly session: NativeSession = sqNative) {}
+  /**
+   * Highest wins, for the life of a session with an SQ: the resolver that keeps followed
+   * channels on their highest fader, and what it reads the faders from — the desk's MIDI link,
+   * where the DCA masters report themselves (`dcaReports.ts`).
+   */
+  private resolver: HighestWins | null = null
+  private untap: (() => void) | null = null
+  /** Where the DCA masters are asked about: the desk's MIDI link and the show's channel. */
+  private levelsFrom: { host: string; port: number; channel: number } | null = null
+  /** Whether the levels have been asked for on this link, so one link asks once. */
+  private asked = false
+
+  constructor(
+    private readonly session: NativeSession = sqNative,
+    private readonly traffic: DeskTraffic = midiTcp,
+    private readonly order: SwitchOrder = switchOrderFromEnv()
+  ) {}
 
   start(context: ServiceContext, settings: ShowSettings): void {
     const { desk } = settings
@@ -130,6 +200,9 @@ export class SqNativeService implements ShowService {
       })
       if (online) {
         context.setState('running', `session open with ${device}`)
+        // A session that comes back is a desk that may have missed a switch while it was
+        // gone: every followed channel is put back on its highest fader.
+        this.write(this.resolver?.resolveAll() ?? [])
         return
       }
       if (cause === 'lost') {
@@ -148,8 +221,73 @@ export class SqNativeService implements ShowService {
       context.bus.alert('warning', this.id, `Desk ${device} is not answering`)
     }
 
+    this.followFaders(host, desk.tcpPort, desk.midiChannel)
     context.setState('starting', `dialling ${device}`)
     this.session.open(host)
+  }
+
+  /**
+   * Listens to the desk's DCA masters on its MIDI link, for highest wins. Nothing is asked of
+   * the desk until a channel is followed: a show that never turns highest wins on sends the
+   * desk nothing it did not send before.
+   */
+  private followFaders(host: string, port: number, channel: number): void {
+    const resolver = new HighestWins(this.order)
+    const reader = new DcaReportReader(channel)
+    const link = deskLinkName(host, port)
+    this.resolver = resolver
+    this.levelsFrom = { host, port, channel }
+    this.asked = false
+    this.untap = this.traffic.tap({
+      message: (device, message) => {
+        if (device !== link) return
+        const report = reader.read(message)
+        if (report !== null) this.write(resolver.report(report))
+      },
+      status: (device, online) => {
+        if (device !== link) return
+        // A link that went away may have missed the faders moving, and one that came back
+        // has a desk to ask: what was read before is not what the desk holds now.
+        reader.reset()
+        resolver.forgetLevels()
+        this.asked = false
+        if (online && resolver.needsLevels()) this.askLevels()
+      }
+    })
+  }
+
+  /** Asks the desk where its DCA masters stand: once per link, and again if the ask did not go. */
+  private askLevels(): void {
+    const from = this.levelsFrom
+    if (from === null || this.asked) return
+    this.asked = true
+    void this.traffic.send(from.host, from.port, dcaGets(from.channel))
+      .then(sent => { if (!sent.ok) this.asked = false })
+      .catch(() => { this.asked = false })
+  }
+
+  /**
+   * Writes memberships in order, each one recorded the moment it lands; the first that does
+   * not land ends the run, and the resolver tries again on the next report. The answer is the
+   * one a recall reads: how many frames went, or why they did not.
+   */
+  private write(writes: SqMembershipIntent[]): SqMembershipAnswer {
+    let frames = 0
+    for (const write of writes) {
+      const sent = this.session.sendMembership(write)
+      if (sent === 0) {
+        return {
+          ok: false,
+          error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+        }
+      }
+      if (sent < 2) {
+        return { ok: false, error: 'only the pair went — the channel’s flag did not, so the write is half made' }
+      }
+      this.resolver?.landed(write)
+      frames += sent
+    }
+    return { ok: true, frames }
   }
 
   stop(): void {
@@ -169,6 +307,10 @@ export class SqNativeService implements ShowService {
     }
     this.context = null
     this.desk = null
+    this.untap?.()
+    this.untap = null
+    this.resolver = null
+    this.levelsFrom = null
     this.session.onStatus = null
     this.session.closeAll()
   }
@@ -184,9 +326,12 @@ export class SqNativeService implements ShowService {
    * refused the same way, which is what a 0 from the engine means.
    */
   command(action: string, payload?: unknown): SqMembershipAnswer {
+    if (action === 'rides') return this.rides(payload)
     if (action !== 'membership') throw new Error(`Unknown action "${action}"`)
     const intent = membershipOf(payload)
     if (typeof intent === 'string') return { ok: false, error: intent }
+    // A pair written by a recall is the show taking the channel back from highest wins.
+    this.resolver?.release(intent.channel)
     const frames = this.session.sendMembership(intent)
     if (frames === 0) {
       return {
@@ -202,6 +347,24 @@ export class SqNativeService implements ShowService {
         error: 'only the pair went — the channel’s flag did not, so the write is half made'
       }
     }
+    this.resolver?.landed(intent)
     return { ok: true, frames }
+  }
+
+  /**
+   * `rides` hands main one channel's faders for a show where the highest fader wins: the
+   * channel is put on the highest of them now and kept there as the faders move. With
+   * `highest` false it is put on all of them, which is how a show leaves highest wins.
+   */
+  private rides(payload: unknown): SqMembershipAnswer {
+    const intent = ridesOf(payload)
+    if (typeof intent === 'string') return { ok: false, error: intent }
+    const resolver = this.resolver
+    if (resolver === null) {
+      return { ok: false, error: 'the show drives no SQ over its own control service' }
+    }
+    const answer = this.write(resolver.ride(intent.channel, intent.dcas, intent.wrote, intent.highest))
+    if (resolver.needsLevels()) this.askLevels()
+    return answer
   }
 }
