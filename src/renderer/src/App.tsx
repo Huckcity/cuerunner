@@ -21,6 +21,7 @@ import { useSilenceTrim } from './hooks/useSilenceTrim'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
 import { useDeskButtons } from './hooks/useDeskButtons'
+import { useHighestWins } from './hooks/useHighestWins'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import { useRedundancy } from './hooks/useRedundancy'
 import { Dock, type DockTab } from './components/layout/Dock'
@@ -55,6 +56,7 @@ export function App() {
   useShowBridge()
   useCueTriggers()
   useDeskButtons()
+  useHighestWins()
   useCompanionPublisher()
   // The other machine on the desk: what it is doing with the show, and what to do with
   // the show it hands over.

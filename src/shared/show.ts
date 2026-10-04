@@ -219,12 +219,20 @@ export interface RfPack {
  * control service by the main process, whose codec owns those frames, so the renderer sends
  * the intent — which channel, which fader, placed or cleared, and whether the channel rides
  * any fader after this write (the per-channel flag the capture measures).
+ *
+ * `sq-native-batch` is several of those intents as one write, which is how a recall sends its
+ * pairs: the desk applies them together, so a channel moving fader is never caught between.
+ *
+ * `sq-native-rides` is the same route for a show where the highest fader wins: one channel and
+ * every fader the scene places it on, and main decides which of them the desk is told.
  */
 export type DeskMessage =
   | { kind: 'midi'; portName: string; messages: MidiMessageKind[] }
   | { kind: 'midi-tcp'; host: string; port: number; messages: MidiMessageKind[] }
   | { kind: 'osc'; host: string; port: number; address: string; args: number[] }
   | ({ kind: 'sq-native' } & SqMembershipIntent)
+  | ({ kind: 'sq-native-rides' } & SqRidesIntent)
+  | { kind: 'sq-native-batch'; memberships: SqMembershipIntent[] }
 
 /**
  * One (channel, fader) pair as the SQ's native control service is asked to write it — the
@@ -244,6 +252,25 @@ export interface SqMembershipIntent {
   placed: boolean
   /** Whether the channel rides any fader after this write. */
   rides: boolean
+}
+
+/**
+ * One channel's faders, as a show where the highest fader wins asks the SQ's own service for
+ * them: every fader the scene places the channel on, and main keeps it on whichever of them
+ * is highest, moving it as the faders move (`HighestWins` in main).
+ */
+export interface SqRidesIntent {
+  /** The controlled channel's own number: its place in the show's channel list. */
+  channel: number
+  /** The faders the scene places it on, as the desk numbers them, in the show's order. */
+  dcas: number[]
+  /** The faders the window's record says the desk was last told, as the desk numbers them. */
+  wrote: number[]
+  /**
+   * Whether the highest of `dcas` wins. False writes every one of them, which is how a show
+   * that leaves highest wins puts a followed channel back on all of its faders.
+   */
+  highest: boolean
 }
 
 /** What the SQ's own service answers a membership write with. */
@@ -430,6 +457,15 @@ export interface ScenesSettings {
    * recall collapses any residual duplicate to the lowest-numbered DCA.
    */
   allowDuplicateAssignment: boolean
+  /**
+   * Whether a channel on more than one fader rides only the highest of them. An SQ adds the
+   * offsets of every DCA a channel is on, so a second fader at -inf silences it; with this on,
+   * the desk is told one membership at a time — the fader that is highest now — and main
+   * moves the channel as the faders cross. An SQ over the network only: it is the one desk
+   * whose DCA levels have been measured. Absent is off, which is how every file saved before
+   * it reads.
+   */
+  highestWins?: boolean
 }
 
 // ── Channels, the cast and the desk ─────────────────────────────────────────

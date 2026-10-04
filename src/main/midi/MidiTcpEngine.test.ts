@@ -382,6 +382,32 @@ describe('hearing a desk', () => {
     expect(heard[0]).toEqual({ kind: 'noteOn', channel: 12, note: 0x24, velocity: 0x7f })
   })
 
+  it('tells a tap the same messages and the link’s state, beside the desk service', async () => {
+    // Main reads the desk's DCA masters itself, before the bus batches them for the window:
+    // a tap hears what the service hears, and taking it away leaves the service hearing.
+    const deskUnderTest = await desk()
+    const link = engine()
+    const served: MidiMessageKind[] = []
+    const tapped: string[] = []
+    link.onMessage = (_device, message) => served.push(message)
+    const untap = link.tap({
+      message: (device, message) => tapped.push(`${device} ${message.kind}`),
+      status: (device, online) => tapped.push(`${device} ${online ? 'up' : 'down'}`)
+    })
+
+    link.open(deskUnderTest.host, deskUnderTest.port)
+    await until(() => deskUnderTest.sockets.length === 1)
+    deskUnderTest.sockets[0].write(Buffer.from([0xb0, 0x63, 0x4f]))
+    await until(() => tapped.length === 2)
+    const name = `127.0.0.1:${deskUnderTest.port}`
+    expect(tapped).toEqual([`${name} up`, `${name} cc`])
+
+    untap()
+    deskUnderTest.sockets[0].write(Buffer.from([0xb0, 0x62, 0x20]))
+    await until(() => served.length === 2)
+    expect(tapped).toHaveLength(2)
+  })
+
   it('hears a message that arrives in two writes', async () => {
     const deskUnderTest = await desk()
     const link = engine()

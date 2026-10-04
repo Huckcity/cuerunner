@@ -218,6 +218,24 @@ export class SqNativeEngine {
   }
 
   /**
+   * Several memberships as one write: every pair and its flag, in order, in a single buffer —
+   * all of them or none. A highest-wins switch is a place and a clear, and written apart the
+   * desk sometimes applies the first before the second on a control tick of its own, so the
+   * channel rides both faders for up to ~190 ms and the two offsets add: 24 of 50 such
+   * switches dipped by the full offset on an SQ-6, against none of 46 written as one
+   * (2026-10-04, LR recorded over USB). The answer is how many frames went: every one, or 0.
+   */
+  sendMemberships(intents: readonly SqMembershipIntent[]): number {
+    const socket = this.up ? this.socket : null
+    const frames = intents.flatMap(intent => [
+      intent.placed ? assignPair(intent.channel, intent.dca) : clearPair(intent.channel, intent.dca),
+      dcaFlag(intent.channel, intent.rides)
+    ])
+    if (frames.length === 0) return 0
+    return this.write(socket, frames.flat()) ? frames.length : 0
+  }
+
+  /**
    * The desk's own door. A session that never came up has no channel and nothing to say.
    *
    * The write is queued even on a channel that has not finished opening — the kernel sends

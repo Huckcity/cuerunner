@@ -3,10 +3,12 @@
 // desk in SqNativeEngine.test.ts — here the session is a stand-in, because what this class
 // decides is when to open, what to publish, what a payload is, and when to let go.
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import { SqNativeService, type NativeSession } from './SqNativeService'
+import { SqNativeService, switchOrderFromEnv, type DeskTraffic, type NativeSession } from './SqNativeService'
+import type { DeskLinkTap } from '../midi/MidiTcpEngine'
+import type { MidiMessageKind } from '../../shared/cue'
 import { ShowBus } from '../bus/ShowBus'
 import type { ServiceContext } from '../bus/ServiceHost'
-import type { DeviceState, ShowSettings } from '../../shared/show'
+import type { DeviceState, ShowSettings, SqMembershipIntent } from '../../shared/show'
 import { defaultShowSettings } from '../../shared/show'
 import { drainMainErrors } from '../errors'
 
@@ -15,7 +17,14 @@ import { drainMainErrors } from '../errors'
  * count the case needs, because how many frames went out is the engine's to decide.
  */
 function fakeSession(frames = 2): NativeSession {
-  return { open: vi.fn(), closeAll: vi.fn(), sendMembership: vi.fn(() => frames), onStatus: null }
+  return {
+    open: vi.fn(),
+    closeAll: vi.fn(),
+    sendMembership: vi.fn(() => frames),
+    // All of them or none, as one write is: `frames` 0 is a session that is not up.
+    sendMemberships: vi.fn((intents: readonly SqMembershipIntent[]) => frames === 0 ? 0 : intents.length * 2),
+    onStatus: null
+  }
 }
 
 const DESK = '10.0.0.5'
@@ -255,5 +264,216 @@ describe('a membership command', () => {
 
     expect(() => service.command('reboot')).toThrow('Unknown action "reboot"')
     expect(session.sendMembership).not.toHaveBeenCalled()
+  })
+})
+
+describe('highest wins', () => {
+  /**
+   * The desk's MIDI link as the service sees it: one tap to hear the masters through, and a
+   * send that records the gets rather than dialling anything.
+   */
+  function fakeTraffic(): DeskTraffic & { tapped: DeskLinkTap[]; sent: MidiMessageKind[][] } {
+    const tapped: DeskLinkTap[] = []
+    const sent: MidiMessageKind[][] = []
+    return {
+      tapped,
+      sent,
+      tap: vi.fn((tap: DeskLinkTap) => {
+        tapped.push(tap)
+        return () => { tapped.splice(tapped.indexOf(tap), 1) }
+      }),
+      send: vi.fn((_host: string, _port: number, messages: MidiMessageKind[]) => {
+        sent.push(messages)
+        return Promise.resolve({ ok: true })
+      })
+    }
+  }
+
+  /** The MIDI link's own name for the desk: the show's default MIDI port, 51325. */
+  const LINK = `${DESK}:51325`
+
+  /** One DCA master's level as the desk reports it, on the show's channel. */
+  function level(tap: DeskLinkTap, dca: number, value: number, device = LINK): void {
+    for (const [controller, data] of [[0x63, 0x4f], [0x62, 0x1f + dca], [0x06, value >> 7], [0x26, value & 0x7f]]) {
+      tap.message?.(device, { kind: 'cc', channel: 1, controller, value: data })
+    }
+  }
+
+  /**
+   * Every membership the service wrote, in the order it wrote them, each write in brackets:
+   * a switch is one write, and a recall's own pair is a write of its own.
+   */
+  function written(session: NativeSession): string[] {
+    const one = session.sendMembership as Mock
+    const many = session.sendMemberships as Mock
+    const calls = [
+      ...one.mock.calls.map((call, at) => ({ order: one.mock.invocationCallOrder[at], writes: [call[0]] })),
+      ...many.mock.calls.map((call, at) => ({ order: many.mock.invocationCallOrder[at], writes: call[0] }))
+    ].sort((a, b) => a.order - b.order)
+    return calls.map(({ writes }) => (writes as SqMembershipIntent[])
+      .map(write => `ch${write.channel} ${write.placed ? 'onto' : 'off'} ${write.dca}`).join(' + '))
+  }
+
+  function started(frames = 2) {
+    const session = fakeSession(frames)
+    const traffic = fakeTraffic()
+    const service = new SqNativeService(session, traffic)
+    const { context } = harness()
+    service.start(context, settings())
+    return { session, traffic, service, tap: traffic.tapped[0] }
+  }
+
+  it('puts a followed channel on its first fader, and asks the desk where the masters stand', async () => {
+    const { session, traffic, service } = started()
+
+    expect(service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true }))
+      .toEqual({ ok: true, frames: 2 })
+
+    expect(written(session)).toEqual(['ch1 onto 1'])
+    expect(session.sendMembership).not.toHaveBeenCalled()
+    expect(traffic.send).toHaveBeenCalledTimes(1)
+    expect(traffic.send).toHaveBeenCalledWith(DESK, 51325, expect.arrayContaining([
+      { kind: 'cc', channel: 1, controller: 0x60, value: 0x7f }
+    ]))
+    // A second followed channel does not ask again: one link asks once.
+    service.command('rides', { channel: 2, dcas: [1, 2], wrote: [], highest: true })
+    await Promise.resolve()
+    expect(traffic.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves the channel to whichever fader the desk reports highest, as it reports it', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    level(tap, 1, 13000)
+    level(tap, 2, 10000)
+    expect(written(session)).toEqual(['ch1 onto 1'])
+
+    // The switch goes as one write: the desk never applies the moment between its halves.
+    level(tap, 1, 9000)
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 2 + ch1 off 1'])
+  })
+
+  it('hears only the desk the show names', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    level(tap, 2, 16000, '10.0.0.9:51325')
+    expect(written(session)).toEqual(['ch1 onto 1'])
+  })
+
+  it('lets a channel go when a recall writes it as a pair', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    service.command('membership', { channel: 1, dca: 3, placed: true, rides: true })
+    level(tap, 2, 16000)
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 3'])
+  })
+
+  it('lets a channel go when a recall writes its pairs as one write', () => {
+    const { session, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    service.command('memberships', { memberships: [
+      { channel: 1, dca: 1, placed: false, rides: true },
+      { channel: 1, dca: 3, placed: true, rides: true }
+    ] })
+    level(tap, 2, 16000)
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 off 1 + ch1 onto 3'])
+  })
+
+  it('asks again when the link comes back, because the faders may have moved while it was gone', () => {
+    const { traffic, service, tap } = started()
+    service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })
+    tap.status?.(LINK, false)
+    tap.status?.(LINK, true)
+    expect(traffic.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('answers a session that is not up, and switches when it is', () => {
+    const { session, service, tap } = started(0)
+    expect(service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true })).toEqual({
+      ok: false,
+      error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+    })
+    ;(session.sendMemberships as Mock).mockImplementation((intents: readonly SqMembershipIntent[]) => intents.length * 2)
+    level(tap, 2, 12000)
+    expect(written(session).at(-1)).toBe('ch1 onto 2')
+  })
+
+  it('refuses a payload that is not one channel’s faders', () => {
+    const { session, service } = started()
+    expect(service.command('rides', { channel: 1, dcas: [0], wrote: [], highest: true })).toEqual({
+      ok: false,
+      error: 'a channel’s faders need whole numbers from 1 to 256, not 0'
+    })
+    expect(service.command('rides', { channel: 1, dcas: [1], wrote: 'all', highest: true })).toEqual({
+      ok: false,
+      error: 'a channel’s last-told faders need to be a list of fader numbers'
+    })
+    expect(service.command('rides', { channel: 1, dcas: [1], wrote: [] })).toEqual({
+      ok: false,
+      error: 'a channel’s faders need highest to be true or false'
+    })
+    expect(session.sendMemberships).not.toHaveBeenCalled()
+  })
+
+  it('refuses when the show drives no SQ, and stops listening when the show stops', () => {
+    const session = fakeSession()
+    const traffic = fakeTraffic()
+    const service = new SqNativeService(session, traffic)
+    const { context } = harness()
+    service.start(context, settings({ profile: 'avantis' }))
+    expect(service.command('rides', { channel: 1, dcas: [1, 2], wrote: [], highest: true }))
+      .toEqual({ ok: false, error: 'the show drives no SQ over its own control service' })
+
+    service.start(context, settings())
+    expect(traffic.tapped).toHaveLength(1)
+    service.stop()
+    expect(traffic.tapped).toHaveLength(0)
+  })
+
+  it('reads the switch order from the machine, placing first unless told otherwise', () => {
+    expect(switchOrderFromEnv(undefined)).toBe('assign-first')
+    expect(switchOrderFromEnv('clear-first')).toBe('clear-first')
+    expect(switchOrderFromEnv('sideways')).toBe('assign-first')
+  })
+})
+
+describe('a recall’s memberships', () => {
+  it('writes every pair as one write, and answers how many frames went', () => {
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    const pairs = [
+      { channel: 1, dca: 1, placed: false, rides: true },
+      { channel: 1, dca: 3, placed: true, rides: true }
+    ]
+    expect(service.command('memberships', { memberships: pairs })).toEqual({ ok: true, frames: 4 })
+    expect(session.sendMemberships).toHaveBeenCalledTimes(1)
+    expect(session.sendMemberships).toHaveBeenCalledWith(pairs)
+    expect(session.sendMembership).not.toHaveBeenCalled()
+  })
+
+  it('writes none of them when any pair is not one, naming what was wrong', () => {
+    const { service, session, context } = harness()
+    service.start(context, settings())
+
+    expect(service.command('memberships', {
+      memberships: [{ channel: 1, dca: 1, placed: true, rides: true }, { channel: 0, dca: 1, placed: true, rides: true }]
+    })).toEqual({ ok: false, error: 'a membership needs a channel as a whole number at or past 1, not 0' })
+    expect(service.command('memberships', { memberships: [] }))
+      .toEqual({ ok: false, error: 'a recall’s memberships need a list of them' })
+    expect(service.command('memberships', undefined))
+      .toEqual({ ok: false, error: 'a recall’s memberships need a list of them' })
+    expect(session.sendMemberships).not.toHaveBeenCalled()
+  })
+
+  it('answers that the session is not up when nothing went', () => {
+    const { service, context } = harness(0)
+    service.start(context, settings())
+
+    expect(service.command('memberships', { memberships: [{ channel: 1, dca: 1, placed: true, rides: true }] }))
+      .toEqual({
+        ok: false,
+        error: 'the SQ session is not up — the desk is not answering, so no membership was written'
+      })
   })
 })
