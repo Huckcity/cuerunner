@@ -64,8 +64,18 @@ function receiver(overrides: { target?: string; origin?: string; seekEveryMs?: n
   })
 }
 
-/** Lets a look that was started in the background finish: it is not awaited by the poll that caused it. */
+/**
+ * Lets a look that was started in the background finish: it is not awaited by the poll that
+ * caused it. For a case that expects the look to find nothing — there is no artifact to wait on.
+ */
 const settled = (): Promise<void> => vi.waitFor(() => expect(discover).toHaveBeenCalled()).then(() => new Promise(r => setTimeout(r, 20)))
+
+/**
+ * Waits for the move a look in the background makes: the second client. A fixed pause after
+ * the look is a race the Linux runners lose — the client is made after the credential is
+ * written — so a case that expects a move waits on the move.
+ */
+const followed = (): Promise<void> => vi.waitFor(() => expect(clients).toHaveLength(2))
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ewdx-receiver-'))
@@ -138,7 +148,7 @@ describe('EwDxReceiver', () => {
     live.start()
 
     await expect(live.snapshot(0)).rejects.toThrow('connection refused')
-    await settled()
+    await followed()
 
     // A second client, at the address the serial was found at, and the old one let go.
     expect(clients).toHaveLength(2)
@@ -157,7 +167,7 @@ describe('EwDxReceiver', () => {
     live.start()
 
     await expect(live.snapshot(0)).rejects.toThrow()
-    await settled()
+    await followed()
 
     expect(credentials.get('rack-a')?.moved).toEqual({ from: TARGET, to: '10.0.0.7:8443' })
     expect(addressOf({ address: '10.0.0.7', port: 8443 })).toBe('10.0.0.7:8443')
@@ -171,7 +181,7 @@ describe('EwDxReceiver', () => {
     live.start()
 
     await expect(live.snapshot(0)).rejects.toThrow()
-    await settled()
+    await followed()
 
     expect(clients[1].parts.origin).toBe('https://192.168.0.177')
   })
@@ -273,7 +283,7 @@ describe('EwDxReceiver', () => {
     live.start()
 
     await expect(live.snapshot(0)).rejects.toThrow()
-    await settled()
+    await followed()
 
     expect(credentials.get('rack-a')?.moved).toBeUndefined()
     expect(clients[1].parts.origin).toBe(ORIGIN)
