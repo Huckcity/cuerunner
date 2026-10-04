@@ -8,7 +8,7 @@ import type { DeskLinkTap } from '../midi/MidiTcpEngine'
 import type { MidiMessageKind } from '../../shared/cue'
 import { ShowBus } from '../bus/ShowBus'
 import type { ServiceContext } from '../bus/ServiceHost'
-import type { DeviceState, ShowSettings } from '../../shared/show'
+import type { DeviceState, ShowSettings, SqMembershipIntent } from '../../shared/show'
 import { defaultShowSettings } from '../../shared/show'
 import { drainMainErrors } from '../errors'
 
@@ -17,7 +17,14 @@ import { drainMainErrors } from '../errors'
  * count the case needs, because how many frames went out is the engine's to decide.
  */
 function fakeSession(frames = 2): NativeSession {
-  return { open: vi.fn(), closeAll: vi.fn(), sendMembership: vi.fn(() => frames), onStatus: null }
+  return {
+    open: vi.fn(),
+    closeAll: vi.fn(),
+    sendMembership: vi.fn(() => frames),
+    // All of them or none, as one write is: `frames` 0 is a session that is not up.
+    sendMemberships: vi.fn((intents: readonly SqMembershipIntent[]) => frames === 0 ? 0 : intents.length * 2),
+    onStatus: null
+  }
 }
 
 const DESK = '10.0.0.5'
@@ -292,9 +299,19 @@ describe('highest wins', () => {
     }
   }
 
+  /**
+   * Every membership the service wrote, in the order it wrote them, each write in brackets:
+   * a switch is one write, and a recall's own pair is a write of its own.
+   */
   function written(session: NativeSession): string[] {
-    return (session.sendMembership as Mock).mock.calls.map(([write]) =>
-      `ch${write.channel} ${write.placed ? 'onto' : 'off'} ${write.dca}`)
+    const one = session.sendMembership as Mock
+    const many = session.sendMemberships as Mock
+    const calls = [
+      ...one.mock.calls.map((call, at) => ({ order: one.mock.invocationCallOrder[at], writes: [call[0]] })),
+      ...many.mock.calls.map((call, at) => ({ order: many.mock.invocationCallOrder[at], writes: call[0] }))
+    ].sort((a, b) => a.order - b.order)
+    return calls.map(({ writes }) => (writes as SqMembershipIntent[])
+      .map(write => `ch${write.channel} ${write.placed ? 'onto' : 'off'} ${write.dca}`).join(' + '))
   }
 
   function started(frames = 2) {
@@ -313,6 +330,7 @@ describe('highest wins', () => {
       .toEqual({ ok: true, frames: 2 })
 
     expect(written(session)).toEqual(['ch1 onto 1'])
+    expect(session.sendMembership).not.toHaveBeenCalled()
     expect(traffic.send).toHaveBeenCalledTimes(1)
     expect(traffic.send).toHaveBeenCalledWith(DESK, 51325, expect.arrayContaining([
       { kind: 'cc', channel: 1, controller: 0x60, value: 0x7f }
@@ -330,8 +348,9 @@ describe('highest wins', () => {
     level(tap, 2, 10000)
     expect(written(session)).toEqual(['ch1 onto 1'])
 
+    // The switch goes as one write: the desk never applies the moment between its halves.
     level(tap, 1, 9000)
-    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 2', 'ch1 off 1'])
+    expect(written(session)).toEqual(['ch1 onto 1', 'ch1 onto 2 + ch1 off 1'])
   })
 
   it('hears only the desk the show names', () => {
@@ -363,7 +382,7 @@ describe('highest wins', () => {
       ok: false,
       error: 'the SQ session is not up — the desk is not answering, so no membership was written'
     })
-    ;(session.sendMembership as Mock).mockReturnValue(2)
+    ;(session.sendMemberships as Mock).mockImplementation((intents: readonly SqMembershipIntent[]) => intents.length * 2)
     level(tap, 2, 12000)
     expect(written(session).at(-1)).toBe('ch1 onto 2')
   })
@@ -382,7 +401,7 @@ describe('highest wins', () => {
       ok: false,
       error: 'a channel’s faders need highest to be true or false'
     })
-    expect(session.sendMembership).not.toHaveBeenCalled()
+    expect(session.sendMemberships).not.toHaveBeenCalled()
   })
 
   it('refuses when the show drives no SQ, and stops listening when the show stops', () => {

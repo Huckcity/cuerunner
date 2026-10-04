@@ -28,6 +28,11 @@ export interface NativeSession {
    */
   sendMembership(intent: SqMembershipIntent): number
   /**
+   * Several memberships as one write, so the desk applies them together: every frame, or 0
+   * when there is no session the desk has spoken on.
+   */
+  sendMemberships(intents: readonly SqMembershipIntent[]): number
+  /**
    * A session coming up or going down, with why when it goes: `lost` is a session the desk
    * was holding and is not, which is the state that leaves a desk mute until it is reset.
    */
@@ -267,26 +272,21 @@ export class SqNativeService implements ShowService {
   }
 
   /**
-   * Writes memberships in order, each one recorded the moment it lands; the first that does
-   * not land ends the run, and the resolver tries again on the next report. The answer is the
-   * one a recall reads: how many frames went, or why they did not.
+   * Writes a channel's switch as one write — the place and the clear together, so the desk
+   * never applies the moment between them (`sendMemberships`) — and records it once it has
+   * gone. A write that does not go leaves the record alone, and the resolver tries again on
+   * the next report. The answer is the one a recall reads: how many frames went, or why not.
    */
   private write(writes: SqMembershipIntent[]): SqMembershipAnswer {
-    let frames = 0
-    for (const write of writes) {
-      const sent = this.session.sendMembership(write)
-      if (sent === 0) {
-        return {
-          ok: false,
-          error: 'the SQ session is not up — the desk is not answering, so no membership was written'
-        }
+    if (writes.length === 0) return { ok: true, frames: 0 }
+    const frames = this.session.sendMemberships(writes)
+    if (frames === 0) {
+      return {
+        ok: false,
+        error: 'the SQ session is not up — the desk is not answering, so no membership was written'
       }
-      if (sent < 2) {
-        return { ok: false, error: 'only the pair went — the channel’s flag did not, so the write is half made' }
-      }
-      this.resolver?.landed(write)
-      frames += sent
     }
+    for (const write of writes) this.resolver?.landed(write)
     return { ok: true, frames }
   }
 

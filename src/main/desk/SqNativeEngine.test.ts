@@ -507,6 +507,41 @@ describe('a membership', () => {
     }
   })
 
+  it('writes several memberships as one write, so the desk applies them together', async () => {
+    // A highest-wins switch is a place and a clear. Written apart, an SQ-6 applied the first on
+    // a tick of its own in 24 of 50 switches, and the channel dipped by both faders' offsets;
+    // written as one, in none of 46 (2026-10-04). One `write` is what this holds.
+    const underTest = await desk()
+    const writes: number[] = []
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    try {
+      const { engine: session, statuses } = engine((host, port) => {
+        const socket = createConnection({ host, port })
+        if (port === NATIVE_TCP_PORT) {
+          const write = socket.write.bind(socket) as (chunk: Uint8Array) => boolean
+          socket.write = ((chunk: Uint8Array) => { writes.push(chunk.length); return write(chunk) }) as typeof socket.write
+        }
+        return socket
+      })
+      session.open(HOST)
+      await until(() => statuses.length === 1)
+      const opened = underTest.received.length
+      writes.length = 0
+
+      expect(session.sendMemberships([
+        { channel: 1, dca: 1, placed: true, rides: true },
+        { channel: 2, dca: 1, placed: false, rides: false }
+      ])).toBe(4)
+      await until(() => underTest.received.length >= opened + 32)
+
+      expect(writes).toEqual([32])
+      expect(hex(underTest.received.slice(opened))).toBe(PLACED + FLAG_RIDES + CLEARED + FLAG_NONE)
+      expect(session.sendMemberships([])).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('writes nothing, and answers 0, until the desk has spoken — and writes once it has', async () => {
     // §6's other state: the desk took the connection and says nothing. It is not a session to
     // write into — the bytes would be accepted and do nothing — so the recall is told nothing
