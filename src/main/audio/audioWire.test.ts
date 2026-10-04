@@ -10,8 +10,7 @@
  * idempotent check every command runs (`scripts/ensure-native.mjs`), so a source edited
  * after the last build is compared against itself rather than against a stale binary.
  */
-import { execFileSync, spawn } from 'node:child_process'
-import type * as ChildProcessModule from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
@@ -23,16 +22,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AUDIO_LIMITS, AUDIO_PROTOCOL_VERSION, AUDIO_WIRE } from '../../shared/audio'
 import type { AudioEngineEvent } from '../../shared/audio'
 import { drainMainErrors } from '../errors'
-import { AudioEngineError, NativeAudioEngine } from './AudioEngine'
-
-// The client spawns its engine through node:child_process. The one test that has to
-// connect to something which never declares itself keeps every real function and replaces
-// only `spawn`, so the child it talks past is an inert process rather than a second
-// engine that would answer for itself.
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof ChildProcessModule>()
-  return { ...actual, spawn: vi.fn(actual.spawn) }
-})
+import { AudioEngineError, NativeAudioEngine, type SpawnAudioEngine } from './AudioEngine'
 
 const repoRoot = resolve(__dirname, '..', '..', '..')
 const binaryName = process.platform === 'win32' ? 'cuerunner-audio.exe' : 'cuerunner-audio'
@@ -63,6 +53,16 @@ function inertEngineProcess(): ChildProcess {
     kill: () => true
   }) as unknown as ChildProcess
 }
+
+/**
+ * The spawner these cases hand the client, so the child it talks past is the inert one above
+ * rather than a second engine that would answer for itself. Handed to the constructor, not
+ * mocked on `node:child_process`: the module mock these cases used never reached the client
+ * (zero calls), so every case spawned the real engine on the test's own socket, and whether
+ * the client met the test's server or that engine first was a race — the engine winning is
+ * the "expected null to be an instance of AudioEngineError" the CI lanes reported.
+ */
+const inert: SpawnAudioEngine = () => inertEngineProcess() as unknown as ReturnType<SpawnAudioEngine>
 
 /** Restores an environment variable to what it was, or removes it. */
 function restoreEnv(name: string, value: string | undefined): void {
@@ -122,8 +122,7 @@ describe('the wire declaration', () => {
     // that starts on a machine with no output endpoint at all, which is what a headless
     // Windows runner is. Without it the client reports the machine instead of the protocol.
     process.env.CUERUNNER_AUDIO_BACKEND = 'silent'
-    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
-    const stale = new NativeAudioEngine()
+    const stale = new NativeAudioEngine(inert)
     try {
       const failure = await stale.ensureStarted().then(
         () => null,
@@ -182,8 +181,7 @@ describe('the wire declaration', () => {
     // The same as the case above: a machine with no output endpoint still has to reach the
     // handshake before it can be refused for what it says in it.
     process.env.CUERUNNER_AUDIO_BACKEND = 'silent'
-    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
-    const silent = new NativeAudioEngine()
+    const silent = new NativeAudioEngine(inert)
     try {
       const failure = await silent.ensureStarted().then(
         () => null,
@@ -252,8 +250,7 @@ describe('the wire declaration', () => {
     const previousSocket = process.env.CUERUNNER_AUDIO_SOCKET
     process.env.CUERUNNER_AUDIO_BIN = ensureBinary()
     process.env.CUERUNNER_AUDIO_SOCKET = socketPath
-    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
-    const engine = new NativeAudioEngine()
+    const engine = new NativeAudioEngine(inert)
     const events: AudioEngineEvent[] = []
     // The panic line is the last of the three, and the client reads a socket's lines in
     // order: its arrival is the signal that both lines before it have been read. No
@@ -362,8 +359,7 @@ describe('the wire declaration', () => {
     const previousSocket = process.env.CUERUNNER_AUDIO_SOCKET
     process.env.CUERUNNER_AUDIO_BIN = ensureBinary()
     process.env.CUERUNNER_AUDIO_SOCKET = socketPath
-    vi.mocked(spawn).mockImplementationOnce((() => inertEngineProcess()) as typeof spawn)
-    const engine = new NativeAudioEngine()
+    const engine = new NativeAudioEngine(inert)
     const events: AudioEngineEvent[] = []
     // The complete line is the last of the four, and the client reads a socket's lines in
     // order: its arrival is the signal that the three before it have been read.
