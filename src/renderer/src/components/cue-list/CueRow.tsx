@@ -184,6 +184,13 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
       <span className="col-dur">
         {countingDown ? (
           <span ref={remainingRef} className="col-dur-remaining" />
+        ) : cue.type === 'audio' && cue.filePath === '' ? (
+          // Said where its length would be, before anybody presses GO: a cue made with
+          // the toolbar has no file until it is given one, and a row that read `–` looked
+          // like a cue that was ready.
+          <span className="col-dur-media" data-media="none" title="this cue has no file to play">
+            no file
+          </span>
         ) : mediaState === 'measuring' ? (
           <span className="col-dur-media" data-media="measuring" title="the file's length is being read">
             measuring

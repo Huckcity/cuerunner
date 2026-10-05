@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createCue, formatDuration, formatClock, nextCueNumber } from './cueDefaults'
+import { createCue, cueNameFromFile, formatDuration, formatClock, nextCueNumber } from './cueDefaults'
 import type { CueType } from '../../../shared/cue'
 
 describe('nextCueNumber', () => {
@@ -145,3 +145,16 @@ describe('formatDuration', () => {
     expect(formatDuration(119_940)).toBe('1:59.9')
   })
 })
+
+describe('a cue named after its file', () => {
+  it('takes the file\'s own name, without the folder or the extension', () => {
+    expect(cueNameFromFile('/shows/hamlet/Door Slam.wav')).toBe('Door Slam')
+    expect(cueNameFromFile('C:\\Shows\\Hamlet\\Door Slam.take2.flac')).toBe('Door Slam.take2')
+  })
+
+  it('keeps a name that is all there is: no extension, or nothing before the dot', () => {
+    expect(cueNameFromFile('/shows/thunder')).toBe('thunder')
+    expect(cueNameFromFile('/shows/.hidden')).toBe('.hidden')
+  })
+})
+

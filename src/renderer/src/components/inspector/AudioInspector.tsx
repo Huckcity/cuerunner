@@ -9,7 +9,7 @@ import { audioEngine } from '../../engine/audioEngineClient'
 import { cueEngine } from '../../engine/CueEngine'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { resampleNotice } from '../../utils/sampleRate'
-import { AUDIO_DEFAULTS } from '../../utils/cueDefaults'
+import { AUDIO_DEFAULTS, cueNameFromFile, DEFAULT_AUDIO_CUE_NAME } from '../../utils/cueDefaults'
 import { trimAmounts } from '../../utils/silenceTrim'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
 
@@ -80,6 +80,17 @@ function trimReadout(cue: AudioCue, refused: boolean): string {
   return 'measuring…'
 }
 
+/**
+ * The engine's reason for a file it could not read, or null when what went wrong was not
+ * the file. An engine that is not answering is the transport's to report, and is true of
+ * every cue: said here, it would read as something wrong with this one's file.
+ */
+function unreadableFileReason(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code
+  if (code !== 'decode' && code !== 'format-unavailable') return null
+  return error instanceof Error ? error.message : String(error)
+}
+
 export function AudioInspector({ cue, tab }: Props) {
   const update = useStore(s => s.updateCue)
   const outputDeviceId = useStore(s => s.audioSettings.outputDeviceId)
@@ -94,6 +105,9 @@ export function AudioInspector({ cue, tab }: Props) {
   // actually have rather than a stereo guess.
   const [fileChannels, setFileChannels] = useState(0)
   const [fileRate, setFileRate] = useState(0)
+  // Why the engine cannot play the cue's file, in its own words, when it cannot: a file
+  // that is gone, or one that is not audio. Null for a file it read, and for no file.
+  const [fileFault, setFileFault] = useState<string | null>(null)
   const [deviceChannels, setDeviceChannels] = useState(2)
   const { info } = useAudioEngineInfo()
   // A file at another rate is resampled, not wrong — but it is worth saying, on the cue
@@ -126,6 +140,7 @@ export function AudioInspector({ cue, tab }: Props) {
 
   // The file's channel count and rate, from the engine's metadata — the media stays there.
   useEffect(() => {
+    setFileFault(null)
     if (!cue.filePath) { setFileChannels(0); setFileRate(0); return }
     let current = true
     audioEngine.prepare(cue.id, cue.filePath)
@@ -134,10 +149,11 @@ export function AudioInspector({ cue, tab }: Props) {
         setFileChannels(metadata.channels)
         setFileRate(metadata.sampleRate)
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!current) return
         setFileChannels(0)
         setFileRate(0)
+        setFileFault(unreadableFileReason(error))
       })
     return () => { current = false }
   }, [cue.id, cue.filePath])
@@ -159,7 +175,12 @@ export function AudioInspector({ cue, tab }: Props) {
   const pickFile = async () => {
     const path = await audioEngine.pickFile()
     if (!path) return
-    set({ filePath: path })
+    // A cue nobody has named takes its file's name, as a dropped file's cue does: a list
+    // built with the toolbar and Browse was otherwise a column of "Audio Cue". A name
+    // somebody typed is theirs and is left alone.
+    set(cue.name === DEFAULT_AUDIO_CUE_NAME
+      ? { filePath: path, name: cueNameFromFile(path) }
+      : { filePath: path })
     setLoading(true)
     try {
       const metadata = await audioEngine.prepare(cue.id, path)
@@ -264,6 +285,11 @@ export function AudioInspector({ cue, tab }: Props) {
       </div>
       {folder !== '' && (
         <p className="inspector-hint audio-file-folder" title={folder}>{folder}</p>
+      )}
+      {fileFault !== null && (
+        <p className="inspector-hint audio-file-fault" role="status">
+          This file cannot be played: {fileFault}
+        </p>
       )}
       {rateNotice !== null && (
         <p className="inspector-hint audio-file-rate"

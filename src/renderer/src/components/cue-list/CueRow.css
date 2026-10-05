@@ -241,3 +241,4 @@
 
 .col-dur-media[data-media='measuring'] { color: var(--fg-subtle); }
 .col-dur-media[data-media='missing'] { color: var(--accent-amber); }
+.col-dur-media[data-media='none'] { color: var(--accent-amber); }

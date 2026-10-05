@@ -4,6 +4,7 @@ import { useStore } from '../../store'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
 import { groupDurationMs } from '../../utils/cueDuration'
+import { cueNameFromFile } from '../../utils/cueDefaults'
 import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import { AUDIO_FORMATS_SENTENCE, isPlayableAudioFile } from '../../../../shared/media'
@@ -22,12 +23,6 @@ export function refusedDropNotice(names: string[]): string {
   const rest = names.length - NAMED_REFUSALS
   const others = rest > 0 ? ` and ${rest} more` : ''
   return `Not added — Cuerunner plays ${AUDIO_FORMATS_SENTENCE}: ${named}${others}`
-}
-
-function nameFromPath(filePath: string): string {
-  const filename = filePath.split(/[\\/]/).pop() ?? filePath
-  const dotIdx = filename.lastIndexOf('.')
-  return dotIdx > 0 ? filename.slice(0, dotIdx) : filename
 }
 
 // One entry in the virtualizer's flat render list.
@@ -246,7 +241,7 @@ export function CueList() {
       .filter(f => isPlayableAudioFile(f.name))
       .map(f => {
         const filePath = window.cuerunner.getPathForFile(f)
-        return { filePath, name: nameFromPath(filePath) }
+        return { filePath, name: cueNameFromFile(filePath) }
       })
 
     if (audioFiles.length > 0) {

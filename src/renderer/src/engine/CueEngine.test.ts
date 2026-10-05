@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { CueEngine } from './CueEngine'
+import { CueEngine, NO_FILE_SELECTED } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
@@ -155,6 +155,28 @@ function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true):
 describe('CueEngine — basic execution', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  // A cue made with the toolbar has no file until it is given one. Fired, it used to log
+  // "completed in 0ms": a GO that made no sound and looked as though it had worked.
+  it('says an audio cue with no file played nothing, and still hands the show on', () => {
+    const empty = makeAudio({ id: 'a1', filePath: '', advance: 'on-end' })
+    const next = makeWait({ id: 'w1', duration: 1000 })
+    const { runner, setLastRun, appendLog, setRunning } = setup([empty, next])
+
+    runner.go()
+    vi.advanceTimersByTime(200)
+
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: NO_FILE_SELECTED
+    }))
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: NO_FILE_SELECTED })
+    ])
+    // Nothing was asked of the engine, and the sequence is not held open by the cue.
+    expect(audioEngine.start).not.toHaveBeenCalled()
+    expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
+  })
 
   it('fires a wait cue and marks it playing immediately', () => {
     const { runner, setRunning } = setup([makeWait()])

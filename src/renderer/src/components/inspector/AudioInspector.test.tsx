@@ -127,6 +127,53 @@ describe('AudioInspector', () => {
     return [...container.querySelectorAll<HTMLDivElement>('.routing-row')]
   }
 
+  // A list built with the toolbar and Browse was a column of "Audio Cue": a dropped file
+  // names its cue, and a picked one did not.
+  it('names a cue nobody has named after the file picked for it', async () => {
+    engine.pickFile.mockResolvedValue('/shows/hamlet/Door Slam.wav')
+    await show(audioCue({ name: 'Audio Cue' }))
+
+    await act(async () => { container.querySelector<HTMLButtonElement>('.inspector-btn')!.click() })
+
+    const cue = useStore.getState().cues[0] as AudioCue
+    expect(cue.filePath).toBe('/shows/hamlet/Door Slam.wav')
+    expect(cue.name).toBe('Door Slam')
+  })
+
+  it('leaves a name somebody typed alone when a file is picked', async () => {
+    engine.pickFile.mockResolvedValue('/shows/hamlet/Door Slam.wav')
+    await show(audioCue({ name: 'Act 2 opener' }))
+
+    await act(async () => { container.querySelector<HTMLButtonElement>('.inspector-btn')!.click() })
+
+    expect(useStore.getState().cues[0].name).toBe('Act 2 opener')
+  })
+
+  // The engine's refusal carries a code; a file it could not read is the cue's own
+  // trouble and is said on the cue, in the engine's words.
+  it('says why the engine cannot play the file, under the file', async () => {
+    engine.prepare.mockRejectedValue(Object.assign(new Error('file not found'), { code: 'decode' }))
+
+    await show(audioCue({ filePath: '/shows/gone.wav' }))
+
+    expect(container.querySelector('.audio-file-fault')?.textContent)
+      .toBe('This file cannot be played: file not found')
+  })
+
+  it('does not blame the file for an engine that is not answering', async () => {
+    engine.prepare.mockRejectedValue(Object.assign(new Error('audio engine is not running'), { code: 'engine' }))
+
+    await show(audioCue({ filePath: '/shows/walk-in.wav' }))
+
+    expect(container.querySelector('.audio-file-fault')).toBeNull()
+  })
+
+  it('says nothing about a file the engine read', async () => {
+    await show(audioCue({ filePath: '/shows/walk-in.wav' }))
+
+    expect(container.querySelector('.audio-file-fault')).toBeNull()
+  })
+
   it('names the file first and puts its folder underneath', async () => {
     await show(audioCue({ filePath: '/Users/sam/Shows/Quixote/audio/walk-in.wav' }))
 

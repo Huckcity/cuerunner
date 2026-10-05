@@ -1,7 +1,8 @@
 // The Timing tab dropped the audio Fade out field (dedicated Fade and Stop cues cover
 // it) and now states what the loop count range means.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp, toolbarCueBtn } from './helpers'
+import path from 'node:path'
+import { closeApp, launchApp, openLogPanel, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -35,3 +36,52 @@ test('Audio Timing tab has no Fade out field and states the loop range', async (
   expect(hint!.y).toBeGreaterThan(loop!.y)
   expect(hint!.y).toBeLessThan(vamp!.y)
 })
+
+// The toolbar's Audio button makes a cue with no file. Its row read `–` where a length
+// goes and a GO on it logged "completed in 0ms": nothing on screen said the cue could not
+// make a sound, before the press or after it.
+test('an audio cue with no file says so on its row, and says it played nothing when fired', async () => {
+  await toolbarCueBtn(page, 'Audio').click()
+  const row = page.locator('.cue-row', { hasText: 'Audio Cue' })
+  await expect(row.locator('.col-dur-media')).toHaveText('no file')
+
+  await page.locator('.btn-go').click()
+
+  await expect(row.locator('.failed-pill')).toHaveAttribute('title', /no file selected — nothing played/)
+  await openLogPanel(page)
+  await expect(page.locator('.log-row[data-level="error"]', { hasText: 'no file selected' })).toBeVisible()
+  await expect(page.locator('.log-panel')).not.toContainText('completed in 0ms')
+})
+
+// A dropped file names its cue; a file picked with Browse did not, so a show built with
+// the toolbar was a column of "Audio Cue".
+test('a file picked with Browse names a cue nobody has named, and leaves a typed name alone', async () => {
+  const walkIn = path.join(process.cwd(), 'resources/demo/walk-in.wav')
+  // The file dialog belongs to the OS; it is answered in the main process.
+  await app.evaluate(async ({ dialog }, picked) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [picked] })
+  }, walkIn)
+
+  await toolbarCueBtn(page, 'Audio').click()
+  await page.locator('.inspector-tab', { hasText: 'Audio' }).click()
+  await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
+
+  const first = page.locator('.cue-row').nth(0)
+  await expect(first.locator('.name-text')).toHaveText('walk-in')
+  // And the row has the file's length rather than the word for having no file.
+  await expect(first.locator('.col-dur-media')).toHaveCount(0)
+  await expect(first.locator('.col-dur')).toHaveText('4.0s')
+
+  await toolbarCueBtn(page, 'Audio').click()
+  await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
+  const name = page.locator('.inspector .field-row', { hasText: 'Name' }).locator('input').first()
+  await name.fill('Curtain up')
+  await name.press('Enter')
+  await page.locator('.inspector-tab', { hasText: 'Audio' }).click()
+  await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
+
+  const second = page.locator('.cue-row').nth(1)
+  await expect(second.locator('.col-dur')).toHaveText('4.0s')
+  await expect(second.locator('.name-text')).toHaveText('Curtain up')
+})
+
