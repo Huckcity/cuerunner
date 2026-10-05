@@ -51,3 +51,21 @@ test('Edit menu undo removes one cue and redo restores it', async () => {
     await expect(page.locator('.cue-row')).toHaveCount(expectedCount)
   }
 })
+
+test('a fade added from a selected cue is one edit: one undo takes the whole cue away', async () => {
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Fade').click()
+  // Born named for the cue it was made from, and aimed at it.
+  await expect(page.locator('.cue-row')).toHaveCount(2)
+  await expect(page.locator('.cue-row').nth(1)).toContainText('Fade Wait')
+
+  // Naming and aiming it used to be a second edit, so the first undo only un-named the
+  // fade and left it in the list.
+  await app.evaluate(({ Menu, BrowserWindow }) => {
+    Menu.getApplicationMenu()
+      ?.getMenuItemById('edit-undo')
+      ?.click(undefined, BrowserWindow.getAllWindows()[0])
+  })
+  await expect(page.locator('.cue-row')).toHaveCount(1)
+  await expect(page.locator('.cue-row').first()).toContainText('Wait')
+})

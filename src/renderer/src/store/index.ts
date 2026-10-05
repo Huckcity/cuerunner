@@ -173,7 +173,13 @@ interface CueListState {
   future: EditSnapshot[]
 
   // Cue CRUD
-  addCue: (type: CueType, afterId?: string) => void
+  /**
+   * Adds a cue after `afterId` (inside it, when that is a group), and selects it. `initial`
+   * is what the cue is born with beyond its type's defaults — a fade made from a selected
+   * cue is born aimed at it — so the add is one edit and one undo, rather than an add and
+   * then a change to the cue that was just added.
+   */
+  addCue: (type: CueType, afterId?: string, initial?: Partial<Cue>) => void
   addAudioCuesFromFiles: (files: Array<{ filePath: string; name: string }>, afterId?: string) => void
   /** Removes each cue with its children — a group takes its subtree — as a single edit. */
   removeCues: (ids: string[]) => void
@@ -798,8 +804,8 @@ export const useStore = create<CueListState>((set) => ({
   reportOpen: false,
   mergeReport: null,
 
-  addCue: (type, afterId) => set(s => {
-    const cue = createCue(type, nextCueNumber(s.cues))
+  addCue: (type, afterId, initial) => set(s => {
+    const cue = { ...createCue(type, nextCueNumber(s.cues)), ...initial } as Cue
     // Adding a cue is the one moment the show's answer to trimming silence is read: the
     // setting is a default for new cues, never a switch over the ones already in the
     // list, so turning it off does not rewrite the show behind the operator.

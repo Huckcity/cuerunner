@@ -154,6 +154,26 @@ describe('Toolbar', () => {
     expect(container.querySelector('.workspace-name-text')?.textContent).toBe('Macbeth')
   })
 
+  it('adds a fade aimed at the selected cue as one edit, so one undo takes it away', () => {
+    useStore.setState({ cues: [], selectedId: null, selectedIds: [], past: [], future: [] })
+    act(() => { useStore.getState().addCue('audio') })
+    const audio = useStore.getState().cues[0]
+    act(() => { useStore.getState().updateCue(audio.id, { name: 'Walk-in' }) })
+    const edits = useStore.getState().past.length
+    render('cues')
+
+    const fadeButton = [...container.querySelectorAll<HTMLButtonElement>('.toolbar-cue-btn')]
+      .find(button => button.textContent === 'Fade')!
+    act(() => fadeButton.click())
+
+    const fade = useStore.getState().cues[1]
+    expect(fade).toMatchObject({ type: 'fade', name: 'Fade Walk-in', targetCueId: audio.id })
+    expect(useStore.getState().past.length).toBe(edits + 1)
+
+    act(() => { useStore.getState().undo() })
+    expect(useStore.getState().cues.map(cue => cue.type)).toEqual(['audio'])
+  })
+
   it('marks which view the window is showing', () => {
     render('scenes')
     // Unlicensed, the Scenes press also carries its Pro mark, so the check is on the

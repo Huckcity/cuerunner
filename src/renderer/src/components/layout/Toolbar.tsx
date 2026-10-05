@@ -78,14 +78,17 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       openSettings('license')
       return
     }
-    addCue(type, selectedId ?? undefined)
-    if (type === 'fade' && selectedId) {
-      const { cues, selectedId: newId, updateCue } = useStore.getState()
-      const target = cues.find(c => c.id === selectedId)
-      if (newId && target) {
-        updateCue(newId, { name: `Fade ${target.name}`, targetCueId: target.id })
-      }
-    }
+    // A fade made with a cue selected is a fade of that cue: it is born named for it and
+    // aimed at it, as part of the add — written afterwards it was a second edit, and the
+    // first undo after adding a fade only un-named it.
+    const target = type === 'fade' && selectedId
+      ? useStore.getState().cues.find(c => c.id === selectedId)
+      : undefined
+    addCue(
+      type,
+      selectedId ?? undefined,
+      target === undefined ? undefined : { name: `Fade ${target.name}`, targetCueId: target.id }
+    )
   }
 
   const { workspaceName, workspacePath, isDirty, newWorkspace, openWorkspace, openRecent, save, saveAs, setWorkspaceName } =
