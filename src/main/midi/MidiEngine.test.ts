@@ -120,6 +120,51 @@ describe('MidiEngine', () => {
       ])
     })
 
+    it('asks whether the module is there once, not on every cue', () => {
+      // Each ask builds a native client. A show's MIDI cues go out on one handle, and the
+      // only other client ever made is the first send's own question.
+      let built = 0
+      const ports = ['Stage Rack']
+      const loader: MidiModuleLoader = () => ({
+        Output: class {
+          constructor() { built++ }
+          getPortCount(): number { return ports.length }
+          getPortName(index: number): string { return ports[index] }
+          openPort(): void {}
+          closePort(): void {}
+          sendMessage(): void {}
+        },
+        Input: class {
+          getPortCount(): number { return 0 }
+          getPortName(): string { return '' }
+          closePort(): void {}
+        }
+      })
+      const engine = new MidiEngine(loader)
+      const note = [{ kind: 'noteOn' as const, channel: 1, note: 60, velocity: 100 }]
+
+      expect(engine.send('Stage Rack', note)).toEqual({ ok: true })
+      const afterFirst = built
+      for (let i = 0; i < 20; i++) expect(engine.send('Stage Rack', note)).toEqual({ ok: true })
+
+      expect(afterFirst).toBe(2)
+      expect(built).toBe(afterFirst)
+    })
+
+    it('keeps asking while the module is missing, so one that appears is found', () => {
+      let installed = false
+      const present = withPorts(['Stage Rack'])
+      const engine = new MidiEngine(() => {
+        if (!installed) throw new Error("Cannot find module 'midi'")
+        return present.loader()
+      })
+      const note = [{ kind: 'noteOn' as const, channel: 1, note: 60, velocity: 100 }]
+
+      expect(engine.send('Stage Rack', note).ok).toBe(false)
+      installed = true
+      expect(engine.send('Stage Rack', note)).toEqual({ ok: true })
+    })
+
     it('drops a handle that throws, so the next send looks for the port again', () => {
       fake.failSendsWith(new Error('Cannot send message on closed port'))
 
