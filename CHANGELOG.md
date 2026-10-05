@@ -1,3 +1,58 @@
+# [0.17.0](https://github.com/Huckcity/cuerunner/compare/v0.16.0...v0.17.0) (2026-10-05)
+
+
+### Bug Fixes
+
+* **audio-cue:** a cue with no file says so, a picked file names its cue, and an unreadable one says why ([f25671f](https://github.com/Huckcity/cuerunner/commit/f25671f2ce8e3bcb3b8b2302443fdd8cb1b09f36))
+* **audio:** the engine's refusal reaches the window with its code ([576265e](https://github.com/Huckcity/cuerunner/commit/576265e88a4372137fcaa7e98858fb40429725f1))
+* **cue-list:** a cue that failed says so on its row and on the Log tab ([f21d32a](https://github.com/Huckcity/cuerunner/commit/f21d32af2c1469cb91e2e69aad63cf35ec87ccb9))
+* **cue-list:** a duplicate takes the next free number, and a number is drawn on one line ([b006fe5](https://github.com/Huckcity/cuerunner/commit/b006fe562a054a3afe0929f452bab28e25efb3c3))
+* **cue-list:** a length is never written with a sixtieth second ([1290d52](https://github.com/Huckcity/cuerunner/commit/1290d52553abc3c5fa3863dbc7ccb1a342fd14cf))
+* **cue-list:** a name field opened and left as it was is not an edit ([62e19af](https://github.com/Huckcity/cuerunner/commit/62e19afdf1971e0c0149168d7ba3b9865519e62b))
+* **cue-list:** deleting the cue you are on leaves you on the one that took its place ([1bb1f36](https://github.com/Huckcity/cuerunner/commit/1bb1f362f9e3ee36e9ee73f213b80186227b74cd))
+* **cue-list:** the drop hint comes down after a file is dragged away, reorder or not ([98a70e1](https://github.com/Huckcity/cuerunner/commit/98a70e129a747f3111c6697028e8c9ac7d11746d))
+* **cues:** a new cue takes the next number in the show it is added to ([352f873](https://github.com/Huckcity/cuerunner/commit/352f8738e01ec39fd2994a331fb9017390687964))
+* **demo:** the walk-in loops until its fade, so the fade has something to fade ([127df7e](https://github.com/Huckcity/cuerunner/commit/127df7eeb5b41d8f493b85bbad3b3ce0d38bfcfd))
+* **engine:** a file that is not there is said to be missing, not the wrong format ([1cc8ee8](https://github.com/Huckcity/cuerunner/commit/1cc8ee898ee7b97fceb2a0fd4c95351f599a4076))
+* **engine:** GO skips a disarmed cue instead of stopping on it ([80757ca](https://github.com/Huckcity/cuerunner/commit/80757ca5f556d76a1e9d24f928be9fdeff05ba3d))
+* **engine:** on Windows, a path that is not ASCII names the file it names ([32ff396](https://github.com/Huckcity/cuerunner/commit/32ff396abc64b2d15caff0e8ea1ef3d283630c03))
+* **engine:** the show clock runs before any engine has answered ([d66e4f2](https://github.com/Huckcity/cuerunner/commit/d66e4f23c761ccb9a6a503560682d22fbf22ddc1))
+* **go:** GO fires nothing when nothing is selected, which is where a show stands after its last cue ([79cf22f](https://github.com/Huckcity/cuerunner/commit/79cf22f0b5fcda916fd2f8ec084f6240dc135df8))
+* **inspector:** a cue whose target was deleted says so, and a stop reports it ([844e0ca](https://github.com/Huckcity/cuerunner/commit/844e0cae0269e5d71cc799e40a9c1bd335c8ad08))
+* **inspector:** a fade is aimed at audio cues, and target lists name cues in full ([026cdbf](https://github.com/Huckcity/cuerunner/commit/026cdbf96e148c063d649933913608fbea8794b7))
+* **inspector:** a wait's length is typed in seconds, like every other length ([8b41ed7](https://github.com/Huckcity/cuerunner/commit/8b41ed776a086266767ab71168577b2bac9cd0fd))
+* **license:** a key check that faults says so and can be tried again ([410ba78](https://github.com/Huckcity/cuerunner/commit/410ba78baa079e9128d2f6e7b8cc243d9f4681fe))
+* **license:** Show Settings carries the Pro mark without a key, and says what it is for ([4329012](https://github.com/Huckcity/cuerunner/commit/4329012d9560491a23294aa2390f5a30ae3e4a78))
+* **media:** one list of the audio the window offers, and a refused drop says so ([c7993ac](https://github.com/Huckcity/cuerunner/commit/c7993ac63bd698930af89534b580e94ce1ed7ff2))
+* **script:** shell() runs in the folder it is given, dots and all ([63cdcff](https://github.com/Huckcity/cuerunner/commit/63cdcffb0c758dd3b37db4b5111aff8468c60fe5))
+* **settings:** the MIDI page says when MIDI is unavailable, and why ([df2c86c](https://github.com/Huckcity/cuerunner/commit/df2c86c6f093fdeeb582da11f97371402fcbd420))
+* **toolbar:** a new fade is pre-aimed only at an audio cue ([4647f16](https://github.com/Huckcity/cuerunner/commit/4647f16555d9c27cd09dd83e29502e5f50752d76))
+* **toolbar:** adding a fade from a selected cue is one edit ([64453b7](https://github.com/Huckcity/cuerunner/commit/64453b7cc043f97ac03326b857cd5ee0875a8025))
+* **toolbar:** Escape closes an open menu instead of stopping the show ([3f9f1fd](https://github.com/Huckcity/cuerunner/commit/3f9f1fd112bc5e76221c6300c7c5faaccee7483d))
+* **toolbar:** the Cues/Scenes switch stays on screen in a narrow window and beside a long name ([ab697b6](https://github.com/Huckcity/cuerunner/commit/ab697b64ae580969fc532070e0e7b223c9a90057))
+* **transport:** the transport says when the sound is not where it should be ([0a74f53](https://github.com/Huckcity/cuerunner/commit/0a74f5319fcea96fa6f16bbd3127b0cb43b5c8e3))
+* **waveform:** the panel's fallback length is the cue's, in the cue's unit ([2e634c0](https://github.com/Huckcity/cuerunner/commit/2e634c00bd161225c790a7a36f3eb32c8c09b6b2))
+* **window:** a file dropped outside the cue list cannot replace the window ([1b9a99d](https://github.com/Huckcity/cuerunner/commit/1b9a99d7b4af0e3f73ab4e88ccf590df75585a4c))
+* **window:** a recent file's refusal names the file once, and the loop hint sits under its field ([9aea4d6](https://github.com/Huckcity/cuerunner/commit/9aea4d6d73e8aea03f0f19ceb797e593c9e483f4))
+* **workspace:** a refused file is refused by Cuerunner, not by WinsLab ([fbdf12f](https://github.com/Huckcity/cuerunner/commit/fbdf12f982347229ef1819915280b3d8dc0ff921))
+* **workspace:** a show has one name, and a first save gives an untitled one its file's ([489efb5](https://github.com/Huckcity/cuerunner/commit/489efb5e4da9635e8b9303a657fd324122c5ce19))
+* **workspace:** a show that is gone is said to be gone, not "not a show" ([d2cfae4](https://github.com/Huckcity/cuerunner/commit/d2cfae46f159cf3a535471ac74204404c699edcf))
+* **workspace:** a show that is replaced stops playing ([95b4853](https://github.com/Huckcity/cuerunner/commit/95b48533ab1a2c1339fbc945e17e2f209ac51c33))
+
+
+### Features
+
+* **license:** a Pro lock says where a key comes from ([6e5f12b](https://github.com/Huckcity/cuerunner/commit/6e5f12bfbc97d7ce3ce139eda4836bf83a1c1904))
+* **window:** the window is sandboxed, and its built page states what it may run ([d3538ae](https://github.com/Huckcity/cuerunner/commit/d3538ae8b64bc544e73bf3b8bfbbfefba185682c))
+* **window:** the window opens where it was left ([399fa41](https://github.com/Huckcity/cuerunner/commit/399fa41ff04f6fa34b1a16fa99893adaeca81c44))
+
+
+### Performance Improvements
+
+* **engine:** the clock is asked for once a second while nothing is playing ([7292b4b](https://github.com/Huckcity/cuerunner/commit/7292b4b8ce945c49fb4b002b56e43485b6de02f6))
+* **midi:** the module is asked whether it is there once, not on every cue ([27756e8](https://github.com/Huckcity/cuerunner/commit/27756e8485a72ac36971e9d83ddb0e4fc5df26b3))
+* **window:** a write to the store is not everybody's news ([c9dd6f4](https://github.com/Huckcity/cuerunner/commit/c9dd6f42d0e87ffbbf7461ec077bb5e703e10131))
+
 # [0.16.0](https://github.com/Huckcity/cuerunner/compare/v0.15.0...v0.16.0) (2026-10-05)
 
 
