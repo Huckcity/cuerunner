@@ -432,6 +432,39 @@ test('a stored rental key whose day has passed ends at launch, and the free half
   await expect(page.locator('.rf-panel')).toBeVisible()
 })
 
+// File → Show Settings… is the console, the cast and the mic plot: what Scenes run on. On
+// a machine without a key it was the one entry of its kind with no mark, and it opened on a
+// desk and twelve faders with no word about what they were for.
+test('Show Settings is marked in the menu without a key, and says what it is for when it opens', async () => {
+  const { page } = await start()
+
+  await page.locator('.toolbar-brand').click()
+  const entry = page.locator('.file-menu button[data-action="show-settings"]')
+  await expect(entry.locator('.pro-mark')).toHaveCount(1)
+  // The show's own history is free, and still says nothing.
+  await expect(page.locator('.file-menu button[data-action="history"] .pro-mark')).toHaveCount(0)
+  await entry.click()
+
+  const dialog = page.getByRole('dialog', { name: 'Show Settings' })
+  const note = dialog.locator('.show-settings-pro-note')
+  await expect(note).toContainText('what Scenes run on')
+  // In front of nothing: the console is still set up here, so a show built on a licensed
+  // machine opens as it is.
+  await expect(dialog.locator('.desk-kind')).toBeEnabled()
+  await dialog.locator('.show-settings-tab', { hasText: 'Cast' }).click()
+  await expect(note).toBeVisible()
+  // The mic plot is locked outright, and its lock speaks for itself.
+  await dialog.locator('.show-settings-tab', { hasText: 'Mic plot' }).click()
+  await expect(note).toHaveCount(0)
+  await expect(dialog.locator('.pro-lock')).toBeVisible()
+
+  // And the note leads where the key goes.
+  await dialog.locator('.show-settings-tab', { hasText: 'Channels' }).click()
+  await note.locator('.license-link').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('dialog', { name: 'Settings' }).locator('#license-key')).toBeVisible()
+})
+
 test('an unlicensed window marks each Pro feature once, quietly, where it opens', async () => {
   const { page } = await start()
 

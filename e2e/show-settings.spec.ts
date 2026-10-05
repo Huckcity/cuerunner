@@ -38,10 +38,13 @@ test('the Cuerunner menu opens Show Settings on its Channels tab', async () => {
   const item = page.locator('.file-menu [data-action="show-settings"]')
   await expect(item).toBeVisible()
   await expect(item).toContainText('Show Settings')
+  // This machine has a key: nothing in the menu or the dialog has anything to say about one.
+  await expect(page.locator('.file-menu .pro-mark')).toHaveCount(0)
   await item.click()
 
   const dialog = page.getByRole('dialog', { name: 'Show Settings' })
   await expect(dialog).toBeVisible()
+  await expect(dialog.locator('.show-settings-pro-note')).toHaveCount(0)
   await expect(dialog.locator('.show-settings-tab')).toHaveCount(3)
   // A show is set up starting from the console, so that is the tab the dialog lands on —
   // and the console is counted for already: twelve DCAs, one per strip.

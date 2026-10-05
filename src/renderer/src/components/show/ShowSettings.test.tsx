@@ -162,6 +162,24 @@ describe('ShowSettings', () => {
     expect(useStore.getState().showSettingsTab).toBeNull()
   })
 
+  // Without a key the dialog opened on a desk and twelve faders with no word about what
+  // they were for: they are what Scenes run on, and Scenes are what the key turns on.
+  it('says what the console and the cast are for on a machine without a key, and nothing with one', async () => {
+    await show({ tab: 'channels' })
+    const note = (): HTMLElement | null => document.querySelector('.show-settings-pro-note')
+    expect(note()?.textContent).toContain('what Scenes run on')
+    // Still set up here, key or no key: the note is in front of nothing.
+    expect(document.querySelector('.show-settings-body')?.textContent).toContain('Desk')
+
+    act(() => note()!.querySelector<HTMLButtonElement>('.license-link')!.click())
+    expect(useStore.getState().showSettingsTab).toBeNull()
+    expect(useStore.getState().settingsTab).toBe('license')
+
+    useStore.setState({ settingsTab: null })
+    await show({ tab: 'channels', licensed: true })
+    expect(note()).toBeNull()
+  })
+
   it('switches tabs, showing the one the header was pressed for', async () => {
     await show({ tab: 'channels' })
 

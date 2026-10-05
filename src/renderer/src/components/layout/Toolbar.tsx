@@ -30,12 +30,15 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
 
 /** The File menu entries that open a Pro surface. The file records its own history
  *  whether or not this machine is licensed; comparing it, merging it and bundling it are
- *  what the key turns on. */
+ *  what the key turns on. Show Settings is the console, the cast and the mic plot — what
+ *  Scenes run on — so it carries the mark too: unmarked, it read as the show's main
+ *  settings and opened a desk nobody on a free build had asked about. */
 const PRO_FILE_ACTIONS = new Set<FileMenuAction>([
   'compare',
   'merge',
   'export-bundle',
-  'import-bundle'
+  'import-bundle',
+  'show-settings'
 ])
 
 const MORE_CUES: { type: CueType; label: string }[] = [
@@ -186,7 +189,9 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const fileItem = (item: FileMenuItem) => (
     <button key={item.action} data-action={item.action} onClick={() => handleMenuAction(fileActions[item.action])}>
       <span className="file-menu-label">{item.label}</span>
-      {PRO_FILE_ACTIONS.has(item.action) && <ProMark />}
+      {/* On a machine without a key only: the mark says a press leads to something the
+          key turns on, and with the key there is nothing to say. */}
+      {PRO_FILE_ACTIONS.has(item.action) && !pro && <ProMark />}
       {item.accelerator && <kbd>{shortcutLabel(item.accelerator)}</kbd>}
     </button>
   )
