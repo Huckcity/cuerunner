@@ -193,7 +193,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
 
   const commitName = () => {
     const val = nameRef.current?.value.trim()
-    if (val) setWorkspaceName(val)
+    // The same name back is not a rename, and must not mark the show unsaved.
+    if (val && val !== workspaceName) setWorkspaceName(val)
     setEditingName(false)
   }
 

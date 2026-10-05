@@ -140,6 +140,20 @@ describe('Toolbar', () => {
     window.removeEventListener('keydown', reachedWindow)
   })
 
+  it('does not mark the show unsaved when its name field is opened and left as it was', () => {
+    useStore.setState({ workspaceName: 'Macbeth', workspacePath: '/shows/Macbeth.cuerunner', isDirty: false })
+    render('cues')
+    act(() => {
+      container.querySelector('.workspace-name-text')!
+        .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
+    const field = container.querySelector<HTMLInputElement>('.workspace-name-input')!
+    act(() => { field.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+
+    expect(useStore.getState().isDirty).toBe(false)
+    expect(container.querySelector('.workspace-name-text')?.textContent).toBe('Macbeth')
+  })
+
   it('marks which view the window is showing', () => {
     render('scenes')
     // Unlicensed, the Scenes press also carries its Pro mark, so the check is on the
