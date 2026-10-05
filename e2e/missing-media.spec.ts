@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, openFromRecent } from './helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel } from './helpers'
 
 // A real audio file, so everything downstream of the relink — reading metadata, drawing
 // a waveform — deals with a file that is actually playable.
@@ -246,6 +246,33 @@ test('a pick that accounts for nothing else leaves the rest missing', async () =
     await expect(page.locator('.missing-media-row')).toHaveCount(1)
     await expect(page.locator('.missing-media-bar')).toHaveText(/One audio file/)
     await expect(page.locator('.missing-media-row .missing-media-path')).toContainText('sting.wav')
+  } finally {
+    await closeApp(app)
+  }
+})
+
+// The engine sniffs a file's first bytes to learn what it is, and a file that is not there
+// has none — so a show whose media had been moved was told, on GO, that its format was
+// "unrecognised (expected wav, mp3, …)": an instruction to convert a file that only needed
+// finding. The row and the log say what the engine could not do.
+test('firing a cue whose file is gone says the file was not found, not that it is the wrong format', async () => {
+  const show = movedShow()
+  const { app, page, userDataDir } = await launchApp()
+
+  try {
+    await openFromRecent(page, userDataDir, show.cuerunner)
+    await expect(page.locator('.missing-media-bar')).toBeVisible()
+
+    const row = page.locator('.cue-row', { hasText: 'Walk-in Music' })
+    await row.click()
+    await page.locator('.btn-go').click()
+
+    // The row's own word for the last run: GO has moved the selection on by the time it lands.
+    await expect(row.locator('.failed-pill')).toHaveAttribute('title', /file not found/)
+    await expect(row.locator('.failed-pill')).not.toHaveAttribute('title', /format/)
+
+    await openLogPanel(page)
+    await expect(page.locator('.log-row[data-level="error"]', { hasText: 'file not found' }).first()).toBeVisible()
   } finally {
     await closeApp(app)
   }
