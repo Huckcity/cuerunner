@@ -108,3 +108,18 @@ test("shell() runs where the script says it should, not where the app was launch
   await expect.poll(() => fs.existsSync(written)).toBe(true)
   expect(fs.readFileSync(written, 'utf8').trim()).toBe('x')
 })
+
+test('shell() runs in the folder it is given, even one with a dot in its name', async () => {
+  const workspace = await openWorkspaceWith({})
+  // "cues.v2" has an extension as far as a path parser can tell, and main used to read
+  // any path with one as a file: the command ran in the folder above, beside the show.
+  const dotted = path.join(path.dirname(workspace), 'cues.v2')
+  fs.mkdirSync(dotted)
+  const command = process.platform === 'win32' ? 'echo x> here.txt' : 'printf x > here.txt'
+  await runScript(`await shell(${JSON.stringify(command)}, { cwd: ${JSON.stringify(dotted)} })`)
+
+  const written = path.join(dotted, 'here.txt')
+  await expect.poll(() => fs.existsSync(written)).toBe(true)
+  expect(fs.readFileSync(written, 'utf8').trim()).toBe('x')
+  expect(fs.existsSync(path.join(path.dirname(workspace), 'here.txt'))).toBe(false)
+})
