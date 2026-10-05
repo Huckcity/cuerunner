@@ -979,6 +979,9 @@ export const useStore = create<CueListState>((set) => ({
     // Where each source's copies go: after the cue, or after the subtree when it is a
     // group, which is what keeps a group's children behind their own header.
     const insertAfter = new Map<number, Cue[]>()
+    // The copies that answer the cues asked for, as opposed to the children that came
+    // along with a group: these are what the operator is left holding.
+    const asked = new Set<string>()
     for (const id of ids) {
       const srcIdx = s.cues.findIndex(c => c.id === id)
       if (srcIdx < 0) continue
@@ -987,9 +990,9 @@ export const useStore = create<CueListState>((set) => ({
 
       const copies: Cue[] = [{
         ...src,
-        id: src.type === 'group' ? newGroupId : crypto.randomUUID(),
-        number: src.number + ' copy'
+        id: src.type === 'group' ? newGroupId : crypto.randomUUID()
       }]
+      asked.add(copies[0].id)
       if (src.type === 'group') {
         // The whole subtree, each child pointing at the copy of its own parent, so a
         // group inside a group comes with its children too.
@@ -1012,18 +1015,28 @@ export const useStore = create<CueListState>((set) => ({
     }
     if (insertAfter.size === 0) return s
 
+    // A copy is a new cue, so it is numbered as one: the next free number, counted down
+    // the list in the order the copies land in it. A copy used to take its original's
+    // number with " copy" after it — which no row had the width to draw, and which a
+    // second duplicate made "copy copy" — and a group's children took their originals'
+    // numbers unchanged, so duplicating a group left the show with two of each.
+    let nextNumber = Number(nextCueNumber(s.cues))
     const cues: Cue[] = []
     const copied: string[] = []
     s.cues.forEach((cue, index) => {
       cues.push(cue)
       const copies = insertAfter.get(index)
       if (copies === undefined) return
-      cues.push(...copies)
-      copied.push(...copies.map(copy => copy.id))
+      for (const copy of copies) {
+        cues.push({ ...copy, number: String(nextNumber++) })
+        if (asked.has(copy.id)) copied.push(copy.id)
+      }
     })
 
     // The copies are what the operator is holding now: a second press duplicates them
-    // again rather than the originals.
+    // again rather than the originals. A group's copy is held by its header, as the group
+    // it was copied from was — with its children in the set as well, that second press
+    // duplicated each of them inside the first copy besides duplicating the group.
     return {
       cues,
       selectedIds: copied,

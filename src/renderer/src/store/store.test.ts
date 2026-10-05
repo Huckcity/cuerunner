@@ -580,10 +580,10 @@ describe('store — batch edits', () => {
 
     const cues = useStore.getState().cues
     expect(cues).toHaveLength(4)
-    // Each copy follows its original, and says it is a copy of it.
-    expect(cues.map(cue => cue.number)).toEqual([
-      numbers[0], `${numbers[0]} copy`, numbers[1], `${numbers[1]} copy`
-    ])
+    // Each copy follows its original, and is numbered as the new cue it is: the next
+    // free numbers, in the order the copies sit in the list.
+    expect(numbers).toEqual(['1', '2'])
+    expect(cues.map(cue => cue.number)).toEqual(['1', '3', '2', '4'])
     expect(useStore.getState().selectedIds).toEqual([cues[1].id, cues[3].id])
     expect(useStore.getState().selectedId).toBe(cues[3].id)
     expect(useStore.getState().past).toHaveLength(before + 1)
@@ -654,10 +654,69 @@ describe('store — audit 2026-09', () => {
 
     useStore.getState().duplicateCues([inner])
     const doubled = useStore.getState().cues
-    const copyHeader = doubled.find(cue => cue.parentId === outer && cue.number.endsWith('copy'))
+    const copyHeader = doubled.find(cue => cue.parentId === outer && cue.type === 'group' && cue.id !== inner)
     expect(copyHeader?.type).toBe('group')
     const copyChildren = doubled.filter(cue => cue.parentId === copyHeader!.id)
     expect(copyChildren).toHaveLength(1)
+  })
+
+  it('numbers every cue of a duplicated group, so the show has no number twice', () => {
+    useStore.getState().addCue('group')
+    const group = useStore.getState().cues[0].id
+    useStore.getState().addCue('wait', group)
+    useStore.getState().addCue('wait', group)
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['1', '2', '3'])
+
+    useStore.getState().duplicateCues([group])
+
+    // The copy's children used to keep their originals' numbers: two cue 2s, two cue 3s.
+    const numbers = useStore.getState().cues.map(cue => cue.number)
+    expect(numbers).toEqual(['1', '2', '3', '4', '5', '6'])
+    expect(new Set(numbers).size).toBe(numbers.length)
+  })
+
+  it('leaves a duplicated group held by its header, so a second press copies the group and nothing else', () => {
+    useStore.getState().addCue('group')
+    const group = useStore.getState().cues[0].id
+    useStore.getState().addCue('wait', group)
+    useStore.getState().select(group)
+
+    useStore.getState().duplicateCues(useStore.getState().selectedIds)
+    const once = useStore.getState()
+    const copy = once.cues.find(cue => cue.type === 'group' && cue.id !== group)!
+    // The header, not its child with it: one row was selected, and one row is.
+    expect(once.selectedIds).toEqual([copy.id])
+    expect(once.selectedId).toBe(copy.id)
+
+    useStore.getState().duplicateCues(useStore.getState().selectedIds)
+    const twice = useStore.getState().cues
+    // Three groups of one child each. With the copy's child selected too, the second press
+    // also duplicated that child where it stood: a first copy with two cues in it.
+    expect(twice).toHaveLength(6)
+    for (const header of twice.filter(cue => cue.type === 'group')) {
+      expect(twice.filter(cue => cue.parentId === header.id)).toHaveLength(1)
+    }
+  })
+
+  it('numbers a copy of a copy like any other, rather than stacking a suffix on it', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().duplicateCues([useStore.getState().cues[0].id])
+    // The copies are what is selected, so a second press duplicates the copy.
+    useStore.getState().duplicateCues(useStore.getState().selectedIds)
+
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['1', '2', '3'])
+  })
+
+  it('counts on from the highest number in the show, whatever the original was called', () => {
+    useStore.getState().addCue('wait')
+    const labelled = useStore.getState().cues[0].id
+    useStore.getState().updateCue(labelled, { number: 'LX 12' })
+    useStore.getState().addCue('wait')
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['LX 12', '1'])
+
+    useStore.getState().duplicateCues([labelled])
+
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['LX 12', '2', '1'])
   })
 
   it('keeps both copies when a group and its last child are duplicated together', () => {
@@ -669,7 +728,7 @@ describe('store — audit 2026-09', () => {
     useStore.getState().duplicateCues([group, child])
 
     const cues = useStore.getState().cues
-    const groupCopies = cues.filter(cue => cue.type === 'group' && cue.number.endsWith('copy'))
+    const groupCopies = cues.filter(cue => cue.type === 'group' && cue.id !== group)
     expect(groupCopies).toHaveLength(1)
     const childCopies = cues.filter(cue => cue.parentId === groupCopies[0].id)
     expect(childCopies).toHaveLength(1)

@@ -210,7 +210,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>Number</td><td>next free</td><td>Text, not a position. <code>12.5</code> and <code>LX 12</code> are both valid, and inserting a cue renumbers nothing.</td></tr>
+            <tr><td>Number</td><td>next free</td><td>Text, not a position. <code>12.5</code> and <code>LX 12</code> are both valid, and inserting a cue renumbers nothing. A duplicate is a new cue and takes the next free number too, as does every cue inside a duplicated group.</td></tr>
             <tr><td>Name</td><td>the type</td><td>What you read at speed.</td></tr>
             <tr><td>Colour</td><td>none</td><td>A stripe down the row's edge. Eight colours.</td></tr>
             <tr><td>Notes</td><td>empty</td><td>The first line shows in the live/next bar when the cue is playing or next.</td></tr>

@@ -15,7 +15,8 @@ describe('nextCueNumber', () => {
   })
 
   it('reads the whole number a cue number begins with', () => {
-    // A split leaves "12b", a duplicate "12 copy", and an operator types "12.5".
+    // A split leaves "12b", an operator types "12.5", and a show saved before a duplicate
+    // took a number of its own still carries "12 copy".
     expect(nextCueNumber(numbered('12b'))).toBe('13')
     expect(nextCueNumber(numbered('12 copy'))).toBe('13')
     expect(nextCueNumber(numbered('12.5'))).toBe('13')

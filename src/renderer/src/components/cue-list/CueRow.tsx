@@ -135,7 +135,7 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
           every row has the same two slots and the icons line up as a column — the
           disclosure column the list used to keep for groups alone is name width now. */}
       <span className="col-num">
-        <span className="cue-number">{cue.number}</span>
+        <span className="cue-number" title={cue.number}>{cue.number}</span>
         <span className="cue-icon-slot">
           {isGroup ? (
             <button
