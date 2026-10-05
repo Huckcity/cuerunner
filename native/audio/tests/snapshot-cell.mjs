@@ -83,7 +83,22 @@ function run(name, extra, optional = false) {
       return 0
     }
   }
-  process.stdout.write(`[${name}] ${result.stdout ?? ''}`)
-  if (result.status !== 0) process.stderr.write(result.stderr ?? '')
+  const said = result.stdout ?? ''
+  process.stdout.write(`[${name}] ${said}${said.endsWith('\n') ? '' : '\n'}`)
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr ?? '')
+    // A run killed by a signal has no status and one that never started has an error, and
+    // both came out as a bare exit 1 after an empty "[thread]" — all the 2026-10-05 night
+    // left to read. The line says which it was.
+    console.error(`snapshot-cell: the ${name} build ${howItEnded(result)}`)
+  }
   return result.status ?? 1
+}
+
+/** How a run that did not pass ended: never started, killed, or a status of its own. */
+function howItEnded(result) {
+  const silent = (result.stdout ?? '') === '' && (result.stderr ?? '') === '' ? ', having printed nothing' : ''
+  if (result.error) return `could not run (${result.error.message})${silent}`
+  if (result.signal) return `was killed by ${result.signal}${silent}`
+  return `exited with status ${result.status}${silent}`
 }
