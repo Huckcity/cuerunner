@@ -8,6 +8,7 @@ import path from 'path'
 // The spec process mints keys with the same codec the app reads them with, so a test
 // cannot pass against a format the app does not actually accept.
 import { createLicense } from '../src/main/license/key.ts'
+import { workerDisplay } from './display.ts'
 
 /**
  * A license minted for a test run.
@@ -107,6 +108,11 @@ export async function launchApp(
     writeFileSync(path.join(userDataDir, 'license.key'), options.license.text, 'utf-8')
   }
 
+  // Each worker's windows go to a virtual display of that worker's own: on one shared
+  // server, a pointer drag in one app was lost when another worker's app dragged at the
+  // same moment. display.ts carries the measurements.
+  const display = await workerDisplay()
+
   const app = await electron.launch({
     args: [
       path.join(process.cwd(), 'out/main/index.js'),
@@ -134,6 +140,7 @@ export async function launchApp(
       // Explicit, not detected: a test run plays no user hardware, and a spec that wants
       // the real device says so.
       CUERUNNER_AUDIO_BACKEND: options.audio?.backend ?? 'silent',
+      ...(display === null ? {} : { DISPLAY: display }),
       ...options.env
     }
   })

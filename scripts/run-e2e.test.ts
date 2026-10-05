@@ -8,7 +8,8 @@ import path from 'path'
 import os from 'os'
 
 // @ts-ignore — js file, no type declarations
-const { findExecutable, resolveE2eRun, XVFB_SCREEN } = require('./run-e2e.js')
+const { findExecutable, resolveE2eRun, XVFB_SCREEN, SCREEN_ENV } = require('./run-e2e.js')
+import { SCREEN_ENV as DISPLAY_SCREEN_ENV } from '../e2e/display'
 
 let rootDir: string
 let binDir: string
@@ -115,6 +116,29 @@ describe('resolveE2eRun', () => {
     expect(run.env.HOME).toBe('/home/tester')
     // The caller's environment is a value, not something to edit underneath them.
     expect(env.WAYLAND_DISPLAY).toBe('wayland-0')
+  })
+
+  // One X server has one pointer, and workers that shared the run's server lost pointer
+  // drags to each other. A virtual run says so to the launch helper, which gives each
+  // worker a server of its own at the same size (e2e/display.ts).
+  it('tells a virtual run’s workers the screen to give their own displays', () => {
+    installFake('xvfb-run')
+    const run = resolveE2eRun({ platform: 'linux', pathEnv: binDir, argv: [], env: { PATH: binDir } })
+
+    expect(run.mode).toBe('virtual')
+    expect(run.env[SCREEN_ENV]).toBe(XVFB_SCREEN)
+    // The two files that name the variable name the same one.
+    expect(SCREEN_ENV).toBe(DISPLAY_SCREEN_ENV)
+  })
+
+  it('asks for no displays for a run that is on a real one', () => {
+    installFake('xvfb-run')
+    const headed = resolveE2eRun({ platform: 'linux', pathEnv: binDir, argv: ['--headed'], env: { PATH: binDir } })
+    expect(headed.env).not.toHaveProperty(SCREEN_ENV)
+    for (const platform of ['darwin', 'win32'] as NodeJS.Platform[]) {
+      const run = resolveE2eRun({ platform, pathEnv: binDir, argv: [], env: { PATH: binDir } })
+      expect(run.env).not.toHaveProperty(SCREEN_ENV)
+    }
   })
 
   it('leaves the environment alone for a run on the developer’s own display', () => {

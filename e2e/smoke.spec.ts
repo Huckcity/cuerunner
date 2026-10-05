@@ -77,3 +77,15 @@ test('nothing sits between the toolbar, the context bar and the cue list', async
   expect(Math.abs(standby!.y - (toolbar!.y + toolbar!.height))).toBeLessThanOrEqual(1)
   expect(Math.abs(list!.y - (standby!.y + standby!.height))).toBeLessThanOrEqual(1)
 })
+
+// On Linux the suite runs on virtual displays, and each worker's apps open on a server of
+// that worker's own: on one shared server, a pointer drag in one app was lost when another
+// worker's app dragged at the same moment (e2e/display.ts). This is the launch helper
+// being held to that — the app is asked which display it was given.
+test('the app opens on its worker’s own display, not the one the run is on', async () => {
+  test.skip(process.env.CUERUNNER_E2E_SCREEN === undefined, 'not a run on virtual displays')
+  const display = await app.evaluate(() => process.env.DISPLAY)
+  expect(display).toMatch(/^:\d+$/)
+  expect(display).not.toBe(process.env.DISPLAY)
+})
+

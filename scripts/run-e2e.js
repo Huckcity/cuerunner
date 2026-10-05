@@ -18,6 +18,9 @@ const { spawnSync } = require('child_process')
 // assertions were written against this screen.
 const XVFB_SCREEN = '1600x1000x24'
 
+// Read by e2e/display.ts, which holds the same name: the screen a worker's own display gets.
+const SCREEN_ENV = 'CUERUNNER_E2E_SCREEN'
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -122,7 +125,10 @@ function resolveE2eRun(opts = {}) {
     mode: 'virtual',
     command: xvfbRun,
     args: ['-a', '-s', `-screen 0 ${XVFB_SCREEN}`, node, ...playwrightArgs],
-    env: withoutWayland(env),
+    // The run itself sits on this one server; each worker then opens its apps on a server
+    // of its own, of the same size, which is what this tells `e2e/display.ts` to start.
+    // Workers that shared the one lost pointer drags to each other.
+    env: { ...withoutWayland(env), [SCREEN_ENV]: XVFB_SCREEN },
   }
 }
 
@@ -154,6 +160,7 @@ if (require.main === module) {
 
 module.exports = {
   XVFB_SCREEN,
+  SCREEN_ENV,
   findExecutable,
   playwrightCli,
   withoutWayland,
