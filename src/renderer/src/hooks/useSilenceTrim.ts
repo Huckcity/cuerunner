@@ -30,6 +30,10 @@ export function useSilenceTrim(): void {
   useEffect(() => {
     let cancelled = false
     let working = false
+    // Whether the last pass ran the queue dry. While it has, a write to the store that is
+    // not about the show's files is not walked for: only a pass that stopped short — an
+    // engine that was not there — is retried on whatever happens next.
+    let settled = false
 
     const work = async (): Promise<void> => {
       if (working || cancelled) return
@@ -39,7 +43,11 @@ export function useSilenceTrim(): void {
           if (cancelled) return
           const state = useStore.getState()
           const [next] = cuesAwaitingSilence(state.cues, state.silenceFailures)
-          if (!next) return
+          if (!next) {
+            // Nothing left to ask about: until the show changes there is nothing to look for.
+            settled = true
+            return
+          }
 
           try {
             const silence = await audioEngine.silence(next.filePath)
@@ -69,8 +77,14 @@ export function useSilenceTrim(): void {
       }
     }
 
-    const wake = (): void => { void work() }
-    const unsubscribe = useStore.subscribe(wake)
+    const wake = (): void => {
+      settled = false
+      void work()
+    }
+    const unsubscribe = useStore.subscribe((state, previous) => {
+      if (state.cues !== previous.cues || state.silenceFailures !== previous.silenceFailures) settled = false
+      if (!settled) void work()
+    })
     // An engine that was replaced has to be asked again: a show that loaded while it was
     // restarting would otherwise stay unmeasured for the night.
     const offSession = audioEngine.onSessionChange(wake)

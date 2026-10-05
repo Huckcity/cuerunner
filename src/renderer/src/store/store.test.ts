@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { useStore } from './index'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { useStore, subscribeToParts } from './index'
 import type { AudioCue } from '../../../shared/cue'
 import { defaultShowSettings, startingChannels } from '../../../shared/show'
 import { rowChannels, setRowMember } from '../utils/scenes'
@@ -53,6 +53,32 @@ function resetStore() {
     mediaLengths: {}
   })
 }
+
+describe('store — subscribeToParts', () => {
+  beforeEach(resetStore)
+
+  it('hears a change to a part it names, and nothing else', () => {
+    const heard = vi.fn()
+    const off = subscribeToParts(s => [s.cues, s.selectedId], heard)
+
+    // Writes a show makes many times a second, none of them to the named parts.
+    useStore.getState().appendLog([{ level: 'info', message: 'started' }])
+    useStore.getState().setRunning('c1', { cueId: 'c1', state: 'playing', startedAt: 0, progress: 0 })
+    useStore.getState().setNotice('something else')
+    expect(heard).not.toHaveBeenCalled()
+
+    useStore.getState().addCue('wait')
+    // One write, which changed both named parts: heard once, not once per part.
+    expect(heard).toHaveBeenCalledTimes(1)
+
+    useStore.getState().select(null)
+    expect(heard).toHaveBeenCalledTimes(2)
+
+    off()
+    useStore.getState().addCue('wait')
+    expect(heard).toHaveBeenCalledTimes(2)
+  })
+})
 
 describe('store — addCue', () => {
   beforeEach(resetStore)

@@ -35,6 +35,10 @@ export function useMediaLengths(): void {
   useEffect(() => {
     let cancelled = false
     let working = false
+    // Whether the last pass ran the queue dry. While it has, a write to the store that is
+    // not about the show's files is not walked for: only a pass that stopped short — an
+    // engine that was not there — is retried on whatever happens next.
+    let settled = false
 
     // The show's own store is the queue: take the next cue nobody has measured, ask the
     // engine about its file, write down what the answer is worth, and look again.
@@ -49,7 +53,11 @@ export function useMediaLengths(): void {
             state.cues,
             mediaLengthsFrom(state.mediaLengths, state.missingMedia)
           )
-          if (!next) return
+          if (!next) {
+            // Nothing left to ask about: until the show changes there is nothing to look for.
+            settled = true
+            return
+          }
 
           try {
             const probe = await audioEngine.probe(next.filePath)
@@ -80,8 +88,15 @@ export function useMediaLengths(): void {
     // Every change to the show wakes the pass: opening a workspace, dropping files on
     // the list, relinking media, or a file answering. A pass already running is left
     // alone — it is working through the same queue — so no file is ever asked twice.
-    const wake = (): void => { void work() }
-    const unsubscribe = useStore.subscribe(wake)
+    const wake = (): void => {
+      settled = false
+      void work()
+    }
+    const unsubscribe = useStore.subscribe((state, previous) => {
+      if (state.cues !== previous.cues || state.mediaLengths !== previous.mediaLengths ||
+        state.missingMedia !== previous.missingMedia) settled = false
+      if (!settled) void work()
+    })
     // An engine that was replaced has to be asked again: a show that loaded while it
     // was restarting would otherwise read as unmeasured for the night.
     const offSession = audioEngine.onSessionChange(wake)

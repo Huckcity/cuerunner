@@ -1735,6 +1735,25 @@ export const useStore = create<CueListState>((set) => ({
   popModal: () => set(s => ({ modals: Math.max(0, s.modals - 1) }))
 }))
 
+/**
+ * Hears about a change to the parts of the store it names, and to nothing else.
+ *
+ * A plain `subscribe` is told about every write — a log line, a show event, a row lighting
+ * up — and a listener that walks or serialises the cue list on each of them is doing that
+ * work for news that was never about the cue list. `parts` names what the listener reads;
+ * the store replaces a slice when it changes, so identity is the comparison.
+ */
+export function subscribeToParts(
+  parts: (state: CueListState) => readonly unknown[],
+  listener: () => void
+): () => void {
+  return useStore.subscribe((state, previous) => {
+    const now = parts(state)
+    const before = parts(previous)
+    if (now.some((part, index) => part !== before[index])) listener()
+  })
+}
+
 export function useSelectedCue(): Cue | null {
   return useStore(s => s.cues.find(c => c.id === s.selectedId) ?? null)
 }
