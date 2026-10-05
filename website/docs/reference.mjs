@@ -550,7 +550,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
             <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Move the selection</td><td>Cue list</td></tr>
-            <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue</td><td>Cue list</td></tr>
+            <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue. The selection moves to the cue that took its place, so GO stays where you were working.</td><td>Cue list</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>D</kbd></td><td>Duplicate the selected cue</td><td>Cue list</td></tr>
             <tr><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td><td>Commit or cancel a rename</td><td>Renaming a cue</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Close a menu — the row menu, Cuerunner ▾ or More ▾ — or cancel a rename; a bare press is the transport's</td><td>Cue list and toolbar</td></tr>

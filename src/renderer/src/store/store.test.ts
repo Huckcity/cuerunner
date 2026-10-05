@@ -569,6 +569,65 @@ describe('store — batch edits', () => {
     expect(useStore.getState().selectedId).toBe(ids[1])
   })
 
+  it('leaves the hand on the cue that took a removed cue\'s place, not on nothing', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    const [first, second, third] = useStore.getState().cues.map(cue => cue.id)
+
+    // The middle of the show: with nothing selected, the next GO would fire the first cue.
+    useStore.getState().select(second)
+    useStore.getState().removeCues([second])
+    expect(useStore.getState().selectedId).toBe(third)
+    expect(useStore.getState().selectedIds).toEqual([third])
+    expect(useStore.getState().selectionAnchorId).toBe(third)
+
+    // The end of the show: nothing follows, so the hand goes to what came before.
+    useStore.getState().removeCues([third])
+    expect(useStore.getState().selectedId).toBe(first)
+
+    // And an empty show has nowhere to put it.
+    useStore.getState().removeCues([first])
+    expect(useStore.getState().selectedId).toBeNull()
+    expect(useStore.getState().selectedIds).toEqual([])
+  })
+
+  it('passes over a removed group\'s own cues, and cues folded away, when it places the hand', () => {
+    useStore.getState().addCue('group')
+    const doomed = useStore.getState().cues[0].id
+    useStore.getState().addCue('wait', doomed)
+    useStore.getState().select(null)
+    useStore.getState().addCue('group')
+    const folded = useStore.getState().cues[2].id
+    useStore.getState().addCue('wait', folded)
+    useStore.getState().select(null)
+    useStore.getState().addCue('wait')
+    const last = useStore.getState().cues[4].id
+    useStore.getState().toggleGroup(folded)
+
+    useStore.getState().select(doomed)
+    useStore.getState().removeCues([doomed])
+
+    // Not the removed group's child, which went with it; the folded group's header is on
+    // screen and is next.
+    expect(useStore.getState().selectedId).toBe(folded)
+
+    useStore.getState().removeCues([folded])
+    expect(useStore.getState().selectedId).toBe(last)
+  })
+
+  it('leaves the selection alone when what was removed was not what was held', () => {
+    useStore.getState().addCue('wait')
+    useStore.getState().addCue('wait')
+    const [first, second] = useStore.getState().cues.map(cue => cue.id)
+    useStore.getState().select(first)
+
+    useStore.getState().removeCues([second])
+
+    expect(useStore.getState().selectedId).toBe(first)
+    expect(useStore.getState().selectedIds).toEqual([first])
+  })
+
   it('duplicates a set as one edit, and selects the copies', () => {
     useStore.getState().addCue('wait')
     useStore.getState().addCue('wait')
