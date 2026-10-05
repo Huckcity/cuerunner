@@ -204,6 +204,13 @@ jobs:
           $signArgs = @(ConvertFrom-Json '${{ steps.signing.outputs.args }}' | Where-Object { $_ })
           & npm run dist:win -- @signArgs
 
+      # `midi` is an optional dependency, so a runner that cannot build it gives `npm ci` an
+      # exit 0 and the packager an app with no MIDI in it: v0.16.0's Windows installer
+      # shipped that way, and said "MIDI unavailable" on its first screen. The artifact is
+      # what is checked — scripts/verify-packaged-midi.mjs carries the rest.
+      - name: The packaged app carries the MIDI module
+        run: node scripts/verify-packaged-midi.mjs dist
+
       # `secrets` is not available to a step's `if:` — GitHub rejects the whole workflow
       # when one is asked for there, and the run fails with no jobs and nothing to read.
       # The step runs, and decides for itself whether there is a signature to check: this is
@@ -312,6 +319,13 @@ jobs:
         run: |
           . scripts/signing-env.sh
           npm run dist:mac
+
+      # `midi` is an optional dependency, so a runner that cannot build it gives `npm ci` an
+      # exit 0 and the packager an app with no MIDI in it: v0.16.0's Windows installer
+      # shipped that way, and said "MIDI unavailable" on its first screen. The artifact is
+      # what is checked — scripts/verify-packaged-midi.mjs carries the rest.
+      - name: The packaged app carries the MIDI module
+        run: node scripts/verify-packaged-midi.mjs dist
 
       # Same reason as the Windows step: the check lives in the shell, not in an `if:`.
       - name: Verify the floor, the signature and the notarisation ticket
@@ -430,6 +444,13 @@ jobs:
 
       - name: Build and package
         run: npm run dist:linux
+
+      # `midi` is an optional dependency, so a runner that cannot build it gives `npm ci` an
+      # exit 0 and the packager an app with no MIDI in it: v0.16.0's Windows installer
+      # shipped that way, and said "MIDI unavailable" on its first screen. The artifact is
+      # what is checked — scripts/verify-packaged-midi.mjs carries the rest.
+      - name: The packaged app carries the MIDI module
+        run: node scripts/verify-packaged-midi.mjs dist
 
       # The AppImage is the artifact this pipeline cannot sign: there is no Linux signing step
       # above, and this story adds none — so there is no secret to read a state from, and the

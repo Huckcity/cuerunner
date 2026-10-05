@@ -784,9 +784,13 @@ These are the ones that matter when building or packaging the app.
 Playback and platform limits:
 
 - MIDI is an optional native module: on Linux it needs the ALSA development headers
-  (`libasound2-dev`) installed before dependencies, and a build without it says so rather
-  than swallowing a cue — a **MIDI unavailable** badge in the status bar opens Settings →
-  MIDI, and a MIDI cue that fires reports the failure in the run log
+  (`libasound2-dev`) installed before dependencies, and on every platform node-gyp needs
+  Python 3 and a C++ toolchain to build it (on Windows a real Python — the Microsoft Store
+  alias is not one). `npm ci` exits 0 without a word when that build fails, so a build
+  without it says so itself rather than swallowing a cue — a **MIDI unavailable** badge in
+  the status bar opens Settings → MIDI, which gives the reason, and a MIDI cue that fires
+  reports the failure in the run log. A packaging job is held to it:
+  `scripts/verify-packaged-midi.mjs` fails `build.yml` when the packaged app has no addon
 - Network cues are sent by the main process as an ordinary HTTP client, so a target server
   needs no CORS headers; a cue still holds until the response or its timeout (5 s by default)
 - Audio cues are written twice: relative to the show folder when the file sits inside it, and
