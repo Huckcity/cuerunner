@@ -6,7 +6,9 @@
 // client cannot drift apart.
 //
 // `nowMs()` is the show clock: the engine's sample clock plus an epoch this client
-// keeps, projected from the last reading so a scheduler can use it synchronously.
+// keeps, projected from the last reading so a scheduler can use it synchronously. Until
+// an engine has answered it runs on the window's own clock, so a show is never waiting on
+// an engine to tell it the time.
 // Commands carry absolute times on that clock, so a command issued early still starts
 // precisely when it was meant to.
 //
@@ -110,6 +112,9 @@ const bridge = (): AudioEngineBridge => {
 export class AudioEngineClient {
   // Engine-clock anchor: a reading, plus the local clock at the moment it arrived.
   private anchor: { engineMs: number; perfMs: number } | null = null
+  // The local-clock moment the show clock began counting without an engine, or null when
+  // it was never asked for the time before a reading arrived.
+  private unanchoredSincePerfMs: number | null = null
   // Engine time -> show time, one entry per session. The show clock is what the
   // renderer schedules on, so it is the one that has to stay continuous; keeping an
   // entry per session is also what lets a line from the engine that was replaced still
@@ -133,9 +138,22 @@ export class AudioEngineClient {
   private progressCache = new Map<string, AudioProgress | null>()
   private probeCache = new Map<string, AudioProbe>()
 
-  /** Show-clock now, ms. Monotonic; before the first reading, 0 (start immediately). */
+  /**
+   * Show-clock now, ms. Monotonic.
+   *
+   * Before any engine has answered, the clock runs on this window's own: it starts at 0
+   * the first time it is asked and counts from there. It used to stand at 0 until a
+   * reading arrived, which was a stopped clock for as long as the engine was not there —
+   * an engine that never started held every wait, every pre-wait and every advance in the
+   * show for ever, though none of them needs a device to count. The first reading takes
+   * over from wherever this had got to (`adoptClock`), so nothing scheduled meanwhile moves.
+   */
   nowMs(): number {
-    if (!this.anchor) return 0
+    if (!this.anchor) {
+      const perfMs = performance.now()
+      if (this.unanchoredSincePerfMs === null) this.unanchoredSincePerfMs = perfMs
+      return perfMs - this.unanchoredSincePerfMs
+    }
     return this.anchor.engineMs + (performance.now() - this.anchor.perfMs) + this.currentEpoch()
   }
 
@@ -204,7 +222,12 @@ export class AudioEngineClient {
     const engineMs = reading.clockMs
     if (this.anchor === null) {
       this.anchor = { engineMs, perfMs }
-      this.recordSession(reading.sessionId, 0)
+      // The first engine to answer takes the show clock over where the window's own had
+      // got to, the same way a replacement engine takes over from the one before it: the
+      // epoch absorbs the difference. A clock nobody had read yet has nowhere to carry on
+      // from, and show time is simply the engine's.
+      const ranForMs = this.unanchoredSincePerfMs === null ? null : perfMs - this.unanchoredSincePerfMs
+      this.recordSession(reading.sessionId, ranForMs === null ? 0 : ranForMs - engineMs)
       return
     }
 
