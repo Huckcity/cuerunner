@@ -428,6 +428,16 @@ test('a build without the MIDI module says so, on the badge and on the cue', asy
     await expect(badge).toHaveText('MIDI unavailable')
     await expect(badge).toHaveAttribute('title', /not installed/)
 
+    // The badge leads to Settings → MIDI, and the page it leads to says the same thing:
+    // an empty port list there used to read as a machine with nothing plugged in.
+    await badge.click()
+    const explained = page.locator('#settings-midi-unavailable')
+    await expect(explained).toContainText('MIDI is unavailable')
+    await expect(explained).toContainText('not installed')
+    await expect(page.locator('.settings-dialog')).not.toContainText('No MIDI inputs on this machine')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.settings-dialog')).toHaveCount(0)
+
     await addCueFromMoreMenu(page, 'MIDI')
     await page.getByRole('button', { name: /GO/ }).click()
 

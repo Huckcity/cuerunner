@@ -143,6 +143,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   const [reconnecting, setReconnecting] = useState(false)
   const [midiPorts, setMidiPorts] = useState<string[]>([])
   const [midiInputPorts, setMidiInputPorts] = useState<string[]>([])
+  // Why this build has no MIDI, when it has none: null while it has, or has not answered.
+  const [midiFault, setMidiFault] = useState<string | null>(null)
   // The engine reports its own device, sample rate, buffer and latency; the dialogs
   // show what it says rather than what the page guessed. A configure this panel sends
   // is a fresh reading, taken through `accept` rather than waited for.
@@ -156,6 +158,12 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
       })
     window.cuerunner.midi.listPorts().then(setMidiPorts)
     window.cuerunner.midi.listInputPorts().then(setMidiInputPorts)
+    // The transport's badge sends the operator here when MIDI is missing, and both port
+    // lists are empty for that reason as well as for an honest lack of ports — so the
+    // page asks the same question the badge did, and says the answer where it is read.
+    window.cuerunner.midi.status()
+      .then(status => setMidiFault(status.available ? null : status.error ?? 'MIDI is unavailable'))
+      .catch(() => setMidiFault('MIDI could not be checked'))
     // A device list belongs to the audio system that produced it, and the show can
     // change systems while this dialog is open: the devices of the old one are no
     // longer a list of anything.
@@ -577,6 +585,11 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
 
           {tab === 'midi' && (
             <>
+              {midiFault !== null && (
+                <p className="settings-warning" id="settings-midi-unavailable" role="status">
+                  MIDI is unavailable: {midiFault}. MIDI cues will not send, and nothing can be listened to.
+                </p>
+              )}
               <div className="field-row">
                 <label htmlFor="settings-midi-out">Send on</label>
                 <select
@@ -600,7 +613,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 onEnabled={enabled => updateMidiInSettings({ enabled })}
                 service={midiService}
               >
-                {midiInputPorts.length === 0 ? (
+                {midiFault !== null ? null : midiInputPorts.length === 0 ? (
                   <p className="inspector-hint" data-scope="panel">No MIDI inputs on this machine.</p>
                 ) : (
                   <>
