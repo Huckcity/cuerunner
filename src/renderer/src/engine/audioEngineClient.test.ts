@@ -170,6 +170,31 @@ describe('AudioEngineClient', () => {
   // be held hostage by an engine that has stopped answering — a stopped device, a wedged
   // service — or the whole desk freezes with it.
 
+  // What the preload rejects with is the refusal as a plain value: the context bridge
+  // copies an Error by its message alone, so an Error built on its far side arrived with
+  // no code — and every caller that branches on one took the wrong branch.
+  it('hands a caller the engine’s refusal as an AudioEngineError that still has its code', async () => {
+    fakeBridge({
+      probe: vi.fn(() => Promise.reject({ ok: false, code: 'decode', message: 'unrecognised media format' }))
+    })
+    const client = new AudioEngineClient()
+
+    const caught = await client.probe('/shows/notes.wav').catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).name).toBe('AudioEngineError')
+    expect((caught as Error).message).toBe('unrecognised media format')
+    expect((caught as Error & { code: string }).code).toBe('decode')
+  })
+
+  it('leaves a fault that is not a refusal as the error it was', async () => {
+    const fault = new Error('the bridge fell over')
+    fakeBridge({ probe: vi.fn(() => Promise.reject(fault)) })
+    const client = new AudioEngineClient()
+
+    await expect(client.probe('/shows/a.wav')).rejects.toBe(fault)
+  })
+
   it('keeps ticking even when the engine never answers the clock', async () => {
     fakeBridge({ clock: vi.fn(() => new Promise<AudioClockReading>(() => {})) } as unknown as Partial<AudioEngineBridge>)
     const client = new AudioEngineClient()

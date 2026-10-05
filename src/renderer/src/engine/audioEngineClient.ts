@@ -43,6 +43,7 @@ import type {
   AudioWaveform,
   DeviceOptions
 } from '../../../shared/audio'
+import { audioEngineError } from '../../../shared/audioResult'
 
 export type {
   AudioCancelResult,
@@ -115,12 +116,34 @@ function sessionWarning(change: AudioEngineSessionChange): string {
   return `audio engine restarted (session ${change.sessionId}); the show clock carried on`
 }
 
-const bridge = (): AudioEngineBridge => {
-  // The engine lives on the existing `audio` namespace, beside the file dialog.
-  const engine = window.cuerunner.audio
-  if (!engine) throw new Error('The audio engine bridge is not available.')
-  return engine
-}
+/**
+ * The engine's verbs, with a refusal arriving as the exception it is.
+ *
+ * The preload rejects with the refusal as a plain value, because that is the only form in
+ * which its `code` survives the context bridge; this is the one place the window reaches
+ * the engine through, so it is the one place that value becomes an `AudioEngineError`
+ * again. Read through to `window.cuerunner.audio` on every call rather than wrapped once:
+ * the object the bridge exposes is frozen, which a proxy over it may not contradict, and a
+ * test replaces it between cases.
+ */
+const engineBridge = new Proxy({} as AudioEngineBridge, {
+  get(_target, verb) {
+    // The engine lives on the existing `audio` namespace, beside the file dialog.
+    const engine = window.cuerunner.audio
+    if (!engine) throw new Error('The audio engine bridge is not available.')
+    const member: unknown = Reflect.get(engine, verb)
+    if (typeof member !== 'function') return member
+    return (...args: unknown[]): unknown => {
+      const answer: unknown = Reflect.apply(member, engine, args)
+      // Only a verb answers with a promise: a subscription hands back its unsubscribe.
+      return answer instanceof Promise
+        ? answer.catch((thrown: unknown) => { throw audioEngineError(thrown) })
+        : answer
+    }
+  }
+})
+
+const bridge = (): AudioEngineBridge => engineBridge
 
 export class AudioEngineClient {
   // Engine-clock anchor: a reading, plus the local clock at the moment it arrived.

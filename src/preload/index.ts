@@ -106,9 +106,12 @@ import type { RedundancySettings } from '../shared/redundancy'
  *
  * The main process answers with the engine's own `{ ok, value } | { ok, code, message }`
  * rather than by rejecting, because Electron logs every rejected `ipcMain.handle` to
- * stderr with a stack and this path refuses by design. Turning a refusal back into an
- * exception in this process — where a rejection is just a rejection, and nothing logs it —
- * keeps every caller reading exactly what it read before, `AudioEngineError` and all.
+ * stderr with a stack and this path refuses by design. Turning a refusal back into a
+ * rejection in this process — where a rejection is just a rejection, and nothing logs it —
+ * keeps every caller catching what it caught before. What is rejected with is the refusal
+ * itself, not an `Error` made from it: the context bridge carries an `Error`'s message and
+ * drops its `code`, so the window's engine client is where it becomes an `AudioEngineError`
+ * (`audioEngineError`, src/shared/audioResult.ts).
  */
 const invokeAudio = async <T>(channel: string, payload?: unknown): Promise<T> =>
   unwrapAudioResult((await ipcRenderer.invoke(channel, payload)) as AudioResult<T>)

@@ -13,7 +13,9 @@
  * in it.
  *
  * So: handlers answer with this envelope, and the preload unwraps it in the renderer
- * process, where throwing is just a rejected promise again — one nobody logs.
+ * process, where throwing is just a rejected promise again — one nobody logs. The refusal
+ * crosses the context bridge as the value it is, and the window's engine client turns it
+ * into the exception (`audioEngineError`): see `unwrapAudioResult` for why not here.
  */
 
 export type AudioRefusal = {
@@ -36,15 +38,42 @@ export function refusalFrom(error: unknown): AudioRefusal {
 }
 
 /**
- * A refusal, back as the exception every caller already expects.
+ * A refusal, handed on as itself.
+ *
+ * This runs in the preload, and what it throws has to cross the context bridge to reach
+ * the window. The bridge copies a thrown `Error` by its message alone — a `code` or a
+ * `name` set on it here arrives as `undefined` and `Error` — so an exception built on this
+ * side reached every caller without the one field they branch on: a file the engine could
+ * not read was indistinguishable from an engine that was not there, and the pass that
+ * measures a show's files asked about it again on every write to the store. A plain value
+ * is copied whole, so the refusal is thrown as the value it already is, and
+ * `audioEngineError` gives it its class on the far side.
+ */
+export function unwrapAudioResult<T>(result: AudioResult<T>): T {
+  if (result.ok) return result.value
+  throw result
+}
+
+/** Whether something caught is the engine's refusal, as `unwrapAudioResult` hands it on. */
+export function isAudioRefusal(thrown: unknown): thrown is AudioRefusal {
+  if (typeof thrown !== 'object' || thrown === null) return false
+  const candidate = thrown as Partial<AudioRefusal>
+  return candidate.ok === false && typeof candidate.code === 'string' && typeof candidate.message === 'string'
+}
+
+/**
+ * A refusal, back as the exception every caller already expects — built in the window,
+ * where the caller is, so its `code` and its name are still on it when it is caught.
+ * Anything that is not a refusal is handed back untouched: a fault is still the fault it
+ * was.
  *
  * The name is deliberate: callers and logs read `AudioEngineError` today, and this is the
  * same thing arriving by a different road.
  */
-export function unwrapAudioResult<T>(result: AudioResult<T>): T {
-  if (result.ok) return result.value
-  const error = new Error(result.message) as Error & { code: string }
+export function audioEngineError(thrown: unknown): unknown {
+  if (!isAudioRefusal(thrown)) return thrown
+  const error = new Error(thrown.message) as Error & { code: string }
   error.name = 'AudioEngineError'
-  error.code = result.code
-  throw error
+  error.code = thrown.code
+  return error
 }
