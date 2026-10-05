@@ -1,7 +1,7 @@
 // The client is the seam between the renderer and the engine: it projects the sample
 // clock, keeps the last position of what is playing, and hands events to the runner.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { AudioEngineClient, TICK_MS, type AudioEngineSessionChange } from './audioEngineClient'
+import { AudioEngineClient, IDLE_CLOCK_REFRESH_MS, TICK_MS, type AudioEngineSessionChange } from './audioEngineClient'
 import { SampleScheduler } from './scheduler'
 import type {
   AudioClockReading,
@@ -234,6 +234,41 @@ describe('AudioEngineClient', () => {
     nowSpy.mockRestore()
   })
 
+  it('asks the engine for the time once a second while nothing is playing, and every beat while something is', async () => {
+    let perf = 0
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => perf)
+    const { bridge } = fakeBridge({ clock: vi.fn(async () => reading(5000 + perf)) } as unknown as Partial<AudioEngineBridge>)
+    const client = new AudioEngineClient()
+    const beats = vi.fn()
+    const off = client.onTick(beats)
+    await vi.advanceTimersByTimeAsync(0)
+    const asked = (): number => vi.mocked(bridge.clock).mock.calls.length
+
+    // A second of a show standing by: forty beats, every one of which still runs the
+    // show, and one question to the engine.
+    const idleFrom = asked()
+    const beatsFrom = beats.mock.calls.length
+    for (let i = 0; i < 40; i++) {
+      perf += TICK_MS
+      await vi.advanceTimersByTimeAsync(TICK_MS)
+    }
+    expect(beats.mock.calls.length - beatsFrom).toBe(40)
+    expect(asked() - idleFrom).toBeLessThanOrEqual(Math.ceil((40 * TICK_MS) / IDLE_CLOCK_REFRESH_MS))
+    expect(asked() - idleFrom).toBeGreaterThanOrEqual(1)
+
+    // A voice is playing: the clock is read on every beat again.
+    await client.start('a1', client.nowMs(), START_OPTIONS)
+    const playingFrom = asked()
+    for (let i = 0; i < 10; i++) {
+      perf += TICK_MS
+      await vi.advanceTimersByTimeAsync(TICK_MS)
+    }
+    expect(asked() - playingFrom).toBe(10)
+
+    off()
+    nowSpy.mockRestore()
+  })
+
   it('does not let a stalled engine clock drag the show’s clock backwards', async () => {
     let perf = 1000
     const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => perf)
@@ -288,21 +323,23 @@ describe('AudioEngineClient', () => {
     expect(client.nowMs()).toBe(5_405_100)
 
     // A second engine, with the epoch already nonzero: continuity must hold again, and
-    // the arithmetic must accumulate rather than reset to the raw engine clock.
-    perf = 5_400_600
+    // the arithmetic must accumulate rather than reset to the raw engine clock. Nothing is
+    // playing, so the clock is asked for once a second rather than every beat — which is
+    // how soon a show that is standing by learns its engine was replaced.
+    perf = 5_401_100
     vi.mocked(window.cuerunner.audio.clock).mockResolvedValue(reading(15, 'session-c'))
     await vi.advanceTimersByTimeAsync(TICK_MS)
 
-    expect(client.nowMs()).toBe(5_405_600)
+    expect(client.nowMs()).toBe(5_406_100)
     expect(changes).toHaveLength(2)
     expect(changes[1]).toEqual({
-      previousSessionId: 'session-b', sessionId: 'session-c', showMs: 5_405_600
+      previousSessionId: 'session-b', sessionId: 'session-c', showMs: 5_406_100
     })
     expect(client.sessionWarnings()).toHaveLength(2)
 
-    const started = await client.start('a2', 5_406_000, START_OPTIONS)
+    const started = await client.start('a2', 5_406_500, START_OPTIONS)
     expect(window.cuerunner.audio.start).toHaveBeenCalledWith('a2', 415, START_OPTIONS)
-    expect(started.startAtMs).toBe(5_406_000)
+    expect(started.startAtMs).toBe(5_406_500)
 
     off()
     nowSpy.mockRestore()

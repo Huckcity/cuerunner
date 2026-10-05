@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import type { DevampCue } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
+import { targetLabel } from './targetLabel'
 
 interface Props { cue: DevampCue }
 
@@ -25,10 +26,7 @@ export function DevampInspector({ cue }: Props) {
         <select value={cue.targetCueId} onChange={e => update(cue.id, { targetCueId: e.target.value })}>
           <option value="">Choose a cue…</option>
           {missing && <option value={cue.targetCueId}>— not in this show —</option>}
-          {targets.map(c => {
-            const displayName = c.name.length > 20 ? c.name.slice(0, 17) + '...' : c.name
-            return <option key={c.id} value={c.id}>{c.number} {displayName}</option>
-          })}
+          {targets.map(c => <option key={c.id} value={c.id}>{targetLabel(c)}</option>)}
         </select>
       </div>
       <p className="inspector-hint">

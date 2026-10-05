@@ -39,6 +39,11 @@ function defaultMidiLoader(): MidiModule {
 
 export class MidiEngine {
   private outputs = new Map<string, MidiOutputPort>()
+  // Whether the module has once answered. A module that loaded and listed its ports does
+  // not stop being installed, so a send asks only until the answer is yes: asking every
+  // time built a fresh native client — a new CoreMIDI or ALSA client on some systems — on
+  // the path of every MIDI cue in the show, to learn what the last cue already knew.
+  private moduleAnswered = false
 
   constructor(private readonly load: MidiModuleLoader = defaultMidiLoader) {}
 
@@ -106,6 +111,13 @@ export class MidiEngine {
           return out
         }
       }
+      // No such port: the handle that was made to look for it is not kept, so it is let go
+      // rather than left for the collector — a cue with a wrong port name fires all night.
+      try {
+        out.closePort()
+      } catch {
+        // A handle that opened nothing has nothing to close.
+      }
     } catch {
       // The module itself is unavailable; send() reports that before it gets here.
     }
@@ -115,9 +127,12 @@ export class MidiEngine {
   send(portName: string, messages: MidiMessage[]): MidiSendResult {
     // Without the module there is no port to look for, and saying "no port named X"
     // would send the operator looking at their rack instead of their installation.
-    const availability = this.status()
-    if (!availability.available) {
-      return { ok: false, error: `MIDI is unavailable${availability.error ? `: ${availability.error}` : ''}` }
+    if (!this.moduleAnswered) {
+      const availability = this.status()
+      if (!availability.available) {
+        return { ok: false, error: `MIDI is unavailable${availability.error ? `: ${availability.error}` : ''}` }
+      }
+      this.moduleAnswered = true
     }
 
     const out = this.getOutput(portName)

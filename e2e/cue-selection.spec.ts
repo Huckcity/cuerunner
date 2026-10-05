@@ -44,7 +44,7 @@ test('Escape stops the show and leaves the selection where it is', async () => {
   // Long enough that nothing but the Escape can have ended it.
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
   const duration = page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input')
-  await duration.fill('30000')
+  await duration.fill('30')
   await duration.press('Enter')
   await page.getByRole('button', { name: /GO/ }).click()
   await expect(row).toHaveAttribute('data-running', 'true')

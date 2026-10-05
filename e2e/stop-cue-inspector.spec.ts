@@ -88,3 +88,17 @@ test('a Stop cue whose target was deleted says so, in its tab and when it runs',
   await page.getByRole('button', { name: /GO/ }).click()
   await expect(stop.locator('.failed-pill')).toHaveAttribute('title', /the cue it stops is not in the show/)
 })
+
+test('a Fade cue is aimed at audio cues only, and the list names them in full', async () => {
+  // An audio cue with a name longer than the twenty characters the list used to cut at.
+  await toolbarCueBtn(page, 'Audio').click()
+  await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
+  await page.locator('.field-row').filter({ hasText: 'Name' }).locator('input').fill('Act 2 Scene 3 underscore (long)')
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Fade').click()
+  await page.locator('.inspector-tab', { hasText: 'Fade' }).click()
+
+  const options = page.locator('.field-row').filter({ hasText: 'Target cue' }).locator('select option')
+  // The wait is in the show and not in the list: a fade moves a sound, and it has none.
+  await expect(options).toHaveText(['— select —', '1 Act 2 Scene 3 underscore (long)'])
+})

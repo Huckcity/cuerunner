@@ -21,9 +21,9 @@ test.afterAll(async () => {
   await closeApp(app)
 })
 
-for (const [ms, shown] of [['59960', '1:00.0'], ['119970', '2:00.0'], ['59940', '59.9s']] as const) {
-  test(`a wait of ${ms} ms reads ${shown} in the list`, async () => {
-    await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(ms)
+for (const [seconds, shown] of [['59.96', '1:00.0'], ['119.97', '2:00.0'], ['59.94', '59.9s']] as const) {
+  test(`a wait of ${seconds} s reads ${shown} in the list`, async () => {
+    await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(seconds)
     await expect(page.locator('.cue-row').first().locator('.col-dur')).toHaveText(shown)
   })
 }

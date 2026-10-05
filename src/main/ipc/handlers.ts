@@ -118,6 +118,7 @@ import { isPro } from '../../shared/license'
 import type { ScriptDocument, ShowEvent, ShowSettings } from '../../shared/show'
 import type { LicenseStatus } from '../../shared/license'
 import type { Workspace } from '../../shared/workspace'
+import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
 
 const midi = new MidiEngine(midiModuleLoader())
 const osc = new OscEngine()
@@ -341,7 +342,7 @@ export function registerIpcHandlers(): void {
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Audio File',
       filters: [
-        { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aiff'] },
+        { name: 'Audio', extensions: [...AUDIO_FILE_EXTENSIONS] },
         { name: 'All Files', extensions: ['*'] }
       ],
       properties: ['openFile']

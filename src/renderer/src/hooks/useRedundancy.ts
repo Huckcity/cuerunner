@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { usePro, useStore } from '../store'
+import { usePro, useStore, subscribeToParts } from '../store'
 import { cueEngine } from '../engine/CueEngine'
 import { audioEngine } from '../engine/audioEngineClient'
 import {
@@ -153,7 +153,13 @@ export function useRedundancy(): void {
 
     // A change in the show goes out at once rather than at the next tick: an operator
     // who has just selected the next cue expects the backup to be standing on it.
-    const unsubscribe = useStore.subscribe(publish)
+    // The parts the digest is made of. The timer above keeps the engine's position
+    // current; this is only for what the operator did, and a write to anything else —
+    // a log line, a show event — is not that, and must not hash the cue list to find out.
+    const unsubscribe = subscribeToParts(
+      s => [s.workspaceId, s.workspaceName, s.cues, s.selectedId, s.running],
+      publish
+    )
 
     warm()
     publish()

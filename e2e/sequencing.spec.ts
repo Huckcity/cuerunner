@@ -22,10 +22,11 @@ async function clearAllCues(p: Page) {
   }
 }
 
-// Sets the Wait cue duration (ms) via the Wait inspector tab.
+// Sets the Wait cue duration via the Wait inspector tab: given in ms, typed in the
+// seconds the field is in.
 async function setWaitDuration(p: Page, ms: number) {
   await p.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await p.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(String(ms))
+  await p.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(String(ms / 1000))
 }
 
 // Sets pre-wait (seconds) on the selected cue via the Basics inspector tab.

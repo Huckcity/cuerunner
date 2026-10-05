@@ -67,6 +67,19 @@ export type {
 /** How often the renderer looks at the clock and at what is playing. */
 export const TICK_MS = 25
 
+/**
+ * How often the engine is asked for the time while nothing is sounding.
+ *
+ * Every beat still runs the show — the subscribers are called each tick, on a clock this
+ * client projects from its last reading — so what this spaces out is only the asking: a
+ * round trip to the main process and on to the engine, which at one per beat was forty a
+ * second for the life of the window, most of it spent with a show standing by. The
+ * projection runs on the window's own clock between readings, and that clock and a sound
+ * card's drift apart by fractions of a millisecond a second, well inside the lookahead a
+ * command is sent with. While a voice is playing the clock is read every beat, as before.
+ */
+export const IDLE_CLOCK_REFRESH_MS = 1000
+
 /** File measurements kept for the workspace estimate; a show has far fewer files. */
 const MAX_PROBES = 256
 
@@ -126,6 +139,8 @@ export class AudioEngineClient {
   private sessionWarningsCache: string[] = []
   private ticker: number | null = null
   private clockInFlight = false
+  /** The window-clock moment the engine was last asked for the time. */
+  private clockAskedAtPerfMs = Number.NEGATIVE_INFINITY
   private progressInFlight = new Set<string>()
   private subscribers = new Set<() => void>()
   private eventSubscribers = new Set<(event: AudioEngineEvent) => void>()
@@ -381,9 +396,20 @@ export class AudioEngineClient {
    * never come. The clock and progress reads are refreshes, not gates.
    */
   private tick(): void {
-    this.refreshClock()
+    if (this.clockIsDue()) this.refreshClock()
     this.pollProgress()
     for (const cb of this.subscribers) cb()
+  }
+
+  /**
+   * Whether this beat asks the engine for the time. Every beat until there is a reading
+   * to project from, and every beat while a voice is playing; otherwise once per
+   * `IDLE_CLOCK_REFRESH_MS`, which is also how soon a replaced engine is noticed by a
+   * show that is standing by.
+   */
+  private clockIsDue(): boolean {
+    if (this.anchor === null || this.watched.size > 0) return true
+    return performance.now() - this.clockAskedAtPerfMs >= IDLE_CLOCK_REFRESH_MS
   }
 
   /** Asks the engine for the time; the answer updates the projection when it lands. */
@@ -391,6 +417,7 @@ export class AudioEngineClient {
     // A wedged engine must not accumulate a queue of reads it will never serve.
     if (this.clockInFlight) return
     this.clockInFlight = true
+    this.clockAskedAtPerfMs = performance.now()
     void bridge().clock()
       .then(reading => this.adoptClock(reading, performance.now()))
       .catch(() => {

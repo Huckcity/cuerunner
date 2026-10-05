@@ -76,7 +76,7 @@ test('a timeline group row shows the duration computed from its children', async
   await toolbarCueBtn(page, 'Wait').click()
   await expect(page.locator('.cue-row[data-depth="1"]')).toHaveCount(2)
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await page.locator('.inspector input[type="number"]').fill('3000')
+  await page.locator('.inspector input[type="number"]').fill('3')
   await page.locator('.inspector-tab', { hasText: 'Basics' }).click()
   await page.locator('.field-row', { hasText: 'Timeline offset' }).locator('input').fill('5')
 

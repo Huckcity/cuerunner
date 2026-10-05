@@ -2,13 +2,15 @@
 // open and shut groups — and both are about a cue list. In the scenes view there is no
 // cue list on screen for them to act on.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { act } from 'react'
+import { act, Profiler } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Toolbar } from './Toolbar'
 import { useStore } from '../../store'
 
 let container: HTMLDivElement
 let root: Root
+/** Stable across renders: a new function each time would itself be a reason to redraw. */
+const noop = (): void => {}
 
 function render(view: 'cues' | 'scenes'): void {
   act(() => {
@@ -172,6 +174,45 @@ describe('Toolbar', () => {
 
     act(() => { useStore.getState().undo() })
     expect(useStore.getState().cues.map(cue => cue.type)).toEqual(['audio'])
+  })
+
+  it('leaves a fade un-aimed when the selected cue has no sound to fade', () => {
+    useStore.setState({ cues: [], selectedId: null, selectedIds: [], past: [], future: [] })
+    act(() => { useStore.getState().addCue('wait') })
+    render('cues')
+
+    const fadeButton = [...container.querySelectorAll<HTMLButtonElement>('.toolbar-cue-btn')]
+      .find(button => button.textContent === 'Fade')!
+    act(() => fadeButton.click())
+
+    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Cue', targetCueId: '' })
+  })
+
+  it('is not redrawn for a write to the store that is not its own', () => {
+    // The toolbar read the store whole, so every log line, show event and row lighting up
+    // drew it again — at the rate a busy show writes.
+    let commits = 0
+    useStore.setState({ workspaceName: 'Untitled', workspacePath: null, isDirty: false })
+    act(() => {
+      root.render(
+        <Profiler id="toolbar" onRender={() => { commits++ }}>
+          <Toolbar onOpenSettings={noop} view="cues" onSwitchView={noop} />
+        </Profiler>
+      )
+    })
+    const drawn = commits
+
+    act(() => {
+      for (let i = 0; i < 20; i++) useStore.getState().appendLog([{ level: 'info', message: `line ${i}` }])
+      useStore.getState().setRunning('c1', { cueId: 'c1', state: 'playing', startedAt: 0, progress: 0 })
+      useStore.getState().setNotice('nothing to do with the toolbar')
+    })
+    expect(commits).toBe(drawn)
+
+    // And it still follows what it does show.
+    act(() => { useStore.getState().setWorkspaceName('Twelfth Night') })
+    expect(commits).toBeGreaterThan(drawn)
+    expect(container.querySelector('.workspace-name-text')?.textContent).toContain('Twelfth Night')
   })
 
   it('marks which view the window is showing', () => {

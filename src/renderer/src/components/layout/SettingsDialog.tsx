@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore, usePro } from '../../store'
+import { useShallow } from 'zustand/react/shallow'
 import { useModal } from '../../hooks/useModal'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { applyAudioDeviceSettings, backendHasNoDevice } from '../../engine/audioDeviceSettings'
@@ -113,12 +114,29 @@ function ProHint({ onUnlock, children }: { onUnlock: () => void; children?: Reac
 
 export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
   useModal()
+  // The parts this dialog reads, compared shallowly: read whole, the dialog was redrawn
+  // for every write to the store while it was open, whatever the write was about.
   const {
     audioSettings, midiSettings, showSettings, showServices, audioDeviceError,
     updateAudioSettings, updateMidiSettings, updateOscInSettings, updateMidiInSettings,
     updateRfSettings, updatePresenceSettings, updateCompanionSettings,
     triggerGuard, updateTriggerGuard
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    audioSettings: s.audioSettings,
+    midiSettings: s.midiSettings,
+    showSettings: s.showSettings,
+    showServices: s.showServices,
+    audioDeviceError: s.audioDeviceError,
+    updateAudioSettings: s.updateAudioSettings,
+    updateMidiSettings: s.updateMidiSettings,
+    updateOscInSettings: s.updateOscInSettings,
+    updateMidiInSettings: s.updateMidiInSettings,
+    updateRfSettings: s.updateRfSettings,
+    updatePresenceSettings: s.updatePresenceSettings,
+    updateCompanionSettings: s.updateCompanionSettings,
+    triggerGuard: s.triggerGuard,
+    updateTriggerGuard: s.updateTriggerGuard
+  })))
   const pro = usePro()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const [devices, setDevices] = useState<AudioDeviceInfo[]>([])

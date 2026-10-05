@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useStore, usePro } from '../store'
+import { useStore, usePro, subscribeToParts } from '../store'
 import type { CompanionCue, CompanionState } from '../../../shared/show'
 import type { Cue } from '../../../shared/cue'
 
@@ -109,7 +109,13 @@ export function useCompanionPublisher(): void {
         .catch(() => {})
     }
 
-    const unsubscribe = useStore.subscribe(publish)
+    // What `build` reads, and nothing else: a log line or a show event arriving is not a
+    // change to the tablet's page, and serialising the cue list to find that out is the
+    // work a duplicate check exists to avoid, done on every write to the store.
+    const unsubscribe = subscribeToParts(
+      s => [s.workspaceName, s.cues, s.selectedId, s.running, s.showAlerts],
+      publish
+    )
     void loadScript()
 
     return () => {

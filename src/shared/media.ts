@@ -23,3 +23,34 @@ export interface MissingMedia {
   /** The absolute path the file had when the workspace was last saved. */
   originalPath: string
 }
+
+// What the engine can play, by the extension a file of that kind carries.
+//
+// The engine itself goes by the bytes — it reads a file's first sixteen and never its
+// name — so this is not what decides whether a file plays. It is what the window offers:
+// which dropped files become cues, and which files a file dialog shows. Those were three
+// lists that had drifted apart: a drop took `.opus`, `.wma` and `.aac`, which the engine
+// has no decoder for, and made cues that could never sound; the dialogs listed `.aiff` and
+// not `.aif`, which is what most AIFF files are called. One list, read by all three.
+//
+// WAV in the three headers the engine reads (RIFF, RF64, Wave64), AIFF and AIFF-C, FLAC,
+// MP3, M4A (AAC or ALAC in an MP4 container) and Ogg Vorbis.
+export const AUDIO_FILE_EXTENSIONS = [
+  'wav', 'wave', 'rf64', 'w64',
+  'aif', 'aiff', 'aifc',
+  'flac',
+  'mp3',
+  'm4a',
+  'ogg'
+] as const
+
+/** The formats as an operator is told them: the same words the guide uses. */
+export const AUDIO_FORMATS_SENTENCE = 'WAV, AIFF, FLAC, MP3, M4A and OGG'
+
+/** Whether a file's name says it is a kind of audio the engine plays. */
+export function isPlayableAudioFile(fileName: string): boolean {
+  const dot = fileName.lastIndexOf('.')
+  if (dot < 0) return false
+  const extension = fileName.slice(dot + 1).toLowerCase()
+  return (AUDIO_FILE_EXTENSIONS as readonly string[]).includes(extension)
+}

@@ -34,19 +34,19 @@ test('an inspector field confirms the value that was typed into it', async () =>
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
 
   const duration = page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input')
-  await expect(duration).toHaveValue('2000')
+  await expect(duration).toHaveValue('2')
 
   await duration.click()
-  await duration.fill('4500')
+  await duration.fill('4.5')
   await duration.blur()
 
-  await expect(duration).toHaveValue('4500')
+  await expect(duration).toHaveValue('4.5')
   await expectToFlash(duration)
 
   // Typed back to what it was: the field ends saying what it started saying, so there is
   // nothing to confirm.
   await duration.click()
-  await duration.fill('2000')
+  await duration.fill('2')
   await duration.blur()
   await page.waitForTimeout(300)
   await expect(duration).not.toHaveAttribute('data-saved', 'true')

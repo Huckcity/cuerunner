@@ -6,8 +6,8 @@
  * list the cue was no longer in. The first-show guide walks straight into it — open the
  * demo, press GO, then File → New.
  *
- * The cue is made a vamp first, so it has no end of its own to reach: what silences the
- * engine here is the show being replaced, and nothing else can.
+ * The demo's walk-in loops until it is faded out, so it has no end of its own to reach:
+ * what silences the engine here is the show being replaced, and nothing else can.
  */
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { closeApp, launchApp } from './helpers'
@@ -33,23 +33,13 @@ test('File → New silences the show that was playing', async () => {
   await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
   const walkIn = page.locator('.cue-row', { hasText: 'Walk-in Music' })
   await walkIn.click()
-
-  // Loop it for ever: a four-second file would otherwise end by itself.
-  await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
-  await page.locator('.vamp-toggle').click()
-  await expect(page.locator('.vamp-toggle')).toHaveAttribute('data-active', 'true')
-
-  await walkIn.click()
   await page.getByRole('button', { name: /GO/ }).click()
   await expect(page.locator('.running-badge')).toHaveText('1 running')
   await expect
     .poll(activeVoices, { timeout: 5000, message: 'the engine should have a voice playing' })
     .toBeGreaterThan(0)
 
-  // The vamp was an edit, so New asks about it; the answer is Don't Save.
-  await app.evaluate(({ dialog }) => {
-    dialog.showMessageBox = (async () => ({ response: 1, checkboxChecked: false })) as typeof dialog.showMessageBox
-  })
+  // The demo opens clean and nothing has edited it, so New does not ask.
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button[data-action="new"]').click()
 

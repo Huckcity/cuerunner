@@ -25,7 +25,7 @@ async function clearAllCues(p: Page) {
 
 async function setWaitDuration(p: Page, ms: number) {
   await p.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await p.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(String(ms))
+  await p.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(String(ms / 1000))
 }
 
 async function setTimelineOffset(p: Page, ms: number) {

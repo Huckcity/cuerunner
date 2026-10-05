@@ -151,6 +151,54 @@ describe('useMediaLengths', () => {
     expect(useStore.getState().cues[0].duration).toBe(1200)
   })
 
+  /** A cue list that counts how often it is walked for files still to measure. */
+  function counted(cues: AudioCue[]): { cues: AudioCue[]; walks: () => number } {
+    let walks = 0
+    const watched = new Proxy(cues, {
+      get(target, key, receiver) {
+        if (key === 'filter') walks++
+        return Reflect.get(target, key, receiver)
+      }
+    })
+    return { cues: watched, walks: () => walks }
+  }
+
+  it('does not walk the cue list for a write that is not about the show’s files', async () => {
+    vi.mocked(audioEngine.probe).mockImplementation(async filePath => probeOf(filePath, 3000))
+    const show = counted([audio('a1', { duration: 3000 }), audio('a2', { duration: 1500 })])
+    useStore.setState({ cues: show.cues })
+    act(() => { root.render(<Harness />) })
+    await settle()
+    const afterLoad = show.walks()
+    expect(afterLoad).toBeGreaterThan(0)
+
+    // A log line, a row lighting up, an alarm: a busy show writes to the store many times
+    // a second, and none of it is news about a file.
+    act(() => {
+      for (let i = 0; i < 50; i++) useStore.getState().appendLog([{ level: 'info', message: `line ${i}` }])
+      useStore.getState().setRunning('a1', { cueId: 'a1', state: 'playing', startedAt: 0, progress: 0 })
+    })
+    await settle()
+
+    expect(show.walks()).toBe(afterLoad)
+  })
+
+  it('still retries on any write while a pass stopped short of the engine', async () => {
+    // The engine was not there, so the queue was not run dry: whatever happens next is
+    // the retry, as it always was.
+    vi.mocked(audioEngine.probe).mockRejectedValue(refusal('engine'))
+    useStore.setState({ cues: [audio('a1')] })
+    act(() => { root.render(<Harness />) })
+    await settle()
+    expect(vi.mocked(audioEngine.probe)).toHaveBeenCalledTimes(1)
+
+    vi.mocked(audioEngine.probe).mockImplementation(async filePath => probeOf(filePath, 900))
+    act(() => { useStore.getState().appendLog([{ level: 'info', message: 'anything at all' }]) })
+    await settle()
+
+    expect(useStore.getState().cues[0].duration).toBe(900)
+  })
+
   it('writes down a file that states no length, and does not ask it again', async () => {
     vi.mocked(audioEngine.probe).mockImplementation(async filePath => probeOf(filePath, 0))
     useStore.setState({ cues: [audio('a1')] })

@@ -174,7 +174,10 @@ function createWindow(): void {
     backgroundColor: '#181818',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // The renderer is sandboxed: it has no Node, and neither does its preload beyond the
+      // bridge it is there to build. The preload asks for `electron` and nothing else, which
+      // is all a sandboxed one may ask for, so this costs the app nothing it uses.
+      sandbox: true,
       // The cue stack is timers and the audio clock, and both have to keep running when
       // the window is not on screen. Chromium throttles backgrounded windows down to
       // about one timer a minute, which turns a three-second wait into a stalled show

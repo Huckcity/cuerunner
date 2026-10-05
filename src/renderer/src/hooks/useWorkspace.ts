@@ -341,7 +341,14 @@ export async function importShowBundle(): Promise<void> {
 }
 
 export function useWorkspace() {
-  const { workspaceName, workspacePath, isDirty, loadWorkspace, setWorkspaceName } = useStore()
+  // One selector per value, not the whole store: this hook lives in the toolbar, and a
+  // component that reads the store whole is redrawn for every write to it — each log line,
+  // each show event, each row that lights up.
+  const workspaceName = useStore(s => s.workspaceName)
+  const workspacePath = useStore(s => s.workspacePath)
+  const isDirty = useStore(s => s.isDirty)
+  const loadWorkspace = useStore(s => s.loadWorkspace)
+  const setWorkspaceName = useStore(s => s.setWorkspaceName)
 
   // Keep window title in sync
   useEffect(() => {

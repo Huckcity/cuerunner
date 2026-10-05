@@ -39,8 +39,18 @@
   color: var(--accent-amber);
 }
 
-.pro-lock-unlock {
+/* The two ways on from a lock: a key to enter, or the page that says what one costs. */
+.pro-lock-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   margin-top: var(--space-1);
+}
+
+.pro-lock-pricing { font-size: var(--text-base); white-space: nowrap; }
+
+.pro-lock-unlock {
+  flex-shrink: 0;
   padding: 0 var(--space-3);
   height: 26px;
   background: transparent;
@@ -107,7 +117,7 @@
 }
 
 .pro-lock[data-variant='strip'] .pro-lock-blurb { max-width: none; }
-.pro-lock[data-variant='strip'] .pro-lock-unlock { margin-top: 0; margin-left: auto; }
+.pro-lock[data-variant='strip'] .pro-lock-actions { margin-top: 0; margin-left: auto; flex-shrink: 0; }
 
 .pro-lock[data-variant='strip'] .pro-lock-close {
   position: static;

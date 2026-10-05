@@ -65,7 +65,7 @@ test('a cue fires after the engine is killed mid-sequence, and the show says so'
   // puts a voice back into the new engine.
   await page.locator('.cue-row', { hasText: 'Interval' }).click()
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill('6000')
+  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill('6')
 
   const before = await engineSession()
   expect(before).toMatch(/^[0-9a-f]{16}$/)
