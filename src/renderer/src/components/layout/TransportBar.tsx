@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import { useCueEngine, useKeyboard } from '../../hooks/useCueEngine'
 import MidiStatusBadge from '../midi/MidiStatusBadge'
+import { AudioStatusBadge } from './AudioStatusBadge'
 import { AlertChip } from './AlertChip'
 import { PlaybackWarnings } from './PlaybackWarnings'
 import { formatShortcut } from '../../utils/shortcuts'
@@ -44,6 +45,7 @@ export function TransportBar({ onShowStrip }: Props) {
             that is always on screen. */}
         <div className="transport-alerts">
           <AlertChip onShow={onShowStrip} />
+          <AudioStatusBadge />
           <MidiStatusBadge />
           <PlaybackWarnings className="transport-warning" compact />
         </div>

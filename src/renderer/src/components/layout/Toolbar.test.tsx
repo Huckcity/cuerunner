@@ -1,7 +1,7 @@
 // The toolbar carries two trays of presses — the ones that add a cue, and the ones that
 // open and shut groups — and both are about a cue list. In the scenes view there is no
 // cue list on screen for them to act on.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Toolbar } from './Toolbar'
@@ -102,6 +102,76 @@ describe('Toolbar', () => {
 
     expect(useStore.getState().workspaceName).toBe('Hamlet')
     expect(container.querySelector('.workspace-name-text')?.textContent).toBe('Hamlet ●')
+  })
+
+  it('closes an open menu on Escape, and keeps the press from the transport', () => {
+    render('cues')
+    // The transport's binding, standing in: a window listener that would stop the show.
+    const reachedWindow = vi.fn()
+    window.addEventListener('keydown', reachedWindow)
+    const press = (key: string): void => {
+      act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })) })
+    }
+
+    for (const [button, menu] of [['.toolbar-brand', '.file-menu'], ['.toolbar-more-btn', '.toolbar-more-menu']]) {
+      act(() => container.querySelector<HTMLButtonElement>(button)!.click())
+      expect(container.querySelector(menu), `${menu} did not open`).not.toBeNull()
+
+      press('Escape')
+      expect(container.querySelector(menu), `${menu} stayed open`).toBeNull()
+      expect(reachedWindow, `Escape reached the transport behind ${menu}`).not.toHaveBeenCalled()
+    }
+
+    // With nothing open the press is the transport's again.
+    press('Escape')
+    expect(reachedWindow).toHaveBeenCalledTimes(1)
+    window.removeEventListener('keydown', reachedWindow)
+  })
+
+  it('lets every other key through an open menu: GO is pressed without looking', () => {
+    render('cues')
+    const reachedWindow = vi.fn()
+    window.addEventListener('keydown', reachedWindow)
+    act(() => container.querySelector<HTMLButtonElement>('.toolbar-brand')!.click())
+    act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })) })
+
+    expect(reachedWindow).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.file-menu')).not.toBeNull()
+    window.removeEventListener('keydown', reachedWindow)
+  })
+
+  it('does not mark the show unsaved when its name field is opened and left as it was', () => {
+    useStore.setState({ workspaceName: 'Macbeth', workspacePath: '/shows/Macbeth.cuerunner', isDirty: false })
+    render('cues')
+    act(() => {
+      container.querySelector('.workspace-name-text')!
+        .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
+    const field = container.querySelector<HTMLInputElement>('.workspace-name-input')!
+    act(() => { field.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+
+    expect(useStore.getState().isDirty).toBe(false)
+    expect(container.querySelector('.workspace-name-text')?.textContent).toBe('Macbeth')
+  })
+
+  it('adds a fade aimed at the selected cue as one edit, so one undo takes it away', () => {
+    useStore.setState({ cues: [], selectedId: null, selectedIds: [], past: [], future: [] })
+    act(() => { useStore.getState().addCue('audio') })
+    const audio = useStore.getState().cues[0]
+    act(() => { useStore.getState().updateCue(audio.id, { name: 'Walk-in' }) })
+    const edits = useStore.getState().past.length
+    render('cues')
+
+    const fadeButton = [...container.querySelectorAll<HTMLButtonElement>('.toolbar-cue-btn')]
+      .find(button => button.textContent === 'Fade')!
+    act(() => fadeButton.click())
+
+    const fade = useStore.getState().cues[1]
+    expect(fade).toMatchObject({ type: 'fade', name: 'Fade Walk-in', targetCueId: audio.id })
+    expect(useStore.getState().past.length).toBe(edits + 1)
+
+    act(() => { useStore.getState().undo() })
+    expect(useStore.getState().cues.map(cue => cue.type)).toEqual(['audio'])
   })
 
   it('marks which view the window is showing', () => {

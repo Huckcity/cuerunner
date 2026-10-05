@@ -1,0 +1,29 @@
+/* The sound is not where the operator thinks it is: one pill beside the transport's
+   alarms, in the shape the MIDI badge has. No engine at all is a failure and is drawn as
+   one; a refused device is a warning — the show is still playing, out of the device the
+   engine already had. It takes no room on a machine where neither is true. */
+
+.audio-status {
+  flex-shrink: 0;
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-pill);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.audio-status[data-state='engine'] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+.audio-status:hover { background: var(--bg-hover); }
+
+/* Nothing to report. */
+.audio-status[data-state='ok'] { display: none; }

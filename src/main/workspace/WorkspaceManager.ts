@@ -991,6 +991,10 @@ export async function readWorkspaceFile(
     // family the recovery funnel already writes, because this is the place that has the
     // path: the window's banner shows the sentence and nothing else.
     const code = (error as NodeJS.ErrnoException).code
+    // A file that is gone is its own state, and the commonest one: the Recent list goes on
+    // naming a show after it has been moved, renamed or deleted. "Not a show" was the wrong
+    // thing to say about a file that is not there to be anything.
+    if (code === 'ENOENT') throw new Refusal(`that file is no longer there — ${filePath}`)
     throw new Refusal(`that file is not a show — ${filePath} could not be read (${code ?? 'unreadable'})`)
   }
   let parsed: Workspace

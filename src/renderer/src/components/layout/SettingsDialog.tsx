@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore, usePro } from '../../store'
 import { useModal } from '../../hooks/useModal'
 import { audioEngine } from '../../engine/audioEngineClient'
-import { applyAudioDeviceSettings } from '../../engine/audioDeviceSettings'
+import { applyAudioDeviceSettings, backendHasNoDevice } from '../../engine/audioDeviceSettings'
 import type { AudioDeviceInfo } from '../../engine/audioEngineClient'
 import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
 import { PlaybackWarnings } from './PlaybackWarnings'
@@ -38,11 +38,6 @@ interface NumberRowProps {
   max: number
   disabled?: boolean
   onValue: (value: number) => void
-}
-
-/** A backend that has no device to configure, so no device request can ever be honoured. */
-function backendHasNoDevice(backend: string): boolean {
-  return backend === 'silent' || backend === 'offline' || backend === 'none'
 }
 
 /**

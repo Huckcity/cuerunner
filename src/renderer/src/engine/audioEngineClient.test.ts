@@ -182,6 +182,58 @@ describe('AudioEngineClient', () => {
     off()
   })
 
+  it('counts on the window’s own clock while no engine has ever answered', async () => {
+    let perf = 10_000
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => perf)
+    fakeBridge({ clock: vi.fn(() => Promise.reject(new Error('audio engine executable is missing'))) } as unknown as Partial<AudioEngineBridge>)
+    const client = new AudioEngineClient()
+
+    // It starts at zero when it is first asked, and then it moves: a two-second wait
+    // scheduled now is over two seconds from now, engine or no engine.
+    expect(client.nowMs()).toBe(0)
+    perf = 12_000
+    expect(client.nowMs()).toBe(2000)
+
+    const scheduler = new SampleScheduler(() => client.nowMs(), cb => client.onTick(cb))
+    const done = vi.fn()
+    scheduler.schedule({ at: client.nowMs() + 2000, due: done })
+    perf = 13_999
+    await vi.advanceTimersByTimeAsync(TICK_MS)
+    expect(done).not.toHaveBeenCalled()
+    perf = 14_000
+    await vi.advanceTimersByTimeAsync(TICK_MS)
+    expect(done).toHaveBeenCalledTimes(1)
+
+    scheduler.dispose()
+    nowSpy.mockRestore()
+  })
+
+  it('hands the show clock to the first engine that answers, without moving it', async () => {
+    let perf = 1000
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => perf)
+    const { bridge } = fakeBridge({ clock: vi.fn(async () => reading(40)) } as unknown as Partial<AudioEngineBridge>)
+    const client = new AudioEngineClient()
+    const changes: AudioEngineSessionChange[] = []
+    client.onSessionChange(change => changes.push(change))
+
+    // The window has been counting for three seconds when an engine finally answers, 40 ms
+    // into its own life.
+    expect(client.nowMs()).toBe(0)
+    perf = 4000
+    await client.syncClock()
+
+    // Show time carries on from three seconds, not from the engine's forty milliseconds…
+    expect(client.nowMs()).toBe(3000)
+    perf = 4500
+    expect(client.nowMs()).toBe(3500)
+    // …it is the first engine, not a replacement, so nothing is announced…
+    expect(changes).toEqual([])
+    // …and a time the show names reaches the engine on the engine's own clock.
+    await client.stop('a1', 0, 3600)
+    expect(bridge.stop).toHaveBeenCalledWith('a1', 0, 640)
+    nowSpy.mockRestore()
+  })
+
   it('does not let a stalled engine clock drag the show’s clock backwards', async () => {
     let perf = 1000
     const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => perf)
@@ -354,9 +406,11 @@ describe('AudioEngineClient', () => {
     const client = new AudioEngineClient()
     const scheduler = new SampleScheduler(() => client.nowMs(), cb => client.onTick(cb))
 
-    await client.syncClock()  // the show starts at 5000 on the engine's clock
+    await client.syncClock()  // the engine answers, with its clock at 5000
     const due = vi.fn()
-    scheduler.schedule({ at: 5300, due })
+    // On the show's clock, which is what a scheduler is given: it was already counting
+    // when the engine answered, so it is not the engine's number.
+    scheduler.schedule({ at: client.nowMs() + 300, due })
 
     // One beat 400 ms later, with the engine's clock still stuck at 5000.
     perf = 400

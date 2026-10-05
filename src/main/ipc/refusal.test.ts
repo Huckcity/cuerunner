@@ -339,6 +339,27 @@ describe('a refusal is a value', () => {
     expect(result).toEqual({ ok: false, error: `that file is not a show — ${file} holds no cue list` })
   })
 
+  it('says a file that is gone is gone, rather than that it is not a show', async () => {
+    // The Recent list names a show long after it has been moved or deleted, and this is the
+    // answer the operator gets for picking it: the fact, and the path it was last at.
+    const file = join(ends.userData.path, 'moved-away.cuerunner')
+
+    const result = await handler(WORKSPACE_CHANNELS.openPath)('event', file)
+
+    expect(result).toEqual({ ok: false, error: `that file is no longer there — ${file}` })
+  })
+
+  it('still says a path that is there and cannot be read is not a show', async () => {
+    // A directory, here: present, and not readable as a file.
+    const result = await handler(WORKSPACE_CHANNELS.openPath)('event', ends.userData.path) as {
+      ok: boolean
+      error?: string
+    }
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain(`that file is not a show — ${ends.userData.path} could not be read`)
+  })
+
   it('answers a cue list of the wrong kind the same way, and not as a fault', async () => {
     // The other half of the same shape: a key with the right name and the wrong kind is still
     // not a show, and the funnel's first read of it — `workspace.cues.find` — is not a

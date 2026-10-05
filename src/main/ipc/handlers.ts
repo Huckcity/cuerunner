@@ -110,6 +110,7 @@ import { createMachineRedundancy } from '../redundancy/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
 import { drainMainErrors } from '../errors'
 import { loadScriptDocument } from '../script/document'
+import { shellWorkingDirectory } from '../script/shellCwd'
 import { createLicenseManager } from '../license/LicenseManager'
 import { trustedPublicKeys } from '../license/trustedKeys'
 import { defaultShowSettings } from '../../shared/show'
@@ -652,10 +653,8 @@ export function registerIpcHandlers(): void {
     async (_event, payload: ScriptShellPayload): Promise<ScriptShellResult> => {
       const options = payload.options ?? {}
       const timeout = options.timeout ?? 10000
-      // If cwd is a file path (e.g. workspace file), resolve to its directory
-      const cwd = options.cwd
-        ? path.extname(options.cwd) ? path.dirname(options.cwd) : options.cwd
-        : process.cwd()
+      // The workspace file stands in for its folder; a folder is itself, dots and all.
+      const cwd = shellWorkingDirectory(options.cwd)
       const env = { ...process.env, ...options.env }
 
       const { promise, resolve } = Promise.withResolvers<ScriptShellResult>()

@@ -134,4 +134,13 @@ describe('formatDuration', () => {
     expect(formatDuration(90500)).toBe('1:30.5')
     expect(formatDuration(125000)).toBe('2:05.0')
   })
+
+  it('never writes a sixtieth second: the tenth is rounded before the minutes are taken', () => {
+    expect(formatDuration(59_960)).toBe('1:00.0')
+    expect(formatDuration(119_970)).toBe('2:00.0')
+    expect(formatDuration(3_599_990)).toBe('60:00.0')
+    // Just under the rounding boundary still belongs to the minute it is in.
+    expect(formatDuration(59_940)).toBe('59.9s')
+    expect(formatDuration(119_940)).toBe('1:59.9')
+  })
 })

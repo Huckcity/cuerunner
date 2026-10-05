@@ -94,7 +94,10 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
     }
     if ('key' in e && e.key !== 'Enter') return
     const val = inputRef.current?.value.trim()
-    if (val !== undefined) updateCue(cue.id, { name: val })
+    // Only a name that changed is an edit. Opening the field and leaving it — a
+    // double-click that was meant to select — used to write the same name back, which
+    // put the unsaved dot on a show nobody had touched and a no-op in the undo history.
+    if (val !== undefined && val !== cue.name) updateCue(cue.id, { name: val })
     setEditing(false)
   }
 
