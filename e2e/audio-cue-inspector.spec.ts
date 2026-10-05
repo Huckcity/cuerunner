@@ -1,6 +1,8 @@
 // The Timing tab dropped the audio Fade out field (dedicated Fade and Stop cues cover
 // it) and now states what the loop count range means.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { closeApp, launchApp, openLogPanel, toolbarCueBtn } from './helpers'
 
@@ -83,5 +85,41 @@ test('a file picked with Browse names a cue nobody has named, and leaves a typed
   const second = page.locator('.cue-row').nth(1)
   await expect(second.locator('.col-dur')).toHaveText('4.0s')
   await expect(second.locator('.name-text')).toHaveText('Curtain up')
+})
+
+// A path reaches the engine as UTF-8, and on Windows the engine's C runtime read it in the
+// machine's ANSI code page: any character outside ASCII named a file that was not there.
+// That is a show kept under "Théâtre" — and the demo's own audio, which is copied into the
+// profile, for anybody whose Windows user name has an accent in it. This runs on every
+// lane; the Windows one is where it was broken.
+test('a file whose folder and name are not ASCII is read and played like any other', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-Théâtre — séance 音-'))
+  const accented = path.join(dir, 'Entrée café.wav')
+  fs.copyFileSync(path.join(process.cwd(), 'resources/demo/walk-in.wav'), accented)
+  try {
+    await app.evaluate(async ({ dialog }, picked) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [picked] })
+    }, accented)
+
+    await toolbarCueBtn(page, 'Audio').click()
+    await page.locator('.inspector-tab', { hasText: 'Audio' }).click()
+    await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
+
+    const row = page.locator('.cue-row').first()
+    await expect(row.locator('.name-text')).toHaveText('Entrée café')
+    // Measured by the engine: a file it could not open reads `missing` here, and says why
+    // under the file.
+    await expect(row.locator('.col-dur')).toHaveText('4.0s')
+    await expect(page.locator('.audio-file-fault')).toHaveCount(0)
+
+    // And it plays: the run is the engine's, with its own position, not a cue that failed.
+    await row.click()
+    await page.locator('.btn-go').click()
+    await expect(row).toHaveAttribute('data-state', 'playing')
+    await expect(row.locator('.failed-pill')).toHaveCount(0)
+    await page.locator('.btn-stop').click()
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })
 
