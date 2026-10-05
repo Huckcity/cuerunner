@@ -115,6 +115,24 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [fileMenuOpen, moreMenuOpen])
 
+  // Escape closes an open menu, and only that. The press is taken on the document, in the
+  // capture phase, before the transport's own binding can read it: an Escape that reached
+  // the window stopped the show behind a menu the operator was only backing out of — and
+  // left the menu open. The same rule the cue list's context menu follows. Space is not
+  // taken: GO is pressed without looking, and a menu passes it through.
+  useEffect(() => {
+    if (!fileMenuOpen && !moreMenuOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      e.preventDefault()
+      setFileMenuOpen(false)
+      setMoreMenuOpen(false)
+    }
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
+  }, [fileMenuOpen, moreMenuOpen])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey

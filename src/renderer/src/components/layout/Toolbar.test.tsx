@@ -1,7 +1,7 @@
 // The toolbar carries two trays of presses — the ones that add a cue, and the ones that
 // open and shut groups — and both are about a cue list. In the scenes view there is no
 // cue list on screen for them to act on.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Toolbar } from './Toolbar'
@@ -102,6 +102,42 @@ describe('Toolbar', () => {
 
     expect(useStore.getState().workspaceName).toBe('Hamlet')
     expect(container.querySelector('.workspace-name-text')?.textContent).toBe('Hamlet ●')
+  })
+
+  it('closes an open menu on Escape, and keeps the press from the transport', () => {
+    render('cues')
+    // The transport's binding, standing in: a window listener that would stop the show.
+    const reachedWindow = vi.fn()
+    window.addEventListener('keydown', reachedWindow)
+    const press = (key: string): void => {
+      act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })) })
+    }
+
+    for (const [button, menu] of [['.toolbar-brand', '.file-menu'], ['.toolbar-more-btn', '.toolbar-more-menu']]) {
+      act(() => container.querySelector<HTMLButtonElement>(button)!.click())
+      expect(container.querySelector(menu), `${menu} did not open`).not.toBeNull()
+
+      press('Escape')
+      expect(container.querySelector(menu), `${menu} stayed open`).toBeNull()
+      expect(reachedWindow, `Escape reached the transport behind ${menu}`).not.toHaveBeenCalled()
+    }
+
+    // With nothing open the press is the transport's again.
+    press('Escape')
+    expect(reachedWindow).toHaveBeenCalledTimes(1)
+    window.removeEventListener('keydown', reachedWindow)
+  })
+
+  it('lets every other key through an open menu: GO is pressed without looking', () => {
+    render('cues')
+    const reachedWindow = vi.fn()
+    window.addEventListener('keydown', reachedWindow)
+    act(() => container.querySelector<HTMLButtonElement>('.toolbar-brand')!.click())
+    act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true })) })
+
+    expect(reachedWindow).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.file-menu')).not.toBeNull()
+    window.removeEventListener('keydown', reachedWindow)
   })
 
   it('marks which view the window is showing', () => {
