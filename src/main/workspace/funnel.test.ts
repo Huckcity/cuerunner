@@ -109,7 +109,7 @@ const REFUSED: readonly Refused[] = [
   {
     what: 'a top-level section this build does not declare',
     show: show({ futureSection: { cues: [] } }),
-    fact: 'has a section this version of WinsLab does not know (futureSection)'
+    fact: 'has a section this version of Cuerunner does not know (futureSection)'
   },
   {
     what: 'a declared top-level section carrying another kind',
@@ -117,12 +117,12 @@ const REFUSED: readonly Refused[] = [
     // alone is not the fact — the value is, and a `history` that is not a list is a fault
     // where the window iterates it and where a save spreads it.
     show: show({ history: 3 }),
-    fact: 'has history as a number, where this version of WinsLab writes a list of objects'
+    fact: 'has history as a number, where this version of Cuerunner writes a list of objects'
   },
   {
     what: 'a settings section this build does not declare',
     show: show({ showSettings: { ...defaultShowSettings(), plot: {} } }),
-    fact: 'settings have a section this version of WinsLab does not know (plot)'
+    fact: 'settings have a section this version of Cuerunner does not know (plot)'
   },
   {
     what: 'settings missing a section this build writes',
@@ -132,7 +132,7 @@ const REFUSED: readonly Refused[] = [
         midiIn: { enabled: false, portNames: [] }
       }
     }),
-    fact: 'settings have no desk section, which this version of WinsLab writes'
+    fact: 'settings have no desk section, which this version of Cuerunner writes'
   },
   {
     what: 'a version literal other than the one this build writes',
@@ -147,7 +147,7 @@ const REFUSED: readonly Refused[] = [
         cast: { ...defaultCastSettings(), channels: [{ id: 'channel-1', name: 'Ruth', dcaId: 'dca-1' }] }
       }
     }),
-    fact: 'settings have a field this version of WinsLab does not know (cast.channels.0.dcaId)'
+    fact: 'settings have a field this version of Cuerunner does not know (cast.channels.0.dcaId)'
   },
   {
     what: 'a row holding the several channels a build before this one wrote',
@@ -165,7 +165,7 @@ const REFUSED: readonly Refused[] = [
         }
       }
     }),
-    fact: 'settings have a field this version of WinsLab does not know (scenes.list.0.dcas.0.channels)'
+    fact: 'settings have a field this version of Cuerunner does not know (scenes.list.0.dcas.0.channels)'
   },
   {
     what: 'an ensemble holding the performers a build before this one grouped',
@@ -175,7 +175,7 @@ const REFUSED: readonly Refused[] = [
         cast: { ...defaultCastSettings(), ensembles: [{ id: 'e-1', name: 'Chorus', members: ['p-1'] }] }
       }
     }),
-    fact: 'settings have a field this version of WinsLab does not know (cast.ensembles.0.members)'
+    fact: 'settings have a field this version of Cuerunner does not know (cast.ensembles.0.members)'
   },
   {
     what: 'a fader carrying the name a build before this one wrote',
@@ -185,7 +185,7 @@ const REFUSED: readonly Refused[] = [
         cast: { ...defaultCastSettings(), dcas: [{ id: 'dca-1', label: 'DCA 1', deskNumber: null }] }
       }
     }),
-    fact: 'settings have a field this version of WinsLab does not know (cast.dcas.0.label)'
+    fact: 'settings have a field this version of Cuerunner does not know (cast.dcas.0.label)'
   },
   {
     what: 'a scene field the pre-change shape carried',
@@ -198,7 +198,7 @@ const REFUSED: readonly Refused[] = [
         }
       }
     }),
-    fact: 'settings have a field this version of WinsLab does not know (scenes.list.0.live)'
+    fact: 'settings have a field this version of Cuerunner does not know (scenes.list.0.live)'
   },
   {
     what: 'a settings field this build writes that the file has not got',
@@ -218,24 +218,24 @@ const REFUSED: readonly Refused[] = [
         }
       }
     }),
-    fact: 'settings have no desk.profile field, which this version of WinsLab writes'
+    fact: 'settings have no desk.profile field, which this version of Cuerunner writes'
   },
   {
     what: 'a cue missing a field its own type carries',
     show: show({ cues: [{ id: 'w1', number: '1', name: 'Walk-in', type: 'wait' }] }),
-    fact: 'cue 1 Walk-in (wait) has no colorLabel field, which this version of WinsLab writes'
+    fact: 'cue 1 Walk-in (wait) has no colorLabel field, which this version of Cuerunner writes'
   },
   {
     what: 'a cue field carrying a number where this build writes a list of objects',
     show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', messages: 3 })] }),
     fact: 'cue 12 Strings (midi) has messages as a number, ' +
-      'where this version of WinsLab writes a list of objects'
+      'where this version of Cuerunner writes a list of objects'
   },
   {
     what: 'a cue list whose element is not the object this build writes',
     show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', messages: [3] })] }),
     fact: 'cue 12 Strings (midi) has messages.0 as a number, ' +
-      'where this version of WinsLab writes an object'
+      'where this version of Cuerunner writes an object'
   },
   {
     what: 'a cue field carrying a number outside the bounds this build writes',
@@ -244,7 +244,7 @@ const REFUSED: readonly Refused[] = [
     // bounds, so the file is refused here rather than played loudly.
     show: show({ cues: [audioCue('a1', { number: '9', name: 'Walk-in', volume: 5 })] }),
     fact: 'cue 9 Walk-in (audio) has volume as a number, ' +
-      'where this version of WinsLab writes a number from 0 to 1'
+      'where this version of Cuerunner writes a number from 0 to 1'
   },
   {
     what: 'a bounded cue field carrying a null',
@@ -254,7 +254,7 @@ const REFUSED: readonly Refused[] = [
     // still a `NaN` when the walk sees it.
     show: show({ cues: [audioCue('a1', { number: '9', name: 'Walk-in', pan: null })] }),
     fact: 'cue 9 Walk-in (audio) has pan as nothing, ' +
-      'where this version of WinsLab writes a number from -1 to 1'
+      'where this version of Cuerunner writes a number from -1 to 1'
   },
   {
     what: 'a cue field inside a list of objects carrying another kind',
@@ -266,7 +266,7 @@ const REFUSED: readonly Refused[] = [
       })]
     }),
     fact: 'cue 14 Walk-in (audio) has outputs.0.gain as a string, ' +
-      'where this version of WinsLab writes a number'
+      'where this version of Cuerunner writes a number'
   },
   {
     what: 'a cue value whose type allows several kinds and carries none of them',
@@ -274,7 +274,7 @@ const REFUSED: readonly Refused[] = [
       cues: [oscCue('o1', { number: '13', name: 'LX Cue 12', args: [{ type: 'i', value: {} }] })]
     }),
     fact: 'cue 13 LX Cue 12 (osc) has args.0.value as an object, ' +
-      'where this version of WinsLab writes a number, a string or a boolean'
+      'where this version of Cuerunner writes a number, a string or a boolean'
   },
   {
     what: 'a cue list carrying null where every element is an object',
@@ -282,36 +282,36 @@ const REFUSED: readonly Refused[] = [
     // them apart, or a `null` message reaches the engine that sends it.
     show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', messages: [null] })] }),
     fact: 'cue 12 Strings (midi) has messages.0 as nothing, ' +
-      'where this version of WinsLab writes an object'
+      'where this version of Cuerunner writes an object'
   },
   {
     what: 'a cue field carrying null where its own type writes an object',
     show: show({ cues: [networkCue('n1', { number: '15', name: 'Trigger Video', headers: null })] }),
     fact: 'cue 15 Trigger Video (network) has headers as nothing, ' +
-      'where this version of WinsLab writes an object'
+      'where this version of Cuerunner writes an object'
   },
   {
     what: 'a cue field carrying a list where its own type writes an object',
     show: show({ cues: [networkCue('n1', { number: '15', name: 'Trigger Video', headers: [] })] }),
     fact: 'cue 15 Trigger Video (network) has headers as a list, ' +
-      'where this version of WinsLab writes an object'
+      'where this version of Cuerunner writes an object'
   },
   {
     what: 'a cue list of objects carrying null where one element stands',
     show: show({ cues: [audioCue('a1', { number: '14', name: 'Walk-in', outputs: [null] })] }),
     fact: 'cue 14 Walk-in (audio) has outputs.0 as nothing, ' +
-      'where this version of WinsLab writes an object'
+      'where this version of Cuerunner writes an object'
   },
   {
     what: 'a cue leaf carrying null where the types do not allow it',
     show: show({ cues: [midiCue('m1', { number: '12', name: 'Strings', preWait: null })] }),
     fact: 'cue 12 Strings (midi) has preWait as nothing, ' +
-      'where this version of WinsLab writes a number'
+      'where this version of Cuerunner writes a number'
   },
   {
     what: 'a settings field that is not the object this build writes',
     show: show({ showSettings: { ...defaultShowSettings(), desk: 'sq' } }),
-    fact: 'settings have desk as a string, where this version of WinsLab writes an object'
+    fact: 'settings have desk as a string, where this version of Cuerunner writes an object'
   },
   {
     what: 'a settings field that is not the list this build writes',
@@ -321,7 +321,7 @@ const REFUSED: readonly Refused[] = [
         cast: { ...defaultCastSettings(), channels: { '0': { id: 'channel-1', name: 'Ruth' } } }
       }
     }),
-    fact: 'settings have cast.channels as an object, where this version of WinsLab writes a list'
+    fact: 'settings have cast.channels as an object, where this version of Cuerunner writes a list'
   },
   {
     what: 'a list entry that is not the object this build writes',
@@ -331,12 +331,12 @@ const REFUSED: readonly Refused[] = [
         cast: { ...defaultCastSettings(), channels: ['channel-1'] }
       }
     }),
-    fact: 'settings have cast.channels.0 as a string, where this version of WinsLab writes an object'
+    fact: 'settings have cast.channels.0 as a string, where this version of Cuerunner writes an object'
   },
   {
     what: 'a cue that is not a cue at all',
     show: show({ cues: [null] }),
-    fact: 'has a cue that is not the shape this version of WinsLab writes (cues.0)'
+    fact: 'has a cue that is not the shape this version of Cuerunner writes (cues.0)'
   },
   {
     what: 'a settings leaf carrying a value of another kind',
@@ -346,7 +346,7 @@ const REFUSED: readonly Refused[] = [
         desk: { ...defaultShowSettings().desk, midiChannel: '1' }
       }
     }),
-    fact: 'settings have desk.midiChannel as a string, where this version of WinsLab writes a number'
+    fact: 'settings have desk.midiChannel as a string, where this version of Cuerunner writes a number'
   },
   {
     what: 'a list of primitives carrying something that is not a list',
@@ -360,7 +360,7 @@ const REFUSED: readonly Refused[] = [
       }
     }),
     fact: 'settings have cast.ensembles.0.channelIds as a number, ' +
-      'where this version of WinsLab writes a list of strings'
+      'where this version of Cuerunner writes a list of strings'
   },
   {
     what: 'an element of a list of primitives carrying another kind',
@@ -370,7 +370,7 @@ const REFUSED: readonly Refused[] = [
         midiIn: { ...defaultShowSettings().midiIn, portNames: ['in', 3] }
       }
     }),
-    fact: 'settings have midiIn.portNames.1 as a number, where this version of WinsLab writes a string'
+    fact: 'settings have midiIn.portNames.1 as a number, where this version of Cuerunner writes a string'
   },
   {
     what: 'a leaf carrying null where the types do not allow it',
@@ -381,7 +381,7 @@ const REFUSED: readonly Refused[] = [
       }
     }),
     fact: 'settings have presence.goneAfterSeconds as nothing, ' +
-      'where this version of WinsLab writes a number'
+      'where this version of Cuerunner writes a number'
   },
   {
     what: 'a leaf the types allow null for carrying another kind instead',
@@ -396,7 +396,7 @@ const REFUSED: readonly Refused[] = [
         }
       }
     }),
-    fact: 'settings have desk.buttons.go as a string, where this version of WinsLab writes a number'
+    fact: 'settings have desk.buttons.go as a string, where this version of Cuerunner writes a number'
   },
   {
     what: 'a settings field inside a scene’s row, where two element indices meet',
@@ -415,7 +415,7 @@ const REFUSED: readonly Refused[] = [
       }
     }),
     fact: 'settings have scenes.list.0.dcas.0.memberId as a number, ' +
-      'where this version of WinsLab writes a string'
+      'where this version of Cuerunner writes a string'
   }
 ]
 

@@ -198,7 +198,7 @@ describe('RecoveryNotice', () => {
     // record nobody can read.
     ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
       ok: false,
-      error: 'that show has a cue this version of WinsLab does not know (video)'
+      error: 'that show has a cue this version of Cuerunner does not know (video)'
     })
 
     await act(async () => {
@@ -210,7 +210,7 @@ describe('RecoveryNotice', () => {
     })
 
     expect(useStore.getState().log.map(entry => entry.message)).toEqual([
-      'Could not bring the unsaved work back: that show has a cue this version of WinsLab does not know (video)'
+      'Could not bring the unsaved work back: that show has a cue this version of Cuerunner does not know (video)'
     ])
   })
 
@@ -220,7 +220,7 @@ describe('RecoveryNotice', () => {
     // back is not a failure the session had — and the log carries the same sentence.
     ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
       ok: false,
-      error: 'that show has a cue this version of WinsLab does not know (video)'
+      error: 'that show has a cue this version of Cuerunner does not know (video)'
     })
 
     await act(async () => { root.render(<RecoveryNotice />) })
@@ -232,7 +232,7 @@ describe('RecoveryNotice', () => {
     // Nothing to decide about a snapshot that is not offerable: no Recover, no Discard.
     expect(container.querySelector('.app-notice-action')).toBeNull()
     expect(useStore.getState().log.map(entry => entry.message)).toEqual([
-      'Could not bring the unsaved work back: that show has a cue this version of WinsLab does not know (video)'
+      'Could not bring the unsaved work back: that show has a cue this version of Cuerunner does not know (video)'
     ])
 
     // Dismissed like any other bar, and the file stays where it is: this build cannot read

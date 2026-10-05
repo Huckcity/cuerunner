@@ -140,7 +140,7 @@ describe('migrateWorkspace', () => {
     ])
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(
-      'that show has a cue this version of WinsLab does not know (video)' +
+      'that show has a cue this version of Cuerunner does not know (video)' +
       ` — ${SHOW} was probably saved by a newer version`
     )
   })
@@ -163,7 +163,7 @@ describe('the shape check', () => {
 
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(
-      'that show has a section this version of WinsLab does not know (futureSection)' +
+      'that show has a section this version of Cuerunner does not know (futureSection)' +
       ` — ${SHOW} was probably saved by a newer version`
     )
   })
@@ -173,7 +173,7 @@ describe('the shape check', () => {
 
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
-      'that show’s settings have a section this version of WinsLab does not know (plot)' +
+      'that show’s settings have a section this version of Cuerunner does not know (plot)' +
       ` — ${SHOW} was probably saved by a newer version`
     )
   })
@@ -189,7 +189,7 @@ describe('the shape check', () => {
 
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
-      'that show’s settings have no desk section, which this version of WinsLab writes' +
+      'that show’s settings have no desk section, which this version of Cuerunner writes' +
       ` — ${SHOW} was probably saved by an older build`
     )
   })
@@ -204,7 +204,7 @@ describe('the shape check', () => {
 
       expect(() => migrateWorkspace(document, SHOW), String(carried)).toThrow(Refusal)
       expect(() => migrateWorkspace(document, SHOW)).toThrow(
-        'that show’s settings are not the sections this version of WinsLab writes'
+        'that show’s settings are not the sections this version of Cuerunner writes'
       )
       expect(() => migrateWorkspace(document, SHOW)).toThrow(SHOW)
     }
@@ -264,7 +264,7 @@ describe('the shape check', () => {
 
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
-      'that show’s settings have desk.midiChannel as a string, where this version of WinsLab writes a number' +
+      'that show’s settings have desk.midiChannel as a string, where this version of Cuerunner writes a number' +
       ` — ${SHOW} was probably saved by another build`
     )
   })
@@ -283,7 +283,7 @@ describe('the shape check', () => {
 
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
-      'that show’s settings have desk.buttons.go as a string, where this version of WinsLab writes a number' +
+      'that show’s settings have desk.buttons.go as a string, where this version of Cuerunner writes a number' +
       ` — ${SHOW} was probably saved by another build`
     )
   })
@@ -308,7 +308,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
       'that show’s settings have scenes.list.0.dcas.0.memberId as a number, ' +
-      `where this version of WinsLab writes a string — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a string — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -327,7 +327,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
       'that show’s settings have cast.ensembles.0.channelIds as a number, ' +
-      'where this version of WinsLab writes a list of strings' +
+      'where this version of Cuerunner writes a list of strings' +
       ` — ${SHOW} was probably saved by another build`
     )
   })
@@ -344,7 +344,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
       'that show’s settings have midiIn.portNames.1 as a number, ' +
-      `where this version of WinsLab writes a string — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a string — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -380,7 +380,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: withNull }, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: withNull }, SHOW)).toThrow(
       'that show’s settings have presence.goneAfterSeconds as nothing, ' +
-      `where this version of WinsLab writes a number — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a number — ${SHOW} was probably saved by another build`
     )
     const loaded = migrateWorkspace({ ...workspaceWith([]), showSettings: allowed }, SHOW).showSettings
     expect(loaded?.desk.buttons.go).toBe(48)
@@ -401,7 +401,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(
       'that show’s cue 12 Strings (midi) has messages as a number, ' +
-      `where this version of WinsLab writes a list of objects — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a list of objects — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -415,7 +415,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([numbered]), SHOW)).toThrow(
       'that show’s cue 12 Strings (midi) has messages.0 as a number, ' +
-      `where this version of WinsLab writes an object — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes an object — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -429,12 +429,12 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(
       'that show’s cue 12 Strings (midi) has messages.0 as nothing, ' +
-      `where this version of WinsLab writes an object — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes an object — ${SHOW} was probably saved by another build`
     )
     expect(() => migrateWorkspace(workspaceWith([headerless]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([headerless]), SHOW)).toThrow(
       'that show’s cue 15 Trigger Video (network) has headers as nothing, ' +
-      `where this version of WinsLab writes an object — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes an object — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -451,7 +451,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace(workspaceWith([routed]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([routed]), SHOW)).toThrow(
       'that show’s cue 14 Walk-in (audio) has outputs.0.gain as a string, ' +
-      `where this version of WinsLab writes a number — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a number — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -465,7 +465,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace(workspaceWith([argued]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([argued]), SHOW)).toThrow(
       'that show’s cue 13 LX Cue 12 (osc) has args.0.value as an object, ' +
-      `where this version of WinsLab writes a number, a string or a boolean — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a number, a string or a boolean — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -478,7 +478,7 @@ describe('the shape check', () => {
     expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(workspaceWith([nothing]), SHOW)).toThrow(
       'that show’s cue 12 Strings (midi) has preWait as nothing, ' +
-      `where this version of WinsLab writes a number — ${SHOW} was probably saved by another build`
+      `where this version of Cuerunner writes a number — ${SHOW} was probably saved by another build`
     )
   })
 
@@ -543,7 +543,7 @@ describe('the shape check', () => {
     } as unknown as Workspace['showSettings']
 
     expect(() => migrateWorkspace({ ...workspaceWith([]), showSettings: settings }, SHOW)).toThrow(
-      'that show’s settings have no oscIn section, which this version of WinsLab writes' +
+      'that show’s settings have no oscIn section, which this version of Cuerunner writes' +
       ` — ${SHOW} was probably saved by an older build`
     )
   })

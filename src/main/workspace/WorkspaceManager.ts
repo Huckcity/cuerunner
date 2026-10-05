@@ -387,7 +387,7 @@ function refuseForeignValue(
     if (admitsLeaf(shape, value)) return
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
-      ` where this version of WinsLab writes ${LEAF_WORDS[shape]}` +
+      ` where this version of Cuerunner writes ${LEAF_WORDS[shape]}` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -401,7 +401,7 @@ function refuseForeignValue(
     if (typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max) return
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
-      ` where this version of WinsLab writes a number from ${min} to ${max}` +
+      ` where this version of Cuerunner writes a number from ${min} to ${max}` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -414,7 +414,7 @@ function refuseForeignValue(
     if (allowed.some(kind => admitsLeaf(kind, value))) return
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
-      ` where this version of WinsLab writes ${kindWords(allowed)}` +
+      ` where this version of Cuerunner writes ${kindWords(allowed)}` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -450,7 +450,7 @@ function refuseForeignItems(
   if (!Array.isArray(value)) {
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
-      ` where this version of WinsLab writes ${ITEM_WORDS[kind]}` +
+      ` where this version of Cuerunner writes ${ITEM_WORDS[kind]}` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -458,7 +458,7 @@ function refuseForeignItems(
     if (admitsLeaf(kind, value[at])) continue
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${valuePath(path, at)} as ${valueKind(value[at])},` +
-      ` where this version of WinsLab writes ${LEAF_WORDS[kind]}` +
+      ` where this version of Cuerunner writes ${LEAF_WORDS[kind]}` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -494,7 +494,7 @@ function refuseForeignFields(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${valuePath(path, at)} as ${valueKind(value)},` +
-      ` where this version of WinsLab writes an object` +
+      ` where this version of Cuerunner writes an object` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -506,7 +506,7 @@ function refuseForeignFields(
     for (const field in carried) {
       if (Object.hasOwn(fields, field)) continue
       throw new Refusal(
-        `${refusalOpening(voice, cue)} a field this version of WinsLab does not know` +
+        `${refusalOpening(voice, cue)} a field this version of Cuerunner does not know` +
         ` (${fieldPath(path, at, field)})` +
         ` — ${source} was probably saved by a newer version`
       )
@@ -520,7 +520,7 @@ function refuseForeignFields(
       if (isAbsentOnDisk(node)) continue
       throw new Refusal(
         `${refusalOpening(voice, cue)} no ${fieldPath(path, at, field)} field,` +
-        ` which this version of WinsLab writes` +
+        ` which this version of Cuerunner writes` +
         ` — ${source} was probably saved by an older build`
       )
     }
@@ -540,7 +540,7 @@ function refuseForeignList(
   if (!Array.isArray(value)) {
     throw new Refusal(
       `${refusalOpening(voice, cue)} ${path} as ${valueKind(value)},` +
-      ` where this version of WinsLab writes a list` +
+      ` where this version of Cuerunner writes a list` +
       ` — ${source} was probably saved by another build`
     )
   }
@@ -569,7 +569,7 @@ function refuseForeignCues(cues: readonly Cue[], source: string): void {
       // a name off — so the sentence carries the one the list itself gives it, as the
       // element-level refusals in the settings' walk carry theirs.
       throw new Refusal(
-        `that show has a cue that is not the shape this version of WinsLab writes (cues.${at})` +
+        `that show has a cue that is not the shape this version of Cuerunner writes (cues.${at})` +
         ` — ${source} carries ${valueKind(cue)} instead`
       )
     }
@@ -638,7 +638,7 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
   for (const key of Object.keys(workspace)) {
     if (DECLARED_SECTIONS[key] === true) continue
     throw new Refusal(
-      `that show has a section this version of WinsLab does not know (${key})` +
+      `that show has a section this version of Cuerunner does not know (${key})` +
       ` — ${source} was probably saved by a newer version`
     )
   }
@@ -664,7 +664,7 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
       const carried = settings === null ? 'nothing' : JSON.stringify(settings)
       throw new Refusal(
-        `that show’s settings are not the sections this version of WinsLab writes` +
+        `that show’s settings are not the sections this version of Cuerunner writes` +
         ` — ${source} carries ${carried} instead`
       )
     }
@@ -672,14 +672,14 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     for (const key of Object.keys(sections)) {
       if (DECLARED_SHOW_SECTIONS[key] === true) continue
       throw new Refusal(
-        `that show’s settings have a section this version of WinsLab does not know (${key})` +
+        `that show’s settings have a section this version of Cuerunner does not know (${key})` +
         ` — ${source} was probably saved by a newer version`
       )
     }
     for (const section of SHOW_SETTINGS_SECTIONS) {
       if (section in sections) continue
       throw new Refusal(
-        `that show’s settings have no ${section} section, which this version of WinsLab writes` +
+        `that show’s settings have no ${section} section, which this version of Cuerunner writes` +
         ` — ${source} was probably saved by an older build`
       )
     }
@@ -718,7 +718,7 @@ export function migrateWorkspace(workspace: Workspace, source: string, notes?: L
   )
   if (unknown !== undefined) {
     throw new Refusal(
-      `that show has a cue this version of WinsLab does not know (${String(unknown.type)})` +
+      `that show has a cue this version of Cuerunner does not know (${String(unknown.type)})` +
       ` — ${source} was probably saved by a newer version`
     )
   }

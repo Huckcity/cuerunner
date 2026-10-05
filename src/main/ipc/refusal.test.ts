@@ -187,7 +187,7 @@ describe('a refusal is a value', () => {
     // It names the file the bytes came from beside the cue type, because this is the only
     // place that knows which file was refused.
     expect(result.error).toBe(
-      'that show has a cue this version of WinsLab does not know (hologram)' +
+      'that show has a cue this version of Cuerunner does not know (hologram)' +
       ` — ${file} was probably saved by a newer version`
     )
   })
