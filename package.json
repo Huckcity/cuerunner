@@ -1,6 +1,6 @@
 {
   "name": "cuerunner",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "license": "FSL-1.1-MIT",
   "description": "QLab-style show control for Windows",
   "main": "out/main/index.js",

@@ -1,3 +1,25 @@
+# [0.16.0](https://github.com/Huckcity/cuerunner/compare/v0.15.0...v0.16.0) (2026-10-05)
+
+
+### Bug Fixes
+
+* **rf:** retry a rename Windows refuses for a moment, and never let a background write crash ([ebbbb47](https://github.com/Huckcity/cuerunner/commit/ebbbb47d56762819f3df356933278f0d8ad87c08))
+* **rf:** say so when the keychain will not keep an EW-DX password ([9d0dd7f](https://github.com/Huckcity/cuerunner/commit/9d0dd7fc2c4d9dd319e87654ecadc77892d14eac))
+* **rf:** stop alerts stacking for one pack, and follow a receiver by its serial ([9861275](https://github.com/Huckcity/cuerunner/commit/9861275c6d3646d9af50374a5946b3cad8bd95df))
+* **rf:** the battery log retries a rename Windows refuses for a moment ([186e531](https://github.com/Huckcity/cuerunner/commit/186e53117770adfa6a3f8a868e2120f256bb3e52))
+
+
+### Features
+
+* **rf:** a Mic cue that mutes or unmutes a radio mic from the cue list ([e12bc94](https://github.com/Huckcity/cuerunner/commit/e12bc9462746fff03a8ce2f0ef09f071ab133bf9))
+* **rf:** a pre-show check of every pack ([46ab614](https://github.com/Huckcity/cuerunner/commit/46ab6149305ac3cf373fa7c0450288c07719a82b))
+* **rf:** add an EW-DX receiver and its password in Settings ([0ca112a](https://github.com/Huckcity/cuerunner/commit/0ca112a7b01ef55825d6621c0fb1945f965166e7))
+* **rf:** find EW-DX receivers on the network, and keep wireless quiet until asked ([8a93121](https://github.com/Huckcity/cuerunner/commit/8a9312103b916f731b9c19a7d31ff30d4606f406))
+* **rf:** read Sennheiser EW-DX receivers over SSCv2 ([ed0f1c7](https://github.com/Huckcity/cuerunner/commit/ed0f1c70d5e8c0d01d119ebc8cdec729501a9d51))
+* **rf:** remember what each pack used per show, and warn when a charge will not last ([e5d523c](https://github.com/Huckcity/cuerunner/commit/e5d523cfbe4cbdba95667fcadbfb9eefb70a394f))
+* **rf:** say what was playing when a pack had trouble, and report packs with no plot ([f1d01f1](https://github.com/Huckcity/cuerunner/commit/f1d01f14f2bf57a4801604815fcf2d08db49e5c9))
+* **rf:** show what an EW-DX receiver itself complains of ([e168e3f](https://github.com/Huckcity/cuerunner/commit/e168e3fdbd47f3dec065b8097c4fa8ddf11f7fae))
+
 # [0.15.0](https://github.com/Huckcity/cuerunner/compare/v0.14.0...v0.15.0) (2026-09-30)
 
 
