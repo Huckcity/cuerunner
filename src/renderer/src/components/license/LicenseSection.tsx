@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { useStore } from '../../store'
 import './License.css'
 
+/** A fault's own words, without the sentence Electron wraps a rejected call in. */
+function faultReason(fault: unknown): string {
+  const message = fault instanceof Error ? fault.message : String(fault)
+  return message.replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^Error:\s*/, '')
+}
+
 /**
  * The license this machine holds, and the field that changes it.
  *
@@ -18,16 +24,28 @@ export function LicenseSection() {
 
   const activate = async (): Promise<void> => {
     setBusy(true)
-    const result = await window.cuerunner.license.activate(draft)
-    setBusy(false)
-    setLicense(result.status)
-    setError(result.ok ? null : result.error ?? 'That key was refused.')
-    if (result.ok) setDraft('')
+    try {
+      const result = await window.cuerunner.license.activate(draft)
+      setLicense(result.status)
+      setError(result.ok ? null : result.error ?? 'That key was refused.')
+      if (result.ok) setDraft('')
+    } catch (fault) {
+      // A refused key is an answer; this is the check itself failing — the key file could
+      // not be written, the main process threw. Uncaught, it left the button disabled for
+      // good with nothing said, and the only way out was to close the dialog.
+      setError(`The key could not be checked: ${faultReason(fault)}`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const deactivate = async (): Promise<void> => {
-    setLicense(await window.cuerunner.license.deactivate())
-    setError(null)
+    try {
+      setLicense(await window.cuerunner.license.deactivate())
+      setError(null)
+    } catch (fault) {
+      setError(`The key could not be removed: ${faultReason(fault)}`)
+    }
   }
 
   return (
@@ -56,6 +74,7 @@ export function LicenseSection() {
               <button className="license-action" onClick={deactivate}>Deactivate</button>
             </div>
           </div>
+          {error !== null && <p className="license-error" role="alert">{error}</p>}
           <p className="license-note">
             Deactivating puts this machine back to the free app. Your shows are untouched.
           </p>
