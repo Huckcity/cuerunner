@@ -27,6 +27,15 @@ export function deviceOptionsFromSettings(settings: AudioSettings): DeviceOption
 }
 
 /**
+ * A backend that has no device to configure, so no device request can ever be honoured:
+ * the silent and offline ones a test or a dev run uses. Their refusal of every request is
+ * by definition, not a fault anyone can act on, so nothing on screen reports it.
+ */
+export function backendHasNoDevice(backend: string): boolean {
+  return backend === 'silent' || backend === 'offline' || backend === 'none'
+}
+
+/**
  * Electron wraps a rejected `invoke` in its own sentence, and the engine's class name
  * rides along behind it. The operator asked for a device setting and the engine refused
  * it; what they need is the engine's reason, not the plumbing that carried it.

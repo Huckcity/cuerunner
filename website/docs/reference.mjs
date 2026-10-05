@@ -911,6 +911,14 @@ await rig.blackout()</code></div>
               <td>The sound device went away mid-show — unplugged, taken by another program in exclusive mode, or a driver that stopped calling. The engine released the cues it was playing and said so in the alarm strip, the transport bar's alarm chip and the log. Settings → Audio shows the device and the engine's own readout of it, and is where another interface is chosen. When the device is back, <strong>Reconnect device</strong> sends the show's settings again and the engine reopens it: the readout updates at once, and the failure text clears. The alarm the loss raised is not the engine's to take down — it stands in the alarm strip until it is dismissed there.</td>
             </tr>
             <tr>
+              <td>The show plays out of the wrong outputs after it is opened on another machine</td>
+              <td>The show names an output device this machine does not have. The engine refuses it and stays on the device it already had open, and the transport bar says <em>Output device refused</em>. Press it, or open Settings → Audio, and choose this machine's device.</td>
+            </tr>
+            <tr>
+              <td>No audio cue plays, and the transport bar says <em>Audio engine not answering</em></td>
+              <td>The engine process did not start, or has stopped. Waits and the cues that do not make sound still run. Settings → Audio → Reconnect device starts it again, and the Log has the engine's own reason.</td>
+            </tr>
+            <tr>
               <td>A MIDI cue does nothing</td>
               <td>No port: the cue names none and the show has no default output, or the interface is gone. Settings → MIDI, and the Monitor reports an interface that disappeared.</td>
             </tr>
