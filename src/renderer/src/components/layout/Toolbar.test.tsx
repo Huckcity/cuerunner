@@ -91,6 +91,18 @@ describe('Toolbar', () => {
     expect(document.title).toBe('The Scottish Play ● — Cuerunner')
   })
 
+  it('keeps the unsaved dot outside the name, so a name cut short does not take it', () => {
+    // The name is the one part of the toolbar that gives when the window is narrow or the
+    // name is long, and it gives by ellipsis. The dot is not part of what may be cut.
+    useStore.setState({ workspaceName: 'The Complete Works (Abridged)', workspacePath: null, isDirty: true })
+    render('cues')
+    const label = container.querySelector<HTMLElement>('.workspace-name-label')!
+    const dot = container.querySelector<HTMLElement>('.dirty-dot')!
+    expect(label.textContent).toBe('The Complete Works (Abridged)')
+    expect(label.contains(dot)).toBe(false)
+    expect(dot.parentElement).toBe(label.parentElement)
+  })
+
   it('renames the show from the toolbar, and shows the new name there', () => {
     useStore.setState({ workspaceName: 'Macbeth', workspacePath: '/shows/Macbeth.cuerunner', isDirty: false })
     render('cues')
