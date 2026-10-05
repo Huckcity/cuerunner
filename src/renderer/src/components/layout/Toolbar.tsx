@@ -78,11 +78,13 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       openSettings('license')
       return
     }
-    // A fade made with a cue selected is a fade of that cue: it is born named for it and
-    // aimed at it, as part of the add — written afterwards it was a second edit, and the
-    // first undo after adding a fade only un-named it.
+    // A fade made with an audio cue selected is a fade of that cue: it is born named for it
+    // and aimed at it, as part of the add — written afterwards it was a second edit, and
+    // the first undo after adding a fade only un-named it. Only an audio cue: a fade moves
+    // a sound, so one made with a wait or a group selected is left for the operator to aim,
+    // rather than aimed at something its own tab would not offer.
     const target = type === 'fade' && selectedId
-      ? useStore.getState().cues.find(c => c.id === selectedId)
+      ? useStore.getState().cues.find(c => c.id === selectedId && c.type === 'audio')
       : undefined
     addCue(
       type,

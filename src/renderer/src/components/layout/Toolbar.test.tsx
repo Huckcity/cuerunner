@@ -176,6 +176,18 @@ describe('Toolbar', () => {
     expect(useStore.getState().cues.map(cue => cue.type)).toEqual(['audio'])
   })
 
+  it('leaves a fade un-aimed when the selected cue has no sound to fade', () => {
+    useStore.setState({ cues: [], selectedId: null, selectedIds: [], past: [], future: [] })
+    act(() => { useStore.getState().addCue('wait') })
+    render('cues')
+
+    const fadeButton = [...container.querySelectorAll<HTMLButtonElement>('.toolbar-cue-btn')]
+      .find(button => button.textContent === 'Fade')!
+    act(() => fadeButton.click())
+
+    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Cue', targetCueId: '' })
+  })
+
   it('is not redrawn for a write to the store that is not its own', () => {
     // The toolbar read the store whole, so every log line, show event and row lighting up
     // drew it again — at the rate a busy show writes.
