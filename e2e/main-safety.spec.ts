@@ -75,7 +75,7 @@ async function openDemo(page: Page): Promise<void> {
 
 async function setWaitDuration(page: Page, ms: number): Promise<void> {
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(String(ms))
+  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill(String(ms / 1000))
 }
 
 async function setAdvance(page: Page, value: 'none' | 'on-start' | 'on-end'): Promise<void> {

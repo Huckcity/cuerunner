@@ -94,7 +94,7 @@ test('unsaved work is offered back after a session that ended without saving', a
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
   const duration = page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input')
   await duration.click()
-  await duration.fill('4500')
+  await duration.fill('4.5')
   await duration.blur()
   await page.locator('.cue-row').nth(1).click()
 

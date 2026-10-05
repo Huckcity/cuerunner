@@ -101,7 +101,7 @@ test('an OSC cue that is sent reports ok', async () => {
 test('every cue type shows its last run, including a wait cue', async () => {
   await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill('150')
+  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill('0.15')
 
   await page.getByRole('button', { name: /GO/ }).click()
   await selectFirstCue()

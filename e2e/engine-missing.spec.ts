@@ -31,7 +31,7 @@ test.afterAll(async () => {
 test('a wait still counts and completes with no engine to tell it the time', async () => {
   await toolbarCueBtn(page, 'Wait').click()
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill('300')
+  await page.locator('.field-row').filter({ hasText: 'Duration' }).locator('input').fill('0.3')
   const row = page.locator('.cue-row').first()
   await row.click()
 

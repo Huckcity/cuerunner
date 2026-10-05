@@ -155,7 +155,7 @@ test('a save records a typed duration and not the length the app measured', asyn
   // A duration the operator types on a wait cue is an edit, and the file remembers it.
   await page.locator('.cue-row', { hasText: 'Hold' }).click()
   await page.locator('.inspector-tab', { hasText: 'Wait' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Duration (ms)' }).locator('input').fill('2500')
+  await page.locator('.field-row').filter({ hasText: 'Duration (s)' }).locator('input').fill('2.5')
 
   await save(page)
 
