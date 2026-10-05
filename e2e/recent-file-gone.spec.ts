@@ -31,6 +31,8 @@ test('a recent show that has been moved away is reported as no longer there', as
   const notice = page.locator('.app-notice[data-kind="error"]')
   await expect(notice).toContainText('that file is no longer there')
   await expect(notice).toContainText(gone)
+  // Once: the sentence names the file, so the banner does not open with the path as well.
+  expect((await notice.innerText()).split(gone)).toHaveLength(2)
   await expect(notice).not.toContainText('is not a show')
   await expect(notice).not.toContainText('ENOENT')
   // Nothing replaced the session it was asked from.

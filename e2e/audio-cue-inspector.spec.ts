@@ -27,4 +27,11 @@ test('Audio Timing tab has no Fade out field and states the loop range', async (
   const fadeIn = await page.locator('.field-row').filter({ hasText: 'Fade in' }).locator('input').boundingBox()
   const loop = await page.locator('.field-row').filter({ hasText: 'Loop count' }).locator('input').boundingBox()
   expect(loop!.width).toBeGreaterThan(fadeIn!.width - 2)
+
+  // And directly under it: the vamp button used to come between the field and the line
+  // that explains it, so "0 = play once, -1 = forever" read as a note about the button.
+  const hint = await page.locator('.inspector-hint', { hasText: '0 = play once' }).boundingBox()
+  const vamp = await page.locator('.vamp-toggle').boundingBox()
+  expect(hint!.y).toBeGreaterThan(loop!.y)
+  expect(hint!.y).toBeLessThan(vamp!.y)
 })
