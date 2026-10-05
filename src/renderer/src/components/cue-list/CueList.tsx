@@ -6,13 +6,22 @@ import { CueContextMenu } from './CueContextMenu'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import { openDemoWorkspace } from '../../hooks/useWorkspace'
+import { AUDIO_FORMATS_SENTENCE, isPlayableAudioFile } from '../../../../shared/media'
 import './CueList.css'
 
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.wave', '.aiff', '.aif', '.flac', '.ogg', '.m4a', '.aac', '.opus', '.wma'])
+/** How many refused files a notice names before it counts the rest. */
+const NAMED_REFUSALS = 4
 
-function isAudioFile(filename: string): boolean {
-  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase()
-  return AUDIO_EXTENSIONS.has(ext)
+/**
+ * What the notice bar says about dropped files that did not become cues. Said rather than
+ * dropped in silence: a drop that does nothing reads as a drop that failed, and the file
+ * the operator is looking for in the list is the one that is not there.
+ */
+export function refusedDropNotice(names: string[]): string {
+  const named = names.slice(0, NAMED_REFUSALS).join(', ')
+  const rest = names.length - NAMED_REFUSALS
+  const others = rest > 0 ? ` and ${rest} more` : ''
+  return `Not added — Cuerunner plays ${AUDIO_FORMATS_SENTENCE}: ${named}${others}`
 }
 
 function nameFromPath(filePath: string): string {
@@ -222,8 +231,9 @@ export function CueList() {
     dragCounterRef.current = 0
     setIsDragOver(false)
 
-    const audioFiles = Array.from(e.dataTransfer.files)
-      .filter(f => isAudioFile(f.name))
+    const dropped = Array.from(e.dataTransfer.files)
+    const audioFiles = dropped
+      .filter(f => isPlayableAudioFile(f.name))
       .map(f => {
         const filePath = window.cuerunner.getPathForFile(f)
         return { filePath, name: nameFromPath(filePath) }
@@ -232,6 +242,8 @@ export function CueList() {
     if (audioFiles.length > 0) {
       addAudioCuesFromFiles(audioFiles, selectedId ?? undefined)
     }
+    const refused = dropped.filter(f => !isPlayableAudioFile(f.name)).map(f => f.name)
+    if (refused.length > 0) useStore.getState().setNotice(refusedDropNotice(refused))
   }, [addAudioCuesFromFiles, selectedId])
 
   // ── Cue-reorder handlers ──────────────────────────────────────────────────

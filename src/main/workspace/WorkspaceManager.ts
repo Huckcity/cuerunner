@@ -13,7 +13,7 @@ import {
 } from '../../shared/showfileMerge'
 import { readRecovery, recoveryFilePath, writeFileAtomically } from './recovery'
 import { mediaOf, serialiseWorkspace, storedMediaPath, type MediaReferenceLike } from './serialise'
-import type { MediaReference, MissingMedia } from '../../shared/media'
+import { AUDIO_FILE_EXTENSIONS, type MediaReference, type MissingMedia } from '../../shared/media'
 import {
   appendHistory,
   cueLabel,
@@ -1177,7 +1177,7 @@ export function planMediaRelink(
 }
 
 const AUDIO_FILTERS = [
-  { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aiff'] },
+  { name: 'Audio', extensions: [...AUDIO_FILE_EXTENSIONS] },
   { name: 'All Files', extensions: ['*'] }
 ]
 
