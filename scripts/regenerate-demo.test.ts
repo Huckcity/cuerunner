@@ -35,3 +35,33 @@ describe('the demo show harness', () => {
     await expect(runDemo(['--write'])).rejects.toThrow('unknown option "--write" — the only one is --check')
   })
 })
+
+// The demo is the first show anybody runs, pressing GO down the list at their own pace. A
+// cue that acts on another cue has to find it still there when they arrive, however long
+// they took: the demo's fade used to be aimed at a four-second clip that had ended at least
+// twelve seconds earlier in running order, so the cue that shows what a fade is faded
+// silence.
+describe('the demo show, run at a newcomer\'s pace', () => {
+  interface DemoCue {
+    id: string
+    number: string
+    type: string
+    targetCueId?: string
+    loopCount?: number
+  }
+  const cues = (JSON.parse(readFileSync(DEMO_FILE, 'utf8')) as { cues: DemoCue[] }).cues
+
+  it('aims every fade at a sound that is still playing when the fade is reached', () => {
+    const fades = cues.filter(cue => cue.type === 'fade')
+    expect(fades.length).toBeGreaterThan(0)
+    for (const fade of fades) {
+      const target = cues.find(cue => cue.id === fade.targetCueId)
+      expect(target, `cue ${fade.number} fades a cue that is not in the demo`).toBeDefined()
+      expect(target?.type, `cue ${fade.number} fades something with no sound`).toBe('audio')
+      // Looping until it is taken out is the only length that outlasts any pace.
+      expect(target?.loopCount, `cue ${fade.number} fades a cue that ends by itself`).toBeLessThan(0)
+      // And it is earlier in the list, so it has been fired by the time the fade is.
+      expect(cues.indexOf(target as DemoCue)).toBeLessThan(cues.indexOf(fade))
+    }
+  })
+})
