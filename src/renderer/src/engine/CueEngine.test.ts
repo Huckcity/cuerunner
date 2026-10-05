@@ -208,6 +208,74 @@ describe('CueEngine — basic execution', () => {
     expect(setRunning).not.toHaveBeenCalled()
   })
 
+  it('skips a disarmed cue: GO fires the next armed one and moves on from there', () => {
+    const cues = [
+      makeWait({ id: 'off', isArmed: false }),
+      makeWait({ id: 'next' }),
+      makeWait({ id: 'after' })
+    ]
+    const { runner, setRunning, setSelected } = setup(cues, 'off')
+    runner.go()
+    expect(setRunning).toHaveBeenCalledWith('next', expect.objectContaining({ state: 'playing' }))
+    expect(setRunning).not.toHaveBeenCalledWith('off', expect.anything())
+    expect(setSelected).toHaveBeenLastCalledWith('after')
+  })
+
+  it('rests the selection on the next armed cue, past a disarmed one', () => {
+    const cues = [
+      makeWait({ id: 'first' }),
+      makeWait({ id: 'off', isArmed: false }),
+      makeWait({ id: 'next' })
+    ]
+    const { runner, setSelected } = setup(cues)
+    runner.go()
+    expect(setSelected).toHaveBeenLastCalledWith('next')
+  })
+
+  it('steps over a disarmed group with everything under it', () => {
+    const cues: Cue[] = [
+      makeWait({ id: 'first' }),
+      { ...makeWait({ id: 'g', isArmed: false }), type: 'group', mode: 'sequence' } as GroupCue,
+      makeWait({ id: 'child', parentId: 'g' }),
+      { ...makeWait({ id: 'inner', parentId: 'g' }), type: 'group', mode: 'sequence' } as GroupCue,
+      makeWait({ id: 'grandchild', parentId: 'inner' }),
+      makeWait({ id: 'next' })
+    ]
+    const { runner, setRunning, setSelected } = setup(cues)
+    runner.go()
+    expect(setSelected).toHaveBeenLastCalledWith('next')
+
+    // And standing on the group itself, the press goes to the cue past its subtree.
+    setSelected('g')
+    vi.advanceTimersByTime(DEFAULT_TRIGGER_GUARD.windowMs + 1)
+    runner.go()
+    expect(setRunning).toHaveBeenCalledWith('next', expect.objectContaining({ state: 'playing' }))
+    for (const id of ['g', 'child', 'inner', 'grandchild']) {
+      expect(setRunning).not.toHaveBeenCalledWith(id, expect.anything())
+    }
+  })
+
+  it('fires nothing and stays put when no armed cue is left', () => {
+    const cues = [makeWait({ id: 'first' }), makeWait({ id: 'off', isArmed: false })]
+    const { runner, setRunning, setSelected } = setup(cues, 'off')
+    runner.go()
+    expect(setRunning).not.toHaveBeenCalled()
+    expect(setSelected).not.toHaveBeenCalled()
+  })
+
+  it('still ends a cue\'s own advance at a disarmed cue', () => {
+    const cues = [
+      makeWait({ id: 'first', advance: 'on-start' }),
+      makeWait({ id: 'off', isArmed: false, advance: 'on-start' }),
+      makeWait({ id: 'next' })
+    ]
+    const { runner, setRunning, setSelected } = setup(cues)
+    runner.go()
+    expect(setRunning).toHaveBeenCalledWith('first', expect.objectContaining({ state: 'playing' }))
+    expect(setRunning).not.toHaveBeenCalledWith('next', expect.anything())
+    expect(setSelected).toHaveBeenLastCalledWith('next')
+  })
+
   it('advances selection to the next cue on go()', () => {
     const cue1 = makeWait({ id: 'w1', number: '1' })
     const cue2 = makeWait({ id: 'w2', number: '2' })

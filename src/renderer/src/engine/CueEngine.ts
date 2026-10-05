@@ -228,11 +228,15 @@ export class CueEngine {
     const cues = getCues()
     const selectedId = getSelected()
 
-    const targetIdx = selectedId ? cues.findIndex(c => c.id === selectedId) : 0
-    if (targetIdx < 0) return
+    const standingIdx = selectedId ? cues.findIndex(c => c.id === selectedId) : 0
+    if (standingIdx < 0) return
 
-    const cue = cues[targetIdx]
-    if (!cue || !cue.isArmed) return
+    // A disarmed cue is skipped, not stood on: the press fires the next armed cue after
+    // it. Returning here instead fired nothing and left the selection where it was, so
+    // every later GO landed on the same disarmed cue — under a bar that said "GO skips it".
+    const cue = this.nextArmed(cues, standingIdx)
+    if (!cue) return
+    const targetIdx = cues.indexOf(cue)
 
     // The hand that shook. Every way of firing a cue reaches the runner, so the window
     // is asked here rather than at each of them — and Space, which the OS repeats while
@@ -261,7 +265,7 @@ export class CueEngine {
       !this.isLastPlaylistStep(cue.id)
 
     // If this cue will auto-fire nextCue, skip selection past it
-    const selectionTarget = steppingPlaylist
+    const afterThis = steppingPlaylist
       ? cue
       : cue.advance && cue.advance !== 'none'
         ? (() => {
@@ -275,6 +279,14 @@ export class CueEngine {
             return cues[nextIdx + 1] ?? null
           })()
         : nextCue
+    // The selection is what the next GO fires, so it comes to rest on a cue that can be
+    // fired: disarmed cues between here and there are stepped over now, where the
+    // operator can see where the show is going, rather than on the next press. Only the
+    // selection steps over them — a cue's own advance still hands over to the cue
+    // directly after it, and a disarmed cue there ends the chain as it always has.
+    const selectionTarget = afterThis === null || afterThis === cue
+      ? afterThis
+      : this.nextArmed(cues, cues.indexOf(afterThis))
     setSelected(selectionTarget?.id ?? null)
 
     // Firing a cue that is already in flight replaces it rather than stacking a second
@@ -387,6 +399,25 @@ export class CueEngine {
       this.deps.setSelected(plan.selectedId)
     }
     return { adopted: plan.adopt.length, skipped: plan.skipped.length }
+  }
+
+  /**
+   * The first armed cue at or after `from`, or null when the show has none left. A
+   * disarmed cue is stepped over, and a disarmed group takes everything under it along:
+   * its children are part of the cue that was taken out of the show, not cues of their
+   * own waiting behind it.
+   */
+  private nextArmed(cues: Cue[], from: number): Cue | null {
+    let i = from
+    while (i < cues.length && !cues[i].isArmed) {
+      const under = new Set([cues[i].id])
+      i++
+      while (i < cues.length && cues[i].parentId !== null && under.has(cues[i].parentId as string)) {
+        under.add(cues[i].id)
+        i++
+      }
+    }
+    return cues[i] ?? null
   }
 
   // Cue identity as it was when the entry was written, e.g. "3 · Network Cue".
