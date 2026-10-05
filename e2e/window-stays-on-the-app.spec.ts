@@ -15,7 +15,7 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { closeApp, launchApp, toolbarCueBtn } from './helpers'
+import { closeApp, launchApp, readRecovered, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -54,13 +54,35 @@ test('the window cannot be sent to a file in place of the app', async () => {
   const before = page.url()
   const elsewhere = pathToFileURL(path.join(process.cwd(), 'package.json')).href
 
-  await page.evaluate(url => { window.location.href = url }, elsewhere)
-  // A navigation that was going to happen has happened well inside this; one that was
-  // refused never will, so there is no artifact to wait on but the window still being here.
-  await page.waitForTimeout(500)
+  // The attempt has an end either way — refused, or carried out — and the window says when:
+  // loading stops. That is the artifact to wait on; a fixed pause would pass a slow machine
+  // that had not got round to leaving yet.
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents
+    const seen = globalThis as unknown as { __navigationAttemptOver?: boolean }
+    seen.__navigationAttemptOver = false
+    contents.once('did-start-navigation', () => {
+      contents.once('did-stop-loading', () => { seen.__navigationAttemptOver = true })
+    })
+  })
 
-  expect(page.url()).toBe(before)
-  await expect(page.locator('.toolbar-brand')).toBeVisible()
-  // The show is the one that was on screen: nothing was reloaded to get back here.
-  await expect(page.locator('.cue-row')).toHaveCount(1)
+  await page.evaluate(url => { window.location.href = url }, elsewhere)
+  await expect
+    .poll(
+      () => app.evaluate(() => (globalThis as unknown as { __navigationAttemptOver?: boolean }).__navigationAttemptOver),
+      { message: 'the navigation attempt should have ended, one way or the other' }
+    )
+    .toBe(true)
+
+  // The window is asked through its own webContents from here on. Playwright saw a
+  // navigation begin and is still waiting for it to finish — it never will, it was refused —
+  // so every locator on `page` would wait with it. That is the harness's picture of the
+  // page, not the page: this is the last case in the file for that reason.
+  const shown = await readRecovered(app, `({
+    href: location.href,
+    brand: document.querySelector('.toolbar-brand') !== null,
+    cues: document.querySelectorAll('.cue-row').length
+  })`)
+  // Still the app, and the show that was on screen: nothing was reloaded to get back here.
+  expect(shown).toEqual({ href: before, brand: true, cues: 1 })
 })
