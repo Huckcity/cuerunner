@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import type { StopCue } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
+import { targetLabel } from './targetLabel'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { STOP_DEFAULTS } from '../../utils/cueDefaults'
@@ -24,10 +25,7 @@ export function StopInspector({ cue }: Props) {
           {/* A target that was deleted is said, not papered over: a select whose value
               matches no option draws its first one, which reads as a choice nobody made. */}
           {targetGone && <option value={cue.targetCueId}>— not in this show —</option>}
-          {otherCues.map(c => {
-            const displayName = c.name.length > 20 ? c.name.slice(0, 17) + '...' : c.name
-            return <option key={c.id} value={c.id}>{c.number} {displayName}</option>
-          })}
+          {otherCues.map(c => <option key={c.id} value={c.id}>{targetLabel(c)}</option>)}
         </select>
         <ResetButton label="Target" value={cue.targetCueId} defaultValue={STOP_DEFAULTS.targetCueId}
           onReset={() => set({ targetCueId: STOP_DEFAULTS.targetCueId })} />

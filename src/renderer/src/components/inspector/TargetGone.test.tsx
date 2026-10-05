@@ -66,3 +66,64 @@ describe('a target that is no longer in the show', () => {
     expect(container.textContent).not.toContain('not in this show')
   })
 })
+
+describe('the cues a fade can be aimed at', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  /** What the target select offers: the first select on either tab. */
+  const offered = (): string[] =>
+    [...container.querySelector('select')!.querySelectorAll('option')].map(option => option.textContent ?? '')
+
+  it('are the audio cues: a fade moves a sound, and nothing else has one', () => {
+    const cues = [
+      { ...createCue('audio', '1'), id: 'a1', name: 'Walk-in' },
+      { ...createCue('wait', '2'), id: 'w1', name: 'Count 8' },
+      { ...createCue('group', '3'), id: 'g1', name: 'Act 1' },
+      { ...createCue('audio', '4'), id: 'a2', name: 'Underscore' }
+    ] as Cue[]
+    const fade = { ...createCue('fade', '5'), id: 'f1' } as FadeCue
+    useStore.setState({ cues: [...cues, fade] })
+    act(() => { root.render(<FadeInspector cue={fade} />) })
+
+    expect(offered()).toEqual(['— select —', '1 Walk-in', '4 Underscore'])
+  })
+
+  it('still shows a cue of another kind that the fade already names', () => {
+    const wait = { ...createCue('wait', '2'), id: 'w1', name: 'Count 8' } as Cue
+    const fade = { ...createCue('fade', '5'), id: 'f1', targetCueId: 'w1' } as FadeCue
+    useStore.setState({ cues: [wait, fade] })
+    act(() => { root.render(<FadeInspector cue={fade} />) })
+
+    expect(offered()).toEqual(['— select —', '2 Count 8'])
+    expect(container.querySelector<HTMLSelectElement>('select')?.value).toBe('w1')
+  })
+
+  it('names each cue in full, so two long names are still two entries', () => {
+    const long = [
+      { ...createCue('audio', '12'), id: 'a1', name: 'Act 2 Scene 3 underscore (long)' },
+      { ...createCue('audio', '13'), id: 'a2', name: 'Act 2 Scene 3 underscore (short)' }
+    ] as Cue[]
+    const stop = { ...createCue('stop', '14'), id: 's1' } as StopCue
+    useStore.setState({ cues: [...long, stop] })
+    act(() => { root.render(<StopInspector cue={stop} />) })
+
+    expect(offered()).toEqual([
+      'All cues',
+      '12 Act 2 Scene 3 underscore (long)',
+      '13 Act 2 Scene 3 underscore (short)'
+    ])
+  })
+})

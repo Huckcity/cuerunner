@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import type { FadeCue, FadeCurve } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
+import { targetLabel } from './targetLabel'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
@@ -12,8 +13,12 @@ export function FadeInspector({ cue }: Props) {
   const cues = useStore(s => s.cues)
   const set = (patch: Partial<FadeCue>) => update(cue.id, patch)
 
-  const otherCues = cues.filter(c => c.id !== cue.id)
-  const targetGone = cue.targetCueId !== '' && !otherCues.some(c => c.id === cue.targetCueId)
+  // A fade moves a sound, and only an audio cue has one: a wait, a group or a MIDI cue in
+  // this list was a target that could be chosen and would do nothing. A cue of another
+  // kind that an older show already aims at stays in the list, so the panel shows what
+  // the cue says rather than quietly showing something else.
+  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.id === cue.targetCueId))
+  const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
 
   return (
     <div>
@@ -24,10 +29,7 @@ export function FadeInspector({ cue }: Props) {
           {/* A target that was deleted is said, not papered over: a select whose value
               matches no option draws its first one, which reads as a choice nobody made. */}
           {targetGone && <option value={cue.targetCueId}>— not in this show —</option>}
-          {otherCues.map(c => {
-            const displayName = c.name.length > 20 ? c.name.slice(0, 17) + '...' : c.name
-            return <option key={c.id} value={c.id}>{c.number} {displayName}</option>
-          })}
+          {targets.map(c => <option key={c.id} value={c.id}>{targetLabel(c)}</option>)}
         </select>
       </div>
       <div className="field-row">
