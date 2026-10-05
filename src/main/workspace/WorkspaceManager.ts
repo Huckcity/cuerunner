@@ -26,7 +26,7 @@ import type { LoadNote, Workspace } from '../../shared/workspace'
 import type { AudioCue, Cue } from '../../shared/cue'
 import { CUE_TYPES } from '../../shared/cue'
 import { heldShowSettings } from '../../shared/show'
-import { hasCueList, normalizeTriggerGuard } from '../../shared/workspace'
+import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
   CUE_FIELD_SHAPE,
   SHOW_SETTINGS_SHAPE,
@@ -1339,6 +1339,16 @@ export interface SavedWorkspace {
    * replacing one.
    */
   history: ShowHistoryEntry[]
+  /**
+   * The name this save gave the show, when it gave one: see `saveWorkspace`. Absent when
+   * the show already had a name of its own.
+   */
+  name?: string
+}
+
+/** A showfile's name without its extension: what a show saved into it is called. */
+function showNameOf(filePath: string): string {
+  return basename(filePath).replace(/\.cuerunner$/i, '').trim()
 }
 
 export async function saveWorkspace(
@@ -1347,15 +1357,29 @@ export async function saveWorkspace(
   existingPath: string | null
 ): Promise<SavedWorkspace | null> {
   let filePath = existingPath
+  // The name this save gives the show, when it gives one.
+  let named: string | undefined
 
   if (!filePath) {
     const result = await dialog.showSaveDialog(win, {
       title: 'Save Workspace',
-      defaultPath: `${workspace.name || 'Untitled'}.cuerunner`,
+      defaultPath: `${workspace.name || UNTITLED_SHOW}.cuerunner`,
       filters: [{ name: 'Cuerunner Workspace', extensions: ['cuerunner'] }]
     })
     if (result.canceled || !result.filePath) return null
     filePath = result.filePath
+    // A show nobody has named is named by the file it is first put in. The operator has
+    // just typed that name into the dialog; leaving the show "Untitled" inside a file
+    // called something else is two names for one thing — the window's title said one and
+    // its toolbar the other. A show that already has a name keeps it: saving a copy under
+    // another file name is the same show in another file.
+    if (isUnnamedShow(workspace.name)) {
+      const fromFile = showNameOf(filePath)
+      if (fromFile !== '' && fromFile !== workspace.name) {
+        named = fromFile
+        workspace = { ...workspace, name: fromFile }
+      }
+    }
   }
 
   // The file about to be replaced, checked against the one this session was built from
@@ -1411,7 +1435,7 @@ export async function saveWorkspace(
   // The recent list is a convenience. The workspace is on disk at this point, and
   // reporting a failure here would tell the operator their show was not saved.
   await addToRecent(filePath).catch(() => {})
-  return { path: filePath, history }
+  return named === undefined ? { path: filePath, history } : { path: filePath, history, name: named }
 }
 
 export async function saveWorkspaceAs(

@@ -4,7 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
-import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../../../shared/workspace'
+import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard, UNTITLED_SHOW } from '../../../shared/workspace'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
@@ -745,7 +745,7 @@ function isDescendant(cues: Cue[], cueId: string, possibleAncestorId: string): b
 }
 
 export const useStore = create<CueListState>((set) => ({
-  workspaceName: 'Untitled',
+  workspaceName: UNTITLED_SHOW,
   workspacePath: null,
   // A session that has not opened a file is a new show, so it starts with an identity of
   // its own — minted once here, not once per save.

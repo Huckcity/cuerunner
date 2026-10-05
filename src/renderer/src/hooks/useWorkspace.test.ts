@@ -280,8 +280,8 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
    */
   function hold(
     flow: 'save' | 'saveAs'
-  ): (saved: { path: string; history: ShowHistoryEntry[] } | null) => void {
-    const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[] } | null>()
+  ): (saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null) => void {
+    const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[]; name?: string } | null>()
     ;(window.cuerunner.workspace[flow] as unknown as Mock).mockImplementation(() =>
       gate.promise.then(saved => ({ ok: true as const, saved }))
     )
@@ -350,6 +350,73 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
       expect(clearRecovery, `${flow} left the snapshot behind after a clean round trip`)
         .toHaveBeenCalledTimes(1)
     }
+  })
+
+  it('takes the name a first save gave the show, and stays clean', async () => {
+    const clearRecovery = window.cuerunner.workspace.clearRecovery as unknown as Mock
+    for (const flow of ['save', 'saveAs'] as const) {
+      clearRecovery.mockClear()
+      act(() => {
+        resetSession()
+        useStore.getState().addCue('wait')
+      })
+      const release = hold(flow)
+      let pending!: Promise<boolean>
+      act(() => { pending = flows[flow]() })
+      await act(async () => {
+        // Main named the untitled show after the file, and wrote that name into it.
+        release({ path: '/shows/Macbeth.cuerunner', history: [], name: 'Macbeth' })
+        await pending
+      })
+      expect(useStore.getState().workspaceName, `${flow} left the show untitled`).toBe('Macbeth')
+      // The name is the save's own bookkeeping, like the path: it is in the file, so it
+      // must not read as an edit the file is behind.
+      expect(useStore.getState().isDirty, `${flow} read its own naming as an edit`).toBe(false)
+      expect(clearRecovery).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('keeps a name typed while the write was out, over the one the save gave', async () => {
+    for (const flow of ['save', 'saveAs'] as const) {
+      act(() => {
+        resetSession()
+        useStore.getState().addCue('wait')
+      })
+      const release = hold(flow)
+      let pending!: Promise<boolean>
+      act(() => { pending = flows[flow]() })
+      act(() => { useStore.getState().setWorkspaceName('The Scottish Play') })
+      await act(async () => {
+        release({ path: '/shows/Macbeth.cuerunner', history: [], name: 'Macbeth' })
+        await pending
+      })
+      // The operator's is the later decision, and the file — which says Macbeth — is
+      // behind it: the session says so.
+      expect(useStore.getState().workspaceName).toBe('The Scottish Play')
+      expect(useStore.getState().isDirty, `${flow} called a renamed show saved`).toBe(true)
+    }
+  })
+
+  it('closes on a close-prompt save that named the show', async () => {
+    const confirmDialog = window.cuerunner.workspace.confirmClose as unknown as Mock
+    const confirmed = window.cuerunner.app.confirmClose as unknown as Mock
+    const onCloseRequested = window.cuerunner.app.onCloseRequested as unknown as Mock
+    confirmDialog.mockResolvedValue(0)          // Save
+    confirmed.mockClear()
+    act(() => { useStore.getState().addCue('wait') })
+
+    const close = onCloseRequested.mock.calls.at(-1)![0] as () => Promise<void>
+    const release = hold('save')
+    let closing!: Promise<void>
+    act(() => { closing = close() })
+    await act(async () => {
+      release({ path: '/shows/Macbeth.cuerunner', history: [], name: 'Macbeth' })
+      await closing
+    })
+
+    // The file carries everything, under the name the save gave it: a witness that read
+    // that name as unsaved work would keep the window open for ever.
+    expect(confirmed).toHaveBeenCalledTimes(1)
   })
 
   it('refuses a save whose show was replaced while the write was out', async () => {
