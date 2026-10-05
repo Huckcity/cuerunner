@@ -1,4 +1,5 @@
 import { useStore } from '../../store'
+import { PRICING_URL } from '../../../../shared/support'
 import './License.css'
 
 /** Where the lock is being drawn: it fills a view, a strip, or sits inside a panel. */
@@ -42,9 +43,17 @@ export function ProLock({ feature, blurb, variant = 'section', onClose }: Props)
           </p>
         )}
         {license.state === 'invalid' && <p className="pro-lock-state">{license.error}</p>}
-        <button className="pro-lock-unlock" onClick={() => openSettings('license')}>
-          Enter license key
-        </button>
+        <div className="pro-lock-actions">
+          <button className="pro-lock-unlock" onClick={() => openSettings('license')}>
+            Enter license key
+          </button>
+          {/* For whoever has no key to enter, which is most people who meet a lock. It
+              opens in the browser: the window's own handler sends a new-window request to
+              the operating system rather than drawing a page in the app. */}
+          <a className="license-link pro-lock-pricing" href={PRICING_URL} target="_blank" rel="noreferrer">
+            See what Pro costs
+          </a>
+        </div>
       </div>
     </div>
   )

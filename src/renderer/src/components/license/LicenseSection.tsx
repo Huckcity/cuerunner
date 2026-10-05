@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
+import { PRICING_URL } from '../../../../shared/support'
 import './License.css'
 
 /** A fault's own words, without the sentence Electron wraps a rejected call in. */
@@ -86,7 +87,10 @@ export function LicenseSection() {
           <p className="inspector-hint" data-scope="panel">
             The cue stack is free, and always will be. Pro adds the show around it: scenes
             and the desk, cues that fire from a console, the monitor, wireless mics, and
-            the script with its tablet view.
+            the script with its tablet view.{' '}
+            <a className="license-link" href={PRICING_URL} target="_blank" rel="noreferrer">
+              See what Pro costs
+            </a>
           </p>
 
           {license.state === 'expired' && (
