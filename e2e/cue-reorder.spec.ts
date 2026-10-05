@@ -95,3 +95,40 @@ test('dropping into the gap below the list lands at the top level, not in the gr
 
   expect(await rowShapes()).toEqual(['0 ', '0G', '0 '])
 })
+
+// The list's file-drop hint is raised and lowered by counting drag enters and leaves, and a
+// reorder used to be counted too: its drop is taken by the list before the container sees
+// it, so every reorder left the count one high. The next file dragged over the list and
+// away again left "Drop audio files to create cues" over a dimmed list until a file was
+// actually dropped.
+test('a file dragged over the list and away leaves no drop hint behind, after a reorder', async () => {
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Wait').click()
+  const numbers = (): Promise<string[]> => page.locator('.cue-number').allTextContents()
+  expect(await numbers()).toEqual(['1', '2', '3'])
+
+  // A real reorder, by the mouse: this is what left the count high.
+  await dragRow(0, { index: 2, edge: 'bottom' })
+  expect(await numbers()).toEqual(['2', '3', '1'])
+
+  // A file from the desktop cannot be dragged by the suite, so the two events the list
+  // hears from one are sent to it: over the list, and away again without a drop.
+  const during = await page.evaluate(() => {
+    const list = document.querySelector('.cue-list-container')
+    if (list === null) throw new Error('no cue list on screen')
+    const data = new DataTransfer()
+    data.items.add(new File(['RIFF'], 'sting.wav', { type: 'audio/wav' }))
+    list.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: data }))
+    return new Promise<boolean>(resolve => requestAnimationFrame(() => {
+      const up = document.querySelector('.cue-list-drop-hint') !== null
+      list.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, dataTransfer: data }))
+      resolve(up)
+    }))
+  })
+  // The hint did come up — otherwise its absence below would prove nothing.
+  expect(during).toBe(true)
+
+  await expect(page.locator('.cue-list-drop-hint')).toHaveCount(0)
+  await expect(page.locator('.cue-list-container')).toHaveAttribute('data-drag-over', 'false')
+})
