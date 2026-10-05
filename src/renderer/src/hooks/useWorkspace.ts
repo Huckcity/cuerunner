@@ -14,6 +14,32 @@ function reportFailure(message: string): void {
   store.appendLog([{ level: 'error', message }])
 }
 
+/** What a save answered with, as far as the name goes: the one it gave the show, if any. */
+interface SavedName {
+  name?: string
+}
+
+/**
+ * The show's name once a save has answered. A save names a show nobody had named — after
+ * the file it was put in, and in the bytes it wrote — and that name is the session's from
+ * then on, unless the operator typed one of their own while the write was out: theirs is
+ * the later decision, and the witness below reports the file as behind it.
+ */
+function nameAfterSave(sent: Workspace, saved: SavedName): string {
+  const now = useStore.getState().workspaceName
+  return saved.name !== undefined && now === sent.name ? saved.name : now
+}
+
+/**
+ * The show as the save wrote it: the payload, under the name the save gave it when it gave
+ * one. This is what the witness compares the session against — the name main put in the
+ * file is the save's own bookkeeping, like the path and the history, and must not read as
+ * an edit that is still unsaved.
+ */
+function asWritten(sent: Workspace, saved: SavedName): Workspace {
+  return saved.name === undefined ? sent : { ...sent, name: saved.name }
+}
+
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 async function guardDirty(): Promise<boolean> {
@@ -38,7 +64,7 @@ async function guardDirty(): Promise<boolean> {
       triggerGuard,
       cues
     })
-    let saved: { path: string; history: ShowHistoryEntry[] } | null
+    let saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null
     try {
       const answer = await window.cuerunner.workspace.save(sent, workspacePath)
       // A save this build refused is an answer rather than a fault: the file the save
@@ -60,13 +86,14 @@ async function guardDirty(): Promise<boolean> {
     if (useStore.getState().workspaceId !== workspaceId) return false
     // The name the store has now, not the one this save was sent with: a rename typed
     // while the file was being written is the operator's, and the witness below reports
-    // the file as behind it.
-    saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
+    // the file as behind it. A show the save itself named takes that name: see
+    // `nameAfterSave`.
+    saveSucceeded(saved.path, nameAfterSave(sent, saved), saved.history)
     // An edit that landed while the save was in flight is not on disk, so the flow must
     // not proceed on it: the witness is the one comparison every save flow keeps, and
     // when it reports, the close stops here — the next prompt offers the save again —
     // with the recovery snapshot left in place for the work still unsaved.
-    if (witnessSave(sent)) return false
+    if (witnessSave(asWritten(sent, saved))) return false
     await window.cuerunner.workspace.clearRecovery().catch(() => {})
   } else {
     // "Don't Save" discards the session, including its recovery snapshot.
@@ -87,6 +114,9 @@ function loadIntoStore(
   identity?: WorkspaceIdentity
 ): void {
   const store = useStore.getState()
+  // Here rather than when the flow began: a file this build refuses, or a dialog the
+  // operator backed out of, leaves the show that is open playing as it was.
+  cueEngine.stopForShowChange()
   store.loadWorkspace(
     workspace.cues,
     workspace.name || 'Untitled',
@@ -331,6 +361,8 @@ export function useWorkspace() {
 
   const newWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
+    // An empty show is a show like any other: what the last one left running goes with it.
+    cueEngine.stopForShowChange()
     loadWorkspace([], 'Untitled', null)
   }, [loadWorkspace])
 
@@ -412,11 +444,11 @@ export function useWorkspace() {
       // point the next save at the wrong file.
       if (useStore.getState().workspaceId !== workspaceId) return false
       // The name the store has now, not the one this save was sent with: see guardDirty.
-      saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
+      saveSucceeded(saved.path, nameAfterSave(ws, saved), saved.history)
       // Anything that moved while the save was in flight is still unsaved, even though
       // the round trip answered: the witness compares against what went out, and while it
       // reports, the snapshot stays — it is that work's only copy.
-      if (!witnessSave(ws)) {
+      if (!witnessSave(asWritten(ws, saved))) {
         // The session is on disk now, so there is nothing left to recover.
         await window.cuerunner.workspace.clearRecovery().catch(() => {})
       }
@@ -456,9 +488,9 @@ export function useWorkspace() {
       if (!saved) return false
       // A load replaced the session while the write was out: see save.
       if (useStore.getState().workspaceId !== workspaceId) return false
-      saveSucceeded(saved.path, useStore.getState().workspaceName, saved.history)
+      saveSucceeded(saved.path, nameAfterSave(ws, saved), saved.history)
       // The same rule as save: the snapshot goes only when the witness reports nothing.
-      if (!witnessSave(ws)) {
+      if (!witnessSave(asWritten(ws, saved))) {
         await window.cuerunner.workspace.clearRecovery().catch(() => {})
       }
       return true

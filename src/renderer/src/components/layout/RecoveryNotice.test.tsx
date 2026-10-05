@@ -6,6 +6,7 @@ import { StrictMode, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
+import { cueEngine } from '../../engine/CueEngine'
 import type { MissingMedia } from '../../../../shared/media'
 import { defaultShowSettings } from '../../../../shared/show'
 import type { LoadNote, Workspace } from '../../../../shared/workspace'
@@ -112,6 +113,20 @@ describe('RecoveryNotice', () => {
     await act(async () => { button?.click() })
   }
 
+  it('stops what this session was playing before the recovered one replaces it', async () => {
+    const stop = vi.spyOn(cueEngine, 'stopForShowChange').mockImplementation(() => {
+      // Said while the session that is leaving is still the one in the store.
+      expect(useStore.getState().cues).toEqual([])
+    })
+    await offer(snapshot())
+
+    await recover()
+
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().cues.map(c => c.name)).toEqual(['Walk-in Music', 'Sting'])
+    stop.mockRestore()
+  })
+
   it('hands back the cues and the show settings the snapshot was carrying', async () => {
     await offer(snapshot())
 
@@ -198,7 +213,7 @@ describe('RecoveryNotice', () => {
     // record nobody can read.
     ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
       ok: false,
-      error: 'that show has a cue this version of WinsLab does not know (video)'
+      error: 'that show has a cue this version of Cuerunner does not know (video)'
     })
 
     await act(async () => {
@@ -210,7 +225,7 @@ describe('RecoveryNotice', () => {
     })
 
     expect(useStore.getState().log.map(entry => entry.message)).toEqual([
-      'Could not bring the unsaved work back: that show has a cue this version of WinsLab does not know (video)'
+      'Could not bring the unsaved work back: that show has a cue this version of Cuerunner does not know (video)'
     ])
   })
 
@@ -220,7 +235,7 @@ describe('RecoveryNotice', () => {
     // back is not a failure the session had — and the log carries the same sentence.
     ;(window.cuerunner.workspace.recovery as unknown as Mock).mockResolvedValue({
       ok: false,
-      error: 'that show has a cue this version of WinsLab does not know (video)'
+      error: 'that show has a cue this version of Cuerunner does not know (video)'
     })
 
     await act(async () => { root.render(<RecoveryNotice />) })
@@ -232,7 +247,7 @@ describe('RecoveryNotice', () => {
     // Nothing to decide about a snapshot that is not offerable: no Recover, no Discard.
     expect(container.querySelector('.app-notice-action')).toBeNull()
     expect(useStore.getState().log.map(entry => entry.message)).toEqual([
-      'Could not bring the unsaved work back: that show has a cue this version of WinsLab does not know (video)'
+      'Could not bring the unsaved work back: that show has a cue this version of Cuerunner does not know (video)'
     ])
 
     // Dismissed like any other bar, and the file stays where it is: this build cannot read

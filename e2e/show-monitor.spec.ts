@@ -341,7 +341,9 @@ test('a quit answered Save writes the show through the dialog and then closes', 
     // The show was really written before the window went: the cue the operator added is in
     // the file, which is what the close prompt's Save promised.
     const saved = JSON.parse(fs.readFileSync(file, 'utf-8')) as { name: string; cues: Array<{ type: string }> }
-    expect(saved.name).toBe('Untitled')
+    // And it is the show the operator named in the dialog: a session nobody had named
+    // takes its file's name on the save that first puts it in one.
+    expect(saved.name).toBe('Quitting Show')
     expect(saved.cues.map(cue => cue.type)).toEqual(['wait'])
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })

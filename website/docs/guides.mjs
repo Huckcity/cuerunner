@@ -177,7 +177,7 @@ export const GUIDES = [
         <li><strong>Drag your audio files onto the cue list.</strong> One cue per file, named after the file, in the order you dropped them. Or press <strong>Audio</strong> in the toolbar and pick a file with Browse.</li>
         <li><strong>Select a cue</strong> and look at the inspector. On <strong>Basics</strong>, give it a number you will recognise in a running order and write a note to yourself — the note shows up in the bar at the top when the cue is next, which is where you will actually read it.</li>
         <li><strong>Press GO</strong> to hear it. <strong>STOP</strong> stops everything.</li>
-        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. Cuerunner writes a <code>.cuerunner</code> file, which holds the cues and the show's setup but not the audio itself.</li>
+        <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. Cuerunner writes a <code>.cuerunner</code> file, which holds the cues and the show's setup but not the audio itself. A show you have not named yet takes the file's name; one you have keeps its own, whatever the file is called.</li>
       </ol>
       <div class="note">
         The show file points at your audio where it sits on disk. Moving a show to another
@@ -478,7 +478,7 @@ export const GUIDES = [
         </article>
         <article class="card state-stop">
           <h3>STOP</h3>
-          <p><kbd>Esc</kbd>, or the button. Stops everything that is running: sound, waits, sequences, scripts.</p>
+          <p><kbd>Esc</kbd>, or the button. Stops everything that is running: sound, waits, sequences, scripts. Opening another show, or starting a new one, stops the one that was playing the same way.</p>
         </article>
         <article class="card state-panic">
           <h3>PANIC</h3>

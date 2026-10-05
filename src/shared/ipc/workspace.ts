@@ -71,6 +71,12 @@ export interface SavedWorkspace {
    * replacing one.
    */
   history: ShowHistoryEntry[]
+  /**
+   * The name this save gave the show, when it gave one: a show nobody had named takes its
+   * file's name the first time it is put in one, and that name is in the bytes that were
+   * written. Absent when the show already had a name of its own.
+   */
+  name?: string
 }
 
 /**

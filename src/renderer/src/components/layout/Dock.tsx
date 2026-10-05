@@ -125,6 +125,12 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
     return stored === null ? null : stored === 'true'
   })
   const emptyWorkspace = useStore(s => s.cues.length === 0)
+  const log = useStore(s => s.log)
+  // The newest log line the operator has had on screen. The Log tab counts the errors
+  // written since, because the log is the one place a failed cue explains itself and it
+  // is a tab nobody has open by default: an error that only an unopened panel could show
+  // is an error that was not shown. Session state — it is where this operator has read to.
+  const [readThrough, setReadThrough] = useState(0)
   const collapsed = chosenFold ?? emptyWorkspace
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null)
   /** The tab the dock last unfolded for, so a real change is told from a re-render. */
@@ -148,6 +154,15 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
   // The mark says which panel is *loaded*, so it stays on when the dock is folded away:
   // a collapsed dock with no tab marked is a dock the operator cannot read.
   const showBody = !collapsed && !(view === 'scenes' && tab === 'cue')
+
+  const logOnScreen = showBody && tab === 'log'
+  const newestLogId = log.length === 0 ? 0 : log[log.length - 1].id
+  useEffect(() => {
+    if (logOnScreen) setReadThrough(newestLogId)
+  }, [logOnScreen, newestLogId])
+  const unreadErrors = logOnScreen
+    ? 0
+    : log.filter(entry => entry.level === 'error' && entry.id > readThrough).length
 
   const choose = (next: DockTab): void => {
     // The same press that opened a panel puts the cue back, as the strips' buttons did.
@@ -246,6 +261,15 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
             onClick={() => choose(id)}
           >
             {label}
+            {id === 'log' && unreadErrors > 0 && (
+              <span
+                className="dock-tab-count"
+                data-level="error"
+                title={`${unreadErrors} ${unreadErrors === 1 ? 'error' : 'errors'} in the log since it was last open`}
+              >
+                {unreadErrors > 99 ? '99+' : unreadErrors}
+              </span>
+            )}
             {gated === true && !pro && <ProMark />}
           </button>
         ))}

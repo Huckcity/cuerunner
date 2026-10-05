@@ -3,6 +3,7 @@
 // `loadNotes` there would repair the grouping silently — exactly what the note exists to
 // prevent.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
+import { cueEngine } from '../engine/CueEngine'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useStore } from '../store'
@@ -79,6 +80,82 @@ describe('importShowBundle', () => {
     expect(state.cues.map(cue => [cue.id, cue.parentId])).toEqual([
       ['g1', null], ['c1', 'g1'], ['o1', null]
     ])
+  })
+})
+
+// A show that replaces the one on screen takes over the engine too: every flow that loads
+// one says so to the runner, and a flow that loaded nothing — a refusal — says nothing, so
+// the show that is open goes on playing.
+describe('useWorkspace — a show that is replaced stops playing', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let flows: ReturnType<typeof useWorkspace>
+
+  function Harness(): null {
+    flows = useWorkspace()
+    return null
+  }
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    useStore.setState({ cues: [], isDirty: false, workspaceName: 'Untitled', workspacePath: null, notice: null, log: [] })
+    act(() => { root.render(createElement(Harness)) })
+    vi.spyOn(cueEngine, 'stopForShowChange').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    vi.restoreAllMocks()
+    vi.clearAllMocks()
+  })
+
+  const opened = { path: '/shows/Broken Grouping.cuerunner', workspace: repaired(), missingMedia: [], loadNotes: [] }
+
+  it('stops the runner before an opened file is loaded', async () => {
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({ ok: true, opened })
+    // The stop is said while the show that is leaving is still the one in the store.
+    vi.mocked(cueEngine.stopForShowChange).mockImplementation(() => {
+      expect(useStore.getState().workspaceName).toBe('Untitled')
+    })
+
+    await act(async () => { await flows.openWorkspace() })
+
+    expect(cueEngine.stopForShowChange).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().workspaceName).toBe('Broken Grouping')
+  })
+
+  it('stops it for a recent file, the demo and a bundle', async () => {
+    vi.mocked(window.cuerunner.workspace.openPath).mockResolvedValue({ ok: true, opened })
+    vi.mocked(window.cuerunner.workspace.openDemo).mockResolvedValue({ ok: true, workspace: repaired() })
+    importBundle().mockResolvedValue({ ok: true, imported: opened })
+
+    await act(async () => { await flows.openRecent(opened.path) })
+    await act(async () => { await openDemoWorkspace() })
+    await act(async () => { await importShowBundle() })
+
+    expect(cueEngine.stopForShowChange).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops it for a new show', async () => {
+    useStore.setState({ cues: [waitCue('c1', null)] })
+
+    await act(async () => { await flows.newWorkspace() })
+
+    expect(cueEngine.stopForShowChange).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().cues).toEqual([])
+  })
+
+  it('leaves the show playing when the file is refused, or the dialog is cancelled', async () => {
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({ ok: false, error: 'that file is not a show' })
+    await act(async () => { await flows.openWorkspace() })
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({ ok: true, opened: null })
+    await act(async () => { await flows.openWorkspace() })
+
+    expect(cueEngine.stopForShowChange).not.toHaveBeenCalled()
   })
 })
 
@@ -203,8 +280,8 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
    */
   function hold(
     flow: 'save' | 'saveAs'
-  ): (saved: { path: string; history: ShowHistoryEntry[] } | null) => void {
-    const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[] } | null>()
+  ): (saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null) => void {
+    const gate = Promise.withResolvers<{ path: string; history: ShowHistoryEntry[]; name?: string } | null>()
     ;(window.cuerunner.workspace[flow] as unknown as Mock).mockImplementation(() =>
       gate.promise.then(saved => ({ ok: true as const, saved }))
     )
@@ -273,6 +350,73 @@ describe('useWorkspace — the write is witnessed when it answers', () => {
       expect(clearRecovery, `${flow} left the snapshot behind after a clean round trip`)
         .toHaveBeenCalledTimes(1)
     }
+  })
+
+  it('takes the name a first save gave the show, and stays clean', async () => {
+    const clearRecovery = window.cuerunner.workspace.clearRecovery as unknown as Mock
+    for (const flow of ['save', 'saveAs'] as const) {
+      clearRecovery.mockClear()
+      act(() => {
+        resetSession()
+        useStore.getState().addCue('wait')
+      })
+      const release = hold(flow)
+      let pending!: Promise<boolean>
+      act(() => { pending = flows[flow]() })
+      await act(async () => {
+        // Main named the untitled show after the file, and wrote that name into it.
+        release({ path: '/shows/Macbeth.cuerunner', history: [], name: 'Macbeth' })
+        await pending
+      })
+      expect(useStore.getState().workspaceName, `${flow} left the show untitled`).toBe('Macbeth')
+      // The name is the save's own bookkeeping, like the path: it is in the file, so it
+      // must not read as an edit the file is behind.
+      expect(useStore.getState().isDirty, `${flow} read its own naming as an edit`).toBe(false)
+      expect(clearRecovery).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('keeps a name typed while the write was out, over the one the save gave', async () => {
+    for (const flow of ['save', 'saveAs'] as const) {
+      act(() => {
+        resetSession()
+        useStore.getState().addCue('wait')
+      })
+      const release = hold(flow)
+      let pending!: Promise<boolean>
+      act(() => { pending = flows[flow]() })
+      act(() => { useStore.getState().setWorkspaceName('The Scottish Play') })
+      await act(async () => {
+        release({ path: '/shows/Macbeth.cuerunner', history: [], name: 'Macbeth' })
+        await pending
+      })
+      // The operator's is the later decision, and the file — which says Macbeth — is
+      // behind it: the session says so.
+      expect(useStore.getState().workspaceName).toBe('The Scottish Play')
+      expect(useStore.getState().isDirty, `${flow} called a renamed show saved`).toBe(true)
+    }
+  })
+
+  it('closes on a close-prompt save that named the show', async () => {
+    const confirmDialog = window.cuerunner.workspace.confirmClose as unknown as Mock
+    const confirmed = window.cuerunner.app.confirmClose as unknown as Mock
+    const onCloseRequested = window.cuerunner.app.onCloseRequested as unknown as Mock
+    confirmDialog.mockResolvedValue(0)          // Save
+    confirmed.mockClear()
+    act(() => { useStore.getState().addCue('wait') })
+
+    const close = onCloseRequested.mock.calls.at(-1)![0] as () => Promise<void>
+    const release = hold('save')
+    let closing!: Promise<void>
+    act(() => { closing = close() })
+    await act(async () => {
+      release({ path: '/shows/Macbeth.cuerunner', history: [], name: 'Macbeth' })
+      await closing
+    })
+
+    // The file carries everything, under the name the save gave it: a witness that read
+    // that name as unsaved work would keep the window open for ever.
+    expect(confirmed).toHaveBeenCalledTimes(1)
   })
 
   it('refuses a save whose show was replaced while the write was out', async () => {

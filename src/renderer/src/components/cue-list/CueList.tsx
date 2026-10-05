@@ -63,6 +63,7 @@ export function CueList() {
   const selectedIds = useStore(s => s.selectedIds)
   const running = useStore(s => s.running)
   const mediaLengths = useStore(s => s.mediaLengths)
+  const lastRuns = useStore(s => s.lastRuns)
   const missingMedia = useStore(s => s.missingMedia)
   const select = useStore(s => s.select)
   const extendSelection = useStore(s => s.extendSelection)
@@ -435,6 +436,7 @@ export function CueList() {
           {virtualizer.getVirtualItems().map(item => {
             const entry = renderItems[item.index]
             const { cue, depth, collapsed } = entry
+            const lastRun = lastRuns[cue.id]
             return (
               <div
                 key={cue.id}
@@ -456,6 +458,7 @@ export function CueList() {
                   mediaState={cue.type === 'group'
                     ? groupLengthState(cues, cue.id, lengths)
                     : mediaLengthState(cue, lengths)}
+                  failure={lastRun?.outcome === 'error' ? lastRun.error ?? 'the cue did not complete' : null}
                   collapsed={collapsed}
                   onToggleCollapse={cue.type === 'group' ? () => toggleGroup(cue.id) : undefined}
                   onClick={e => handleRowClick(e, cue.id, visibleIds)}

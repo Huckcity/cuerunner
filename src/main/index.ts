@@ -9,6 +9,7 @@ import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
+import { refuseNavigation } from './safety/navigation'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
 
@@ -239,6 +240,10 @@ function createWindow(): void {
       console.error(`[renderer] ${details.message} (${details.sourceId}:${details.lineNumber})`)
     }
   })
+
+  // The window stays on the app: a file dropped where the page does not take it would
+  // otherwise be opened in place of the show. navigation.ts carries the why.
+  refuseNavigation(win.webContents)
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)

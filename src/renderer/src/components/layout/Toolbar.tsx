@@ -179,10 +179,6 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     setEditingName(false)
   }
 
-  const baseName = workspacePath
-    ? workspacePath.split(/[\\/]/).pop()?.replace('.cuerunner', '') ?? workspaceName
-    : workspaceName
-
   return (
     <div className="toolbar">
       <div className="toolbar-left">
@@ -242,12 +238,18 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
               autoFocus
             />
           ) : (
+            // The show's own name, which is the one the window's title and the close
+            // prompt use. It used to be the file's name once there was a file, so a show
+            // saved as "Macbeth" read "Macbeth" here and "Untitled" in the title bar, and a
+            // rename typed into this very field changed the title and left this as it was.
+            // The file is still one hover away, for a show kept in a file called something
+            // else.
             <span
               className="workspace-name-text"
               onDoubleClick={() => setEditingName(true)}
-              title="Double-click to rename"
+              title={workspacePath === null ? 'Double-click to rename' : `${workspacePath}\nDouble-click to rename`}
             >
-              {baseName}{isDirty ? <span className="dirty-dot"> ●</span> : ''}
+              {workspaceName}{isDirty ? <span className="dirty-dot"> ●</span> : ''}
             </span>
           )}
         </div>

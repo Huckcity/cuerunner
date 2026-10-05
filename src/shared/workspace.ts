@@ -55,6 +55,18 @@ export interface TriggerGuardSettings {
  */
 export const DEFAULT_TRIGGER_GUARD: TriggerGuardSettings = { windowMs: 300 }
 
+/**
+ * The name a show has until somebody gives it one. A save that puts such a show in a file
+ * for the first time names it after the file (`saveWorkspace`), because a show called
+ * "Untitled" in a file called "Macbeth" is two names for one thing.
+ */
+export const UNTITLED_SHOW = 'Untitled'
+
+/** Whether a show's name is still the one it was born with, or nothing at all. */
+export function isUnnamedShow(name: string | undefined): boolean {
+  return name === undefined || name.trim() === '' || name === UNTITLED_SHOW
+}
+
 /** The guard's editable range. A window past two seconds is a cue that refused to fire. */
 export const TRIGGER_GUARD_MIN_MS = 0
 export const TRIGGER_GUARD_MAX_MS = 2000

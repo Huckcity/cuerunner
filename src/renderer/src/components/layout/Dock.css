@@ -60,6 +60,18 @@
   border-bottom-color: var(--accent-blue);
 }
 
+/* What the Log tab has that the operator has not read: errors only, in the failure pair. */
+.dock-tab-count {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+
 .dock-collapse {
   margin-left: auto;
   width: 28px;

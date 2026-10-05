@@ -15,9 +15,12 @@ import ReactDOM from 'react-dom/client'
 import { App } from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { installRuntimeErrorReporting } from './errors'
+import { installDropGuard } from './utils/dropGuard'
 import { useStore } from './store'
 
 installRuntimeErrorReporting()
+// A file dropped where no surface takes it must not replace the window: see dropGuard.ts.
+installDropGuard()
 
 /**
  * The license decides which half of the app is on screen, so it is read before the

@@ -73,6 +73,37 @@ describe('Toolbar', () => {
     expect(item('MIDI').querySelector('.pro-mark')).toBeNull()
   })
 
+  it('names the show by its own name, which is the one the window title carries', () => {
+    // A show kept in a file called something else: the toolbar used to draw the file's
+    // name while the title bar drew the show's, and a rename moved only the title.
+    useStore.setState({ workspaceName: 'Macbeth', workspacePath: '/shows/Macbeth v2.cuerunner', isDirty: false })
+    render('cues')
+    const name = (): HTMLElement => container.querySelector<HTMLElement>('.workspace-name-text')!
+    expect(name().textContent).toBe('Macbeth')
+    expect(document.title).toBe('Macbeth — Cuerunner')
+    // The file is a hover away.
+    expect(name().title).toContain('/shows/Macbeth v2.cuerunner')
+
+    act(() => { useStore.getState().setWorkspaceName('The Scottish Play') })
+    expect(name().textContent).toBe('The Scottish Play ●')
+    expect(document.title).toBe('The Scottish Play ● — Cuerunner')
+  })
+
+  it('renames the show from the toolbar, and shows the new name there', () => {
+    useStore.setState({ workspaceName: 'Macbeth', workspacePath: '/shows/Macbeth.cuerunner', isDirty: false })
+    render('cues')
+    act(() => {
+      container.querySelector('.workspace-name-text')!
+        .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
+    const field = container.querySelector<HTMLInputElement>('.workspace-name-input')!
+    field.value = 'Hamlet'
+    act(() => { field.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+
+    expect(useStore.getState().workspaceName).toBe('Hamlet')
+    expect(container.querySelector('.workspace-name-text')?.textContent).toBe('Hamlet ●')
+  })
+
   it('marks which view the window is showing', () => {
     render('scenes')
     // Unlicensed, the Scenes press also carries its Pro mark, so the check is on the

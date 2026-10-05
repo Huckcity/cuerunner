@@ -4,7 +4,7 @@ import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
-import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard } from '../../../shared/workspace'
+import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard, UNTITLED_SHOW } from '../../../shared/workspace'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
@@ -27,7 +27,7 @@ import type {
   ShowSettings,
   ShowSnapshot
 } from '../../../shared/show'
-import { createCue } from '../utils/cueDefaults'
+import { createCue, nextCueNumber } from '../utils/cueDefaults'
 import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
@@ -745,7 +745,7 @@ function isDescendant(cues: Cue[], cueId: string, possibleAncestorId: string): b
 }
 
 export const useStore = create<CueListState>((set) => ({
-  workspaceName: 'Untitled',
+  workspaceName: UNTITLED_SHOW,
   workspacePath: null,
   // A session that has not opened a file is a new show, so it starts with an identity of
   // its own — minted once here, not once per save.
@@ -799,7 +799,7 @@ export const useStore = create<CueListState>((set) => ({
   mergeReport: null,
 
   addCue: (type, afterId) => set(s => {
-    const cue = createCue(type)
+    const cue = createCue(type, nextCueNumber(s.cues))
     // Adding a cue is the one moment the show's answer to trimming silence is read: the
     // setting is a default for new cues, never a switch over the ones already in the
     // list, so turning it off does not rewrite the show behind the operator.
@@ -851,8 +851,11 @@ export const useStore = create<CueListState>((set) => ({
       }
     }
 
-    const newCues: Cue[] = files.map(({ filePath, name }) => ({
-      ...(createCue('audio') as AudioCue),
+    // One count for the whole drop: the files take the next numbers in the order they
+    // were dropped, starting one past what the show already uses.
+    const firstNumber = Number(nextCueNumber(s.cues))
+    const newCues: Cue[] = files.map(({ filePath, name }, index) => ({
+      ...(createCue('audio', String(firstNumber + index)) as AudioCue),
       filePath,
       name,
       parentId,

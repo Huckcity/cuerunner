@@ -99,84 +99,106 @@ export const MSC_DEFAULTS = {
   portName: ''
 }
 
-let _counter = 1
-function nextNumber(): string {
-  return String(_counter++)
+/**
+ * The number a cue added to this list is born with: one past the highest whole number the
+ * list already uses. A number is text — `12.5` and `LX 12` are both valid — so what is read
+ * is the whole number a cue's own number begins with, and a number that begins with none
+ * (`LX 12`) is nobody's place in the count.
+ *
+ * Read from the list rather than counted in the window: a counter that started at 1 with
+ * the app gave a show that had just been opened a second cue 1, and carried on from
+ * wherever the last show left it when a new one was made.
+ */
+export function nextCueNumber(cues: ReadonlyArray<Pick<Cue, 'number'>>): string {
+  let highest = 0
+  for (const cue of cues) {
+    const whole = /^\s*(\d+)/.exec(cue.number)
+    if (whole === null) continue
+    const value = Number(whole[1])
+    // A run of digits past what a number can count is a label, not a place in the count.
+    if (Number.isSafeInteger(value)) highest = Math.max(highest, value)
+  }
+  return String(highest + 1)
 }
 
-function base(name: string): Omit<Cue, 'type'> {
+function base(name: string, number: string): Omit<Cue, 'type'> {
   return {
     ...BASE_DEFAULTS,
     id: crypto.randomUUID(),
-    number: nextNumber(),
+    number,
     name,
     parentId: null,
     notes: ''
   }
 }
 
-export function createCue(type: CueType): Cue {
+/**
+ * A new cue of one type, with the defaults above. `number` is the caller's to give — the
+ * list the cue is going into decides it (`nextCueNumber`) — and a cue made on its own is
+ * the first cue of nothing.
+ */
+export function createCue(type: CueType, number = '1'): Cue {
   switch (type) {
     case 'audio':
       return {
-        ...base('Audio Cue'),
+        ...base('Audio Cue', number),
         type: 'audio',
         filePath: '',
         ...AUDIO_DEFAULTS
       } satisfies AudioCue
     case 'midi':
       return {
-        ...base('MIDI Cue'),
+        ...base('MIDI Cue', number),
         type: 'midi',
         portName: '',
         messages: []
       } satisfies MidiCue
     case 'osc':
       return {
-        ...base('OSC Cue'),
+        ...base('OSC Cue', number),
         type: 'osc',
         ...OSC_DEFAULTS,
         args: []
       } satisfies OscCue
     case 'wait':
       return {
-        ...base('Wait'),
+        ...base('Wait', number),
         type: 'wait',
         ...WAIT_DEFAULTS
       } satisfies WaitCue
     case 'fade':
       return {
-        ...base('Fade Cue'),
+        ...base('Fade Cue', number),
         type: 'fade',
         ...FADE_DEFAULTS
       } satisfies FadeCue
     case 'stop':
       return {
-        ...base('Stop Cue'),
+        ...base('Stop Cue', number),
         type: 'stop',
         ...STOP_DEFAULTS
       } satisfies StopCue
     case 'group':
       return {
-        ...base('Group'),
+        ...base('Group', number),
         type: 'group',
         ...GROUP_DEFAULTS
       } satisfies GroupCue
     case 'network':
       return {
-        ...base('Network Cue'),
+        ...base('Network Cue', number),
         type: 'network',
         ...NETWORK_DEFAULTS
       } satisfies NetworkCue
     case 'script':
       return {
-        ...base('Script Cue'),
+        ...base('Script Cue', number),
         type: 'script',
         ...SCRIPT_DEFAULTS
       } satisfies ScriptCue
     case 'scene':
       return {
-        ...base('Scene Cue'),
+        ...base('Scene Cue', number),
         type: 'scene',
         // Empty until the operator points it at one: a cue with no scene must not close
         // every mic on the desk, so the runner refuses it instead.
@@ -184,7 +206,7 @@ export function createCue(type: CueType): Cue {
       } satisfies SceneCue
     case 'devamp':
       return {
-        ...base('Devamp'),
+        ...base('Devamp', number),
         type: 'devamp',
         // Empty until it is pointed at one, for the same reason: a devamp aimed at
         // nothing must do nothing rather than guess which cue was vamping.
@@ -192,13 +214,13 @@ export function createCue(type: CueType): Cue {
       } satisfies DevampCue
     case 'msc':
       return {
-        ...base('Show Control'),
+        ...base('Show Control', number),
         type: 'msc',
         ...MSC_DEFAULTS
       } satisfies MscCue
     case 'mic':
       return {
-        ...base('Mic Cue'),
+        ...base('Mic Cue', number),
         type: 'mic',
         // Empty until it is pointed at one: a mic cue aimed at nothing must do nothing rather
         // than guess which pack was meant.
