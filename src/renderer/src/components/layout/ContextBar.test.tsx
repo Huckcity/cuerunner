@@ -26,8 +26,10 @@ describe('standbyCue', () => {
     expect(standbyCue([a, b], b.id)).toBe(b)
   })
 
-  it('is the first cue when nothing is selected, which is what GO fires', () => {
-    expect(standbyCue([a, b], null)).toBe(a)
+  it('is nothing when nothing is selected, because GO fires nothing then', () => {
+    // After the last cue of a show the selection is empty, and the bar used to name cue 1
+    // there: one more press of GO restarted the show.
+    expect(standbyCue([a, b], null)).toBeNull()
   })
 
   it('is nothing when the selection points nowhere', () => {

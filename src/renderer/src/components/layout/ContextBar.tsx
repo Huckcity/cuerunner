@@ -11,11 +11,12 @@ import './ContextBar.css'
 const TICK_MS = 100
 
 /**
- * The cue GO fires, by the runner's own rule: the selected cue, or the first cue when
- * nothing is selected. A selection that points at nothing fires nothing.
+ * The cue GO fires, by the runner's own rule: the selected cue, and nothing when nothing
+ * is selected — which is where the show stands after its last cue. A selection that
+ * points at nothing fires nothing either.
  */
 export function standbyCue(cues: Cue[], selectedId: string | null): Cue | null {
-  if (selectedId === null) return cues[0] ?? null
+  if (selectedId === null) return null
   return cues.find(cue => cue.id === selectedId) ?? null
 }
 
@@ -109,7 +110,9 @@ export function ContextBar() {
         <div className="ctx-head">
           <span className="ctx-tag ctx-tag-next">Next</span>
           {standby === null ? (
-            <span className="ctx-none">{cues.length === 0 ? 'No cues yet' : 'Nothing selected'}</span>
+            <span className="ctx-none">
+              {cues.length === 0 ? 'No cues yet' : 'Nothing selected — GO fires nothing'}
+            </span>
           ) : (
             <>
               <span className="ctx-number">{standby.number}</span>

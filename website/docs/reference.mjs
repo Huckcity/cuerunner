@@ -521,7 +521,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
-            <tr><td><kbd>Space</kbd></td><td>GO — fire the next cue</td><td>Anywhere except a text field</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue and move on to the next. With nothing selected, as after the last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>Esc</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is busy</td></tr>

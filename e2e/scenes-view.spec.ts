@@ -333,6 +333,13 @@ test('the view follows the show past the side of the window', async () => {
   await addCueFromMoreMenu(page, 'Scene')
   await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
   await page.locator('#scene-cue-select').selectOption({ label: 'Number 19' })
+  // And a second cue that comes back to the same scene later in the show, for the last
+  // press of this test: GO fires the cue it is standing on, and after the only cue in a
+  // stack it is standing on nothing.
+  await addCueFromMoreMenu(page, 'Scene')
+  await page.locator('.inspector-tab', { hasText: 'Scene' }).click()
+  await page.locator('#scene-cue-select').selectOption({ label: 'Number 19' })
+  await page.locator('.cue-row').first().click()
   await page.locator('.btn-go').click()
   await page.locator('.toolbar-view-btn', { hasText: 'Scenes' }).click()
   // The show has moved: the scenes view follows what the desk was told, so the cue has to
@@ -381,9 +388,10 @@ test('the view follows the show past the side of the window', async () => {
   await page.locator('.matrix-scroll').evaluate(el => { el.scrollLeft = 0 })
   await expect(columns.nth(14)).not.toBeInViewport()
 
-  // And the next recall brings it back to the show, whichever hand moved the desk. The
-  // press waits out the firing window first: two GO presses in one breath are one firing,
-  // and this is a second, deliberate press rather than a hand that shook.
+  // And the next recall brings it back to the show, whichever hand moved the desk: the
+  // second scene cue, which the first GO left the show standing on. The press waits out
+  // the firing window first: two GO presses in one breath are one firing, and this is a
+  // second, deliberate press rather than a hand that shook.
   await page.waitForTimeout(400)
   await page.locator('.btn-go').click()
   await expect(columns.nth(18)).toHaveAttribute('data-current', 'true')

@@ -474,7 +474,7 @@ export const GUIDES = [
       <div class="cards three-col">
         <article class="card state-go">
           <h3>GO</h3>
-          <p><kbd>Space</kbd>, or the button. Fires the cue on the right of the bar, then moves on to the next armed one. A disarmed cue is skipped.</p>
+          <p><kbd>Space</kbd>, or the button. Fires the cue on the right of the bar, then moves on to the next armed one. A disarmed cue is skipped. After the last cue nothing is selected and GO fires nothing: the bar says so, and the show starts again when you select the cue to start it from.</p>
         </article>
         <article class="card state-stop">
           <h3>STOP</h3>

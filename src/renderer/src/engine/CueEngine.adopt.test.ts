@@ -190,7 +190,7 @@ describe('CueEngine — putting a show back on the engine', () => {
     // show the live machine hands over: after a takeover, what is running is the mirror.
     const stray = makeWait({ id: 'w1', duration: 30_000 })
     const overture = makeAudio({ id: 'a1' })
-    const { runner, setRunning, appendLog, clearAllRunning } = setup([stray, overture])
+    const { runner, setRunning, appendLog, clearAllRunning } = setup([stray, overture], 'w1')
 
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
@@ -238,7 +238,7 @@ describe('CueEngine — putting a show back on the engine', () => {
     // Standing down is the mirror image of a takeover: the other machine is already
     // playing this cue, so this one stops rather than the pair playing it twice.
     const cue = makeAudio({ id: 'a1' })
-    const { runner, setRunning, clearAllRunning } = setup([cue])
+    const { runner, setRunning, clearAllRunning } = setup([cue], 'a1')
 
     runner.go()
     await vi.advanceTimersByTimeAsync(0)

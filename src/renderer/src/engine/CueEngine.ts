@@ -231,7 +231,13 @@ export class CueEngine {
     const cues = getCues()
     const selectedId = getSelected()
 
-    const standingIdx = selectedId ? cues.findIndex(c => c.id === selectedId) : 0
+    // Nothing selected fires nothing. It used to fire the first cue of the show, and the
+    // selection is empty exactly once in every performance: after the last cue. One more
+    // press there — a hand resting on Space as the house lights come up — started the
+    // walk-in again over the bows. A show that has just been opened is standing on its
+    // first cue, so the top of the show is still one press away where it should be.
+    if (!selectedId) return
+    const standingIdx = cues.findIndex(c => c.id === selectedId)
     if (standingIdx < 0) return
 
     // A disarmed cue is skipped, not stood on: the press fires the next armed cue after
