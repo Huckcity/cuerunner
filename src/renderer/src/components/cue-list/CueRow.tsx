@@ -22,6 +22,13 @@ interface Props {
    * otherwise show `–` for a file nobody has read, or a zero for one that is gone.
    */
   mediaState?: MediaLengthState | null
+  /**
+   * Why the cue's last run failed, in the runner's own words, or null when it did not —
+   * or has not run. The same fact the inspector's Last Run block carries, said here
+   * because GO has moved the selection on by the time a cue fails: the inspector is
+   * showing the next cue, and a failure only it could show was a failure nobody saw.
+   */
+  failure?: string | null
   collapsed?: boolean
   onToggleCollapse?: () => void
   onClick: (e: React.MouseEvent) => void
@@ -29,7 +36,7 @@ interface Props {
   renamingId: string | null
 }
 
-export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaState, collapsed, onToggleCollapse, onClick, onContextMenu, renamingId }: Props) {
+export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaState, failure = null, collapsed, onToggleCollapse, onClick, onContextMenu, renamingId }: Props) {
   const updateCue = useStore(s => s.updateCue)
   const [editing, setEditing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -110,6 +117,7 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
       data-state={runState?.state}
       data-depth={depth}
       data-armed={cue.isArmed}
+      data-failed={failure !== null && !isRunning}
       onClick={onClick}
       onDoubleClick={startEdit}
       onContextMenu={e => { e.preventDefault(); onContextMenu(e, cue.id) }}
@@ -164,6 +172,11 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
           <span className="state-pill">post-wait</span>
         )}
         {vamping && <span className="state-pill" data-vamping="true">vamping</span>}
+        {/* The last run, not this one: a cue fired again is doing what its other pills
+            say, and what it did last time comes back only if it does it again. */}
+        {failure !== null && !isRunning && (
+          <span className="failed-pill" title={`Last run failed: ${failure}`}>failed</span>
+        )}
       </span>
       <span className="col-dur">
         {countingDown ? (

@@ -147,7 +147,8 @@
 /* One pill shape, whatever it says: what the cue is doing now, or that it is out of the
    running order. */
 .state-pill,
-.disarmed-pill {
+.disarmed-pill,
+.failed-pill {
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
@@ -160,6 +161,15 @@
 .disarmed-pill {
   background: var(--bg-card);
   color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+}
+
+/* The cue's last run did not do what the cue says. The semantic failure pair, the same
+   one the inspector's Last Run badge and the alarm chip are drawn in. */
+.failed-pill {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
   text-transform: uppercase;
   letter-spacing: var(--ls-caps);
 }

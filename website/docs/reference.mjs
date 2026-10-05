@@ -882,7 +882,9 @@ await rig.blackout()</code></div>
       <h1>Troubleshooting</h1>
       <p class="doc-lede">
         Start with the <strong>Log</strong> tab in the dock and the <strong>Last run</strong>
-        block in the cue's own inspector. Between them they usually say it outright.
+        block in the cue's own inspector. Between them they usually say it outright. A cue
+        whose last run failed is marked <em>failed</em> on its row — hover the mark for the
+        reason — and the Log tab counts the errors written since you last had it open.
       </p>
     </section>
 

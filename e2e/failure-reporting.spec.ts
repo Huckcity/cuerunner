@@ -1,6 +1,8 @@
 // What the operator can see when a cue could not do what it says. A missing MIDI port
 // and an OSC host that does not resolve used to fire silently; both are now reported in
-// the inspector's Last Run and in the log.
+// the inspector's Last Run and in the log — and, because GO has moved the selection on by
+// the time a cue fails, on the cue's own row and on the Log tab, which are the two parts
+// of that report still on screen.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { addCueFromMoreMenu, closeApp, launchApp } from './helpers'
 
@@ -39,6 +41,34 @@ test('a MIDI cue that reached no port is reported as failed', async () => {
   // is not the contract.
   await expect(page.locator('.last-run-error')).toBeVisible()
   await expect(page.locator('.last-run-error')).toContainText('MIDI')
+})
+
+test('a cue that failed says so on its row and on the Log tab, with nothing reselected', async () => {
+  await addCueFromMoreMenu(page, 'MIDI')
+  // A second cue, so GO has somewhere to move the selection on to: the inspector is on
+  // this one by the time the MIDI cue has failed.
+  await page.locator('.toolbar-cue-btn', { hasText: 'Wait' }).click()
+  const midi = page.locator('.cue-row').first()
+  await midi.click()
+  await expect(midi.locator('.failed-pill')).toHaveCount(0)
+  await expect(page.locator('.dock-tab.btn-log .dock-tab-count')).toHaveCount(0)
+
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(page.locator('.cue-row').nth(1)).toHaveAttribute('data-selected', 'true')
+
+  // The row carries the failure, and the reason is on the mark itself.
+  await expect(midi.locator('.failed-pill')).toHaveText('failed')
+  await expect(midi).toHaveAttribute('data-failed', 'true')
+  await expect(midi.locator('.failed-pill')).toHaveAttribute('title', /^Last run failed: .*MIDI/)
+  // And the tab of the panel that explains it counts what has not been read.
+  // (Not held to a number: a machine with no MIDI at all has said so in the log already.)
+  const unread = page.locator('.dock-tab.btn-log .dock-tab-count')
+  await expect(unread).toBeVisible()
+
+  // Opening the log is reading it.
+  await page.locator('.dock-tab.btn-log').click()
+  await expect(page.locator('.log-row[data-level="error"]', { hasText: 'MIDI' }).first()).toBeVisible()
+  await expect(unread).toHaveCount(0)
 })
 
 test('an OSC cue whose host cannot be resolved is reported as failed', async () => {

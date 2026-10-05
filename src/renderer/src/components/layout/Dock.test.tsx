@@ -83,6 +83,50 @@ describe('Dock', () => {
     expect(container.querySelector('.pro-lock[data-feature="Wireless"]')).not.toBeNull()
   })
 
+  it('counts the errors written to the log since it was last on screen, on its tab', () => {
+    useStore.setState({ log: [] })
+    act(() => { root.render(<Harness />) })
+    const count = (): string | null => tab('btn-log').querySelector('.dock-tab-count')?.textContent ?? null
+    expect(count()).toBeNull()
+
+    // A cue fails while the dock is showing the selected cue: the log is the only place
+    // that says why, and its tab is the only part of it on screen.
+    act(() => {
+      useStore.getState().appendLog([
+        { level: 'info', message: 'started', label: '4 · Strings Patch' },
+        { level: 'error', message: 'No MIDI output port is set for this cue', label: '4 · Strings Patch' },
+        { level: 'error', message: 'request failed', label: '6 · Trigger Video' }
+      ])
+    })
+    expect(count()).toBe('2')
+
+    // Opening the log is reading it, and the count does not come back when it is closed.
+    act(() => { tab('btn-log').click() })
+    expect(count()).toBeNull()
+    act(() => { tab('btn-cue').click() })
+    expect(count()).toBeNull()
+
+    // What is written after that is new.
+    act(() => { useStore.getState().appendLog([{ level: 'error', message: 'audio device lost' }]) })
+    expect(count()).toBe('1')
+  })
+
+  it('counts nothing but errors, and nothing while the log is the panel on screen', () => {
+    useStore.setState({ log: [] })
+    act(() => { root.render(<Harness initial="log" />) })
+    act(() => {
+      useStore.getState().appendLog([
+        { level: 'output', message: 'house lights → warm' },
+        { level: 'error', message: 'request failed' }
+      ])
+    })
+    expect(tab('btn-log').querySelector('.dock-tab-count')).toBeNull()
+
+    act(() => { tab('btn-monitor').click() })
+    act(() => { useStore.getState().appendLog([{ level: 'info', message: 'completed in 12ms' }]) })
+    expect(tab('btn-log').querySelector('.dock-tab-count')).toBeNull()
+  })
+
   it('folds away to its tabs, and remembers that', () => {
     act(() => { root.render(<Harness />) })
     act(() => container.querySelector<HTMLButtonElement>('.dock-collapse')!.click())
