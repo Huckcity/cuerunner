@@ -125,9 +125,14 @@ export function WaveformPanel() {
    */
   const cursorMs = cursor !== null && cursor.cueId === audioCue?.id ? cursor.ms : null
 
-  /** The file length in ms, from the envelope the engine sent, or the cue's own. */
+  /**
+   * The file length in ms, from the envelope the engine sent, or the cue's own. The ref is
+   * seconds and the cue's length is milliseconds, so only the ref is scaled: scaling both
+   * made the fallback a thousand times the file, for as long as there was no envelope —
+   * while one was on its way, and for good when the file could not be read.
+   */
   const totalMs = (): number =>
-    (durationRef.current || (audioCue?.duration ?? 0)) * 1000
+    durationRef.current > 0 ? durationRef.current * 1000 : audioCue?.duration ?? 0
 
   /** A span of the file, in ms, as fractions of it; a null end is the end of the file. */
   const fractionsOf = (startMs: number, endMs: number | null, totalMs: number): WaveformRegion => {
@@ -276,6 +281,9 @@ export function WaveformPanel() {
     if (peaksFileRef.current !== audioCue.filePath) {
       peaksRef.current = null
       peaksFileRef.current = audioCue.filePath
+      // The length went with the envelope it came from: left behind, the header and every
+      // press on the panel read the last file's length until this one's own arrived.
+      durationRef.current = 0
       setPeaks(null)
       setOnsets([])
     }
@@ -342,7 +350,7 @@ export function WaveformPanel() {
   useEffect(() => {
     if (!isPlaying || !audioCue) {
       if (!isPlaying) {
-        const length = (durationRef.current || (audioCue?.duration ?? 0)) * 1000
+        const length = totalMs()
         setPlayFraction(audioCue && length > 0 ? audioCue.startTime / length : 0)
       }
       return
