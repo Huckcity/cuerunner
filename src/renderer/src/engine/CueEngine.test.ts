@@ -1009,6 +1009,37 @@ describe('CueEngine — stop cue', () => {
     expect(engine.stop).toHaveBeenCalledWith('a1', 800)
   })
 
+  it('reports a stop whose target is no longer in the show, and still moves the show on', () => {
+    // The cue it named was deleted: the stop reaches nothing, and a result of "ok" would
+    // hide that until the night it mattered.
+    const stopCue = makeStop({ targetCueId: 'deleted-cue', advance: 'on-end' })
+    const nextCue = makeWait({ id: 'w2', number: '2' })
+    const { runner, setRunning, setLastRun } = setup([stopCue, nextCue])
+
+    runner.go()
+
+    expect(setLastRun).toHaveBeenCalledWith('s1', expect.objectContaining({
+      outcome: 'error', error: 'the cue it stops is not in the show'
+    }))
+    expect(setRunning.mock.calls.map(c => c[0])).toContain('w2')
+  })
+
+  it('reports nothing of the kind for a stop aimed at everything, or at a cue that is there', () => {
+    const target = makeWait({ id: 'w1', duration: 5000 })
+    const { runner, setLastRun } = setup([
+      target,
+      makeStop({ id: 's-all' }),
+      makeStop({ id: 's-one', targetCueId: 'w1' })
+    ], 's-all')
+    runner.go()
+    vi.advanceTimersByTime(DEFAULT_TRIGGER_GUARD.windowMs + 1)
+    runner.go()
+
+    for (const id of ['s-all', 's-one']) {
+      expect(setLastRun).toHaveBeenCalledWith(id, expect.objectContaining({ outcome: 'success' }))
+    }
+  })
+
   it('fires the next cue only after the fade when waitForFade is on', () => {
     const stopCue = makeStop({
       targetCueId: 'a1', fadeOut: true, fadeOutDuration: 1200, waitForFade: true, advance: 'on-end'

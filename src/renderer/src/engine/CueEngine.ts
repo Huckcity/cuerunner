@@ -1318,13 +1318,22 @@ export class CueEngine {
         this.stopCue(target.id, fadeMs)
       }
     }
+    // A stop aimed at a cue that is no longer in the show stops nothing, and says so: the
+    // cue it named was deleted, and a stop that reported "ok" for it is a cue that looks
+    // like it is doing its job on the night it is not. Its timing is what it always was —
+    // the show moves on when it would have — only the result differs.
+    const targetGone = cue.targetCueId !== 'all' &&
+      !this.deps!.getCues().some(c => c.id === cue.targetCueId)
+    const done: Finish = targetGone
+      ? endMs => finish(endMs, { outcome: 'error', error: 'the cue it stops is not in the show' })
+      : finish
     // A wait-for-fade stop keeps the run open until the fade has finished sounding,
     // so the next cue does not start over it.
     if (cue.fadeOut && cue.waitForFade) {
       const endAt = at + cue.fadeOutDuration
-      this.scheduleRunEnd(run, endAt, finish)
+      this.scheduleRunEnd(run, endAt, done)
     } else {
-      finish(at)
+      done(at)
     }
   }
 

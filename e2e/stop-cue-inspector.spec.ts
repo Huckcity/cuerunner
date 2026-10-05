@@ -64,3 +64,27 @@ test('Wait for fade is gated by Fade out and survives reselection', async () => 
   await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
   await expect(waitForFade).toBeChecked()
 })
+
+test('a Stop cue whose target was deleted says so, in its tab and when it runs', async () => {
+  await toolbarCueBtn(page, 'Audio').click()
+  await toolbarCueBtn(page, 'Stop').click()
+  await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
+  const target = page.locator('.field-row').filter({ hasText: 'Target' }).locator('select')
+  await target.selectOption({ index: 1 })
+
+  // The cue it stops is taken out of the show.
+  await page.locator('.cue-row').first().click()
+  await page.keyboard.press('Delete')
+  await expect(page.locator('.cue-row')).toHaveCount(1)
+
+  // The tab used to draw "All cues" here: a select whose value matches no option shows
+  // its first one, which is a stop-everything nobody asked for and the cue does not do.
+  const stop = page.locator('.cue-row').first()
+  await stop.click()
+  await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
+  await expect(target.locator('option:checked')).toHaveText('— not in this show —')
+
+  // And fired, it reports what it reached: nothing.
+  await page.getByRole('button', { name: /GO/ }).click()
+  await expect(stop.locator('.failed-pill')).toHaveAttribute('title', /the cue it stops is not in the show/)
+})

@@ -13,6 +13,7 @@ export function StopInspector({ cue }: Props) {
   const set = (patch: Partial<StopCue>) => update(cue.id, patch)
 
   const otherCues = cues.filter(c => c.id !== cue.id)
+  const targetGone = cue.targetCueId !== 'all' && !otherCues.some(c => c.id === cue.targetCueId)
 
   return (
     <div>
@@ -20,6 +21,9 @@ export function StopInspector({ cue }: Props) {
         <label>Target</label>
         <select value={cue.targetCueId} onChange={e => set({ targetCueId: e.target.value })}>
           <option value="all">All cues</option>
+          {/* A target that was deleted is said, not papered over: a select whose value
+              matches no option draws its first one, which reads as a choice nobody made. */}
+          {targetGone && <option value={cue.targetCueId}>— not in this show —</option>}
           {otherCues.map(c => {
             const displayName = c.name.length > 20 ? c.name.slice(0, 17) + '...' : c.name
             return <option key={c.id} value={c.id}>{c.number} {displayName}</option>
