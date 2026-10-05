@@ -23,15 +23,26 @@ test('a window that was moved and resized opens there again', async () => {
   let placed: Bounds
   try {
     await expect(page.locator('.toolbar')).toBeVisible()
-    // Not where or what the window opens at by itself. What is compared after the
-    // relaunch is what the window says it became, which is the operating system's answer
-    // to the request rather than the request.
-    placed = await app.evaluate(({ BrowserWindow }) => {
+    // Not where or what the window opens at by itself, and inside the display: the
+    // runners' screens are not all the same size (the Windows one is 1024 wide), and a
+    // window asked to be wider than its screen is clamped by the app on the way back in
+    // and moved by macOS on the way out. What is compared after the relaunch is what the
+    // window says it became, which is the operating system's answer to the request rather
+    // than the request.
+    placed = await app.evaluate(({ BrowserWindow, screen }) => {
       const win = BrowserWindow.getAllWindows()[0]
-      win.setBounds({ x: 48, y: 56, width: 1040, height: 560 })
+      const area = screen.getPrimaryDisplay().workArea
+      const [minWidth, minHeight] = win.getMinimumSize()
+      win.setBounds({
+        x: area.x + Math.max(0, Math.min(40, area.width - minWidth)),
+        y: area.y + Math.max(0, Math.min(40, area.height - minHeight)),
+        width: minWidth,
+        height: minHeight
+      })
       return win.getNormalBounds()
     })
     expect(placed.width).not.toBe(1280)
+    expect(placed.height).not.toBe(800)
 
     // The artifact, not a pause: the place is written once the window has stopped moving.
     await expect.poll(() => {
