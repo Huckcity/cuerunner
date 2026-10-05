@@ -27,7 +27,7 @@ import type {
   ShowSettings,
   ShowSnapshot
 } from '../../../shared/show'
-import { createCue } from '../utils/cueDefaults'
+import { createCue, nextCueNumber } from '../utils/cueDefaults'
 import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
@@ -799,7 +799,7 @@ export const useStore = create<CueListState>((set) => ({
   mergeReport: null,
 
   addCue: (type, afterId) => set(s => {
-    const cue = createCue(type)
+    const cue = createCue(type, nextCueNumber(s.cues))
     // Adding a cue is the one moment the show's answer to trimming silence is read: the
     // setting is a default for new cues, never a switch over the ones already in the
     // list, so turning it off does not rewrite the show behind the operator.
@@ -851,8 +851,11 @@ export const useStore = create<CueListState>((set) => ({
       }
     }
 
-    const newCues: Cue[] = files.map(({ filePath, name }) => ({
-      ...(createCue('audio') as AudioCue),
+    // One count for the whole drop: the files take the next numbers in the order they
+    // were dropped, starting one past what the show already uses.
+    const firstNumber = Number(nextCueNumber(s.cues))
+    const newCues: Cue[] = files.map(({ filePath, name }, index) => ({
+      ...(createCue('audio', String(firstNumber + index)) as AudioCue),
       filePath,
       name,
       parentId,

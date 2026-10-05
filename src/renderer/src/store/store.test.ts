@@ -57,6 +57,44 @@ function resetStore() {
 describe('store — addCue', () => {
   beforeEach(resetStore)
 
+  it('numbers a new cue one past the highest number in the show', () => {
+    const { loadWorkspace, addCue } = useStore.getState()
+    addCue('wait')
+    addCue('wait')
+    const made = useStore.getState().cues
+    loadWorkspace(
+      [{ ...made[0], number: '1' }, { ...made[1], number: '7' }],
+      'Opened',
+      null
+    )
+    // A show that has just been opened: the next cue follows its numbers, not a count
+    // the window kept from before the file was read.
+    addCue('wait', useStore.getState().cues[0].id)
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['1', '8', '7'])
+  })
+
+  it('starts a new show at cue 1, whatever the last one reached', () => {
+    const { loadWorkspace, addCue } = useStore.getState()
+    addCue('wait')
+    addCue('wait')
+    addCue('wait')
+    loadWorkspace([], 'Untitled', null)
+    addCue('wait')
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['1'])
+  })
+
+  it('numbers dropped files in the order they were dropped, after the show\'s own', () => {
+    const { addCue, addAudioCuesFromFiles } = useStore.getState()
+    addCue('wait')
+    addCue('wait')
+    addAudioCuesFromFiles([
+      { filePath: '/media/a.wav', name: 'a' },
+      { filePath: '/media/b.wav', name: 'b' },
+      { filePath: '/media/c.wav', name: 'c' }
+    ])
+    expect(useStore.getState().cues.map(cue => cue.number)).toEqual(['1', '2', '3', '4', '5'])
+  })
+
   it('appends a cue to the end by default', () => {
     useStore.getState().addCue('wait')
     expect(useStore.getState().cues).toHaveLength(1)

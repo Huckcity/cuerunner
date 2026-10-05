@@ -1,6 +1,32 @@
 import { describe, it, expect } from 'vitest'
-import { createCue, formatDuration, formatClock } from './cueDefaults'
+import { createCue, formatDuration, formatClock, nextCueNumber } from './cueDefaults'
 import type { CueType } from '../../../shared/cue'
+
+describe('nextCueNumber', () => {
+  const numbered = (...numbers: string[]) => numbers.map(number => ({ number }))
+
+  it('starts an empty show at 1', () => {
+    expect(nextCueNumber([])).toBe('1')
+  })
+
+  it('is one past the highest number the show uses, wherever that cue sits', () => {
+    expect(nextCueNumber(numbered('1', '2', '3'))).toBe('4')
+    expect(nextCueNumber(numbered('7', '2', '3'))).toBe('8')
+  })
+
+  it('reads the whole number a cue number begins with', () => {
+    // A split leaves "12b", a duplicate "12 copy", and an operator types "12.5".
+    expect(nextCueNumber(numbered('12b'))).toBe('13')
+    expect(nextCueNumber(numbered('12 copy'))).toBe('13')
+    expect(nextCueNumber(numbered('12.5'))).toBe('13')
+  })
+
+  it('counts past a number that is a label rather than a place', () => {
+    expect(nextCueNumber(numbered('LX 12', '', 'A'))).toBe('1')
+    expect(nextCueNumber(numbered('3', 'LX 40'))).toBe('4')
+    expect(nextCueNumber(numbered('2', '99999999999999999999'))).toBe('3')
+  })
+})
 
 describe('createCue', () => {
   const types: CueType[] = ['audio', 'midi', 'osc', 'wait', 'fade', 'stop', 'group', 'network', 'script', 'scene', 'devamp']
@@ -14,6 +40,14 @@ describe('createCue', () => {
     const b = createCue(type)
     expect(a.id).not.toBe(b.id)
     expect(a.id).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('takes the number it is given, and is cue 1 when it is made on its own', () => {
+    expect(createCue('wait', '14').number).toBe('14')
+    expect(createCue('wait').number).toBe('1')
+    // Two cues made on their own are both the first cue of nothing: no count is kept
+    // between them, which is what used to number a new show from the last one's total.
+    expect(createCue('wait').number).toBe('1')
   })
 
   it.each(types)('%s cue is armed by default', (type) => {
