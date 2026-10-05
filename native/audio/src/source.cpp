@@ -4,6 +4,7 @@
 #include "util.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
@@ -47,6 +48,25 @@ bool readMagic(const std::string& path, unsigned char* out, size_t count) {
   const size_t got = std::fread(out, 1, count, f);
   std::fclose(f);
   return got == count;
+}
+
+/**
+ * Why a file cannot be opened at all, or empty when it can be.
+ *
+ * Asked only once the sniff has failed, because the sniff cannot tell the two apart: a file
+ * that is not there has no first bytes to read, and neither does one that is there and is
+ * not media. Answering both with "unrecognised media format" told an operator whose file
+ * had been moved to go and convert it.
+ */
+std::string openFailure(const std::string& path) {
+  errno = 0;
+  std::FILE* f = std::fopen(path.c_str(), "rb");
+  if (f != nullptr) {
+    std::fclose(f);
+    return {};
+  }
+  if (errno == ENOENT) return "file not found";
+  return std::string("cannot open file: ") + std::strerror(errno);
 }
 
 /** The sixteen bytes a Sony Wave64 file starts with: the "riff" GUID, sizes in 64 bits. */
@@ -660,7 +680,12 @@ std::unique_ptr<Source> openSource(const std::string& path, std::string& error, 
   if (errorCode != nullptr) *errorCode = SourceError::None;
   Format format = sniffFormat(path);
   if (format == Format::Unknown) {
-    error = "unrecognised media format (expected wav, mp3, ogg, flac, m4a or aiff)";
+    // The code is the same either way — the file cannot be played — and the sentence is
+    // what the operator acts on: find the file, or convert it.
+    const std::string failure = openFailure(path);
+    error = failure.empty()
+        ? "unrecognised media format (expected wav, mp3, ogg, flac, m4a or aiff)"
+        : failure;
     if (errorCode != nullptr) *errorCode = SourceError::Unreadable;
     return nullptr;
   }

@@ -41,7 +41,7 @@
    rather than by a padding that has to be kept in step with them. The header is laid out
    with the same gap as a row (App.css --space-2), so a column heading sits over its
    column whatever is in it. */
-.col-num   { width: 52px; flex-shrink: 0; }
+.col-num   { width: 68px; flex-shrink: 0; }
 .col-name  { flex: 1; min-width: 0; }
 .col-dur   { width: 76px; flex-shrink: 0; text-align: right; }
 .col-pre   { width: 64px; flex-shrink: 0; text-align: right; }

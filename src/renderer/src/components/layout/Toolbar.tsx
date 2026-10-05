@@ -273,7 +273,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
               onDoubleClick={() => setEditingName(true)}
               title={workspacePath === null ? 'Double-click to rename' : `${workspacePath}\nDouble-click to rename`}
             >
-              {workspaceName}{isDirty ? <span className="dirty-dot"> ●</span> : ''}
+              <span className="workspace-name-label">{workspaceName}</span>
+              {isDirty ? <span className="dirty-dot"> ●</span> : ''}
             </span>
           )}
         </div>

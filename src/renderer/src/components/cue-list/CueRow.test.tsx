@@ -52,6 +52,13 @@ describe('CueRow — a failed run', () => {
     expect(row().dataset.failed).toBe('true')
   })
 
+  it('carries its whole number in a tooltip, for a number the column has to cut short', () => {
+    draw(null)
+    const number = container.querySelector<HTMLElement>('.cue-number')!
+    expect(number.textContent).toBe(cue.number)
+    expect(number.title).toBe(cue.number)
+  })
+
   it('says nothing about a cue that has not failed', () => {
     draw(null)
     expect(pill()).toBeNull()

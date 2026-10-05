@@ -61,16 +61,26 @@
 /* The shape of every icon is set once in App.css; a row only says what colour it is. */
 .cue-type-icon { color: var(--fg-muted); }
 
+/* Wide enough for the numbers a show is actually given — `100.5`, `LX 12`, `SQ 100` — which
+   the column used to be too narrow for: a number is text, and one with a space in it
+   wrapped onto a second line and out over the row's borders. */
 .col-num {
-  width: 52px;
+  width: 68px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 
+/* One line, whatever was typed: a number longer than the column is cut short where it
+   meets the icon rather than drawn across it and the name, and is whole in the row's
+   tooltip and in the inspector. */
 .cue-number {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: right;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;

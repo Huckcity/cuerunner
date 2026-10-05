@@ -9,15 +9,21 @@
   flex-shrink: 0;
 }
 
+/* The one part of the row that gives. Everything to its right is a control at the width
+   its label needs, and the rightmost of them — the Cues/Scenes switch — is what the show
+   is run from; the show's name is as long as somebody made it. So the name is cut short
+   before any control is pushed off the edge of a window that clips rather than scrolls. */
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .file-menu-wrapper {
   position: relative;
+  flex-shrink: 0;
 }
 
 .toolbar-brand {
@@ -107,9 +113,13 @@
 .workspace-name {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .workspace-name-text {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
   font-size: var(--text-base);
   color: var(--fg-body);
   cursor: default;
@@ -121,7 +131,18 @@
 
 .workspace-name-text:hover { border-color: var(--border-input); }
 
+/* The name itself, which is what is cut short: the unsaved dot beside it is not part of
+   what may be lost to an ellipsis. */
+.workspace-name-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dirty-dot {
+  flex-shrink: 0;
+  white-space: pre;
   color: var(--accent-amber);
   font-size: var(--text-sm);
 }
@@ -135,12 +156,14 @@
   padding: 2px 6px;
   outline: none;
   width: 180px;
+  min-width: 0;
 }
 
 /* The list's own controls, in a tray beside the cues': same shape, different job. */
 .toolbar-list-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 2px;
   padding: 2px;
   background: var(--bg-well);
@@ -153,6 +176,7 @@
 .toolbar-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 2px;
   padding: 2px;
   background: var(--bg-well);
@@ -224,6 +248,7 @@
 .toolbar-more-btn {
   height: var(--h-button-sm);
   padding: 0 var(--space-3);
+  white-space: nowrap;
   font-size: var(--text-base);
   border: none;
   border-radius: var(--radius-lg);
@@ -316,3 +341,18 @@
    every tray that can be hidden says so itself. */
 .toolbar-actions[hidden],
 .toolbar-list-actions[hidden] { display: none; }
+
+/* A narrow window. The row's controls at their full spacing are wider than the smallest
+   window the app allows — 1062px of them against a 1000px floor, which is less again inside
+   a Windows frame — so below this the spacing closes up: every control keeps its label and
+   its place, and what is given back is the air between them. Above it nothing changes. */
+@media (max-width: 1150px) {
+  .toolbar { gap: var(--space-2); }
+
+  .toolbar-cue-btn,
+  .toolbar-more-btn,
+  .toolbar-list-btn,
+  .toolbar-view-btn { padding: 0 var(--space-2); }
+
+  .toolbar-cue-btn { gap: var(--space-1); }
+}

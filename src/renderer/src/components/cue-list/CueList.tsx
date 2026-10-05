@@ -208,10 +208,16 @@ export function CueList() {
 
   // ── File-drop handlers ────────────────────────────────────────────────────
 
+  // Only a drag that carries files is counted. A cue being reordered crosses the same
+  // rows, and its drop is taken by the list before it can reach the container — so its
+  // enters were counted and its last leave never was. Every reorder left the count one
+  // high, and the next file dragged over the list and away again could not bring it back
+  // to zero: the drop hint stayed over a dimmed list until a file was actually dropped.
   const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return
     e.preventDefault()
     dragCounterRef.current++
-    if (e.dataTransfer.types.includes('Files')) setIsDragOver(true)
+    setIsDragOver(true)
   }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -220,8 +226,12 @@ export function CueList() {
     e.dataTransfer.dropEffect = 'copy'
   }, [])
 
-  const handleDragLeave = useCallback(() => {
-    dragCounterRef.current--
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return
+    // Never below zero: a leave with no enter behind it — a drag that began over the list
+    // as the window opened — must not leave the count waiting for an enter that already
+    // happened.
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
     if (dragCounterRef.current === 0) setIsDragOver(false)
   }, [])
 
