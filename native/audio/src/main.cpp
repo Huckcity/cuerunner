@@ -11,6 +11,7 @@
 #include "transport.h"
 #include "util.h"
 
+#include <clocale>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -150,6 +151,18 @@ bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& so
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+  // A path arrives from the app as UTF-8, and this engine opens files with the C runtime's
+  // narrow functions — `fopen`, `stat`, and the decoders' own `*_init_file`. On Windows
+  // those read a narrow path in the machine's ANSI code page unless told otherwise, so any
+  // character outside ASCII named a file that was not there: a show kept under "Théâtre",
+  // and the demo's own audio for anybody whose Windows user name has an accent in it,
+  // because the demo is copied into their profile. With the character type set to UTF-8
+  // the runtime converts the path as the UTF-8 it is. Only the character type: the number
+  // format stays the C locale's, which is what the JSON on the wire is written in. A
+  // runtime too old to know the code page answers null and is left as it was.
+  std::setlocale(LC_CTYPE, ".UTF8");
+#endif
   ws::EngineOptions engineOptions;
   std::string socketPath;
   std::string scriptPath;

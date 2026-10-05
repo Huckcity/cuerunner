@@ -362,6 +362,9 @@
   white-space: nowrap;
 }
 
+/* Why the engine cannot play the file, under the file it is about. */
+.audio-file-fault { color: var(--accent-amber); }
+
 /* The script cue's helper notes, behind their disclosure. */
 .script-help {
   display: grid;

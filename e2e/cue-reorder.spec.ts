@@ -110,24 +110,24 @@ test('a file dragged over the list and away leaves no drop hint behind, after a 
 
   // A real reorder, by the mouse: this is what left the count high.
   await dragRow(0, { index: 2, edge: 'bottom' })
-  expect(await numbers()).toEqual(['2', '3', '1'])
+  await expect.poll(numbers).toEqual(['2', '3', '1'])
 
   // A file from the desktop cannot be dragged by the suite, so the two events the list
-  // hears from one are sent to it: over the list, and away again without a drop.
-  const during = await page.evaluate(() => {
+  // hears from one are sent to it: over the list, and away again without a drop. Each is
+  // waited on by what it does to the window — the hint read a frame after the first event
+  // was not always up yet, on a machine with every core busy.
+  const fileDrag = (type: 'dragenter' | 'dragleave'): Promise<void> => page.evaluate(type => {
     const list = document.querySelector('.cue-list-container')
     if (list === null) throw new Error('no cue list on screen')
     const data = new DataTransfer()
     data.items.add(new File(['RIFF'], 'sting.wav', { type: 'audio/wav' }))
-    list.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: data }))
-    return new Promise<boolean>(resolve => requestAnimationFrame(() => {
-      const up = document.querySelector('.cue-list-drop-hint') !== null
-      list.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, dataTransfer: data }))
-      resolve(up)
-    }))
-  })
+    list.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data }))
+  }, type)
+
+  await fileDrag('dragenter')
   // The hint did come up — otherwise its absence below would prove nothing.
-  expect(during).toBe(true)
+  await expect(page.locator('.cue-list-drop-hint')).toHaveCount(1)
+  await fileDrag('dragleave')
 
   await expect(page.locator('.cue-list-drop-hint')).toHaveCount(0)
   await expect(page.locator('.cue-list-container')).toHaveAttribute('data-drag-over', 'false')

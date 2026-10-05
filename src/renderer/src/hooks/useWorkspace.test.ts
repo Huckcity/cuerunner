@@ -166,9 +166,10 @@ describe('useWorkspace — a file that is not a show', () => {
   let container: HTMLDivElement
   let root: Root
   let openWorkspace: () => Promise<void>
+  let openRecent: (filePath: string) => Promise<void>
 
   function Harness(): null {
-    openWorkspace = useWorkspace().openWorkspace
+    ;({ openWorkspace, openRecent } = useWorkspace())
     return null
   }
 
@@ -192,6 +193,22 @@ describe('useWorkspace — a file that is not a show', () => {
     act(() => root.unmount())
     container.remove()
     vi.clearAllMocks()
+  })
+
+  it('names a recent file once: the refusal already says which file it is about', async () => {
+    // The banner used to open with the path and then carry a sentence that ended with it:
+    // "Could not open /shows/Gone.cuerunner: that file is no longer there — /shows/Gone.cuerunner".
+    const file = '/shows/Gone.cuerunner'
+    vi.mocked(window.cuerunner.workspace.openPath).mockResolvedValue({
+      ok: false,
+      error: `that file is no longer there — ${file}`
+    })
+
+    await act(async () => { await openRecent(file) })
+
+    const notice = useStore.getState().notice ?? ''
+    expect(notice).toBe(`Could not open the workspace: that file is no longer there — ${file}`)
+    expect(notice.split(file)).toHaveLength(2)
   })
 
   it('names the file and says it is not a show, with no parser text in the notice', async () => {

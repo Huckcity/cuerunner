@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Mock } from 'vitest'
-import { CueEngine } from './CueEngine'
+import { CueEngine, NO_FILE_SELECTED } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
 import type { AudioEngineEvent, AudioMetadata } from './audioEngineClient'
 import { network } from './networkClient'
@@ -156,6 +156,28 @@ describe('CueEngine — basic execution', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
+  // A cue made with the toolbar has no file until it is given one. Fired, it used to log
+  // "completed in 0ms": a GO that made no sound and looked as though it had worked.
+  it('says an audio cue with no file played nothing, and still hands the show on', () => {
+    const empty = makeAudio({ id: 'a1', filePath: '', advance: 'on-end' })
+    const next = makeWait({ id: 'w1', duration: 1000 })
+    const { runner, setLastRun, appendLog, setRunning } = setup([empty, next])
+
+    runner.go()
+    vi.advanceTimersByTime(200)
+
+    expect(setLastRun).toHaveBeenCalledWith('a1', expect.objectContaining({
+      outcome: 'error',
+      error: NO_FILE_SELECTED
+    }))
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ level: 'error', message: NO_FILE_SELECTED })
+    ])
+    // Nothing was asked of the engine, and the sequence is not held open by the cue.
+    expect(audioEngine.start).not.toHaveBeenCalled()
+    expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
+  })
+
   it('fires a wait cue and marks it playing immediately', () => {
     const { runner, setRunning } = setup([makeWait()])
     runner.go()
@@ -299,6 +321,27 @@ describe('CueEngine — basic execution', () => {
     const { runner, setSelected } = setup([cue1, cue2])
     runner.go()
     expect(setSelected).toHaveBeenCalledWith(null)
+  })
+
+  // The selection is empty exactly once in every performance: after the last cue. GO used
+  // to fire the first cue of the show from there, so one more press at the end — a hand
+  // resting on Space as the house lights come up — started the walk-in again.
+  it('fires nothing when nothing is selected, which is where the show stands after its last cue', () => {
+    const walkIn = makeWait({ id: 'w1', duration: 100 })
+    const bows = makeWait({ id: 'w2', duration: 100 })
+    const { runner, setRunning, setSelected } = setup([walkIn, bows], 'w2')
+
+    runner.go()
+    expect(setSelected).toHaveBeenLastCalledWith(null)
+    vi.advanceTimersByTime(1000)
+    runner.resetGuards()
+    setRunning.mockClear()
+
+    runner.go()
+    vi.advanceTimersByTime(1000)
+
+    expect(setRunning).not.toHaveBeenCalled()
+    expect(setSelected).toHaveBeenLastCalledWith(null)
   })
 
   it('sets selection to null when firing the last cue', () => {
@@ -565,10 +608,12 @@ describe('CueEngine — re-firing a running cue', () => {
     // The cue that is itself the repeat — a stinger, a hold chord — asks for the old
     // behaviour, which is the whole reason the policy is a setting rather than a rule.
     const cue = makeWait({ id: 'w1', duration: 5000, refire: 'restart' })
-    const { runner, setRunning } = setup([cue])
+    const { runner, setRunning, setSelected } = setup([cue])
 
     runner.go()
     runner.resetGuards()
+    // The hand goes back on the cue: firing the last cue of a list leaves nothing selected.
+    setSelected('w1')
     runner.go()
 
     expect(starts(setRunning, 'w1')).toBe(2)
@@ -1496,7 +1541,7 @@ describe('CueEngine — engine failures are reported', () => {
 
   it('lets the show go on after a loss: the row is clear and the next GO fires', async () => {
     const cue = makeAudio({ id: 'a1', duration: 5000, postWait: 3000 })
-    const { runner, setLastRun } = setup([cue])
+    const { runner, setLastRun, setSelected } = setup([cue])
 
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
@@ -1515,6 +1560,9 @@ describe('CueEngine — engine failures are reported', () => {
 
     engine.start.mockClear()
     runner.resetGuards()
+    // The operator selects the cue the device took: it was the last in the list, so the
+    // GO that fired it left nothing selected.
+    setSelected('a1')
     runner.go()
     await vi.advanceTimersByTimeAsync(0)
 

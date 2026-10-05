@@ -48,6 +48,9 @@ const PLANNED_END_TOLERANCE_MS = 25
 // still logged — the line names the type — but has no count of its own to climb.
 const MAX_UNRECOGNISED_EVENT_TYPES = 64
 
+/** What an audio cue's run says when the cue names no file: it ran, and played nothing. */
+export const NO_FILE_SELECTED = 'no file selected — nothing played'
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -228,7 +231,13 @@ export class CueEngine {
     const cues = getCues()
     const selectedId = getSelected()
 
-    const standingIdx = selectedId ? cues.findIndex(c => c.id === selectedId) : 0
+    // Nothing selected fires nothing. It used to fire the first cue of the show, and the
+    // selection is empty exactly once in every performance: after the last cue. One more
+    // press there — a hand resting on Space as the house lights come up — started the
+    // walk-in again over the bows. A show that has just been opened is standing on its
+    // first cue, so the top of the show is still one press away where it should be.
+    if (!selectedId) return
+    const standingIdx = cues.findIndex(c => c.id === selectedId)
     if (standingIdx < 0) return
 
     // A disarmed cue is skipped, not stood on: the press fires the next armed cue after
@@ -701,8 +710,12 @@ export class CueEngine {
   private planAudio(cue: AudioCue, run: CueRun, at: number, finish: Finish): void {
     if (!cue.filePath) {
       // A cue with no file plays nothing. It still takes its time in the sequence,
-      // rather than holding the show open forever.
-      this.track(run, this.scheduler!.schedule({ at, due: () => finish(at) }))
+      // rather than holding the show open forever — and it says so: a GO that made no
+      // sound and reported "completed in 0ms" was a cue that looked as though it worked.
+      this.track(run, this.scheduler!.schedule({
+        at,
+        due: () => finish(at, { outcome: 'error', error: NO_FILE_SELECTED })
+      }))
       return
     }
 

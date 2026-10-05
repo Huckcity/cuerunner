@@ -301,7 +301,8 @@ export async function openMergedShow(filePath: string): Promise<void> {
   try {
     const answer = await window.cuerunner.workspace.openPath(filePath)
     if (!answer.ok) {
-      reportFailure(`Could not open ${filePath}: ${answer.error}`)
+      // A refusal names the file itself — see `openRecent`.
+      reportFailure(`Could not open the workspace: ${answer.error}`)
       return
     }
     // The merge reports what it and its input reads repaired through its own report, but
@@ -404,7 +405,10 @@ export function useWorkspace() {
       // something to catch.
       const answer = await window.cuerunner.workspace.openPath(filePath)
       if (!answer.ok) {
-        reportFailure(`Could not open ${filePath}: ${answer.error}`)
+        // Every refusal a load can give names the file it is about, because the banner
+        // shows the sentence and nothing else — so the path is not said again in front of
+        // it. A fault, below, has only the operating system's words, and is told which file.
+        reportFailure(`Could not open the workspace: ${answer.error}`)
         return
       }
       loadIntoStore(

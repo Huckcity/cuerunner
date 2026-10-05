@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, shell, Menu } from 'electron'
+import { app, BrowserWindow, crashReporter, screen, shell, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -10,6 +10,7 @@ import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
 import { refuseNavigation } from './safety/navigation'
+import { placeWindow, readWindowState, saveWindowState } from './windowState'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
 
@@ -160,16 +161,32 @@ function createMenu(): void {
   Menu.setApplicationMenu(menu)
 }
 
+/** The size a window opens at when this machine has not been told another. */
+const DEFAULT_WINDOW = { width: 1280, height: 800 }
+
+// The toolbar is one row of controls that do not wrap, and the rightmost of them — the
+// Cues/Scenes switch — is the one an operator reaches for to run the show. At 800 it fell
+// off the edge and was clipped by the window, which clips rather than scrolls.
+const MINIMUM_WINDOW = { width: 1000, height: 500 }
+
+/** How long the window has to have stopped moving before its place is written down. */
+const WINDOW_STATE_SETTLE_MS = 400
+
 function createWindow(): void {
+  // Where the operator left the window, when the displays it was left on are still there:
+  // windowState.ts carries the why.
+  const stateFile = join(app.getPath('userData'), 'window-state.json')
+  const primary = screen.getPrimaryDisplay()
+  const workAreas = [primary, ...screen.getAllDisplays().filter(display => display.id !== primary.id)]
+    .map(display => display.workArea)
+  const placement = placeWindow(readWindowState(stateFile), workAreas, MINIMUM_WINDOW, DEFAULT_WINDOW)
+
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    // The toolbar is one row of controls that do not wrap, and the rightmost of them —
-    // the Cues/Scenes switch — is the one an operator reaches for to run the show. At
-    // 800 it fell off the edge and was clipped by the window, which clips rather than
-    // scrolls.
-    minWidth: 1000,
-    minHeight: 500,
+    width: placement.width,
+    height: placement.height,
+    ...(placement.x === undefined || placement.y === undefined ? {} : { x: placement.x, y: placement.y }),
+    minWidth: MINIMUM_WINDOW.width,
+    minHeight: MINIMUM_WINDOW.height,
     title: 'Cuerunner',
     backgroundColor: '#181818',
     webPreferences: {
@@ -184,6 +201,29 @@ function createWindow(): void {
       // the moment the operator minimizes the window and walks to the desk.
       backgroundThrottling: false
     }
+  })
+
+  if (placement.maximized) win.maximize()
+
+  // The window's place is written down once it has stopped moving, and again as it
+  // closes. `getNormalBounds` is the window as it is when it is not maximised, so a
+  // maximised window remembers both: that it was, and what to go back to.
+  const rememberPlace = (): void => {
+    if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+    saveWindowState(stateFile, { ...win.getNormalBounds(), maximized: win.isMaximized() })
+  }
+  let settling: ReturnType<typeof setTimeout> | null = null
+  const placeChanged = (): void => {
+    if (settling !== null) clearTimeout(settling)
+    settling = setTimeout(rememberPlace, WINDOW_STATE_SETTLE_MS)
+  }
+  win.on('resize', placeChanged)
+  win.on('move', placeChanged)
+  win.on('maximize', placeChanged)
+  win.on('unmaximize', placeChanged)
+  win.on('close', () => {
+    if (settling !== null) clearTimeout(settling)
+    rememberPlace()
   })
 
   // Intercept close and ask the renderer to run the dirty check.

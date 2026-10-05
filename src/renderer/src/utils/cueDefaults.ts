@@ -121,6 +121,16 @@ export function nextCueNumber(cues: ReadonlyArray<Pick<Cue, 'number'>>): string 
   return String(highest + 1)
 }
 
+/** What an audio cue is called until somebody, or a file, names it. */
+export const DEFAULT_AUDIO_CUE_NAME = 'Audio Cue'
+
+/** A cue's name from the file it plays: the file's own name, without its extension. */
+export function cueNameFromFile(filePath: string): string {
+  const filename = filePath.split(/[\\/]/).pop() ?? filePath
+  const dotIdx = filename.lastIndexOf('.')
+  return dotIdx > 0 ? filename.slice(0, dotIdx) : filename
+}
+
 function base(name: string, number: string): Omit<Cue, 'type'> {
   return {
     ...BASE_DEFAULTS,
@@ -141,7 +151,7 @@ export function createCue(type: CueType, number = '1'): Cue {
   switch (type) {
     case 'audio':
       return {
-        ...base('Audio Cue', number),
+        ...base(DEFAULT_AUDIO_CUE_NAME, number),
         type: 'audio',
         filePath: '',
         ...AUDIO_DEFAULTS

@@ -750,6 +750,35 @@ function isDescendant(cues: Cue[], cueId: string, possibleAncestorId: string): b
   return false
 }
 
+/**
+ * The cue a removal leaves in the removed cue's place: the first one after it that is still
+ * in the show and on screen, or failing that the last one before it. Null when the show is
+ * empty. A cue folded away under a collapsed group is passed over — a selection nobody can
+ * see is not somewhere to leave the operator's hand.
+ */
+function neighbourOfRemoved(
+  cues: Cue[],
+  removed: ReadonlySet<string>,
+  removedId: string,
+  collapsed: ReadonlySet<string>
+): string | null {
+  const at = cues.findIndex(cue => cue.id === removedId)
+  if (at < 0) return null
+  const byId = new Map(cues.map(cue => [cue.id, cue]))
+  const onScreen = (cue: Cue): boolean => {
+    if (removed.has(cue.id)) return false
+    const seen = new Set<string>()
+    for (let parent = cue.parentId; parent !== null && !seen.has(parent); parent = byId.get(parent)?.parentId ?? null) {
+      if (collapsed.has(parent)) return false
+      seen.add(parent)
+    }
+    return true
+  }
+  for (let i = at + 1; i < cues.length; i++) if (onScreen(cues[i])) return cues[i].id
+  for (let i = at - 1; i >= 0; i--) if (onScreen(cues[i])) return cues[i].id
+  return null
+}
+
 export const useStore = create<CueListState>((set) => ({
   workspaceName: UNTITLED_SHOW,
   workspacePath: null,
@@ -895,6 +924,23 @@ export const useStore = create<CueListState>((set) => ({
     }
 
     const selectedIds = s.selectedIds.filter(id => !removed.has(id))
+    // Everything the operator was holding has gone: the hand comes to rest on the cue that
+    // took its place. Left on nothing, the next Delete did nothing and the next GO fired
+    // the first cue of the show — from wherever in it the operator had been working.
+    const heldIsGone = selectedIds.length === 0 && s.selectedId !== null && removed.has(s.selectedId)
+    const neighbour = heldIsGone ? neighbourOfRemoved(s.cues, removed, s.selectedId!, s.collapsedGroupIds) : null
+    if (neighbour !== null) {
+      return {
+        cues: s.cues.filter(c => !removed.has(c.id)),
+        ...selectionFor(neighbour),
+        lastRuns: Object.fromEntries(
+          Object.entries(s.lastRuns).filter(([cueId]) => !removed.has(cueId))
+        ),
+        isDirty: true,
+        past: pushPast(s.past, snapshotOf(s)),
+        future: [],
+      }
+    }
     return {
       cues: s.cues.filter(c => !removed.has(c.id)),
       selectedIds,

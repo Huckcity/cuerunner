@@ -6,6 +6,7 @@ import { act, Profiler } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Toolbar } from './Toolbar'
 import { useStore } from '../../store'
+import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement
 let root: Root
@@ -56,6 +57,22 @@ describe('Toolbar', () => {
       expect(icon, `${button.textContent} has no icon`).not.toBeNull()
       expect(icon?.getAttribute('data-type')).toBeTruthy()
     }
+  })
+
+  it('marks the File menu entries a key turns on, on a machine without one, and none with one', () => {
+    const marked = (): string[] =>
+      [...container.querySelectorAll<HTMLButtonElement>('.file-menu button')]
+        .filter(button => button.querySelector('.pro-mark') !== null)
+        .map(button => button.dataset.action ?? '')
+
+    useStore.setState({ license: { state: 'unlicensed' } })
+    render('cues')
+    act(() => container.querySelector<HTMLButtonElement>('.toolbar-brand')!.click())
+    // Show Settings among them: it is the console and the cast, which Scenes run on.
+    expect(marked()).toEqual(['compare', 'merge', 'export-bundle', 'import-bundle', 'show-settings'])
+
+    act(() => { useStore.setState({ license: { state: 'active', license: TEST_LICENSE } }) })
+    expect(marked()).toEqual([])
   })
 
   it('marks the Pro cue types in the add menu, read from the declaration', () => {

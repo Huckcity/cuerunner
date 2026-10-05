@@ -27,6 +27,7 @@ export function ShowSettings() {
   const pro = usePro()
   const openShowSettings = useStore(s => s.openShowSettings)
   const closeShowSettings = useStore(s => s.closeShowSettings)
+  const openSettings = useStore(s => s.openSettings)
   // While this is up the transport keys stand down: the operator is setting a show up,
   // not running one, and a Space typed into a name must not fire the next cue behind it.
   useModal()
@@ -71,6 +72,25 @@ export function ShowSettings() {
         </div>
 
         <div className="show-settings-body">
+          {/* Without a key the console and the cast can still be set up — a show built on
+              a licensed machine opens here as it is, and nothing is thrown away — but what
+              runs on them is Scenes, and a dialog full of faders with no word about that
+              read as settings the free cue stack somehow needed. */}
+          {!pro && tab !== 'mic-plot' && (
+            <p className="show-settings-pro-note" role="note">
+              <span className="pro-chip">Cuerunner Pro</span>
+              <span>
+                The console and the cast are what Scenes run on. You can set them up without
+                a key; Scenes need one.
+              </span>
+              <button
+                className="license-link"
+                onClick={() => { closeShowSettings(); openSettings('license') }}
+              >
+                Enter license key
+              </button>
+            </p>
+          )}
           {tab === 'channels' && <ChannelsTab />}
           {tab === 'cast' && <CastTab />}
           {/* The plot is the one Pro surface in here: the cast and the channels describe

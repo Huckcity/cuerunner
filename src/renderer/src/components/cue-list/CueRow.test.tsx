@@ -123,3 +123,46 @@ describe('CueRow — renaming', () => {
     expect(useStore.getState().past).toHaveLength(1)
   })
 })
+
+// A cue made with the toolbar's Audio button has no file until it is given one, and its
+// row read `–` where a length goes: the same as a cue that was ready.
+describe('CueRow — an audio cue with no file', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  function draw(cue: ReturnType<typeof createCue>): void {
+    act(() => {
+      root.render(
+        <CueRow cue={cue} depth={0} isSelected={false} runState={null}
+          onClick={() => {}} onContextMenu={() => {}} renamingId={null} />
+      )
+    })
+  }
+
+  it('says so where its length would be', () => {
+    draw(createCue('audio'))
+    const cell = container.querySelector<HTMLElement>('.col-dur-media')
+    expect(cell?.textContent?.trim()).toBe('no file')
+    expect(cell?.dataset.media).toBe('none')
+  })
+
+  it('says nothing of the kind once the cue names a file, or for a cue that plays none', () => {
+    draw({ ...createCue('audio'), filePath: '/shows/walk-in.wav', duration: 4000 } as ReturnType<typeof createCue>)
+    expect(container.querySelector('.col-dur-media')).toBeNull()
+    draw(createCue('wait'))
+    expect(container.querySelector('.col-dur-media')).toBeNull()
+  })
+})
+

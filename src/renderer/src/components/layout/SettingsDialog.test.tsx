@@ -135,6 +135,34 @@ describe('SettingsDialog', () => {
     expect(text('.settings-block-title')).toBe('OSC control|Find devices|Tablet view')
   })
 
+  // The transport's "MIDI unavailable" badge opens this page. It used to show an empty
+  // port list and "No MIDI inputs on this machine" — the page of a machine with nothing
+  // plugged in — and said nothing about the module being absent.
+  it('says that MIDI is unavailable, and why, on the page the badge leads to', async () => {
+    vi.mocked(window.cuerunner.midi.status).mockResolvedValue({
+      available: false,
+      error: 'the MIDI module is not installed in this build'
+    })
+    render()
+    openSection('MIDI')
+    await act(async () => {})
+
+    const warning = container.querySelector('#settings-midi-unavailable')
+    expect(warning?.textContent).toContain('MIDI is unavailable: the MIDI module is not installed in this build')
+    // And not the sentence that is true of a different machine.
+    expect(container.textContent).not.toContain('No MIDI inputs on this machine')
+  })
+
+  it('says nothing of the kind on a machine whose MIDI works', async () => {
+    vi.mocked(window.cuerunner.midi.status).mockResolvedValue({ available: true, error: null })
+    render()
+    openSection('MIDI')
+    await act(async () => {})
+
+    expect(container.querySelector('#settings-midi-unavailable')).toBeNull()
+    expect(container.textContent).toContain('No MIDI inputs on this machine')
+  })
+
   it('keeps the protocol details behind Advanced rather than first on the panel', () => {
     render()
     openSection('Network')

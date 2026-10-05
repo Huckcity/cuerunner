@@ -37,6 +37,30 @@ test('Ctrl+Backspace deletes the selected cue', async () => {
   await expect(page.locator('.cue-row')).toHaveCount(0)
 })
 
+// Deleting the cue the operator is standing on used to leave them standing on nothing:
+// a second Delete did nothing, and the next GO fired the first cue of the show.
+test('Delete leaves the selection on the cue that took the deleted one\'s place', async () => {
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Wait').click()
+  await toolbarCueBtn(page, 'Wait').click()
+  const selected = page.locator('.cue-row[data-selected="true"] .cue-number')
+  await page.locator('.cue-row').nth(1).click()
+  await expect(selected).toHaveText('2')
+
+  await list(page).press('Delete')
+  await expect(page.locator('.cue-row')).toHaveCount(2)
+  await expect(selected).toHaveText('3')
+  // Where GO points is the same cue, said where the operator reads it.
+  await expect(page.locator('.context-bar')).toContainText('3')
+
+  // So a run of Deletes takes a run of cues.
+  await list(page).press('Delete')
+  await expect(page.locator('.cue-row')).toHaveCount(1)
+  await expect(selected).toHaveText('1')
+  await list(page).press('Delete')
+  await expect(page.locator('.cue-row')).toHaveCount(0)
+})
+
 test('Ctrl+Shift+A takes the selected cue out of the show and puts it back', async () => {
   // Arming is the one edit that happens mid-run, so it has to be a key rather than a
   // right-click: the operator is watching the stage, not the mouse.

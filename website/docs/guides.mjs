@@ -174,7 +174,7 @@ export const GUIDES = [
       <h2>3. Make one of your own</h2>
       <ol class="steps">
         <li><strong>Cuerunner ▾ → New</strong>, then double-click the name in the toolbar and call it something. The dock along the bottom opens folded away — a show with no cues in it has nothing for that panel to show, so the list has the room until something is in it. Any tab along the bottom opens it, and it stays where you leave it.</li>
-        <li><strong>Drag your audio files onto the cue list.</strong> One cue per file, named after the file, in the order you dropped them. Or press <strong>Audio</strong> in the toolbar and pick a file with Browse.</li>
+        <li><strong>Drag your audio files onto the cue list.</strong> One cue per file, named after the file, in the order you dropped them. Or press <strong>Audio</strong> in the toolbar and pick a file with Browse: the cue takes the file's name unless you have already named it, and until it has a file its row reads <em>no file</em>.</li>
         <li><strong>Select a cue</strong> and look at the inspector. On <strong>Basics</strong>, give it a number you will recognise in a running order and write a note to yourself — the note shows up in the bar at the top when the cue is next, which is where you will actually read it.</li>
         <li><strong>Press GO</strong> to hear it. <strong>STOP</strong> stops everything.</li>
         <li><strong>Save</strong> with <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd>. Cuerunner writes a <code>.cuerunner</code> file, which holds the cues and the show's setup but not the audio itself. A show you have not named yet takes the file's name; one you have keeps its own, whatever the file is called.</li>
@@ -474,7 +474,7 @@ export const GUIDES = [
       <div class="cards three-col">
         <article class="card state-go">
           <h3>GO</h3>
-          <p><kbd>Space</kbd>, or the button. Fires the cue on the right of the bar, then moves on to the next armed one. A disarmed cue is skipped.</p>
+          <p><kbd>Space</kbd>, or the button. Fires the cue on the right of the bar, then moves on to the next armed one. A disarmed cue is skipped. After the last cue nothing is selected and GO fires nothing: the bar says so, and the show starts again when you select the cue to start it from.</p>
         </article>
         <article class="card state-stop">
           <h3>STOP</h3>

@@ -69,8 +69,13 @@ test.describe('A file the engine cannot read', () => {
     }, notAudio)
     await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
     await expect(page.locator('.audio-file-name')).toHaveValue('notes.wav')
+    // Under the file, in the engine's words: the pick is taken, and the cue says what is
+    // wrong with it rather than leaving the operator to find out on GO.
+    await expect(page.locator('.audio-file-fault')).toContainText('This file cannot be played')
+    await expect(page.locator('.audio-file-fault')).toContainText('unrecognised media format')
 
-    const row = page.locator('.cue-row', { hasText: 'Audio Cue' })
+    // The cue took its file's name when the file was picked.
+    const row = page.locator('.cue-row', { hasText: 'notes' })
     // The settled answer, not the one before it: `measuring` is what the row read for
     // good while the refusal's code was being lost on the way to the window.
     await expect(row.locator('.col-dur-media')).toHaveAttribute('data-media', 'missing')

@@ -345,6 +345,9 @@ export const REFERENCE = [
         <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>,</kbd>, or Cuerunner ▾ → Settings…, whose sidebar
         splits them by where they are kept: <strong>this show</strong> travels in the
         <code>.cuerunner</code> file, <strong>this computer</strong> stays on the machine.
+        The window's own place stays on the machine too: it opens at the size and position
+        you left it, maximised if it was, and on the primary display when the monitor it
+        was on is no longer connected.
       </p>
     </section>
 
@@ -518,7 +521,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
-            <tr><td><kbd>Space</kbd></td><td>GO — fire the next cue</td><td>Anywhere except a text field</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue and move on to the next. With nothing selected, as after the last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>Esc</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is busy</td></tr>
@@ -550,7 +553,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
             <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Move the selection</td><td>Cue list</td></tr>
-            <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue</td><td>Cue list</td></tr>
+            <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue. The selection moves to the cue that took its place, so GO stays where you were working.</td><td>Cue list</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>D</kbd></td><td>Duplicate the selected cue</td><td>Cue list</td></tr>
             <tr><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td><td>Commit or cancel a rename</td><td>Renaming a cue</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Close a menu — the row menu, Cuerunner ▾ or More ▾ — or cancel a rename; a bare press is the transport's</td><td>Cue list and toolbar</td></tr>
@@ -897,6 +900,10 @@ await rig.blackout()</code></div>
             <tr>
               <td>GO skips a cue</td>
               <td>It is disarmed — the row says so. Arm it from the right-click menu or the Basics tab.</td>
+            </tr>
+            <tr>
+              <td>An audio cue fires and nothing plays</td>
+              <td>Its row says why. <em>no file</em>: the cue has not been given one — pick it with Browse on the Audio tab. <em>missing</em>: the file could not be read, and the Audio tab says whether it was not found or is not a format Cuerunner plays. After a GO the row is marked <em>failed</em> and the log carries the same reason.</td>
             </tr>
             <tr>
               <td>An audio cue is silent after moving files</td>
