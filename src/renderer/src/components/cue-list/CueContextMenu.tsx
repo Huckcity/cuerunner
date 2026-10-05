@@ -20,9 +20,10 @@ const MENU_HEIGHT = 300
 
 /** What the split item would do, where the cursor is: "Split at 1:23.4". */
 function splitHint(cue: Cue, atMs: number): string {
-  const seconds = atMs / 1000
-  const min = Math.floor(seconds / 60)
-  const sec = seconds % 60
+  // The tenth that is shown, then the minutes: see `formatDuration`.
+  const tenths = Math.round(atMs / 100)
+  const min = Math.floor(tenths / 600)
+  const sec = (tenths % 600) / 10
   return `Split “${cue.name}” at ${min}:${sec.toFixed(1).padStart(4, '0')}`
 }
 

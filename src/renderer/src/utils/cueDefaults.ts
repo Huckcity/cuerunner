@@ -233,9 +233,12 @@ export function createCue(type: CueType, number = '1'): Cue {
 
 export function formatDuration(ms: number): string {
   if (ms === 0) return '–'
-  const s = ms / 1000
-  const min = Math.floor(s / 60)
-  const sec = s % 60
+  // Rounded to the tenth that is shown before it is split into minutes and seconds. Split
+  // first and each part rounds on its own: 59.96 s read "60.0s" and 1:59.97 read "1:60.0",
+  // a second that does not exist.
+  const tenths = Math.round(ms / 100)
+  const min = Math.floor(tenths / 600)
+  const sec = (tenths % 600) / 10
   if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, '0')}`
   return `${sec.toFixed(1)}s`
 }

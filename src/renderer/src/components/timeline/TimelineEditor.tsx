@@ -44,16 +44,21 @@ function blockColor(cue: Cue): string {
   return CUE_TYPE_COLORS[cue.type] ?? '#3a3a3a'
 }
 
-function fmtTime(ms: number): string {
+/**
+ * A time on the ruler or in the readout: milliseconds under a second, tenths under a minute,
+ * whole seconds after. Rounded to what is shown before the minutes are taken, so a time just
+ * under a minute reads as the minute it rounds to rather than as a sixtieth second.
+ */
+export function fmtTime(ms: number): string {
   if (ms === 0) return '0'
   if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 60) {
-    const fixed = s.toFixed(1)
+  const tenths = Math.round(ms / 100)
+  if (tenths < 600) {
+    const fixed = (tenths / 10).toFixed(1)
     return fixed.endsWith('.0') ? fixed.slice(0, -2) + 's' : fixed + 's'
   }
-  const m = Math.floor(s / 60)
-  return `${m}:${(s % 60).toFixed(0).padStart(2, '0')}`
+  const seconds = Math.round(ms / 1000)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 function pickTickMs(pxPerMs: number): number {
