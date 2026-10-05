@@ -5,6 +5,7 @@ import type { LoadNote, Workspace } from '../../../../shared/workspace'
 import { formatClock } from '../../utils/cueDefaults'
 import { buildWorkspace } from '../../utils/workspace'
 import { witnessSave } from '../../utils/saveWitness'
+import { cueEngine } from '../../engine/CueEngine'
 import { NoticeBar } from './NoticeBar'
 
 interface Snapshot {
@@ -127,6 +128,8 @@ export function RecoveryNotice() {
       }
     }
     const live = useStore.getState()
+    // The recovered session replaces this one, and what this one was playing goes with it.
+    cueEngine.stopForShowChange()
     live.loadWorkspace(
       snapshot.workspace.cues,
       name,

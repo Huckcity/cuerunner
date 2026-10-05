@@ -3,6 +3,7 @@
 // `loadNotes` there would repair the grouping silently — exactly what the note exists to
 // prevent.
 import { describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest'
+import { cueEngine } from '../engine/CueEngine'
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useStore } from '../store'
@@ -79,6 +80,82 @@ describe('importShowBundle', () => {
     expect(state.cues.map(cue => [cue.id, cue.parentId])).toEqual([
       ['g1', null], ['c1', 'g1'], ['o1', null]
     ])
+  })
+})
+
+// A show that replaces the one on screen takes over the engine too: every flow that loads
+// one says so to the runner, and a flow that loaded nothing — a refusal — says nothing, so
+// the show that is open goes on playing.
+describe('useWorkspace — a show that is replaced stops playing', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let flows: ReturnType<typeof useWorkspace>
+
+  function Harness(): null {
+    flows = useWorkspace()
+    return null
+  }
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    useStore.setState({ cues: [], isDirty: false, workspaceName: 'Untitled', workspacePath: null, notice: null, log: [] })
+    act(() => { root.render(createElement(Harness)) })
+    vi.spyOn(cueEngine, 'stopForShowChange').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    vi.restoreAllMocks()
+    vi.clearAllMocks()
+  })
+
+  const opened = { path: '/shows/Broken Grouping.cuerunner', workspace: repaired(), missingMedia: [], loadNotes: [] }
+
+  it('stops the runner before an opened file is loaded', async () => {
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({ ok: true, opened })
+    // The stop is said while the show that is leaving is still the one in the store.
+    vi.mocked(cueEngine.stopForShowChange).mockImplementation(() => {
+      expect(useStore.getState().workspaceName).toBe('Untitled')
+    })
+
+    await act(async () => { await flows.openWorkspace() })
+
+    expect(cueEngine.stopForShowChange).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().workspaceName).toBe('Broken Grouping')
+  })
+
+  it('stops it for a recent file, the demo and a bundle', async () => {
+    vi.mocked(window.cuerunner.workspace.openPath).mockResolvedValue({ ok: true, opened })
+    vi.mocked(window.cuerunner.workspace.openDemo).mockResolvedValue({ ok: true, workspace: repaired() })
+    importBundle().mockResolvedValue({ ok: true, imported: opened })
+
+    await act(async () => { await flows.openRecent(opened.path) })
+    await act(async () => { await openDemoWorkspace() })
+    await act(async () => { await importShowBundle() })
+
+    expect(cueEngine.stopForShowChange).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops it for a new show', async () => {
+    useStore.setState({ cues: [waitCue('c1', null)] })
+
+    await act(async () => { await flows.newWorkspace() })
+
+    expect(cueEngine.stopForShowChange).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().cues).toEqual([])
+  })
+
+  it('leaves the show playing when the file is refused, or the dialog is cancelled', async () => {
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({ ok: false, error: 'that file is not a show' })
+    await act(async () => { await flows.openWorkspace() })
+    vi.mocked(window.cuerunner.workspace.open).mockResolvedValue({ ok: true, opened: null })
+    await act(async () => { await flows.openWorkspace() })
+
+    expect(cueEngine.stopForShowChange).not.toHaveBeenCalled()
   })
 })
 

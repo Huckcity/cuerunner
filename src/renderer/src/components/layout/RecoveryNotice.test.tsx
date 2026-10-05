@@ -6,6 +6,7 @@ import { StrictMode, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { RecoveryNotice } from './RecoveryNotice'
 import { useStore } from '../../store'
+import { cueEngine } from '../../engine/CueEngine'
 import type { MissingMedia } from '../../../../shared/media'
 import { defaultShowSettings } from '../../../../shared/show'
 import type { LoadNote, Workspace } from '../../../../shared/workspace'
@@ -111,6 +112,20 @@ describe('RecoveryNotice', () => {
     const button = [...container.querySelectorAll('button')].find(b => b.textContent === 'Recover')
     await act(async () => { button?.click() })
   }
+
+  it('stops what this session was playing before the recovered one replaces it', async () => {
+    const stop = vi.spyOn(cueEngine, 'stopForShowChange').mockImplementation(() => {
+      // Said while the session that is leaving is still the one in the store.
+      expect(useStore.getState().cues).toEqual([])
+    })
+    await offer(snapshot())
+
+    await recover()
+
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().cues.map(c => c.name)).toEqual(['Walk-in Music', 'Sting'])
+    stop.mockRestore()
+  })
 
   it('hands back the cues and the show settings the snapshot was carrying', async () => {
     await offer(snapshot())

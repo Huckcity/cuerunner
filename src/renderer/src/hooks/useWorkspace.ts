@@ -87,6 +87,9 @@ function loadIntoStore(
   identity?: WorkspaceIdentity
 ): void {
   const store = useStore.getState()
+  // Here rather than when the flow began: a file this build refuses, or a dialog the
+  // operator backed out of, leaves the show that is open playing as it was.
+  cueEngine.stopForShowChange()
   store.loadWorkspace(
     workspace.cues,
     workspace.name || 'Untitled',
@@ -331,6 +334,8 @@ export function useWorkspace() {
 
   const newWorkspace = useCallback(async () => {
     if (!await guardDirty()) return
+    // An empty show is a show like any other: what the last one left running goes with it.
+    cueEngine.stopForShowChange()
     loadWorkspace([], 'Untitled', null)
   }, [loadWorkspace])
 

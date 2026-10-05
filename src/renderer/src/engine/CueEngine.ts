@@ -1485,6 +1485,22 @@ export class CueEngine {
     }
   }
 
+  /**
+   * The show is being replaced — New, Open, the demo, a bundle, a recovered session —
+   * and what is running belongs to the show that is leaving. Loading only swaps the list:
+   * the store forgets what was running while the engine goes on playing it, so the sound
+   * carried on under a transport that said "idle", over a cue list it was not in. This is
+   * STOP, said by the load, with a line in the log for a silence nobody pressed for.
+   */
+  stopForShowChange(): void {
+    // A window whose transport has not mounted has started nothing.
+    if (!this.deps) return
+    if (this.runs.size > 0 || this.timelineTasks.size > 0) {
+      this.log({ level: 'info', message: 'stopped what was running: another show was opened' })
+    }
+    this.stop()
+  }
+
   // PANIC is the one place that wants the tails: stop() cuts immediately, panic counts
   // down with a fixed fade so the cut does not click. It must not call stop() first —
   // that would silence every source before the fade could be scheduled.

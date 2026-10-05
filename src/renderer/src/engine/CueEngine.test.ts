@@ -501,6 +501,45 @@ describe('CueEngine — stop and panic', () => {
   })
 })
 
+// A show that is replaced takes what it was playing with it. Loading only swaps the list,
+// so without this the engine went on playing a show that was no longer on screen.
+describe('CueEngine — the show is replaced', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('stops everything that was running, and says why in the log', () => {
+    const first = makeWait({ id: 'w1', duration: 5000, advance: 'on-end' })
+    const second = makeWait({ id: 'w2', duration: 5000 })
+    const { runner, setRunning, clearAllRunning, appendLog } = setup([first, second])
+    runner.go()
+
+    runner.stopForShowChange()
+
+    expect(engine.stopAll).toHaveBeenCalledWith(0)
+    expect(clearAllRunning).toHaveBeenCalled()
+    expect(appendLog).toHaveBeenCalledWith([
+      expect.objectContaining({ message: 'stopped what was running: another show was opened' })
+    ])
+    // Nothing the old show had scheduled may land on the new one: not the end of the
+    // wait, and not the cue its advance would have fired.
+    const before = setRunning.mock.calls.length
+    vi.advanceTimersByTime(20_000)
+    expect(setRunning.mock.calls.length).toBe(before)
+  })
+
+  it('says nothing when nothing was running', () => {
+    const { runner, appendLog } = setup([makeWait()])
+    runner.stopForShowChange()
+    expect(appendLog).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op in a window whose transport has not mounted', () => {
+    const runner = new CueEngine()
+    expect(() => runner.stopForShowChange()).not.toThrow()
+    expect(engine.stopAll).not.toHaveBeenCalled()
+  })
+})
+
 // What a second firing does to a cue that is already running. The guard's window has
 // passed in each of these — an operator who waits and presses again is a second press,
 // and that is the one the policy is about.
