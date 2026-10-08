@@ -259,7 +259,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio, video, image or text cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
+              <td><strong>Target</strong> (an audio, video, image, text or camera cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> or <strong>geometry only</strong> for a picture — a video has all of them, an image, text or camera only the picture's; a Light cue's is its intensity; a picture fade's <strong>Move the picture</strong> ticks the position, scale, rotation and crop it moves, each to its own target, from wherever the picture is when the fade starts), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
@@ -275,7 +275,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="pictures">
-      <h2>Video, Image and Text</h2>
+      <h2>Video, Image, Text and Camera</h2>
       <p>
         The picture cues. Each shows on a video output (see <a href="./settings.html#outputs">Outputs</a>)
         and carries the <strong>Picture</strong> fields; each has its own tab for what it shows,
@@ -296,7 +296,10 @@ export const REFERENCE = [
             <tr><td>Position</td><td>0%, 0%</td><td>The picture's centre, right of and below the output's centre, as a share of its width and height.</td></tr>
             <tr><td>Scale</td><td>100%</td><td>A multiple of the fitted size, 1% to 1000%.</td></tr>
             <tr><td>Rotate</td><td>0°</td><td>Clockwise, about the picture's own centre.</td></tr>
-            <tr><td>Crop</td><td>0%</td><td>Video and image: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Crop</td><td>0%</td><td>Video, image and camera: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Blend</td><td>Normal</td><td>How the picture is laid over what is behind it: Normal, Multiply, Screen, Overlay, Darken, Lighten, Colour dodge, Colour burn, Hard light, Soft light, Difference, Exclusion, Add or Subtract, at the picture's opacity. The same on the GPU and the 2D fallback. Applies at once while it is up.</td></tr>
+            <tr><td>Next GO</td><td>the show's default</td><td><strong>Takes it down</strong> — over its own fade out — on the next GO, whatever that GO fires; <strong>Leaves it up</strong>; or the show's default (the Outputs panel's <strong>Next GO</strong>, off unless set). A GO from a trigger or a desk counts; a picture the GO's own crossfade is dissolving is left to the dissolve.</td></tr>
+            <tr><td>Keyframes</td><td>none</td><td>Up to 32 places the picture moves to over its own play: each a time from its first frame (pauses taken out), a position, scale, rotation and crop, and how it is reached — Linear, Ease in, Ease out, Ease in and out, or Jump. From the cue's own geometry at nought; it stays at the last.</td></tr>
           </tbody>
         </table>
       </div>
@@ -315,6 +318,10 @@ export const REFERENCE = [
             <tr>
               <td><strong>Text</strong></td>
               <td><strong>Text</strong> (one block, new lines kept), <strong>Font</strong> (IBM Plex Sans; a font this computer does not have falls back), <strong>Size</strong> (96 px, in the output's own pixels), <strong>Colour</strong> (white), <strong>Bold</strong>, <strong>Italic</strong>, <strong>Position</strong> (one of nine; centre) and <strong>Shown for</strong>.</td>
+            </tr>
+            <tr>
+              <td><strong>Camera</strong></td>
+              <td><strong>Source</strong>: <strong>A camera on this machine</strong> (a capture device the outputs can see — webcam, USB, HDMI capture; the show keeps its name, this computer its exact device) or <strong>A network stream</strong> with an <strong>Address</strong> (HTTP video, HLS <code>.m3u8</code> or MJPEG; a login in the address is passed on; RTSP is refused). Fills its output (Size to <strong>Fill</strong>) and runs until it is stopped. A camera that is not connected is said across the output and on its card, and comes up when it is plugged in; with no camera chosen, or an RTSP address, the cue fails and says why.</td>
             </tr>
           </tbody>
         </table>
@@ -563,6 +570,9 @@ export const REFERENCE = [
             <tr><td>Soft edge</td><td>show</td><td>0%</td><td>Fades each edge to black over a share of the frame, for overlapping projectors. <strong>Edge curve</strong> (1) bends the ramp.</td></tr>
             <tr><td>Identify</td><td>—</td><td>—</td><td>Draws every output's name across it for three seconds.</td></tr>
             <tr><td>Floating timer</td><td>computer</td><td>Off</td><td>A small always-on-top window counting the time of day, the show clock or the cue remaining.</td></tr>
+            <tr><td>Shows</td><td>show</td><td>Its own pictures</td><td>Or <strong>the same as</strong> another output: a mirror, showing that output's pictures as it composes them, at its size — a confidence monitor, a stacked projector. It keeps its own display, timer and corner pin; a picture cue cannot name a mirror.</td></tr>
+            <tr><td>Mask</td><td>show</td><td>none</td><td>An image laid over the output's pictures, stretched to it: <strong>Mask reads</strong> its brightness (white shows) or its transparency (opaque shows), and <strong>Invert</strong> turns it round. Drawn before the corner pin, under the timer and test pattern. A mirror with no mask of its own shows its source's. Its file is kept by its path, and is not carried into a bundle.</td></tr>
+            <tr><td>Next GO</td><td>show</td><td>off</td><td>On, every picture whose cue leaves it to the show is taken down on the next GO.</td></tr>
           </tbody>
         </table>
       </div>
@@ -973,9 +983,11 @@ await rig.blackout()</code></div>
       <p>
         Video and image cues store their files the same way, and move with the show the
         same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
-        corner pin and soft edges — written only when the show has one; where each output
-        goes on a computer is kept on that computer, in <code>video-outputs.json</code> beside
-        the licence.
+        corner pin and soft edges, a mirror and a mask — written only when the show has one;
+        where each output goes on a computer is kept on that computer, in
+        <code>video-outputs.json</code> beside the licence. A show whose pictures go on the next
+        GO carries a <code>pictures</code> section; a camera cue carries its camera's name, and
+        each computer keeps the device it picked for that cue in <code>camera-devices.json</code>.
       </p>
       <p>
         A cue whose file has gone says <em>missing</em> where its length should be, and a
@@ -1205,7 +1217,15 @@ await rig.blackout()</code></div>
             </tr>
             <tr>
               <td>An output has a red banner across it</td>
-              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card.</td>
+              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card. A banner naming a camera means that camera is not connected (or another program has it); a banner naming a mask means its file could not be read.</td>
+            </tr>
+            <tr>
+              <td>The camera list says to open an output</td>
+              <td>Only an output window may open a camera, so the list comes from one. Add or open an output. On a Mac, allow Cuerunner under Camera in the Mac's Privacy &amp; Security settings.</td>
+            </tr>
+            <tr>
+              <td>A camera cue fails with <em>RTSP streams are not supported</em></td>
+              <td>Cuerunner reads HTTP video, HLS and MJPEG. Most IP cameras serve one of them too: use that address.</td>
             </tr>
             <tr>
               <td>A video plays with no sound</td>

@@ -64,9 +64,11 @@
       <p>
         Video and image cues store their files the same way, and move with the show the
         same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
-        corner pin and soft edges — written only when the show has one; where each output
-        goes on a computer is kept on that computer, in <code>video-outputs.json</code> beside
-        the licence.
+        corner pin and soft edges, a mirror and a mask — written only when the show has one;
+        where each output goes on a computer is kept on that computer, in
+        <code>video-outputs.json</code> beside the licence. A show whose pictures go on the next
+        GO carries a <code>pictures</code> section; a camera cue carries its camera's name, and
+        each computer keeps the device it picked for that cue in <code>camera-devices.json</code>.
       </p>
       <p>
         A cue whose file has gone says <em>missing</em> where its length should be, and a
