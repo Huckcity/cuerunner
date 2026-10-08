@@ -28,7 +28,8 @@ import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
 import { ShowModeView } from './components/show-mode/ShowModeView'
-import { useShowMode } from './hooks/useShowMode'
+import { useCartMode, useShowMode } from './hooks/useShowMode'
+import { CartView } from './components/cart/CartView'
 import { useLogFile } from './hooks/useLogFile'
 import { useSelectedCue, useStore, usePro } from './store'
 import type { GroupCue } from '../../shared/cue'
@@ -87,13 +88,16 @@ export function App() {
   const selected = useSelectedCue()
   // The large-type operator view (F5): it takes the place of the list and the inspector.
   const [showMode, toggleShowMode] = useShowMode()
+  // The cart (F6): the list as a wall of buttons. Show mode, when it is on, is in front of it.
+  const [cartMode, toggleCartMode] = useCartMode()
+  const cartShown = cartMode && !showMode && view === 'cues'
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
     ? selected as GroupCue
     : null
 
   const timelineFullscreen = timelineExpanded && timelineGroupCue !== null && dockTab === 'cue' && view === 'cues'
-  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}${showMode ? ' in-show-mode' : ''}`
+  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}${showMode ? ' in-show-mode' : ''}${cartShown ? ' in-cart' : ''}`
 
   // The license can change while the window is open — a key entered in Settings, or one
   // that ran out overnight — so the panels follow the main process rather than the read
@@ -161,9 +165,11 @@ export function App() {
         onSwitchView={setView}
       />
       <ContextBar />
-      <div className="app-main" data-view={showMode ? 'show' : view}>
+      <div className="app-main" data-view={showMode ? 'show' : cartShown ? 'cart' : view}>
         {showMode ? (
           <ShowModeView onExit={toggleShowMode} />
+        ) : cartShown ? (
+          <CartView onExit={toggleCartMode} />
         ) : view === 'scenes' ? (
           pro ? (
             <ScenesView />

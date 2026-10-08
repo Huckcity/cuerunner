@@ -153,6 +153,13 @@ function createMenu(): void {
           registerAccelerator: false,
           click: () => sendMenuAction('show-mode')
         },
+        {
+          id: 'view-cart',
+          label: 'Cart',
+          accelerator: 'F6',
+          registerAccelerator: false,
+          click: () => sendMenuAction('cart')
+        },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },

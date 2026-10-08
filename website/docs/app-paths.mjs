@@ -269,6 +269,11 @@ export const APP_PATHS = [
   },
   {
     page: 'reference/keyboard.html',
+    printed: 'F6 → Cart — the list as a wall of buttons, each playing its cue; F6 again for the list',
+    names: [{ item: 'view-cart', own: true }]
+  },
+  {
+    page: 'reference/keyboard.html',
     printed: 'Ctrl/⌘ + N → New workspace',
     names: [{ menu: 'new', own: true }]
   },

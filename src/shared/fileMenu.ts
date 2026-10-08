@@ -19,10 +19,11 @@ export type FileMenuAction =
   | 'settings'
 
 /**
- * What the View menu asks of the window: show mode, the large-type operator view, in and out.
- * Not a File item, so the Cuerunner ▾ button does not draw it — the window answers F5 itself.
+ * What the View menu asks of the window: show mode, the large-type operator view, and the cart,
+ * the list as a wall of buttons — each in and out. Not File items, so the Cuerunner ▾ button
+ * does not draw them; the window answers F5 and F6 itself.
  */
-export type ViewMenuAction = 'show-mode'
+export type ViewMenuAction = 'show-mode' | 'cart'
 
 /** Everything the application menu can ask the window to do. */
 export type MenuAction = 'undo' | 'redo' | FileMenuAction | ViewMenuAction

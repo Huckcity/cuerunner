@@ -548,6 +548,14 @@ export const GUIDES = [
         <kbd>F5</kbd> again brings the editor back.
       </p>
       <p>
+        The <strong>cart</strong> (<kbd>F6</kbd>, or the View menu) turns the list into a wall
+        of buttons — one tile per cue at the top of the list, a group as one tile — and a press
+        plays that cue wherever the show is standing: the doorbell, the phone, the crash, in
+        whatever order the scene asks for them. The first ten answer the number keys
+        <kbd>1</kbd>–<kbd>9</kbd> and <kbd>0</kbd>. A running tile counts down and has its own
+        stop. This computer remembers whether you left it in the cart.
+      </p>
+      <p>
         The <strong>Active</strong> tab in the dock lists everything that is running, oldest
         first, with the time it has left and a stop of its own on each row. An audio cue's
         bar there is a handle: drag along it and let go, and that cue plays on from there —

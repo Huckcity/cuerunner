@@ -186,8 +186,9 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   fileActionsRef.current = fileActions
 
   useEffect(() => window.cuerunner.app.onMenuAction(action => {
-    if (action === 'undo' || action === 'redo' || action === 'show-mode') return
-    void fileActionsRef.current[action]()
+    // The File menu's own actions only: undo, redo and the View menu's are answered elsewhere.
+    if (!(action in fileActionsRef.current)) return
+    void fileActionsRef.current[action as FileMenuAction]()
   }), [])
 
   const fileItem = (item: FileMenuItem) => (
