@@ -160,7 +160,7 @@ export const REFERENCE = [
       <div class="cards two-col doc-cards">
         <a class="card doc-card" href="./cue-types.html">
           <h3>Cue types</h3>
-          <p>All twelve types, every field, and what each one defaults to.</p>
+          <p>Every type, every field, and what each one defaults to.</p>
         </a>
         <a class="card doc-card" href="./settings.html">
           <h3>Settings</h3>
@@ -200,7 +200,7 @@ export const REFERENCE = [
     <section class="panel reveal">
       <h1>Cue types</h1>
       <p class="doc-lede">
-        Twelve types. Every one of them carries the common fields below, and then its own.
+        Every type carries the common fields below, and then its own.
       </p>
     </section>
 
@@ -257,7 +257,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio cue), <strong>Property</strong> (volume or pan), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
+              <td><strong>Target</strong> (an audio, video, image or text cue), <strong>Property</strong> (volume or pan for a sound; <strong>opacity</strong> for a picture, 0–1 — a video has all three), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
@@ -265,7 +265,54 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
-              <td><strong>Target</strong> — a looping audio cue. It finishes the lap it is on and plays out to the end of its file.</td>
+              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="pictures">
+      <h2>Video, Image and Text</h2>
+      <p>
+        The picture cues. Each shows on a video output (see <a href="./settings.html#outputs">Outputs</a>)
+        and carries the <strong>Picture</strong> fields; each has its own tab for what it shows,
+        and a video has a <strong>Sound</strong> tab. How they behave together is in the
+        <a href="../guides/video.html">video guide</a>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Picture field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Output</td><td>the first output</td><td>Which output the picture goes to. A cue naming an output the show no longer has fails and says so.</td></tr>
+            <tr><td>Layer</td><td>1</td><td>Stacking order, −1000 to 1000: higher is in front. On one layer the later firing is in front.</td></tr>
+            <tr><td>Opacity</td><td>100%</td><td>The level the picture rests at. Applies at once while it is up; a fade cue moves it over time.</td></tr>
+            <tr><td>Fade in</td><td>0 s</td><td>From the picture's first frame on screen to its opacity.</td></tr>
+            <tr><td>Fade out</td><td>0 s</td><td>Lands on the picture's own end: a video's last pass, an image's or text's display time. Nothing to land on — a video looping for ever, a picture held until stopped — and it does nothing.</td></tr>
+            <tr><td>Crossfade</td><td>off</td><td>Video and image. Dissolves in from what is on the output at or below this layer, over the fade in, as an exact mix of the two frames; what it replaced is taken down and its cue stopped when it lands. With nothing to dissolve from it fades up.</td></tr>
+            <tr><td>Size to</td><td>Fit</td><td><strong>Fit</strong> (all of it, letterboxed), <strong>Fill</strong> (the whole output, cropped), <strong>Stretch</strong> (to the output's shape) or <strong>Native</strong> (one pixel per pixel). Text is always native.</td></tr>
+            <tr><td>Position</td><td>0%, 0%</td><td>The picture's centre, right of and below the output's centre, as a share of its width and height.</td></tr>
+            <tr><td>Scale</td><td>100%</td><td>A multiple of the fitted size, 1% to 1000%.</td></tr>
+            <tr><td>Rotate</td><td>0°</td><td>Clockwise, about the picture's own centre.</td></tr>
+            <tr><td>Crop</td><td>0%</td><td>Video and image: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Fields</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Video</strong></td>
+              <td><strong>File</strong> (MP4, MOV, M4V, WebM, MKV, OGV — what Chromium decodes), <strong>Start time</strong> / <strong>End time</strong> (0 / end of file), <strong>Loop count</strong> (0 once, n more times, −1 until stopped or devamped), <strong>Hold last frame</strong> (off; on, the cue runs until it is stopped) and, while it plays, <strong>Pause</strong>/<strong>Resume</strong> and <strong>Position</strong>. On <strong>Sound</strong>: <strong>Volume</strong> (100%), <strong>Pan</strong> (centre) and <strong>Routing</strong> — the sound is an engine voice exactly as an audio cue's is. Its length is measured from the file, like an audio cue's.</td>
+            </tr>
+            <tr>
+              <td><strong>Image</strong></td>
+              <td><strong>File</strong> (PNG, JPEG, GIF, WebP, BMP, SVG, AVIF) and <strong>Shown for</strong> (empty holds it until it is stopped).</td>
+            </tr>
+            <tr>
+              <td><strong>Text</strong></td>
+              <td><strong>Text</strong> (one block, new lines kept), <strong>Font</strong> (IBM Plex Sans; a font this computer does not have falls back), <strong>Size</strong> (96 px, in the output's own pixels), <strong>Colour</strong> (white), <strong>Bold</strong>, <strong>Italic</strong>, <strong>Position</strong> (one of nine; centre) and <strong>Shown for</strong>.</td>
             </tr>
           </tbody>
         </table>
@@ -448,6 +495,33 @@ export const REFERENCE = [
             <tr><td>If the other one stops</td><td>Tell me</td><td>Or take the show over by itself.</td></tr>
             <tr><td>↳ Ports, address, access code</td><td>53110</td><td>Under Advanced. The access code must match on both computers; without one, any machine that finds the port can claim the pair.</td></tr>
             <tr><td>↳ Gone after</td><td>3000 ms</td><td>Under Advanced. Silence before the partner counts as gone.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="outputs">
+      <h2>Outputs</h2>
+      <p>
+        In the dock's <strong>Outputs</strong> tab. What an output <em>is</em> is kept with
+        <strong>this show</strong>; where it goes is kept on <strong>this computer</strong>, by
+        output, so a show opened on another machine keeps its outputs and finds them places of
+        that machine's own.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Kept</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Name</td><td>show</td><td>Output 1, 2…</td><td>What the cues and the card call it, and what Identify draws.</td></tr>
+            <tr><td>Display</td><td>computer</td><td>A window</td><td>A window you can move and size, or one of this computer's displays. A display that is not connected opens it as a window with a banner saying which.</td></tr>
+            <tr><td>Fullscreen</td><td>computer</td><td>off</td><td>Fills the display chosen. A fullscreen output never takes the keyboard.</td></tr>
+            <tr><td>Size</td><td>show</td><td>1920 × 1080</td><td>The size it composes at in a window, or when its display cannot say. Fullscreen, the display's own pixels are used.</td></tr>
+            <tr><td>Timer</td><td>show</td><td>No timer</td><td>Time of day, the show clock (from the first GO), or the time left on the cue with an end that started last — and where on the output.</td></tr>
+            <tr><td>Test pattern</td><td>—</td><td>off</td><td>Grid, centre, corners and colour bars over the output, at its own resolution.</td></tr>
+            <tr><td>Corner pin</td><td>show</td><td>0%</td><td>Moves each corner of the finished frame by a share of the output; the frame is laid on that shape in perspective. Needs the GPU.</td></tr>
+            <tr><td>Soft edge</td><td>show</td><td>0%</td><td>Fades each edge to black over a share of the frame, for overlapping projectors. <strong>Edge curve</strong> (1) bends the ramp.</td></tr>
+            <tr><td>Identify</td><td>—</td><td>—</td><td>Draws every output's name across it for three seconds.</td></tr>
+            <tr><td>Floating timer</td><td>computer</td><td>Off</td><td>A small always-on-top window counting the time of day, the show clock or the cue remaining.</td></tr>
           </tbody>
         </table>
       </div>
@@ -771,6 +845,13 @@ await rig.blackout()</code></div>
         file and the audio beside it, copied whole.
       </p>
       <p>
+        Video and image cues store their files the same way, and move with the show the
+        same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
+        corner pin and soft edges — written only when the show has one; where each output
+        goes on a computer is kept on that computer, in <code>video-outputs.json</code> beside
+        the licence.
+      </p>
+      <p>
         A cue whose file has gone says <em>missing</em> where its length should be, and a
         bar across the top of the window offers to relink it — point it at the file once
         and the rest of the cues in the same folder follow.
@@ -950,6 +1031,18 @@ await rig.blackout()</code></div>
               <td>Its timeout is 0, which waits for ever. Set one, or check what the script is waiting on in the log.</td>
             </tr>
             <tr>
+              <td>A video, image or text cue fails with <em>the show has no video output</em></td>
+              <td>The show has no output, or the cue names one that was removed. Add one in the dock's Outputs tab, or choose another on the cue's Picture tab.</td>
+            </tr>
+            <tr>
+              <td>An output has a red banner across it</td>
+              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card.</td>
+            </tr>
+            <tr>
+              <td>A video plays with no sound</td>
+              <td>The file has no sound track (its Sound tab says so), or — a WebM or MKV on Windows — the computer has no decoder for its sound. The picture still plays; convert the file to MP4 for sound everywhere.</td>
+            </tr>
+            <tr>
               <td>A trigger does not fire the cue</td>
               <td>The input is off (Settings → Network or MIDI), the cue is disarmed, the address does not match exactly, or the repeat guard is swallowing a second message. The Monitor shows what actually arrived.</td>
             </tr>
@@ -988,7 +1081,8 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-2" id="limitations">
       <h2>Known limitations</h2>
       <ul class="tight-list">
-        <li>No video or image cues. Video is driven by talking to something that plays it, through a network, OSC or MIDI cue.</li>
+        <li>Video plays what Chromium decodes (H.264, VP8, VP9, AV1 and the rest); ProRes and other professional codecs need converting first. On Windows a WebM's or MKV's sound needs the system's own decoder for it, and plays silent where there is none.</li>
+        <li>One crossfade at a time per output: a second that starts while one is running lands the first at once. Blend modes other than normal are not offered.</li>
         <li>No cue-level audio effects beyond level, pan, rate and fades.</li>
         <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
