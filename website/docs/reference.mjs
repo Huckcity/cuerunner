@@ -363,6 +363,7 @@ export const REFERENCE = [
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>Repeat guard</td><td>300 ms</td><td>Ignores a second GO arriving this soon after the first, from the space bar, a trigger or a console. 0 turns it off.</td></tr>
+            <tr><td>STOP fade</td><td>0 ms</td><td>How long STOP — <kbd>Esc</kbd>, the button, a remote's <code>/stop</code> — fades everything over. 0 cuts at once. With a fade, the show lets go at once and the sound fades; a second STOP during the fade cuts what is left. Saved with the show.</td></tr>
           </tbody>
         </table>
       </div>
@@ -529,7 +530,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
             <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue and move on to the next. With nothing selected, as after the last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything, at once or over the show's STOP fade; a second press during the fade cuts it</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
             <tr><td><kbd>P</kbd></td><td>PAUSE — hold the whole show where it stands, and let it go on. While it is held GO waits; STOP and PANIC end the hold</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>Esc</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is busy</td></tr>

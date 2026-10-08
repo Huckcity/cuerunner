@@ -16,7 +16,7 @@ import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { currentPlatform } from '../../utils/shortcuts'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../../../shared/show'
-import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../../../shared/workspace'
+import { STOP_FADE_MAX_MS, TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../../../shared/workspace'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
 import { isAllowEntry, remoteEnabled } from '../../../../shared/oscRemote'
 import type { EwDxFound } from '../../../../shared/ipc/show'
@@ -361,6 +361,21 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               <p className="inspector-hint">
                 Ignores a second GO that arrives this soon after the first — a footswitch
                 that bounces, a desk that sends twice, a key held down. 0 turns it off.
+              </p>
+              <div className="field-row">
+                <label htmlFor="settings-stop-fade">STOP fade</label>
+                <NumberField
+                  id="settings-stop-fade"
+                  value={triggerGuard.stopFadeMs ?? 0}
+                  min={0}
+                  max={STOP_FADE_MAX_MS}
+                  step={10}
+                  onValue={next => { if (next !== null) updateTriggerGuard({ stopFadeMs: next }) }}
+                />
+                <span className="settings-info">ms</span>
+              </div>
+              <p className="inspector-hint">
+                0 cuts at once. With a fade, a second STOP during it cuts what is left.
               </p>
             </>
           )}

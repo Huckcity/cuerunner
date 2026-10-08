@@ -30,7 +30,8 @@ export function useCueEngine() {
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 
   const go = useCallback(() => cueEngine.go(), [])
-  const stop = useCallback(() => cueEngine.stop(), [])
+  // The operator's STOP: a cut, or the show's STOP fade with a second press to cut it.
+  const stop = useCallback(() => cueEngine.operatorStop(), [])
   const panic = useCallback(() => cueEngine.panic(), [])
   const togglePause = useCallback(() => cueEngine.togglePause(), [])
 

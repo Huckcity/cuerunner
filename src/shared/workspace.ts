@@ -46,6 +46,11 @@ export interface TriggerGuardSettings {
    * rather than a constant.
    */
   windowMs: number
+  /**
+   * How long the operator's STOP fades everything over, ms. Optional, and absent or 0 is the
+   * cut STOP has always been; a show that fades has a second STOP during the fade cut it.
+   */
+  stopFadeMs?: number
 }
 
 /**
@@ -71,14 +76,24 @@ export function isUnnamedShow(name: string | undefined): boolean {
 export const TRIGGER_GUARD_MIN_MS = 0
 export const TRIGGER_GUARD_MAX_MS = 2000
 
+/** The longest STOP fade the setting takes: past this, STOP is a fade cue. */
+export const STOP_FADE_MAX_MS = 10_000
+
 /** Fills in a gate a workspace saved by an older build never wrote. */
 export function normalizeTriggerGuard(
   guard: Partial<TriggerGuardSettings> | undefined
 ): TriggerGuardSettings {
   const windowMs = guard?.windowMs
-  if (typeof windowMs !== 'number' || !Number.isFinite(windowMs)) return { ...DEFAULT_TRIGGER_GUARD }
+  const stopFadeMs = guard?.stopFadeMs
+  // Carried only when it is a fade: a show that cuts writes no field, so its file is the
+  // bytes it always was.
+  const fade = typeof stopFadeMs === 'number' && Number.isFinite(stopFadeMs) && stopFadeMs > 0
+    ? { stopFadeMs: Math.min(Math.round(stopFadeMs), STOP_FADE_MAX_MS) }
+    : {}
+  if (typeof windowMs !== 'number' || !Number.isFinite(windowMs)) return { ...DEFAULT_TRIGGER_GUARD, ...fade }
   return {
-    windowMs: Math.min(Math.max(windowMs, TRIGGER_GUARD_MIN_MS), TRIGGER_GUARD_MAX_MS)
+    windowMs: Math.min(Math.max(windowMs, TRIGGER_GUARD_MIN_MS), TRIGGER_GUARD_MAX_MS),
+    ...fade
   }
 }
 

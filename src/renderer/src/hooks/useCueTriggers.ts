@@ -79,7 +79,7 @@ function remoteDeps() {
     getCollapsed: () => useStore.getState().collapsedGroupIds,
     select: store.select,
     go: () => cueEngine.go(),
-    stop: (cueId?: string) => cueEngine.stop(cueId),
+    stop: (cueId?: string) => cueId === undefined ? cueEngine.operatorStop() : cueEngine.stop(cueId),
     goById: (cueId: string) => cueEngine.goById(cueId),
     seekCue: (cueId: string, positionMs: number) => cueEngine.seekCue(cueId, positionMs),
     pauseAll: () => cueEngine.pauseAll(),

@@ -44,6 +44,10 @@ const PANIC_FADE_MS = 200
 // where the engine says rather than at a time it never reached.
 const PLANNED_END_TOLERANCE_MS = 25
 
+// A second STOP this long after a faded one's fade has ended still reads as the second press
+// of a double press: a hand that pressed twice is not timing the fade.
+const DOUBLE_STOP_GRACE_MS = 500
+
 // Unrecognised event types whose count is kept. A skewed engine can name a fresh type in
 // every event, so the table has a bound like every other read path; past it a new name is
 // still logged — the line names the type — but has no count of its own to climb.
@@ -217,6 +221,9 @@ export class CueEngine {
    * own counters, which read the window's clock rather than the show's.
    */
   private held: { wallAt: number; cueIds: string[]; rows: Map<string, RunningCue> } | null = null
+  /** When the operator's last faded STOP began, and its fade, while a second press can cut it. */
+  private softStopAt: number | null = null
+  private softStopFadeMs = 0
   /** What each random group has left to draw before it repeats a child. */
   private randomDraws = new ShuffleBag()
   /** Audio cues held on their own, while the rest of the show goes on, by cue id. */
@@ -1600,6 +1607,36 @@ export class CueEngine {
       void audioEngine.stopAll(0).catch(() => {})
       clearAllRunning()
     }
+  }
+
+  /**
+   * The operator's STOP — Esc, the transport's button, a remote's /stop. A show that sets a
+   * STOP fade fades everything out over it and takes the runs away at once, so nothing moves
+   * the show on behind the fade; a second STOP before the fade is over cuts what is left of
+   * it, which is the hard stop a double press of Esc has always meant. A show with no fade
+   * set cuts at once, as STOP always has.
+   */
+  operatorStop(): void {
+    if (!this.deps) return
+    const fadeMs = Math.max(0, this.deps.getTriggerGuard().stopFadeMs ?? 0)
+    const now = Date.now()
+    const fading = this.softStopAt !== null && now - this.softStopAt < this.softStopFadeMs + DOUBLE_STOP_GRACE_MS
+    if (fadeMs === 0 || fading) {
+      if (fading) this.log({ level: 'info', message: 'cut the STOP fade' })
+      this.softStopAt = null
+      this.stop()
+      return
+    }
+    for (const cueId of [...this.runs.keys()]) {
+      void audioEngine.stop(cueId, fadeMs).catch(() => {})
+    }
+    this.cancelAllWork()
+    scriptHost.cancelAll()
+    void audioEngine.stopAll(fadeMs).catch(() => {})
+    this.deps.clearAllRunning()
+    this.softStopAt = now
+    this.softStopFadeMs = fadeMs
+    this.log({ level: 'info', message: `stopped with a ${fadeMs} ms fade — STOP again to cut it` })
   }
 
   /**
