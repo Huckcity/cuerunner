@@ -172,6 +172,8 @@ interface CueRun {
   paused?: boolean
   /** A video whose file has no sound: its run ends with its picture, not with a voice. */
   silentPicture?: boolean
+  /** The task that fades a video's sound out onto its end, so a re-planned end can move it. */
+  soundFadeTask?: number | null
 }
 
 /**
@@ -1873,6 +1875,7 @@ export class CueEngine {
             // A prepare that outlasted the lookahead moved the sound's start; the picture
             // follows it rather than running ahead of it.
             if (Math.abs(startAtMs - at) > 5) visualCues.anchor(cue.id, startAtMs)
+            this.armSoundFadeOut(cue, run)
           }
         })
       }
@@ -1898,6 +1901,30 @@ export class CueEngine {
     }
   }
 
+  /**
+   * A video's fade out lands on its end for its sound as it does for its picture: the voice
+   * is faded to nothing over the same time, from the same moment, so the two go together.
+   * Re-armed whenever the end moves (a seek, a resume), and nothing at all for a video that
+   * holds its last frame, loops for ever, or has no sound.
+   */
+  private armSoundFadeOut(cue: VideoCue, run: CueRun): void {
+    if (run.soundFadeTask !== undefined && run.soundFadeTask !== null) {
+      this.scheduler!.cancel(run.soundFadeTask)
+      run.soundFadeTask = null
+    }
+    if (cue.fadeOutDuration <= 0 || cue.holdLastFrame || run.endAt === null || run.silentPicture || run.paused) return
+    const endAt = run.endAt
+    const from = Math.max(this.now(), endAt - cue.fadeOutDuration)
+    const task = this.scheduler!.schedule({
+      at: from,
+      early: () => {
+        void audioEngine.fade(cue.id, 'volume', 0, Math.max(0, endAt - from), 'linear', from).catch(() => {})
+      }
+    })
+    run.soundFadeTask = task
+    this.track(run, task)
+  }
+
   private holdsLastFrame(cueId: string): boolean {
     const cue = this.deps?.getCues().find(c => c.id === cueId)
     return cue?.type === 'video' && (cue as VideoCue).holdLastFrame
@@ -1921,6 +1948,7 @@ export class CueEngine {
   /** The run's end, from `now` with `elapsed` of the play behind it. */
   private replanVideoEnd(cue: VideoCue, run: CueRun, now: number, elapsed: number): void {
     if (run.endTask !== null) { this.scheduler!.cancel(run.endTask); run.endTask = null }
+    if (run.soundFadeTask !== undefined && run.soundFadeTask !== null) { this.scheduler!.cancel(run.soundFadeTask); run.soundFadeTask = null }
     if (!run.released && run.releaseTask !== null) { this.scheduler!.cancel(run.releaseTask); run.releaseTask = null }
     run.endAt = null
     run.plannedMs = null
@@ -1933,6 +1961,7 @@ export class CueEngine {
     run.plannedMs = run.endAt - run.startAt
     this.armAudioEndTask(run, run.finish)
     this.planRelease(run, run.endAt)
+    this.armSoundFadeOut(cue, run)
   }
 
   /** Whether a video's run is paused. */
@@ -2040,6 +2069,7 @@ export class CueEngine {
         if (!run || run.cancelled || run.phase !== 'running' || run.endAt !== null || run.paused || !run.finish) return
         if ((cue as VideoCue).holdLastFrame) return
         this.scheduleAudioEnd(run, run.startAt, startOptions(videoSound(cue as VideoCue), run.seekMs, false), durationMs, run.finish)
+        this.armSoundFadeOut(cue as VideoCue, run)
       },
       pictureFailed: (cueId, message) => {
         const cue = this.deps?.getCues().find(c => c.id === cueId)

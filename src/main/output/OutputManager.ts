@@ -481,6 +481,7 @@ export class OutputManager {
         console.error(`[output ${output.name}] ${details.message} (${details.sourceId}:${details.lineNumber})`)
       }
     })
+    forwardKeys(win)
     loadOutputPage(win, 'output')
   }
 
@@ -519,6 +520,7 @@ export class OutputManager {
       }
     })
     this.timerWin = win
+    forwardKeys(win)
     loadOutputPage(win, 'timer')
   }
 
@@ -570,6 +572,38 @@ export class OutputManager {
   private send(entry: OutputWindow, command: OutputWindowCommand): void {
     sendCommands(entry.win, [command])
   }
+}
+
+/** Electron's accelerator name for a key, as `sendInputEvent` takes it. */
+export function keyCodeOf(key: string): string {
+  const named: Record<string, string> = {
+    ' ': 'Space', Escape: 'Escape', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete',
+    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Home: 'Home', End: 'End',
+    PageUp: 'PageUp', PageDown: 'PageDown'
+  }
+  return named[key] ?? key
+}
+
+/**
+ * The keyboard belongs to the show, wherever it is pressed. A floating output, or the timer,
+ * can take focus — it is a window the operator moves — and a GO pressed while it has it would
+ * otherwise land on a page with nothing to do with it. The key is handed to the control
+ * window, which is given the focus back, so the next one goes there directly.
+ */
+function forwardKeys(win: BrowserWindow): void {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' && input.type !== 'keyUp') return
+    const control = BrowserWindow.getAllWindows().find(other => !isOutputWindow(other) && !other.isDestroyed())
+    if (control === undefined || !liveWindow(control)) return
+    event.preventDefault()
+    const modifiers: Array<'shift' | 'control' | 'alt' | 'meta'> = []
+    if (input.shift) modifiers.push('shift')
+    if (input.control) modifiers.push('control')
+    if (input.alt) modifiers.push('alt')
+    if (input.meta) modifiers.push('meta')
+    if (input.type === 'keyDown') control.focus()
+    control.webContents.sendInputEvent({ type: input.type, keyCode: keyCodeOf(input.key), modifiers })
+  })
 }
 
 function sendCommands(win: BrowserWindow, commands: OutputWindowCommand[]): void {

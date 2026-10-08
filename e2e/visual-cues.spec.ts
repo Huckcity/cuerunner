@@ -210,6 +210,21 @@ test.describe('on the GPU', () => {
     await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'false')
   })
 
+  test('takes GO from the keyboard while the floating output has the focus', async () => {
+    await page.locator('.cue-row').nth(0).click()
+    await page.waitForTimeout(350)
+    // A key pressed on the output window, through the window's own input path — the one a
+    // keyboard drives, and the one Playwright's synthetic keys go round.
+    await app.evaluate(({ BrowserWindow }) => {
+      const output = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('role=output'))!
+      output.focus()
+      output.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' })
+      output.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' })
+    })
+    await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
+    await stopEverything(page)
+  })
+
   test('plays a video with no sound as a picture alone, and ends with it', async () => {
     test.setTimeout(40_000)
     await pickNext(app, SILENT)

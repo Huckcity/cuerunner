@@ -175,6 +175,22 @@ describe('CueEngine — picture cues', () => {
     expect(held.setLastRun).not.toHaveBeenCalledWith('v2', expect.anything())
   })
 
+  it('fades a video\'s sound out onto its end with its picture, and not one that holds its last frame', async () => {
+    const { runner } = setup([makeVideo({ duration: 4000, fadeOutDuration: 1000 })])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    const play = sent().find(command => command.op === 'play')
+    const start = play?.op === 'play' ? play.layer.at : 0
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(engine.fade).toHaveBeenCalledWith('v1', 'volume', 0, 1000, 'linear', start + 3000)
+
+    engine.fade.mockClear()
+    const held = setup([makeVideo({ id: 'v2', duration: 4000, fadeOutDuration: 1000, holdLastFrame: true })])
+    held.runner.go()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(engine.fade).not.toHaveBeenCalled()
+  })
+
   it('plays a video with no sound as its picture alone, ending where the picture says', async () => {
     engine.prepare.mockRejectedValueOnce(Object.assign(new Error('this video has no sound track'), { code: 'no-audio' }))
     const { runner, setLastRun } = setup([makeVideo({ duration: 0 })])
