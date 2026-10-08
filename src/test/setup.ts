@@ -170,7 +170,13 @@ Object.defineProperty(window, 'cuerunner', {
       listInputPorts: vi.fn(() => Promise.resolve([])),
       status: vi.fn(() => Promise.resolve({ available: true, error: null })),
       send: vi.fn(() => Promise.resolve({ ok: true })),
-      sendTcp: vi.fn(() => Promise.resolve({ ok: true }))
+      sendTcp: vi.fn(() => Promise.resolve({ ok: true })),
+      pickFile: vi.fn(() => Promise.resolve(null)),
+      fileInspect: vi.fn(() => Promise.resolve({ ok: false as const, error: 'no file in a unit test' })),
+      filePlay: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0, passMs: 0 })),
+      filePause: vi.fn(() => Promise.resolve({ ok: true as const, positionMs: 0 })),
+      fileResume: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0 })),
+      fileStop: vi.fn(() => Promise.resolve(false))
     },
     network: {
       request: vi.fn(() => Promise.resolve({

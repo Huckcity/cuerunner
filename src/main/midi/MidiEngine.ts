@@ -125,6 +125,16 @@ export class MidiEngine {
   }
 
   send(portName: string, messages: MidiMessage[]): MidiSendResult {
+    return this.sendRaw(portName, messages.map(encodeMidiMessage))
+  }
+
+  /**
+   * Bytes as they go on the wire, already encoded. The MIDI file player sends this way: a
+   * file carries pitch bend, pressure and the escape form, which the cue's message union
+   * has no shape for, and its bytes are already the file's own. Asked with no messages it
+   * sends nothing and answers whether the port is there.
+   */
+  sendRaw(portName: string, messages: readonly number[][]): MidiSendResult {
     // Without the module there is no port to look for, and saying "no port named X"
     // would send the operator looking at their rack instead of their installation.
     if (!this.moduleAnswered) {
@@ -147,7 +157,7 @@ export class MidiEngine {
       }
     }
     try {
-      for (const msg of messages) out.sendMessage(encodeMidiMessage(msg))
+      for (const bytes of messages) out.sendMessage([...bytes])
       return { ok: true }
     } catch (error) {
       // A device unplugged mid-show leaves a handle that throws on every later send.

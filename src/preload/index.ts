@@ -53,6 +53,15 @@ import {
 import { PLAYBACK_CHANNELS } from '../shared/ipc/playback'
 import { LICENSE_CHANNELS } from '../shared/ipc/license'
 import { MIDI_CHANNELS, type MidiSendPayload, type MidiSendResult, type MidiSendTcpPayload } from '../shared/ipc/midi'
+import type {
+  MidiFileCuePayload,
+  MidiFileInspectPayload,
+  MidiFileInspectResult,
+  MidiFilePauseResult,
+  MidiFilePlayPayload,
+  MidiFilePlayResult,
+  MidiFileResumeResult
+} from '../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../shared/ipc/network'
 import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
@@ -248,7 +257,19 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(MIDI_CHANNELS.send, cmd),
     /** MIDI to a desk on the network, which is where an SQ and an Avantis listen. */
     sendTcp: (cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
-      invoke(MIDI_CHANNELS.sendTcp, cmd)
+      invoke(MIDI_CHANNELS.sendTcp, cmd),
+    pickFile: (): Promise<string | null> =>
+      invoke(MIDI_CHANNELS.pickFile),
+    fileInspect: (cmd: MidiFileInspectPayload): Promise<MidiFileInspectResult> =>
+      invoke(MIDI_CHANNELS.fileInspect, cmd),
+    filePlay: (cmd: MidiFilePlayPayload): Promise<MidiFilePlayResult> =>
+      invoke(MIDI_CHANNELS.filePlay, cmd),
+    filePause: (cmd: MidiFileCuePayload): Promise<MidiFilePauseResult> =>
+      invoke(MIDI_CHANNELS.filePause, cmd),
+    fileResume: (cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
+      invoke(MIDI_CHANNELS.fileResume, cmd),
+    fileStop: (cmd: MidiFileCuePayload): Promise<boolean> =>
+      invoke(MIDI_CHANNELS.fileStop, cmd)
   },
   network: {
     /**

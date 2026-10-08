@@ -5,6 +5,9 @@ import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
+import { midiFiles } from '../midi/midiFileRuntime'
+import { installMidiLoopback } from '../midi/loopback'
+import { MIDI_FILE_EXTENSIONS } from '../../shared/midiFile'
 import { KeychainRefusedError, createEwDxCredentials } from '../ewdx/credentials'
 import { discoverEwDx } from '../ewdx/discovery'
 import { BatteryLog } from '../services/BatteryLog'
@@ -39,7 +42,14 @@ import {
   MIDI_CHANNELS,
   type MidiSendPayload,
   type MidiSendResult,
-  type MidiSendTcpPayload
+  type MidiSendTcpPayload,
+  type MidiFileCuePayload,
+  type MidiFileInspectPayload,
+  type MidiFileInspectResult,
+  type MidiFilePauseResult,
+  type MidiFilePlayPayload,
+  type MidiFilePlayResult,
+  type MidiFileResumeResult
 } from '../../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../../shared/ipc/network'
 import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../../shared/ipc/osc'
@@ -121,6 +131,9 @@ import type { Workspace } from '../../shared/workspace'
 import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
 
 const midi = new MidiEngine(midiModuleLoader())
+// A MIDI File cue's players send through the same engine, so a port it names is the port
+// every other MIDI cue would reach by that name.
+midiFiles.useOutput((portName, messages) => midi.sendRaw(portName, messages))
 const osc = new OscEngine()
 
 // This machine's half of a redundant pair, read once at startup and written only when
@@ -184,6 +197,11 @@ const network = new NetworkClient({ fetch: (url, init) => net.fetch(url, init) }
  * this branch, so nothing here can make a real installation look broken.
  */
 function midiModuleLoader(): MidiModuleLoader | undefined {
+  // The other harness: one output port, by the name the launch gives it, that writes down
+  // every message it is sent — so a spec can read what a MIDI File cue put on the wire on a
+  // machine with no MIDI at all (src/main/midi/loopback.ts).
+  const loopback = !app.isPackaged ? process.env['CUERUNNER_TEST_MIDI_LOOPBACK'] : undefined
+  if (loopback !== undefined && loopback !== '') return installMidiLoopback(loopback)
   if (!app.isPackaged && process.env['CUERUNNER_TEST_MIDI_MISSING'] === '1') {
     return () => {
       throw new Error("Cannot find module 'midi'")
@@ -436,6 +454,30 @@ export function registerIpcHandlers(): void {
   // destination is an address, and the answer worth having is whether the desk took it.
   ipcMain.handle(MIDI_CHANNELS.sendTcp, async (_, cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
     midiTcp.send(cmd.host, cmd.port, cmd.messages))
+
+  // MIDI File cues. Free, like every other MIDI cue. The file is read and played here, where
+  // the port is; the window is told what the file holds and how long a run will take, and a
+  // file that cannot be played or a port that is not there is an answer, not a fault.
+  ipcMain.handle(MIDI_CHANNELS.pickFile, async (event) => {
+    const result = await dialog.showOpenDialog(getWin(event), {
+      title: 'Select MIDI File',
+      filters: [
+        { name: 'MIDI Files', extensions: [...MIDI_FILE_EXTENSIONS] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+  ipcMain.handle(MIDI_CHANNELS.fileInspect, (_, cmd: MidiFileInspectPayload): Promise<MidiFileInspectResult> =>
+    refusalValue(async () => ({ ok: true as const, summary: await midiFiles.inspect(cmd.filePath) })))
+  ipcMain.handle(MIDI_CHANNELS.filePlay, (_, cmd: MidiFilePlayPayload): Promise<MidiFilePlayResult> =>
+    refusalValue(async () => ({ ok: true as const, ...await midiFiles.play(cmd) })))
+  ipcMain.handle(MIDI_CHANNELS.filePause, (_, cmd: MidiFileCuePayload): Promise<MidiFilePauseResult> =>
+    refusalValue(async () => ({ ok: true as const, ...midiFiles.pause(cmd.cueId) })))
+  ipcMain.handle(MIDI_CHANNELS.fileResume, (_, cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
+    refusalValue(async () => ({ ok: true as const, ...midiFiles.resume(cmd.cueId) })))
+  ipcMain.handle(MIDI_CHANNELS.fileStop, (_, cmd: MidiFileCuePayload): boolean => midiFiles.stop(cmd.cueId))
 
   // OSC
   ipcMain.handle(OSC_CHANNELS.send, async (_, cmd: OscSendPayload): Promise<OscSendResult> =>

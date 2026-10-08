@@ -8,6 +8,7 @@ import { onMainError, reportMainError } from './errors'
 import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
+import { midiFiles } from './midi/midiFileRuntime'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
 import { refuseNavigation } from './safety/navigation'
 import { placeWindow, readWindowState, saveWindowState } from './windowState'
@@ -351,6 +352,9 @@ app.whenReady().then(() => {
   app.on('will-quit', () => {
     playbackSafety.close()
     audioEngine.forceShutdown()
+    // A MIDI file still playing at quit lets go of its notes on the way out: a port outlives
+    // the app that held it, and a synth left with a chord down drones until someone finds it.
+    midiFiles.stopAll()
   })
   createWindow()
   app.on('activate', () => {
