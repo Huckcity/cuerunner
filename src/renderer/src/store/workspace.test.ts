@@ -33,6 +33,7 @@ function savedShape(): Workspace {
     lighting: s.lighting,
     timecode: s.timecode,
     videoOutputs: s.videoOutputs,
+    pictures: s.pictures,
     cues: s.cues
   })
 }

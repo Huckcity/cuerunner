@@ -60,6 +60,7 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'video',   label: 'Video' },
   { type: 'image',   label: 'Image' },
   { type: 'text',    label: 'Text' },
+  { type: 'camera',  label: 'Camera' },
 ]
 
 interface Props {

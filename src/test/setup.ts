@@ -302,7 +302,10 @@ Object.defineProperty(window, 'cuerunner', {
       timer: vi.fn(() => Promise.resolve()),
       timerWindow: vi.fn((state: { open: boolean; mode: 'clock' | 'elapsed' | 'remaining' }) => Promise.resolve(state)),
       pickFile: vi.fn(() => Promise.resolve(null)),
-      onEvents: vi.fn(() => () => {})
+      onEvents: vi.fn(() => () => {}),
+      cameras: vi.fn(() => Promise.resolve({ devices: [], listed: false, choices: {} })),
+      chooseCamera: vi.fn(() => Promise.resolve({ devices: [], listed: false, choices: {} })),
+      pickMask: vi.fn(() => Promise.resolve(null))
     }
   } satisfies CuerunnerBridge,
   writable: true

@@ -5,7 +5,16 @@ import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard, UNTITLED_SHOW } from '../../../shared/workspace'
-import { MAX_OUTPUTS, carriesMediaFile, createOutput, normalizeVideoOutputs, type VideoOutput } from '../../../shared/visual'
+import {
+  MAX_OUTPUTS,
+  carriesMediaFile,
+  createOutput,
+  defaultPictureSettings,
+  normalizePictureSettings,
+  normalizeVideoOutputs,
+  type PictureSettings,
+  type VideoOutput
+} from '../../../shared/visual'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
@@ -333,6 +342,9 @@ interface CueListState {
   addVideoOutput: () => string
   updateVideoOutput: (id: string, patch: Partial<Omit<VideoOutput, 'id'>>) => void
   removeVideoOutput: (id: string) => void
+  /** What the show says about its pictures as a whole (src/shared/visual.ts). Workspace content. */
+  pictures: PictureSettings
+  setPictures: (patch: Partial<PictureSettings>) => void
 
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
@@ -582,7 +594,8 @@ interface CueListState {
     history?: ShowHistoryEntry[],
     lighting?: LightingSettings,
     timecode?: TimecodeShowSettings,
-    videoOutputs?: VideoOutput[]
+    videoOutputs?: VideoOutput[],
+    pictures?: PictureSettings
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
   saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
@@ -605,6 +618,7 @@ interface EditSnapshot {
   lighting: LightingSettings
   timecode: TimecodeShowSettings
   videoOutputs: VideoOutput[]
+  pictures: PictureSettings
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
@@ -616,7 +630,8 @@ function snapshotOf(state: CueListState): EditSnapshot {
     plot: state.showSettings.rf.plot,
     lighting: state.lighting,
     timecode: state.timecode,
-    videoOutputs: state.videoOutputs
+    videoOutputs: state.videoOutputs,
+    pictures: state.pictures
   }
 }
 
@@ -867,6 +882,7 @@ export const useStore = create<CueListState>((set) => ({
   lighting: defaultLightingSettings(),
   timecode: defaultTimecodeShowSettings(),
   videoOutputs: [],
+  pictures: defaultPictureSettings(),
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -1203,6 +1219,7 @@ export const useStore = create<CueListState>((set) => ({
       lighting: snapshot.lighting,
       timecode: snapshot.timecode,
       videoOutputs: snapshot.videoOutputs,
+      pictures: snapshot.pictures,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
       // An undo after a save moves the cues away from the file's bytes: the session is
@@ -1221,6 +1238,7 @@ export const useStore = create<CueListState>((set) => ({
       lighting: snapshot.lighting,
       timecode: snapshot.timecode,
       videoOutputs: snapshot.videoOutputs,
+      pictures: snapshot.pictures,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
@@ -1577,7 +1595,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs, pictures) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1616,6 +1634,8 @@ export const useStore = create<CueListState>((set) => ({
       timecode: heldTimecode(timecode),
       // A show with no outputs has none; one that has them has them held to their ranges.
       videoOutputs: normalizeVideoOutputs(videoOutputs),
+      // A show that says nothing about its pictures leaves them up until they are stopped.
+      pictures: normalizePictureSettings(pictures),
       // The file's own record of its saves. A file that has never been saved has none.
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
@@ -1696,7 +1716,15 @@ export const useStore = create<CueListState>((set) => ({
   })),
 
   removeVideoOutput: (id) => set(s => ({
-    videoOutputs: s.videoOutputs.filter(output => output.id !== id),
+    // An output that mirrored the one going shows its own pictures again.
+    videoOutputs: normalizeVideoOutputs(s.videoOutputs.filter(output => output.id !== id)),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setPictures: (patch) => set(s => ({
+    pictures: normalizePictureSettings({ ...s.pictures, ...patch }),
     isDirty: true,
     past: pushPast(s.past, snapshotOf(s)),
     future: []

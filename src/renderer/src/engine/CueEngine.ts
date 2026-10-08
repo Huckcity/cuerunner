@@ -7,9 +7,11 @@ import type {
 } from '../../../shared/cue'
 import type { MidiFileCue } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
-import type { VideoCue, VisualCue } from '../../../shared/visual'
+import type { PictureSettings, VideoCue, VideoOutput, VisualCue } from '../../../shared/visual'
 import { isVisualCue } from '../../../shared/visual'
+import { cameraSourceProblem } from '../../../shared/camera'
 import { visualCues, type VisualHost } from './visualCues'
+import { picturesTakenByGo } from './stopOnNextGo'
 import { audioEngine } from './audioEngineClient'
 import type {
   AudioEngineEvent,
@@ -232,6 +234,11 @@ interface RunnerDeps {
   // a resume can put back what it said. Optional: a runner without it still holds the show,
   // and only the rows do not change.
   getRunning?: () => ReadonlyMap<string, RunningCue>
+  // What the show says about its pictures — whether the next GO takes them down — and the
+  // outputs they are on, which a crossfade's targets are read against. Optional: a runner
+  // without them takes nothing down on a GO but the pictures that say so themselves.
+  getPictureSettings?: () => PictureSettings
+  getVideoOutputs?: () => readonly VideoOutput[]
 }
 
 export class CueEngine {
@@ -387,6 +394,7 @@ export class CueEngine {
     // batched 16 ms, for the stop this very GO issued — cannot be read as the new run's.
     const supersededEngineRunId = this.runs.get(cue.id)?.engineRunId ?? null
     if (this.hasActiveRun(cue.id)) this.stop(cue.id, false)
+    this.takeDownOnGo(cue)
 
     const startMs = this.now()
     this.fireCue(cue, startMs, (doneAt, run) => {
@@ -416,6 +424,8 @@ export class CueEngine {
     // show's own handovers are on the held clock and come due when it runs again.
     if (atMs === undefined && this.refuseWhileHeld()) return
     if (atMs === undefined && this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
+    // A press from a trigger or a desk is a GO like the button's: what goes on the next GO goes.
+    if (atMs === undefined) this.takeDownOnGo(cue)
     const idx = cues.findIndex(c => c.id === id)
     // The cue after a group is the one past its children — handing a group's completion
     // to its own first child would start the group over instead of moving the show on.
@@ -808,8 +818,26 @@ export class CueEngine {
         break
       case 'image':
       case 'text':
+      case 'camera':
         this.executePicture(cue as VisualCue, run, at, finish)
         break
+    }
+  }
+
+  /**
+   * The pictures a GO takes down before it fires `incoming`: the ones set to go on the next GO
+   * (stopOnNextGo.ts), each over its own fade out.
+   */
+  private takeDownOnGo(incoming: Cue): void {
+    const stops = picturesTakenByGo({
+      cues: this.deps!.getCues(),
+      showing: visualCues.showingIds(),
+      incoming,
+      settings: this.deps!.getPictureSettings?.() ?? { stopOnNextGo: false },
+      outputs: this.deps!.getVideoOutputs?.() ?? []
+    })
+    for (const stop of stops) {
+      if (this.runs.has(stop.cueId) || visualCues.isShowing(stop.cueId)) this.stopCue(stop.cueId, stop.fadeMs)
     }
   }
 
@@ -1152,9 +1180,11 @@ export class CueEngine {
       this.executeLightFade(cue, run, at, finish)
       return
     }
-    if (cue.fadeProperty === 'opacity') {
-      // A picture's level, on its output: the same ramp, drawn rather than heard.
-      visualCues.fade(cue.targetCueId, cue.targetValue, cue.duration, cue.curve, at)
+    if (cue.fadeProperty === 'opacity' || cue.fadeProperty === 'geometry') {
+      // A picture's level, on its output: the same ramp, drawn rather than heard — and its
+      // place, where the fade moves that too, over the same time and curve.
+      if (cue.fadeProperty === 'opacity') visualCues.fade(cue.targetCueId, cue.targetValue, cue.duration, cue.curve, at)
+      if (cue.geometryTarget) visualCues.move(cue.targetCueId, cue.geometryTarget, cue.duration, cue.curve, at)
     } else {
       const param: AudioFadeParam = cue.fadeProperty === 'volume' ? 'volume' : 'pan'
       // The ramp starts at the cue's own time on the clock, whether that is now or later.
@@ -2416,6 +2446,14 @@ export class CueEngine {
   private executePicture(cue: VisualCue, run: CueRun, at: number, finish: Finish): void {
     if (cue.type === 'image' && !cue.filePath) {
       finish(at, { outcome: 'error', error: NO_FILE_SELECTED })
+      return
+    }
+    // A camera with nothing chosen, or an address this build cannot play, is said at once
+    // rather than put up as black.
+    const cameraProblem = cue.type === 'camera' ? cameraSourceProblem(cue) : null
+    if (cameraProblem !== null) {
+      this.log({ level: 'error', message: cameraProblem, label: this.cueLabel(cue) })
+      finish(at, { outcome: 'error', error: cameraProblem })
       return
     }
     void visualCues.play(cue, at, run.seekMs).then(result => {

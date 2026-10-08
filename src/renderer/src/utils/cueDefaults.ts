@@ -1,7 +1,8 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, CameraCue
 } from '../../../shared/cue'
+import { CAMERA_DEFAULTS } from '../../../shared/camera'
 import { TEXT_DEFAULTS, VIDEO_DEFAULTS, VISUAL_BASE_DEFAULTS, defaultGeometry } from '../../../shared/visual'
 import type { MidiFileCue } from '../../../shared/cue'
 import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
@@ -340,6 +341,16 @@ export function createCue(type: CueType, number = '1'): Cue {
         ...TEXT_DEFAULTS,
         geometry: defaultGeometry()
       } satisfies TextCue
+    // A live picture: filled to the output, until it is stopped. Which camera is chosen in its
+    // own tab — by the name the show carries, with this machine's device kept by main.
+    case 'camera':
+      return {
+        ...base('Camera Cue', number),
+        type: 'camera',
+        ...VISUAL_BASE_DEFAULTS,
+        ...CAMERA_DEFAULTS,
+        geometry: { ...defaultGeometry(), fit: 'fill' }
+      } satisfies CameraCue
   }
 }
 

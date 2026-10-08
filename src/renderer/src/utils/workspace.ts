@@ -2,6 +2,7 @@ import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSecti
 import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { isDefaultPictureSettings, type PictureSettings } from '../../../shared/visual'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
 // the same way, so a recovered workspace has the shape a saved one does.
@@ -34,12 +35,14 @@ import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../share
 // show saved before timecode existed, or that never touched it, stays byte-identical.
 //
 // The video outputs the same: named at every call, even where there are none, and a show with
-// none writes no section.
+// none writes no section. And the show's picture settings: named at every call, and a show that
+// leaves them at the defaults writes no section.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'pictures'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
     videoOutputs: WorkspaceValues['videoOutputs']
+    pictures: PictureSettings | undefined
   }
 ): Workspace {
   return savedShape({
@@ -52,6 +55,8 @@ export function buildWorkspace(
     timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
     // The same for a show with no video output: its bytes are what they were before
     // outputs existed.
-    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined
+    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined,
+    // And for a show whose pictures stay up until they are stopped, as they always did.
+    pictures: values.pictures === undefined || isDefaultPictureSettings(values.pictures) ? undefined : values.pictures
   })
 }

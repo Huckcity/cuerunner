@@ -223,6 +223,7 @@ function CompareTab() {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
+      pictures: useStore.getState().pictures,
       cues
     })
     setBusy(true)

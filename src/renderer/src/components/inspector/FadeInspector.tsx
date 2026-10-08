@@ -6,6 +6,7 @@ import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
 import { isVisualCue } from '../../../../shared/visual'
+import { FadeGeometry } from './FadeGeometry'
 
 interface Props { cue: FadeCue }
 
@@ -35,12 +36,12 @@ export function FadeInspector({ cue }: Props) {
   const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
   const lightTarget = cues.some(c => c.id === cue.targetCueId && c.type === 'light')
   const target = cues.find(c => c.id === cue.targetCueId)
-  const pictureOnly = target?.type === 'image' || target?.type === 'text'
+  const pictureOnly = target?.type === 'image' || target?.type === 'text' || target?.type === 'camera'
   const hasPicture = target !== undefined && isVisualCue(target)
   const aim = (targetCueId: string): void => {
     const next = cues.find(c => c.id === targetCueId)
-    const silent = next?.type === 'image' || next?.type === 'text'
-    set(silent && cue.fadeProperty !== 'opacity'
+    const silent = next?.type === 'image' || next?.type === 'text' || next?.type === 'camera'
+    set(silent && cue.fadeProperty !== 'opacity' && cue.fadeProperty !== 'geometry'
       ? { targetCueId, fadeProperty: 'opacity', targetValue: 0, panTargetValue: null }
       : { targetCueId })
   }
@@ -69,6 +70,7 @@ export function FadeInspector({ cue }: Props) {
               const next = e.target.value as typeof property
               if (next === 'both') set({ fadeProperty: 'volume', panTargetValue: cue.panTargetValue ?? 0 })
               else if (next === 'opacity') set({ fadeProperty: 'opacity', panTargetValue: null, ...(cue.targetValue < 0 ? { targetValue: 0 } : {}) })
+              else if (next === 'geometry') set({ fadeProperty: 'geometry', panTargetValue: null })
               else set({ fadeProperty: next, panTargetValue: null, ...clampedFor(next) })
             }}
           >
@@ -76,19 +78,20 @@ export function FadeInspector({ cue }: Props) {
             {!pictureOnly && <option value="pan">Pan</option>}
             {!pictureOnly && <option value="both">Volume and pan</option>}
             {(hasPicture || cue.fadeProperty === 'opacity') && <option value="opacity">Opacity</option>}
+            {(hasPicture || cue.fadeProperty === 'geometry') && <option value="geometry">Geometry only</option>}
           </select>
         )}
         <ResetButton label="Property" value={property} defaultValue={FADE_DEFAULTS.fadeProperty}
           onReset={() => set({ fadeProperty: FADE_DEFAULTS.fadeProperty, panTargetValue: null })} />
       </div>
-      <div className="field-row">
+      {property !== 'geometry' && <div className="field-row">
         <label>{property === 'both' ? 'Target volume' : 'Target value'}</label>
         {/* Pan runs left to right, −1 to 1; a volume from silence to full, 0 to 1. */}
         <NumberField when="typed" min={cue.fadeProperty === 'pan' ? -1 : 0} max={1} step={0.01} value={cue.targetValue}
           onValue={targetValue => { if (targetValue !== null) set({ targetValue }) }} />
         <ResetButton label="Target value" value={cue.targetValue} defaultValue={FADE_DEFAULTS.targetValue}
           onReset={() => set({ targetValue: FADE_DEFAULTS.targetValue })} />
-      </div>
+      </div>}
       {property === 'both' && !lightTarget && (
         <div className="field-row">
           <label>Target pan</label>
@@ -113,6 +116,10 @@ export function FadeInspector({ cue }: Props) {
         <ResetButton label="Curve" value={cue.curve} defaultValue={FADE_DEFAULTS.curve}
           onReset={() => set({ curve: FADE_DEFAULTS.curve })} />
       </div>
+      {/* A picture's place moves with its level: what it moves to, property by property. */}
+      {hasPicture && (property === 'opacity' || property === 'geometry') && target !== undefined && isVisualCue(target) && (
+        <FadeGeometry cue={cue} target={target} />
+      )}
       <div className="field-row">
         <label>Stop target when done</label>
         <input type="checkbox" checked={cue.stopTargetWhenDone}

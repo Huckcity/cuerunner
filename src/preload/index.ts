@@ -128,11 +128,14 @@ import {
   type OutputPlacePayload,
   type OutputPlaceResult,
   type OutputSnapshot,
+  type CameraSnapshot,
+  type ChooseCameraPayload,
   type OutputTestPatternPayload,
   type TimerFeed,
   type TimerWindowState
 } from '../shared/ipc/output'
 import type { OutputPlacement, VideoOutput } from '../shared/visual'
+import type { CameraDevice } from '../shared/camera'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
@@ -513,6 +516,12 @@ contextBridge.exposeInMainWorld('cuerunner', {
     pickFile: (kind: 'video' | 'image'): Promise<string | null> =>
       invoke(OUTPUT_CHANNELS.pickFile, kind),
     onEvents: (callback: (events: OutputEvent[]) => void): (() => void) =>
-      subscribe(OUTPUT_CHANNELS.events, callback)
+      subscribe(OUTPUT_CHANNELS.events, callback),
+    cameras: (): Promise<CameraSnapshot> =>
+      invoke(OUTPUT_CHANNELS.cameras),
+    chooseCamera: (cueId: string, device: CameraDevice | null): Promise<CameraSnapshot> =>
+      invoke(OUTPUT_CHANNELS.chooseCamera, { cueId, device } satisfies ChooseCameraPayload),
+    pickMask: (): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.pickMask)
   }
 } satisfies CuerunnerBridge)

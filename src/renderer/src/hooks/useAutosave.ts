@@ -41,6 +41,7 @@ export function useAutosave(): void {
         lighting,
         timecode,
         videoOutputs: useStore.getState().videoOutputs,
+        pictures: useStore.getState().pictures,
         cues
       })
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when

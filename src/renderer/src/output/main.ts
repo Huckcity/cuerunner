@@ -18,6 +18,7 @@ import { Stage, timerText } from './stage'
 import { GlRenderer } from './renderGl'
 import { CanvasRenderer } from './render2d'
 import { chooseRenderer } from './renderChoice'
+import { CameraFeeds } from './cameraFeeds'
 import type { Renderer } from './render'
 
 declare global {
@@ -54,6 +55,11 @@ async function runOutput(): Promise<void> {
   }
 
   let renderer: Renderer | null = null
+  // The capture devices this window can see: listed for the control window's picker, looked at
+  // again whenever one is plugged in or taken away.
+  const cameras = new CameraFeeds(navigator.mediaDevices ?? null)
+  cameras.onDevices(devices => { void bridge.report({ events: [], cameras: devices }).catch(() => {}) })
+  let maskMissing: string | null = null
   const clock = new EngineClock(() => bridge.clock(), delta => stage.rebase(delta))
   const stage = new Stage({
     now: () => clock.now(),
@@ -62,7 +68,13 @@ async function runOutput(): Promise<void> {
       pending.push(event)
       if (flushing === null) flushing = setTimeout(flush, 16)
     },
-    release: key => renderer?.release(key)
+    release: key => renderer?.release(key),
+    cameras,
+    maskStatus: missing => {
+      if (missing === maskMissing) return
+      maskMissing = missing
+      void bridge.report({ events: [], maskMissing: missing }).catch(() => {})
+    }
   })
 
   renderer = chooseRenderer(canvas, new URLSearchParams(location.search).get('renderer'), {
@@ -79,7 +91,12 @@ async function runOutput(): Promise<void> {
     if (renderer !== null && !renderer.pins && warp !== null && warp.corners.some(c => c.x !== 0 || c.y !== 0)) {
       lines.push('Corner pin needs the GPU, which this machine is not giving the output — drawn unpinned')
     }
-    banner.textContent = lines.join(' · ')
+    // A camera that is not there, and a mask that could not be read, are said across the output
+    // rather than drawn as black: the operator looking at it is the one who can fix it.
+    lines.push(...stage.cameraLines())
+    if (maskMissing !== null) lines.push(`The mask ${maskMissing.split(/[\\/]/).pop() ?? ''} could not be read — drawn unmasked`)
+    const text = lines.join(' · ')
+    if (banner.textContent !== text) banner.textContent = text
     banner.hidden = lines.length === 0
   }
 
@@ -136,8 +153,13 @@ async function runOutput(): Promise<void> {
     size: () => ({ width: canvas.width, height: canvas.height }),
     pixel: (x, y) => renderer!.readPixel(x, y),
     showing: () => stage.showing(),
-    videos: () => stage.videos()
+    videos: () => stage.videos(),
+    cameras: () => stage.cameras(),
+    geometry: cueId => stage.geometry(cueId),
+    banner: () => (banner.hidden ? '' : banner.textContent ?? '')
   }
+  // The devices are looked at once the window is up: the list the control window's picker offers.
+  void cameras.refresh()
 
   const tick = (): void => {
     try {
@@ -145,6 +167,7 @@ async function runOutput(): Promise<void> {
     } catch (error) {
       console.error('output frame failed:', error)
     }
+    drawBanner()
     if (!identify.hidden && performance.now() > identifyUntil) identify.hidden = true
     requestAnimationFrame(tick)
   }

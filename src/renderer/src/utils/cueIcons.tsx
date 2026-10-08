@@ -50,7 +50,9 @@ const PATHS: Record<CueType, string[]> = {
   // A picture: its frame, a sun and a hill.
   image: ['M2.5 3.5h11v9h-11z', 'M5.6 6.4v.01', 'M2.5 11l3.4-3.2 2.6 2.4 1.8-1.6 3.2 3'],
   // A capital T, set on a baseline.
-  text: ['M3.5 3.5h9', 'M8 3.5v9', 'M6 12.5h4']
+  text: ['M3.5 3.5h9', 'M8 3.5v9', 'M6 12.5h4'],
+  // A camera on its side: the body, the lens hood opening out, and the tally light.
+  camera: ['M2.5 4.8h7.6v6.4H2.5z', 'M10.1 7.1l3.4-2v5.8l-3.4-2', 'M4.4 6.6v.01']
 }
 
 interface Props {

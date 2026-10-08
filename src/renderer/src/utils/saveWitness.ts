@@ -47,6 +47,7 @@ export function witnessSave(sent: Workspace): boolean {
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
+    pictures: useStore.getState().pictures,
     cues
   })
   const diff = diffWorkspaces(sent, now)

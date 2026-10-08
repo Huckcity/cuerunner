@@ -32,6 +32,7 @@ function sent(): Workspace {
     lighting: s.lighting,
     timecode: s.timecode,
     videoOutputs: s.videoOutputs,
+    pictures: s.pictures,
     cues: s.cues
   })
 }
@@ -67,6 +68,7 @@ function editRouted(key: WorkspaceKey): void {
       return
     case 'timecode': useStore.getState().setTimecode({ chase: !useStore.getState().timecode.chase }); return
     case 'videoOutputs': useStore.getState().addVideoOutput(); return
+    case 'pictures': useStore.getState().setPictures({ stopOnNextGo: !useStore.getState().pictures.stopOnNextGo }); return
     default: throw new Error(`no edit for routed section '${key}': the witness walk needs one`)
   }
 }

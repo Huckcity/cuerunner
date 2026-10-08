@@ -127,6 +127,8 @@ const fixture: Required<Workspace> = {
   // Moved from its defaults, as a show that chases a clock carries it.
   timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
   videoOutputs: [createOutput('out-1', 'Stage left')],
+  // Moved from its defaults: a show whose pictures go on the next GO.
+  pictures: { stopOnNextGo: true },
   cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
 }
 
@@ -181,6 +183,7 @@ const declared: readonly WorkspaceKey[] = [
   'lighting',
   'timecode',
   'videoOutputs',
+  'pictures',
   'cues'
 ]
 
@@ -199,14 +202,14 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined, timecode: undefined, videoOutputs: undefined },
+      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined, timecode: undefined, videoOutputs: undefined, pictures: undefined },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
       declared.filter(
         key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' && key !== 'timecode' &&
-          key !== 'videoOutputs'
+          key !== 'videoOutputs' && key !== 'pictures'
       )
     )
   })
@@ -535,6 +538,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     fadeProperty: 'volume',
     targetValue: 1,
     panTargetValue: -0.5,
+    geometryTarget: { x: 0.25, scale: 0.5, crop: { top: 0, right: 0.1, bottom: 0, left: 0.1 } },
     curve: 'linear',
     stopTargetWhenDone: false
   },
@@ -642,7 +646,12 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     holdLastFrame: true,
     volume: 0.8,
     pan: 0,
-    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }]
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }],
+    // The optional picture fields, set, so the walk reads them: a blend, a keyframe list (a list
+    // of objects with an object inside each), and a cue's own stop-on-next-GO.
+    blendMode: 'screen',
+    keyframes: [{ atMs: 2000, x: 0.2, y: 0, scale: 0.8, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 }, easing: 'ease-in-out' }],
+    stopOnNextGo: true
   },
   image: {
     ...cueBase('i1'),
@@ -672,7 +681,22 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     color: '#ffffff',
     bold: true,
     italic: false,
-    position: 'bottom'
+    position: 'bottom',
+    stopOnNextGo: null
+  },
+  camera: {
+    ...cueBase('c1'),
+    type: 'camera',
+    outputId: '',
+    layer: 1,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fill', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    source: 'device',
+    deviceName: 'HD Webcam',
+    url: ''
   }
 }
 

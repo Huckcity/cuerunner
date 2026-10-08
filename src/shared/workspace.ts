@@ -3,7 +3,7 @@ import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
 import type { LightingSettings } from './dmx'
 import type { TimecodeShowSettings } from './timecode'
-import type { VideoOutput } from './visual'
+import type { PictureSettings, VideoOutput } from './visual'
 
 export interface AudioSettings {
   /**
@@ -174,6 +174,11 @@ export interface Workspace {
    * their bytes are what they were. Where each output is on a machine is that machine's.
    */
   videoOutputs?: VideoOutput[]
+  /**
+   * What the show says about its pictures as a whole (src/shared/visual.ts). Optional: a show
+   * that leaves them at the defaults carries none, so its bytes are what they were.
+   */
+  pictures?: PictureSettings
   cues: Cue[]
 }
 

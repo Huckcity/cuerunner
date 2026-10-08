@@ -20,10 +20,10 @@ import { MicInspector } from './MicInspector'
 import { MidiFileInspector } from './MidiFileInspector'
 import { LightInspector, LightTrackingTab } from '../lighting/LightInspector'
 import { TimecodeInspector } from './TimecodeInspector'
-import { VideoInspector, ImageInspector, TextInspector } from './VisualInspector'
+import { VideoInspector, ImageInspector, TextInspector, CameraCueInspector } from './VisualInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue
+  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, CameraCue
 } from '../../../../shared/cue'
 import type { MidiFileCue } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
@@ -53,7 +53,8 @@ const TYPE_TABS: Record<string, string[]> = {
   timecode: ['Basics', 'Timecode'],
   video: ['Basics', 'Video', 'Picture', 'Sound'],
   image: ['Basics', 'Image', 'Picture'],
-  text: ['Basics', 'Text', 'Picture']
+  text: ['Basics', 'Text', 'Picture'],
+  camera: ['Basics', 'Camera', 'Picture']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -124,6 +125,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (cue.type === 'video') return <VideoInspector cue={cue as VideoCue} tab={tab} />
   if (cue.type === 'image') return <ImageInspector cue={cue as ImageCue} tab={tab} />
   if (cue.type === 'text') return <TextInspector cue={cue as TextCue} tab={tab} />
+  if (cue.type === 'camera') return <CameraCueInspector cue={cue as CameraCue} tab={tab} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

@@ -13,7 +13,18 @@
 // frame the audience first sees, not on the GO.
 
 import type { LayerCommand, LayerSpec, OutputEvent, TextStyle, TimerFeed } from '../../../shared/ipc/output'
-import type { OutputWarp, TimerMode, VideoOutput } from '../../../shared/visual'
+import { mediaUrl, type OutputMask, type OutputWarp, type TimerMode, type VideoOutput, type VisualGeometry } from '../../../shared/visual'
+import { blendOf } from '../../../shared/visualBlend'
+import {
+  keyframedGeometry,
+  moveGeometry,
+  movesAfterEdit,
+  shiftMoves,
+  withMoves,
+  type GeometryRamps
+} from '../../../shared/visualKeyframes'
+import type { CameraFeedState } from '../../../shared/camera'
+import type { CameraFeed, CameraFeeds } from './cameraFeeds'
 import {
   dissolveProgress,
   elapsedAt,
@@ -35,7 +46,7 @@ import { dissolveTargets, planComposition, type PlanLayer } from '../../../share
 import { gridCentre, placeLayer, textGeometry } from '../../../shared/visualGeometry'
 import { rateWorthSetting, syncCorrection } from '../../../shared/visualSync'
 import { createImage, createVideo, drawTestPattern, drawText, type Drawable } from './sources'
-import type { DrawItem, Frame } from './render'
+import type { DrawItem, Frame, MaskItem } from './render'
 
 /** How long before its moment a video is put at its first frame, if nothing prepared it. */
 const PREROLL_MS = 400
@@ -66,6 +77,12 @@ interface Layer {
    * its anchor's to hold.
    */
   heldAt: number | null
+  /** The properties fade cues have moved, each on its own ramp (visualKeyframes.ts). */
+  moves: GeometryRamps
+  /** A live picture's feed. */
+  feed: CameraFeed | null
+  /** How the feed was last heard to be getting on, and the line it shows when it is not live. */
+  feedState: { state: CameraFeedState; message: string } | null
 }
 
 interface Dissolve {
@@ -83,11 +100,22 @@ export interface StageHost {
   emit(event: OutputEvent): void
   /** A texture the renderer can let go of. */
   release(key: string): void
+  /** Where live pictures come from; an output with none shows a camera cue as a banner. */
+  cameras?: CameraFeeds
+  /** The mask could not be read (its path), or now has been (null). */
+  maskStatus?(missing: string | null): void
+}
+
+interface MaskState {
+  mask: OutputMask
+  image: HTMLImageElement
+  drawable: Drawable
 }
 
 export class Stage {
   private layers = new Map<string, Layer>()
   private prepared = new Map<string, { src: string; video: HTMLVideoElement }>()
+  private mask: MaskState | null = null
   private dissolve: Dissolve | null = null
   private testPattern: { drawable: Drawable; canvas: HTMLCanvasElement } | null = null
   private timer: { drawable: Drawable; canvas: HTMLCanvasElement; text: string } | null = null
@@ -108,6 +136,37 @@ export class Stage {
     if (this.testPattern !== null) this.setTestPattern(true)
     if (output !== null) this.timerMode = output.timer.mode
     this.timer = null
+    this.configureMask(output?.mask ?? null)
+  }
+
+  /** Loads the output's mask, when it names another than the one it has. */
+  private configureMask(mask: OutputMask | null): void {
+    if (mask === null) {
+      if (this.mask !== null) this.host.release('__mask')
+      this.mask = null
+      this.host.maskStatus?.(null)
+      return
+    }
+    if (this.mask !== null && this.mask.mask.filePath === mask.filePath) {
+      // The same image, read another way: no need to read it again.
+      this.mask = { ...this.mask, mask }
+      return
+    }
+    if (this.mask !== null) this.host.release('__mask')
+    const image = createImage(mediaUrl(mask.filePath))
+    const state: MaskState = { mask, image, drawable: { element: image, width: 0, height: 0, version: 0, ready: false } }
+    this.mask = state
+    image.decode().then(() => {
+      if (this.mask !== state) return
+      state.drawable.width = image.naturalWidth
+      state.drawable.height = image.naturalHeight
+      state.drawable.version++
+      state.drawable.ready = true
+      this.host.maskStatus?.(null)
+    }).catch(() => {
+      // A mask that cannot be read masks nothing: the output says so rather than going black.
+      if (this.mask === state) this.host.maskStatus?.(mask.filePath)
+    })
   }
 
   warp(): OutputWarp | null {
@@ -138,6 +197,7 @@ export class Stage {
       if (layer.shownAt !== null) layer.shownAt += deltaMs
       if (layer.stop !== null) layer.stop = { ...layer.stop, atMs: layer.stop.atMs + deltaMs }
       if (layer.heldAt !== null) layer.heldAt += deltaMs
+      layer.moves = shiftMoves(layer.moves, deltaMs)
     }
     if (this.dissolve !== null) this.dissolve.firstFrameMs += deltaMs
     if (this.timerFeed.elapsedFrom !== null || this.timerFeed.remaining !== null) {
@@ -174,6 +234,8 @@ export class Stage {
         if (patch.opacity !== undefined && patch.opacity !== layer.spec.opacity) {
           layer.level = retarget(layer.level, patch.opacity, now, 0, 'linear')
         }
+        // A property the operator changed by hand is theirs again; a fade's other moves stand.
+        if (patch.geometry !== undefined) layer.moves = movesAfterEdit(layer.moves, layer.spec.geometry, patch.geometry)
         layer.spec = {
           ...layer.spec,
           ...(patch.layer !== undefined ? { layer: patch.layer } : {}),
@@ -181,13 +243,20 @@ export class Stage {
           ...(patch.geometry !== undefined ? { geometry: patch.geometry } : {}),
           ...(patch.fadeOutMs !== undefined ? { fadeOutMs: patch.fadeOutMs } : {}),
           ...(patch.displayMs !== undefined ? { displayMs: patch.displayMs } : {}),
-          ...(patch.text !== undefined ? { text: patch.text } : {})
+          ...(patch.text !== undefined ? { text: patch.text } : {}),
+          ...(patch.blend !== undefined ? { blend: patch.blend } : {}),
+          ...(patch.keyframes !== undefined ? { keyframes: patch.keyframes } : {})
         }
         if (patch.text !== undefined && layer.textCanvas !== null) this.renderText(layer, patch.text)
         return
       }
       case 'fade':
         layer.level = retarget(layer.level, command.to, at, command.durationMs, command.curve)
+        return
+      case 'move':
+        // From wherever the picture is when the move begins: its keyframes' place then, or a
+        // move still running.
+        layer.moves = moveGeometry(layer.moves, this.geometryAt(layer, at), command.to, at, command.durationMs, command.curve)
         return
       case 'stop':
         if (layer.stop === null || at + command.fadeMs < layer.stop.atMs + layer.stop.fadeMs) {
@@ -197,6 +266,8 @@ export class Stage {
       case 'pause':
         layer.anchor = reanchor(layer.anchor, at, true)
         layer.video?.pause()
+        // A live picture held stands on the frame it was showing.
+        if (layer.feed?.element instanceof HTMLVideoElement) layer.feed.element.pause()
         if (layer.heldAt === null) layer.heldAt = at
         return
       case 'resume':
@@ -209,10 +280,12 @@ export class Stage {
           if (layer.shownAt !== null) layer.shownAt += held
           layer.level = { ...layer.level, startMs: layer.level.startMs + held }
           if (layer.stop !== null) layer.stop = { ...layer.stop, atMs: layer.stop.atMs + held }
+          layer.moves = shiftMoves(layer.moves, held)
           // A dissolve into it was held with it.
           if (this.dissolve !== null && this.dissolve.incoming === layer.spec.cueId) this.dissolve.firstFrameMs += held
         }
         if (layer.started && layer.video !== null && !layer.holding) void layer.video.play().catch(() => {})
+        if (layer.feed?.element instanceof HTMLVideoElement) void layer.feed.element.play().catch(() => {})
         return
       case 'seek':
         layer.anchor = { engineMs: at, elapsedMs: Math.max(0, command.elapsedMs), paused: layer.anchor.paused }
@@ -229,6 +302,10 @@ export class Stage {
   }
 
   private prepare(spec: LayerSpec): void {
+    if (spec.kind === 'camera') {
+      this.prepareFeed(spec)
+      return
+    }
     if (spec.kind !== 'video' || spec.src === null || this.layers.has(spec.cueId)) return
     const existing = this.prepared.get(spec.cueId)
     if (existing !== undefined && existing.src === spec.src) return
@@ -264,7 +341,15 @@ export class Stage {
       elementEnded: false,
       framePending: false,
       dissolvedIn: false,
-      heldAt: null
+      heldAt: null,
+      moves: {},
+      feed: null,
+      feedState: null
+    }
+    if (spec.kind === 'camera') {
+      this.layers.set(spec.cueId, layer)
+      this.attachFeed(layer)
+      return
     }
     if (spec.kind === 'video' && spec.src !== null) {
       const prepared = this.prepared.get(spec.cueId)
@@ -316,6 +401,99 @@ export class Stage {
     this.layers.set(spec.cueId, layer)
   }
 
+  // ── Live pictures ───────────────────────────────────────────────────────────
+
+  private preparedFeeds = new Map<string, { key: string; feed: CameraFeed; state: { state: CameraFeedState; message: string } }>()
+
+  /** Opens a camera ahead of its GO, so its picture is live the moment it is asked for. */
+  private prepareFeed(spec: LayerSpec): void {
+    const cameras = this.host.cameras
+    if (cameras === undefined || spec.camera === undefined || spec.camera === null || this.layers.has(spec.cueId)) return
+    const key = JSON.stringify(spec.camera)
+    if (this.preparedFeeds.get(spec.cueId)?.key === key) return
+    this.preparedFeeds.get(spec.cueId)?.feed.close()
+    const entry = { key, feed: null as unknown as CameraFeed, state: { state: 'connecting' as CameraFeedState, message: '' } }
+    entry.feed = cameras.open(spec.camera, (state, message) => {
+      entry.state = { state, message }
+      // Once it is a picture's, the picture hears it.
+      const layer = this.layers.get(spec.cueId)
+      if (layer !== undefined && layer.feed === entry.feed) this.feedReport(layer, state, message)
+    })
+    this.preparedFeeds.set(spec.cueId, entry)
+    // A camera held open is a device another program cannot have: the newest two are kept.
+    while (this.preparedFeeds.size > 2) {
+      const [oldest, held] = this.preparedFeeds.entries().next().value as [string, { feed: CameraFeed }]
+      held.feed.close()
+      this.preparedFeeds.delete(oldest)
+    }
+  }
+
+  private attachFeed(layer: Layer): void {
+    const spec = layer.spec
+    const cameras = this.host.cameras
+    if (spec.camera === undefined || spec.camera === null || cameras === undefined) {
+      this.feedReport(layer, 'failed', 'this output cannot open a camera')
+      return
+    }
+    const key = JSON.stringify(spec.camera)
+    const prepared = this.preparedFeeds.get(spec.cueId)
+    this.preparedFeeds.delete(spec.cueId)
+    if (prepared !== undefined && prepared.key === key) {
+      layer.feed = prepared.feed
+      this.feedReport(layer, prepared.state.state, prepared.state.message)
+      return
+    }
+    prepared?.feed.close()
+    // A feed reports as it opens — before `open` has returned it — so its reports are the
+    // layer's from the start rather than checked against a feed that is not there yet.
+    let feed: CameraFeed | null = null
+    feed = cameras.open(spec.camera, (state, message) => {
+      if (this.layers.get(spec.cueId) === layer && (feed === null || layer.feed === feed)) this.feedReport(layer, state, message)
+    })
+    layer.feed = feed
+  }
+
+  private feedReport(layer: Layer, state: CameraFeedState, message: string): void {
+    const previous = layer.feedState
+    if (previous !== null && previous.state === state && previous.message === message) return
+    layer.feedState = { state, message }
+    this.host.emit({ kind: 'camera', cueId: layer.spec.cueId, outputId: layer.spec.outputId, state, message })
+  }
+
+  /** A live picture's frame, every frame it is giving them: it is up once the first one comes. */
+  private advanceFeed(layer: Layer, now: number): void {
+    const feed = layer.feed
+    if (feed === null || feed.element === null) return
+    const size = feed.size()
+    const live = feed.state === 'live' && size.width > 0 && size.height > 0
+    if (layer.drawable.element !== feed.element) {
+      layer.drawable = { element: feed.element, width: size.width, height: size.height, version: layer.drawable.version + 1, ready: live }
+    }
+    layer.drawable.width = size.width
+    layer.drawable.height = size.height
+    layer.drawable.ready = live
+    // A live picture changes every frame; held, it stands on the one it had.
+    if (live && layer.heldAt === null) layer.drawable.version++
+    if (live && layer.shownAt === null && now >= layer.spec.at) this.shown(layer, now)
+  }
+
+  /** The lines a live picture that cannot be shown draws across the output. */
+  cameraLines(): string[] {
+    const lines: string[] = []
+    for (const layer of this.layers.values()) {
+      const state = layer.feedState
+      if (state !== null && state.state !== 'live' && state.state !== 'connecting' && state.message !== '') lines.push(state.message)
+    }
+    return lines
+  }
+
+  /** Each live picture, and how it is getting on: for the tests. */
+  cameras(): Array<{ cueId: string; state: CameraFeedState; device: string }> {
+    return [...this.layers.values()]
+      .filter(layer => layer.spec.kind === 'camera')
+      .map(layer => ({ cueId: layer.spec.cueId, state: layer.feedState?.state ?? 'connecting', device: layer.feed?.name ?? '' }))
+  }
+
   private renderText(layer: Layer, style: TextStyle): void {
     if (layer.textCanvas === null) return
     drawText(layer.textCanvas, style)
@@ -346,7 +524,13 @@ export class Stage {
       if (layer.shownAt === null || !layer.drawable.ready) continue
       const opacity = this.opacityOf(layer, now)
       planLayers.push({ cueId: layer.spec.cueId, layer: layer.spec.layer, seq: layer.spec.seq, opacity })
-      items.set(layer.spec.cueId, { key: layer.spec.cueId, source: layer.drawable, placement: this.placementOf(layer), opacity })
+      items.set(layer.spec.cueId, {
+        key: layer.spec.cueId,
+        source: layer.drawable,
+        placement: this.placementOf(layer, now),
+        opacity,
+        blend: blendOf(layer.spec.blend)
+      })
     }
     const plan = planComposition(planLayers, this.dissolve === null ? null : {
       incoming: this.dissolve.incoming,
@@ -363,7 +547,8 @@ export class Stage {
         key: '__test-pattern',
         source: this.testPattern.drawable,
         placement: placeLayer({ fit: 'stretch', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } }, this.testPattern.drawable, this),
-        opacity: 1
+        opacity: 1,
+        blend: 'normal'
       })
     }
     return {
@@ -371,8 +556,32 @@ export class Stage {
         ? { kind: 'single', draws: toItems(plan.draws) }
         : { kind: 'dissolve', before: toItems(plan.before), after: toItems(plan.after), progress: plan.progress },
       overlays,
+      mask: this.maskItem(),
       warp: this.output?.warp ?? { corners: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }], blend: { left: 0, right: 0, top: 0, bottom: 0 }, gamma: 1 }
     }
+  }
+
+  /** The output's mask, once its image is read. */
+  private maskItem(): MaskItem | null {
+    const mask = this.mask
+    if (mask === null || !mask.drawable.ready) return null
+    return { key: '__mask', source: mask.drawable, mode: mask.mask.mode, invert: mask.mask.invert, filePath: mask.mask.filePath }
+  }
+
+  /**
+   * Where a picture is at `now`: its own geometry, carried along its keyframes by how long it has
+   * been up (pauses taken out), with every move a fade cue has made laid over that.
+   */
+  private geometryAt(layer: Layer, now: number): VisualGeometry {
+    const t = layer.heldAt ?? now
+    const elapsed = layer.shownAt === null ? 0 : Math.max(0, t - layer.shownAt)
+    return withMoves(keyframedGeometry(layer.spec.geometry, layer.spec.keyframes, elapsed), layer.moves, t)
+  }
+
+  /** A picture's geometry as this frame draws it: for the tests. */
+  geometry(cueId: string): VisualGeometry | null {
+    const layer = this.layers.get(cueId)
+    return layer === undefined ? null : this.geometryAt(layer, this.host.now())
   }
 
   /** Each video's element, as it stands: where it is in its file, and whether it is playing. */
@@ -398,13 +607,14 @@ export class Stage {
       .map(layer => ({ cueId: layer.spec.cueId, opacity: this.opacityOf(layer, now) }))
   }
 
-  private placementOf(layer: Layer): ReturnType<typeof placeLayer> {
+  private placementOf(layer: Layer, now: number): ReturnType<typeof placeLayer> {
+    const geometry = this.geometryAt(layer, now)
     if (layer.spec.kind === 'text' && layer.spec.text !== null) {
       const margin = this.height * MARGIN
       const anchor = gridCentre(layer.spec.text.position, layer.drawable, this, margin)
-      return placeLayer(textGeometry(layer.spec.geometry), layer.drawable, this, anchor)
+      return placeLayer(textGeometry(geometry), layer.drawable, this, anchor)
     }
-    return placeLayer(layer.spec.geometry, layer.drawable, this)
+    return placeLayer(geometry, layer.drawable, this)
   }
 
   private endsAt(layer: Layer): number | null {
@@ -432,6 +642,8 @@ export class Stage {
     }
     if (spec.kind === 'video' && layer.video !== null) {
       this.advanceVideo(layer, layer.video, now)
+    } else if (spec.kind === 'camera') {
+      this.advanceFeed(layer, now)
     } else if (layer.shownAt === null && layer.drawable.ready && now >= spec.at) {
       this.shown(layer, now)
     }
@@ -598,6 +810,8 @@ export class Stage {
     if (this.layers.get(layer.spec.cueId) !== layer) return
     this.layers.delete(layer.spec.cueId)
     if (layer.video !== null) disposeVideo(layer.video)
+    // A camera let go of is a device another picture, or another program, can have.
+    layer.feed?.close()
     this.host.release(layer.spec.cueId)
     if (announce) this.host.emit({ kind: 'gone', cueId: layer.spec.cueId, outputId: layer.spec.outputId })
   }
@@ -626,7 +840,8 @@ export class Stage {
       key: '__timer',
       source: drawable,
       placement: placeLayer({ fit: 'native', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } }, drawable, this, anchor),
-      opacity: 1
+      opacity: 1,
+      blend: 'normal'
     }
   }
 }

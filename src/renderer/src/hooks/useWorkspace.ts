@@ -66,6 +66,7 @@ export async function guardDirty(): Promise<boolean> {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
+      pictures: useStore.getState().pictures,
       cues
     })
     let saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null
@@ -133,7 +134,8 @@ export function loadIntoStore(
     workspace.history ?? [],
     workspace.lighting,
     workspace.timecode,
-    workspace.videoOutputs
+    workspace.videoOutputs,
+    workspace.pictures
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
@@ -190,6 +192,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
+    pictures: useStore.getState().pictures,
     cues
   })
   try {
@@ -237,6 +240,7 @@ export async function exportShowBundle(): Promise<void> {
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
+    pictures: useStore.getState().pictures,
     cues
   })
   try {
@@ -288,6 +292,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
+    pictures: useStore.getState().pictures,
     cues
   })
   try {
@@ -456,6 +461,7 @@ export function useWorkspace() {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
+      pictures: useStore.getState().pictures,
       cues
     })
     try {
@@ -507,6 +513,7 @@ export function useWorkspace() {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
+      pictures: useStore.getState().pictures,
       cues
     })
     try {

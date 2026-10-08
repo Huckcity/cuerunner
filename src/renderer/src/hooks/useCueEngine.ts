@@ -25,6 +25,8 @@ export function useCueEngine() {
       getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName,
       getTriggerGuard: () => useStore.getState().triggerGuard,
       getRunning: () => useStore.getState().running,
+      getPictureSettings: () => useStore.getState().pictures,
+      getVideoOutputs: () => useStore.getState().videoOutputs,
       isPro: () => isPro(useStore.getState().license)
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
