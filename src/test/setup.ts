@@ -23,6 +23,7 @@ import type {
   WorkspaceOpenResult,
   WorkspaceSaveResult
 } from '../shared/ipc/workspace'
+import type { QLabFindMediaResult, QLabImportResult, QLabWorkspacesResult } from '../shared/ipc/qlab'
 import type { RedundancySettings } from '../shared/redundancy'
 import type { ScriptDocument } from '../shared/show'
 import type { Workspace } from '../shared/workspace'
@@ -260,6 +261,12 @@ Object.defineProperty(window, 'cuerunner', {
       clearRecovery: vi.fn(() => Promise.resolve()),
       setTitle: vi.fn(() => Promise.resolve()),
       confirmClose: vi.fn((): Promise<0 | 1 | 2> => Promise.resolve(0))
+    },
+    qlab: {
+      importFile: vi.fn((): Promise<QLabImportResult> => Promise.resolve({ ok: true, imported: null })),
+      listWorkspaces: vi.fn((): Promise<QLabWorkspacesResult> => Promise.resolve({ ok: true, workspaces: [] })),
+      importLive: vi.fn((): Promise<QLabImportResult> => Promise.resolve({ ok: true, imported: null })),
+      findMedia: vi.fn((): Promise<QLabFindMediaResult> => Promise.resolve({ ok: true, found: null }))
     }
   } satisfies CuerunnerBridge,
   writable: true

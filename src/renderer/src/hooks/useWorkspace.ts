@@ -42,7 +42,7 @@ function asWritten(sent: Workspace, saved: SavedName): Workspace {
 
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
-async function guardDirty(): Promise<boolean> {
+export async function guardDirty(): Promise<boolean> {
   const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
@@ -106,7 +106,7 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function loadIntoStore(
+export function loadIntoStore(
   workspace: Workspace,
   path: string | null,
   missingMedia: MissingMedia[],

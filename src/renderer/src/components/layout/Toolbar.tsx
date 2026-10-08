@@ -15,6 +15,7 @@ import { formatShortcut } from '../../utils/shortcuts'
 import { startNewCueDrag } from '../../utils/newCueDrag'
 import { openLogsFolder } from '../../hooks/useLogFile'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
+import { openQLabImport } from '../qlab/qlabImport'
 import './Toolbar.css'
 
 /** An Electron accelerator, written for this keyboard. */
@@ -177,6 +178,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'merge': mergeAnotherShow,
     'export-bundle': exportShowBundle,
     'import-bundle': importShowBundle,
+    'import-qlab': openQLabImport,
     'report-problem': openReport,
     'open-logs': () => openLogsFolder(),
     'show-settings': () => openShowSettings('channels'),
