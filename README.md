@@ -113,7 +113,7 @@ npm run preview           # Preview built app without packaging
 npm run dist              # Build and package for all platforms
 npm run dist:win          # Build and package for Windows only
 npm run dist:mac          # Build and package for macOS only
-npm run dist:linux        # Build and package for Linux only (AppImage)
+npm run dist:linux        # Build and package for Linux only (AppImage and .deb)
 npm run screenshots       # Regenerate website/assets/guide images (requires build)
 npm run demo:write        # Put resources/demo/Demo Show.cuerunner through the serialiser
 npm run demo:check        # Fail if the shipped demo is not what that writes
@@ -159,7 +159,7 @@ npm install
 # Run in development
 npm run dev
 
-# Package an AppImage into dist/
+# Package an AppImage and a .deb into dist/
 npm run dist:linux
 ```
 
@@ -169,6 +169,17 @@ extract and run it instead:
 ```bash
 ./dist/Cuerunner-*.AppImage --appimage-extract-and-run
 ```
+
+The Debian package is written beside it, as `dist/cuerunner_<version>_amd64.deb`. Unlike the
+AppImage it declares what it needs from the system — Electron's own libraries and ALSA
+(`libasound2t64 | libasound2`) — so `apt` pulls those in:
+
+```bash
+sudo apt install ./dist/cuerunner_*_amd64.deb
+```
+
+The release pipeline publishes the AppImage only for now; the `.deb` is built by
+`npm run dist:linux` and held to its declared dependencies by `scripts/linux-packages.test.ts`.
 
 ### Troubleshooting `Error: Electron uninstall`
 
