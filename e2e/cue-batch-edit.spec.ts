@@ -60,6 +60,26 @@ test('Edit (n)… writes a pre-wait and an advance to every selected cue, as one
   }
 })
 
+test('Edit (n)… renumbers the selection by a step, and refuses a number another cue has', async () => {
+  for (let i = 0; i < 4; i++) await toolbarCueBtn(page, 'Wait').click()
+  await selectRange('1', '3')
+
+  await row('2').click({ button: 'right' })
+  await page.locator('.cue-context-menu-item[data-action="batch-edit"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Edit 3 cues' })
+  // Cue 4 is not selected and keeps its number: a plan that would hand it out again is refused.
+  await dialog.locator('#batch-number-from').fill('2')
+  await expect(dialog.locator('.batch-edit-refused')).toHaveText('Cue 4 is already called that')
+  await expect(dialog.locator('.batch-edit-apply')).toBeDisabled()
+
+  await dialog.locator('#batch-number-from').fill('10')
+  await dialog.locator('#batch-number-step').fill('0.5')
+  await expect(dialog.locator('.batch-edit-refused')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Apply to 3' }).click()
+
+  await expect(page.locator('.cue-row .cue-number')).toHaveText(['10', '10.5', '11', '4'])
+})
+
 test('an audio cue’s own fields go to the audio cues in a mixed set and to nothing else', async () => {
   await toolbarCueBtn(page, 'Audio').click()
   await toolbarCueBtn(page, 'Wait').click()

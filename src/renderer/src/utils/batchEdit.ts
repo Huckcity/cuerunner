@@ -54,6 +54,44 @@ export function batchPatches(cues: readonly Cue[], ids: readonly string[], edit:
   return patches
 }
 
+/**
+ * New numbers for the cues asked for, in list order: `from`, then `from + step` and on, written
+ * to the decimals the step has (from `1` by `0.5` reads `1`, `1.5`, `2`). A number another
+ * cue keeps is not handed out twice — the answer is then a reason rather than a plan, because
+ * two cues called 12 is a call the stage manager cannot make.
+ */
+export function renumbered(
+  cues: readonly Cue[],
+  ids: readonly string[],
+  from: number,
+  step: number
+): { ok: true; patches: Record<string, Partial<Cue>> } | { ok: false; reason: string } {
+  if (!Number.isFinite(from) || !Number.isFinite(step) || step <= 0) {
+    return { ok: false, reason: 'A start and a step above zero are needed' }
+  }
+  const wanted = new Set(ids)
+  const decimals = Math.max(decimalsOf(from), decimalsOf(step))
+  const patches: Record<string, Partial<Cue>> = {}
+  const given = new Set<string>()
+  let next = from
+  for (const cue of cues) {
+    if (!wanted.has(cue.id)) continue
+    // Rounded to the step's own decimals and written without trailing zeros: 1, 1.5, 2.
+    const number = String(Number(next.toFixed(decimals)))
+    given.add(number)
+    if (cue.number !== number) patches[cue.id] = { number }
+    next += step
+  }
+  const clash = cues.find(cue => !wanted.has(cue.id) && given.has(cue.number.trim()))
+  if (clash) return { ok: false, reason: `Cue ${clash.number} is already called that` }
+  return { ok: true, patches }
+}
+
+function decimalsOf(value: number): number {
+  const text = String(value)
+  return text.includes('.') ? Math.min(3, text.length - text.indexOf('.') - 1) : 0
+}
+
 /** The two cues a selection can have made for it: a fade out, or a stop. */
 export type TargetingKind = 'fade' | 'stop'
 

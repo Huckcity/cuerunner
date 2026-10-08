@@ -1,7 +1,7 @@
 // A batch edit from the list's menu, and the fade or stop made for a selection: which cue
 // gets which field, and what the made cues aim at.
 import { describe, it, expect, beforeEach } from 'vitest'
-import { batchPatches, canTarget, editsAudio, targetingBlock } from './batchEdit'
+import { batchPatches, canTarget, editsAudio, renumbered, targetingBlock } from './batchEdit'
 import { createCue } from './cueDefaults'
 import { editFromDraft } from '../components/cue-list/BatchEditDialog'
 import { useStore } from '../store'
@@ -44,9 +44,31 @@ describe('batchPatches', () => {
   })
 })
 
+describe('renumbered', () => {
+  const show = [cue('wait', 'a', { number: '1' }), cue('wait', 'b', { number: '7' }), cue('wait', 'c', { number: '3' }), cue('wait', 'd', { number: '200' })]
+
+  it('numbers the selection in list order from a start, by a step', () => {
+    expect(renumbered(show, ['a', 'b', 'c'], 10, 10)).toEqual({
+      ok: true, patches: { a: { number: '10' }, b: { number: '20' }, c: { number: '30' } }
+    })
+  })
+
+  it('keeps the decimals the step is written in, and leaves a number that is already right', () => {
+    expect(renumbered(show, ['a', 'c'], 1, 0.5)).toEqual({ ok: true, patches: { c: { number: '1.5' } } })
+  })
+
+  it('refuses a plan that would give two cues one number, naming the one that has it', () => {
+    expect(renumbered(show, ['a', 'b'], 199, 1)).toEqual({ ok: false, reason: 'Cue 200 is already called that' })
+  })
+
+  it('refuses a step that goes nowhere', () => {
+    expect(renumbered(show, ['a'], 1, 0).ok).toBe(false)
+  })
+})
+
 describe('editFromDraft', () => {
   it('reads seconds and percent into the cue’s ms and gain, and an empty field as no change', () => {
-    expect(editFromDraft({ preWait: 1.5, postWait: null, advance: '', volume: 80, fadeIn: null, fadeOut: 2 })).toEqual({
+    expect(editFromDraft({ numberFrom: null, step: null, preWait: 1.5, postWait: null, advance: '', volume: 80, fadeIn: null, fadeOut: 2 })).toEqual({
       preWait: 1500,
       postWait: undefined,
       advance: undefined,
