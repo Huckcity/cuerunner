@@ -204,6 +204,25 @@ describe('CueEngine — picture cues', () => {
     expect(setLastRun).toHaveBeenCalledWith('v1', expect.objectContaining({ outcome: 'success' }))
   })
 
+  it('plays the picture of a video whose sound this machine cannot decode, and says the sound will not', async () => {
+    engine.prepare.mockRejectedValueOnce(Object.assign(new Error('no decoder'), { code: 'format-unavailable' }))
+    const { runner, setLastRun, appendLog } = setup([makeVideo({ duration: 1000 })])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(engine.start).not.toHaveBeenCalled()
+    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: expect.stringContaining('picture plays silent') })])
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(setLastRun).toHaveBeenCalledWith('v1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('fails a video whose file cannot be read at all', async () => {
+    engine.prepare.mockRejectedValueOnce(Object.assign(new Error('file not found'), { code: 'decode' }))
+    const { runner, setLastRun } = setup([makeVideo()])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(setLastRun).toHaveBeenCalledWith('v1', expect.objectContaining({ outcome: 'error', error: 'file not found' }))
+  })
+
   it('takes a picture down with a stop cue\'s fade, and everything with a stop of all', async () => {
     const stopOne: StopCue = { ...base, id: 's1', number: '9', name: 'Stop', type: 'stop', duration: 0, targetCueId: 'i1', fadeOut: true, fadeOutDuration: 750, waitForFade: false }
     const { runner, select } = setup([makeImage(), stopOne])

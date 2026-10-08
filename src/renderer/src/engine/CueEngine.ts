@@ -1866,7 +1866,19 @@ export class CueEngine {
         void this.prepareAndPlay(sound, run, at, options, finish, {
           planEnd,
           soundless: error => {
-            if ((error as { code?: string } | null)?.code !== 'no-audio') return false
+            const code = (error as { code?: string } | null)?.code
+            if (code === 'format-unavailable') {
+              // A sound this machine has no decoder for — a WebM's on a Windows without the
+              // extension, say. The picture is Chromium's and still plays; the operator is
+              // told the sound will not, rather than losing the picture with it.
+              this.log({
+                level: 'error',
+                message: `its sound cannot be decoded on this machine, so its picture plays silent: ${errorMessage(error)}`,
+                label: this.cueLabel(cue)
+              })
+            } else if (code !== 'no-audio') {
+              return false
+            }
             // A picture with no sound: the run is the picture's from here.
             run.silentPicture = true
             return true
