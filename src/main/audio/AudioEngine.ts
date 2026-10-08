@@ -900,6 +900,15 @@ export class NativeAudioEngine {
     return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false }).then(() => undefined)
   }
 
+  /**
+   * One linear-timecode verb (native/audio/src/ltc.h), answered as the engine answers it.
+   * The timecode module owns the shapes on either side (src/main/timecode/ltc.ts); this is
+   * only the door to the socket, so the LTC block of the wire has one caller.
+   */
+  ltc(verb: Extract<AudioWireVerb, `ltc${string}`>, params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.request(verb, params)
+  }
+
   private failPending(error: Error): void {
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer)

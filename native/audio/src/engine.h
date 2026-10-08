@@ -6,6 +6,7 @@
 
 #include "cache.h"
 #include "capture.h"
+#include "ltc.h"
 #include "mixer.h"
 #include "snapshot_cell.h"
 #include "source.h"
@@ -307,6 +308,10 @@ class Engine {
   void renderOfflineBlock(float* out, int frames);
   void pump();
 
+  /** The LTC voices the mixer adds to its output, and the reader on a capture device (ltc.h). */
+  LtcOutputs& ltcOutputs() { return ltcOutputs_; }
+  LtcInput& ltcInput() { return ltcInput_; }
+
  private:
   struct DeviceState;
 
@@ -403,6 +408,8 @@ class Engine {
   SpscQueue<ReclaimItem, 512> reclaim_;
   Mixer mixer_;
   CaptureWriter capture_;
+  LtcOutputs ltcOutputs_;
+  LtcInput ltcInput_;
 
   std::unique_ptr<DeviceState> device_;
   mutable std::mutex deviceMutex_;

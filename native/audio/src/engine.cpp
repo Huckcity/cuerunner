@@ -855,6 +855,8 @@ void Engine::renderAudio(float* out, int frames) {
     Command command;
     while (commands_.pop(command)) mixer_.apply(command);
     mixer_.render(target, chunk, channels);
+    // LTC voices write their own output channel, after the mix and before the capture tee.
+    ltcOutputs_.render(target, chunk, channels, mixer_.sampleRate());
     mixer_.advanceClock(chunk);
     if (capture_.active()) capture_.write(target, chunk);
     renderedFrames_.fetch_add(static_cast<uint64_t>(chunk), std::memory_order_relaxed);

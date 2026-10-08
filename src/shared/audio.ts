@@ -307,7 +307,37 @@ export const AUDIO_WIRE = {
       type: { type: 'string', required: true },
       deliberate: { type: 'boolean', required: false, default: false }
     },
-    shutdown: {}
+    shutdown: {},
+    // ── Linear timecode (native/audio/src/ltc.h) ────────────────────────────
+    // The LTC voices a timecode cue runs, and the reader on a capture device. Main speaks
+    // these (src/main/timecode); the window never does, so they have no IPC channel.
+    /** Starts an LTC voice on an output channel, or moves one that is running. */
+    ltcStart: {
+      voiceId: { type: 'string', required: true },
+      channel: { type: 'number', required: false, default: 0 },
+      rate: { type: 'string', required: false, default: '25' },
+      frame: { type: 'number', required: false, default: 0 },
+      levelDb: { type: 'number', required: false, default: -12 }
+    },
+    /** `stop`, `pause`, `resume` or `locate` (to `frame`) a running voice. */
+    ltcControl: {
+      voiceId: { type: 'string', required: true },
+      action: { type: 'string', required: true },
+      frame: { type: 'number', required: false, default: 0 }
+    },
+    ltcStatus: {},
+    /** The capture devices LTC can be read from. */
+    ltcInputs: {},
+    /** Listens for LTC on one channel of a capture device; an empty device is the default one. */
+    ltcListen: {
+      device: { type: 'string', required: false, default: '' },
+      channel: { type: 'number', required: false, default: 0 }
+    },
+    /** The frames read since the last call, with the steady clock they were read on. */
+    ltcRead: {
+      limit: { type: 'number', required: false, default: 256 }
+    },
+    ltcUnlisten: {}
   },
   events: AUDIO_WIRE_EVENTS
 } as const satisfies {
