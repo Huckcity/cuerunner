@@ -82,7 +82,7 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   await expect(report).toBeVisible()
   expect(await page.locator('.app-notice').allTextContents(), 'the app reported an error').toEqual([])
   await expect(report.getByTestId('qlab-summary')).toContainText(
-    'Press Night: 30 cues in 2 cue lists came across from Press Night.qlab5; 7 are placeholders.'
+    'Press Night: 30 cues in 2 cue lists came across from Press Night.qlab5; 6 are placeholders.'
   )
 
   // Every QLab type, and what it became.
@@ -93,7 +93,9 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   await expect(row('MIDI', 'msc')).toHaveText('1')
   await expect(row('Network', 'osc')).toHaveText('2')
   await expect(row('Video', 'placeholder')).toHaveText('1')
-  await expect(report.locator('[data-notes="placeholder"] li')).toHaveCount(7)
+  // QLab's Start cue is a Control cue here, not a placeholder.
+  await expect(row('Start', 'control')).toHaveText('1')
+  await expect(report.locator('[data-notes="placeholder"] li')).toHaveCount(6)
   await expect(report.locator('[data-notes="retimed"]')).toContainText('Fade walk-in')
 
   // Two files are not where QLab said: one never existed here, one is on a stick.
@@ -113,6 +115,9 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   // workspace. The list is virtualised, so what it holds is read from the file Save As
   // writes rather than from the rows on screen.
   await expect(page.locator('.cue-row').filter({ hasText: 'Walk-in' }).first()).toBeVisible()
+  // Each QLab list is a tab: the main sequence in front, the cart beside it.
+  await expect(page.locator('.cue-list-tab .cue-list-tab-name')).toHaveText(['Main Cue List', 'Sound FX'])
+  await expect(page.locator('.cue-list-tab').nth(1)).toHaveAttribute('data-cart', 'true')
   await expect(page).toHaveTitle(/Press Night ● — Cuerunner/)
   expect(fs.readdirSync(show).sort()).toEqual(['Press Night.qlab5', 'audio'])
 
@@ -126,20 +131,29 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   await expect(page).toHaveTitle(/^Press Night — Cuerunner/)
 
   const stored = JSON.parse(fs.readFileSync(saved, 'utf-8')) as {
-    cues: Array<{ id: string; number: string; type: string; isArmed: boolean; parentId: string | null; filePath?: string; mode?: string }>
+    cueLists?: Array<{ id: string; name: string; cart?: boolean }>
+    cues: Array<{
+      id: string; number: string; type: string; isArmed: boolean; parentId: string | null; filePath?: string
+      mode?: string; listId?: string
+    }>
   }
   // QLab's numbers in QLab's order, children after their groups, the second list last.
   expect(stored.cues.map(cue => cue.number)).toEqual([
     '1', '2', '3', '4', '4.1', '4.2', '5', '5.1', '5.2', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15',
-    '16', '17', '18', '19', '19.1', '19.2', '20', '20.1', '21', '21.1', '', 'FX1'
+    '16', '17', '18', '19', '19.1', '19.2', '20', '20.1', '21', '21.1', 'FX1'
   ])
+  // The cart is a cart list of its own, its cue in it and armed: not a disarmed group in the main list.
+  expect(stored.cueLists?.map(list => [list.name, list.cart === true])).toEqual([['Main Cue List', false], ['Sound FX', true]])
+  expect(stored.cues.find(entry => entry.number === 'FX1')).toMatchObject({ listId: stored.cueLists?.[1].id, isArmed: true })
   const cue = (number: string) => stored.cues.find(entry => entry.number === number)!
   expect([cue('1').type, cue('2').type, cue('3').type, cue('9').type, cue('11').type, cue('16').type])
     .toEqual(['audio', 'fade', 'stop', 'msc', 'osc', 'devamp'])
   expect([cue('4').mode, cue('5').mode, cue('19').mode, cue('20').mode, cue('21').mode])
     .toEqual(['timeline', 'random', 'timeline', 'sequence', 'playlist'])
-  expect(['10', '12', '13', '14', '15', '17', '18'].map(number => [cue(number).type, cue(number).isArmed]))
-    .toEqual(Array(7).fill(['wait', false]))
+  expect(['10', '12', '13', '14', '15', '18'].map(number => [cue(number).type, cue(number).isArmed]))
+    .toEqual(Array(6).fill(['wait', false]))
+  // QLab's Start cue, armed and aimed: a Control cue that starts cue 4.
+  expect(cue('17')).toMatchObject({ type: 'control', action: 'start', isArmed: true, targetCueIds: [cue('4').id] })
   expect(cue('4.1').parentId).toBe(cue('4').id)
   // The file found on the stick is the file the saved show plays.
   expect(cue('FX1').filePath).toBe(path.join('stick', 'audio', 'door.wav'))

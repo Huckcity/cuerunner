@@ -39,6 +39,8 @@ interface Props {
 export function OutputsPanel({ onClose }: Props) {
   const outputs = useStore(s => s.videoOutputs)
   const addVideoOutput = useStore(s => s.addVideoOutput)
+  const pictures = useStore(s => s.pictures)
+  const setPictures = useStore(s => s.setPictures)
   const statuses = useOutputState(s => s.statuses)
   const displays = useOutputState(s => s.displays)
   const timerWindow = useOutputState(s => s.timerWindow)
@@ -106,24 +108,35 @@ export function OutputsPanel({ onClose }: Props) {
         <div className="outputs-error" role="status">{errors[errors.length - 1].message}</div>
       )}
       <div className="outputs-body">
+        {outputs.length > 0 && (
+          <div className="field-row outputs-show-pictures">
+            <label htmlFor="outputs-stop-on-next-go">Next GO</label>
+            <input id="outputs-stop-on-next-go" type="checkbox" checked={pictures.stopOnNextGo}
+              onChange={e => setPictures({ stopOnNextGo: e.target.checked })} />
+            <span className="inspector-readout">
+              {pictures.stopOnNextGo ? 'takes every picture down, unless its cue says otherwise' : 'leaves pictures up, unless their cue says otherwise'}
+            </span>
+          </div>
+        )}
         {outputs.length === 0 ? (
           <p className="outputs-empty">
             A video, image or text cue needs somewhere to go. Add an output: it opens as a window you can move to the projector, or put fullscreen on a display.
           </p>
         ) : outputs.map(output => (
           <OutputCard key={output.id} output={output} status={statuses[output.id]} preview={previews[output.id] ?? null}
-            displays={displays} />
+            displays={displays} outputs={outputs} />
         ))}
       </div>
     </div>
   )
 }
 
-function OutputCard({ output, status, preview, displays }: {
+function OutputCard({ output, status, preview, displays, outputs }: {
   output: VideoOutput
   status: OutputStatus | undefined
   preview: string | null
   displays: ReturnType<typeof useOutputState.getState>['displays']
+  outputs: VideoOutput[]
 }) {
   const update = useStore(s => s.updateVideoOutput)
   const remove = useStore(s => s.removeVideoOutput)
@@ -166,6 +179,10 @@ function OutputCard({ output, status, preview, displays }: {
           <span className="output-showing">
             {showing.length === 0 ? 'Nothing up' : `Up: ${showing.map(cue => `${cue.number} ${cue.name}`).join(', ')}`}
           </span>
+          {(status?.cameraProblems ?? []).map(problem => <span key={problem} className="output-missing output-camera-problem">{problem}</span>)}
+          {status?.maskMissing !== undefined && (
+            <span className="output-missing output-mask-missing">The mask could not be read — drawn unmasked</span>
+          )}
         </div>
       </div>
 
@@ -192,6 +209,43 @@ function OutputCard({ output, status, preview, displays }: {
             onChange={e => place({ ...placement, fullscreen: e.target.checked })} /> Fullscreen
         </label>
       </div>
+      <div className="field-row">
+        <label>Shows</label>
+        <select className="output-mirror" value={output.mirrorOf ?? ''}
+          onChange={e => set({ mirrorOf: e.target.value === '' ? undefined : e.target.value })}>
+          <option value="">Its own pictures</option>
+          {outputs.filter(other => other.id !== output.id && other.mirrorOf === undefined).map(other => (
+            <option key={other.id} value={other.id}>The same as {other.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="field-row">
+        <label>Mask</label>
+        <input className="output-mask-file" readOnly value={output.mask === undefined ? '' : output.mask.filePath.split(/[\\/]/).pop() ?? ''}
+          placeholder="No mask" title={output.mask?.filePath ?? ''} style={{ flex: 1 }} />
+        <button className="outputs-btn output-mask-browse" onClick={() => {
+          void window.cuerunner.output.pickMask().then(filePath => {
+            if (filePath !== null) set({ mask: { filePath, mode: output.mask?.mode ?? 'luma', invert: output.mask?.invert ?? false } })
+          }).catch(() => {})
+        }}>Browse</button>
+        {output.mask !== undefined && (
+          <button className="outputs-btn output-mask-clear" onClick={() => set({ mask: undefined })}>Clear</button>
+        )}
+      </div>
+      {output.mask !== undefined && (
+        <div className="field-row">
+          <label>Mask reads</label>
+          <select className="output-mask-mode" value={output.mask.mode}
+            onChange={e => set({ mask: { ...output.mask!, mode: e.target.value === 'alpha' ? 'alpha' : 'luma' } })}>
+            <option value="luma">Brightness — white shows</option>
+            <option value="alpha">Transparency — opaque shows</option>
+          </select>
+          <label className="output-inline">
+            <input type="checkbox" className="output-mask-invert" checked={output.mask.invert}
+              onChange={e => set({ mask: { ...output.mask!, invert: e.target.checked } })} /> Invert
+          </label>
+        </div>
+      )}
       <div className="field-row">
         <label>Size</label>
         <NumberField when="leave" min={16} max={8192} value={output.width} aria-label="Width"

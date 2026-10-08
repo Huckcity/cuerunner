@@ -27,6 +27,20 @@ import {
 /** The lighting engine's service id. */
 export const DMX_SERVICE_ID = 'dmx'
 
+/**
+ * What `importGdtf` answers: a fixture type read from a GDTF file, with what the import has to
+ * say about it, or the sentence a file that cannot be read was refused with. Main reads the file
+ * — the window has no zip reader and no file system — and the window adds the type to the show.
+ */
+export type GdtfImportResult =
+  | { ok: true; type: import('./dmx').FixtureType; notes: string[] }
+  | { ok: false; error: string }
+
+/** The `importGdtf` payload: the file, by its full path. */
+export interface GdtfImportRequest {
+  path: string
+}
+
 /** Where the show's data goes, and what a panic does: the slice of the lighting main reads. */
 export interface DmxConfig {
   outputs: UniverseOutput[]

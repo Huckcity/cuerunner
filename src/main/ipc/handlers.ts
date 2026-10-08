@@ -60,7 +60,14 @@ import {
   type MidiFileResumeResult
 } from '../../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../../shared/ipc/network'
-import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../../shared/ipc/osc'
+import {
+  OSC_CHANNELS,
+  type OscInterfaceState,
+  type OscSendPayload,
+  type OscSendResult,
+  type OscSetInterfacePayload,
+  type OscSetInterfaceResult
+} from '../../shared/ipc/osc'
 import { PLAYBACK_CHANNELS } from '../../shared/ipc/playback'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../../shared/ipc/redundancy'
 import {
@@ -144,6 +151,9 @@ import {
 } from '../../shared/ipc/qlab'
 import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces } from '../import/qlabImport'
 import { createShowRuntime, defaultServices } from '../show/runtime'
+import { UPDATE_CHANNELS, type UpdateActionResult, type UpdateCheckResult, type WhatsNew } from '../../shared/ipc/update'
+import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../../shared/update'
+import { openDownloads, updates } from '../update/main'
 import { createMachineRedundancy } from '../redundancy/machine'
 import { createMachineDmx } from '../dmx/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
@@ -159,12 +169,23 @@ import type { LicenseStatus } from '../../shared/license'
 import type { Workspace } from '../../shared/workspace'
 import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
 import { registerOutputHandlers } from '../output/ipc'
+import { createMachineOsc } from '../osc/machine'
+import { createOscInterfaces } from '../osc/interfaces'
 
 const midi = new MidiEngine(midiModuleLoader())
 // A MIDI File cue's players send through the same engine, so a port it names is the port
 // every other MIDI cue would reach by that name.
 midiFiles.useOutput((portName, messages) => midi.sendRaw(portName, messages))
-const osc = new OscEngine()
+// Which interface this machine's OSC listens and sends on: the machine's, beside the
+// licence, so a show carried to another desk uses that desk's network (`osc.json`).
+const oscInterfaces = createOscInterfaces({
+  machine: createMachineOsc({ filePath: path.join(app.getPath('userData'), 'osc.json') }),
+  restartInput: async () => {
+    if (settingsReceived) await show.restart('osc-in')
+  },
+  rebindOutput: () => osc.rebind()
+})
+const osc = new OscEngine(undefined, () => oscInterfaces.outputAddress())
 
 // This machine's half of a redundant pair, read once at startup and written only when
 // the operator changes it. It lives beside `license.key` rather than in the workspace:
@@ -231,7 +252,8 @@ const show = createShowRuntime(
     // Which interface the lights go out of and who this machine is on the wire: the
     // machine's, beside the licence, so a show carried to another desk goes out of that
     // desk's own network.
-    dmx: { machine: createMachineDmx({ filePath: path.join(app.getPath('userData'), 'dmx.json') }) }
+    dmx: { machine: createMachineDmx({ filePath: path.join(app.getPath('userData'), 'dmx.json') }) },
+    osc: { binding: () => oscInterfaces.input(), appVersion: () => app.getVersion() }
   }),
   () => isPro(license.status())
 )
@@ -561,6 +583,9 @@ export function registerIpcHandlers(): void {
   // OSC
   ipcMain.handle(OSC_CHANNELS.send, async (_, cmd: OscSendPayload): Promise<OscSendResult> =>
     osc.send(cmd.host, cmd.port, cmd.address, cmd.args))
+  ipcMain.handle(OSC_CHANNELS.interfaces, (): OscInterfaceState => oscInterfaces.state())
+  ipcMain.handle(OSC_CHANNELS.setInterface, (_, payload: OscSetInterfacePayload): Promise<OscSetInterfaceResult> =>
+    refusalValue(async () => ({ ok: true as const, ...await oscInterfaces.set(payload.direction, payload.name) })))
 
   // Network cues. No license gate: network cues shipped in the free half of the app, and
   // this is the same cue making the same request from a process the page's origin does
@@ -749,6 +774,30 @@ export function registerIpcHandlers(): void {
     timecodeHub.control(payload.cueId, payload.action))
   // The clocks a cue started stop with the app, and so does the reader.
   app.on('will-quit', () => timecodeHub.dispose())
+
+  // Updates. Free, and every step the operator's: a check, a download, a restart — each
+  // refused with a sentence while the show runs or the lockout holds. The window reports the
+  // show's state as it changes; the service is made on the first call, not at registration.
+  ipcMain.handle(UPDATE_CHANNELS.status, (): UpdateStatus => updates().status())
+  ipcMain.handle(UPDATE_CHANNELS.check, (): Promise<UpdateCheckResult> =>
+    refusalValue(async () => ({ ok: true as const, status: await updates().check() })))
+  ipcMain.handle(UPDATE_CHANNELS.download, (): Promise<UpdateActionResult> =>
+    refusalValue(async () => {
+      await updates().download()
+      return { ok: true as const }
+    }))
+  ipcMain.handle(UPDATE_CHANNELS.install, (): Promise<UpdateActionResult> =>
+    refusalValue(async () => {
+      await updates().install()
+      return { ok: true as const }
+    }))
+  ipcMain.handle(UPDATE_CHANNELS.configure, (_, patch: Partial<UpdateSettings>): Promise<UpdateStatus> =>
+    updates().configure(patch))
+  ipcMain.handle(UPDATE_CHANNELS.report, (_, state: UpdateShowState): void => {
+    updates().report(state)
+  })
+  ipcMain.handle(UPDATE_CHANNELS.whatsNew, (): Promise<WhatsNew | null> => updates().takeWhatsNew())
+  ipcMain.handle(UPDATE_CHANNELS.openDownloads, (): Promise<void> => openDownloads())
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.

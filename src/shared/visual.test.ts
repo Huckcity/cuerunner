@@ -71,7 +71,7 @@ describe('media', () => {
   })
 
   it('names the cue types that carry a file and the ones that draw a picture', () => {
-    expect(CUE_TYPES.filter(type => carriesMediaFile({ type }))).toEqual(['audio', 'video', 'image'])
-    expect(CUE_TYPES.filter(type => isVisualCue({ type }))).toEqual(['video', 'image', 'text'])
+    expect(CUE_TYPES.filter(type => carriesMediaFile({ type }))).toEqual(['audio', 'midiFile', 'video', 'image'])
+    expect(CUE_TYPES.filter(type => isVisualCue({ type }))).toEqual(['video', 'image', 'text', 'camera'])
   })
 })

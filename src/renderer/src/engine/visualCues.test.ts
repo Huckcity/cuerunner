@@ -49,7 +49,10 @@ describe('a picture as an output is told to show it', () => {
   })
 
   it('applies to a picture that is up only what may change while it is', () => {
-    expect(livePatchOf(text)).toEqual({ layer: 3, opacity: 0.8, geometry: defaultGeometry(), fadeOutMs: 600, text: expect.objectContaining({ text: 'Hi' }) })
+    expect(livePatchOf(text)).toEqual({
+      layer: 3, opacity: 0.8, geometry: defaultGeometry(), fadeOutMs: 600, blend: 'normal', keyframes: [],
+      text: expect.objectContaining({ text: 'Hi' })
+    })
     expect(livePatchOf(image)).not.toHaveProperty('text')
   })
 })

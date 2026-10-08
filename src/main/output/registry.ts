@@ -70,9 +70,12 @@ export class OutputRegistry {
     return { added, changed, removed }
   }
 
-  /** The output a cue's picture goes to: the one it names, else — named nothing — the first. */
+  /**
+   * The output a cue's picture goes to: the one it names, else — named nothing — the first
+   * that has pictures of its own (a mirror shows another's).
+   */
   resolve(outputId: string): VideoOutput | null {
-    if (outputId === '') return this.outputs[0] ?? null
+    if (outputId === '') return this.outputs.find(output => output.mirrorOf === undefined) ?? this.outputs[0] ?? null
     return this.get(outputId)
   }
 
@@ -176,6 +179,8 @@ export function applyPatch(spec: LayerSpec, patch: import('../../shared/ipc/outp
     ...(patch.geometry !== undefined ? { geometry: patch.geometry } : {}),
     ...(patch.fadeOutMs !== undefined ? { fadeOutMs: patch.fadeOutMs } : {}),
     ...(patch.text !== undefined ? { text: patch.text } : {}),
-    ...(patch.displayMs !== undefined ? { displayMs: patch.displayMs } : {})
+    ...(patch.displayMs !== undefined ? { displayMs: patch.displayMs } : {}),
+    ...(patch.blend !== undefined ? { blend: patch.blend } : {}),
+    ...(patch.keyframes !== undefined ? { keyframes: patch.keyframes } : {})
   }
 }

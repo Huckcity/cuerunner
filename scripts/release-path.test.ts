@@ -94,7 +94,8 @@ const RECORDINGS: Recording[] = [
     outputs: {
       installer: '${{ steps.publish.outputs.installer }}',
       certificate: '${{ steps.publish.outputs.certificate }}',
-      asio: '${{ steps.publish.outputs.asio }}'
+      asio: '${{ steps.publish.outputs.asio }}',
+      feed: '${{ steps.publish.outputs.feed }}'
     }
   },
   {
@@ -103,15 +104,32 @@ const RECORDINGS: Recording[] = [
     outputs: {
       dmg: '${{ steps.publish.outputs.dmg }}',
       certificate: '${{ steps.publish.outputs.certificate }}',
-      notarised: '${{ steps.publish.outputs.notarised }}'
+      notarised: '${{ steps.publish.outputs.notarised }}',
+      zip: '${{ steps.publish.outputs.zip }}',
+      feed: '${{ steps.publish.outputs.feed }}'
     }
   },
   {
     job: 'build-linux',
     step: 'Record what this build is',
-    outputs: { appimage: '${{ steps.publish.outputs.appimage }}' }
+    outputs: {
+      appimage: '${{ steps.publish.outputs.appimage }}',
+      deb: '${{ steps.publish.outputs.deb }}',
+      feed: '${{ steps.publish.outputs.feed }}'
+    }
   }
 ]
+
+/**
+ * The outputs of each recording that name a file, and so the files the job has to upload: an
+ * installer, the update the app replaces itself from, and the feed that offers it. Every one is
+ * uploaded from the path the recording names, and nothing else is.
+ */
+const FILE_OUTPUTS: Record<string, string[]> = {
+  'build-windows': ['installer', 'feed'],
+  'build-mac': ['dmg', 'zip', 'feed'],
+  'build-linux': ['appimage', 'deb', 'feed']
+}
 
 /**
  * The recordings the composer is handed, as the release job passes them: one reference per
@@ -125,7 +143,12 @@ const COMPOSER_INPUTS = [
   '${{ needs.build-mac.outputs.dmg }}',
   '${{ needs.build-mac.outputs.certificate }}',
   '${{ needs.build-mac.outputs.notarised }}',
-  '${{ needs.build-linux.outputs.appimage }}'
+  '${{ needs.build-linux.outputs.appimage }}',
+  '${{ needs.build-windows.outputs.feed }}',
+  '${{ needs.build-mac.outputs.zip }}',
+  '${{ needs.build-mac.outputs.feed }}',
+  '${{ needs.build-linux.outputs.deb }}',
+  '${{ needs.build-linux.outputs.feed }}'
 ]
 
 /**
@@ -909,6 +932,11 @@ function notesProblems(reading: Reading): string[] {
         `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step publishes no \`body=\`, \`files<<\` and \`mirror<<\` outputs, so the release step has neither notes nor a list to publish and the mirror has none to copy`
       )
     }
+    if (!/feed<</.test(compose.run)) {
+      problems.push(
+        `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step publishes no \`feed<<\` output, so the mirror has no update feed to serve and every installed copy stops hearing about releases`
+      )
+    }
     if (!/GITHUB_RUN_ID/.test(compose.run)) {
       problems.push(
         `${BUILD}:${compose.line}'s \`${COMPOSE_STEP}\` step's section names no run, so a page carrying two appended sections cannot be read back to the run that wrote either`
@@ -936,6 +964,11 @@ function notesProblems(reading: Reading): string[] {
   if ((outputs.mirror ?? '') !== '${{ steps.notes.outputs.mirror }}') {
     problems.push(
       `${BUILD}:${job.line}'s \`release\` job publishes no \`mirror\` output composed by the notes step, so the mirror has no list to copy and would have to search for one`
+    )
+  }
+  if ((outputs.feed ?? '') !== '${{ steps.notes.outputs.feed }}') {
+    problems.push(
+      `${BUILD}:${job.line}'s \`release\` job publishes no \`feed\` output composed by the notes step, so the mirror has no update feed to serve`
     )
   }
   const publish = stepOrNull(job, PUBLISH_STEP)
@@ -1172,16 +1205,34 @@ function asioProblems(reading: Reading): string[] {
       `${BUILD}:${upload.line}'s upload runs on \`${upload.if || '(no condition)'}\` rather than on the recorded installer, so the installer a withheld build declined to publish would be uploaded anyway`
     )
   }
-  for (const [name, pathField] of Object.entries({ 'build-windows': 'installer', 'build-mac': 'dmg', 'build-linux': 'appimage' })) {
+  for (const [name, fields] of Object.entries(FILE_OUTPUTS)) {
     const job = jobOrNull(reading.build, BUILD, name)
     if (job === null) continue
-    const uploader = stepsOf(job).find((step) => step.uses.startsWith('actions/upload-artifact'))
-    if (uploader === undefined) continue
-    if (uploader.with.path !== `dist/\${{ steps.publish.outputs.${pathField} }}`) {
-      problems.push(
-        `${BUILD}:${uploader.line}'s \`${name}\` job uploads \`${uploader.with.path}\` rather than the file it recorded, so the artifact the notes name and the artifact this run carries can part company`
-      )
+    const uploaders = stepsOf(job).filter((step) => step.uses.startsWith('actions/upload-artifact'))
+    const uploaded = new Set<string>()
+    for (const uploader of uploaders) {
+      const field = /^dist\/\$\{\{ steps\.publish\.outputs\.(\w+) \}\}$/.exec(uploader.with.path ?? '')?.[1]
+      if (field === undefined || !fields.includes(field)) {
+        problems.push(
+          `${BUILD}:${uploader.line}'s \`${name}\` job uploads \`${uploader.with.path}\` rather than a file it recorded, so the artifact the notes name and the artifact this run carries can part company`
+        )
+        continue
+      }
+      uploaded.add(field)
     }
+    for (const field of fields) {
+      if (!uploaded.has(field)) {
+        problems.push(
+          `${BUILD}:${job.line}'s \`${name}\` job records \`${field}\` and uploads no file from it, so the release would name a file this run never carried`
+        )
+      }
+    }
+  }
+  const feedUpload = stepsOf(windows).find((step) => step.with.path === 'dist/${{ steps.publish.outputs.feed }}')
+  if (feedUpload !== undefined && !/steps\.publish\.outputs\.feed\s*!=\s*''/.test(feedUpload.if)) {
+    problems.push(
+      `${BUILD}:${feedUpload.line}'s feed upload runs on \`${feedUpload.if || '(no condition)'}\` rather than on the recorded feed, so a withheld installer's feed would be uploaded anyway`
+    )
   }
   const dependencies = JSON.parse(reading.dependencies) as {
     dependencies?: Array<{ name?: string }>
@@ -1231,6 +1282,11 @@ function mirrorProblems(reading: Reading): string[] {
   if (upload.env.FILES !== '${{ needs.release.outputs.mirror }}') {
     problems.push(
       `${BUILD}:${upload.line}'s \`${MIRROR_STEP}\` step does not read the mirror list (\`FILES: ${upload.env.FILES || '(none)'}\`), so it would copy the release page's list instead: that list names the sums file, which no suffix places, and the two surfaces would name files the other does not serve`
+    )
+  }
+  if (upload.env.FEED !== '${{ needs.release.outputs.feed }}') {
+    problems.push(
+      `${BUILD}:${upload.line}'s \`${MIRROR_STEP}\` step does not read the composed update feed (\`FEED: ${upload.env.FEED || '(none)'}\`), so the feed the app reads would come from somewhere other than the files this release published`
     )
   }
   if (/\bfind\b/.test(commands(upload.run)) || /artifacts\//.test(commands(upload.run))) {
@@ -1478,6 +1534,11 @@ interface Scenario {
   macCertificate?: string
   macNotarised?: string
   linuxAppimage?: string
+  windowsFeed?: string
+  macZip?: string
+  macFeed?: string
+  linuxDeb?: string
+  linuxFeed?: string
   /** The file the download step carried, when a recording names one it did not: a run whose
    *  record and upload disagree is the state the composer exists to refuse. */
   carried?: { windows?: string; mac?: string; linux?: string }
@@ -1491,7 +1552,43 @@ const UNSIGNED: Scenario = {
   macDmg: 'Cuerunner-0.14.0.dmg',
   macCertificate: 'no',
   macNotarised: 'no',
-  linuxAppimage: 'Cuerunner-0.14.0.AppImage'
+  linuxAppimage: 'Cuerunner-0.14.0.AppImage',
+  windowsFeed: 'latest.yml',
+  macZip: 'Cuerunner-0.14.0-universal-mac.zip',
+  macFeed: 'latest-mac.yml',
+  linuxDeb: 'cuerunner_0.14.0_amd64.deb',
+  linuxFeed: 'latest-linux.yml'
+}
+
+/** The same release with the Windows installer withheld: no installer, so no feed offering it. */
+const WITHHELD: Scenario = { ...UNSIGNED, windowsInstaller: '', windowsAsio: 'on', windowsFeed: '' }
+
+/**
+ * What each feed holds, as electron-builder writes one: the entries naming the build's files by
+ * the names the build gave them, the digests, and the release notes — whose lines can look like
+ * entries, and are not.
+ */
+function feedYaml(file: string): string | null {
+  const offers: Record<string, string[]> = {
+    'latest.yml': [UNSIGNED.windowsInstaller ?? ''],
+    'latest-mac.yml': [UNSIGNED.macZip ?? '', UNSIGNED.macDmg ?? ''],
+    'latest-linux.yml': [UNSIGNED.linuxAppimage ?? '', UNSIGNED.linuxDeb ?? '']
+  }
+  const names = offers[path.basename(file)]
+  if (names === undefined) return null
+  return [
+    'version: 0.14.0',
+    'files:',
+    ...names.flatMap((name) => [`  - url: ${name}`, '    sha512: c2hhNTEyIG9mIHRoZSBieXRlcw==', '    size: 12']),
+    `path: ${names[0]}`,
+    'sha512: c2hhNTEyIG9mIHRoZSBieXRlcw==',
+    'releaseNotes: |',
+    '  # [0.14.0](https://example/compare) (2026-09-21)',
+    '  path: not a file',
+    '  - url: not a file either',
+    "releaseDate: '2026-09-21T00:00:00.000Z'",
+    ''
+  ].join('\n')
 }
 
 /** The same release with every certificate configured, which is the state the notes must flip. */
@@ -1523,6 +1620,8 @@ interface Composed {
   files: string[]
   /** The `mirror` output: what the mirror copies, and no sums file. */
   mirror: string[]
+  /** The `feed` output: the update files the mirror serves to the app. */
+  feed: string[]
   /** The lines of the `SHA256SUMS` written beside the notes. */
   sums: string[]
   status: number
@@ -1563,7 +1662,12 @@ function compose(script: string, scenario: Scenario): Composed {
   for (const [artifact, name] of [
     ['Cuerunner-windows', scenario.carried?.windows ?? scenario.windowsInstaller],
     ['Cuerunner-mac', scenario.carried?.mac ?? scenario.macDmg],
-    ['Cuerunner-linux', scenario.carried?.linux ?? scenario.linuxAppimage]
+    ['Cuerunner-linux', scenario.carried?.linux ?? scenario.linuxAppimage],
+    ['Cuerunner-windows-feed', scenario.windowsFeed],
+    ['Cuerunner-mac-update', scenario.macZip],
+    ['Cuerunner-mac-feed', scenario.macFeed],
+    ['Cuerunner-linux-deb', scenario.linuxDeb],
+    ['Cuerunner-linux-feed', scenario.linuxFeed]
   ] as Array<[string, string | undefined]>) {
     if (name === undefined || name === '') continue
     const relative = ['artifacts', artifact, name].join('/')
@@ -1592,7 +1696,12 @@ function compose(script: string, scenario: Scenario): Composed {
       MAC_DMG: scenario.macDmg ?? '',
       MAC_CERTIFICATE: scenario.macCertificate ?? '',
       MAC_NOTARISED: scenario.macNotarised ?? '',
-      LINUX_APPIMAGE: scenario.linuxAppimage ?? ''
+      LINUX_APPIMAGE: scenario.linuxAppimage ?? '',
+      WINDOWS_FEED: scenario.windowsFeed ?? '',
+      MAC_ZIP: scenario.macZip ?? '',
+      MAC_FEED: scenario.macFeed ?? '',
+      LINUX_DEB: scenario.linuxDeb ?? '',
+      LINUX_FEED: scenario.linuxFeed ?? ''
     }
   })
   const wrote = (name: string): string => fs.readFileSync(path.join(directory, name), 'utf-8')
@@ -1600,6 +1709,7 @@ function compose(script: string, scenario: Scenario): Composed {
     notes: fs.existsSync(path.join(directory, 'release-notes.md')) ? wrote('release-notes.md') : '',
     files: outputLines(wrote('github-output.txt'), 'files'),
     mirror: outputLines(wrote('github-output.txt'), 'mirror'),
+    feed: outputLines(wrote('github-output.txt'), 'feed'),
     sums: fs.existsSync(path.join(directory, 'SHA256SUMS'))
       ? wrote('SHA256SUMS').split('\n').filter((line) => line !== '')
       : [],
@@ -1628,6 +1738,8 @@ interface Mirrored {
   copies: Array<{ from: string; to: string }>
   removals: string[]
   sums: string[]
+  /** The feeds as the mirror rewrote them before serving them, by the name it wrote them under. */
+  served: Record<string, string>
   errors: string
 }
 
@@ -1639,7 +1751,7 @@ interface Mirrored {
  * copies the list cannot carry it. A call whose argument matches `refuse` exits nonzero the way
  * a refused CLI call does — logged first, because the step's `set -eu` is what has to stop it.
  */
-function mirror(script: string, files: string[], refuse = ''): Mirrored {
+function mirror(script: string, files: string[], refuse = '', feed: string[] = []): Mirrored {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'release-path-r2-'))
   fs.writeFileSync(path.join(directory, 'mirror.sh'), script, 'utf-8')
   fs.mkdirSync(path.join(directory, 'bin'))
@@ -1657,9 +1769,9 @@ function mirror(script: string, files: string[], refuse = ''): Mirrored {
       'fi\n',
     { mode: 0o755 }
   )
-  for (const file of files) {
+  for (const file of [...files, ...feed]) {
     fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true })
-    fs.writeFileSync(path.join(directory, file), fixtureBytes(file))
+    fs.writeFileSync(path.join(directory, file), feedYaml(file) ?? fixtureBytes(file))
   }
   // The previous run's sums, as a reused workspace would still hold them: what the mirror writes
   // has to be this run's digests, so every case below runs against them.
@@ -1674,6 +1786,7 @@ function mirror(script: string, files: string[], refuse = ''): Mirrored {
       AWS_LOG: log,
       AWS_REFUSE: refuse,
       FILES: files.join('\n'),
+      FEED: feed.join('\n'),
       R2_BUCKET: 'bucket',
       R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
       TAG: 'v0.14.0'
@@ -1686,11 +1799,16 @@ function mirror(script: string, files: string[], refuse = ''): Mirrored {
     if (tool === 's3' && verb === 'cp') copies.push({ from, to })
     if (tool === 's3' && verb === 'rm') removals.push(from)
   }
+  const served: Record<string, string> = {}
+  for (const name of fs.readdirSync(directory)) {
+    if (name.startsWith('feed-')) served[name.slice('feed-'.length)] = fs.readFileSync(path.join(directory, name), 'utf-8')
+  }
   const mirrored: Mirrored = {
     status: run.status ?? 1,
     copies,
     removals,
     sums: fs.readFileSync(path.join(directory, 'SHA256SUMS'), 'utf-8').split('\n').filter((line) => line !== ''),
+    served,
     errors: `${run.stdout ?? ''}${run.stderr ?? ''}`
   }
   fs.rmSync(directory, { recursive: true, force: true })
@@ -1770,26 +1888,46 @@ describe.skipIf(process.platform === 'win32')('the notes the composer writes', (
   const script = composerScript(LIVE)
 
   it('names the repository\'s own installers unsigned, and never as signed', () => {
-    const { notes, files, mirror, sums, status } = compose(script, UNSIGNED)
+    const { notes, files, mirror, feed, sums, status } = compose(script, UNSIGNED)
     expect(status, `the composer exited ${status}: ${notes}`).toBe(0)
     expect(files).toEqual([
       'artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe',
       'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
       'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
+      'artifacts/Cuerunner-linux-deb/cuerunner_0.14.0_amd64.deb',
+      'artifacts/Cuerunner-windows-feed/latest.yml',
+      'artifacts/Cuerunner-mac-update/Cuerunner-0.14.0-universal-mac.zip',
+      'artifacts/Cuerunner-mac-feed/latest-mac.yml',
+      'artifacts/Cuerunner-linux-feed/latest-linux.yml',
       'SHA256SUMS'
     ])
     expect(mirror, 'the mirror list carries a file the mirror composes for itself').toEqual([
       'artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe',
       'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
-      'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage'
+      'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
+      'artifacts/Cuerunner-linux-deb/cuerunner_0.14.0_amd64.deb'
+    ])
+    expect(feed, 'the feed list is not the update files this run recorded').toEqual([
+      'artifacts/Cuerunner-windows-feed/latest.yml',
+      'artifacts/Cuerunner-mac-update/Cuerunner-0.14.0-universal-mac.zip',
+      'artifacts/Cuerunner-mac-feed/latest-mac.yml',
+      'artifacts/Cuerunner-linux-feed/latest-linux.yml'
     ])
     // The digests the release page carries, under the names the page carries the files by —
     // composed from the bytes this run located, so a line cannot outlive the file it names.
     expect(sums).toEqual([
       `${digestOf('artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe')}  Cuerunner Setup 0.14.0.exe`,
+      `${digestOf('artifacts/Cuerunner-windows-feed/latest.yml')}  latest.yml`,
       `${digestOf('artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg')}  Cuerunner-0.14.0.dmg`,
-      `${digestOf('artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage')}  Cuerunner-0.14.0.AppImage`
+      `${digestOf('artifacts/Cuerunner-mac-update/Cuerunner-0.14.0-universal-mac.zip')}  Cuerunner-0.14.0-universal-mac.zip`,
+      `${digestOf('artifacts/Cuerunner-mac-feed/latest-mac.yml')}  latest-mac.yml`,
+      `${digestOf('artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage')}  Cuerunner-0.14.0.AppImage`,
+      `${digestOf('artifacts/Cuerunner-linux-deb/cuerunner_0.14.0_amd64.deb')}  cuerunner_0.14.0_amd64.deb`,
+      `${digestOf('artifacts/Cuerunner-linux-feed/latest-linux.yml')}  latest-linux.yml`
     ])
+    expect(notes).toContain('cuerunner_0.14.0_amd64.deb')
+    expect(notes).toMatch(/A \.deb does not replace itself/)
+    expect(notes).toMatch(/\*\*Updates\*\*: `latest\.yml` `Cuerunner-0\.14\.0-universal-mac\.zip` `latest-mac\.yml` `latest-linux\.yml`/)
     expect(notes).toContain('Cuerunner Setup 0.14.0.exe')
     expect(notes).toContain('Cuerunner-0.14.0.dmg')
     expect(notes, 'the notes do not name the sums file they are attached with').toContain('SHA256SUMS')
@@ -1811,15 +1949,21 @@ describe.skipIf(process.platform === 'win32')('the notes the composer writes', (
   })
 
   it('publishes no exe and names it withheld when the SDK is linked and nothing is recorded', () => {
-    const { notes, files, mirror, sums, status } = compose(script, { ...UNSIGNED, windowsInstaller: '', windowsAsio: 'on' })
+    const { notes, files, mirror, feed, sums, status } = compose(script, WITHHELD)
     expect(status).toBe(0)
     expect(files.some((file) => file.endsWith('.exe'))).toBe(false)
-    expect(files).toHaveLength(3)
+    expect(files.some((file) => file.endsWith('/latest.yml')), 'a withheld installer is still offered by a feed').toBe(false)
+    expect(files).toHaveLength(7)
     expect(mirror.some((file) => file.endsWith('.exe'))).toBe(false)
-    expect(mirror).toHaveLength(2)
+    expect(mirror).toHaveLength(3)
+    expect(feed.some((file) => file.endsWith('/latest.yml'))).toBe(false)
     expect(sums.map((line) => line.slice(line.indexOf('  ') + 2))).toEqual([
       'Cuerunner-0.14.0.dmg',
-      'Cuerunner-0.14.0.AppImage'
+      'Cuerunner-0.14.0-universal-mac.zip',
+      'latest-mac.yml',
+      'Cuerunner-0.14.0.AppImage',
+      'cuerunner_0.14.0_amd64.deb',
+      'latest-linux.yml'
     ])
     expect(notes).toMatch(/no installer is published/)
     expect(notes).toContain(recordOf(LIVE.build))
@@ -1834,6 +1978,19 @@ describe.skipIf(process.platform === 'win32')('the notes the composer writes', (
     const unnotarised = compose(script, { ...SIGNED, macNotarised: 'no' })
     expect(unnotarised.status).not.toBe(0)
     expect(unnotarised.errors).toMatch(/no notarisation credentials/)
+  })
+
+  it('refuses to publish an installer no feed offers, rather than a release the app never hears of', () => {
+    for (const [scenario, says] of [
+      [{ ...UNSIGNED, windowsFeed: '' }, /build-windows published an installer and recorded no update feed/],
+      [{ ...UNSIGNED, macZip: '' }, /build-mac published a dmg and recorded no update zip or feed/],
+      [{ ...UNSIGNED, linuxFeed: '' }, /build-linux published an AppImage and recorded no update feed/]
+    ] as Array<[Scenario, RegExp]>) {
+      const composed = compose(script, scenario)
+      expect(composed.status).not.toBe(0)
+      expect(composed.errors).toMatch(says)
+      expect(composed.files, 'the failed composer still published a list').toEqual([])
+    }
   })
 
   it('fails when a recording names a file this run did not carry', () => {
@@ -1866,7 +2023,8 @@ describe.skipIf(process.platform === 'win32')('the notes the composer writes', (
             ...UNSIGNED,
             windowsCertificate: certificate,
             windowsAsio: asio,
-            windowsInstaller: installer
+            windowsInstaller: installer,
+            windowsFeed: installer === '' ? '' : UNSIGNED.windowsFeed
           })
           expect(
             composed.status,
@@ -1895,7 +2053,7 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
 
   it('copies exactly the files the notes were composed from, under the names the site links', () => {
     const composed = compose(composerScript(LIVE), UNSIGNED)
-    const { status, copies, removals, errors } = mirror(script, composed.mirror)
+    const { status, copies, removals, errors } = mirror(script, composed.mirror, '', composed.feed)
     expect(status, `the mirror exited ${status}: ${errors}`).toBe(0)
     expect(copies.map((copy) => copy.to)).toEqual([
       's3://bucket/versions/v0.14.0/Cuerunner-Setup.exe',
@@ -1904,6 +2062,15 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
       's3://bucket/latest/Cuerunner.dmg',
       's3://bucket/versions/v0.14.0/Cuerunner.AppImage',
       's3://bucket/latest/Cuerunner.AppImage',
+      's3://bucket/versions/v0.14.0/Cuerunner.deb',
+      's3://bucket/latest/Cuerunner.deb',
+      's3://bucket/versions/v0.14.0/Cuerunner-mac.zip',
+      's3://bucket/versions/v0.14.0/latest.yml',
+      's3://bucket/latest/latest.yml',
+      's3://bucket/versions/v0.14.0/latest-mac.yml',
+      's3://bucket/latest/latest-mac.yml',
+      's3://bucket/versions/v0.14.0/latest-linux.yml',
+      's3://bucket/latest/latest-linux.yml',
       's3://bucket/latest/SHA256SUMS'
     ])
     expect(copies.map((copy) => copy.from)).toEqual([
@@ -1913,14 +2080,58 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
       'artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg',
       'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
       'artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage',
+      'artifacts/Cuerunner-linux-deb/cuerunner_0.14.0_amd64.deb',
+      'artifacts/Cuerunner-linux-deb/cuerunner_0.14.0_amd64.deb',
+      'artifacts/Cuerunner-mac-update/Cuerunner-0.14.0-universal-mac.zip',
+      'feed-latest.yml',
+      'feed-latest.yml',
+      'feed-latest-mac.yml',
+      'feed-latest-mac.yml',
+      'feed-latest-linux.yml',
+      'feed-latest-linux.yml',
       'SHA256SUMS'
     ])
-    expect(removals, 'a release that published all three names still removed one').toEqual([])
+    expect(removals, 'a release that published every name still removed one').toEqual([])
+  })
+
+  it('serves each feed pointing at the copies this release wrote, digests and notes untouched', () => {
+    const composed = compose(composerScript(LIVE), UNSIGNED)
+    const { status, served, errors } = mirror(script, composed.mirror, '', composed.feed)
+    expect(status, `the mirror exited ${status}: ${errors}`).toBe(0)
+    expect(served['latest.yml']).toContain('  - url: ../versions/v0.14.0/Cuerunner-Setup.exe\n')
+    expect(served['latest.yml']).toContain('path: ../versions/v0.14.0/Cuerunner-Setup.exe\n')
+    expect(served['latest-mac.yml']).toContain('  - url: ../versions/v0.14.0/Cuerunner-mac.zip\n')
+    expect(served['latest-mac.yml']).toContain('  - url: ../versions/v0.14.0/Cuerunner.dmg\n')
+    expect(served['latest-linux.yml']).toContain('  - url: ../versions/v0.14.0/Cuerunner.AppImage\n')
+    expect(served['latest-linux.yml']).toContain('  - url: ../versions/v0.14.0/Cuerunner.deb\n')
+    for (const text of Object.values(served)) {
+      // The digest is the build's, of bytes a copy does not change; the notes are words.
+      expect(text).toContain('    sha512: c2hhNTEyIG9mIHRoZSBieXRlcw==\n')
+      expect(text).toContain('  path: not a file\n')
+      expect(text).toContain('  - url: not a file either\n')
+      expect(text).toContain("releaseDate: '2026-09-21T00:00:00.000Z'\n")
+    }
+  })
+
+  it('serves no feed offering a file this run did not write', () => {
+    // The .deb is missing from what was copied, and the Linux feed names it: a feed that would
+    // send the app to a 404 fails the step instead of being served.
+    const composed = compose(composerScript(LIVE), UNSIGNED)
+    const { status, copies, errors } = mirror(
+      script,
+      composed.mirror.filter((file) => !file.endsWith('.deb')),
+      '',
+      composed.feed
+    )
+    expect(status).not.toBe(0)
+    expect(errors).toMatch(/offers cuerunner_0\.14\.0_amd64\.deb, which this run did not write/)
+    expect(copies.map((copy) => copy.to)).not.toContain('s3://bucket/latest/latest-linux.yml')
+    expect(copies.map((copy) => copy.to)).not.toContain('s3://bucket/latest/SHA256SUMS')
   })
 
   it('writes the digests of the bytes it copied, under the names it wrote them by', () => {
     const composed = compose(composerScript(LIVE), UNSIGNED)
-    const { status, sums, errors } = mirror(script, composed.mirror)
+    const { status, sums, errors } = mirror(script, composed.mirror, '', composed.feed)
     expect(status, `the mirror exited ${status}: ${errors}`).toBe(0)
     // The buyer's file: the bytes a card hands out, digested under the name the card links —
     // `Cuerunner-Setup.exe` rather than the build's `Cuerunner Setup 0.14.0.exe` — in coreutils'
@@ -1928,16 +2139,19 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
     expect(sums).toEqual([
       `${digestOf('artifacts/Cuerunner-windows/Cuerunner Setup 0.14.0.exe')}  Cuerunner-Setup.exe`,
       `${digestOf('artifacts/Cuerunner-mac/Cuerunner-0.14.0.dmg')}  Cuerunner.dmg`,
-      `${digestOf('artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage')}  Cuerunner.AppImage`
+      `${digestOf('artifacts/Cuerunner-linux/Cuerunner-0.14.0.AppImage')}  Cuerunner.AppImage`,
+      `${digestOf('artifacts/Cuerunner-linux-deb/cuerunner_0.14.0_amd64.deb')}  Cuerunner.deb`
     ])
   })
 
   it('mirrors no installer the notes name withheld, and removes the name its card points at', () => {
-    const withheld = compose(composerScript(LIVE), { ...UNSIGNED, windowsInstaller: '', windowsAsio: 'on' })
-    const { status, copies, removals } = mirror(script, withheld.mirror)
+    const withheld = compose(composerScript(LIVE), WITHHELD)
+    const { status, copies, removals } = mirror(script, withheld.mirror, '', withheld.feed)
     expect(status).toBe(0)
     expect(copies.some((copy) => copy.to.endsWith('Cuerunner-Setup.exe'))).toBe(false)
-    expect(copies).toHaveLength(5)
+    // And no feed offers it: the app is offered what this release published, and nothing else.
+    expect(copies.some((copy) => copy.to.endsWith('/latest.yml'))).toBe(false)
+    expect(copies).toHaveLength(12)
     expect(removals).toEqual(['s3://bucket/latest/Cuerunner-Setup.exe'])
   })
 
@@ -1949,7 +2163,11 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
       's3://bucket/latest/Cuerunner.AppImage',
       's3://bucket/latest/SHA256SUMS'
     ])
-    expect(removals).toEqual(['s3://bucket/latest/Cuerunner-Setup.exe', 's3://bucket/latest/Cuerunner.dmg'])
+    expect(removals).toEqual([
+      's3://bucket/latest/Cuerunner-Setup.exe',
+      's3://bucket/latest/Cuerunner.dmg',
+      's3://bucket/latest/Cuerunner.deb'
+    ])
   })
 
   it('stops at a refused removal, rather than reading a refusal as a removal that happened', () => {
@@ -1969,7 +2187,7 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
     // The sums upload runs after every copy, so a copy the CLI refuses has to leave
     // `latest/SHA256SUMS` unwritten rather than carrying a short list of digests.
     const composed = compose(composerScript(LIVE), UNSIGNED)
-    const { status, copies, errors } = mirror(script, composed.mirror, 's3://bucket/latest/Cuerunner.AppImage')
+    const { status, copies, errors } = mirror(script, composed.mirror, 's3://bucket/latest/Cuerunner.AppImage', composed.feed)
     expect(status, `the mirror exited ${status}: ${errors}`).not.toBe(0)
     expect(copies.map((copy) => copy.to), 'the refused copy was never attempted').toContain(
       's3://bucket/latest/Cuerunner.AppImage'
@@ -2197,7 +2415,32 @@ describe('the release path the checks exist to refuse', () => {
 
   it('names an upload that stopped being the file its job recorded', () => {
     expect(asioProblems(doctored(LIVE, '          path: dist/${{ steps.publish.outputs.dmg }}', '          path: dist/*.dmg'))).toEqual([
-      expect.stringContaining('uploads `dist/*.dmg` rather than the file it recorded')
+      expect.stringContaining('uploads `dist/*.dmg` rather than a file it recorded'),
+      expect.stringContaining('records `dmg` and uploads no file from it')
+    ])
+  })
+
+  it('names an update feed that is not uploaded, or uploaded for an installer that was withheld', () => {
+    const dropped = doctored(
+      LIVE,
+      "      - name: Upload deb\n        uses: actions/upload-artifact@v7\n        with:\n          name: Cuerunner-linux-deb\n          path: dist/${{ steps.publish.outputs.deb }}\n",
+      "      - name: Upload deb\n        run: echo the deb is not uploaded\n"
+    )
+    expect(asioProblems(dropped)).toEqual([expect.stringContaining('records `deb` and uploads no file from it')])
+    const unconditional = doctored(
+      LIVE,
+      "      - name: Upload the update feed\n        if: steps.publish.outputs.feed != ''\n",
+      "      - name: Upload the update feed\n"
+    )
+    expect(asioProblems(unconditional)).toEqual([expect.stringContaining('a withheld installer\'s feed would be uploaded anyway')])
+  })
+
+  it('names a release whose update feed is composed or mirrored from nowhere', () => {
+    expect(notesProblems(doctored(LIVE, '      feed: ${{ steps.notes.outputs.feed }}\n', ''))).toEqual([
+      expect.stringContaining('publishes no `feed` output')
+    ])
+    expect(mirrorProblems(doctored(LIVE, '          FEED: ${{ needs.release.outputs.feed }}\n', ''))).toEqual([
+      expect.stringContaining('does not read the composed update feed')
     ])
   })
 
@@ -2253,7 +2496,7 @@ describe('the release path the checks exist to refuse', () => {
   it('names a mirror whose names this guard cannot read', () => {
     const unreadable = doctored(
       LIVE,
-      "NAMES='exe=Cuerunner-Setup.exe dmg=Cuerunner.dmg AppImage=Cuerunner.AppImage'",
+      "NAMES='exe=Cuerunner-Setup.exe dmg=Cuerunner.dmg AppImage=Cuerunner.AppImage deb=Cuerunner.deb'",
       "NAMES='Cuerunner-Setup.exe Cuerunner.dmg'"
     )
     expect(() => cardProblems(unreadable)).toThrow(/does not read as a space-separated/)

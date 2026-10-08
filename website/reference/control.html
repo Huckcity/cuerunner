@@ -98,8 +98,8 @@
         <table>
           <thead><tr><th>Address</th><th>Effect</th></tr></thead>
           <tbody>
-            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue fires and the selection moves on.</td></tr>
-            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP: everything is cut where it stands.</td></tr>
+            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue of the list in front fires and the selection moves on.</td></tr>
+            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP, as <kbd>Esc</kbd>: the list in front is cut where it stands — everything, where no other list is running.</td></tr>
             <tr><td><code>/panic</code></td><td>Panic, answered where the engine is, as <code>/cuerunner/panic</code> is.</td></tr>
             <tr><td><code>/pause</code>, <code>/resume</code>, <code>/togglePause</code> (also <code>/pause_toggle</code>)</td><td>Hold the whole show, let it go on, or whichever it is not — as <kbd>P</kbd> does.</td></tr>
             <tr><td><code>/cue/{number}/pause</code>, <code>/resume</code>, <code>/togglePause</code></td><td>Hold one playing audio cue while the rest of the show goes on, and let it go.</td></tr>
@@ -109,6 +109,12 @@
             <tr><td><code>/cue/{number}/start</code></td><td>Fire that cue where it is; the selection stays where the operator left it. A disarmed cue is not fired, and the log says so.</td></tr>
             <tr><td><code>/cue/{number}/stop</code></td><td>Stop that cue (and a group's children with it).</td></tr>
             <tr><td><code>/cue/{number}/seek</code> <em>seconds</em></td><td>Move a running audio cue to that many seconds into its region.</td></tr>
+            <tr><td><code>/cue_id/{id}/…</code></td><td>The same verbs, for the cue with that id. QLab counts a cue list as a cue, and so does this: <code>/cue_id/{list id}/go</code> is GO on that list, <code>/stop</code> stops it and <code>/select</code> brings it to the front. A list imported from QLab keeps QLab's id.</td></tr>
+            <tr><td><code>/list/{list}/go</code> (also <code>/cueList/…</code>, <code>/cueLists/…</code>; <code>/start</code>)</td><td>GO on that list's own place, without bringing it to the front. The list is named by its id, its name (any case) or its place among the tabs counting from 1.</td></tr>
+            <tr><td><code>/list/{list}/stop</code></td><td>Stop what is running in that list, and nothing else.</td></tr>
+            <tr><td><code>/list/{list}/select</code></td><td>Bring that list to the front.</td></tr>
+            <tr><td><code>/list/{list}/next</code>, <code>/previous</code></td><td>Move that list's place one cue, without bringing it to the front. Nothing fires.</td></tr>
+            <tr><td><code>/list/{list}/arm</code>, <code>/disarm</code></td><td>Put the list back in the show, or take it out: a disarmed list fires nothing, by GO, trigger or clock.</td></tr>
           </tbody>
         </table>
       </div>
@@ -129,6 +135,54 @@
       </p>
     </section>
 
+    <section class="panel reveal delay-1" id="feedback">
+      <h2>Feedback</h2>
+      <p>
+        The port answers questions as well as commands, from the state the window last
+        published, and never fires anything for one. A remote written for QLab is answered
+        the way QLab answers: on <code>/reply/</code> followed by the address it asked, with a
+        JSON document — <code>{"workspace_id", "address", "status": "ok", "data"}</code> —
+        sent back to the address and port it came from. <code>/cue/selected/…</code>,
+        <code>/cue/playhead/…</code>, <code>/cue/{number}/…</code> and
+        <code>/cue_id/{id}/…</code> answer <code>number</code>, <code>name</code>,
+        <code>displayName</code>, <code>type</code>, <code>uniqueID</code>,
+        <code>armed</code>, <code>colorName</code>, <code>notes</code>,
+        <code>isRunning</code>, <code>isPaused</code>, <code>actionElapsed</code>,
+        <code>duration</code> and <code>percentActionElapsed</code>;
+        <code>/runningCues</code>, <code>/runningOrPausedCues</code>,
+        <code>/selectedCues</code>, <code>/cueLists</code> (every list, each with its own cues),
+        <code>/workspaces</code>,
+        <code>/version</code> and <code>/thump</code> answer too. The same address with a
+        value is QLab's setter, and is not answered: a remote does not edit the show. A list
+        is a cue to QLab: <code>/cue_id/{list id}/playbackPosition</code> is that list's own
+        playhead. <code>/updates 1</code> asks for QLab's pushes:
+        <code>/update/workspace/{id}/cueList/{list id}/playbackPosition</code> when any list's
+        playhead moves, and <code>/update/workspace/{id}/cue_id/{id}</code> when a cue starts, stops or
+        is held.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cuerunner's own</th><th>What it carries</th></tr></thead>
+          <tbody>
+            <tr><td><code>/cuerunner/playhead/number</code>, <code>/name</code>, <code>/id</code>, <code>/type</code></td><td>The cue the list in front's GO fires next; empty strings at the end of it.</td></tr>
+            <tr><td><code>/cuerunner/lists/count</code>; <code>/cuerunner/list/{place}/id</code>, <code>/name</code>, <code>/playhead/number</code>, <code>/playhead/name</code>, <code>/playhead/id</code>, <code>/running/count</code></td><td>Every cue list by its place among the tabs, counting from 1 — the place <code>/list/{place}/go</code> names it by — with its own playhead and how many of its cues run. A list that goes is emptied once.</td></tr>
+            <tr><td><code>/cuerunner/running/count</code>, <code>/active</code></td><td>How many cues run, and 1 or 0.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/number</code>, <code>/name</code>, <code>/id</code>, <code>/state</code>, <code>/list</code></td><td>The running cues as slots, in show order, each with the name of the list it runs in. A slot that empties is written once as empty.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/progress</code>, <code>/elapsed</code>, <code>/remaining</code>, <code>/duration</code></td><td>0–1 and seconds, at the feedback's rate; −1 where nobody can say (a loop for ever). A freed slot gets one zeroing pulse.</td></tr>
+            <tr><td><code>/cuerunner/cues/count</code>, <code>/cuerunner/cues/options</code></td><td>The list, and a JSON list of <code>[number, "number — name"]</code> a dropdown takes as its values.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        These go to the destination Settings → Network names, and to every remote that sent
+        <code>/cuerunner/feedback/subscribe</code> — to its own port, or to the port it gives
+        as the argument — until it sends <code>/cuerunner/feedback/unsubscribe</code>; sixteen
+        at most, the oldest dropped. <code>/cuerunner/feedback/request</code> sends everything
+        now. A change is pushed at most twenty times a second however fast the show moves, and
+        a playing cue's progress is carried on between the window's updates.
+      </p>
+    </section>
+
     <section class="panel reveal delay-2" id="triggers">
       <h2>What a trigger matches</h2>
       <div class="table-wrap">
@@ -140,6 +194,8 @@
             <tr><td>MIDI control change</td><td>Port, channel and controller number.</td><td>Value.</td></tr>
             <tr><td>MIDI program change</td><td>Port, channel and program number.</td><td>—</td></tr>
             <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
+            <tr><td>Key</td><td>A key on this machine and its modifiers — <code>F7</code>, <code>Shift+Q</code>, typed or taken with <strong>Record</strong> — while the window has the keyboard and no field or dialog does. A key the app already answers (Space, Esc, P, F5, F6, the arrows, the number row, the menus' shortcuts) is refused with what it does; a key another cue answers is said, and fires both.</td><td>A key held down: it is one press.</td></tr>
+            <tr><td>Time of day</td><td>A time on this machine's clock (<code>19:30</code> or <code>19:30:15</code>) on the days ticked — none is every day. A time that went by while the show was closed or the machine asleep is <strong>skipped and said</strong> in the log, or <strong>fired late</strong> if it is no more than its grace behind (1–60 minutes); either way only the latest is counted.</td><td>—</td></tr>
             <tr><td>Timecode<span class="pro">Pro</span></td><td>The frame of the incoming clock, at the rate it is read at — typed as a label, as seconds from midnight (<code>3610s</code>), or taken from the running clock with <strong>Take</strong>: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
           </tbody>
         </table>
@@ -157,7 +213,7 @@
         <table>
           <thead><tr><th>Cue</th><th>What goes out</th></tr></thead>
           <tbody>
-            <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
+            <tr><td>OSC cue</td><td>Each message's address and typed arguments, in order, to its patch's host and port or its own, from the interface Settings → Network names.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>MIDI File cue</td><td>The file's own messages — notes, controllers, programs, bends, pressure and SysEx; never its meta events — at the file's times, through the cue's channel map and transposition, on the cue's port or the show's default output. On a stop: a Note Off for every note it started and Sustain (CC 64) 0 on each channel it used; on PANIC, All Notes Off (CC 123) on those channels too.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>

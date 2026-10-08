@@ -76,12 +76,17 @@ const FROZEN_CHANNELS = [
   'midi:status',
   'network:cancel',
   'network:request',
+  'osc:interfaces',
   'osc:send',
+  'osc:set-interface',
+  'output:cameras',
+  'output:chooseCamera',
   'output:configure',
   'output:events',
   'output:identify',
   'output:layer',
   'output:pickFile',
+  'output:pickMask',
   'output:place',
   'output:preview',
   'output:snapshot',
@@ -118,6 +123,15 @@ const FROZEN_CHANNELS = [
   'timecode:settings',
   'timecode:show',
   'timecode:status',
+  'update:check',
+  'update:configure',
+  'update:download',
+  'update:events',
+  'update:install',
+  'update:openDownloads',
+  'update:report',
+  'update:status',
+  'update:whatsNew',
   'workspace:autosave',
   'workspace:clearRecovery',
   'workspace:compare',
@@ -146,7 +160,8 @@ const FROZEN_EVENTS = [
   'output:events',
   'playback:panic',
   'show:events',
-  'timecode:events'
+  'timecode:events',
+  'update:events'
 ] as const
 
 describe('the declared channel values', () => {

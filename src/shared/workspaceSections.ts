@@ -88,6 +88,9 @@ export const WORKSPACE_SECTIONS = [
   { key: 'lighting', route: 'lighting', merge: 'section' },
   { key: 'timecode', route: 'timecode', merge: 'section' },
   { key: 'videoOutputs', route: 'outputs', merge: 'section' },
+  { key: 'cueLists', route: 'lists', merge: 'section' },
+  { key: 'pictures', route: 'pictures', merge: 'section' },
+  { key: 'oscPatches', route: 'oscPatches', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
 
@@ -300,7 +303,11 @@ export const SHOW_SETTINGS_SHAPE = {
     enabled: 'boolean',
     port: 'number',
     remote: { absent: true, of: 'boolean' },
-    allowFrom: { absent: true, of: { items: 'string' } }
+    allowFrom: { absent: true, of: { items: 'string' } },
+    feedback: {
+      absent: true,
+      of: { enabled: 'boolean', host: 'string', port: { bounded: [1, 65535] }, rateHz: { bounded: [0, 30] } }
+    }
   },
   midiIn: { enabled: 'boolean', portNames: { items: 'string' } },
   desk: {
@@ -404,7 +411,7 @@ export const SHOW_SETTINGS_SHAPE = {
  * guard of the wrong kind is read as the default rather than refused — or `version`, whose
  * one value the check reads as the literal it is.
  */
-type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings' | 'videoOutputs'
+type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings' | 'videoOutputs' | 'pictures'
 
 /**
  * The kind a section of the form is read as, from the field's own type: the leaf a primitive
@@ -439,7 +446,9 @@ export const WORKSPACE_SECTION_SHAPE = {
   midiSettings: 'object',
   // A list of outputs; the window reads each one through `normalizeVideoOutputs`, which
   // holds its numbers to their ranges.
-  videoOutputs: { items: 'object' }
+  videoOutputs: { items: 'object' },
+  // The show's picture settings; the window reads them through `normalizePictureSettings`.
+  pictures: 'object'
 } as const satisfies {
   readonly [K in KindOnlySectionKey]: SectionKindOf<NonNullable<Workspace[K]>>
 }
@@ -480,7 +489,8 @@ const CUE_BASE_SHAPE = {
   // being an object and the clauses' own fields are not declared.
   triggers: { absent: true, of: { items: 'object' } },
   refire: { absent: true, of: 'string' },
-  scriptLine: { absent: true, of: { nothing: true, of: 'number' } }
+  scriptLine: { absent: true, of: { nothing: true, of: 'number' } },
+  listId: { absent: true, of: 'string' }
 } as const satisfies ShapeFields<CueBase>
 
 /**
@@ -502,7 +512,24 @@ const VISUAL_CUE_SHAPE = {
     scale: 'number',
     rotation: 'number',
     crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' }
-  }
+  },
+  // The fields the types mark `?:` — a show saved before them has none of them.
+  blendMode: { absent: true, of: 'string' },
+  keyframes: {
+    absent: true,
+    of: {
+      elements: {
+        atMs: 'number',
+        x: 'number',
+        y: 'number',
+        scale: 'number',
+        rotation: 'number',
+        crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' },
+        easing: 'string'
+      }
+    }
+  },
+  stopOnNextGo: { absent: true, of: { nothing: true, of: 'boolean' } }
 } as const satisfies ShapeFields<VisualCueBase>
 
 /**
@@ -572,15 +599,37 @@ export const CUE_FIELD_SHAPE = {
   osc: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    host: 'string',
-    port: 'number',
-    address: 'string',
+    // The one message a cue written before a cue could send several carries on itself; a cue
+    // that carries `messages` has none of these.
+    host: { absent: true, of: 'string' },
+    port: { absent: true, of: 'number' },
+    address: { absent: true, of: 'string' },
     // An argument is an object of two fields, and its value is the one field in the saved
     // form whose type allows more than one kind: a number, a string or a boolean.
     args: {
-      elements: {
-        type: 'string',
-        value: { oneOf: ['number', 'string', 'boolean'] }
+      absent: true,
+      of: {
+        elements: {
+          type: 'string',
+          value: { oneOf: ['number', 'string', 'boolean'] }
+        }
+      }
+    },
+    messages: {
+      absent: true,
+      of: {
+        elements: {
+          patchId: 'string',
+          host: 'string',
+          port: 'number',
+          address: 'string',
+          args: {
+            elements: {
+              type: 'string',
+              value: { oneOf: ['number', 'string', 'boolean'] }
+            }
+          }
+        }
       }
     }
   },
@@ -588,10 +637,26 @@ export const CUE_FIELD_SHAPE = {
   fade: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    targetCueId: 'string',
+    // One target as a show saved before lists wrote it, or the list: `fadeTargetIds` reads both.
+    targetCueId: { absent: true, of: 'string' },
+    targetCueIds: { absent: true, of: { items: 'string' } },
     fadeProperty: 'string',
     targetValue: 'number',
     panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
+    // A picture fade's geometry: each property optional, the crop moved as one.
+    geometryTarget: {
+      absent: true,
+      of: {
+        nothing: true,
+        of: {
+          x: { absent: true, of: 'number' },
+          y: { absent: true, of: 'number' },
+          scale: { absent: true, of: 'number' },
+          rotation: { absent: true, of: 'number' },
+          crop: { absent: true, of: { top: 'number', right: 'number', bottom: 'number', left: 'number' } }
+        }
+      }
+    },
     curve: 'string',
     stopTargetWhenDone: 'boolean',
     shape: { absent: true, of: { nothing: true, of: 'object' } }
@@ -599,7 +664,9 @@ export const CUE_FIELD_SHAPE = {
   stop: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    targetCueId: 'string',
+    // `'all'` or one target, or the list: `stopTargetIds` reads them.
+    targetCueId: { absent: true, of: 'string' },
+    targetCueIds: { absent: true, of: { items: 'string' } },
     fadeOut: 'boolean',
     fadeOutDuration: 'number',
     waitForFade: 'boolean'
@@ -722,6 +789,16 @@ export const CUE_FIELD_SHAPE = {
     bold: 'boolean',
     italic: 'boolean',
     position: 'string'
+  },
+  // A live picture: its source, by the name the show carries — the machine's own id for a device
+  // is userData's, never the file's.
+  camera: { ...VISUAL_CUE_SHAPE, type: 'string', source: 'string', deviceName: 'string', url: 'string' },
+  control: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    action: 'string',
+    targetCueIds: { items: 'string' },
+    loadToMs: 'number'
   },
   // A live input (src/shared/cue.ts): its device and channels, then an audio cue's level,
   // pan, fades and routing, bounded the same way.

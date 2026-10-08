@@ -45,7 +45,12 @@ function openMidiInput(port: string, onMessage: (bytes: number[], at: number) =>
   return { close: () => input.closePort() }
 }
 
-/** Binds a UDP port for ArtTimeCode. Shared with any other Art-Net listener on the machine. */
+/**
+ * Binds a UDP port for ArtTimeCode. Address reuse is required and kept: ArtTimeCode is broadcast
+ * on Art-Net's own port, which the lighting's Art-Net input in this same process listens on too,
+ * as may the console's software on the machine — each listener has to be handed its own copy of
+ * the clock, and without reuse whichever started second would hear nothing.
+ */
 function bindUdp(port: number, onPacket: (packet: Buffer, at: number) => void): Promise<Closable> {
   return new Promise((resolve, reject) => {
     const socket = createSocket({ type: 'udp4', reuseAddr: true })

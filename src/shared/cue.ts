@@ -3,6 +3,7 @@ import type { TimecodeRate } from './timecode'
 import type { FadeShape } from './fadeShape'
 import type { CueSlices } from './slices'
 import type { CueLoudness } from './loudness'
+import type { GeometryTarget } from './visualKeyframes'
 
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
@@ -18,6 +19,8 @@ export const CUE_TYPES = [
   'memo', 'midiFile', 'light',
   'timecode',
   'video', 'image', 'text',
+  'camera',
+  'control',
   'input'
 ] as const
 
@@ -99,6 +102,31 @@ export type CueTrigger =
    * machine's, the moment is the show's.
    */
   | { id: string; kind: 'timecode'; timecode: string }
+  /**
+   * A key on this machine's keyboard, pressed while the cue list has the window: the cue a
+   * sound-effects operator keeps under one finger. Written as the accelerator the shortcut
+   * table writes (`F5`, `Shift+Q`), and refused where the app already answers that key
+   * (`hotkeyConflict`), so a trigger can never take GO, STOP or PANIC off the operator.
+   */
+  | { id: string; kind: 'hotkey'; key: string }
+  /**
+   * A time of day on this machine's clock: the half-hour call, the house-open music. `time` is
+   * `HH:MM` or `HH:MM:SS`, 24-hour; `days` the weekdays it answers (0 Sunday … 6 Saturday),
+   * empty for every day. `missed` is what a time that passed while the show was closed — or the
+   * machine asleep — does when the show next sees the clock: `skip` says so in the log and
+   * fires nothing, `fire` fires it late if it is no more than `graceMinutes` behind.
+   */
+  | {
+      id: string
+      kind: 'clock'
+      time: string
+      days: number[]
+      missed: ClockMissedPolicy
+      graceMinutes: number
+    }
+
+/** What a wall-clock trigger whose time passed unseen does: see `CueTrigger`'s `clock` kind. */
+export type ClockMissedPolicy = 'skip' | 'fire'
 
 export interface CueBase {
   id: string
@@ -129,6 +157,12 @@ export interface CueBase {
    * tablet reading it. Null or absent means it is not pinned to anything.
    */
   scriptLine?: number | null
+  /**
+   * The cue list a cue at the top level runs in, by the list's id (`./cueLists`). Absent is
+   * the show's main list — every cue of a show saved before lists existed — and a child never
+   * carries one: it runs in its group's list, which is what keeps a group whole.
+   */
+  listId?: string
 }
 
 /**
@@ -240,12 +274,46 @@ export interface OscArg {
   value: number | string | boolean
 }
 
-export interface OscCue extends CueBase {
-  type: 'osc'
+/**
+ * One message an OSC cue sends: where to, and what. `patchId` names one of the show's OSC
+ * patches (`OscPatch`), whose host and port it is sent to; empty sends it to the message's own
+ * `host` and `port`, which is what a cue written before patches existed carries.
+ */
+export interface OscMessage {
+  patchId: string
   host: string
   port: number
   address: string
   args: OscArg[]
+}
+
+/**
+ * A named destination the show sends OSC to — the lighting desk, the video server, the other
+ * machine — chosen per message by name, so a show moved to another venue changes one address
+ * rather than every cue's.
+ */
+export interface OscPatch {
+  id: string
+  name: string
+  host: string
+  port: number
+}
+
+/**
+ * An OSC cue: one message or several, sent in order on GO.
+ *
+ * A cue written before a cue could send several carries one, in the four fields on the cue
+ * itself, and is read as a list of one (`oscMessages`) without being rewritten: it saves as it
+ * was until it is edited, and an edit writes `messages` and takes the four away. A cue that
+ * carries `messages` is read from them alone.
+ */
+export interface OscCue extends CueBase {
+  type: 'osc'
+  host?: string
+  port?: number
+  address?: string
+  args?: OscArg[]
+  messages?: OscMessage[]
 }
 
 export interface WaitCue extends CueBase {
@@ -256,12 +324,23 @@ export type FadeCurve = 'linear' | 'sCurve' | 'logarithmic'
 
 export interface FadeCue extends CueBase {
   type: 'fade'
-  targetCueId: string
+  /**
+   * The cue it fades, as a show saved before a fade could name several wrote it — read as a
+   * list of one (`fadeTargetIds`) and left as it is until the targets are edited, which writes
+   * `targetCueIds` and takes this away.
+   */
+  targetCueId?: string
+  /**
+   * The cues it fades: any of them, groups among them — a group's fade reaches every sound
+   * under it, however deep. Read in preference to `targetCueId` whenever it is there.
+   */
+  targetCueIds?: string[]
   /**
    * What the fade moves. `opacity` is a picture's: a video, image or text cue's layer on its
-   * output, 0–1 (see src/shared/visual.ts). A video's sound is still `volume`.
+   * output, 0–1 (see src/shared/visual.ts). A video's sound is still `volume`. `geometry` is a
+   * picture's place alone — `geometryTarget` — with its opacity left where it is.
    */
-  fadeProperty: 'volume' | 'pan' | 'opacity'
+  fadeProperty: 'volume' | 'pan' | 'opacity' | 'geometry'
   targetValue: number
   /**
    * Where a volume fade takes the pan as well, −1 to 1, over the same time and curve — the
@@ -269,6 +348,13 @@ export interface FadeCue extends CueBase {
    * fade of the one property, which is what a show saved before it existed did.
    */
   panTargetValue?: number | null
+  /**
+   * Where a picture fade moves the picture to — its position, scale, rotation, crop — over the
+   * same time and curve as its opacity (src/shared/visualKeyframes.ts). A property it does not
+   * name stays where it is. Optional on disk, and absent or null is a fade that moves no
+   * geometry, which is what every show saved before it existed did.
+   */
+  geometryTarget?: GeometryTarget | null
   curve: FadeCurve
   stopTargetWhenDone: boolean
   /**
@@ -280,7 +366,17 @@ export interface FadeCue extends CueBase {
 
 export interface StopCue extends CueBase {
   type: 'stop'
-  targetCueId: string | 'all'
+  /**
+   * `'all'` for a stop of everything, or — in a show saved before a stop could name several
+   * cues — the one cue it stops, read as a list of one (`stopTargetIds`) and kept as it is
+   * until the targets are edited.
+   */
+  targetCueId?: string | 'all'
+  /**
+   * The cues it stops, groups and the cues inside them among them. Read in preference to
+   * `targetCueId` whenever it is there; choosing "all cues" takes it away again.
+   */
+  targetCueIds?: string[]
   fadeOut: boolean
   fadeOutDuration: number
   waitForFade: boolean
@@ -530,6 +626,35 @@ export interface TimecodeCue extends CueBase {
 // layers — in src/shared/visual.ts, which imports nothing from here but `CueBase`.
 import type { VideoCue, ImageCue, TextCue } from './visual'
 export type { VideoCue, ImageCue, TextCue } from './visual'
+import type { CameraCue } from './visual'
+export type { CameraCue } from './visual'
+
+/**
+ * What a Control cue does to the cues it names. `goto` moves the playhead rather than touching
+ * a cue; `load` readies a cue to start from `loadToMs` into it; `arm` and `disarm` change
+ * whether GO and the triggers may fire it, as an edit of the show.
+ */
+export type ControlAction =
+  | 'start' | 'stop' | 'pause' | 'resume' | 'load' | 'reset' | 'goto' | 'arm' | 'disarm'
+
+export const CONTROL_ACTIONS: readonly ControlAction[] = [
+  'start', 'stop', 'pause', 'resume', 'load', 'reset', 'goto', 'arm', 'disarm'
+]
+
+/**
+ * A cue that acts on other cues — starts them, stops them, holds them, readies them, puts them
+ * back, moves the playhead to one, arms or disarms them — the way QLab's Start, Stop, Pause,
+ * Resume, Load, Reset, GoTo, Arm and Disarm cues each do. One type carries the nine, because
+ * they differ only in the verb; the verb is the cue's to change.
+ */
+export interface ControlCue extends CueBase {
+  type: 'control'
+  action: ControlAction
+  /** The cues it acts on, in the order it acts; `goto` takes the first. Empty does nothing. */
+  targetCueIds: string[]
+  /** For `load`: how far into each target it is readied to start, ms. */
+  loadToMs: number
+}
 
 export type Cue =
   | AudioCue
@@ -552,4 +677,6 @@ export type Cue =
   | VideoCue
   | ImageCue
   | TextCue
+  | CameraCue
+  | ControlCue
   | InputCue

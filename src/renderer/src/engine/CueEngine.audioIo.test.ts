@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
-import type { AudioCue, Cue, DevampCue, FadeCue, InputCue } from '../../../shared/cue'
+import type { AudioCue, ControlCue, Cue, DevampCue, FadeCue, InputCue } from '../../../shared/cue'
 import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 import { createCue } from '../utils/cueDefaults'
 import { resetAudioRoutingSync, syncAudioRouting } from './audioRouting'
@@ -170,12 +170,45 @@ describe('a cue through a patch, with slices and drawn fades', () => {
 describe('a fade cue and a devamp cue', () => {
   it('a fade cue with a drawn shape sends its table', async () => {
     const shape = { kind: 'bezier' as const, x1: 0.1, y1: 0.9, x2: 0.3, y2: 1 }
-    const fade: FadeCue = { ...(createCue('fade') as FadeCue), id: 'f1', targetCueId: 'a1', duration: 1000, shape }
+    const fade: FadeCue = { ...(createCue('fade') as FadeCue), id: 'f1', targetCueId: 'a1', targetCueIds: ['a1'], duration: 1000, shape }
     const runner = setup([fade])
     runner.go()
     await vi.advanceTimersByTimeAsync(50)
     const call = engine.fade.mock.calls.find(entry => entry[0] === 'a1')
     expect(call?.[6]).toEqual(bakeShape(shape))
+  })
+
+  it('a fade of several targets sends the shape to every sound it moves, a live input among them', async () => {
+    const shape = { kind: 'preset' as const, preset: 'exponential' as const }
+    const fade: FadeCue = {
+      ...(createCue('fade') as FadeCue), id: 'f1', targetCueId: '', targetCueIds: ['a1', 'in1'], duration: 1000, shape
+    }
+    const runner = setup([fade, audio(), input()])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    for (const id of ['a1', 'in1']) {
+      const call = engine.fade.mock.calls.find(entry => entry[0] === id)
+      expect(call?.[6], id).toEqual(bakeShape(shape))
+    }
+  })
+
+  it('a Control cue starts, pauses, resumes and stops a live input', async () => {
+    const control = (action: ControlCue['action']): ControlCue =>
+      ({ ...(createCue('control') as ControlCue), id: `c-${action}`, action, targetCueIds: ['in1'] })
+    const cues: Cue[] = [control('start'), control('pause'), control('resume'), control('stop'), input()]
+    const runner = setup(cues)
+    runner.goById('c-start')
+    await vi.advanceTimersByTimeAsync(100)
+    expect(engine.startInput).toHaveBeenCalledTimes(1)
+    runner.goById('c-pause')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(engine.pause).toHaveBeenCalledWith('in1')
+    runner.goById('c-resume')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(engine.resume).toHaveBeenCalledWith('in1')
+    runner.goById('c-stop')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(engine.stop).toHaveBeenCalledWith('in1', 200)
   })
 
   it('a devamp set to stop ends its target at the end of the pass', async () => {

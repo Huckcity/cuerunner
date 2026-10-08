@@ -8,6 +8,8 @@ import { CUE_COLOR_VAR } from '../../utils/cueColors'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { scrubbableRegion, scrubPositionMs } from '../../utils/scrub'
+import { listMembership } from '../../../../shared/cueLists'
+import { actingOn, fadedBy } from '../../utils/actingOn'
 import './ActivePanel.css'
 
 interface Props {
@@ -26,10 +28,20 @@ interface Props {
 export function ActivePanel({ onClose }: Props) {
   const running = useStore(s => s.running)
   const cues = useStore(s => s.cues)
+  const lists = useStore(s => s.cueLists)
   const byId = new Map(cues.map(cue => [cue.id, cue]))
+  // In a show of several lists each row names the list it is running in: a cue playing in a
+  // list that is not on screen has no row there to say whose it is.
+  const membership = lists.length > 1 ? listMembership(cues) : null
+  const listName = (cueId: string): string | null => {
+    const listId = membership?.get(cueId)
+    return listId === undefined ? null : lists.find(list => list.id === listId)?.name ?? null
+  }
   const rows = [...running.values()]
     .filter(run => byId.has(run.cueId))
     .sort((a, b) => a.startedAt - b.startedAt)
+  // The sounds a running fade is moving, so their own rows can say so.
+  const fading = fadedBy(cues, running)
 
   return (
     <div className="active-panel">
@@ -45,7 +57,7 @@ export function ActivePanel({ onClose }: Props) {
           <div className="active-empty">Nothing is running. Cues appear here while they play.</div>
         ) : (
           rows.map(run => (
-            <ActiveRow key={run.cueId} cue={byId.get(run.cueId)!} run={run} cues={cues} />
+            <ActiveRow key={run.cueId} cue={byId.get(run.cueId)!} run={run} cues={cues} listName={listName(run.cueId)} fading={fading.has(run.cueId)} />
           ))
         )}
       </div>
@@ -53,7 +65,7 @@ export function ActivePanel({ onClose }: Props) {
   )
 }
 
-function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] }) {
+function ActiveRow({ cue, run, cues, listName, fading }: { cue: Cue; run: RunningCue; cues: Cue[]; listName: string | null; fading: boolean }) {
   const fillRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLSpanElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
@@ -63,6 +75,7 @@ function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] 
   heldRef.current = held
 
   const totalMs = cue.type === 'group' ? groupDurationMs(cues, cue.id) : cue.duration
+  const acting = actingOn(cue, cues)
   const audio = cue.type === 'audio' ? cue as AudioCue : null
   const region = audio !== null && run.state === 'playing' ? scrubbableRegion(audio) : null
 
@@ -121,8 +134,18 @@ function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] 
       <span className="active-color" style={{ background: CUE_COLOR_VAR[cue.colorLabel] }} />
       <CueIcon type={cue.type} className="active-icon" />
       <span className="active-number">{cue.number}</span>
-      <span className="active-name">{cue.name || 'untitled'}</span>
-      {run.state !== 'playing' && <span className="state-pill active-state">{run.state}</span>}
+      <span className="active-name">
+        {cue.name || 'untitled'}
+        {listName !== null && <span className="active-list" data-list={listName}> · {listName}</span>}
+        {/* What a fade, a stop or a control cue is acting on: the row is otherwise a name and a
+            clock, and the question in the booth is which sounds it is taking away. */}
+        {acting !== null && <span className="active-targets" title={acting}> → {acting}</span>}
+      </span>
+      {run.state !== 'playing'
+        ? <span className="state-pill active-state">{run.state}</span>
+        : fading
+          ? <span className="state-pill active-state" data-fading="true">fading</span>
+          : null}
       <span className="active-time" ref={timeRef} />
       {audio !== null && (run.state === 'playing' || run.state === 'paused') ? (
         <button

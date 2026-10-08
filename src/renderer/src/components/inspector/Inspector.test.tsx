@@ -154,21 +154,24 @@ describe('Inspector', () => {
   })
 
   it('gives a new OSC string argument a value that is a string', () => {
-    // node-osc reads each argument's type tag off the JavaScript value, so a 0 left under
-    // an argument the panel calls `string` reaches the desk as an integer.
-    const osc = cue('osc', { args: [{ type: 'f', value: 0 }] } as Partial<Cue>)
+    // A 0 left under an argument the panel calls `string` is a value of the wrong kind: the
+    // row would say one thing and the value another.
+    const osc = cue('osc', {
+      messages: [{ patchId: '', host: '127.0.0.1', port: 53000, address: '/x', args: [{ type: 'f', value: 0 }] }]
+    } as Partial<Cue>)
     show([osc], osc)
     openTab('OSC')
 
-    const select = container.querySelector<HTMLSelectElement>('select')!
+    // The first select is where the message goes; the argument's type is the next.
+    const select = container.querySelectorAll<HTMLSelectElement>('.osc-message select')[1]
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
       setter?.call(select, 's')
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
-    const stored = useStore.getState().cues[0] as { args: Array<{ type: string; value: unknown }> }
-    expect(stored.args[0]).toEqual({ type: 's', value: '' })
+    const stored = useStore.getState().cues[0] as { messages: Array<{ args: Array<{ type: string; value: unknown }> }> }
+    expect(stored.messages[0].args[0]).toEqual({ type: 's', value: '' })
   })
 
   it('refuses a header rename that would take another header’s value with it', () => {

@@ -184,6 +184,11 @@ export const APP_PATHS = [
     names: [{ tab: 'redundancy' }]
   },
   {
+    page: 'guides/running.html',
+    printed: `${prose(SETTINGS_ITEM)} → Updates`,
+    names: [{ tab: 'updates' }]
+  },
+  {
     page: 'guides/script.html',
     printed: `${prose(SETTINGS_ITEM)} → Network → Tablet view`,
     names: [{ tab: 'network' }]

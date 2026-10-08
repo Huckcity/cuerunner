@@ -17,6 +17,7 @@ import { openLogsFolder } from '../../hooks/useLogFile'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import { openQLabImport } from '../qlab/qlabImport'
 import './Toolbar.css'
+import { isVisualCue } from '../../../../shared/visual'
 
 /** An Electron accelerator, written for this keyboard. */
 function shortcutLabel(accelerator: string): string {
@@ -60,6 +61,8 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'video',   label: 'Video' },
   { type: 'image',   label: 'Image' },
   { type: 'text',    label: 'Text' },
+  { type: 'camera',  label: 'Camera' },
+  { type: 'control', label: 'Control' },
   { type: 'input',   label: 'Live Input' },
 ]
 
@@ -97,14 +100,18 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     // the first undo after adding a fade only un-named it. Only an audio cue: a fade moves
     // a sound, so one made with a wait or a group selected is left for the operator to aim,
     // rather than aimed at something its own tab would not offer. A Light cue has a level
-    // too — its intensity — so a fade made with one selected is aimed at it the same way.
+    // too — its intensity — so a fade made with one selected is aimed at it the same way, and
+    // so has a picture its opacity: an image or a text, which have nothing else, is faded by it.
     const target = type === 'fade' && selectedId
-      ? useStore.getState().cues.find(c => c.id === selectedId && (c.type === 'audio' || c.type === 'light'))
+      ? useStore.getState().cues.find(c => c.id === selectedId && (c.type === 'audio' || c.type === 'light' || isVisualCue(c)))
       : undefined
+    const silentPicture = target?.type === 'image' || target?.type === 'text'
     addCue(
       type,
       selectedId ?? undefined,
-      target === undefined ? undefined : { name: `Fade ${target.name}`, targetCueId: target.id }
+      target === undefined
+        ? undefined
+        : { name: `Fade ${target.name}`, targetCueIds: [target.id], ...(silentPicture ? { fadeProperty: 'opacity' as const } : {}) }
     )
   }
 

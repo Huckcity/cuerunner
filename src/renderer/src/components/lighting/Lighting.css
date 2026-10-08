@@ -235,6 +235,14 @@
 .lighting-fader input[type='range'] { width: 100%; accent-color: var(--accent-blue); }
 .lighting-fader output { text-align: right; font-family: var(--font-mono); color: var(--fg-body); }
 .lighting-fader[data-held='true'] label { color: var(--accent-blue); }
+/* What a parameter with several functions is doing at its value — Closed, Open, Strobe — under
+   its fader, where the percentage alone would not say. */
+.lighting-fader .lighting-function {
+  grid-column: 2 / 4;
+  margin-top: -2px;
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
 
 /* The monitor: every slot of one universe, its number on top and its value under it, read the
    way a console's channel display reads. The bar under each value is its level. */

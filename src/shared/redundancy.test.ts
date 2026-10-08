@@ -161,6 +161,19 @@ describe('the same show on both machines', () => {
     expect(cueListHash(cues)).not.toBe(cueListHash([{ ...cues[0], name: 'Prelude' }, cues[1]]))
   })
 
+  it('tells a cue moved to another list apart, and hashes a show of one list as it always did', () => {
+    // The fingerprint a build before lists wrote, so two machines a release apart still agree.
+    let before = 0x811c9dc5
+    for (const cue of cues) {
+      for (const char of `${cue.id}\u0000${cue.number}\u0000${cue.name}\u0001`) {
+        before ^= char.charCodeAt(0)
+        before = Math.imul(before, 0x01000193) >>> 0
+      }
+    }
+    expect(cueListHash(cues)).toBe(before.toString(16).padStart(8, '0'))
+    expect(cueListHash(cues)).not.toBe(cueListHash([{ ...cues[0], listId: 'fx' }, cues[1]]))
+  })
+
   it('is in sync when both machines have the same file, the same cues and the same list', () => {
     const mine = digest()
     expect(syncVerdict(mine, digest())).toEqual({ inSync: true, note: '3 cues, the same show' })

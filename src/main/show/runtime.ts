@@ -1,7 +1,7 @@
 import { ShowBus } from '../bus/ShowBus'
 import { ServiceHost, type CommandResult, type ShowService } from '../bus/ServiceHost'
 import { stableJson } from '../../shared/showfile'
-import { OscInputService } from '../services/OscInputService'
+import { OscInputService, type OscBinding } from '../services/OscInputService'
 import { MidiInputService } from '../services/MidiInputService'
 import { MidiTcpService } from '../services/MidiTcpService'
 import { SqNativeService } from '../services/SqNativeService'
@@ -37,6 +37,8 @@ export interface ServiceOptions {
   dmx?: DmxLightingOptions
   /** The timecode hub, whose receiver the timecode service runs. */
   timecode?: () => TimecodeHub
+  /** Where the OSC listener binds — this machine's chosen interface — and what `/version` says. */
+  osc?: { binding: () => OscBinding; appVersion: () => string }
 }
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
@@ -45,7 +47,7 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     // program must not be behind a key, or the free half stops competing with free
     // software. What costs is the show of it — the desk link, the radios, the network
     // and the second machine — so those services carry `pro` and the host asks.
-    new OscInputService(),
+    new OscInputService({ binding: options.osc?.binding, appVersion: options.osc?.appVersion }),
     new MidiInputService(),
     new MidiTcpService(),
     // The SQ's own control service, beside the desk link: the membership is written there

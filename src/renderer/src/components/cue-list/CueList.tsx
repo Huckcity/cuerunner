@@ -17,6 +17,8 @@ import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import { AUDIO_FORMATS_SENTENCE, isPlayableAudioFile } from '../../../../shared/media'
 import { isMidiFileName } from '../../../../shared/midiFile'
 import { addMidiFileCuesFromFiles } from '../../utils/midiFileDrop'
+import { listMembership } from '../../../../shared/cueLists'
+import { CUE_IDS_DRAG_TYPE } from '../cue-lists/CueListTabs'
 import './CueList.css'
 
 /** How many refused files a notice names before it counts the rest. */
@@ -72,6 +74,9 @@ function dropParentId(items: RenderItem[], dropAt: number): string | null {
 
 export function CueList() {
   const cues = useStore(s => s.cues)
+  // The list on screen: its cues are the rows, and another list's are another tab's.
+  const activeListId = useStore(s => s.activeListId)
+  const activeList = useStore(s => s.cueLists.find(list => list.id === s.activeListId))
   const selectedId = useStore(s => s.selectedId)
   const selectedIds = useStore(s => s.selectedIds)
   const running = useStore(s => s.running)
@@ -128,8 +133,12 @@ export function CueList() {
     // hidden too, so a group inside a group cannot leave its own children behind on the
     // screen with nothing above them.
     const hidden = new Set<string>()
+    const membership = listMembership(cues)
     for (let i = 0; i < cues.length; i++) {
       const cue = cues[i]
+      // Another list's cue, and everything under it, is drawn on that list's tab. The flat
+      // index stays the show's own, so a drag or a drop here is placed in the one array.
+      if (membership.get(cue.id) !== activeListId) continue
       if (cue.parentId !== null &&
           (hidden.has(cue.parentId) || collapsedGroupIds.has(cue.parentId))) {
         hidden.add(cue.id)
@@ -142,7 +151,7 @@ export function CueList() {
       items.push({ cue, depth: cue.parentId === null ? 0 : 1, flatIndex: i, ...groupState })
     }
     return items
-  }, [cues, collapsedGroupIds])
+  }, [cues, collapsedGroupIds, activeListId])
   // Read by the background's drag handler, which is not rebuilt per render.
   const renderItemsRef = useRef(renderItems)
   renderItemsRef.current = renderItems
@@ -300,6 +309,12 @@ export function CueList() {
   const handleRowDragStart = useCallback((e: React.DragEvent, renderIndex: number) => {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('application/x-cue-render-index', String(renderIndex))
+    // What a tab reads when the rows are dropped on it: this cue, or the selection it is part of.
+    const dragged = renderItemsRef.current[renderIndex]?.cue.id
+    if (dragged !== undefined) {
+      const held = useStore.getState().selectedIds
+      e.dataTransfer.setData(CUE_IDS_DRAG_TYPE, JSON.stringify(held.includes(dragged) ? held : [dragged]))
+    }
     setDragRenderIndex(renderIndex)
     clearHoverTimer()
   }, [clearHoverTimer])
@@ -580,7 +595,12 @@ export function CueList() {
           )}
         </div>
       </div>
-      {renderItems.length === 0 && !isDragOver && (
+      {renderItems.length === 0 && !isDragOver && cues.length > 0 && (
+        <div className="cue-list-empty">
+          <div>No cues in “{activeList?.name ?? 'this list'}”. Add cues using the toolbar above, or drag audio files here.</div>
+        </div>
+      )}
+      {cues.length === 0 && !isDragOver && (
         <div className="cue-list-empty">
           <div>No cues. Add cues using the toolbar above, or drag audio files here.</div>
           <button className="cue-list-empty-demo" onClick={() => openDemoWorkspace()}>

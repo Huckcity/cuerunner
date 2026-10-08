@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Video and outputs — Cuerunner</title>
-  <meta name="description" content="Video, image and text cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, fades and exact crossfades, geometry, corner pin and soft edges, and the timers." />
+  <meta name="description" content="Video, image, text and camera cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, blend modes, fades and exact crossfades, geometry and moving it, the next GO, mirrors and masks, corner pin and soft edges, and the timers." />
   <meta property="og:type" content="article" />
   <meta property="og:title" content="Video and outputs — Cuerunner" />
-  <meta property="og:description" content="Video, image and text cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, fades and exact crossfades, geometry, corner pin and soft edges, and the timers." />
+  <meta property="og:description" content="Video, image, text and camera cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, blend modes, fades and exact crossfades, geometry and moving it, the next GO, mirrors and masks, corner pin and soft edges, and the timers." />
   <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../styles.css" />
 </head>
@@ -43,8 +43,8 @@
       <h1>Video and outputs</h1>
       <p class="doc-lede">
         Pictures go to <strong>outputs</strong> — windows Cuerunner keeps open for the show,
-        one per projector or screen — and three cue types put them there: <strong>Video</strong>,
-        <strong>Image</strong> and <strong>Text</strong>. All of it is free.
+        one per projector or screen — and four cue types put them there: <strong>Video</strong>,
+        <strong>Image</strong>, <strong>Text</strong> and <strong>Camera</strong>. All of it is free.
       </p>
     </section>
 
@@ -123,6 +123,38 @@
       </p>
     </section>
 
+    <section class="panel reveal delay-2" id="camera">
+      <h2>A live camera</h2>
+      <p>
+        A <strong>Camera</strong> cue shows a live picture on an output until it is stopped,
+        with the fades, layer, blend and geometry every picture has. Its <strong>Camera</strong>
+        tab chooses the source. <strong>A camera on this machine</strong> lists the capture
+        devices the outputs can see — a webcam, a USB camera, an HDMI capture card. The list
+        comes from the output windows, the one place Cuerunner opens a camera, so open an output
+        first. The show keeps the camera's <em>name</em>, so the venue machine finds the same
+        model; each machine keeps its own pick of the exact device, so two cameras with one name
+        are never confused. A camera that is stood on is opened ahead of its GO, so its picture
+        is live the moment it is asked for.
+      </p>
+      <p>
+        If the camera is not connected, the output says so in a banner across it —
+        <em>Camera Stage cam is not connected</em> — the output's card says the same, and the
+        cue keeps running: plug the camera in and the picture comes up by itself. A cable pulled
+        mid-show does the same.
+      </p>
+      <p>
+        <strong>A network stream</strong> takes an address: HTTP video, an HLS playlist
+        (<code>.m3u8</code>), or MJPEG — what most IP cameras and phone camera apps serve. A login
+        in the address (<code>http://user:password@camera/…</code>) is passed on. The stream is
+        fetched by Cuerunner itself, only from the address a cue names. RTSP is not supported:
+        use the camera's HTTP, MJPEG or HLS address.
+      </p>
+      <p>
+        On a Mac, the first camera cue asks for camera access once; if it was refused, allow
+        Cuerunner under Camera in the Mac's Privacy &amp; Security settings.
+      </p>
+    </section>
+
     <section class="panel reveal delay-2" id="layers">
       <h2>Layers, fades and crossfades</h2>
       <p>
@@ -153,6 +185,29 @@
         <strong>Opacity</strong> on the Picture tab is the level a picture rests at; changing
         it while the picture is up changes it at once.
       </p>
+      <h3>Blend modes</h3>
+      <p>
+        <strong>Blend</strong> on the Picture tab says how a picture is laid over what is
+        behind it: <strong>Normal</strong>, <strong>Multiply</strong>, <strong>Screen</strong>,
+        <strong>Overlay</strong>, <strong>Darken</strong>, <strong>Lighten</strong>,
+        <strong>Colour dodge</strong>, <strong>Colour burn</strong>, <strong>Hard light</strong>,
+        <strong>Soft light</strong>, <strong>Difference</strong>, <strong>Exclusion</strong>,
+        <strong>Add</strong> and <strong>Subtract</strong>. Screen or Add a flare or a smoke
+        loop over a scene so its black disappears; Multiply a gobo or a texture over it so its
+        white does. The picture's opacity sets how much of the blend shows. Every mode draws the
+        same on the GPU and on the 2D fallback.
+      </p>
+      <h3>The next GO</h3>
+      <p>
+        <strong>Next GO</strong> on the Picture tab takes the picture down — over its own fade
+        out — the next time GO is pressed, whatever that GO fires: a caption, a title card, a
+        still between scenes. <strong>The show's default</strong> follows the
+        <strong>Next GO</strong> box at the top of the Outputs panel, so a show of surtitles can
+        say it once. A GO from a trigger or a desk counts the same as the button. It is the next
+        GO <em>in the picture's own cue list</em>: a sound effect fired from a cart list leaves
+        the main list's captions up. A picture the GO's own crossfade is dissolving away is left
+        to the dissolve.
+      </p>
     </section>
 
     <section class="panel reveal delay-2" id="geometry">
@@ -164,6 +219,44 @@
         <strong>Position</strong> moves it as a share of the output, <strong>Scale</strong>
         sizes it, <strong>Rotate</strong> turns it clockwise, and <strong>Crop</strong> cuts
         from each edge first. Every one of them applies while the picture is up.
+      </p>
+      <h3>Moving it</h3>
+      <p>
+        <strong>Keyframes</strong>, under the geometry, move a picture over its own play.
+        <strong>Add keyframe</strong> puts one a second on from the last, where the picture would
+        be then; give it a time (from the picture's first frame), a place, scale, rotation and
+        crop, and how it gets there — <strong>Linear</strong>, <strong>Ease in</strong>,
+        <strong>Ease out</strong>, <strong>Ease in and out</strong>, or <strong>Jump</strong>.
+        The picture starts where its own geometry puts it and stays at the last keyframe. A
+        paused picture's keyframes pause with it.
+      </p>
+      <p>
+        A <strong>fade cue</strong> moves a picture that is up: with its <strong>Property</strong>
+        set to <strong>Opacity</strong> or <strong>Geometry only</strong>, tick what it moves under
+        <strong>Move the picture</strong> — position, scale, rotation, crop — and give each its
+        target. It moves from wherever the picture is when the fade starts, over the fade's time
+        and curve, and the picture stays where the fade left it. A property you then change by
+        hand on the Picture tab is yours again.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="mirrors">
+      <h2>Mirrors and masks</h2>
+      <p>
+        <strong>Shows</strong>, on an output's card, makes it a mirror of another output: it
+        shows that output's pictures exactly as that output composes them — a confidence monitor
+        at the desk, or a second projector stacked on the first for brightness. A mirror keeps
+        its own display, timer and corner pin; a picture cue cannot be pointed at a mirror, only
+        at the output it shows.
+      </p>
+      <p>
+        <strong>Mask</strong> lays an image over an output's pictures: where it is white they
+        show, where it is black they do not — or by its transparency, with <strong>Mask
+        reads</strong> set so, and turned round with <strong>Invert</strong>. Draw it on the test
+        pattern's grid to mask a set piece or a proscenium. The mask is stretched to the output
+        and pinned with the picture; the timer and test pattern are drawn over it. A mirror with
+        no mask of its own shows its source's. A mask that cannot be read is said on the output
+        and the pictures are drawn unmasked.
       </p>
     </section>
 

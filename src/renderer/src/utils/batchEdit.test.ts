@@ -5,7 +5,7 @@ import { batchPatches, canTarget, editsAudio, renumbered, targetingBlock } from 
 import { createCue } from './cueDefaults'
 import { editFromDraft } from '../components/cue-list/BatchEditDialog'
 import { useStore } from '../store'
-import type { AudioCue, Cue, FadeCue, GroupCue, StopCue } from '../../../shared/cue'
+import type { AudioCue, Cue, FadeCue, StopCue } from '../../../shared/cue'
 
 function cue(type: Cue['type'], id: string, patch: Partial<Cue> = {}): Cue {
   return { ...createCue(type, id), id, name: `Cue ${id}`, ...patch } as Cue
@@ -88,29 +88,32 @@ describe('targetingBlock', () => {
   it('aims one fade at one sound, to silence and stopping it there', () => {
     const [fade] = targetingBlock('fade', [music], '9') as FadeCue[]
     expect(fade).toMatchObject({
-      type: 'fade', number: '9', name: 'Fade out Walk-in', targetCueId: 'a1',
+      type: 'fade', number: '9', name: 'Fade out Walk-in', targetCueIds: ['a1'],
       fadeProperty: 'volume', targetValue: 0, stopTargetWhenDone: true
     })
+    expect('targetCueId' in fade).toBe(false)
   })
 
-  it('makes one GO of several: a timeline group with a cue aimed at each, all at zero', () => {
+  it('makes one cue of several: one row, one GO, aimed at each in list order', () => {
     const block = targetingBlock('stop', [music, hold, sting], '12')
-    const [group, ...children] = block as [GroupCue, ...StopCue[]]
-    expect(group).toMatchObject({ type: 'group', mode: 'timeline', number: '12', name: 'Stop 3 cues', parentId: null })
-    expect(children.map(child => [child.number, child.targetCueId, child.parentId, child.timelineOffset])).toEqual([
-      ['12.1', 'a1', group.id, 0],
-      ['12.2', 'w1', group.id, 0],
-      ['12.3', 'a2', group.id, 0]
-    ])
+    expect(block).toHaveLength(1)
+    const [stop] = block as StopCue[]
+    expect(stop).toMatchObject({ type: 'stop', number: '12', name: 'Stop 3 cues', parentId: null, targetCueIds: ['a1', 'w1', 'a2'] })
+    // Not "all": the list is what it stops.
+    expect('targetCueId' in stop).toBe(false)
   })
 
-  it('aims a fade at sounds only, and a stop at anything that runs', () => {
+  it('aims a fade at what has a level, and a stop at anything that runs', () => {
     expect(canTarget('fade', hold)).toBe(false)
+    expect(canTarget('fade', cue('light', 'l1'))).toBe(true)
+    expect(canTarget('fade', cue('group', 'g1'))).toBe(true)
     expect(canTarget('stop', hold)).toBe(true)
     expect(canTarget('stop', note)).toBe(false)
     expect(targetingBlock('fade', [hold, note], '1')).toEqual([])
-    // Of a mixed set the fade takes the one sound, as a single cue rather than a group of one.
-    expect(targetingBlock('fade', [hold, music], '1').map(made => made.type)).toEqual(['fade'])
+    // Of a mixed set the fade takes the one sound.
+    const [fade] = targetingBlock('fade', [hold, music], '1') as FadeCue[]
+    expect(fade.targetCueIds).toEqual(['a1'])
+    expect(fade.name).toBe('Fade out Walk-in')
   })
 })
 

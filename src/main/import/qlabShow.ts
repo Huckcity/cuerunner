@@ -139,6 +139,8 @@ export interface QLabCue {
   /** What a fade fades to: the master level, and the pan its first two outputs make. */
   fadeTo?: { master: number | null; pan: number | null }
   stopTargetWhenDone?: boolean
+  /** A Load cue's time into its target, seconds, where QLab said it. */
+  loadAt?: number
   /** A group's mode: 1 start first and enter, 2 start first, 3 timeline, 4 random, 6 playlist. */
   groupMode?: number
   children?: QLabCue[]

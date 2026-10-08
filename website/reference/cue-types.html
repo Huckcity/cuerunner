@@ -61,7 +61,7 @@
             <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
             <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
             <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
-            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages, a key on this machine or a time of day that fire this cue. See <a href="./control.html#triggers">control</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -93,7 +93,7 @@
     </section>
 
     <section class="panel reveal delay-2" id="timing">
-      <h2>Wait, Fade, Stop and Devamp</h2>
+      <h2>Wait, Fade, Stop, Devamp and Control</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Fields</th></tr></thead>
@@ -104,15 +104,19 @@
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio, video, image or text cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic), <strong>Shape</strong> (a preset or a drawn curve that plays in place of the curve — on a sound, a light and a picture alike) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
+              <td><strong>Targets</strong> — any number of audio, video, image, text, camera, Light or group cues, all faded together on one time and curve; a group's fade reaches every cue inside it, however deep. <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> or <strong>geometry only</strong> for a picture — a video has all of them, an image, text or camera only the picture's; a Light cue's is its intensity; a picture fade's <strong>Move the picture</strong> ticks the position, scale, rotation and crop it moves, each to its own target, from wherever each picture is when the fade starts), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic), <strong>Shape</strong> (a preset or a drawn curve that plays in place of the curve — on every target and every route: a sound, a light, a picture's opacity and its geometry alike) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue. A show saved when a fade named one cue opens with that cue as its one target, and is saved as it was until its targets are edited.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
-              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
+              <td><strong>Target</strong> — <strong>All cues</strong>, or <strong>These cues</strong>: any set of cues, a group stopped whole and before the rest — <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
               <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
+            </tr>
+            <tr>
+              <td><strong>Control</strong></td>
+              <td><strong>Action</strong> and <strong>Targets</strong>: <strong>Start</strong> (each target where it is, as its own GO would; a disarmed one, or one in a disarmed list, is not started and the log says so), <strong>Stop</strong> (at once, a group whole), <strong>Pause</strong> / <strong>Resume</strong> (each playing audio or video cue, and those inside a group), <strong>Load</strong> (readies each target to start <strong>Load to</strong> seconds into itself the next time it fires — its file decoded, a picture opened on its output — or moves a playing audio or video cue there now), <strong>Reset</strong> (stops it, forgets its load, puts a playlist back at its first child and a random group's draw afresh), <strong>Go to</strong> (the playhead of the first target's own list to it — that list's, whichever list is in front; nothing fires) and <strong>Arm</strong> / <strong>Disarm</strong> (an edit of the show, with an undo). Targets may be in any cue list. It completes at once, never acts on itself, and with no target does nothing and says so. QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues import as Control cues.</td>
             </tr>
           </tbody>
         </table>
@@ -120,7 +124,7 @@
     </section>
 
     <section class="panel reveal delay-2" id="pictures">
-      <h2>Video, Image and Text</h2>
+      <h2>Video, Image, Text and Camera</h2>
       <p>
         The picture cues. Each shows on a video output (see <a href="./settings.html#outputs">Outputs</a>)
         and carries the <strong>Picture</strong> fields; each has its own tab for what it shows,
@@ -141,7 +145,10 @@
             <tr><td>Position</td><td>0%, 0%</td><td>The picture's centre, right of and below the output's centre, as a share of its width and height.</td></tr>
             <tr><td>Scale</td><td>100%</td><td>A multiple of the fitted size, 1% to 1000%.</td></tr>
             <tr><td>Rotate</td><td>0°</td><td>Clockwise, about the picture's own centre.</td></tr>
-            <tr><td>Crop</td><td>0%</td><td>Video and image: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Crop</td><td>0%</td><td>Video, image and camera: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Blend</td><td>Normal</td><td>How the picture is laid over what is behind it: Normal, Multiply, Screen, Overlay, Darken, Lighten, Colour dodge, Colour burn, Hard light, Soft light, Difference, Exclusion, Add or Subtract, at the picture's opacity. The same on the GPU and the 2D fallback. Applies at once while it is up.</td></tr>
+            <tr><td>Next GO</td><td>the show's default</td><td><strong>Takes it down</strong> — over its own fade out — on the next GO, whatever that GO fires; <strong>Leaves it up</strong>; or the show's default (the Outputs panel's <strong>Next GO</strong>, off unless set). A GO from a trigger or a desk counts, but only a GO in the picture's own cue list; a picture the GO's own crossfade is dissolving is left to the dissolve.</td></tr>
+            <tr><td>Keyframes</td><td>none</td><td>Up to 32 places the picture moves to over its own play: each a time from its first frame (pauses taken out), a position, scale, rotation and crop, and how it is reached — Linear, Ease in, Ease out, Ease in and out, or Jump. From the cue's own geometry at nought; it stays at the last.</td></tr>
           </tbody>
         </table>
       </div>
@@ -160,6 +167,10 @@
             <tr>
               <td><strong>Text</strong></td>
               <td><strong>Text</strong> (one block, new lines kept), <strong>Font</strong> (IBM Plex Sans; a font this computer does not have falls back), <strong>Size</strong> (96 px, in the output's own pixels), <strong>Colour</strong> (white), <strong>Bold</strong>, <strong>Italic</strong>, <strong>Position</strong> (one of nine; centre) and <strong>Shown for</strong>.</td>
+            </tr>
+            <tr>
+              <td><strong>Camera</strong></td>
+              <td><strong>Source</strong>: <strong>A camera on this machine</strong> (a capture device the outputs can see — webcam, USB, HDMI capture; the show keeps its name, this computer its exact device) or <strong>A network stream</strong> with an <strong>Address</strong> (HTTP video, HLS <code>.m3u8</code> or MJPEG; a login in the address is passed on; RTSP is refused). Fills its output (Size to <strong>Fill</strong>) and runs until it is stopped. A camera that is not connected is said across the output and on its card, and comes up when it is plugged in; with no camera chosen, or an RTSP address, the cue fails and says why.</td>
             </tr>
           </tbody>
         </table>
@@ -222,7 +233,7 @@
             </tr>
             <tr>
               <td><strong>OSC</strong></td>
-              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false. <strong>Send now</strong> sends the message from the inspector without running the cue — the check that the console is listening — and says whether it left.</td>
+              <td>One message or several, sent in order on GO: each <strong>Send to</strong> one of the show's <a href="./settings.html#network">OSC patches</a> or its own <strong>Host</strong> and <strong>Port</strong>, an <strong>Address</strong>, and arguments typed as integer, float, string, true or false — the type goes out as written. A message whose patch was deleted is not sent and the run says which; the rest still go. <strong>Send now</strong> sends them from the inspector without running the cue — the check that the console is listening — and says whether they left.</td>
             </tr>
             <tr>
               <td><strong>Network</strong></td>

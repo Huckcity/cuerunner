@@ -30,6 +30,9 @@ import { AuditionButton } from '../audio/AuditionButton'
 import { visualCues } from '../../engine/visualCues'
 import { cueNameFromFile } from '../../utils/cueDefaults'
 import { formatDuration } from '../../utils/cueDefaults'
+import { PictureCompositing, PictureKeyframes } from './PictureMotion'
+import { CameraInspector } from './CameraInspector'
+import type { CameraCue } from '../../../../shared/visual'
 import './VisualInspector.css'
 
 // The picture cues' tabs. Every one of them shares the Picture tab — which output, which
@@ -327,6 +330,12 @@ function DisplayTime({ cue }: { cue: ImageCue | TextCue }) {
   )
 }
 
+/** A live picture: its source on its own tab, and the Picture tab every picture shares. */
+export function CameraCueInspector({ cue, tab }: { cue: CameraCue; tab: string }) {
+  if (tab === 'Picture') return <PictureTab cue={cue} />
+  return <CameraInspector cue={cue} />
+}
+
 export function TextInspector({ cue, tab }: { cue: TextCue; tab: string }) {
   const set = useSet(cue)
   if (tab === 'Picture') return <PictureTab cue={cue} />
@@ -433,6 +442,7 @@ function PictureTab({ cue }: { cue: VisualCue }) {
           <span className="inspector-readout">{cue.crossfade ? 'dissolves from what is on the output' : 'fades up over it'}</span>
         </div>
       )}
+      <PictureCompositing cue={cue} />
       <div className="field-section-title">Geometry</div>
       {cue.type !== 'text' && (
         <div className="field-row">
@@ -474,6 +484,7 @@ function PictureTab({ cue }: { cue: VisualCue }) {
         <label>Geometry</label>
         <button className="inspector-btn" onClick={() => set({ geometry: defaultGeometry() })}>Reset geometry</button>
       </div>
+      <PictureKeyframes cue={cue} />
     </div>
   )
 }

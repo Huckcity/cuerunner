@@ -694,6 +694,18 @@ void Mixer::apply(const Command& cmd) {
       Voice* voice = findVoice(cmd.cueId);
       if (voice != nullptr) {
         double target = cmd.positionMs * static_cast<double>(voice->sampleRate) / 1000.0;
+        if (voice->sliceCount > 0) {
+          // A sliced voice moves to the slice that holds the place asked for, at its first
+          // pass, so a load to a time inside a later slice plays on from that slice.
+          const VoiceSlice* slices = slicesOf(*voice);
+          int index = 0;
+          while (index < voice->sliceCount - 1 && slices[index].endFrame <= target) index++;
+          voice->sliceIndex = index;
+          voice->slicePlays = 0;
+          voice->sliceRelease = false;
+          voice->segmentStartFrame = slices[index].startFrame;
+          voice->segmentEndFrame = slices[index].endFrame;
+        }
         if (target < voice->segmentStartFrame) target = voice->segmentStartFrame;
         if (target > voice->segmentEndFrame) target = voice->segmentEndFrame;
         voice->position = target;

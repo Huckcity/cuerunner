@@ -20,11 +20,12 @@ import { MicInspector } from './MicInspector'
 import { MidiFileInspector } from './MidiFileInspector'
 import { LightInspector, LightTrackingTab } from '../lighting/LightInspector'
 import { TimecodeInspector } from './TimecodeInspector'
-import { VideoInspector, ImageInspector, TextInspector } from './VisualInspector'
+import { ControlInspector } from './ControlInspector'
+import { VideoInspector, ImageInspector, TextInspector, CameraCueInspector } from './VisualInspector'
 import { InputInspector } from './InputInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, InputCue
+  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, CameraCue, ControlCue, InputCue
 } from '../../../../shared/cue'
 import type { MidiFileCue } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
@@ -55,6 +56,8 @@ const TYPE_TABS: Record<string, string[]> = {
   video: ['Basics', 'Video', 'Picture', 'Sound'],
   image: ['Basics', 'Image', 'Picture'],
   text: ['Basics', 'Text', 'Picture'],
+  camera: ['Basics', 'Camera', 'Picture'],
+  control: ['Basics', 'Control'],
   input: ['Basics', 'Live Input']
 }
 
@@ -87,6 +90,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
     )
   }
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
+  if (tab === 'Control') return <ControlInspector cue={cue as ControlCue} />
   if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   if (tab === 'Show Control') return <MscInspector cue={cue as MscCue} />
   if (tab === 'MIDI File' || tab === 'Channels') return <MidiFileInspector cue={cue as MidiFileCue} tab={tab} />
@@ -127,6 +131,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (cue.type === 'video') return <VideoInspector cue={cue as VideoCue} tab={tab} />
   if (cue.type === 'image') return <ImageInspector cue={cue as ImageCue} tab={tab} />
   if (cue.type === 'text') return <TextInspector cue={cue as TextCue} tab={tab} />
+  if (cue.type === 'camera') return <CameraCueInspector cue={cue as CameraCue} tab={tab} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

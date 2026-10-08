@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, protocol, screen, shell, Menu } from 'electron'
+import { app, BrowserWindow, crashReporter, net, protocol, screen, session, shell, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -14,13 +14,24 @@ import { refuseNavigation } from './safety/navigation'
 import { placeWindow, readWindowState, saveWindowState } from './windowState'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
+import { startUpdates, stopUpdates } from './update/main'
 import { MEDIA_SCHEME_PRIVILEGES, installMediaProtocol } from './output/mediaProtocol'
-import { existingOutputManager, registerOutputWindowHandlers } from './output/ipc'
+import { existingOutputManager, registerOutputWindowHandlers, streamAllowance } from './output/ipc'
 import { isOutputWindow } from './output/OutputManager'
+import { STREAM_SCHEME_PRIVILEGES, installStreamProtocol } from './output/streamProtocol'
+import { fakeCameraSwitches, installCameraPermissions } from './output/cameraAccess'
 
-// The scheme pictures are read through has to be privileged before the app is ready —
-// Electron's rule — so it is declared here, at load, and answered once the app is up.
-protocol.registerSchemesAsPrivileged([MEDIA_SCHEME_PRIVILEGES])
+// The schemes pictures are read through have to be privileged before the app is ready —
+// Electron's rule — so they are declared here, at load, and answered once the app is up: the
+// show's media files, and a camera cue's network stream.
+protocol.registerSchemesAsPrivileged([MEDIA_SCHEME_PRIVILEGES, STREAM_SCHEME_PRIVILEGES])
+
+// A development build told to use Chromium's fake camera gets it before Chromium starts; a
+// packaged build never reads the switch (src/main/output/cameraAccess.ts).
+for (const [name, value] of fakeCameraSwitches(app.isPackaged, process.env)) {
+  if (value === undefined) app.commandLine.appendSwitch(name)
+  else app.commandLine.appendSwitch(name, value)
+}
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -366,6 +377,9 @@ app.whenReady().then(() => {
   
   createMenu()
   installMediaProtocol(protocol)
+  installStreamProtocol(protocol, streamAllowance, (url, init) => net.fetch(url, init))
+  // A capture device is an output's to open, for a Camera cue, and nobody else's.
+  installCameraPermissions(session.defaultSession)
   registerIpcHandlers()
   registerOutputWindowHandlers()
   // The engine comes up with the app rather than with the first cue, so a device that
@@ -400,8 +414,12 @@ app.whenReady().then(() => {
     // A MIDI file still playing at quit lets go of its notes on the way out: a port outlives
     // the app that held it, and a synth left with a chord down drones until someone finds it.
     midiFiles.stopAll()
+    stopUpdates()
   })
   createWindow()
+  // The launch check waits for the window and a show; the daily one follows it. Each is
+  // skipped while checks are off or locked out, and none of them downloads anything.
+  startUpdates()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().every(win => isOutputWindow(win))) createWindow()
   })

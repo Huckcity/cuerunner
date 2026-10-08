@@ -22,6 +22,10 @@
 //                           is main's scheme for the media files a show names, and serves
 //                           nothing else — src/main/output/mediaProtocol.ts).
 //   media-src               the same scheme, for a video cue's file in an output.
+//   cuerunner-stream:       a camera cue's network stream, in img-src (MJPEG) and media-src
+//                           (video): main fetches it from the camera a cue names and nothing
+//                           else (src/main/output/streamProtocol.ts) — the page itself still
+//                           reaches nothing off the machine.
 //   connect-src 'self'      the window makes no requests of its own: network cues, OSC and
 //                           MIDI all leave from the main process.
 //   object-src, base-uri, form-action 'none'   nothing the app uses, so nothing is allowed.
@@ -29,8 +33,8 @@ export const RENDERER_CONTENT_POLICY_DIRECTIVES: Readonly<Record<string, string>
   'default-src': "'self'",
   'script-src': "'self'",
   'style-src': "'self' 'unsafe-inline'",
-  'img-src': "'self' data: cuerunner-media:",
-  'media-src': "'self' cuerunner-media:",
+  'img-src': "'self' data: cuerunner-media: cuerunner-stream:",
+  'media-src': "'self' cuerunner-media: cuerunner-stream:",
   'font-src': "'self' data:",
   'connect-src': "'self'",
   'worker-src': "'self'",

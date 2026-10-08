@@ -29,7 +29,8 @@ export const SETTINGS_SECTIONS = [
   { tab: 'wireless', anchor: 'wireless' },
   { tab: 'redundancy', anchor: 'backup' },
   { tab: 'timecode', anchor: 'timecode' },
-  { tab: 'license', anchor: 'license' }
+  { tab: 'license', anchor: 'license' },
+  { tab: 'updates', anchor: 'updates' }
 ]
 
 /**
@@ -220,7 +221,7 @@ export const REFERENCE = [
             <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
             <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
             <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
-            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages, a key on this machine or a time of day that fire this cue. See <a href="./control.html#triggers">control</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -252,7 +253,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="timing">
-      <h2>Wait, Fade, Stop and Devamp</h2>
+      <h2>Wait, Fade, Stop, Devamp and Control</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Fields</th></tr></thead>
@@ -263,15 +264,19 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio, video, image or text cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic), <strong>Shape</strong> (a preset or a drawn curve that plays in place of the curve — on a sound, a light and a picture alike) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
+              <td><strong>Targets</strong> — any number of audio, video, image, text, camera, Light or group cues, all faded together on one time and curve; a group's fade reaches every cue inside it, however deep. <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> or <strong>geometry only</strong> for a picture — a video has all of them, an image, text or camera only the picture's; a Light cue's is its intensity; a picture fade's <strong>Move the picture</strong> ticks the position, scale, rotation and crop it moves, each to its own target, from wherever each picture is when the fade starts), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic), <strong>Shape</strong> (a preset or a drawn curve that plays in place of the curve — on every target and every route: a sound, a light, a picture's opacity and its geometry alike) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue. A show saved when a fade named one cue opens with that cue as its one target, and is saved as it was until its targets are edited.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
-              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
+              <td><strong>Target</strong> — <strong>All cues</strong>, or <strong>These cues</strong>: any set of cues, a group stopped whole and before the rest — <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
               <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
+            </tr>
+            <tr>
+              <td><strong>Control</strong></td>
+              <td><strong>Action</strong> and <strong>Targets</strong>: <strong>Start</strong> (each target where it is, as its own GO would; a disarmed one, or one in a disarmed list, is not started and the log says so), <strong>Stop</strong> (at once, a group whole), <strong>Pause</strong> / <strong>Resume</strong> (each playing audio or video cue, and those inside a group), <strong>Load</strong> (readies each target to start <strong>Load to</strong> seconds into itself the next time it fires — its file decoded, a picture opened on its output — or moves a playing audio or video cue there now), <strong>Reset</strong> (stops it, forgets its load, puts a playlist back at its first child and a random group's draw afresh), <strong>Go to</strong> (the playhead of the first target's own list to it — that list's, whichever list is in front; nothing fires) and <strong>Arm</strong> / <strong>Disarm</strong> (an edit of the show, with an undo). Targets may be in any cue list. It completes at once, never acts on itself, and with no target does nothing and says so. QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues import as Control cues.</td>
             </tr>
           </tbody>
         </table>
@@ -279,7 +284,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="pictures">
-      <h2>Video, Image and Text</h2>
+      <h2>Video, Image, Text and Camera</h2>
       <p>
         The picture cues. Each shows on a video output (see <a href="./settings.html#outputs">Outputs</a>)
         and carries the <strong>Picture</strong> fields; each has its own tab for what it shows,
@@ -300,7 +305,10 @@ export const REFERENCE = [
             <tr><td>Position</td><td>0%, 0%</td><td>The picture's centre, right of and below the output's centre, as a share of its width and height.</td></tr>
             <tr><td>Scale</td><td>100%</td><td>A multiple of the fitted size, 1% to 1000%.</td></tr>
             <tr><td>Rotate</td><td>0°</td><td>Clockwise, about the picture's own centre.</td></tr>
-            <tr><td>Crop</td><td>0%</td><td>Video and image: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Crop</td><td>0%</td><td>Video, image and camera: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Blend</td><td>Normal</td><td>How the picture is laid over what is behind it: Normal, Multiply, Screen, Overlay, Darken, Lighten, Colour dodge, Colour burn, Hard light, Soft light, Difference, Exclusion, Add or Subtract, at the picture's opacity. The same on the GPU and the 2D fallback. Applies at once while it is up.</td></tr>
+            <tr><td>Next GO</td><td>the show's default</td><td><strong>Takes it down</strong> — over its own fade out — on the next GO, whatever that GO fires; <strong>Leaves it up</strong>; or the show's default (the Outputs panel's <strong>Next GO</strong>, off unless set). A GO from a trigger or a desk counts, but only a GO in the picture's own cue list; a picture the GO's own crossfade is dissolving is left to the dissolve.</td></tr>
+            <tr><td>Keyframes</td><td>none</td><td>Up to 32 places the picture moves to over its own play: each a time from its first frame (pauses taken out), a position, scale, rotation and crop, and how it is reached — Linear, Ease in, Ease out, Ease in and out, or Jump. From the cue's own geometry at nought; it stays at the last.</td></tr>
           </tbody>
         </table>
       </div>
@@ -319,6 +327,10 @@ export const REFERENCE = [
             <tr>
               <td><strong>Text</strong></td>
               <td><strong>Text</strong> (one block, new lines kept), <strong>Font</strong> (IBM Plex Sans; a font this computer does not have falls back), <strong>Size</strong> (96 px, in the output's own pixels), <strong>Colour</strong> (white), <strong>Bold</strong>, <strong>Italic</strong>, <strong>Position</strong> (one of nine; centre) and <strong>Shown for</strong>.</td>
+            </tr>
+            <tr>
+              <td><strong>Camera</strong></td>
+              <td><strong>Source</strong>: <strong>A camera on this machine</strong> (a capture device the outputs can see — webcam, USB, HDMI capture; the show keeps its name, this computer its exact device) or <strong>A network stream</strong> with an <strong>Address</strong> (HTTP video, HLS <code>.m3u8</code> or MJPEG; a login in the address is passed on; RTSP is refused). Fills its output (Size to <strong>Fill</strong>) and runs until it is stopped. A camera that is not connected is said across the output and on its card, and comes up when it is plugged in; with no camera chosen, or an RTSP address, the cue fails and says why.</td>
             </tr>
           </tbody>
         </table>
@@ -381,7 +393,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>OSC</strong></td>
-              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false. <strong>Send now</strong> sends the message from the inspector without running the cue — the check that the console is listening — and says whether it left.</td>
+              <td>One message or several, sent in order on GO: each <strong>Send to</strong> one of the show's <a href="./settings.html#network">OSC patches</a> or its own <strong>Host</strong> and <strong>Port</strong>, an <strong>Address</strong>, and arguments typed as integer, float, string, true or false — the type goes out as written. A message whose patch was deleted is not sent and the run says which; the rest still go. <strong>Send now</strong> sends them from the inspector without running the cue — the check that the console is listening — and says whether they left.</td>
             </tr>
             <tr>
               <td><strong>Network</strong></td>
@@ -510,7 +522,10 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. The port is Cuerunner's alone: one another program holds — QLab, a second Cuerunner — is refused and said here and once in the log (<code>EADDRINUSE</code>), rather than shared with it in silence. It is a status, not an alarm: a second show on the machine is not the stage going wrong.</td></tr>
+            <tr><td>↳ Network interface</td><td>any</td><td>This machine's, not the show's. <strong>Listen on</strong> binds the port to one interface; <strong>Send from</strong> sends OSC cues out of one. An interface that has gone is said, and the port opens on every interface until it is back.</td></tr>
+            <tr><td>↳ Feedback</td><td>off, 127.0.0.1:53001, 10 Hz</td><td><strong>Push state</strong> sends the playhead, what is running and its progress to <strong>Send to</strong> : <strong>Port</strong>, progress <strong>Progress (Hz)</strong> times a second (0–30). Remotes can also ask for it themselves. See <a href="control.html#feedback">feedback</a>.</td></tr>
+            <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
             <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
             <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
             <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
@@ -578,6 +593,9 @@ export const REFERENCE = [
             <tr><td>Soft edge</td><td>show</td><td>0%</td><td>Fades each edge to black over a share of the frame, for overlapping projectors. <strong>Edge curve</strong> (1) bends the ramp.</td></tr>
             <tr><td>Identify</td><td>—</td><td>—</td><td>Draws every output's name across it for three seconds.</td></tr>
             <tr><td>Floating timer</td><td>computer</td><td>Off</td><td>A small always-on-top window counting the time of day, the show clock or the cue remaining.</td></tr>
+            <tr><td>Shows</td><td>show</td><td>Its own pictures</td><td>Or <strong>the same as</strong> another output: a mirror, showing that output's pictures as it composes them, at its size — a confidence monitor, a stacked projector. It keeps its own display, timer and corner pin; a picture cue cannot name a mirror.</td></tr>
+            <tr><td>Mask</td><td>show</td><td>none</td><td>An image laid over the output's pictures, stretched to it: <strong>Mask reads</strong> its brightness (white shows) or its transparency (opaque shows), and <strong>Invert</strong> turns it round. Drawn before the corner pin, under the timer and test pattern. A mirror with no mask of its own shows its source's. Its file is kept by its path, and is not carried into a bundle.</td></tr>
+            <tr><td>Next GO</td><td>show</td><td>off</td><td>On, every picture whose cue leaves it to the show is taken down on the next GO.</td></tr>
           </tbody>
         </table>
       </div>
@@ -617,6 +635,55 @@ ${table(['Row', 'What it shows'], LICENSE_ROWS.map(row => [row.label, row.prose]
         tab says which day it ran out. The cue stack and the shows keep working either way.
       </p>
 ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.prose]))}
+    </section>
+
+    <section class="panel reveal delay-3" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Newer versions of Cuerunner, and when this machine may look for them. Kept on the computer,
+        not in the show, and free. A check only asks whether there is something newer; nothing is
+        downloaded until you press <strong>Download</strong>, nothing is installed until you press
+        <strong>Restart now</strong> or quit, and neither happens while anything in the show is
+        running. The <a href="../guides/running.html#updates">guide</a> walks it through.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>This version</td><td>—</td><td>The version running, and how it was installed: Windows installer, macOS app, AppImage, .deb package, or a development build run from source.</td></tr>
+            <tr><td>Check now</td><td>—</td><td>Asks the update feed now, and says what it found beside the button: up to date, a newer version with its notes, or that the server could not be reached. Refused, with the reason, during the show hours or in Show Mode with a show open.</td></tr>
+            <tr><td>Check automatically</td><td>on</td><td>Checks twenty seconds after launch and then once a day. A check that cannot reach the server says nothing at all — a show machine with no network is an ordinary machine. Off, only <strong>Check now</strong> checks.</td></tr>
+            <tr><td>Show hours</td><td>off, 18:00–23:30</td><td>No checks and no downloads between <strong>From</strong> and <strong>To</strong>, by this computer's clock. A window that ends before it starts runs past midnight.</td></tr>
+            <tr><td>In Show Mode</td><td>on</td><td>No checks while a show file is open in Show Mode.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What an update offered on this machine can say:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>It says</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td>Cuerunner <em>x.y.z</em> is available.</td><td>A newer release is published. <strong>Release notes</strong> shows every version between this one and it; <strong>Download</strong> fetches it; <strong>Later</strong> puts the bar away until the next launch. The bar is never drawn in Show Mode.</td></tr>
+            <tr><td>Held: something in the show is running.</td><td>A download or a restart was asked for while a cue was running, paused or waiting, or while sound or a MIDI file was playing. Nothing was fetched or installed; ask again once the show is idle. A cue started while a download is under way stops the download the same way.</td></tr>
+            <tr><td>Refused: the download did not match the checksum its release published…</td><td>The bytes that arrived are not the bytes the release's feed names (SHA-512). They were deleted, and nothing was installed.</td></tr>
+            <tr><td>Refused: the update is not signed by the publisher…</td><td>Windows checks that the new installer is signed by the publisher this copy was signed by, and macOS that the new app carries a valid signature. A download that fails either is deleted, and nothing was installed.</td></tr>
+            <tr><td>Cuerunner <em>x.y.z</em> is ready.</td><td>Downloaded and checked. It installs when Cuerunner quits — the one thing that happens without a press — or now with <strong>Restart now</strong>, which asks you to save the show first. The installer runs silently and starts the new version.</td></tr>
+            <tr><td>…installed from the .deb package, which cannot replace itself</td><td>A <code>.deb</code> belongs to the package manager that installed it: the app says when there is a newer version and <strong>Open the download page</strong> takes you to it. Install the new <code>.deb</code> over the old one; your settings stay.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The feed is <code>pub.cuerunner.app/latest/</code> — <code>latest.yml</code> for Windows,
+        <code>latest-mac.yml</code> for macOS (a Mac updates from a zip of the app rather than
+        the dmg) and <code>latest-linux.yml</code> for the AppImage — and each one names the
+        release's own files under <code>versions/</code>. The settings and the version this
+        machine last ran are kept in <code>updates.json</code> in the app's data folder.
+      </p>
+      <p>
+        After an update, the first launch shows <strong>What's new</strong>: the notes of every
+        version installed since this machine last ran Cuerunner, newest first — skip two releases
+        and you read both. It is shown once.
+      </p>
     </section>
 
     <section class="panel reveal delay-3" id="show">
@@ -671,14 +738,16 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
-            <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue and move on to the next. With nothing selected, as after the last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything, at once or over the show's STOP fade; a second press during the fade cuts it</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue of the list in front and move on to the next cue of that list. With nothing selected, as after the list's last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>STOP — stop the list in front, at once or over the show's STOP fade; a second press during the fade cuts it. Where no other list is running, that is everything</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
             <tr><td><kbd>P</kbd></td><td>PAUSE — hold the whole show where it stands, and let it go on. While it is held GO waits; STOP and PANIC end the hold</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>Esc</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is busy</td></tr>
             <tr><td><kbd>F5</kbd></td><td>Show mode — the show in large type, read-only; F5 again to edit</td><td>Anywhere a panel is not open</td></tr>
             <tr><td><kbd>F6</kbd></td><td>Cart — the list as a wall of buttons, each playing its cue; F6 again for the list</td><td>Anywhere a panel is not open</td></tr>
             <tr><td><kbd>1</kbd> … <kbd>9</kbd>, <kbd>0</kbd></td><td>Play the first ten cart tiles</td><td>The cart</td></tr>
+            <tr><td>A tile's own key</td><td>Play that tile — set by right-clicking the tile and pressing the key</td><td>Anywhere except a text field, whichever list is in front</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>Page Down</kbd> / <kbd>Page Up</kbd></td><td>The next or previous cue list tab</td><td>Anywhere a panel is not open</td></tr>
           </tbody>
         </table>
       </div>
@@ -793,8 +862,8 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Address</th><th>Effect</th></tr></thead>
           <tbody>
-            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue fires and the selection moves on.</td></tr>
-            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP: everything is cut where it stands.</td></tr>
+            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue of the list in front fires and the selection moves on.</td></tr>
+            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP, as <kbd>Esc</kbd>: the list in front is cut where it stands — everything, where no other list is running.</td></tr>
             <tr><td><code>/panic</code></td><td>Panic, answered where the engine is, as <code>/cuerunner/panic</code> is.</td></tr>
             <tr><td><code>/pause</code>, <code>/resume</code>, <code>/togglePause</code> (also <code>/pause_toggle</code>)</td><td>Hold the whole show, let it go on, or whichever it is not — as <kbd>P</kbd> does.</td></tr>
             <tr><td><code>/cue/{number}/pause</code>, <code>/resume</code>, <code>/togglePause</code></td><td>Hold one playing audio cue while the rest of the show goes on, and let it go.</td></tr>
@@ -804,6 +873,12 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td><code>/cue/{number}/start</code></td><td>Fire that cue where it is; the selection stays where the operator left it. A disarmed cue is not fired, and the log says so.</td></tr>
             <tr><td><code>/cue/{number}/stop</code></td><td>Stop that cue (and a group's children with it).</td></tr>
             <tr><td><code>/cue/{number}/seek</code> <em>seconds</em></td><td>Move a running audio cue to that many seconds into its region.</td></tr>
+            <tr><td><code>/cue_id/{id}/…</code></td><td>The same verbs, for the cue with that id. QLab counts a cue list as a cue, and so does this: <code>/cue_id/{list id}/go</code> is GO on that list, <code>/stop</code> stops it and <code>/select</code> brings it to the front. A list imported from QLab keeps QLab's id.</td></tr>
+            <tr><td><code>/list/{list}/go</code> (also <code>/cueList/…</code>, <code>/cueLists/…</code>; <code>/start</code>)</td><td>GO on that list's own place, without bringing it to the front. The list is named by its id, its name (any case) or its place among the tabs counting from 1.</td></tr>
+            <tr><td><code>/list/{list}/stop</code></td><td>Stop what is running in that list, and nothing else.</td></tr>
+            <tr><td><code>/list/{list}/select</code></td><td>Bring that list to the front.</td></tr>
+            <tr><td><code>/list/{list}/next</code>, <code>/previous</code></td><td>Move that list's place one cue, without bringing it to the front. Nothing fires.</td></tr>
+            <tr><td><code>/list/{list}/arm</code>, <code>/disarm</code></td><td>Put the list back in the show, or take it out: a disarmed list fires nothing, by GO, trigger or clock.</td></tr>
           </tbody>
         </table>
       </div>
@@ -824,6 +899,54 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
       </p>
     </section>
 
+    <section class="panel reveal delay-1" id="feedback">
+      <h2>Feedback</h2>
+      <p>
+        The port answers questions as well as commands, from the state the window last
+        published, and never fires anything for one. A remote written for QLab is answered
+        the way QLab answers: on <code>/reply/</code> followed by the address it asked, with a
+        JSON document — <code>{"workspace_id", "address", "status": "ok", "data"}</code> —
+        sent back to the address and port it came from. <code>/cue/selected/…</code>,
+        <code>/cue/playhead/…</code>, <code>/cue/{number}/…</code> and
+        <code>/cue_id/{id}/…</code> answer <code>number</code>, <code>name</code>,
+        <code>displayName</code>, <code>type</code>, <code>uniqueID</code>,
+        <code>armed</code>, <code>colorName</code>, <code>notes</code>,
+        <code>isRunning</code>, <code>isPaused</code>, <code>actionElapsed</code>,
+        <code>duration</code> and <code>percentActionElapsed</code>;
+        <code>/runningCues</code>, <code>/runningOrPausedCues</code>,
+        <code>/selectedCues</code>, <code>/cueLists</code> (every list, each with its own cues),
+        <code>/workspaces</code>,
+        <code>/version</code> and <code>/thump</code> answer too. The same address with a
+        value is QLab's setter, and is not answered: a remote does not edit the show. A list
+        is a cue to QLab: <code>/cue_id/{list id}/playbackPosition</code> is that list's own
+        playhead. <code>/updates 1</code> asks for QLab's pushes:
+        <code>/update/workspace/{id}/cueList/{list id}/playbackPosition</code> when any list's
+        playhead moves, and <code>/update/workspace/{id}/cue_id/{id}</code> when a cue starts, stops or
+        is held.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cuerunner's own</th><th>What it carries</th></tr></thead>
+          <tbody>
+            <tr><td><code>/cuerunner/playhead/number</code>, <code>/name</code>, <code>/id</code>, <code>/type</code></td><td>The cue the list in front's GO fires next; empty strings at the end of it.</td></tr>
+            <tr><td><code>/cuerunner/lists/count</code>; <code>/cuerunner/list/{place}/id</code>, <code>/name</code>, <code>/playhead/number</code>, <code>/playhead/name</code>, <code>/playhead/id</code>, <code>/running/count</code></td><td>Every cue list by its place among the tabs, counting from 1 — the place <code>/list/{place}/go</code> names it by — with its own playhead and how many of its cues run. A list that goes is emptied once.</td></tr>
+            <tr><td><code>/cuerunner/running/count</code>, <code>/active</code></td><td>How many cues run, and 1 or 0.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/number</code>, <code>/name</code>, <code>/id</code>, <code>/state</code>, <code>/list</code></td><td>The running cues as slots, in show order, each with the name of the list it runs in. A slot that empties is written once as empty.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/progress</code>, <code>/elapsed</code>, <code>/remaining</code>, <code>/duration</code></td><td>0–1 and seconds, at the feedback's rate; −1 where nobody can say (a loop for ever). A freed slot gets one zeroing pulse.</td></tr>
+            <tr><td><code>/cuerunner/cues/count</code>, <code>/cuerunner/cues/options</code></td><td>The list, and a JSON list of <code>[number, "number — name"]</code> a dropdown takes as its values.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        These go to the destination Settings → Network names, and to every remote that sent
+        <code>/cuerunner/feedback/subscribe</code> — to its own port, or to the port it gives
+        as the argument — until it sends <code>/cuerunner/feedback/unsubscribe</code>; sixteen
+        at most, the oldest dropped. <code>/cuerunner/feedback/request</code> sends everything
+        now. A change is pushed at most twenty times a second however fast the show moves, and
+        a playing cue's progress is carried on between the window's updates.
+      </p>
+    </section>
+
     <section class="panel reveal delay-2" id="triggers">
       <h2>What a trigger matches</h2>
       <div class="table-wrap">
@@ -835,6 +958,8 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>MIDI control change</td><td>Port, channel and controller number.</td><td>Value.</td></tr>
             <tr><td>MIDI program change</td><td>Port, channel and program number.</td><td>—</td></tr>
             <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
+            <tr><td>Key</td><td>A key on this machine and its modifiers — <code>F7</code>, <code>Shift+Q</code>, typed or taken with <strong>Record</strong> — while the window has the keyboard and no field or dialog does. A key the app already answers (Space, Esc, P, F5, F6, the arrows, the number row, the menus' shortcuts) is refused with what it does; a key another cue answers is said, and fires both.</td><td>A key held down: it is one press.</td></tr>
+            <tr><td>Time of day</td><td>A time on this machine's clock (<code>19:30</code> or <code>19:30:15</code>) on the days ticked — none is every day. A time that went by while the show was closed or the machine asleep is <strong>skipped and said</strong> in the log, or <strong>fired late</strong> if it is no more than its grace behind (1–60 minutes); either way only the latest is counted.</td><td>—</td></tr>
             <tr><td>Timecode<span class="pro">Pro</span></td><td>The frame of the incoming clock, at the rate it is read at — typed as a label, as seconds from midnight (<code>3610s</code>), or taken from the running clock with <strong>Take</strong>: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
           </tbody>
         </table>
@@ -852,7 +977,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Cue</th><th>What goes out</th></tr></thead>
           <tbody>
-            <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
+            <tr><td>OSC cue</td><td>Each message's address and typed arguments, in order, to its patch's host and port or its own, from the interface Settings → Network names.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>MIDI File cue</td><td>The file's own messages — notes, controllers, programs, bends, pressure and SysEx; never its meta events — at the file's times, through the cue's channel map and transposition, on the cue's port or the show's default output. On a stop: a Note Off for every note it started and Sustain (CC 64) 0 on each channel it used; on PANIC, All Notes Off (CC 123) on those channels too.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
@@ -979,6 +1104,38 @@ await rig.blackout()</code></div>
         and the sACN identity this machine sends as, are the machine's, in
         <code>dmx.json</code> beside the licence.
       </p>
+      <p id="gdtf">
+        <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
+        Patch → Import GDTF file…, part of Cuerunner Pro) is copied into the show like any
+        other type, so the show does not need the file again. Only the archive's
+        <code>description.xml</code> is read — the models and wheel images beside it are
+        not — up to 16 MB of XML, and a description that declares a document type is
+        refused. Each <code>DMXMode</code> becomes a mode, as wide as its highest offset. Each
+        <code>DMXChannel</code> with an offset becomes a parameter: its kind from the
+        attribute of the function it starts on (<code>Dimmer</code>, <code>Pan</code>,
+        <code>Tilt</code>, <code>ColorAdd_R</code> and the other emitters, colour wheels and
+        macros as colour, everything else as other), its label from the attribute's pretty
+        name — with the geometry after it where cells share an attribute — its coarse and
+        fine slots from <code>Offset</code>, and where it rests from the default of its
+        initial function (or, in a GDTF 1.0 file, the channel's own <code>Default</code>).
+        A channel with more than one <code>ChannelFunction</code> keeps each one's name and
+        the share of travel it starts at (<code>DMXFrom</code>), up to 64, and the faders name
+        the one a value is in. A 24- or 32-bit channel is driven on its two most significant
+        bytes and the bytes below are held at zero. A virtual channel (no offset) is left out.
+        Refused, with a sentence: a mode spread over more than one <code>DMXBreak</code>, a
+        channel that overwrites another break, an offset past 512, two channels on one slot,
+        a mode with no DMX channels, more than 32 modes or 128 parameters to a mode.
+      </p>
+      <p>
+        A show with more than one cue list carries a <code>cueLists</code> section: each list's
+        id, name, colour, whether it is a cart, whether it is disarmed, how it follows the
+        clock and its tiles' own keys, in tab order. A cue at the top level of a list other than
+        the main one names it with <code>listId</code>; a cue inside a group never does — it runs
+        in its group's list. A show with only its main list under its own name writes no
+        section and no <code>listId</code>, so a show saved before lists existed opens as one
+        list and saves the bytes it always did. A cue naming a list the file does not have runs
+        in the main list, and the bar across the top says so, the way a grouping repair does.
+      </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping
@@ -988,9 +1145,11 @@ await rig.blackout()</code></div>
       <p>
         Video and image cues store their files the same way, and move with the show the
         same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
-        corner pin and soft edges — written only when the show has one; where each output
-        goes on a computer is kept on that computer, in <code>video-outputs.json</code> beside
-        the licence.
+        corner pin and soft edges, a mirror and a mask — written only when the show has one;
+        where each output goes on a computer is kept on that computer, in
+        <code>video-outputs.json</code> beside the licence. A show whose pictures go on the next
+        GO carries a <code>pictures</code> section; a camera cue carries its camera's name, and
+        each computer keeps the device it picked for that cue in <code>camera-devices.json</code>.
       </p>
       <p>
         A cue whose file has gone says <em>missing</em> where its length should be, and a
@@ -1040,9 +1199,9 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="bundle">
       <h2>The bundle file<span class="pro">Pro</span></h2>
       <p>
-        A <code>.cuerunnerx</code> is the show <em>and</em> its audio as one file: a zip holding
-        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
-        inside it. It opens in any file manager, and its bytes are a function of the show,
+        A <code>.cuerunnerx</code> is the show <em>and</em> its media as one file — the audio,
+        video, image and MIDI files its cues play — a zip holding <code>show.cuerunner</code>
+        and a <code>media/</code> folder, with the showfile pointing inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file.
       </p>
       <p>
@@ -1196,7 +1355,7 @@ await rig.blackout()</code></div>
             </tr>
             <tr>
               <td>A Stop or Fade cue does nothing</td>
-              <td>The cue it was aimed at has been deleted. Its tab shows <em>— not in this show —</em> where the target was, and a Stop cue fired like that is marked <em>failed</em>. Choose another target.</td>
+              <td>A cue it was aimed at has been deleted. Its tab shows <em>— not in this show —</em> in the target list, and a Stop or Fade cue fired like that is marked <em>failed</em> with how many were gone. Remove it and choose another.</td>
             </tr>
             <tr>
               <td>A show control cue does nothing</td>
@@ -1220,7 +1379,15 @@ await rig.blackout()</code></div>
             </tr>
             <tr>
               <td>An output has a red banner across it</td>
-              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card.</td>
+              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card. A banner naming a camera means that camera is not connected (or another program has it); a banner naming a mask means its file could not be read.</td>
+            </tr>
+            <tr>
+              <td>The camera list says to open an output</td>
+              <td>Only an output window may open a camera, so the list comes from one. Add or open an output. On a Mac, allow Cuerunner under Camera in the Mac's Privacy &amp; Security settings.</td>
+            </tr>
+            <tr>
+              <td>A camera cue fails with <em>RTSP streams are not supported</em></td>
+              <td>Cuerunner reads HTTP video, HLS and MJPEG. Most IP cameras serve one of them too: use that address.</td>
             </tr>
             <tr>
               <td>A video plays with no sound</td>
@@ -1272,7 +1439,7 @@ await rig.blackout()</code></div>
         <li>OSC input is UDP only.</li>
         <li>The channel ceiling a desk model states is the number the console publishes rather than a measurement: a show with more channels than the selected model takes is named under the desk connection, with the number, and every channel is sent as it always was. Only the count control stops at it, and a show already larger than the ceiling keeps its own whole range on the dial rather than being trimmed back to it.</li>
         <li>An SQ's membership is written over the desk's own control service — TCP 51326 outbound, with a keepalive datagram to the desk's UDP 51324 — a protocol Allen &amp; Heath publish nothing about, spoken here from frames measured off an SQ-6 on firmware 1.6.1. The desk's own answer to a membership has never been read, so nothing here says a desk has accepted one: what a recall leaves out is worked out against what Cuerunner last sent, not against the desk. The channel mutes ride the MIDI service beside it, on 51325. The session leaves by the desk's own door when the show stops, and one the desk loses without that goodbye leaves it mute until it is reset — said in the log, on the device row and in an alarm, which is why a lost session is not dialled again in a loop.</li>
-        <li>The lighting is DMX over the network, not a console: a patch, faders, groups and Light cues with tracking — no palettes, no command line, no pixel-matrix fixtures, and no fixture library beyond an Open Fixture Library file read in. 64 universes and 2048 fixtures to a show. The packets are held byte for byte to the sACN and Art-Net documents and to a listener on this machine; no hardware node has been part of a run. The tracking sheet reads the Light cues in list order and does not account for what a Stop or Fade cue does at show time.</li>
+        <li>The lighting is DMX over the network, not a console: a patch, faders, groups and Light cues with tracking — no palettes, no command line, no pixel-matrix fixtures, and no fixture library beyond an Open Fixture Library file or a GDTF file read in — a GDTF fixture split over several DMX breaks is refused rather than patched as one. 64 universes and 2048 fixtures to a show. The packets are held byte for byte to the sACN and Art-Net documents and to a listener on this machine; no hardware node has been part of a run. The tracking sheet reads the Light cues in list order and does not account for what a Stop or Fade cue does at show time.</li>
         <li>A redundant pair both send their lights when both are licensed and both have outputs: the standby's levels are not the live machine's, and receivers merging two sources at one priority take the higher of each slot. Give the standby no outputs, or a lower sACN priority.</li>
         <li>The tablet view is read-only by design.</li>
         <li>Cuerunner is distributed outside the app stores, and the release notes say whether a build is signed: Windows warns when an unsigned installer is run, and macOS warns about an unidentified developer at first launch — Gatekeeper refuses such an app on a machine that has not seen it. Each release publishes its digests twice: a <code>SHA256SUMS</code> beside the assets on its release page, naming the files that page carries, and <code>latest/SHA256SUMS</code> on the download host, naming the files the cards link.</li>

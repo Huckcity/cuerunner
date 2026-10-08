@@ -129,6 +129,29 @@ describe('exporting a show as a bundle', () => {
     expect(stored.cues[1].media.path).toBe('media/bows.wav')
   })
 
+  it('carries a MIDI file cue\'s file with the show, and unpacks it where the cue looks', async () => {
+    writeFileSync(join(dir, 'music', 'click.mid'), Buffer.from('MThd\0\0\0\x06\0\0\0\x01\0\x60', 'latin1'))
+    const midiFile = {
+      type: 'midiFile', id: 'm1', number: '1', name: 'Click', colorLabel: 'none', parentId: null,
+      preWait: 0, postWait: 0, timelineOffset: 0, duration: 0, advance: 'none', isArmed: true, notes: '',
+      filePath: join(dir, 'music', 'click.mid'), portName: '', playbackRate: 1, startTime: 0,
+      endTime: null, loopCount: 0, channelMap: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+      transpose: 0, transposeDrums: false
+    } as unknown as Cue
+    const show = workspace([midiFile, audioCue('a1', '2', 'Walk-in', join(dir, 'music', 'walk-in.wav'))])
+
+    const exported = await writeBundle(show, join(dir, 'Press Night.cuerunner'), bundled)
+    expect(exported.missing).toEqual([])
+    const bundle = await readBundle(bundled)
+    expect(bundle.media.map(entry => entry.name)).toEqual(['media/click.mid', 'media/walk-in.wav'])
+
+    const unpacked = await unpackBundle(bundled, join(dir, 'handover'), bundle)
+    expect(unpacked.missingMedia).toEqual([])
+    const click = unpacked.workspace.cues.find(cue => cue.id === 'm1') as unknown as { filePath: string }
+    expect(click.filePath).toBe(join(dir, 'handover', 'media', 'click.mid'))
+    expect(readFileSync(click.filePath)).toEqual(readFileSync(join(dir, 'music', 'click.mid')))
+  })
+
   it('writes the same bytes for the same show', async () => {
     const show = workspace([audioCue('a1', '1', 'Walk-in', join(dir, 'music', 'walk-in.wav'))])
     const first = join(dir, 'first.cuerunnerx')

@@ -182,3 +182,9 @@
 .cart-tile[data-state='post-wait'] .cart-tile-fire,
 .cart-tile[data-state='paused'] .cart-tile-fire { background: var(--bg-prewait-row); }
 .cart-tile[data-armed='false'] .cart-tile-name { color: var(--fg-subtle); text-decoration: line-through; }
+
+/* A tile waiting for its own key: ringed, so the press that comes next has somewhere to go. */
+.cart-tile[data-keying] .cart-tile-fire { box-shadow: 0 0 0 2px var(--accent-blue); }
+
+/* A tile with a key of its own: the key reads brighter than a place's number. */
+.cart-tile[data-own-key] .cart-tile-key { color: var(--fg-primary); }

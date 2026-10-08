@@ -25,7 +25,15 @@ export function useCueEngine() {
       getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName,
       getTriggerGuard: () => useStore.getState().triggerGuard,
       getRunning: () => useStore.getState().running,
-      isPro: () => isPro(useStore.getState().license)
+      isPro: () => isPro(useStore.getState().license),
+      getOscPatches: () => useStore.getState().oscPatches,
+      setArmed: (cueIds, armed) => useStore.getState().updateCues(cueIds, { isArmed: armed }),
+      getCueLists: () => useStore.getState().cueLists,
+      getActiveListId: () => useStore.getState().activeListId,
+      getListPlayhead: listId => useStore.getState().listPlayhead(listId),
+      setListPlayhead: (listId, cueId) => useStore.getState().setListPlayhead(listId, cueId),
+      getPictureSettings: () => useStore.getState().pictures,
+      getVideoOutputs: () => useStore.getState().videoOutputs
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 

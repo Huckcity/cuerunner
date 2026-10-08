@@ -37,7 +37,7 @@ export const NOT_YET_PROVED = '(not yet proved on real hardware)'
  * built from this list, so a type that moves across the line moves the words with it, and the
  * guard reads the list against `CUE_TYPES` minus `PRO_CUE_TYPES`.
  */
-const FREE_CUES = ['audio', 'MIDI', 'MIDI file', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp', 'memo', 'video', 'image', 'text', 'input']
+const FREE_CUES = ['audio', 'MIDI', 'MIDI file', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp', 'memo', 'video', 'image', 'text', 'camera', 'control', 'input']
 
 /** How a count reads at the head of a sentence: "Eleven cue types". Past the last word, the numeral stands. */
 const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty']
@@ -145,7 +145,7 @@ export const PRO_ROWS = [
     pro: {
       identifiers: ['dmx'],
       cues: ['light'],
-      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
+      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, fixture types read from Open Fixture Library and GDTF files, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
     }
   },
   {

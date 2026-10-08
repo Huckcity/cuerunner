@@ -43,6 +43,7 @@ import type { Workspace } from '../../shared/workspace'
 import { builtinFixtureTypes, defaultLightingSettings, type LightingSettings } from '../../shared/dmx'
 import { LIGHTING_SHAPE } from '../../shared/dmxShape'
 import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { CUE_LIST_SHAPE } from '../../shared/cueListsShape'
 
 vi.mock('electron', () => ({
   // Nothing here touches the user-data folder; the serialiser needs no Electron at all.
@@ -127,7 +128,20 @@ const fixture: Required<Workspace> = {
   // Moved from its defaults, as a show that chases a clock carries it.
   timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
   videoOutputs: [createOutput('out-1', 'Stage left')],
-  cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
+  // A second list with every optional field a list can carry, so the walk reaches all of them.
+  cueLists: [
+    { id: 'main', name: 'Main Cue List' },
+    {
+      id: 'sfx', name: 'Effects', color: 'blue', cart: true, disarmed: true,
+      timecode: { enabled: false, offsetFrames: 250 },
+      tileKeys: [{ cueId: 'a2', key: 'q' }]
+    }
+  ],
+  // Moved from its defaults: a show whose pictures go on the next GO.
+  pictures: { stopOnNextGo: true },
+  // A destination the show's OSC cues name, as a show that sends to a desk carries it.
+  oscPatches: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
+  cues: [cue('a1', 'Walk-in'), { ...cue('a2', 'Interval'), listId: 'sfx' }]
 }
 
 /**
@@ -181,6 +195,9 @@ const declared: readonly WorkspaceKey[] = [
   'lighting',
   'timecode',
   'videoOutputs',
+  'cueLists',
+  'pictures',
+  'oscPatches',
   'cues'
 ]
 
@@ -199,14 +216,17 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined, timecode: undefined, videoOutputs: undefined },
+      {
+        ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined,
+        timecode: undefined, videoOutputs: undefined, cueLists: undefined, pictures: undefined, oscPatches: undefined
+      },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
       declared.filter(
         key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' && key !== 'timecode' &&
-          key !== 'videoOutputs'
+          key !== 'videoOutputs' && key !== 'cueLists' && key !== 'pictures' && key !== 'oscPatches'
       )
     )
   })
@@ -442,7 +462,7 @@ describe('the settings-field shape', () => {
 })
 
 /** One cue's own fields, from `CueBase`: what every cue carries, without the optionals. */
-function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'> {
+function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine' | 'listId'> {
   return {
     id,
     number: id,
@@ -494,6 +514,8 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     triggers: [{ id: 't-a1', kind: 'osc', address: '/go' }],
     refire: 'restart',
     scriptLine: 12,
+    // A cue at the top level of a list other than the main one names it.
+    listId: 'sfx',
     trimSilence: true,
     soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false },
     fadeOutDuration: 1500,
@@ -532,6 +554,10 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
       { type: 'f', value: 3.5 },
       { type: 's', value: '/lx/12' },
       { type: 'T', value: true }
+    ],
+    // The list a cue that sends several carries: a message to a patch, with its own arguments.
+    messages: [
+      { patchId: 'p-desk', host: '', port: 0, address: '/eos/cue/12/fire', args: [{ type: 'f', value: 1 }] }
     ]
   },
   wait: { ...cueBase('w1'), type: 'wait' },
@@ -539,9 +565,11 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     ...cueBase('f1'),
     type: 'fade',
     targetCueId: '',
+    targetCueIds: ['a1', 'g1'],
     fadeProperty: 'volume',
     targetValue: 1,
     panTargetValue: -0.5,
+    geometryTarget: { x: 0.25, scale: 0.5, crop: { top: 0, right: 0.1, bottom: 0, left: 0.1 } },
     curve: 'linear',
     stopTargetWhenDone: false
   },
@@ -549,6 +577,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     ...cueBase('s1'),
     type: 'stop',
     targetCueId: 'all',
+    targetCueIds: ['a1'],
     fadeOut: false,
     fadeOutDuration: 0,
     waitForFade: false
@@ -649,7 +678,12 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     holdLastFrame: true,
     volume: 0.8,
     pan: 0,
-    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }]
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }],
+    // The optional picture fields, set, so the walk reads them: a blend, a keyframe list (a list
+    // of objects with an object inside each), and a cue's own stop-on-next-GO.
+    blendMode: 'screen',
+    keyframes: [{ atMs: 2000, x: 0.2, y: 0, scale: 0.8, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 }, easing: 'ease-in-out' }],
+    stopOnNextGo: true
   },
   image: {
     ...cueBase('i1'),
@@ -679,7 +713,34 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     color: '#ffffff',
     bold: true,
     italic: false,
-    position: 'bottom'
+    position: 'bottom',
+    stopOnNextGo: null
+  },
+  camera: {
+    ...cueBase('c1'),
+    type: 'camera',
+    outputId: '',
+    layer: 1,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fill', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    source: 'device',
+    deviceName: 'HD Webcam',
+    url: ''
+  },
+  control: {
+    ...cueBase('ct1'),
+    type: 'control',
+    action: 'load',
+    targetCueIds: ['a1', 'g1'],
+    loadToMs: 12_000,
+    // The two triggers a control cue is as likely as any to carry: a key and a time of day.
+    triggers: [
+      { id: 'tr-key', kind: 'hotkey', key: 'Shift+F7' },
+      { id: 'tr-clock', kind: 'clock', time: '19:30', days: [5, 6], missed: 'fire', graceMinutes: 5 }
+    ]
   },
   input: {
     ...cueBase('in1'),
@@ -702,6 +763,14 @@ describe('the lighting shape', () => {
     // carries and the declaration has not learned fails here, and so does a declared field the
     // rig has not got.
     expect(shapeDifferences(lighting, LIGHTING_SHAPE, 'lighting')).toEqual([])
+  })
+})
+
+describe('the cue lists shape', () => {
+  it('declares every field a cue list carries, with the kind it is written as', () => {
+    for (const list of fixture.cueLists) {
+      expect(shapeDifferences(list, CUE_LIST_SHAPE, `cueLists.${list.id}`)).toEqual([])
+    }
   })
 })
 

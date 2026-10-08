@@ -16,17 +16,23 @@
 import nodePath, { type PlatformPath } from 'node:path'
 import type {
   AudioCue, Cue, CueBase, CueColor, CueType, FadeCue, GroupCue, GroupMode, MidiCue,
-  MidiMessageKind, MscCommand, MscCue, MscFormat, OscArg, OscCue, StopCue, DevampCue, WaitCue
+  MidiMessageKind, MscCommand, MscCue, MscFormat, OscArg, OscCue, StopCue, DevampCue, WaitCue,
+  ControlAction, ControlCue, OscPatch
 } from '../../shared/cue'
 import type { QLabImportNote, QLabTypeCount } from '../../shared/ipc/qlab'
 import { QLAB_TYPE_LABELS, type QLabCue, type QLabKind, type QLabShow } from './qlabShow'
+import { canonicalCueList, MAIN_CUE_LIST_ID, MAIN_CUE_LIST_NAME, type CueListInfo } from '../../shared/cueLists'
 
 /** What the mapping produced: the cue list, and everything the report says about it. */
 export interface MappedShow {
   cues: Cue[]
+  /** The show's lists, in QLab's order: the main one first, then every other list and cart. */
+  cueLists: CueListInfo[]
   types: QLabTypeCount[]
   notes: QLabImportNote[]
   totalCues: number
+  /** QLab's network patches the cues send through, as the show's own OSC patches. */
+  oscPatches: OscPatch[]
 }
 
 /** Why each type with no Cuerunner counterpart is a placeholder, in one line. */
@@ -38,14 +44,7 @@ const NO_COUNTERPART: Partial<Record<QLabKind, string>> = {
   mic: 'Cuerunner has no live-input cue (its Mic cue mutes a radio mic)',
   midifile: 'Cuerunner has no MIDI file cue',
   timecode: 'Cuerunner has no timecode cue',
-  start: 'Cuerunner has no start cue',
-  pause: 'Cuerunner has no pause cue',
-  load: 'Cuerunner has no load cue',
-  reset: 'Cuerunner has no reset cue',
-  goto: 'Cuerunner has no go-to cue',
   target: 'Cuerunner has no target cue: its targets are fixed when the cue is made',
-  arm: 'Cuerunner has no arm cue',
-  disarm: 'Cuerunner has no disarm cue',
   script: 'QLab scripts are AppleScript, which Cuerunner does not run: the script is kept below',
   unknown: 'this is a cue type the import does not know'
 }
@@ -180,6 +179,8 @@ interface Context {
   out: Cue[]
   notes: QLabImportNote[]
   types: Map<string, QLabTypeCount>
+  /** QLab's network patches by name, each made once, as the show's OSC patches. */
+  patches: Map<string, OscPatch>
 }
 
 /** Converts a QLab show into a Cuerunner cue list, with everything the report says about it. */
@@ -192,7 +193,8 @@ export function mapQLabShow(show: QLabShow, newId: IdSource): MappedShow {
     kindOf: new Map(),
     out: [],
     notes: [],
-    types: new Map()
+    types: new Map(),
+    patches: new Map()
   }
 
   // Ids first, across every list, so a fade can target a cue that comes after it or sits
@@ -212,46 +214,47 @@ export function mapQLabShow(show: QLabShow, newId: IdSource): MappedShow {
   }
   show.lists.forEach(list => list.cues.forEach(assign))
 
-  // One list is the running order; Cuerunner runs one. The first list that is not a cart
-  // is the cue list, at the top level, and every other list becomes a disarmed group after
-  // it — kept, numbered and visible, and never fired by a GO meant for the show.
+  // Every QLab list is a list here, each its own tab and its own GO. The first list that is not
+  // a cart is the main list, so a cue that names no list runs where the show's own running
+  // order did; it comes first among the tabs, and the rest follow in QLab's order. A cart is a
+  // cart list: its tiles fire on their own, in the order the cart held them.
   const mainIndex = Math.max(0, show.lists.findIndex(list => !list.cart))
-  const main = show.lists[mainIndex]
-  if (main) {
-    if (main.cart) {
+  const cueLists: CueListInfo[] = []
+  const order = show.lists.length === 0 ? [] : [mainIndex, ...show.lists.map((_, index) => index).filter(index => index !== mainIndex)]
+  for (const index of order) {
+    const list = show.lists[index]
+    const isMain = index === mainIndex
+    // QLab's own id for the list where it can be kept: it is what `/cue_id/{id}/go` from a
+    // remote set up for that show names, and a remote that worked there should work here.
+    const own = list.uniqueID
+    const id = isMain
+      ? MAIN_CUE_LIST_ID
+      : /^[A-Za-z0-9-]{1,64}$/.test(own) && !taken.has(own) && own !== MAIN_CUE_LIST_ID ? own : uniqueFrom(newId, taken)
+    taken.add(id)
+    const name = list.name.trim() || (isMain ? MAIN_CUE_LIST_NAME : list.cart ? 'Cart' : 'Cue List')
+    cueLists.push(canonicalCueList({ id, name, cart: list.cart }))
+    if (list.cart) {
       context.notes.push({
-        cueId: '', number: '', name: main.name, qlabType: 'Cart', kind: 'approximated',
-        detail: 'a cart is a grid of buttons in QLab; here its cues are a list, in the order the cart held them'
+        cueId: '', number: '', name, qlabType: 'Cart', kind: 'approximated',
+        detail: 'a cart is a grid of buttons in QLab; here it is a cart list, its tiles in the order the cart held them'
       })
     }
-    mapSiblings(main.cues, null, ids, context)
-  }
-  show.lists.forEach((list, index) => {
-    if (index === mainIndex) return
-    const id = uniqueFrom(newId, taken)
-    taken.add(id)
-    const kind = list.cart ? 'cart' : 'cue list'
-    const group: GroupCue = {
-      ...baseFields(id, '', list.name || (list.cart ? 'Cart' : 'Cue List'), null),
-      isArmed: false,
-      notes: `[From QLab: the ${kind} “${list.name}”. Cuerunner runs one cue list, so this one is kept as a ` +
-        `disarmed group: GO passes it by. Arm it, or move its cues, to run them.]`,
-      type: 'group',
-      mode: 'sequence'
+    const from = context.out.length
+    mapSiblings(list.cues, null, ids, context)
+    if (isMain) continue
+    // The list's own cues at its top level name it; their children are in it through them.
+    for (let at = from; at < context.out.length; at++) {
+      if (context.out[at].parentId === null) context.out[at] = { ...context.out[at], listId: id }
     }
-    context.out.push(group)
-    context.notes.push({
-      cueId: id, number: '', name: group.name, qlabType: list.cart ? 'Cart' : 'Cue List', kind: 'approximated',
-      detail: `QLab’s ${kind} is a disarmed group here: Cuerunner runs one cue list`
-    })
-    mapSiblings(list.cues, id, ids, context)
-  })
+  }
 
   return {
     cues: context.out,
+    cueLists,
     types: [...context.types.values()],
     notes: context.notes,
-    totalCues: ids.size
+    totalCues: ids.size,
+    oscPatches: [...context.patches.values()]
   }
 }
 
@@ -362,6 +365,13 @@ function mapCue(cue: QLabCue, parentId: string | null, ids: Map<QLabCue, string>
     ); break
     case 'stop':
     case 'devamp': mapped = mapTargeted(cue, base, context); break
+    case 'start':
+    case 'pause':
+    case 'load':
+    case 'reset':
+    case 'goto':
+    case 'arm':
+    case 'disarm': mapped = mapControl(cue, base, context); break
     case 'wait':
     case 'memo': {
       count(context, cue, 'wait')
@@ -457,7 +467,8 @@ function mapFade(cue: QLabCue, base: CueBase, context: Context): FadeCue | null 
     ...base,
     type: 'fade',
     duration: ms(cue.duration),
-    targetCueId,
+    // A QLab fade names one cue; Cuerunner's names a list, and this is a list of that one.
+    targetCueIds: targetCueId === '' ? [] : [targetCueId],
     fadeProperty: master !== null ? 'volume' : 'pan',
     targetValue: master !== null ? clamp(master, 0, 1) : clamp(pan!, -1, 1),
     // QLab's fades are S-curves unless their shape is redrawn, which an import cannot read.
@@ -501,13 +512,37 @@ function mapTargeted(cue: QLabCue, base: CueBase, context: Context): StopCue | D
   const stop: StopCue = {
     ...base,
     type: 'stop',
-    targetCueId,
+    // A QLab stop names one cue; the list of that one — never "all", which QLab's stop is not.
+    targetCueIds: targetCueId === '' ? [] : [targetCueId],
     fadeOut: false,
     fadeOutDuration: 500,
     waitForFade: false
   }
   targetNotes(cue, stop, targetCueId, context, Object.keys(QLAB_TYPE_LABELS) as QLabKind[])
   return stop
+}
+
+/** QLab's control cue types, as the one Control cue's verbs. */
+const CONTROL_ACTION: Partial<Record<QLabKind, ControlAction>> = {
+  start: 'start', pause: 'pause', load: 'load', reset: 'reset', goto: 'goto', arm: 'arm', disarm: 'disarm'
+}
+
+/**
+ * QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues: each is a Control cue with that
+ * verb, aimed at the cue it names. A Load keeps its time into the target where QLab said one.
+ */
+function mapControl(cue: QLabCue, base: CueBase, context: Context): ControlCue {
+  count(context, cue, 'control')
+  const targetCueId = resolveTarget(cue, context) ?? ''
+  const control: ControlCue = {
+    ...base,
+    type: 'control',
+    action: CONTROL_ACTION[cue.kind] ?? 'start',
+    targetCueIds: targetCueId === '' ? [] : [targetCueId],
+    loadToMs: cue.kind === 'load' && cue.loadAt !== undefined ? ms(cue.loadAt) : 0
+  }
+  targetNotes(cue, control, targetCueId, context, Object.keys(QLAB_TYPE_LABELS) as QLabKind[])
+  return control
 }
 
 function midiGap(cue: QLabCue): string {
@@ -622,13 +657,23 @@ function mapNetwork(cue: QLabCue, base: CueBase, context: Context): OscCue | nul
   if (parsed === null) return null
   count(context, cue, 'osc')
   const known = network.host !== null && network.host !== ''
+  const host = known ? (network.host === 'localhost' ? '127.0.0.1' : network.host!) : '127.0.0.1'
+  const port = network.port !== null && network.port >= 1 && network.port <= 65535 ? network.port : 53000
+  // A named QLab patch with a known destination becomes one of the show's OSC patches, made
+  // once and shared by every cue that sent through it — so a show moved to another venue
+  // changes one address here, as it did in QLab.
+  const patchName = network.patch.trim()
+  let patchId = ''
+  if (known && patchName !== '') {
+    const existing = context.patches.get(patchName)
+    const patch = existing ?? { id: uniqueFrom(context.newId, new Set()), name: patchName, host, port }
+    if (existing === undefined) context.patches.set(patchName, patch)
+    patchId = patch.id
+  }
   const osc: OscCue = {
     ...base,
     type: 'osc',
-    host: known ? (network.host === 'localhost' ? '127.0.0.1' : network.host!) : '127.0.0.1',
-    port: network.port !== null && network.port >= 1 && network.port <= 65535 ? network.port : 53000,
-    address: parsed.address,
-    args: parsed.args
+    messages: [{ patchId, host, port, address: parsed.address, args: parsed.args }]
   }
   if (!known) {
     note(context, osc, cue, 'approximated',

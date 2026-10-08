@@ -24,7 +24,7 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: seventeen cue types, groups and timelines, the waveform editor,
+The **cue stack is free**: nineteen cue types, groups and timelines, the waveform editor,
 the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
 and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
 wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
@@ -178,8 +178,11 @@ AppImage it declares what it needs from the system — Electron's own libraries 
 sudo apt install ./dist/cuerunner_*_amd64.deb
 ```
 
-The release pipeline publishes the AppImage only for now; the `.deb` is built by
-`npm run dist:linux` and held to its declared dependencies by `scripts/linux-packages.test.ts`.
+The release pipeline publishes the `.deb` beside the AppImage — on the release page, and on the
+mirror as `pub.cuerunner.app/latest/Cuerunner.deb` with its digest in `latest/SHA256SUMS` — and
+`scripts/linux-packages.test.ts` holds it to its declared dependencies. A `.deb` install does not
+replace itself: the app checks for a newer version like any other and sends the operator to the
+download page for it (see Updates below).
 
 ### Troubleshooting `Error: Electron uninstall`
 
@@ -232,7 +235,7 @@ Renderer Layer (React/Zustand)
 Main Process Layer
   ├─ src/main/ipc/handlers.ts (ipcMain.handle)
   │   ├─ MidiEngine (using 'midi' npm package)
-  │   ├─ OscEngine (using 'node-osc')
+  │   ├─ OscEngine (its own UDP sockets and OSC codec, osc/codec.ts)
   │   └─ WorkspaceManager (fs + file dialogs)
   └─ src/main/ipc/windowHandlers.ts (the per-window channels: close request, menu action)
 ```
@@ -699,7 +702,9 @@ GitHub Actions workflows in `.github/workflows/`:
   - Integration tests on Linux: Cuerunner against the protocol peers for the console and the
     desk (no vendor software, no hardware)
 - **`build.yml`**: Runs when a release is published, or manually
-  - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
+  - Tests, then builds the Windows (NSIS), macOS (DMG, and the zip a Mac updates itself from)
+    and Linux (AppImage and `.deb`) installers, each with electron-builder's `latest*.yml` update
+    feed beside it
   - Normally started by `release.yml`, which dispatches it for the tag it just cut; if a release
     ends up with no packaging run, start one by hand — `gh workflow run build.yml --ref <tag>` —
     because a release page with no assets means neither happened
@@ -722,6 +727,12 @@ GitHub Actions workflows in `.github/workflows/`:
     file is a way to check a download, not a signature
   - Uploads that list to R2 (Cloudflare) and GitHub Releases: the `pub.cuerunner.app/latest/`
     files the site's download cards point at, with the digests the cards link beside them
+  - Serves the update feed the app checks: each platform's `latest*.yml` goes to `latest/`,
+    rewritten so every file it names is this release's own copy under `versions/<tag>/` (the
+    macOS zip is copied there only), and a feed is published only beside the installer it
+    offers — a withheld Windows installer has no `latest.yml` either. The SHA-512 in a feed is
+    electron-builder's digest of the bytes, which the app checks a download against before
+    installing anything
 - **`release.yml`**: Semantic versioning with `semantic-release` — run it by hand from
   `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
   own, so a release happens only when it is meant to. Cutting the tag is not enough on its

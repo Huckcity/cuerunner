@@ -39,7 +39,8 @@ export const LIGHTING_SHAPE = {
               kind: 'string',
               offset: { bounded: [0, 511] },
               fineOffset: { nothing: true, of: { bounded: [0, 511] } },
-              home: { bounded: [0, 1] }
+              home: { bounded: [0, 1] },
+              functions: { absent: true, of: { elements: { name: 'string', from: { bounded: [0, 1] } } } }
             }
           }
         }

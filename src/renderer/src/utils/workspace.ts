@@ -2,6 +2,10 @@ import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSecti
 import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { canonicalCueList, isDefaultCueLists, type CueListInfo } from '../../../shared/cueLists'
+import { isDefaultPictureSettings, type PictureSettings } from '../../../shared/visual'
+import { savedOscPatches } from '../../../shared/oscPatches'
+import type { OscPatch } from '../../../shared/cue'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
 // the same way, so a recovered workspace has the shape a saved one does.
@@ -35,11 +39,25 @@ import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../share
 //
 // The video outputs the same: named at every call, even where there are none, and a show with
 // none writes no section.
+//
+// The cue lists are named by every caller the same way: a call site that forgot them would
+// compile and save every list's cues into a show that has only its main list — which the load
+// funnel would then repair into one list. A show with only its main list under its own name
+// writes no section, so a show saved before lists existed stays byte-identical.
+//
+// And the show's picture settings: named at every call, and a show that leaves them at the
+// defaults writes no section.
+// The OSC patches are named by every caller for the same reason: a show with none writes no
+// section, and a call site that forgot them would save a show whose messages name patches it
+// no longer has.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'cueLists' | 'pictures' | 'oscPatches'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
     videoOutputs: WorkspaceValues['videoOutputs']
+    cueLists: CueListInfo[] | undefined
+    pictures: PictureSettings | undefined
+    oscPatches: OscPatch[] | undefined
   }
 ): Workspace {
   return savedShape({
@@ -52,6 +70,12 @@ export function buildWorkspace(
     timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
     // The same for a show with no video output: its bytes are what they were before
     // outputs existed.
-    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined
+    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined,
+    cueLists: values.cueLists === undefined || isDefaultCueLists(values.cueLists)
+      ? undefined
+      : values.cueLists.map(canonicalCueList),
+    // And for a show whose pictures stay up until they are stopped, as they always did.
+    pictures: values.pictures === undefined || isDefaultPictureSettings(values.pictures) ? undefined : values.pictures,
+    oscPatches: savedOscPatches(values.oscPatches)
   })
 }

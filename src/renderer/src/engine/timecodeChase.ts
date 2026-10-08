@@ -38,6 +38,12 @@ export interface ChaseDeps {
   stop(cueId: string): void
   isRunning(cueId: string): boolean
   log?(message: string): void
+  /**
+   * Where a cue's list puts it on the clock: frames added to its triggers, or null for a list
+   * that does not follow the clock — turned off, or taken out of the show. Optional: without it
+   * every cue follows the show's clock as it is, which is what a show of one list does.
+   */
+  listShift?(cue: Cue): number | null
 }
 
 interface Placed {
@@ -68,6 +74,8 @@ export class TimecodeChase {
     const out: Placed[] = []
     for (const cue of this.deps.getCues()) {
       if (!cue.isArmed) continue
+      const shift = this.deps.listShift === undefined ? 0 : this.deps.listShift(cue)
+      if (shift === null) continue
       for (const trigger of cue.triggers ?? []) {
         if (trigger.kind !== 'timecode') continue
         const key = `${rate}|${trigger.timecode}`
@@ -76,7 +84,7 @@ export class TimecodeChase {
           frames = parseTimecodeFrames(trigger.timecode, rate)
           this.parsed.set(key, frames)
         }
-        if (frames !== null) out.push({ cue, triggerId: trigger.id, frames })
+        if (frames !== null) out.push({ cue, triggerId: trigger.id, frames: frames + shift })
       }
     }
     return out

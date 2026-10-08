@@ -50,8 +50,23 @@ export interface DmxSocket {
 
 export type DmxSocketFactory = () => DmxSocket
 
+/**
+ * The listening sockets: sACN's port with its universes' multicast groups, and Art-Net's port,
+ * where nodes broadcast. Address reuse is required here and is kept: E1.31 is multicast and
+ * Art-Net is broadcast, so every listener on the machine — a visualiser, the console's own
+ * software, this app's timecode receiver on Art-Net's port — is handed its own copy of each
+ * packet. Without reuse the second program to start would simply not hear the rig. A unicast
+ * datagram to the port goes to one of them; the inputs are for the broadcast traffic.
+ */
 export const defaultSocketFactory: DmxSocketFactory = () =>
   createSocket({ type: 'udp4', reuseAddr: true }) as unknown as DmxSocket
+
+/**
+ * The sending socket: bound to an ephemeral port that nothing else can want, so it has no
+ * reason to share an address, and does not.
+ */
+export const senderSocketFactory: DmxSocketFactory = () =>
+  createSocket({ type: 'udp4' }) as unknown as DmxSocket
 
 /** The interface traffic is pinned to, or nothing for whatever the OS routes by. */
 export interface DmxBinding {
@@ -169,7 +184,7 @@ export class DmxTransmitter {
   private readonly artnetPort: number
 
   constructor(private readonly options: TransmitterOptions = {}) {
-    this.create = options.createSocket ?? defaultSocketFactory
+    this.create = options.createSocket ?? senderSocketFactory
     this.sacnPort = options.sacnPort ?? SACN_PORT
     this.artnetPort = options.artnetPort ?? ARTNET_PORT
   }

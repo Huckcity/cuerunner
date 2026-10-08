@@ -102,6 +102,27 @@ describe('the output registry', () => {
   })
 })
 
+describe('the output registry and mirrors', () => {
+  it('sends a picture that names no output past a mirror, to the first with pictures of its own', () => {
+    const registry = new OutputRegistry()
+    registry.configure([{ ...createOutput('desk', 'Desk'), mirrorOf: 'stage' }, createOutput('stage', 'Stage')])
+    expect(registry.route({ op: 'play', layer: spec('i1') })).toEqual(expect.objectContaining({ kind: 'output', outputId: 'stage' }))
+  })
+
+  it('folds a blend and keyframes edit into the picture, so a reloaded output draws it as it is now', () => {
+    const registry = new OutputRegistry()
+    registry.configure([createOutput('a', 'A')])
+    registry.route({ op: 'play', layer: spec('i1') })
+    const keyframes = [{ atMs: 500, x: 0.1, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 }, easing: 'linear' as const }]
+    registry.route({ op: 'update', cueId: 'i1', patch: { blend: 'multiply', keyframes } })
+    registry.route({ op: 'move', cueId: 'i1', to: { x: 0.2 }, durationMs: 100, curve: 'linear', at: 2000 })
+    const replay = registry.replay('a')
+    expect(replay.layers[0]).toEqual(expect.objectContaining({ blend: 'multiply', keyframes }))
+    // A fade cue's move is a command the window replays, like a fade of its level.
+    expect(replay.commands).toEqual([expect.objectContaining({ op: 'move', cueId: 'i1' })])
+  })
+})
+
 describe('the test-only renderer switch', () => {
   it('holds a development build\'s outputs on the 2D fallback when the suite asks', () => {
     expect(outputRendererOverride(false, { CUERUNNER_TEST_OUTPUT_RENDERER: 'canvas' })).toBe('canvas')

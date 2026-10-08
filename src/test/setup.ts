@@ -27,6 +27,8 @@ import type { QLabFindMediaResult, QLabImportResult, QLabWorkspacesResult } from
 import type { RedundancySettings } from '../shared/redundancy'
 import { defaultTimecodeSettings, idleReceiverStatus, type TimecodeSettings, type TimecodeShowSettings, type TimecodeStatus } from '../shared/timecode'
 import type { TimecodeGenerateResult } from '../shared/ipc/timecode'
+import { defaultUpdateSettings, type UpdateStatus } from '../shared/update'
+import type { UpdateActionResult, UpdateCheckResult, WhatsNew } from '../shared/ipc/update'
 import type { ScriptDocument } from '../shared/show'
 import type { Workspace } from '../shared/workspace'
 
@@ -106,6 +108,21 @@ const redundancySettings = {
 // Global window.cuerunner mock — the preload's own bridge, checked against the composed
 // type the preload implements (src/shared/ipc). A member added, renamed or removed there
 // fails to compile here until this mock follows, which is the point of the annotation.
+/** What a machine reports before anything has been checked: the update tab's starting state. */
+export function idleUpdateStatus(): UpdateStatus {
+  return {
+    current: '0.0.0',
+    install: 'development',
+    phase: 'idle',
+    available: null,
+    progress: null,
+    message: null,
+    lastCheckedAt: null,
+    lockout: null,
+    settings: defaultUpdateSettings()
+  }
+}
+
 Object.defineProperty(window, 'cuerunner', {
   value: {
     platform: 'win32',
@@ -211,7 +228,18 @@ Object.defineProperty(window, 'cuerunner', {
       cancel: vi.fn(() => Promise.resolve(false))
     },
     osc: {
-      send: vi.fn(() => Promise.resolve({ ok: true }))
+      send: vi.fn(() => Promise.resolve({ ok: true })),
+      interfaces: vi.fn(() => Promise.resolve({
+        interfaces: [],
+        input: { selected: null, boundAddress: null, missing: false },
+        output: { selected: null, boundAddress: null, missing: false }
+      })),
+      setInterface: vi.fn(() => Promise.resolve({
+        ok: true as const,
+        interfaces: [],
+        input: { selected: null, boundAddress: null, missing: false },
+        output: { selected: null, boundAddress: null, missing: false }
+      }))
     },
     show: {
       snapshot: vi.fn(() => Promise.resolve({
@@ -304,6 +332,18 @@ Object.defineProperty(window, 'cuerunner', {
       control: vi.fn(() => Promise.resolve(true)),
       onEvents: vi.fn(() => () => {})
     },
+    // A development build: nothing offered, nothing new, checks on as a new machine has them.
+    update: {
+      status: vi.fn((): Promise<UpdateStatus> => Promise.resolve(idleUpdateStatus())),
+      check: vi.fn((): Promise<UpdateCheckResult> => Promise.resolve({ ok: true, status: idleUpdateStatus() })),
+      download: vi.fn((): Promise<UpdateActionResult> => Promise.resolve({ ok: true })),
+      install: vi.fn((): Promise<UpdateActionResult> => Promise.resolve({ ok: true })),
+      configure: vi.fn((): Promise<UpdateStatus> => Promise.resolve(idleUpdateStatus())),
+      report: vi.fn(),
+      whatsNew: vi.fn((): Promise<WhatsNew | null> => Promise.resolve(null)),
+      openDownloads: vi.fn(() => Promise.resolve()),
+      onEvents: vi.fn(() => () => {})
+    },
     output: {
       configure: vi.fn(() => Promise.resolve()),
       snapshot: vi.fn(() => Promise.resolve({
@@ -319,7 +359,10 @@ Object.defineProperty(window, 'cuerunner', {
       timer: vi.fn(() => Promise.resolve()),
       timerWindow: vi.fn((state: { open: boolean; mode: 'clock' | 'elapsed' | 'remaining' }) => Promise.resolve(state)),
       pickFile: vi.fn(() => Promise.resolve(null)),
-      onEvents: vi.fn(() => () => {})
+      onEvents: vi.fn(() => () => {}),
+      cameras: vi.fn(() => Promise.resolve({ devices: [], listed: false, choices: {} })),
+      chooseCamera: vi.fn(() => Promise.resolve({ devices: [], listed: false, choices: {} })),
+      pickMask: vi.fn(() => Promise.resolve(null))
     }
   } satisfies CuerunnerBridge,
   writable: true

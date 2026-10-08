@@ -401,6 +401,11 @@ function fileCue(value: Archived, patches: Patches, counter: { cues: number }, n
   const targetId = text(cue['cueTargetUniqueID']) || text(cue['cueTargetID']) || text(cue['targetUniqueID'])
   const targetNumber = text(cue['cueTargetNumber']) || text(cue['targetCueNumber'])
   if (targetId !== '' || targetNumber !== '') out.target = { uniqueID: targetId, number: targetNumber }
+  if (kind === 'load') {
+    // The time a Load cue readies its target to, under the names QLab's versions have used.
+    const loadAt = number(cue['loadAt']) ?? number(cue['loadActionAt']) ?? number(cue['loadTime'])
+    if (loadAt !== undefined) out.loadAt = loadAt
+  }
   const media = fileMedia(cue['fileTarget'] ?? cue['mediaTarget'])
   if (media) out.media = media
 

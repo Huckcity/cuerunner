@@ -77,7 +77,14 @@ import type {
   MidiFileResumeResult
 } from '../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../shared/ipc/network'
-import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
+import {
+  OSC_CHANNELS,
+  type OscInterfaceState,
+  type OscSendPayload,
+  type OscSendResult,
+  type OscSetInterfacePayload,
+  type OscSetInterfaceResult
+} from '../shared/ipc/osc'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import {
   TIMECODE_CHANNELS,
@@ -131,6 +138,13 @@ import {
   type QLabWorkspacesResult
 } from '../shared/ipc/qlab'
 import {
+  UPDATE_CHANNELS,
+  type UpdateActionResult,
+  type UpdateCheckResult,
+  type WhatsNew
+} from '../shared/ipc/update'
+import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../shared/update'
+import {
   OUTPUT_CHANNELS,
   type LayerCommand,
   type OutputCommandResult,
@@ -138,11 +152,14 @@ import {
   type OutputPlacePayload,
   type OutputPlaceResult,
   type OutputSnapshot,
+  type CameraSnapshot,
+  type ChooseCameraPayload,
   type OutputTestPatternPayload,
   type TimerFeed,
   type TimerWindowState
 } from '../shared/ipc/output'
 import type { OutputPlacement, VideoOutput } from '../shared/visual'
+import type { CameraDevice } from '../shared/camera'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
@@ -361,7 +378,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
   },
   osc: {
     send: (cmd: OscSendPayload): Promise<OscSendResult> =>
-      invoke(OSC_CHANNELS.send, cmd)
+      invoke(OSC_CHANNELS.send, cmd),
+    interfaces: (): Promise<OscInterfaceState> =>
+      invoke(OSC_CHANNELS.interfaces),
+    setInterface: (payload: OscSetInterfacePayload): Promise<OscSetInterfaceResult> =>
+      invoke(OSC_CHANNELS.setInterface, payload)
   },
   show: {
     snapshot: (): Promise<ShowSnapshot> =>
@@ -521,6 +542,32 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(QLAB_CHANNELS.findMedia, { workspace, workspacePath } satisfies QLabFindMediaPayload)
   },
   /**
+   * Updates: each step the operator's, and each refused while the show runs. The show's state
+   * is reported as it changes, fire and forget — a report that fails is one main does without,
+   * and it treats a show it has not heard about as the window last described it.
+   */
+  update: {
+    status: (): Promise<UpdateStatus> =>
+      invoke(UPDATE_CHANNELS.status),
+    check: (): Promise<UpdateCheckResult> =>
+      invoke(UPDATE_CHANNELS.check),
+    download: (): Promise<UpdateActionResult> =>
+      invoke(UPDATE_CHANNELS.download),
+    install: (): Promise<UpdateActionResult> =>
+      invoke(UPDATE_CHANNELS.install),
+    configure: (patch: Partial<UpdateSettings>): Promise<UpdateStatus> =>
+      invoke(UPDATE_CHANNELS.configure, patch),
+    report: (state: UpdateShowState): void => {
+      void ipcRenderer.invoke(UPDATE_CHANNELS.report, state).catch(() => {})
+    },
+    whatsNew: (): Promise<WhatsNew | null> =>
+      invoke(UPDATE_CHANNELS.whatsNew),
+    openDownloads: (): Promise<void> =>
+      invoke(UPDATE_CHANNELS.openDownloads),
+    onEvents: (callback: (status: UpdateStatus) => void): (() => void) =>
+      subscribe(UPDATE_CHANNELS.events, callback)
+  },
+  /**
    * The video outputs: windows main keeps for the show's pictures. Every time a command
    * carries is engine milliseconds, the clock the sound of a video is scheduled on.
    */
@@ -546,6 +593,12 @@ contextBridge.exposeInMainWorld('cuerunner', {
     pickFile: (kind: 'video' | 'image'): Promise<string | null> =>
       invoke(OUTPUT_CHANNELS.pickFile, kind),
     onEvents: (callback: (events: OutputEvent[]) => void): (() => void) =>
-      subscribe(OUTPUT_CHANNELS.events, callback)
+      subscribe(OUTPUT_CHANNELS.events, callback),
+    cameras: (): Promise<CameraSnapshot> =>
+      invoke(OUTPUT_CHANNELS.cameras),
+    chooseCamera: (cueId: string, device: CameraDevice | null): Promise<CameraSnapshot> =>
+      invoke(OUTPUT_CHANNELS.chooseCamera, { cueId, device } satisfies ChooseCameraPayload),
+    pickMask: (): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.pickMask)
   }
 } satisfies CuerunnerBridge)

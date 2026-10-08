@@ -117,7 +117,10 @@
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. The port is Cuerunner's alone: one another program holds — QLab, a second Cuerunner — is refused and said here and once in the log (<code>EADDRINUSE</code>), rather than shared with it in silence. It is a status, not an alarm: a second show on the machine is not the stage going wrong.</td></tr>
+            <tr><td>↳ Network interface</td><td>any</td><td>This machine's, not the show's. <strong>Listen on</strong> binds the port to one interface; <strong>Send from</strong> sends OSC cues out of one. An interface that has gone is said, and the port opens on every interface until it is back.</td></tr>
+            <tr><td>↳ Feedback</td><td>off, 127.0.0.1:53001, 10 Hz</td><td><strong>Push state</strong> sends the playhead, what is running and its progress to <strong>Send to</strong> : <strong>Port</strong>, progress <strong>Progress (Hz)</strong> times a second (0–30). Remotes can also ask for it themselves. See <a href="control.html#feedback">feedback</a>.</td></tr>
+            <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
             <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
             <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
             <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
@@ -185,6 +188,9 @@
             <tr><td>Soft edge</td><td>show</td><td>0%</td><td>Fades each edge to black over a share of the frame, for overlapping projectors. <strong>Edge curve</strong> (1) bends the ramp.</td></tr>
             <tr><td>Identify</td><td>—</td><td>—</td><td>Draws every output's name across it for three seconds.</td></tr>
             <tr><td>Floating timer</td><td>computer</td><td>Off</td><td>A small always-on-top window counting the time of day, the show clock or the cue remaining.</td></tr>
+            <tr><td>Shows</td><td>show</td><td>Its own pictures</td><td>Or <strong>the same as</strong> another output: a mirror, showing that output's pictures as it composes them, at its size — a confidence monitor, a stacked projector. It keeps its own display, timer and corner pin; a picture cue cannot name a mirror.</td></tr>
+            <tr><td>Mask</td><td>show</td><td>none</td><td>An image laid over the output's pictures, stretched to it: <strong>Mask reads</strong> its brightness (white shows) or its transparency (opaque shows), and <strong>Invert</strong> turns it round. Drawn before the corner pin, under the timer and test pattern. A mirror with no mask of its own shows its source's. Its file is kept by its path, and is not carried into a bundle.</td></tr>
+            <tr><td>Next GO</td><td>show</td><td>off</td><td>On, every picture whose cue leaves it to the show is taken down on the next GO.</td></tr>
           </tbody>
         </table>
       </div>
@@ -243,6 +249,55 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Newer versions of Cuerunner, and when this machine may look for them. Kept on the computer,
+        not in the show, and free. A check only asks whether there is something newer; nothing is
+        downloaded until you press <strong>Download</strong>, nothing is installed until you press
+        <strong>Restart now</strong> or quit, and neither happens while anything in the show is
+        running. The <a href="../guides/running.html#updates">guide</a> walks it through.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>This version</td><td>—</td><td>The version running, and how it was installed: Windows installer, macOS app, AppImage, .deb package, or a development build run from source.</td></tr>
+            <tr><td>Check now</td><td>—</td><td>Asks the update feed now, and says what it found beside the button: up to date, a newer version with its notes, or that the server could not be reached. Refused, with the reason, during the show hours or in Show Mode with a show open.</td></tr>
+            <tr><td>Check automatically</td><td>on</td><td>Checks twenty seconds after launch and then once a day. A check that cannot reach the server says nothing at all — a show machine with no network is an ordinary machine. Off, only <strong>Check now</strong> checks.</td></tr>
+            <tr><td>Show hours</td><td>off, 18:00–23:30</td><td>No checks and no downloads between <strong>From</strong> and <strong>To</strong>, by this computer's clock. A window that ends before it starts runs past midnight.</td></tr>
+            <tr><td>In Show Mode</td><td>on</td><td>No checks while a show file is open in Show Mode.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What an update offered on this machine can say:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>It says</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td>Cuerunner <em>x.y.z</em> is available.</td><td>A newer release is published. <strong>Release notes</strong> shows every version between this one and it; <strong>Download</strong> fetches it; <strong>Later</strong> puts the bar away until the next launch. The bar is never drawn in Show Mode.</td></tr>
+            <tr><td>Held: something in the show is running.</td><td>A download or a restart was asked for while a cue was running, paused or waiting, or while sound or a MIDI file was playing. Nothing was fetched or installed; ask again once the show is idle. A cue started while a download is under way stops the download the same way.</td></tr>
+            <tr><td>Refused: the download did not match the checksum its release published…</td><td>The bytes that arrived are not the bytes the release's feed names (SHA-512). They were deleted, and nothing was installed.</td></tr>
+            <tr><td>Refused: the update is not signed by the publisher…</td><td>Windows checks that the new installer is signed by the publisher this copy was signed by, and macOS that the new app carries a valid signature. A download that fails either is deleted, and nothing was installed.</td></tr>
+            <tr><td>Cuerunner <em>x.y.z</em> is ready.</td><td>Downloaded and checked. It installs when Cuerunner quits — the one thing that happens without a press — or now with <strong>Restart now</strong>, which asks you to save the show first. The installer runs silently and starts the new version.</td></tr>
+            <tr><td>…installed from the .deb package, which cannot replace itself</td><td>A <code>.deb</code> belongs to the package manager that installed it: the app says when there is a newer version and <strong>Open the download page</strong> takes you to it. Install the new <code>.deb</code> over the old one; your settings stay.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The feed is <code>pub.cuerunner.app/latest/</code> — <code>latest.yml</code> for Windows,
+        <code>latest-mac.yml</code> for macOS (a Mac updates from a zip of the app rather than
+        the dmg) and <code>latest-linux.yml</code> for the AppImage — and each one names the
+        release's own files under <code>versions/</code>. The settings and the version this
+        machine last ran are kept in <code>updates.json</code> in the app's data folder.
+      </p>
+      <p>
+        After an update, the first launch shows <strong>What's new</strong>: the notes of every
+        version installed since this machine last ran Cuerunner, newest first — skip two releases
+        and you read both. It is shown once.
+      </p>
     </section>
 
     <section class="panel reveal delay-3" id="show">

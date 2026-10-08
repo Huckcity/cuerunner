@@ -97,7 +97,7 @@ test('an audio cue’s own fields go to the audio cues in a mixed set and to not
   await expect(page.locator('.field-row', { hasText: 'Fade out' }).locator('input')).toHaveValue('2')
 })
 
-test('Fade out (n) makes one GO of fades aimed at each selected sound', async () => {
+test('Fade out (n) makes one fade aimed at every selected sound', async () => {
   await toolbarCueBtn(page, 'Audio').click()
   await toolbarCueBtn(page, 'Audio').click()
   await toolbarCueBtn(page, 'Wait').click()
@@ -106,12 +106,14 @@ test('Fade out (n) makes one GO of fades aimed at each selected sound', async ()
   await row('1').click({ button: 'right' })
   await page.locator('.cue-context-menu-item[data-action="fade-out"]').click()
 
-  // A group after the last of them, with a fade at each, all at once.
-  await expect(row('4')).toHaveAttribute('data-type', 'group')
+  // One cue after the last of them, naming both: one row, one GO, one fade time.
+  await expect(row('4')).toHaveAttribute('data-type', 'fade')
   await expect(row('4')).toContainText('Fade out 2 cues')
-  await expect(row('4.1')).toHaveAttribute('data-type', 'fade')
-  await expect(row('4.2')).toHaveAttribute('data-type', 'fade')
+  await expect(page.locator('.cue-row')).toHaveCount(4)
   await expect(page.locator('.cue-row').nth(2)).toContainText('Fade out 2 cues')
+  await row('4').click()
+  await page.locator('.inspector-tab', { hasText: 'Fade' }).click()
+  await expect(page.locator('.target-row')).toHaveCount(2)
 
   await undo()
   await expect(page.locator('.cue-row[data-type="fade"]')).toHaveCount(0)

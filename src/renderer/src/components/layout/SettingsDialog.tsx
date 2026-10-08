@@ -25,6 +25,8 @@ import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
 import { RedundancySection } from '../redundancy/RedundancySection'
 import { TimecodeSection } from '../timecode/TimecodeSection'
+import { UpdateSection } from '../update/UpdateSection'
+import { OscSettings } from '../osc/OscSettings'
 import { AudioRoutingSection } from '../audio/AudioRoutingSection'
 import './SettingsDialog.css'
 
@@ -81,7 +83,8 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; scope: 'show' | 'machine'
   { id: 'wireless', label: 'Wireless', scope: 'show' },
   { id: 'redundancy', label: 'Backup machine', scope: 'machine' },
   { id: 'timecode', label: 'Timecode', scope: 'machine' },
-  { id: 'license', label: 'License', scope: 'machine' }
+  { id: 'license', label: 'License', scope: 'machine' },
+  { id: 'updates', label: 'Updates', scope: 'machine' }
 ]
 
 /** What each tab is for, in one line, under its heading. */
@@ -93,7 +96,8 @@ const TAB_BLURB: Record<SettingsTab, string> = {
   wireless: 'Where pack readings come from, and when to warn about them.',
   redundancy: 'A second computer, ready to take the show over.',
   license: 'Cuerunner Pro on this machine.',
-  timecode: 'The SMPTE clock this machine follows, and how the cue list follows it.'
+  timecode: 'The SMPTE clock this machine follows, and how the cue list follows it.',
+  updates: 'Newer versions of Cuerunner, and when this machine may look for them.'
 }
 
 /** Which service reports for a tab, so the sidebar can show whether it is on. */
@@ -717,6 +721,7 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <p className="inspector-hint" data-scope="panel">
                   Addresses or ranges, comma-separated. Empty hears everyone.
                 </p>
+                <OscSettings />
               </ServiceBlock>
 
               {!pro && (
@@ -919,6 +924,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
           {tab === 'license' && <LicenseSection />}
 
           {tab === 'timecode' && <TimecodeSection />}
+
+          {tab === 'updates' && <UpdateSection />}
         </div>
       </div>
     </div>

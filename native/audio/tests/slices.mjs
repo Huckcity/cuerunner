@@ -95,6 +95,26 @@ const HALF = RATE / 2 // one slice: 500 ms
 }
 
 {
+  console.log('\na seek into a later slice plays on from that slice — a Control cue\'s load')
+  const { wav } = render(workDir, {
+    frames: RATE * 3,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: rampPath },
+      { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, slices: SLICES } },
+      // Into slice 3 (1000–1500 ms) from the first pass of slice 1.
+      { atMs: 200, verb: 'seek', cueId: 'a', positionMs: 1200 }
+    ]
+  })
+  // A seek lands at the top of the block it arrives in: find where the file jumped to 1.2 s.
+  let seekFrame = -1
+  for (let t = 0; t < 0.3 * RATE; t++) if (sourceAt(wav, t) === 1.2 * RATE) { seekFrame = t; break }
+  check('the seek lands within a block of when it was sent', seekFrame > 0.2 * RATE - 512 && seekFrame <= 0.2 * RATE,
+    `at frame ${seekFrame}`)
+  const detail = plays(wav, seekFrame, seekFrame + 0.3 * RATE, t => 1.2 * RATE + (t - seekFrame))
+  check('it plays from 1.2 s in slice 3, not held to slice 1', detail === '', detail)
+}
+
+{
   console.log('\na plain loop asked to stop at the end of its pass')
   const { summary } = render(workDir, {
     frames: RATE * 4,

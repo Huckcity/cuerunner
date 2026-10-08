@@ -88,12 +88,13 @@ its artifacts are.
       curl -sI https://pub.cuerunner.app/latest/Cuerunner-Setup.exe
       curl -sI https://pub.cuerunner.app/latest/Cuerunner.dmg
       curl -sI https://pub.cuerunner.app/latest/Cuerunner.AppImage
+      curl -sI https://pub.cuerunner.app/latest/Cuerunner.deb
       curl -sI https://pub.cuerunner.app/latest/SHA256SUMS
       ```
 
-      The four names are the mirror's, not the notes' build names: the cards link these, and a
+      The five names are the mirror's, not the notes' build names: the cards link these, and a
       release whose Windows installer the ASIO gate withheld has no
-      `latest/Cuerunner-Setup.exe` at all. Each of the three file names has to answer `200` when
+      `latest/Cuerunner-Setup.exe` at all. Each of the four file names has to answer `200` when
       the notes list its installer as published, and `404` when they list it as withheld — not a
       `200` with an earlier release's file behind it, which is the state the mirror now rules out
       by deleting each name it writes that this release did not copy. `latest/SHA256SUMS` always
@@ -115,6 +116,21 @@ its artifacts are.
       packaging run points at the R2 bucket or its public hostname — the `R2_*` secrets and
       Cloudflare's side — rather than at this pipeline, and is to be reported rather than worked
       around.
+- [ ] **Check the update feed the installed apps read.** The feeds are what every copy of the
+      app checks against once a day, so they are checked as a buyer's download is:
+
+      ```bash
+      curl -s https://pub.cuerunner.app/latest/latest.yml
+      curl -s https://pub.cuerunner.app/latest/latest-mac.yml
+      curl -s https://pub.cuerunner.app/latest/latest-linux.yml
+      ```
+
+      Each has to carry this release's `version:`, and every `url:` and `path:` in it has to read
+      `../versions/<tag>/…` — this release's own copy — and answer `200` when fetched against
+      `latest/`. A release whose Windows installer was withheld leaves `latest.yml` offering the
+      previous release, which is still a file that exists; that is expected, not a fault.
+      Nothing here installs anything: an installed copy downloads only when its operator asks,
+      and never while its show is running.
 
 **Whether anyone is downloading is reported for you, from the host rather than the app.**
 `download-report.yml` runs daily and, when the window has counts, comments them on the standing

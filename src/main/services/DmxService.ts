@@ -14,6 +14,7 @@ import {
   readDmxRelease
 } from '../../shared/dmxWire'
 import { sharedLighting, type DmxLighting } from '../dmx/lighting'
+import { gdtfFallbackName, importGdtfFile, readGdtfRequest } from '../dmx/gdtf'
 
 /**
  * The show's lights over the network: sACN and Art-Net out of this machine, and the consoles
@@ -93,6 +94,12 @@ export class DmxService implements ShowService {
         return lighting.setInterface(readDmxInterfaceChoice(payload))
       case 'discover':
         return lighting.discover()
+      case 'importGdtf': {
+        // A fixture type read from a GDTF file. A file that cannot be one is an answer — the
+        // refusal arm of the result — not a failed command, so it raises no alarm.
+        const request = readGdtfRequest(payload)
+        return importGdtfFile(request.path, gdtfFallbackName(request.path))
+      }
       default:
         throw new Error(`the lighting has no action "${action}"`)
     }

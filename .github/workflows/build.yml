@@ -91,6 +91,7 @@ jobs:
       installer: ${{ steps.publish.outputs.installer }}
       certificate: ${{ steps.publish.outputs.certificate }}
       asio: ${{ steps.publish.outputs.asio }}
+      feed: ${{ steps.publish.outputs.feed }}
     steps:
       - uses: actions/checkout@v7
 
@@ -269,9 +270,21 @@ jobs:
             Write-Host "::warning::$($installer.Name) links Steinberg's ASIO SDK and native/audio/third_party/ASIO-AGREEMENT.md records no signed agreement: the installer is withheld from the release."
           }
           $published = if ($withheld) { '' } else { $installer.Name }
+          # The update feed this installer is offered by: electron-builder's `latest.yml`, which
+          # has to name the installer recorded here, or the app would be sent a file that is not
+          # this one. It follows the installer — a withheld installer is offered by no feed.
+          $feed = ''
+          if ($published -ne '') {
+            if (-not (Test-Path dist\latest.yml)) { throw 'electron-builder wrote no dist\latest.yml beside the installer' }
+            if (-not (Select-String -Path dist\latest.yml -SimpleMatch -Quiet -Pattern "url: $published")) {
+              throw "dist\latest.yml does not name $published, so it would offer a file this build did not make"
+            }
+            $feed = 'latest.yml'
+          }
           Add-Content -Path $env:GITHUB_OUTPUT -Value "installer=$published"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "certificate=$certificate"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "asio=$asio"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "feed=$feed"
 
       - name: Upload installer
         if: steps.publish.outputs.installer != ''
@@ -279,6 +292,15 @@ jobs:
         with:
           name: Cuerunner-windows
           path: dist/${{ steps.publish.outputs.installer }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the update feed
+        if: steps.publish.outputs.feed != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: Cuerunner-windows-feed
+          path: dist/${{ steps.publish.outputs.feed }}
           if-no-files-found: error
           retention-days: 30
 
@@ -292,6 +314,8 @@ jobs:
       dmg: ${{ steps.publish.outputs.dmg }}
       certificate: ${{ steps.publish.outputs.certificate }}
       notarised: ${{ steps.publish.outputs.notarised }}
+      zip: ${{ steps.publish.outputs.zip }}
+      feed: ${{ steps.publish.outputs.feed }}
     steps:
       - uses: actions/checkout@v7
 
@@ -398,10 +422,23 @@ jobs:
           else
             notarised='no'
           fi
+          # The update: macOS replaces an app from a zip of it rather than from the dmg, so the
+          # zip is what `latest-mac.yml` offers, and the feed has to name the zip recorded here.
+          ZIP=$(find dist -maxdepth 1 -name '*.zip' | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "::error::no zip was built in dist/, and the zip is what a Mac updates itself from"
+            exit 1
+          fi
+          if [ ! -f dist/latest-mac.yml ] || ! grep -qF "url: $(basename "$ZIP")" dist/latest-mac.yml; then
+            echo "::error::dist/latest-mac.yml does not name $(basename "$ZIP"), so it would offer a file this build did not make"
+            exit 1
+          fi
           {
             echo "dmg=$(basename "$DMG")"
             echo "certificate=$certificate"
             echo "notarised=$notarised"
+            echo "zip=$(basename "$ZIP")"
+            echo "feed=latest-mac.yml"
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload dmg
@@ -412,13 +449,32 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload the update
+        uses: actions/upload-artifact@v7
+        with:
+          name: Cuerunner-mac-update
+          path: dist/${{ steps.publish.outputs.zip }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the update feed
+        uses: actions/upload-artifact@v7
+        with:
+          name: Cuerunner-mac-feed
+          path: dist/${{ steps.publish.outputs.feed }}
+          if-no-files-found: error
+          retention-days: 30
+
   build-linux:
     needs: [ test, test-e2e ]
     runs-on: [self-hosted, linux, x64, ubox]
-    # The one artifact with no signature to record: this pipeline has no Linux signing step —
-    # and adds none — so the AppImage is named as what it is in the release job's notes.
+    # The artifacts with no signature to record: this pipeline has no Linux signing step — and
+    # adds none — so the AppImage and the .deb are named as what they are in the release job's
+    # notes.
     outputs:
       appimage: ${{ steps.publish.outputs.appimage }}
+      deb: ${{ steps.publish.outputs.deb }}
+      feed: ${{ steps.publish.outputs.feed }}
     steps:
       - uses: actions/checkout@v7
 
@@ -467,13 +523,45 @@ jobs:
             echo "::error::no AppImage was built in dist/"
             exit 1
           fi
+          # The .deb beside it, for the machines a package manager keeps: it names the libraries
+          # the AppImage cannot ask for (scripts/linux-packages.test.ts), and it cannot replace
+          # itself, so the app sends a .deb install to the download page when there is a newer one.
+          DEB=$(find dist -maxdepth 1 -name '*.deb' | head -1)
+          if [ -z "$DEB" ]; then
+            echo "::error::no .deb was built in dist/"
+            exit 1
+          fi
+          # The update feed: `latest-linux.yml` has to name the AppImage recorded here, which is
+          # the Linux build that replaces itself.
+          if [ ! -f dist/latest-linux.yml ] || ! grep -qF "url: $(basename "$APPI")" dist/latest-linux.yml; then
+            echo "::error::dist/latest-linux.yml does not name $(basename "$APPI"), so it would offer a file this build did not make"
+            exit 1
+          fi
           echo "appimage=$(basename "$APPI")" >> "$GITHUB_OUTPUT"
+          echo "deb=$(basename "$DEB")" >> "$GITHUB_OUTPUT"
+          echo "feed=latest-linux.yml" >> "$GITHUB_OUTPUT"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v7
         with:
           name: Cuerunner-linux
           path: dist/${{ steps.publish.outputs.appimage }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v7
+        with:
+          name: Cuerunner-linux-deb
+          path: dist/${{ steps.publish.outputs.deb }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the update feed
+        uses: actions/upload-artifact@v7
+        with:
+          name: Cuerunner-linux-feed
+          path: dist/${{ steps.publish.outputs.feed }}
           if-no-files-found: error
           retention-days: 30
 
@@ -490,6 +578,7 @@ jobs:
     outputs:
       files: ${{ steps.notes.outputs.files }}
       mirror: ${{ steps.notes.outputs.mirror }}
+      feed: ${{ steps.notes.outputs.feed }}
     permissions:
       contents: write
     steps:
@@ -514,6 +603,11 @@ jobs:
           MAC_CERTIFICATE: ${{ needs.build-mac.outputs.certificate }}
           MAC_NOTARISED: ${{ needs.build-mac.outputs.notarised }}
           LINUX_APPIMAGE: ${{ needs.build-linux.outputs.appimage }}
+          WINDOWS_FEED: ${{ needs.build-windows.outputs.feed }}
+          MAC_ZIP: ${{ needs.build-mac.outputs.zip }}
+          MAC_FEED: ${{ needs.build-mac.outputs.feed }}
+          LINUX_DEB: ${{ needs.build-linux.outputs.deb }}
+          LINUX_FEED: ${{ needs.build-linux.outputs.feed }}
         run: |
           set -eu
 
@@ -522,6 +616,7 @@ jobs:
           # to be what this run recorded.
           : > release-notes.md
           : > release-files.txt
+          : > release-feed.txt
           : > SHA256SUMS
 
           # The path the download step left a recorded file at. A name no artifact holds is a
@@ -551,6 +646,17 @@ jobs:
             # directory, under the basename the release page carries it by: the digest is read
             # from the bytes this run located, never typed, and a reader can check the file they
             # downloaded against the line attached beside the notes.
+            (cd "$(dirname "$found")" && sha256sum "$(basename "$found")") >> SHA256SUMS
+          }
+
+          # One file the app's update check reads — a platform's `latest*.yml`, or the macOS zip
+          # it names — carried on the release page with its digest like every other file, and
+          # listed for the mirror's feed rather than its download cards: no buyer is handed one.
+          # A feed is only ever recorded beside the installer it offers, so one with no
+          # installer is a recording that contradicts itself.
+          feed() {
+            found=$(located "$1" "$2")
+            printf '%s\n' "$found" >> release-feed.txt
             (cd "$(dirname "$found")" && sha256sum "$(basename "$found")") >> SHA256SUMS
           }
 
@@ -590,6 +696,11 @@ jobs:
                 ;;
             esac
             publish "$WINDOWS_INSTALLER" "**Windows**: \`$WINDOWS_INSTALLER\` — $windows" 'build-windows'
+            if [ -z "$WINDOWS_FEED" ]; then
+              echo '::error::build-windows published an installer and recorded no update feed for it, so the app would never be offered it'
+              exit 1
+            fi
+            feed "$WINDOWS_FEED" 'build-windows'
           elif [ "$WINDOWS_ASIO" = 'on' ]; then
             withheld="- **Windows**: no installer is published. This build linked Steinberg's ASIO SDK and \`native/audio/third_party/ASIO-AGREEMENT.md\` records no signed agreement, which is what publishing a build against the SDK requires — so the installer is withheld from this page, and the download mirror removes the name the Windows card points at: that card answers 404 until a release carries the file again."
             printf -- '%s\n' "$withheld" >> release-notes.md
@@ -615,28 +726,52 @@ jobs:
               ;;
           esac
           publish "$MAC_DMG" "**macOS**: \`$MAC_DMG\` — $mac" 'build-mac'
+          if [ -z "$MAC_ZIP" ] || [ -z "$MAC_FEED" ]; then
+            echo '::error::build-mac published a dmg and recorded no update zip or feed beside it, so a Mac would never be offered this release'
+            exit 1
+          fi
+          feed "$MAC_ZIP" 'build-mac'
+          feed "$MAC_FEED" 'build-mac'
 
           publish "$LINUX_APPIMAGE" "**Linux**: \`$LINUX_APPIMAGE\` — unsigned: this pipeline has no Linux signing step, so nothing signs the AppImage and nothing here claims otherwise." 'build-linux'
+          publish "$LINUX_DEB" "**Linux (Debian, Ubuntu)**: \`$LINUX_DEB\` — unsigned like the AppImage, for the same reason. A .deb does not replace itself: the app says when there is a newer one and sends the operator to the download page." 'build-linux'
+          if [ -z "$LINUX_FEED" ]; then
+            echo '::error::build-linux published an AppImage and recorded no update feed for it, so the app would never be offered it'
+            exit 1
+          fi
+          feed "$LINUX_FEED" 'build-linux'
+
+          # What the update files are, in one line: the app reads them, and the mirror points each
+          # at this release's own folder.
+          if [ -s release-feed.txt ]; then
+            named=$(while IFS= read -r file; do printf '`%s` ' "$(basename "$file")"; done < release-feed.txt)
+            printf -- '- **Updates**: %s— what the app'"'"'s update check reads. Each feed names its installer with the SHA-512 the app checks the download against before installing anything, and the download mirror serves the feeds under `latest/` pointing at this release'"'"'s own `versions/` folder.\n' "$named" >> release-notes.md
+          fi
 
           if [ ! -s release-files.txt ]; then
             echo '::error::no artifact was published, so there is no release to describe and nothing to mirror'
             exit 1
           fi
 
-          # Two lists off the one recording: what the release page carries — the located files
-          # and the sums file composed from them — and what the mirror copies, the located files
-          # alone. The mirror is handed its own list because it writes its own names and composes
-          # its own sums under them, and because a list naming a file no suffix places is how a
-          # mirror comes to carry something the release page does not.
+          # Three lists off the one recording: what the release page carries — the located files,
+          # the update feed and the sums file composed from them — what the mirror copies to the
+          # names its cards link, the located installers alone, and the feed the mirror serves to
+          # the app. The mirror is handed its own lists because it writes its own names and
+          # composes its own sums under them, and because a list naming a file no suffix places is
+          # how a mirror comes to carry something the release page does not.
           {
             printf 'body=release-notes.md\n'
             printf 'files<<RELEASE_FILES\n'
             cat release-files.txt
+            cat release-feed.txt
             printf '%s\n' SHA256SUMS
             printf 'RELEASE_FILES\n'
             printf 'mirror<<RELEASE_MIRROR\n'
             cat release-files.txt
             printf 'RELEASE_MIRROR\n'
+            printf 'feed<<RELEASE_FEED\n'
+            cat release-feed.txt
+            printf 'RELEASE_FEED\n'
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
@@ -670,6 +805,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
           TAG: ${{ github.ref_name }}
           FILES: ${{ needs.release.outputs.mirror }}
+          FEED: ${{ needs.release.outputs.feed }}
         run: |
           set -eu
           # The list the notes were composed from, copied file by file. There is no search
@@ -681,7 +817,12 @@ jobs:
           # the file that ships rather than one architecture of two. The names are declared once,
           # as suffix→name pairs: the copy loop's `case` resolves a file through them and the
           # removals below read the same pairs, so a rename cannot land on one half alone.
-          NAMES='exe=Cuerunner-Setup.exe dmg=Cuerunner.dmg AppImage=Cuerunner.AppImage'
+          NAMES='exe=Cuerunner-Setup.exe dmg=Cuerunner.dmg AppImage=Cuerunner.AppImage deb=Cuerunner.deb'
+
+          # The update files no card links, declared the same way: the macOS zip a Mac replaces
+          # itself from. The `latest*.yml` feeds keep their own names, which is where the app
+          # looks for them.
+          UPDATES='zip=Cuerunner-mac.zip'
 
           # This run's own sums file, created rather than appended to: a reused workspace can
           # still hold the previous run's digests, and what a buyer checks has to be what this
@@ -733,6 +874,88 @@ jobs:
             esac
             aws s3 rm "s3://$R2_BUCKET/latest/$name" --endpoint-url "$R2_ENDPOINT"
           done
+
+          # The update feed, after every installer it can name is in place. A file a feed offers
+          # is copied under this release's own `versions/` folder only — never `latest/`, which the
+          # next release overwrites while a machine may be halfway through downloading it — and
+          # each feed is rewritten so every file it names is that copy, by the name this mirror
+          # wrote it under, before it is served from `latest/`, where the app looks. The SHA-512 a
+          # feed carries is electron-builder's digest of the bytes, which a copy does not change,
+          # so the app checks what it downloads against the build that made it. A feed naming a
+          # file this run did not write fails here rather than offering a 404. The release notes
+          # inside a feed are left as they are: only the entries above them name files.
+          written=" $published "
+          : > feeds.txt
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            case "$file" in
+              *.yml)
+                printf '%s\n' "$file" >> feeds.txt
+                continue
+                ;;
+            esac
+            name=''
+            for pair in $UPDATES; do
+              case "$file" in
+                *."${pair%%=*}") name="${pair#*=}" ;;
+              esac
+            done
+            if [ -z "$name" ]; then
+              echo "::error::$file is in the update feed under a name this mirror cannot place"
+              exit 1
+            fi
+            aws s3 cp "$file" "s3://$R2_BUCKET/versions/$TAG/$name" \
+              --cache-control "public, max-age=31536000, immutable" --endpoint-url "$R2_ENDPOINT"
+            written="$written$name "
+          done <<< "$FEED"
+
+          # Where a file a feed names was written: `../versions/<tag>/<name>`, relative to the
+          # `latest/` the feed is served from, or nothing when this run wrote no such name.
+          placed() {
+            for pair in $NAMES $UPDATES; do
+              case "$1" in
+                *."${pair%%=*}")
+                  case "$written" in
+                    *" ${pair#*=} "*) printf '../versions/%s/%s\n' "$TAG" "${pair#*=}"; return 0 ;;
+                  esac
+                  ;;
+              esac
+            done
+            return 1
+          }
+
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            served="feed-$(basename "$file")"
+            : > "$served"
+            entries=1
+            while IFS= read -r line || [ -n "$line" ]; do
+              # A top-level key ends the entries' part of the file or carries on with it: the
+              # notes are a block of their own, and nothing in them is a file this mirror wrote.
+              case "$line" in
+                releaseNotes:*) entries=0 ;;
+                [A-Za-z]*) entries=1 ;;
+              esac
+              if [ "$entries" = 1 ] && [[ $line =~ ^([[:space:]]*(-[[:space:]]+)?(url|path):[[:space:]]+)(.+)$ ]]; then
+                value="${BASH_REMATCH[4]}"
+                value="${value#\'}"
+                value="${value%\'}"
+                value="${value#\"}"
+                value="${value%\"}"
+                if ! target=$(placed "$value"); then
+                  echo "::error::$file offers $value, which this run did not write to the mirror"
+                  exit 1
+                fi
+                printf '%s%s\n' "${BASH_REMATCH[1]}" "$target" >> "$served"
+              else
+                printf '%s\n' "$line" >> "$served"
+              fi
+            done < "$file"
+            aws s3 cp "$served" "s3://$R2_BUCKET/versions/$TAG/$(basename "$file")" \
+              --cache-control "public, max-age=31536000, immutable" --endpoint-url "$R2_ENDPOINT"
+            aws s3 cp "$served" "s3://$R2_BUCKET/latest/$(basename "$file")" \
+              --cache-control "public, max-age=300" --endpoint-url "$R2_ENDPOINT"
+          done < feeds.txt
 
           # Last, so that the served digests and the served names agree: a refused removal fails
           # the step above with the previous release's `latest/SHA256SUMS` still standing beside

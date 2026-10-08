@@ -19,6 +19,9 @@ import type { FadeShape } from '../fadeShape'
 import type { MediaTimeline } from '../visualClock'
 import type { AudioClockReading } from '../audio'
 import type { DisplayInfo, GridPosition, OutputPlacement, OutputStatus, TimerMode, VideoOutput, VisualGeometry } from '../visual'
+import type { BlendMode } from '../visualBlend'
+import type { GeometryKeyframe, GeometryTarget } from '../visualKeyframes'
+import type { CameraDevice, CameraFeedState, LayerCamera } from '../camera'
 import type { Refusal } from './refusal'
 
 /** The IPC channels. Main owns the handlers; preload owns the bridge to them. */
@@ -44,7 +47,13 @@ export const OUTPUT_CHANNELS = {
   /** A dialog for a video or image file. */
   pickFile: 'output:pickFile',
   /** What the outputs did, pushed: first frames, ends, dissolves, statuses. */
-  events: 'output:events'
+  events: 'output:events',
+  /** The capture devices this machine's outputs can see, and the one each camera cue uses here. */
+  cameras: 'output:cameras',
+  /** This machine's device for one camera cue: a machine fact, kept in userData. */
+  chooseCamera: 'output:chooseCamera',
+  /** A dialog for a mask image. */
+  pickMask: 'output:pickMask'
 } as const
 
 /** How a block of text is drawn. */
@@ -62,7 +71,7 @@ export interface TextStyle {
 export interface LayerSpec {
   cueId: string
   outputId: string
-  kind: 'video' | 'image' | 'text'
+  kind: 'video' | 'image' | 'text' | 'camera'
   /** Firing order, for pictures on one layer: later is in front. */
   seq: number
   layer: number
@@ -86,6 +95,12 @@ export interface LayerSpec {
   /** How long an image or text is shown from `at`; null holds it until it is stopped. */
   displayMs: number | null
   text: TextStyle | null
+  /** How it is laid over what is behind it. Absent is normal: a record main kept from before. */
+  blend?: BlendMode
+  /** Where it moves over its own play, from its first frame. Absent or empty is nowhere. */
+  keyframes?: GeometryKeyframe[]
+  /** A live picture's source. */
+  camera?: LayerCamera | null
 }
 
 /** What may change about a picture while it is up. */
@@ -93,6 +108,8 @@ export interface LayerPatch {
   layer?: number
   opacity?: number
   geometry?: VisualGeometry
+  blend?: BlendMode
+  keyframes?: GeometryKeyframe[]
   fadeOutMs?: number
   text?: TextStyle
   displayMs?: number | null
@@ -105,6 +122,8 @@ export type LayerCommand =
   | { op: 'update'; cueId: string; patch: LayerPatch }
   /** Moves the resting level to `to` from `at`, over `durationMs`. */
   | { op: 'fade'; cueId: string; to: number; durationMs: number; curve: FadeCurve; at: number; shape?: FadeShape | null }
+  /** Moves the picture's place to `to` from `at`, over `durationMs`: a fade cue's geometry. */
+  | { op: 'move'; cueId: string; to: GeometryTarget; durationMs: number; curve: FadeCurve; at: number; shape?: FadeShape | null }
   /** Takes the picture down over `fadeMs`, from `at`. */
   | { op: 'stop'; cueId: string; fadeMs: number; at: number }
   | { op: 'pause'; cueId: string; at: number }
@@ -131,7 +150,11 @@ export type OutputEvent =
   /** What the media turned out to be. */
   | { kind: 'media'; cueId: string; outputId: string; durationMs: number | null; width: number; height: number }
   | { kind: 'error'; cueId: string; outputId: string; message: string }
+  /** How a live picture is getting on: a camera that is missing says so here, and when it is back. */
+  | { kind: 'camera'; cueId: string; outputId: string; state: CameraFeedState; message: string }
   | { kind: 'status'; status: OutputStatus }
+  /** The capture devices changed: one plugged in, one taken away. */
+  | { kind: 'cameras'; cameras: CameraSnapshot }
 
 /** What the timers count. Engine ms; null where there is nothing to count. */
 export interface TimerFeed {
@@ -153,6 +176,24 @@ export interface OutputSnapshot {
   timerWindow: TimerWindowState
 }
 
+/**
+ * The capture devices this machine has, as its outputs see them — an output window is the one
+ * place camera access is granted, so a machine with no output open cannot list them — and the
+ * device each camera cue uses here, by cue id.
+ */
+export interface CameraSnapshot {
+  devices: CameraDevice[]
+  /** Whether any output has been able to look: false is "open an output to list them". */
+  listed: boolean
+  choices: Record<string, CameraDevice>
+}
+
+export interface ChooseCameraPayload {
+  cueId: string
+  /** The device, or null to forget this machine's choice for the cue. */
+  device: CameraDevice | null
+}
+
 export type OutputPlaceResult = Refusal | { ok: true; status: OutputStatus }
 export type OutputCommandResult = Refusal | { ok: true }
 
@@ -169,6 +210,9 @@ export interface OutputBridge {
   timerWindow(state: TimerWindowState): Promise<TimerWindowState>
   pickFile(kind: 'video' | 'image'): Promise<string | null>
   onEvents(callback: (events: OutputEvent[]) => void): () => void
+  cameras(): Promise<CameraSnapshot>
+  chooseCamera(cueId: string, device: CameraDevice | null): Promise<CameraSnapshot>
+  pickMask(): Promise<string | null>
 }
 
 export interface OutputPlacePayload {
@@ -214,6 +258,10 @@ export interface OutputWindowReport {
   events: OutputEvent[]
   /** How it draws, once it has found out. */
   renderer?: 'webgl' | 'canvas'
+  /** The capture devices it can see, when it has looked (and again whenever they change). */
+  cameras?: CameraDevice[]
+  /** The mask it was given and could not read, or null once it has one (or none). */
+  maskMissing?: string | null
 }
 
 export interface OutputWindowBridge {
@@ -235,4 +283,10 @@ export interface OutputProbe {
   showing(): Array<{ cueId: string; opacity: number }>
   /** Each video's element: its place in its file, and whether it is playing. */
   videos(): Array<{ cueId: string; positionMs: number; paused: boolean; rate: number; heldAt: number | null; anchorPaused: boolean }>
+  /** Each live picture, and how it is getting on. */
+  cameras(): Array<{ cueId: string; state: CameraFeedState; device: string }>
+  /** Each picture's geometry as this frame drew it: keyframes and moves applied. */
+  geometry(cueId: string): VisualGeometry | null
+  /** The line across the output, or '' when there is none. */
+  banner(): string
 }

@@ -10,7 +10,8 @@ import { cueEngine } from '../engine/CueEngine'
 import { visualCues } from '../engine/visualCues'
 import { audioEngine } from '../engine/audioEngineClient'
 import { isVisualCue, type DisplayInfo, type OutputStatus } from '../../../shared/visual'
-import type { OutputEvent, OutputSnapshot, TimerFeed, TimerWindowState } from '../../../shared/ipc/output'
+import type { CameraSnapshot, OutputEvent, OutputSnapshot, TimerFeed, TimerWindowState } from '../../../shared/ipc/output'
+import { cameraSourceProblem } from '../../../shared/camera'
 import type { Cue } from '../../../shared/cue'
 
 /** How often the timers' feed is worked out. A change is sent at once; nothing else is sent. */
@@ -22,6 +23,11 @@ interface OutputState {
   timerWindow: TimerWindowState
   /** Pictures that could not be shown, newest last, for the panel to say. */
   errors: Array<{ cueId: string; outputId: string; message: string }>
+  /** The capture devices this machine's outputs see, and the one each camera cue uses here. */
+  cameras: CameraSnapshot
+  /** How each camera picture is getting on, by cue: the line its output shows, or '' when it is live. */
+  cameraStates: Record<string, { state: string; message: string }>
+  setCameras: (cameras: CameraSnapshot) => void
   apply: (snapshot: OutputSnapshot) => void
   status: (status: OutputStatus) => void
   error: (entry: { cueId: string; outputId: string; message: string }) => void
@@ -34,6 +40,9 @@ export const useOutputState = create<OutputState>(set => ({
   displays: [],
   timerWindow: { open: false, mode: 'remaining' },
   errors: [],
+  cameras: { devices: [], listed: false, choices: {} },
+  cameraStates: {},
+  setCameras: cameras => set({ cameras }),
   apply: snapshot => set({
     statuses: Object.fromEntries(snapshot.outputs.map(status => [status.outputId, status])),
     displays: snapshot.displays,
@@ -72,6 +81,10 @@ export function useOutputs(): void {
       for (const event of events) {
         if (event.kind === 'status') state.status(event.status)
         if (event.kind === 'error') state.error({ cueId: event.cueId, outputId: event.outputId, message: event.message })
+        if (event.kind === 'cameras') state.setCameras(event.cameras)
+        if (event.kind === 'camera') {
+          useOutputState.setState(s => ({ cameraStates: { ...s.cameraStates, [event.cueId]: { state: event.state, message: event.message } } }))
+        }
       }
     })
     return unsubscribe
@@ -89,6 +102,23 @@ export function useOutputs(): void {
     const cue = useStore.getState().cues.find(c => c.id === selectedId)
     if (cue?.type === 'video') visualCues.prepare(cue)
   }, [selectedId, selectedVideoFile])
+
+  // A camera stood on is opened on its output the same way, so its picture is live the moment
+  // GO asks for it rather than a second later: a capture device takes that long to wake.
+  const selectedCamera = useStore(s => {
+    const cue = s.cues.find(c => c.id === s.selectedId)
+    return cue?.type === 'camera' && cameraSourceProblem(cue) === null ? `${cue.source}|${cue.deviceName}|${cue.url}|${cue.outputId}` : null
+  })
+  useEffect(() => {
+    if (selectedId === null || selectedCamera === null) return
+    const cue = useStore.getState().cues.find(c => c.id === selectedId)
+    if (cue?.type === 'camera') visualCues.prepare(cue)
+  }, [selectedId, selectedCamera])
+
+  // The capture devices, as main has them now: the camera picker reads them.
+  useEffect(() => {
+    void window.cuerunner.output.cameras().then(cameras => useOutputState.getState().setCameras(cameras)).catch(() => {})
+  }, [])
 
   // An edit to a picture that is up reaches it on its next frame.
   useEffect(() => {

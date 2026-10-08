@@ -16,7 +16,13 @@ function cueAt(id: string, type: 'audio' | 'osc', label: string, duration = 0): 
   return { ...cue, id, number: id, duration, triggers: [{ id: `t-${id}`, kind: 'timecode', timecode: label }] } as Cue
 }
 
-function harness(options: { chase?: boolean; onStop?: TimecodeOnStop; pro?: boolean; tolerance?: number } = {}) {
+function harness(options: {
+  chase?: boolean
+  onStop?: TimecodeOnStop
+  pro?: boolean
+  tolerance?: number
+  listShift?: ChaseDeps['listShift']
+} = {}) {
   const cues: Cue[] = [
     cueAt('A', 'audio', '01:00:00:00', 10_000),
     cueAt('B', 'osc', '01:00:05:00'),
@@ -40,7 +46,8 @@ function harness(options: { chase?: boolean; onStop?: TimecodeOnStop; pro?: bool
       log.push(`stop ${cueId}`)
       running.delete(cueId)
     },
-    isRunning: cueId => running.has(cueId)
+    isRunning: cueId => running.has(cueId),
+    ...(options.listShift ? { listShift: options.listShift } : {})
   }
   const chase = new TimecodeChase(deps)
   let now = 0
@@ -143,5 +150,28 @@ describe('chase', () => {
     run(at('01:00:06:00'), 0)
     // A is inside its ten seconds; B is an OSC message, which has no inside.
     expect(log).toEqual(['chase A 6000'])
+  })
+})
+
+describe('each list on the clock', () => {
+  it('places a list’s cues its own offset later, and fires them there', () => {
+    // A and C are in a list that sits six seconds later on the clock; B is in the main list.
+    const { log, run } = harness({ listShift: cue => cue.id === 'B' ? 0 : at('00:00:06:00') })
+    run(at('00:59:59:00'), 8000)
+    expect(log).toEqual(['fire B', 'fire A'])
+  })
+
+  it('leaves a list that does not follow the clock alone, firing and chasing', () => {
+    const { log, run } = harness({ chase: true, listShift: cue => cue.id === 'A' ? null : 0 })
+    run(at('01:00:03:00'), 0)
+    run(at('01:00:03:00') + 1, 2400)
+    expect(log).toEqual(['fire B'])
+  })
+
+  it('chases a list’s cue to where its own offset puts the clock inside it', () => {
+    const { log, run } = harness({ chase: true, listShift: cue => cue.id === 'A' ? at('00:00:02:00') : 0 })
+    run(at('01:00:05:00'), 0)
+    // A starts at 01:00:02:00 on this list's clock: three seconds in.
+    expect(log).toContain('chase A 3000')
   })
 })

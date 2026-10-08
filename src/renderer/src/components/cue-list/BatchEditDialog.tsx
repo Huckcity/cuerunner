@@ -60,7 +60,7 @@ export function BatchEditDialog({ ids, onClose }: Props) {
   const numbering = draft.numberFrom === null ? null : renumbered(cues, ids, draft.numberFrom, draft.step ?? 1)
   const patches: Record<string, Partial<Cue>> = { ...fieldPatches }
   if (numbering?.ok) {
-    for (const [id, patch] of Object.entries(numbering.patches)) patches[id] = { ...patches[id], ...patch }
+    for (const [id, patch] of Object.entries(numbering.patches)) patches[id] = { ...patches[id], ...patch } as Partial<Cue>
   }
   const refused = numbering !== null && !numbering.ok ? numbering.reason : null
   const changing = refused === null ? Object.keys(patches).length : 0

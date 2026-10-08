@@ -198,7 +198,7 @@ describe('Toolbar', () => {
     act(() => fadeButton.click())
 
     const fade = useStore.getState().cues[1]
-    expect(fade).toMatchObject({ type: 'fade', name: 'Fade Walk-in', targetCueId: audio.id })
+    expect(fade).toMatchObject({ type: 'fade', name: 'Fade Walk-in', targetCueIds: [audio.id] })
     expect(useStore.getState().past.length).toBe(edits + 1)
 
     act(() => { useStore.getState().undo() })
@@ -215,7 +215,7 @@ describe('Toolbar', () => {
       .find(button => button.textContent === 'Fade')!
     act(() => fadeButton.click())
 
-    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Light Cue', targetCueId: light.id })
+    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Light Cue', targetCueIds: [light.id] })
   })
 
   it('leaves a fade un-aimed when the selected cue has no sound to fade', () => {
@@ -227,7 +227,7 @@ describe('Toolbar', () => {
       .find(button => button.textContent === 'Fade')!
     act(() => fadeButton.click())
 
-    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Cue', targetCueId: '' })
+    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Cue', targetCueIds: [] })
   })
 
   it('is not redrawn for a write to the store that is not its own', () => {

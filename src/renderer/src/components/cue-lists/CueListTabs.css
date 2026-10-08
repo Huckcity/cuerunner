@@ -1,0 +1,206 @@
+/* The show's cue lists, one tab each, in a bar above the list on screen. Quiet until it is
+   needed: the tab in front reads as the surface the rows sit on, the rest as labels. */
+
+.cue-list-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 30px;
+  padding: 3px var(--space-2) 0;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: none;
+}
+
+.cue-list-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-base);
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+}
+
+.cue-list-tab:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+.cue-list-tab[data-active='true'] {
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+  border-color: var(--border);
+  font-weight: var(--fw-semi);
+}
+
+/* Cue rows or another tab held over this one: a drop moves them here. */
+.cue-list-tab[data-drop] { box-shadow: inset 0 -2px 0 var(--accent-blue); }
+
+.cue-list-tab:focus-visible { outline: 1px solid var(--border-focus); outline-offset: -1px; }
+
+.cue-list-tab-color {
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.cue-list-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A disarmed list's name is struck through: nothing in it fires. */
+.cue-list-tab[data-disarmed='true'] .cue-list-tab-name { text-decoration: line-through; }
+
+.cue-list-tab-badge {
+  padding: 0 4px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-subtle);
+  font-size: var(--text-xs);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  line-height: 14px;
+  flex: none;
+}
+
+.cue-list-tab-badge[data-kind='off'] { color: var(--warn-fg); border-color: var(--warn-border); }
+
+/* Something is running in this list, on screen or not. */
+.cue-list-tab-running {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--state-running-fg);
+  flex: none;
+}
+
+.cue-list-tab-rename {
+  width: 140px;
+  height: 20px;
+  padding: 0 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font: inherit;
+  outline: none;
+}
+
+.cue-list-tab-add {
+  align-self: center;
+  width: 24px;
+  height: 22px;
+  margin-left: var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+
+.cue-list-tab-add:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+.cue-list-tab-menu .cue-context-menu-item:disabled {
+  color: var(--fg-disabled);
+  cursor: default;
+  background: transparent;
+}
+
+/* The list's own dialogs: its settings, and the question before it is deleted. */
+.cue-list-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.cue-list-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 460px;
+  max-height: 80vh;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.cue-list-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+}
+
+.cue-list-dialog-title {
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  color: var(--fg-primary);
+}
+
+.cue-list-dialog-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 16px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.cue-list-dialog-dismiss:hover { color: var(--fg-primary); }
+
+.cue-list-dialog-body { padding: var(--space-3) 16px 0; }
+
+.cue-list-dialog-blurb {
+  padding: var(--space-2) 16px 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  line-height: var(--line-height-base);
+}
+
+.cue-list-dialog-swatches {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.cue-list-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) 16px 14px;
+}
+
+.cue-list-dialog-button {
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cue-list-dialog-button:hover { background: var(--bg-hover); }
+
+.cue-list-dialog-button[data-kind='danger'] {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-fg);
+}

@@ -17,6 +17,9 @@
 
 import type { AudioCrosspoint, CueBase, FadeCurve } from './cue'
 import type { FadeShape } from './fadeShape'
+import type { BlendMode } from './visualBlend'
+import type { GeometryKeyframe } from './visualKeyframes'
+import type { CameraSourceKind } from './camera'
 
 /** One of the nine places text — or the timer — is anchored to on an output. */
 export type GridPosition =
@@ -113,6 +116,23 @@ export interface VisualCueBase extends CueBase {
    * the new — so nothing dips through black or shows through a letterbox on the way.
    */
   crossfade: boolean
+  /**
+   * How the picture is laid over what is behind it (src/shared/visualBlend.ts). Optional on
+   * disk: absent is `normal`, which is every picture a show saved before blend modes had.
+   */
+  blendMode?: BlendMode
+  /**
+   * Where the picture moves to over its own play (src/shared/visualKeyframes.ts): from its own
+   * geometry at its first frame, through each keyframe in turn. Optional on disk, and absent or
+   * empty is a picture that stays where its geometry puts it.
+   */
+  keyframes?: GeometryKeyframe[]
+  /**
+   * Whether the next GO takes this picture down (over its own fade out), whatever that GO fires.
+   * Absent or null follows the show's default (`PictureSettings.stopOnNextGo`); true or false is
+   * this cue's own answer.
+   */
+  stopOnNextGo?: boolean | null
 }
 
 export interface VideoCue extends VisualCueBase {
@@ -163,22 +183,39 @@ export interface TextCue extends VisualCueBase {
   position: GridPosition
 }
 
-export type VisualCue = VideoCue | ImageCue | TextCue
+/**
+ * A live picture: a capture device on this machine, or a network stream (src/shared/camera.ts).
+ * It runs until it is stopped — a feed has no end of its own — so its `duration` is nought.
+ */
+export interface CameraCue extends VisualCueBase {
+  type: 'camera'
+  source: CameraSourceKind
+  /**
+   * The device by the name its driver gives it: what travels with the show. This machine's own
+   * id for it is kept in userData, by cue id, and is never written here.
+   */
+  deviceName: string
+  /** The stream's address, for a network source: HTTP(S) video, HLS or MJPEG. */
+  url: string
+}
+
+export type VisualCue = VideoCue | ImageCue | TextCue | CameraCue
 export type VisualCueType = VisualCue['type']
 
-export const VISUAL_CUE_TYPES: readonly VisualCueType[] = ['video', 'image', 'text']
+export const VISUAL_CUE_TYPES: readonly VisualCueType[] = ['video', 'image', 'text', 'camera']
 
 /** Whether a cue puts a picture on an output. */
 export function isVisualCue(cue: { type: string }): cue is VisualCue {
-  return cue.type === 'video' || cue.type === 'image' || cue.type === 'text'
+  return cue.type === 'video' || cue.type === 'image' || cue.type === 'text' || cue.type === 'camera'
 }
 
 /**
  * Whether a cue names a media file the show carries with it — the cues whose path is made
- * portable on save, resolved on load, bundled, relinked and counted in the footprint.
+ * portable on save, resolved on load, bundled, relinked and counted in the footprint. A MIDI
+ * file is one too: a show that plays a click track has to arrive with it.
  */
-export function carriesMediaFile(cue: { type: string }): cue is { type: 'audio' | 'video' | 'image'; filePath: string } & CueBase {
-  return cue.type === 'audio' || cue.type === 'video' || cue.type === 'image'
+export function carriesMediaFile(cue: { type: string }): cue is { type: 'audio' | 'video' | 'image' | 'midiFile'; filePath: string } & CueBase {
+  return cue.type === 'audio' || cue.type === 'video' || cue.type === 'image' || cue.type === 'midiFile'
 }
 
 // ─── Outputs ──────────────────────────────────────────────────────────────────
@@ -220,6 +257,20 @@ export interface OutputWarp {
   gamma: number
 }
 
+/**
+ * An image laid over an output's pictures as a mask: where it is white (or opaque) the pictures
+ * show, where it is black (or clear) they do not. Stretched to the output's frame, and applied to
+ * the pictures alone — the timer and the test pattern are drawn over it — before the corner pin,
+ * so it is pinned with them.
+ */
+export interface OutputMask {
+  filePath: string
+  /** Which of the image's channels says how much shows: its brightness, or its transparency. */
+  mode: 'luma' | 'alpha'
+  /** Shows the pictures where the image is black instead. */
+  invert: boolean
+}
+
 /** An output as the show declares it. */
 export interface VideoOutput {
   id: string
@@ -232,6 +283,15 @@ export interface VideoOutput {
   height: number
   timer: OutputTimer
   warp: OutputWarp
+  /**
+   * Another output whose pictures this one shows — a confidence monitor at the desk, a second
+   * projector stacked on the first. It shows that output's cues as that output composes them,
+   * at that output's size, with its own timer and corner pin. Optional on disk: absent is an
+   * output with pictures of its own.
+   */
+  mirrorOf?: string
+  /** An image the pictures are masked by. Optional on disk: absent is no mask. */
+  mask?: OutputMask
 }
 
 export const DEFAULT_OUTPUT_SIZE = { width: 1920, height: 1080 }
@@ -268,10 +328,14 @@ export function createOutput(id: string, name: string): VideoOutput {
   }
 }
 
-/** The output a cue's picture goes to: the one it names, else the show's first. */
+/**
+ * The output a cue's picture goes to: the one it names, else the show's first that has
+ * pictures of its own (a mirror shows another's).
+ */
 export function outputFor(outputs: readonly VideoOutput[], outputId: string): VideoOutput | null {
   if (outputs.length === 0) return null
-  return outputs.find(output => output.id === outputId) ?? (outputId === '' ? outputs[0] : null)
+  return outputs.find(output => output.id === outputId) ??
+    (outputId === '' ? outputs.find(output => output.mirrorOf === undefined) ?? outputs[0] : null)
 }
 
 // ─── Placement (a machine fact) ───────────────────────────────────────────────
@@ -325,6 +389,12 @@ export interface OutputStatus {
   testPattern: boolean
   /** Its window was closed by hand: the show still has the output, and it can be opened again. */
   windowClosed: boolean
+  /** The output whose pictures it shows, when it mirrors one. */
+  mirrorOf?: string
+  /** A mask the output could not read, by its file's path. */
+  maskMissing?: string
+  /** The cameras its pictures name that are not giving a picture, each with the line it shows. */
+  cameraProblems?: string[]
 }
 
 // ─── The cue defaults ─────────────────────────────────────────────────────────
@@ -459,8 +529,71 @@ export function normalizeVideoOutputs(value: unknown): VideoOutput[] {
           bottom: finiteIn(blend.bottom, 0, 0.5, 0)
         },
         gamma: finiteIn(warp.gamma, 0.1, 5, 1)
-      }
+      },
+      ...(typeof entry.mirrorOf === 'string' && entry.mirrorOf !== '' && entry.mirrorOf !== entry.id ? { mirrorOf: entry.mirrorOf } : {}),
+      ...maskOf(entry.mask)
     })
   }
-  return outputs
+  // A mirror shows an output that has pictures of its own: one that names an output the show
+  // does not have, or another mirror, shows its own instead — a chain of mirrors is a loop
+  // waiting to be made.
+  const own = new Set(outputs.filter(output => output.mirrorOf === undefined).map(output => output.id))
+  return outputs.map(output => {
+    if (output.mirrorOf === undefined || own.has(output.mirrorOf)) return output
+    const { mirrorOf: _dropped, ...rest } = output
+    return rest
+  })
+}
+
+function maskOf(value: unknown): { mask?: OutputMask } {
+  if (typeof value !== 'object' || value === null) return {}
+  const mask = value as Partial<OutputMask>
+  if (typeof mask.filePath !== 'string' || mask.filePath === '') return {}
+  return {
+    mask: {
+      filePath: mask.filePath,
+      mode: mask.mode === 'alpha' ? 'alpha' : 'luma',
+      invert: mask.invert === true
+    }
+  }
+}
+
+/** The output whose pictures an output shows: the one it mirrors, else itself. */
+export function pictureSourceOf(outputs: readonly VideoOutput[], outputId: string): VideoOutput | null {
+  const output = outputs.find(candidate => candidate.id === outputId)
+  if (output === undefined) return null
+  if (output.mirrorOf === undefined) return output
+  const source = outputs.find(candidate => candidate.id === output.mirrorOf)
+  return source !== undefined && source.mirrorOf === undefined ? source : output
+}
+
+// ─── The show's picture settings ──────────────────────────────────────────────
+
+/**
+ * What the show says about its pictures as a whole. A section of the show of its own
+ * (`Workspace.pictures`), written only when it says something other than the defaults, so a
+ * show that never touched it keeps the bytes it had.
+ */
+export interface PictureSettings {
+  /** Whether a picture is taken down by the next GO unless its cue says otherwise. */
+  stopOnNextGo: boolean
+}
+
+export function defaultPictureSettings(): PictureSettings {
+  return { stopOnNextGo: false }
+}
+
+export function isDefaultPictureSettings(settings: PictureSettings): boolean {
+  return settings.stopOnNextGo === false
+}
+
+/** The picture settings as a file carries them: anything missing or of the wrong kind is the default. */
+export function normalizePictureSettings(value: unknown): PictureSettings {
+  const entry = typeof value === 'object' && value !== null ? value as Partial<PictureSettings> : {}
+  return { stopOnNextGo: entry.stopOnNextGo === true }
+}
+
+/** Whether the next GO takes a picture down: its cue's own answer, else the show's. */
+export function stopsOnNextGo(cue: Pick<VisualCueBase, 'stopOnNextGo'>, settings: PictureSettings): boolean {
+  return typeof cue.stopOnNextGo === 'boolean' ? cue.stopOnNextGo : settings.stopOnNextGo
 }

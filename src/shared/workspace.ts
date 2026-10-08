@@ -1,10 +1,11 @@
 import type { OutputFader, OutputPatch } from './audioRouting'
-import type { Cue } from './cue'
+import type { Cue, OscPatch } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
 import type { LightingSettings } from './dmx'
 import type { TimecodeShowSettings } from './timecode'
-import type { VideoOutput } from './visual'
+import type { PictureSettings, VideoOutput } from './visual'
+import type { CueListInfo } from './cueLists'
 
 export interface AudioSettings {
   /**
@@ -135,7 +136,7 @@ export interface WorkspaceIdentity {
 export interface LoadNote {
   /** The cue the note is about: the orphan, the loop member, or the group whose children moved. */
   cueId: string
-  kind: 'reordered' | 'missing-group' | 'cycle'
+  kind: 'reordered' | 'missing-group' | 'cycle' | 'missing-list' | 'list-in-group'
   /** What happened, in one line, ready for the dialog that lists it. */
   detail: string
 }
@@ -188,6 +189,24 @@ export interface Workspace {
    * their bytes are what they were. Where each output is on a machine is that machine's.
    */
   videoOutputs?: VideoOutput[]
+  /**
+   * The show's cue lists, in tab order: each one's id, name, colour and what it decides for
+   * its cues (`./cueLists`). Optional: a show with only its main list, under its own name,
+   * carries no such section, so a show saved before lists existed writes the bytes it always
+   * wrote. A cue names its list with `listId`; one that names none is in the main list.
+   */
+  cueLists?: CueListInfo[]
+  /**
+   * What the show says about its pictures as a whole (src/shared/visual.ts). Optional: a show
+   * that leaves them at the defaults carries none, so its bytes are what they were.
+   */
+  pictures?: PictureSettings
+  /**
+   * The show's named OSC destinations, chosen per message by an OSC cue. Optional: a show with
+   * none carries no such section, so a show saved before patches existed writes the bytes it
+   * always wrote.
+   */
+  oscPatches?: OscPatch[]
   cues: Cue[]
 }
 
