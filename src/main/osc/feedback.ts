@@ -11,6 +11,7 @@
 
 import {
   cueListMessages,
+  DEFAULT_FEEDBACK_RATE_HZ,
   feedbackChanges,
   MAX_FEEDBACK_RATE_HZ,
   parseFeedbackRequest,
@@ -192,7 +193,9 @@ export class OscFeedback {
 
   /** Progress is pushed while something runs, and once more after, to zero the gauges. */
   private armProgress(): void {
-    const rate = Math.min(MAX_FEEDBACK_RATE_HZ, Math.max(0, this.settings?.rateHz ?? 0))
+    // The show's rate, or — for a show that has set none, whose remotes subscribed themselves —
+    // the default one.
+    const rate = Math.min(MAX_FEEDBACK_RATE_HZ, Math.max(0, this.settings?.rateHz ?? DEFAULT_FEEDBACK_RATE_HZ))
     const wanted = rate > 0 && this.snapshot !== null &&
       (this.snapshot.running.length > 0 || this.progressSlots > 0) &&
       (this.destinations().length > 0)

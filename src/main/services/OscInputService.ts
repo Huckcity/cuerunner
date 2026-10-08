@@ -258,7 +258,12 @@ export function refusalSentence(error: unknown, address: string, port: number): 
       return `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
         `this show cannot hear OSC there until it is let go or the port is changed (EADDRINUSE)`
     case 'EACCES':
-      return `port ${port} needs privileges this program does not have — choose a port above 1023 (EACCES)`
+      // Windows reports a port another socket holds exclusively as WSAEACCES; elsewhere it is
+      // a port below 1024 that needs privileges.
+      return process.platform === 'win32'
+        ? `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
+          `this show cannot hear OSC there until it is let go or the port is changed (EACCES)`
+        : `port ${port} needs privileges this program does not have — choose a port above 1023 (EACCES)`
     case 'EADDRNOTAVAIL':
       return `${address} is not an address of this machine any more — choose its interface again (EADDRNOTAVAIL)`
     default:
