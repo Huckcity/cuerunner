@@ -160,6 +160,10 @@ export class UpdateService {
   private tickTimer: unknown = null
   private lastLockout: string | null = null
   private writing: Promise<void> = Promise.resolve()
+  /** Set by `dispose()`: nothing is written after it, so a quit leaves no write behind it. */
+  private closed = false
+  /** Checks and downloads from their first step, before they have anything in `inflight`. */
+  private readonly pending = new Set<Promise<unknown>>()
   private readonly now: () => Date
   private readonly timers: UpdateTimers
   private readonly engineBusy: () => boolean
@@ -213,12 +217,38 @@ export class UpdateService {
     this.tickTimer = this.timers.setInterval(() => this.tick(), UPDATE_TICK_MS)
   }
 
+  /**
+   * Stops the schedule and any download, and starts no write after it: the app is quitting, or
+   * the test is over. A write already under way is not cut short — `flush()` waits for it.
+   */
   dispose(): void {
+    this.closed = true
     if (this.launchTimer !== null) this.timers.clearTimeout(this.launchTimer)
     if (this.tickTimer !== null) this.timers.clearInterval(this.tickTimer)
     this.launchTimer = null
     this.tickTimer = null
     this.downloadAbort?.abort()
+  }
+
+  /**
+   * Settles once nothing is under way and nothing is being written: every check, download and
+   * write this service started has finished. The file's folder can be removed after it — a
+   * test's, at its end — without a write landing in a folder that is gone.
+   */
+  async flush(): Promise<void> {
+    for (;;) {
+      await Promise.allSettled([...this.pending])
+      await this.settled()
+      const writing = this.writing
+      await writing
+      if (writing === this.writing && this.inflight === null && this.pending.size === 0) return
+    }
+  }
+
+  /** `dispose()`, then `flush()`: the way out that leaves nothing running and nothing half written. */
+  async close(): Promise<void> {
+    this.dispose()
+    await this.flush()
   }
 
   /**
@@ -256,7 +286,11 @@ export class UpdateService {
   }
 
   /** Starts the download the last check offered. Answers once it has started, not finished. */
-  async download(): Promise<void> {
+  download(): Promise<void> {
+    return this.track(this.startDownload())
+  }
+
+  private async startDownload(): Promise<void> {
     const cannot = selfUpdateRefusal(this.options.install)
     if (!canSelfUpdate(this.options.install)) throw new Refusal(cannot ?? 'This copy cannot replace itself.')
     if (this.available === null) throw new Refusal('There is no update to download: check for one first.')
@@ -385,7 +419,22 @@ export class UpdateService {
     return this.updaterMade
   }
 
-  private async runCheck(manual: boolean): Promise<void> {
+  /** A check, counted from its first step — making the updater — so `flush()` waits for all of it. */
+  private runCheck(manual: boolean): Promise<void> {
+    return this.track(this.checkOnce(manual))
+  }
+
+  /** Remembers work under way until it settles, whichever way it settles. */
+  private track<T>(work: Promise<T>): Promise<T> {
+    this.pending.add(work)
+    const done = (): void => {
+      this.pending.delete(work)
+    }
+    work.then(done, done)
+    return work
+  }
+
+  private async checkOnce(manual: boolean): Promise<void> {
     const updater = await this.updater()
     if (updater === null) {
       if (manual) {
@@ -484,6 +533,7 @@ export class UpdateService {
 
   /** Writes one at a time, in order: two quick changes must not land out of order. */
   private persist(): Promise<void> {
+    if (this.closed) return this.writing
     const snapshot = `${JSON.stringify(this.stored, null, 2)}\n`
     const next = this.writing.then(() => writeFileAtomically(this.options.filePath, snapshot))
     this.writing = next.catch(() => {})
