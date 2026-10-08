@@ -149,12 +149,38 @@ async function openOutputsPanel(page: Page): Promise<void> {
   await expect(page.locator('.outputs-panel')).toBeVisible()
 }
 
+/**
+ * The numbers of every cue the list on screen holds, read by scrolling it end to end. The list
+ * is virtualized: the rows in the DOM are the ones the window has room for (and a few either
+ * side), so a count of `.cue-row` is a count of how tall the window is — a Windows desk at
+ * 150% scaling has room for fewer of a fifteen-cue show than an Xvfb screen does. Scrolled
+ * through, every cue the list holds is seen once.
+ */
+async function listedCueNumbers(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const scroller = document.querySelector<HTMLElement>('.cue-list-scroll')
+    if (scroller === null) return []
+    const seen = new Set<string>()
+    const frame = (): Promise<void> => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    const step = Math.max(1, Math.floor(scroller.clientHeight / 2))
+    for (let top = 0; ; top += step) {
+      scroller.scrollTop = top
+      await frame()
+      for (const cell of document.querySelectorAll('.cue-row .cue-number')) seen.add(cell.textContent ?? '')
+      if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight) break
+    }
+    scroller.scrollTop = 0
+    await frame()
+    return [...seen]
+  })
+}
+
 /** A launch with a show of its own open: the app, its window, and where it keeps its files. */
 async function launchShow(
   name: string,
   outputs: VideoOutput[],
   cues: (dir: string) => Array<Record<string, unknown>>,
-  options: { env?: Record<string, string>; extra?: Record<string, unknown>; rows?: number } = {}
+  options: { env?: Record<string, string>; extra?: Record<string, unknown> } = {}
 ): Promise<{ app: ElectronApplication; page: Page; dir: string; userDataDir: string }> {
   mkdirSync(ROOT, { recursive: true })
   const dir = mkdtempSync(path.join(ROOT, `${name}-`))
@@ -163,8 +189,11 @@ async function launchShow(
   const userDataDir = mkdtempSync(path.join(ROOT, 'userdata-'))
   const { app, page } = await launchApp({ userDataDir, args: ['--enable-unsafe-swiftshader'], env: options.env })
   await openFromRecent(page, userDataDir, show)
-  // The rows on screen are the first list's: a show of several lists shows one at a time.
-  await expect(page.locator('.cue-row')).toHaveCount(options.rows ?? list.length)
+  // The show is open with every cue the first list holds — a show of several lists shows one at
+  // a time, the main list first — counted by scrolling, not by the rows the window has room for.
+  const firstList = list.filter(cue => cue.listId === undefined || cue.listId === 'main').map(cue => String(cue.number))
+  await expect(page.locator('.cue-row').first()).toBeVisible()
+  await expect.poll(async () => (await listedCueNumbers(page)).sort(), { timeout: 10_000 }).toEqual([...firstList].sort())
   return { app, page, dir, userDataDir }
 }
 
@@ -392,7 +421,7 @@ test('leaves a caption up through a GO in another cue list, and takes it down on
     textCue('caption', { stopOnNextGo: true }),
     waitCue('w1'),
     { ...waitCue('bang'), listId: 'fx' }
-  ], { rows: 2, extra: { cueLists: [{ id: 'main', name: 'Main Cue List' }, { id: 'fx', name: 'Effects' }] } })
+  ], { extra: { cueLists: [{ id: 'main', name: 'Main Cue List' }, { id: 'fx', name: 'Effects' }] } })
   try {
     const stage = (await outputWindows(app, 1)).get('Stage')!
     await fire(page, 0)
