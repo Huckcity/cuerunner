@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../store'
 import type { LightCue } from '../../../../shared/cue'
-import { resolveParam } from '../../../../shared/dmx'
+import { functionAt, resolveParam } from '../../../../shared/dmx'
 import type { DmxMonitor, DmxProgrammerValue } from '../../../../shared/dmxWire'
 import { lightingCommand } from '../../engine/lighting'
 import { paramsOf, recordLook } from '../../utils/lighting'
@@ -119,6 +119,11 @@ export function FadersPanel({ monitor }: { monitor: DmxMonitor | null }) {
                     onChange={e => move(fixture.id, entry.key, Number(e.target.value))}
                   />
                   <output htmlFor={id}>{value === undefined ? '—' : `${Math.round(value.v * 100)}%`}</output>
+                  {entry.functions !== undefined && (
+                    <span className="lighting-function" data-testid="fader-function">
+                      {functionAt(entry, value?.v ?? entry.home) ?? ''}
+                    </span>
+                  )}
                 </div>
               )
             })}
