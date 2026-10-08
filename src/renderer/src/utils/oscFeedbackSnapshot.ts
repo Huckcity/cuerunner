@@ -1,24 +1,27 @@
 import type { Cue } from '../../../shared/cue'
 import type { AudioProgress } from '../../../shared/audio'
-import type { FeedbackRun, OscFeedbackSnapshot } from '../../../shared/oscFeedback'
+import type { FeedbackCue, FeedbackRun, OscFeedbackSnapshot } from '../../../shared/oscFeedback'
+import { defaultCueLists, listMembership, MAIN_CUE_LIST_ID, type CueListInfo } from '../../../shared/cueLists'
 import type { RunningCue } from '../store'
 import { groupDurationMs } from './cueDuration'
 import { runTiming } from './runTiming'
-
-/**
- * The list the playhead stands in, as a QLab remote names it. The show has one list; the id is
- * constant so a remote that learnt it keeps it across a reload.
- */
-export const FEEDBACK_LIST_ID = 'main'
 
 /** What a snapshot is built from: the store's own fields, and the engine's progress. */
 export interface SnapshotSource {
   workspaceId: string
   workspaceName: string
   cues: readonly Cue[]
+  /** The list in front's playhead. */
   selectedId: string | null
   running: ReadonlyMap<string, RunningCue>
+  /** The show's lists; a source without them is a show of one, the main list. */
+  cueLists?: readonly CueListInfo[]
+  activeListId?: string
+  /** Each list's own playhead: the selection for the list in front, a list's own cursor otherwise. */
+  listPlayhead?: (listId: string) => string | null
 }
+
+const asFeedbackCue = (cue: Cue): FeedbackCue => ({ id: cue.id, number: cue.number, name: cue.name, type: cue.type })
 
 /**
  * The show as a remote reads it now. The running cues are in list order — the topmost is slot
@@ -31,7 +34,11 @@ export function buildFeedbackSnapshot(
   nowMs: number,
   progressOf: (cueId: string) => AudioProgress | null
 ): OscFeedbackSnapshot {
-  const selected = source.cues.find(cue => cue.id === source.selectedId) ?? null
+  const byId = new Map(source.cues.map(cue => [cue.id, cue]))
+  const selected = source.selectedId === null ? null : byId.get(source.selectedId) ?? null
+  const membership = listMembership(source.cues)
+  const lists = source.cueLists ?? defaultCueLists()
+  const activeListId = source.activeListId ?? MAIN_CUE_LIST_ID
   const running: FeedbackRun[] = []
   for (const cue of source.cues) {
     const run = source.running.get(cue.id)
@@ -43,6 +50,7 @@ export function buildFeedbackSnapshot(
       number: cue.number,
       name: cue.name,
       type: cue.type,
+      listId: membership.get(cue.id) ?? MAIN_CUE_LIST_ID,
       state: run.state,
       elapsedMs: Math.round(timing.elapsedMs),
       durationMs: timing.remainingMs === null ? null : Math.round(timing.elapsedMs + timing.remainingMs)
@@ -51,10 +59,19 @@ export function buildFeedbackSnapshot(
   return {
     workspaceId: source.workspaceId,
     workspaceName: source.workspaceName,
-    listId: FEEDBACK_LIST_ID,
-    playhead: selected === null
-      ? null
-      : { id: selected.id, number: selected.number, name: selected.name, type: selected.type },
+    activeListId,
+    playhead: selected === null ? null : asFeedbackCue(selected),
+    lists: lists.map(list => {
+      const headId = list.id === activeListId ? source.selectedId : source.listPlayhead?.(list.id) ?? null
+      const head = headId === null ? undefined : byId.get(headId)
+      return {
+        id: list.id,
+        name: list.name,
+        playhead: head === undefined ? null : asFeedbackCue(head),
+        cart: list.cart === true,
+        disarmed: list.disarmed === true
+      }
+    }),
     running,
     cues: source.cues.map(cue => ({
       id: cue.id,
@@ -62,6 +79,7 @@ export function buildFeedbackSnapshot(
       name: cue.name,
       type: cue.type,
       parentId: cue.parentId,
+      listId: membership.get(cue.id) ?? MAIN_CUE_LIST_ID,
       isArmed: cue.isArmed,
       colorName: cue.colorLabel,
       // A remote shows a cue's notes in a line or two; the snapshot does not carry a novel.

@@ -6,6 +6,7 @@ import {
   feedbackChanges,
   parseFeedbackRequest,
   playheadMessages,
+  listMessages,
   progressMessages,
   qlabCueUpdate,
   qlabPlayheadUpdate,
@@ -15,23 +16,31 @@ import {
 } from './oscFeedback'
 
 const cue = (id: string, number: string, name: string, extra: Partial<OscFeedbackSnapshot['cues'][number]> = {}) =>
-  ({ id, number, name, type: 'audio', parentId: null, isArmed: true, colorName: 'none', notes: '', ...extra })
+  ({ id, number, name, type: 'audio', parentId: null, listId: 'main', isArmed: true, colorName: 'none', notes: '', ...extra })
 
 const snapshot = (patch: Partial<OscFeedbackSnapshot> = {}): OscFeedbackSnapshot => ({
   workspaceId: 'WS',
   workspaceName: 'Press Night',
-  listId: 'main',
+  activeListId: 'main',
   playhead: { id: 'c2', number: '2', name: 'Storm', type: 'audio' },
+  // Two lists, the second a cart with its own playhead, standing on its door slam.
+  lists: [
+    { id: 'main', name: 'Main Cue List', playhead: { id: 'c2', number: '2', name: 'Storm', type: 'audio' }, cart: false, disarmed: false },
+    { id: 'sfx', name: 'Effects', playhead: { id: 'x1', number: 'X1', name: 'Door', type: 'audio' }, cart: true, disarmed: false }
+  ],
   running: [
-    { id: 'c1', number: '1', name: 'Walk-in', type: 'audio', state: 'playing', elapsedMs: 5000, durationMs: 20_000 },
-    { id: 'c3', number: '3', name: 'Loop', type: 'audio', state: 'paused', elapsedMs: 1000, durationMs: null }
+    { id: 'c1', number: '1', name: 'Walk-in', type: 'audio', listId: 'main', state: 'playing', elapsedMs: 5000, durationMs: 20_000 },
+    { id: 'c3', number: '3', name: 'Loop', type: 'audio', listId: 'main', state: 'paused', elapsedMs: 1000, durationMs: null },
+    { id: 'x2', number: 'X2', name: 'Thunder', type: 'audio', listId: 'sfx', state: 'playing', elapsedMs: 100, durationMs: 4000 }
   ],
   cues: [
     cue('c1', '1', 'Walk-in'),
     cue('c2', '2', 'Storm', { notes: 'big', colorName: 'red' }),
     cue('c3', '3', 'Loop'),
     cue('g', '4', 'Act 2', { type: 'group' }),
-    cue('c5', '4.1', 'Inside', { parentId: 'g', isArmed: false })
+    cue('c5', '4.1', 'Inside', { parentId: 'g', isArmed: false }),
+    cue('x1', 'X1', 'Door', { listId: 'sfx' }),
+    cue('x2', 'X2', 'Thunder', { listId: 'sfx' })
   ],
   ...patch
 })
@@ -51,40 +60,58 @@ describe('Cuerunner’s own feedback', () => {
   })
 
   it('names the running cues as slots, and empties the slots that are no longer used', () => {
-    const now = values(runningMessages(snapshot(), 3))
-    expect(now['/cuerunner/running/count']).toEqual([2])
+    const now = values(runningMessages(snapshot(), 4))
+    expect(now['/cuerunner/running/count']).toEqual([3])
     expect(now['/cuerunner/running/active']).toEqual([1])
     expect(now['/cuerunner/running/0/number']).toEqual(['1'])
     expect(now['/cuerunner/running/1/state']).toEqual(['paused'])
-    expect(now['/cuerunner/running/2/name']).toEqual([''])
-    expect(now['/cuerunner/running/3/name']).toBeUndefined()
+    // Each running cue names the list it runs in.
+    expect(now['/cuerunner/running/0/list']).toEqual(['Main Cue List'])
+    expect(now['/cuerunner/running/2/list']).toEqual(['Effects'])
+    expect(now['/cuerunner/running/3/name']).toEqual([''])
+    expect(now['/cuerunner/running/4/name']).toBeUndefined()
   })
 
   it('pushes progress, with −1 where nobody can say how long, and zeroes a freed slot once', () => {
-    const now = values(progressMessages(snapshot(), 3))
+    const now = values(progressMessages(snapshot(), 4))
     expect(now['/cuerunner/running/0/progress']).toEqual([0.25])
     expect(now['/cuerunner/running/0/elapsed']).toEqual([5])
     expect(now['/cuerunner/running/0/remaining']).toEqual([15])
     expect(now['/cuerunner/running/0/duration']).toEqual([20])
     expect(now['/cuerunner/running/1/remaining']).toEqual([-1])
     expect(now['/cuerunner/running/1/duration']).toEqual([-1])
-    expect(now['/cuerunner/running/2/progress']).toEqual([0])
+    expect(now['/cuerunner/running/3/progress']).toEqual([0])
+  })
+
+  it('says every list’s own playhead and what runs in it, by its place among the tabs', () => {
+    const now = values(listMessages(snapshot(), 3))
+    expect(now['/cuerunner/lists/count']).toEqual([2])
+    expect(now['/cuerunner/list/1/name']).toEqual(['Main Cue List'])
+    expect(now['/cuerunner/list/2/id']).toEqual(['sfx'])
+    expect(now['/cuerunner/list/2/playhead/number']).toEqual(['X1'])
+    expect(now['/cuerunner/list/1/running/count']).toEqual([2])
+    expect(now['/cuerunner/list/2/running/count']).toEqual([1])
+    // A third list that has gone is emptied once.
+    expect(now['/cuerunner/list/3/name']).toEqual([''])
   })
 
   it('lists the cues as a dropdown’s values', () => {
     const now = values(cueListMessages(snapshot()))
-    expect(now['/cuerunner/cues/count']).toEqual([5])
+    expect(now['/cuerunner/cues/count']).toEqual([7])
     expect(JSON.parse(String(now['/cuerunner/cues/options'][0]))[1]).toEqual(['2', '2 — Storm'])
   })
 
   it('tells a change of playhead, of what runs and of the list apart, and which cues moved', () => {
     const before = snapshot()
     expect(feedbackChanges(null, before)).toMatchObject({ playhead: true, running: true, cues: true })
-    expect(feedbackChanges(before, snapshot())).toEqual({ playhead: false, running: false, cues: false, changedCueIds: [] })
+    expect(feedbackChanges(before, snapshot())).toEqual({ playhead: false, running: false, cues: false, lists: false, changedCueIds: [], movedListIds: [] })
+    // Another list's playhead moving is that list's change, not the one in front's.
+    const cart = snapshot({ lists: before.lists.map(list => list.id === 'sfx' ? { ...list, playhead: null } : list) })
+    expect(feedbackChanges(before, cart)).toMatchObject({ playhead: false, lists: true, movedListIds: ['sfx'] })
     // Progress alone is not a change: it is pushed on its own clock.
     const later = snapshot({ running: before.running.map(run => ({ ...run, elapsedMs: run.elapsedMs + 500 })) })
     expect(feedbackChanges(before, later).running).toBe(false)
-    const stopped = snapshot({ running: before.running.slice(1), playhead: null })
+    const stopped = snapshot({ running: before.running.filter(run => run.id !== 'c1'), playhead: null })
     expect(feedbackChanges(before, stopped)).toMatchObject({ playhead: true, running: true, changedCueIds: ['c1'] })
   })
 
@@ -116,12 +143,24 @@ describe('QLab’s request and reply', () => {
   })
 
   it('lists what is running, what is selected and the list itself', () => {
-    expect((ask('/runningCues')?.body.data as Array<{ number: string }>).map(entry => entry.number)).toEqual(['1'])
-    expect((ask('/runningOrPausedCues')?.body.data as Array<{ number: string }>).map(entry => entry.number)).toEqual(['1', '3'])
+    expect((ask('/runningCues')?.body.data as Array<{ number: string }>).map(entry => entry.number)).toEqual(['1', 'X2'])
+    expect((ask('/runningOrPausedCues')?.body.data as Array<{ number: string }>).map(entry => entry.number)).toEqual(['1', '3', 'X2'])
     expect((ask('/selectedCues')?.body.data as Array<{ uniqueID: string }>)[0].uniqueID).toBe('c2')
-    const [list] = ask('/cueLists')?.body.data as Array<{ cues: Array<{ number: string; cues?: Array<{ number: string; armed: boolean }> }> }>
-    expect(list.cues.map(entry => entry.number)).toEqual(['1', '2', '3', '4'])
-    expect(list.cues[3].cues).toEqual([expect.objectContaining({ number: '4.1', armed: false })])
+    // Every list, each a cue of its own holding only its own cues.
+    const lists = ask('/cueLists')?.body.data as Array<{ uniqueID: string; type: string; name: string; cues: Array<{ number: string; cues?: Array<{ number: string; armed: boolean }> }> }>
+    expect(lists.map(list => [list.uniqueID, list.name, list.type])).toEqual([['main', 'Main Cue List', 'Cue List'], ['sfx', 'Effects', 'Cart']])
+    expect(lists[0].cues.map(entry => entry.number)).toEqual(['1', '2', '3', '4'])
+    expect(lists[0].cues[3].cues).toEqual([expect.objectContaining({ number: '4.1', armed: false })])
+    expect(lists[1].cues.map(entry => entry.number)).toEqual(['X1', 'X2'])
+  })
+
+  it('answers a list asked as a cue: its own playhead, its name, whether anything in it runs', () => {
+    expect(ask('/cue_id/sfx/playbackPosition')?.body.data).toBe('x1')
+    expect(ask('/cue_id/main/playbackPosition')?.body.data).toBe('c2')
+    expect(ask('/cue_id/sfx/name')?.body.data).toBe('Effects')
+    expect(ask('/cue_id/sfx/isRunning')?.body.data).toBe(true)
+    // A list is not started by a query: the verb is the window's.
+    expect(ask('/cue_id/sfx/go')).toBeNull()
   })
 
   it('answers the workspace-level questions a QLab remote opens with', () => {
@@ -141,9 +180,13 @@ describe('QLab’s request and reply', () => {
 
   it('pushes QLab’s update addresses', () => {
     expect(qlabCueUpdate('WS', 'c1')).toEqual({ address: '/update/workspace/WS/cue_id/c1', args: [] })
-    expect(qlabPlayheadUpdate(snapshot())).toEqual({
+    expect(qlabPlayheadUpdate(snapshot(), 'main')).toEqual({
       address: '/update/workspace/WS/cueList/main/playbackPosition',
       args: [{ type: 's', value: 'c2' }]
+    })
+    expect(qlabPlayheadUpdate(snapshot(), 'sfx')).toEqual({
+      address: '/update/workspace/WS/cueList/sfx/playbackPosition',
+      args: [{ type: 's', value: 'x1' }]
     })
   })
 })

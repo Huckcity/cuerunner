@@ -1,7 +1,7 @@
 // The show as the window publishes it for the OSC feedback: the playhead, the running cues in
 // list order with how far each has got, and the list.
 import { describe, it, expect } from 'vitest'
-import { buildFeedbackSnapshot, FEEDBACK_LIST_ID } from './oscFeedbackSnapshot'
+import { buildFeedbackSnapshot } from './oscFeedbackSnapshot'
 import { createCue } from './cueDefaults'
 import type { Cue } from '../../../shared/cue'
 import type { RunningCue } from '../store'
@@ -21,7 +21,9 @@ describe('the feedback snapshot', () => {
       5000,
       id => (id === 'a1' ? { elapsedMs: 4000, durationMs: 20_000 } as never : null)
     )
-    expect(snapshot.listId).toBe(FEEDBACK_LIST_ID)
+    // A source that names no lists is a show of one, the main list.
+    expect(snapshot.lists.map(list => list.id)).toEqual(['main'])
+    expect(snapshot.lists[0].playhead?.id).toBe('w2')
     expect(snapshot.playhead).toEqual({ id: 'w2', number: 'w2', name: 'Cue w2', type: 'wait' })
     expect(snapshot.running.map(run => [run.id, run.elapsedMs, run.durationMs])).toEqual([
       ['w1', 4000, 10_000],
@@ -29,6 +31,20 @@ describe('the feedback snapshot', () => {
     ])
     // Notes are a line or two to a remote, not the whole of them.
     expect(snapshot.cues[2].notes.length).toBe(256)
+  })
+
+  it('reads every list’s own playhead, and names each running cue’s list', () => {
+    const cues = [cue('wait', 'm1'), { ...cue('wait', 'x1'), listId: 'sfx' }, { ...cue('wait', 'x2'), listId: 'sfx' }]
+    const running = new Map<string, RunningCue>([['x2', { cueId: 'x2', state: 'playing', startedAt: 0, progress: 0 }]])
+    const snapshot = buildFeedbackSnapshot({
+      workspaceId: 'WS', workspaceName: 'Show', cues, selectedId: 'm1', running,
+      cueLists: [{ id: 'main', name: 'Main Cue List' }, { id: 'sfx', name: 'Effects', cart: true }],
+      activeListId: 'main',
+      listPlayhead: listId => (listId === 'sfx' ? 'x1' : null)
+    }, 1000, () => null)
+    expect(snapshot.lists.map(list => [list.id, list.playhead?.id ?? null, list.cart])).toEqual([['main', 'm1', false], ['sfx', 'x1', true]])
+    expect(snapshot.running.map(run => [run.id, run.listId])).toEqual([['x2', 'sfx']])
+    expect(snapshot.cues.map(entry => entry.listId)).toEqual(['main', 'sfx', 'sfx'])
   })
 
   it('stands on nothing at the end of the show', () => {

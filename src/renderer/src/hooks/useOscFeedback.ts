@@ -47,7 +47,7 @@ export function useOscFeedback(): void {
 
     publish()
     const unsubscribe = subscribeToParts(
-      s => [s.cues, s.selectedId, s.running, s.workspaceName, s.workspaceId],
+      s => [s.cues, s.selectedId, s.running, s.workspaceName, s.workspaceId, s.cueLists, s.activeListId, s.listCursors],
       schedule
     )
     const resync = window.setInterval(() => {

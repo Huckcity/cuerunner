@@ -13,6 +13,7 @@ import {
   cueListMessages,
   DEFAULT_FEEDBACK_RATE_HZ,
   feedbackChanges,
+  listMessages,
   MAX_FEEDBACK_RATE_HZ,
   parseFeedbackRequest,
   playheadMessages,
@@ -56,13 +57,15 @@ export class OscFeedback {
   private settings: OscFeedbackSettings | null = null
   private subscribers = new Map<string, Destination>()
   private qlabSubscribers = new Map<string, Destination>()
-  private owed = { playhead: false, running: false, cues: false, cueIds: new Set<string>() }
+  private owed = { playhead: false, running: false, cues: false, lists: false, cueIds: new Set<string>(), listIds: new Set<string>() }
   private lastPush = Number.NEGATIVE_INFINITY
   private pushTimer: unknown = null
   private progressTimer: unknown = null
   /** How many slots the last running and progress pushes filled, for the zeroing pulse. */
   private runningSlots = 0
   private progressSlots = 0
+  /** How many list places the last push wrote, so a removed list's place is emptied once. */
+  private listPlaces = 0
 
   constructor(private readonly ports: FeedbackPorts) {}
 
@@ -80,8 +83,11 @@ export class OscFeedback {
     this.owed.playhead ||= changes.playhead
     this.owed.running ||= changes.running
     this.owed.cues ||= changes.cues
+    // What runs in each list is part of each list's line, so a start or a stop is owed there too.
+    this.owed.lists ||= changes.lists || changes.running
     for (const id of changes.changedCueIds) this.owed.cueIds.add(id)
-    if (changes.playhead || changes.running || changes.cues || changes.changedCueIds.length > 0) this.schedulePush()
+    for (const id of changes.movedListIds) this.owed.listIds.add(id)
+    if (changes.playhead || changes.running || changes.cues || changes.lists || changes.changedCueIds.length > 0) this.schedulePush()
     this.armProgress()
   }
 
@@ -154,6 +160,7 @@ export class OscFeedback {
     if (this.snapshot === null) return []
     const messages = [
       ...playheadMessages(this.snapshot),
+      ...listMessages(this.snapshot, this.listPlaces),
       ...runningMessages(this.snapshot, this.runningSlots),
       ...progressMessages(this.snapshot, this.progressSlots)
     ]
@@ -174,19 +181,24 @@ export class OscFeedback {
     if (snapshot === null) return
     this.lastPush = this.ports.now()
     const owed = this.owed
-    this.owed = { playhead: false, running: false, cues: false, cueIds: new Set() }
+    this.owed = { playhead: false, running: false, cues: false, lists: false, cueIds: new Set(), listIds: new Set() }
     const messages: FeedbackMessage[] = []
     if (owed.playhead) messages.push(...playheadMessages(snapshot))
     if (owed.running) {
       messages.push(...runningMessages(snapshot, this.runningSlots))
       this.runningSlots = Math.min(snapshot.running.length, 8)
     }
+    if (owed.lists) {
+      messages.push(...listMessages(snapshot, this.listPlaces))
+      this.listPlaces = snapshot.lists.length
+    }
     if (owed.cues) messages.push(...cueListMessages(snapshot))
     this.sendAll(this.destinations(), messages)
 
     // QLab's remotes are told what moved and ask again for what they show.
     const qlab: FeedbackMessage[] = []
-    if (owed.playhead) qlab.push(qlabPlayheadUpdate(snapshot))
+    // Each list whose playhead moved, by its own id: a QLab remote follows every list.
+    for (const listId of owed.listIds) qlab.push(qlabPlayheadUpdate(snapshot, listId))
     for (const id of owed.cueIds) qlab.push(qlabCueUpdate(snapshot.workspaceId, id))
     this.sendAll([...this.qlabSubscribers.values()], qlab)
   }

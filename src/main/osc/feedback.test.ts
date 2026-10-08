@@ -47,15 +47,16 @@ const settings = (patch: Partial<OscFeedbackSettings> = {}): OscFeedbackSettings
 const snap = (patch: Partial<OscFeedbackSnapshot> = {}): OscFeedbackSnapshot => ({
   workspaceId: 'WS',
   workspaceName: 'Show',
-  listId: 'main',
+  activeListId: 'main',
   playhead: { id: 'c1', number: '1', name: 'Walk-in', type: 'audio' },
+  lists: [{ id: 'main', name: 'Main Cue List', playhead: { id: 'c1', number: '1', name: 'Walk-in', type: 'audio' }, cart: false, disarmed: false }],
   running: [],
-  cues: [{ id: 'c1', number: '1', name: 'Walk-in', type: 'audio', parentId: null, isArmed: true, colorName: 'none', notes: '' }],
+  cues: [{ id: 'c1', number: '1', name: 'Walk-in', type: 'audio', parentId: null, listId: 'main', isArmed: true, colorName: 'none', notes: '' }],
   ...patch
 })
 
 const playing = (elapsedMs: number): OscFeedbackSnapshot['running'] =>
-  [{ id: 'c1', number: '1', name: 'Walk-in', type: 'audio', state: 'playing', elapsedMs, durationMs: 10_000 }]
+  [{ id: 'c1', number: '1', name: 'Walk-in', type: 'audio', listId: 'main', state: 'playing', elapsedMs, durationMs: 10_000 }]
 
 describe('the OSC feedback', () => {
   it('pushes a change to the show’s destination, and a burst of publishes as one push', () => {
@@ -132,6 +133,27 @@ describe('the OSC feedback', () => {
     ])
     // No destination of its own: the Cuerunner namespace went nowhere.
     expect(clock.sent.some(entry => entry.address.startsWith('/cuerunner/'))).toBe(false)
+  })
+
+  it('tells QLab’s remotes when another list’s playhead moves, by that list’s own id', () => {
+    const clock = ports()
+    const feedback = new OscFeedback(clock.ports)
+    feedback.configure(null)
+    const twoLists = (cartHead: string | null): OscFeedbackSnapshot => snap({
+      lists: [
+        { id: 'main', name: 'Main Cue List', playhead: { id: 'c1', number: '1', name: 'Walk-in', type: 'audio' }, cart: false, disarmed: false },
+        { id: 'sfx', name: 'Effects', playhead: cartHead === null ? null : { id: cartHead, number: 'X', name: 'Door', type: 'audio' }, cart: true, disarmed: false }
+      ]
+    })
+    feedback.publish(twoLists('x1'))
+    feedback.handle('/updates', [{ type: 'i', value: 1 }], { host: '10.0.0.7', port: 53001 })
+    clock.advance(MIN_PUSH_MS)
+    clock.sent.length = 0
+    feedback.publish(twoLists('x2'))
+    clock.advance(MIN_PUSH_MS)
+    expect(clock.sent.filter(entry => entry.address.startsWith('/update/')).map(entry => [entry.address, entry.args])).toEqual([
+      ['/update/workspace/WS/cueList/sfx/playbackPosition', ['x2']]
+    ])
   })
 
   it('sends a subscriber the state at once, to the port it names, and forgets it when it asks', () => {

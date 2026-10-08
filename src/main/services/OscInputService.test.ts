@@ -294,12 +294,13 @@ describe('OscInputService', () => {
     const snapshot: OscFeedbackSnapshot = {
       workspaceId: 'WS-1',
       workspaceName: 'Show',
-      listId: 'main',
+      activeListId: 'main',
       playhead: { id: 'c2', number: '2', name: 'Storm', type: 'audio' },
+      lists: [{ id: 'main', name: 'Main Cue List', playhead: { id: 'c2', number: '2', name: 'Storm', type: 'audio' }, cart: false, disarmed: false }],
       running: [],
       cues: [
-        { id: 'c1', number: '1', name: 'Walk-in', type: 'audio', parentId: null, isArmed: true, colorName: 'none', notes: '' },
-        { id: 'c2', number: '2', name: 'Storm', type: 'audio', parentId: null, isArmed: true, colorName: 'none', notes: '' }
+        { id: 'c1', number: '1', name: 'Walk-in', type: 'audio', parentId: null, listId: 'main', isArmed: true, colorName: 'none', notes: '' },
+        { id: 'c2', number: '2', name: 'Storm', type: 'audio', parentId: null, listId: 'main', isArmed: true, colorName: 'none', notes: '' }
       ]
     }
 
@@ -374,10 +375,9 @@ describe('the listener binds its port exclusively', () => {
       `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
       'this show cannot hear OSC there until it is let go or the port is changed (EADDRINUSE)'
     )
-    // The log is the alert's: the operator reads the same sentence there.
-    expect(second.bus.snapshot().alerts).toEqual([
-      expect.objectContaining({ level: 'warning', source: 'osc-in', message: `OSC input: ${sentence}` })
-    ])
+    // A refused port is a status, not an alarm: the window writes the status's sentence to
+    // the log (`useOscPortReport`), and nothing reaches the alarm list or the transport chip.
+    expect(second.bus.snapshot().alerts).toEqual([])
     // The first listener is untouched: it still holds the port and still hears it.
     expect(first.setState).not.toHaveBeenCalledWith('degraded', expect.anything())
   })
