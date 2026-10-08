@@ -1,7 +1,8 @@
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue,
   MscCue,
-  MicCue
+  MicCue,
+  LightCue
 } from '../../../shared/cue'
 import type { MidiFileCue } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
@@ -28,6 +29,7 @@ import {
   resumeMidiFile as releaseHeldMidiFile,
   stopMidiFile
 } from './midiFile'
+import { goLight, isLightCue, levelLight, panicLights, releaseLight, stopLight, stopLightsAmong } from './lighting'
 import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
@@ -742,6 +744,9 @@ export class CueEngine {
       case 'mic':
         this.executeMic(cue as MicCue, finish)
         break
+      case 'light':
+        this.executeLight(cue as LightCue, run, at, finish)
+        break
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
@@ -1053,6 +1058,10 @@ export class CueEngine {
   }
 
   private executeFade(cue: FadeCue, run: CueRun, at: number, finish: Finish): void {
+    if (isLightCue(this.deps!.getCues(), cue.targetCueId)) {
+      this.executeLightFade(cue, run, at, finish)
+      return
+    }
     const param: AudioFadeParam = cue.fadeProperty === 'volume' ? 'volume' : 'pan'
     // The ramp starts at the cue's own time on the clock, whether that is now or later.
     void audioEngine.fade(cue.targetCueId, param, cue.targetValue, cue.duration, cue.curve, at)
@@ -1158,6 +1167,47 @@ export class CueEngine {
     }).catch(error => {
       finish(this.now(), { outcome: 'error', error: errorMessage(error) })
     })
+  }
+
+  /**
+   * A Light cue: its look goes to the lighting engine, which fades it on its own clock, and the
+   * run ends when the fade does — the cue's duration is its fade time. The lights stay where it
+   * put them after the run has ended: that is tracking, not a cue still running.
+   */
+  private executeLight(cue: LightCue, run: CueRun, at: number, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    const endAt = at + Math.max(0, cue.duration - run.seekMs)
+    void goLight(cue, run.seekMs).then(result => {
+      if (run.cancelled) return
+      if (!result.ok) {
+        this.log({ level: 'error', message: result.error ?? 'the lighting did not take it', label })
+        finish(Math.max(at, this.now()), { outcome: 'error', error: result.error ?? 'the lighting did not take it' })
+        return
+      }
+      if (cue.look.length === 0 && cue.effects.length === 0) {
+        // A cue nobody has recorded anything into changes nothing, and says so.
+        this.log({ level: 'info', message: 'nothing in its look', label })
+      }
+    })
+    this.scheduleRunEnd(run, endAt, finish)
+  }
+
+  /**
+   * A Fade cue aimed at a Light cue moves the intensity that cue holds to its target share of
+   * what the cue set, over the fade; asked to stop the target when it is done, it releases it.
+   */
+  private executeLightFade(cue: FadeCue, run: CueRun, at: number, finish: Finish): void {
+    const level = Math.min(1, Math.max(0, cue.targetValue))
+    void levelLight(cue.targetCueId, level, cue.duration, cue.curve)
+    const endAt = at + cue.duration
+    this.planRelease(run, endAt)
+    this.track(run, this.scheduler!.schedule({
+      at: endAt,
+      due: () => {
+        if (cue.stopTargetWhenDone) void releaseLight(cue.targetCueId, 0)
+        finish(endAt)
+      }
+    }))
   }
 
   private executeMic(cue: MicCue, finish: Finish): void {
@@ -1396,6 +1446,7 @@ export class CueEngine {
   private stopCue(cueId: string, fadeMs: number, settles = true): void {
     const run = this.runs.get(cueId)
     if (run) this.cancelRun(cueId, run)
+    if (isLightCue(this.deps!.getCues(), cueId)) stopLight(cueId)
     this.cancelTimelineTasks(cueId)
     scriptHost.cancel(cueId)
     void audioEngine.stop(cueId, fadeMs).catch(() => {
@@ -1522,6 +1573,11 @@ export class CueEngine {
         // The group's own run goes first, so its children settling cannot carry it on.
         this.stopCue(target.id, fadeMs)
         this.stopGroup(target as GroupCue, fadeMs)
+      } else if (target.type === 'light') {
+        // A light that is stopped stays on where its fade had got to; a stop with a fade-out
+        // is the one that turns it off — what the cue holds fades home over the fade-out.
+        this.stopCue(target.id, fadeMs)
+        if (cue.fadeOut) void releaseLight(target.id, fadeMs)
       } else {
         this.stopCue(target.id, fadeMs)
       }
@@ -1700,6 +1756,8 @@ export class CueEngine {
       for (const cueId of [...this.runs.keys()]) {
         void audioEngine.stop(cueId, 0).catch(() => {})
       }
+      // A light mid-fade stops where it is and stays on.
+      stopLightsAmong(this.deps!.getCues(), this.runs.keys())
       this.cancelAllWork()
       scriptHost.cancelAll()
       void audioEngine.stopAll(0).catch(() => {})
@@ -1762,6 +1820,8 @@ export class CueEngine {
     this.cancelAllWork()
     scriptHost.cancelAll()
     void audioEngine.panic(PANIC_FADE_MS).catch(() => {})
+    // The lights do what the show's rule says a panic does to them: hold, release, or black out.
+    panicLights()
     this.deps!.clearAllRunning()
     // The stuck control is what an operator reaches for PANIC to fix: a pad whose
     // note-off never came is not a note anybody is holding, and leaving it held would

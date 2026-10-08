@@ -81,6 +81,11 @@ export const GUIDES = [
           <p>The plot, the batteries, the alarm before one dies mid-line, and the report
              afterwards.</p>
         </a>
+        <a class="card doc-card" href="./guides/lighting.html">
+          <h3>Lighting from the cue list</h3>
+          <p>Patch the rig, build a look on the faders, record it into a Light cue, and send
+             it out as sACN or Art-Net.</p>
+        </a>
         <a class="card doc-card" href="./guides/script.html">
           <h3>Following the script</h3>
           <p>The script beside the cue list, cues pinned to their lines, and the same view
@@ -437,6 +442,7 @@ export const GUIDES = [
             <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
             <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
             <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
+            <tr><td>Light<span class="pro">Pro</span></td><td>Fade the lighting rig to a look, over sACN or Art-Net.</td></tr>
             <tr><td>Devamp</td><td>Let a looping cue out of its loop and play on.</td></tr>
           </tbody>
         </table>
@@ -1327,6 +1333,110 @@ export const GUIDES = [
         what the night did to its packs. Like the rest of the session it starts over when
         Cuerunner does, so copy it before you quit.
       </p>
+    </section>
+`
+  },
+
+  {
+    path: 'guides/lighting.html',
+    section: 'Guides',
+    title: 'Lighting from the cue list',
+    blurb: 'Patch the rig, send it out as sACN or Art-Net, build a look on the faders, record it into a Light cue, and run it with the sound.',
+    pro: true,
+    body: `
+    <section class="panel reveal">
+      <h1>Lighting from the cue list<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        The lights in the same list as the sound, fired by the same GO: Cuerunner sends
+        DMX over the network itself, as sACN or Art-Net, to whatever node or dimmer rack
+        the rig is on.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>1. Patch the rig</h2>
+      <p>
+        The <strong>Lighting</strong> view, then <strong>Patch</strong>. Choose a type and a
+        mode, a universe, and how many: <strong>Patch</strong> puts them one after another in
+        the first gaps that fit, or from the address you type. The built-in types are a
+        dimmer, RGB, dimmer + RGB, RGBW, RGBA, RGBAW + UV and a basic moving head in 8- or
+        16-bit; anything else is a type you make from a channel list, or an
+        <strong>Open Fixture Library</strong> definition file read in.
+      </p>
+      <p>
+        Two fixtures sharing a slot, and one that runs off the end of its universe, are
+        listed above the patch in amber before the show finds them.
+        <strong>Identify</strong> flashes a fixture for three seconds — light and colour
+        full, a head centred — so you can find it in the rig.
+      </p>
+      <p>
+        <strong>Groups</strong> are fixtures a cue drives as one: a level on a group reaches
+        every member that has that parameter, so "the wash to blue" is one line in a cue
+        however many fixtures are in the wash.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>2. Send it somewhere</h2>
+      <p>
+        <strong>Network</strong>, then <strong>Add output</strong> for each universe:
+        sACN to its multicast group or to one receiver, or Art-Net broadcast or to one node.
+        A universe can have both. sACN carries a priority, for a rig where a console sends
+        too; <strong>Synchronise</strong> holds every universe's frame until they can all
+        change at once. <strong>Interface</strong> pins the traffic to one network card —
+        a machine fact, kept with the machine rather than the show. <strong>Find
+        nodes</strong> asks the Art-Net network who is there.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>3. Build a look and record it</h2>
+      <p>
+        <strong>Faders</strong> has every fixture's parameters live, over whatever the cues
+        are doing. Set the look by eye, then <strong>Record into cue</strong> (or
+        <strong>New Light cue</strong>): the faders' values go into the cue and the faders
+        let go, so the next GO shows the cue rather than the faders on top of it. A look can
+        also be built and trimmed in the cue's own <strong>Light</strong> tab.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>4. Run it</h2>
+      <p>
+        A Light cue's <strong>Fade</strong> is how long its look takes to arrive, on the
+        curve it names. What the cue does not name stays where the cues before it left it —
+        tracking — and a later cue that sets the same parameter takes it over:
+        <strong>latest takes precedence</strong>. A cue whose intensity is
+        <strong>highest takes precedence</strong> adds its intensity alongside the others
+        instead, and the light is as bright as the brightest of them. The
+        <strong>Tracking</strong> tab shows, parameter by parameter, what the cue moves,
+        what it sets to where it already was, and what it leaves.
+      </p>
+      <ul class="tight-list">
+        <li><strong>STOP</strong> stops a fade where it has got to. The light stays on.</li>
+        <li>A <strong>Stop cue</strong> with a fade-out releases a Light cue: what it holds fades home.</li>
+        <li>A <strong>Fade cue</strong> aimed at a Light cue moves its intensity to a share of what it set — 0.5 is half.</li>
+        <li><strong>Effects</strong> keep a parameter moving after the fade — sine, triangle, square or saw. On a group, spread starts each member at its own point, which is a chase.</li>
+      </ul>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>5. Watch it, and the consoles beside it</h2>
+      <p>
+        <strong>Monitor</strong> shows every slot of a universe as it goes out, ten times a
+        second. <strong>Listen to this universe</strong> in Network hears another console's
+        sACN or Art-Net: it shows under each slot, and with <strong>Merge in</strong> it is
+        merged into this show's output, highest takes precedence.
+      </p>
+      <div class="note">
+        <strong>Blackout</strong> takes every slot to zero until it is pressed again;
+        <strong>Release all</strong> fades every cue's levels home. A panic does what the
+        show says under Network → <strong>On panic</strong>: hold the lights where they are
+        (the default — a panic is a sound emergency, and a dark stage is a second one),
+        release them, or black out. The packets are held byte for byte to the sACN and
+        Art-Net documents and to a listener on this machine in the test suite; no hardware
+        node has been part of a run yet.
+      </div>
     </section>
 `
   },

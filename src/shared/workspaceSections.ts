@@ -84,6 +84,7 @@ export const WORKSPACE_SECTIONS = [
   { key: 'midiSettings', route: 'midi', merge: 'section' },
   { key: 'showSettings', route: 'show', merge: 'keys' },
   { key: 'triggerGuard', route: 'guard', merge: 'section' },
+  { key: 'lighting', route: 'lighting', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
 
@@ -607,6 +608,29 @@ export const CUE_FIELD_SHAPE = {
     channelMap: { items: 'number' },
     transpose: 'number',
     transposeDrums: 'boolean'
+  },
+  // A look is a list of levels and an effect list beside it: each element is one shape, and a
+  // value is bounded the way the window's own faders bound it.
+  light: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    look: {
+      elements: { target: 'string', id: 'string', param: 'string', value: { bounded: [0, 1] } }
+    },
+    effects: {
+      elements: {
+        target: 'string',
+        id: 'string',
+        param: 'string',
+        shape: 'string',
+        rate: { bounded: [0.01, 25] },
+        low: { bounded: [0, 1] },
+        high: { bounded: [0, 1] },
+        spread: { bounded: [0, 1] }
+      }
+    },
+    curve: 'string',
+    intensity: 'string'
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

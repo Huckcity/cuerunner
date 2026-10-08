@@ -180,6 +180,7 @@ export async function findQLabMediaInFolder(): Promise<void> {
     midiSettings: store.midiSettings,
     showSettings: store.showSettings,
     triggerGuard: store.triggerGuard,
+    lighting: store.lighting,
     cues: store.cues
   })
   set({ busy: true, error: null })

@@ -6,6 +6,7 @@ import { midiFiles } from '../midi/midiFileRuntime'
 import { PlaybackSafety } from './PlaybackSafety'
 import type { PlaybackPanic } from '../../shared/playback'
 import type { AudioEngineEvent } from '../../shared/audio'
+import { panicLighting } from '../dmx/lighting'
 
 // The one place the safety net is wired to the two things it protects: the native audio
 // service in this process, and every window that may still be there to be told. Nothing
@@ -18,6 +19,10 @@ import type { AudioEngineEvent } from '../../shared/audio'
 // panic. `sendToWindow` skips those and survives the race either way.
 function broadcastPanic(panic: PlaybackPanic): void {
   for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, PLAYBACK_CHANNELS.panic, panic)
+  // The lights follow a panic someone asked for — the menu, a desk's OSC or MIDI — by the
+  // show's own rule. A window that died or stopped answering is not one: the lights run in
+  // this process and were never the window's, so they are not stopped for it.
+  if (panic.source === 'menu' || panic.source === 'osc' || panic.source === 'midi') panicLighting()
 }
 
 /** How many engine events are kept for the dev harness, newest last. */

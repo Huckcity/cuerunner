@@ -515,6 +515,7 @@ cuerunner/
 │   │   │   ├── handlers.ts          # Main process IPC handlers, one per declared channel
 │   │   │   ├── windowHandlers.ts    # The two channels registered per window
 │   │   │   └── parity.test.ts       # Fails the build when the declaration and the registrations disagree
+│   │   ├── dmx/                     # sACN and Art-Net packets, the lighting state, its sockets and frame loop
 │   │   └── index.ts                 # Electron main process entry
 │   ├── preload/
 │   │   └── index.ts                 # IPC bridge (context isolation)
@@ -944,7 +945,8 @@ keys are verified on the machine they are entered on:
   computer it was entered on, not to a workspace or a show file. A machine's half of a
   redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
   machines of a pair run the same workspace file, so which one is the main is a fact about
-  the machine rather than about the show.
+  the machine rather than about the show. The interface the lights leave by and the sACN
+  identity this machine sends as are kept there too (`dmx.json`).
 - **A key ends when it ends.** The key is checked when the app starts, when one is
   entered, and whenever anything asks what the license is; the app's own clock crosses a
   key's last day while it is open, with no operator action and no restart. The moment it

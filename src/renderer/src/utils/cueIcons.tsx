@@ -40,7 +40,9 @@ const PATHS: Record<CueType, string[]> = {
   // A sheet with its corner turned and two lines on it: a note, not a command.
   memo: ['M3.5 2.5h6.2l2.8 2.8v8.2h-9z', 'M9.7 2.5v2.8h2.8', 'M5.6 8.2h4.8', 'M5.6 10.8h4.8'],
   // A page with notes on it: a file of MIDI, rather than one message.
-  midiFile: ['M3.5 2h6.2l2.8 2.8V14h-9z', 'M9.6 2v2.9h2.9', 'M6 11.6V7.2l3.8-.9v4.4', 'M6 11.6a1 1 0 1 1-2 0 1 1 0 0 1 2 0', 'M9.8 10.7a1 1 0 1 1-2 0 1 1 0 0 1 2 0']
+  midiFile: ['M3.5 2h6.2l2.8 2.8V14h-9z', 'M9.6 2v2.9h2.9', 'M6 11.6V7.2l3.8-.9v4.4', 'M6 11.6a1 1 0 1 1-2 0 1 1 0 0 1 2 0', 'M9.8 10.7a1 1 0 1 1-2 0 1 1 0 0 1 2 0'],
+  // A lantern on its yoke, and its beam.
+  light: ['M4 3.2h5.2l1.2 4.4H2.8z', 'M6.6 1.6v1.6', 'M3.4 9.6 2 13.4', 'M6.6 9.6v4', 'M9.8 9.6l1.4 3.8', 'M11.6 5.4h2.6']
 }
 
 interface Props {

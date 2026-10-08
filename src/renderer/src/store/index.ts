@@ -54,6 +54,7 @@ import { incidentsFrom, MAX_INCIDENTS } from '../utils/rfIncidents'
 import type { RfIncident } from '../utils/rfIncidents'
 import { liveCue } from '../utils/liveCue'
 import type { LicenseStatus } from '../../../shared/license'
+import { defaultLightingSettings, heldLighting, type LightingSettings } from '../../../shared/dmx'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
 
@@ -300,6 +301,14 @@ interface CueListState {
   triggerGuard: TriggerGuardSettings
   updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
 
+  /**
+   * The lighting rig: workspace content, so an edit dirties the show and enters undo with the
+   * cue list it is read beside. The levels on the rig are not here — they are the lighting
+   * engine's, in main — only what the show says the rig is.
+   */
+  lighting: LightingSettings
+  setLighting: (next: LightingSettings) => void
+
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
   // of it is workspace content, so none of it dirties the show or enters undo.
@@ -545,7 +554,8 @@ interface CueListState {
     showSettings?: ShowSettings,
     identity?: WorkspaceIdentity,
     triggerGuard?: TriggerGuardSettings,
-    history?: ShowHistoryEntry[]
+    history?: ShowHistoryEntry[],
+    lighting?: LightingSettings
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
   saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
@@ -565,6 +575,7 @@ interface EditSnapshot {
   cast: CastSettings
   desk: DeskSettings
   plot: RfPlot
+  lighting: LightingSettings
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
@@ -573,7 +584,8 @@ function snapshotOf(state: CueListState): EditSnapshot {
     scenes: state.showSettings.scenes,
     cast: state.showSettings.cast,
     desk: state.showSettings.desk,
-    plot: state.showSettings.rf.plot
+    plot: state.showSettings.rf.plot,
+    lighting: state.lighting
   }
 }
 
@@ -821,6 +833,7 @@ export const useStore = create<CueListState>((set) => ({
   log: [],
   showSettings: defaultShowSettings(),
   triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
+  lighting: defaultLightingSettings(),
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -1154,6 +1167,7 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      lighting: snapshot.lighting,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
       // An undo after a save moves the cues away from the file's bytes: the session is
@@ -1169,6 +1183,7 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      lighting: snapshot.lighting,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
@@ -1525,7 +1540,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1558,6 +1573,8 @@ export const useStore = create<CueListState>((set) => ({
       // A file written before the guard existed has none: the normalizer both fills it in
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // A show with no lights opens with an empty rig.
+      lighting: heldLighting(lighting),
       // The file's own record of its saves. A file that has never been saved has none.
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
@@ -1599,6 +1616,13 @@ export const useStore = create<CueListState>((set) => ({
   updateTriggerGuard: (patch) => set(s => ({
     triggerGuard: normalizeTriggerGuard({ ...s.triggerGuard, ...patch }),
     isDirty: true
+  })),
+
+  setLighting: (lighting) => set(s => ({
+    lighting,
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
   })),
 
   updateOscInSettings: (patch) => set(s => ({

@@ -1,6 +1,6 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, MemoCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue
 } from '../../../shared/cue'
 import type { MidiFileCue } from '../../../shared/cue'
 import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
@@ -113,6 +113,14 @@ export const MIDI_FILE_DEFAULTS = {
   channelMap: [...MIDI_FILE_IDENTITY_MAP],
   transpose: 0,
   transposeDrums: false
+}
+
+export const LIGHT_DEFAULTS = {
+  // A look takes three seconds to arrive unless it says otherwise: long enough to read as a
+  // fade, short enough that a cue nobody has timed yet does not hold the show.
+  duration: 3000,
+  curve: 'linear' as const,
+  intensity: 'ltp' as const
 }
 
 /**
@@ -268,6 +276,16 @@ export function createCue(type: CueType, number = '1'): Cue {
         // A fresh list per cue: the defaults' own must not be shared by every cue made.
         channelMap: [...MIDI_FILE_IDENTITY_MAP]
       } satisfies MidiFileCue
+    case 'light':
+      return {
+        ...base('Light Cue', number),
+        type: 'light',
+        // Nothing until it is recorded or built: a Light cue with an empty look changes
+        // nothing, which is what a cue nobody has written yet should do.
+        look: [],
+        effects: [],
+        ...LIGHT_DEFAULTS
+      } satisfies LightCue
   }
 }
 

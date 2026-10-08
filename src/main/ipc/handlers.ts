@@ -131,6 +131,7 @@ import {
 import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces } from '../import/qlabImport'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
+import { createMachineDmx } from '../dmx/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
 import { drainMainErrors, onMainError } from '../errors'
 import { loadScriptDocument } from '../script/document'
@@ -194,7 +195,11 @@ const show = createShowRuntime(
     redundancy: () => machineRedundancy.current(),
     ewDx: ewDxCredentials,
     discoverReceivers,
-    batteryLog
+    batteryLog,
+    // Which interface the lights go out of and who this machine is on the wire: the
+    // machine's, beside the licence, so a show carried to another desk goes out of that
+    // desk's own network.
+    dmx: { machine: createMachineDmx({ filePath: path.join(app.getPath('userData'), 'dmx.json') }) }
   }),
   () => isPro(license.status())
 )

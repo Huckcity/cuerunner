@@ -24,8 +24,12 @@ export function FadeInspector({ cue }: Props) {
   // this list was a target that could be chosen and would do nothing. A cue of another
   // kind that an older show already aims at stays in the list, so the panel shows what
   // the cue says rather than quietly showing something else.
-  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.id === cue.targetCueId))
+  //
+  // A Light cue has a level too: its intensity, which a fade moves to a share of what the
+  // cue set, so it is offered beside the sounds.
+  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.type === 'light' || c.id === cue.targetCueId))
   const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
+  const lightTarget = cues.some(c => c.id === cue.targetCueId && c.type === 'light')
 
   return (
     <div>
@@ -41,18 +45,23 @@ export function FadeInspector({ cue }: Props) {
       </div>
       <div className="field-row">
         <label>Property</label>
-        <select
-          value={property}
-          onChange={e => {
-            const next = e.target.value as typeof property
-            if (next === 'both') set({ fadeProperty: 'volume', panTargetValue: cue.panTargetValue ?? 0 })
-            else set({ fadeProperty: next, panTargetValue: null, ...clampedFor(next) })
-          }}
-        >
-          <option value="volume">Volume</option>
-          <option value="pan">Pan</option>
-          <option value="both">Volume and pan</option>
-        </select>
+        {lightTarget ? (
+          // A light's one level is its intensity; the target value is a share of what it set.
+          <span className="field-value">Intensity</span>
+        ) : (
+          <select
+            value={property}
+            onChange={e => {
+              const next = e.target.value as typeof property
+              if (next === 'both') set({ fadeProperty: 'volume', panTargetValue: cue.panTargetValue ?? 0 })
+              else set({ fadeProperty: next, panTargetValue: null, ...clampedFor(next) })
+            }}
+          >
+            <option value="volume">Volume</option>
+            <option value="pan">Pan</option>
+            <option value="both">Volume and pan</option>
+          </select>
+        )}
         <ResetButton label="Property" value={property} defaultValue={FADE_DEFAULTS.fadeProperty}
           onReset={() => set({ fadeProperty: FADE_DEFAULTS.fadeProperty, panTargetValue: null })} />
       </div>
@@ -64,7 +73,7 @@ export function FadeInspector({ cue }: Props) {
         <ResetButton label="Target value" value={cue.targetValue} defaultValue={FADE_DEFAULTS.targetValue}
           onReset={() => set({ targetValue: FADE_DEFAULTS.targetValue })} />
       </div>
-      {property === 'both' && (
+      {property === 'both' && !lightTarget && (
         <div className="field-row">
           <label>Target pan</label>
           <NumberField when="typed" min={-1} max={1} step={0.01} value={cue.panTargetValue ?? 0}

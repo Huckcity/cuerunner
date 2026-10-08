@@ -55,6 +55,7 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'mic',     label: 'Mic' },
   { type: 'memo',    label: 'Memo' },
   { type: 'midiFile', label: 'MIDI File' },
+  { type: 'light',   label: 'Light' },
 ]
 
 interface Props {
@@ -67,7 +68,7 @@ interface Props {
  * What fills the middle of the window: the cue stack the show is built in, or the scenes
  * the show is run from and edited in.
  */
-export type AppView = 'cues' | 'scenes'
+export type AppView = 'cues' | 'scenes' | 'lighting'
 
 export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
@@ -90,9 +91,10 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     // and aimed at it, as part of the add — written afterwards it was a second edit, and
     // the first undo after adding a fade only un-named it. Only an audio cue: a fade moves
     // a sound, so one made with a wait or a group selected is left for the operator to aim,
-    // rather than aimed at something its own tab would not offer.
+    // rather than aimed at something its own tab would not offer. A Light cue has a level
+    // too — its intensity — so a fade made with one selected is aimed at it the same way.
     const target = type === 'fade' && selectedId
-      ? useStore.getState().cues.find(c => c.id === selectedId && c.type === 'audio')
+      ? useStore.getState().cues.find(c => c.id === selectedId && (c.type === 'audio' || c.type === 'light'))
       : undefined
     addCue(
       type,
@@ -383,6 +385,18 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of Cuerunner Pro'}
         >
           Scenes
+          {!pro && <ProMark />}
+        </button>
+        <button
+          className="toolbar-view-btn"
+          role="tab"
+          aria-selected={view === 'lighting'}
+          data-active={view === 'lighting'}
+          data-locked={!pro}
+          onClick={() => onSwitchView('lighting')}
+          title={pro ? 'The lighting rig: patch, faders and the DMX going out' : 'Lighting — part of Cuerunner Pro'}
+        >
+          Lighting
           {!pro && <ProMark />}
         </button>
       </div>
