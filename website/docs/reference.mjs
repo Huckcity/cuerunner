@@ -220,7 +220,7 @@ export const REFERENCE = [
             <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
             <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
             <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
-            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages, a key on this machine or a time of day that fire this cue. See <a href="./control.html#triggers">control</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -248,7 +248,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="timing">
-      <h2>Wait, Fade, Stop and Devamp</h2>
+      <h2>Wait, Fade, Stop, Devamp and Control</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Fields</th></tr></thead>
@@ -259,15 +259,19 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio, video, image or text cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
+              <td><strong>Targets</strong> — any number of audio, video, image, text, Light or group cues, all faded together on one time and curve; a group's fade reaches every cue inside it, however deep. <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue. A show saved when a fade named one cue opens with that cue as its one target, and is saved as it was until its targets are edited.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
-              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
+              <td><strong>Target</strong> — <strong>All cues</strong>, or <strong>These cues</strong>: any set of cues, a group stopped whole and before the rest — <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
               <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound.</td>
+            </tr>
+            <tr>
+              <td><strong>Control</strong></td>
+              <td><strong>Action</strong> and <strong>Targets</strong>: <strong>Start</strong> (each target where it is, as its own GO would; a disarmed one is not started and the log says so), <strong>Stop</strong> (at once, a group whole), <strong>Pause</strong> / <strong>Resume</strong> (each playing audio or video cue, and those inside a group), <strong>Load</strong> (readies each target to start <strong>Load to</strong> seconds into itself the next time it fires — its file decoded, a picture opened on its output — or moves a playing audio or video cue there now), <strong>Reset</strong> (stops it, forgets its load, puts a playlist back at its first child and a random group's draw afresh), <strong>Go to</strong> (the playhead to the first target; nothing fires) and <strong>Arm</strong> / <strong>Disarm</strong> (an edit of the show, with an undo). It completes at once, never acts on itself, and with no target does nothing and says so. QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues import as Control cues.</td>
             </tr>
           </tbody>
         </table>
@@ -377,7 +381,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>OSC</strong></td>
-              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false. <strong>Send now</strong> sends the message from the inspector without running the cue — the check that the console is listening — and says whether it left.</td>
+              <td>One message or several, sent in order on GO: each <strong>Send to</strong> one of the show's <a href="./settings.html#network">OSC patches</a> or its own <strong>Host</strong> and <strong>Port</strong>, an <strong>Address</strong>, and arguments typed as integer, float, string, true or false — the type goes out as written. A message whose patch was deleted is not sent and the run says which; the rest still go. <strong>Send now</strong> sends them from the inspector without running the cue — the check that the console is listening — and says whether they left.</td>
             </tr>
             <tr>
               <td><strong>Network</strong></td>
@@ -495,7 +499,10 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. The port is Cuerunner's alone: one another program holds — QLab, a second Cuerunner — is refused and said here and in the log (<code>EADDRINUSE</code>), rather than shared with it in silence.</td></tr>
+            <tr><td>↳ Network interface</td><td>any</td><td>This machine's, not the show's. <strong>Listen on</strong> binds the port to one interface; <strong>Send from</strong> sends OSC cues out of one. An interface that has gone is said, and the port opens on every interface until it is back.</td></tr>
+            <tr><td>↳ Feedback</td><td>off, 127.0.0.1:53001, 10 Hz</td><td><strong>Push state</strong> sends the playhead, what is running and its progress to <strong>Send to</strong> : <strong>Port</strong>, progress <strong>Progress (Hz)</strong> times a second (0–30). Remotes can also ask for it themselves. See <a href="control.html#feedback">feedback</a>.</td></tr>
+            <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
             <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
             <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
             <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
@@ -809,6 +816,51 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
       </p>
     </section>
 
+    <section class="panel reveal delay-1" id="feedback">
+      <h2>Feedback</h2>
+      <p>
+        The port answers questions as well as commands, from the state the window last
+        published, and never fires anything for one. A remote written for QLab is answered
+        the way QLab answers: on <code>/reply/</code> followed by the address it asked, with a
+        JSON document — <code>{"workspace_id", "address", "status": "ok", "data"}</code> —
+        sent back to the address and port it came from. <code>/cue/selected/…</code>,
+        <code>/cue/playhead/…</code>, <code>/cue/{number}/…</code> and
+        <code>/cue_id/{id}/…</code> answer <code>number</code>, <code>name</code>,
+        <code>displayName</code>, <code>type</code>, <code>uniqueID</code>,
+        <code>armed</code>, <code>colorName</code>, <code>notes</code>,
+        <code>isRunning</code>, <code>isPaused</code>, <code>actionElapsed</code>,
+        <code>duration</code> and <code>percentActionElapsed</code>;
+        <code>/runningCues</code>, <code>/runningOrPausedCues</code>,
+        <code>/selectedCues</code>, <code>/cueLists</code>, <code>/workspaces</code>,
+        <code>/version</code> and <code>/thump</code> answer too. The same address with a
+        value is QLab's setter, and is not answered: a remote does not edit the show.
+        <code>/updates 1</code> asks for QLab's pushes:
+        <code>/update/workspace/{id}/cueList/main/playbackPosition</code> when the playhead
+        moves, and <code>/update/workspace/{id}/cue_id/{id}</code> when a cue starts, stops or
+        is held.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cuerunner's own</th><th>What it carries</th></tr></thead>
+          <tbody>
+            <tr><td><code>/cuerunner/playhead/number</code>, <code>/name</code>, <code>/id</code>, <code>/type</code></td><td>The cue GO fires next; empty strings at the end of the show.</td></tr>
+            <tr><td><code>/cuerunner/running/count</code>, <code>/active</code></td><td>How many cues run, and 1 or 0.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/number</code>, <code>/name</code>, <code>/id</code>, <code>/state</code></td><td>The running cues as slots, topmost first. A slot that empties is written once as empty.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/progress</code>, <code>/elapsed</code>, <code>/remaining</code>, <code>/duration</code></td><td>0–1 and seconds, at the feedback's rate; −1 where nobody can say (a loop for ever). A freed slot gets one zeroing pulse.</td></tr>
+            <tr><td><code>/cuerunner/cues/count</code>, <code>/cuerunner/cues/options</code></td><td>The list, and a JSON list of <code>[number, "number — name"]</code> a dropdown takes as its values.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        These go to the destination Settings → Network names, and to every remote that sent
+        <code>/cuerunner/feedback/subscribe</code> — to its own port, or to the port it gives
+        as the argument — until it sends <code>/cuerunner/feedback/unsubscribe</code>; sixteen
+        at most, the oldest dropped. <code>/cuerunner/feedback/request</code> sends everything
+        now. A change is pushed at most twenty times a second however fast the show moves, and
+        a playing cue's progress is carried on between the window's updates.
+      </p>
+    </section>
+
     <section class="panel reveal delay-2" id="triggers">
       <h2>What a trigger matches</h2>
       <div class="table-wrap">
@@ -820,6 +872,8 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>MIDI control change</td><td>Port, channel and controller number.</td><td>Value.</td></tr>
             <tr><td>MIDI program change</td><td>Port, channel and program number.</td><td>—</td></tr>
             <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
+            <tr><td>Key</td><td>A key on this machine and its modifiers — <code>F7</code>, <code>Shift+Q</code>, typed or taken with <strong>Record</strong> — while the window has the keyboard and no field or dialog does. A key the app already answers (Space, Esc, P, F5, F6, the arrows, the number row, the menus' shortcuts) is refused with what it does; a key another cue answers is said, and fires both.</td><td>A key held down: it is one press.</td></tr>
+            <tr><td>Time of day</td><td>A time on this machine's clock (<code>19:30</code> or <code>19:30:15</code>) on the days ticked — none is every day. A time that went by while the show was closed or the machine asleep is <strong>skipped and said</strong> in the log, or <strong>fired late</strong> if it is no more than its grace behind (1–60 minutes); either way only the latest is counted.</td><td>—</td></tr>
             <tr><td>Timecode<span class="pro">Pro</span></td><td>The frame of the incoming clock, at the rate it is read at — typed as a label, as seconds from midnight (<code>3610s</code>), or taken from the running clock with <strong>Take</strong>: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
           </tbody>
         </table>
@@ -837,7 +891,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Cue</th><th>What goes out</th></tr></thead>
           <tbody>
-            <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
+            <tr><td>OSC cue</td><td>Each message's address and typed arguments, in order, to its patch's host and port or its own, from the interface Settings → Network names.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>MIDI File cue</td><td>The file's own messages — notes, controllers, programs, bends, pressure and SysEx; never its meta events — at the file's times, through the cue's channel map and transposition, on the cue's port or the show's default output. On a stop: a Note Off for every note it started and Sustain (CC 64) 0 on each channel it used; on PANIC, All Notes Off (CC 123) on those channels too.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
@@ -1181,7 +1235,7 @@ await rig.blackout()</code></div>
             </tr>
             <tr>
               <td>A Stop or Fade cue does nothing</td>
-              <td>The cue it was aimed at has been deleted. Its tab shows <em>— not in this show —</em> where the target was, and a Stop cue fired like that is marked <em>failed</em>. Choose another target.</td>
+              <td>A cue it was aimed at has been deleted. Its tab shows <em>— not in this show —</em> in the target list, and a Stop or Fade cue fired like that is marked <em>failed</em> with how many were gone. Remove it and choose another.</td>
             </tr>
             <tr>
               <td>A show control cue does nothing</td>

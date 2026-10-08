@@ -408,8 +408,8 @@ export const GUIDES = [
         <strong>Number from</strong> and <strong>Step</strong> renumber the set in list order
         (from 10 by 0.5 reads 10, 10.5, 11), and refuse a number another cue already has.
         <strong>Fade out</strong> and <strong>Add stop</strong> make the cue that ends what is
-        selected and put it after the last of them: one cue for one, or a group that fires one
-        for each at once. Each of these is one undo.
+        selected and put it after the last of them: one cue that names every one of them, so
+        one GO takes them all on one time. Each of these is one undo.
       </p>
     </section>
 
@@ -1025,6 +1025,14 @@ export const GUIDES = [
         tick none.
       </p>
       <p>
+        The OSC port is Cuerunner's alone. If QLab, another Cuerunner or a bridge already
+        holds 53000, the row under OSC control says the port is in use and the log says it
+        too: change the port, or close what holds it. Nothing is shared in silence, so a desk
+        that is heard is heard by this show. On a machine with two networks,
+        <strong>Network interface</strong> under the same block picks the one the show
+        listens on and the one its OSC cues send from.
+      </p>
+      <p>
         The <strong>Monitor</strong> tab in the dock shows what is listening and what has
         arrived, so you can point the desk at Cuerunner and watch the messages land before
         writing a single trigger.
@@ -1052,6 +1060,8 @@ export const GUIDES = [
         <li><strong>OSC</strong> — an address, such as <code>/eos/cue/12/fire</code>. Arguments are ignored; the address is the trigger.</li>
         <li><strong>MIDI</strong> — a note, a controller or a program change on a channel. A note fires whatever its velocity.</li>
         <li><strong>Show control</strong> — an MSC command from a desk, matched on every field it sent.</li>
+        <li><strong>Key</strong> — a key on this machine, typed or taken with <strong>Record</strong>: the sound-effects board under one finger. A key the app already uses is refused, with what it does.</li>
+        <li><strong>Time of day</strong> — the half-hour call at 19:00, the house-open loop at 19:15. Choose what a time the show was closed for does: skip it and say so, or fire it late within a few minutes.</li>
       </ul>
       <p>
         <strong>Learn</strong> is the shortcut: press it, then send the message from the
@@ -1064,6 +1074,19 @@ export const GUIDES = [
         advance. A disarmed cue ignores its triggers, which makes disarming a safe way to
         take a cue out of a show that a console is driving.
       </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Let a remote read the show</h2>
+      <p>
+        A tablet that runs the show can also show it. Turn on <strong>Feedback</strong> under
+        OSC control and give it the tablet's address and port: the playhead, the running
+        cues and their progress are pushed there, ten times a second by default. A remote can
+        ask for itself instead — <code>/cuerunner/feedback/subscribe</code> — and a remote set
+        up for QLab is answered the way QLab answers it, so its playhead and running-cue
+        displays work unchanged. The addresses are in the
+        <a href="../reference/control.html#feedback">reference</a>.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
