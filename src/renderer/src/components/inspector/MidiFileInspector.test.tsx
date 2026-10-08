@@ -8,6 +8,7 @@ import { useStore } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
 import type { MidiFileCue } from '../../../../shared/cue'
 import type { SmfSummary } from '../../../../shared/smf'
+import { cueEngine } from '../../engine/CueEngine'
 
 const SUMMARY: SmfSummary = {
   format: 1,
@@ -113,5 +114,31 @@ describe('MidiFileInspector', () => {
     expect(drums.checked).toBe(false)
     act(() => { drums.click() })
     expect(stored().transposeDrums).toBe(true)
+  })
+
+  it('reads a hold from the row, whoever made it, and holds and lets go through the runner’s one path', async () => {
+    const toggle = vi.spyOn(cueEngine, 'togglePauseCue').mockReturnValue(true)
+    const held = vi.spyOn(cueEngine, 'isHeld').mockReturnValue(false)
+    await show('MIDI File')
+    const button = () => container.querySelector<HTMLButtonElement>('.midi-file-hold')
+    expect(button()).toBeNull()
+
+    act(() => useStore.getState().setRunning('f1', { cueId: 'f1', state: 'playing', startedAt: Date.now(), progress: 0 }))
+    expect(button()?.textContent).toBe('Pause')
+    act(() => button()!.click())
+    expect(toggle).toHaveBeenCalledWith('f1')
+
+    // Held by a Control cue or the Active tab: the row says so, and the button lets it go.
+    act(() => useStore.getState().setRunning('f1', { cueId: 'f1', state: 'paused', startedAt: Date.now(), progress: 0 }))
+    expect(button()?.textContent).toBe('Resume')
+    expect(button()?.disabled).toBe(false)
+
+    // Held with the whole show: only the show's RESUME lets it go.
+    held.mockReturnValue(true)
+    act(() => useStore.getState().setRunning('f1', { cueId: 'f1', state: 'paused', startedAt: Date.now() - 1, progress: 0 }))
+    expect(button()?.disabled).toBe(true)
+    act(() => useStore.getState().setRunning('f1', null))
+    toggle.mockRestore()
+    held.mockRestore()
   })
 })

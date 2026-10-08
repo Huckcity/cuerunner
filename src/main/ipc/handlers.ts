@@ -57,7 +57,8 @@ import {
   type MidiFilePauseResult,
   type MidiFilePlayPayload,
   type MidiFilePlayResult,
-  type MidiFileResumeResult
+  type MidiFileResumeResult,
+  type MidiFileSeekPayload
 } from '../../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../../shared/ipc/network'
 import {
@@ -578,6 +579,8 @@ export function registerIpcHandlers(): void {
     refusalValue(async () => ({ ok: true as const, ...midiFiles.pause(cmd.cueId) })))
   ipcMain.handle(MIDI_CHANNELS.fileResume, (_, cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
     refusalValue(async () => ({ ok: true as const, ...midiFiles.resume(cmd.cueId) })))
+  ipcMain.handle(MIDI_CHANNELS.fileSeek, (_, cmd: MidiFileSeekPayload): Promise<MidiFileResumeResult> =>
+    refusalValue(async () => ({ ok: true as const, ...midiFiles.seek(cmd.cueId, cmd.positionMs) })))
   ipcMain.handle(MIDI_CHANNELS.fileStop, (_, cmd: MidiFileCuePayload): boolean => midiFiles.stop(cmd.cueId))
 
   // OSC

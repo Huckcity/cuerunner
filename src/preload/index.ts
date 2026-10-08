@@ -74,7 +74,8 @@ import type {
   MidiFilePauseResult,
   MidiFilePlayPayload,
   MidiFilePlayResult,
-  MidiFileResumeResult
+  MidiFileResumeResult,
+  MidiFileSeekPayload
 } from '../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../shared/ipc/network'
 import {
@@ -362,6 +363,8 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(MIDI_CHANNELS.filePause, cmd),
     fileResume: (cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
       invoke(MIDI_CHANNELS.fileResume, cmd),
+    fileSeek: (cmd: MidiFileSeekPayload): Promise<MidiFileResumeResult> =>
+      invoke(MIDI_CHANNELS.fileSeek, cmd),
     fileStop: (cmd: MidiFileCuePayload): Promise<boolean> =>
       invoke(MIDI_CHANNELS.fileStop, cmd)
   },

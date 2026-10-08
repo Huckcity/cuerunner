@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { CueEngine } from './CueEngine'
 import { NO_MIDI_FILE_SELECTED } from './midiFile'
-import type { Cue, MidiFileCue, WaitCue } from '../../../shared/cue'
+import type { ControlCue, Cue, MidiFileCue, WaitCue } from '../../../shared/cue'
+import type { RunningCue } from '../store'
+import { createCue } from '../utils/cueDefaults'
 import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
 import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 
@@ -18,8 +20,16 @@ vi.mock('./networkClient', () => ({ network: { request: vi.fn(), cancel: vi.fn()
 
 const runners: CueEngine[] = []
 afterEach(() => {
-  for (const runner of runners.splice(0)) runner.dispose()
+  for (const runner of runners.splice(0)) {
+    // A hold left standing would freeze the next test's clock.
+    runner.stop()
+    runner.dispose()
+  }
 })
+
+function makeControl(action: ControlCue['action'], overrides: Partial<ControlCue> = {}): ControlCue {
+  return { ...(createCue('control') as ControlCue), id: 'c1', number: '9', name: 'Control', action, targetCueIds: ['f1'], ...overrides }
+}
 
 const base = {
   colorLabel: 'none' as const, parentId: null, preWait: 0, postWait: 0, timelineOffset: 0,
@@ -42,6 +52,8 @@ function makeWait(overrides: Partial<WaitCue> = {}): WaitCue {
 
 interface Setup {
   runner: CueEngine
+  /** The rows as the store would hold them, written through `setRunning`. */
+  rows: Map<string, RunningCue>
   setRunning: Mock
   setLastRun: Mock
   appendLog: Mock
@@ -51,7 +63,11 @@ interface Setup {
 function setup(cues: Cue[]): Setup {
   const runner = new CueEngine()
   let selected: string | null = cues[0]?.id ?? null
-  const setRunning = vi.fn()
+  const rows = new Map<string, RunningCue>()
+  const setRunning = vi.fn((id: string, state: RunningCue | null) => {
+    if (state === null) rows.delete(id)
+    else rows.set(id, state)
+  })
   const setLastRun = vi.fn()
   const appendLog = vi.fn()
   const syncCueDuration = vi.fn()
@@ -67,10 +83,11 @@ function setup(cues: Cue[]): Setup {
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'show-port',
     getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
+    getRunning: () => rows,
     isPro: () => false
   })
   runners.push(runner)
-  return { runner, setRunning, setLastRun, appendLog, syncCueDuration }
+  return { runner, rows, setRunning, setLastRun, appendLog, syncCueDuration }
 }
 
 const midi = () => vi.mocked(window.cuerunner.midi)
@@ -165,17 +182,117 @@ describe('a MIDI File cue in the runner', () => {
 
   it('takes a held file’s end away, and plans it again from what main says is left', async () => {
     midi().fileResume.mockResolvedValue({ ok: true, remainingMs: 1500 })
-    const { runner, setLastRun } = setup([makeFile({ duration: 2000 })])
+    const { runner, rows, setLastRun } = setup([makeFile({ duration: 2000 })])
     runner.go()
     await vi.advanceTimersByTimeAsync(500)
-    runner.pauseMidiFile('f1')
+    expect(runner.pauseCue('f1')).toBe(true)
     expect(midi().filePause).toHaveBeenCalledWith({ cueId: 'f1' })
+    expect(rows.get('f1')?.state).toBe('paused')
     await vi.advanceTimersByTimeAsync(10_000)
     expect(setLastRun).not.toHaveBeenCalled()
-    runner.resumeMidiFile('f1')
+    expect(runner.resumeCue('f1')).toBe(true)
+    expect(midi().fileResume).toHaveBeenCalledWith({ cueId: 'f1' })
+    expect(rows.get('f1')?.state).toBe('playing')
     await vi.advanceTimersByTimeAsync(1400)
     expect(setLastRun).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(200)
     expect(setLastRun).toHaveBeenCalledWith('f1', expect.objectContaining({ outcome: 'success' }))
+  })
+})
+
+describe('a MIDI File cue under the show’s PAUSE and a Control cue', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    midi().filePlay.mockResolvedValue({ ok: true, remainingMs: 2000, passMs: 2000 })
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('holds the file in main with the show, and plans its end from main’s answer when the show goes on', async () => {
+    midi().fileResume.mockResolvedValue({ ok: true, remainingMs: 1200 })
+    const { runner, rows, setLastRun, setRunning } = setup([makeFile({ duration: 2000, advance: 'on-end' }), makeWait()])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(800)
+    runner.pauseAll()
+    // Held in main, where it plays: a show that is held must not have a file running on under it.
+    expect(midi().filePause).toHaveBeenCalledWith({ cueId: 'f1' })
+    expect(rows.get('f1')?.state).toBe('paused')
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(setLastRun).not.toHaveBeenCalled()
+    expect(setRunning).not.toHaveBeenCalledWith('w1', expect.anything())
+
+    runner.resumeAll()
+    expect(midi().fileResume).toHaveBeenCalledWith({ cueId: 'f1' })
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(setLastRun).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(200)
+    expect(setLastRun).toHaveBeenCalledWith('f1', expect.objectContaining({ outcome: 'success' }))
+    expect(setRunning).toHaveBeenCalledWith('w1', expect.objectContaining({ state: 'playing' }))
+  })
+
+  it('leaves a file held on its own alone when the show is held and let go', async () => {
+    const { runner } = setup([makeFile({ duration: 2000 })])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(100)
+    runner.pauseCue('f1')
+    vi.mocked(midi().filePause).mockClear()
+    runner.pauseAll()
+    runner.resumeAll()
+    expect(midi().filePause).not.toHaveBeenCalled()
+    expect(midi().fileResume).not.toHaveBeenCalled()
+    expect(runner.isPaused('f1')).toBe(true)
+  })
+
+  it('is held and let go by a Control cue’s Pause and Resume, the way its own hold does', async () => {
+    midi().fileResume.mockResolvedValue({ ok: true, remainingMs: 900 })
+    const cues: Cue[] = [makeFile({ duration: 2000 }), makeControl('pause'), makeControl('resume', { id: 'c2', number: '10' })]
+    const { runner, rows, setLastRun } = setup(cues)
+    runner.go()
+    await vi.advanceTimersByTimeAsync(300)
+    runner.goById('c1')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(midi().filePause).toHaveBeenCalledWith({ cueId: 'f1' })
+    expect(rows.get('f1')?.state).toBe('paused')
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(setLastRun).not.toHaveBeenCalledWith('f1', expect.anything())
+
+    runner.goById('c2')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(midi().fileResume).toHaveBeenCalledWith({ cueId: 'f1' })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(setLastRun).toHaveBeenCalledWith('f1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('holds a file inside a group a Control cue pauses', async () => {
+    const group = { ...(createCue('group')), id: 'g', number: '1', name: 'Band', mode: 'sequence' } as Cue
+    const file = makeFile({ parentId: 'g' })
+    const { runner } = setup([group, file, makeControl('pause', { targetCueIds: ['g'] })])
+    runner.goById('f1')
+    await vi.advanceTimersByTimeAsync(100)
+    runner.goById('c1')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(midi().filePause).toHaveBeenCalledWith({ cueId: 'f1' })
+  })
+
+  it('moves a running file to the place a Control cue’s Load names, with its end planned from there', async () => {
+    midi().fileSeek.mockResolvedValue({ ok: true, remainingMs: 500 })
+    const { runner, setLastRun } = setup([makeFile({ duration: 2000 }), makeControl('load', { loadToMs: 1500 })])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(100)
+    runner.goById('c1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(midi().fileSeek).toHaveBeenCalledWith({ cueId: 'f1', positionMs: 1500 })
+    await vi.advanceTimersByTimeAsync(400)
+    expect(setLastRun).not.toHaveBeenCalledWith('f1', expect.anything())
+    await vi.advanceTimersByTimeAsync(200)
+    expect(setLastRun).toHaveBeenCalledWith('f1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('starts a file a Load readied part-way in from there, the next time it is fired', async () => {
+    const { runner } = setup([makeControl('load', { loadToMs: 750 }), makeFile()])
+    runner.goById('c1')
+    await vi.advanceTimersByTimeAsync(10)
+    runner.goById('f1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(midi().filePlay).toHaveBeenCalledWith(expect.objectContaining({ cueId: 'f1', offsetMs: 750 }))
   })
 })

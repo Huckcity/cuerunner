@@ -146,11 +146,12 @@ describe('playing a file', () => {
     // At 2x, 250 ms in is half a second into the file: the note at 500 is the next thing.
     const { clock, player, sent } = rig(phrase(), { rate: 2 })
     player.start(250)
-    // The controller before the place is chased; the note struck before it is not. What is
-    // written at the place itself plays at once, in its turn.
-    expect(sent).toEqual([[0, 0xb0, 7, 90], [0, 0x80, 60, 0], [0, 0x90, 64, 100]])
+    // The controller before the place is chased; the note struck before it is not, and nor is
+    // that note's release, since this run never struck it. What is written at the place
+    // itself plays at once, in its turn.
+    expect(sent).toEqual([[0, 0xb0, 7, 90], [0, 0x90, 64, 100]])
     clock.advance(1000)
-    expect(sent[3]).toEqual([125, 0x80, 64, 0])
+    expect(sent[2]).toEqual([125, 0x80, 64, 0])
     expect(player.state).toBe('ended')
   })
 
@@ -260,7 +261,8 @@ describe('pause, resume and seek', () => {
     clock.advance(199)
     expect(sent).toHaveLength(before + 1)
     clock.advance(1)
-    expect(sent.slice(before + 1)).toEqual([[5500, 0x80, 60, 0], [5500, 0x90, 64, 100]])
+    // The file's own release of the note the pause already let go is not sent a second time.
+    expect(sent.slice(before + 1)).toEqual([[5500, 0x90, 64, 100]])
     clock.advance(1000)
     expect(player.state).toBe('ended')
   })
@@ -307,8 +309,30 @@ describe('pause, resume and seek', () => {
     expect(sent).toHaveLength(before)
     player.resume()
     expect(sent.slice(before)).toEqual([[1100, 0xb0, 7, 90]])
-    clock.advance(150)
-    expect(sent.slice(-1)).toEqual([[1250, 0x80, 64, 0]])
+    clock.advance(400)
+    // The note at 500 sounds across the place it moved to and is not struck again, so its
+    // release at 750 is not this run's to send; the run ends at the file's end, pedal lifted.
+    expect(sent.slice(before)).toEqual([[1100, 0xb0, 7, 90], [1500, 0xb0, 64, 0]])
+  })
+})
+
+describe('releases', () => {
+  it('sends a release only for a note this run struck, so a stray Note Off never reaches the port', () => {
+    const file = source(1000, [0, 0x90, 60, 100], [100, 0x80, 60, 0], [200, 0x80, 61, 0], [300, 0x90, 62, 0])
+    const { clock, player, sent } = rig(file)
+    player.start()
+    clock.advance(1000)
+    // The release of 60, which it struck, goes; the releases of 61 and 62 — never struck, the
+    // second written as a Note On at velocity 0 — do not.
+    expect(sent).toEqual([[0, 0x90, 60, 100], [100, 0x80, 60, 0], [1000, 0xb0, 64, 0]])
+  })
+
+  it('releases a note struck twice once for each strike, and no more', () => {
+    const file = source(1000, [0, 0x90, 60, 100], [10, 0x90, 60, 90], [20, 0x80, 60, 0], [30, 0x80, 60, 0], [40, 0x80, 60, 0])
+    const { clock, player, sent } = rig(file)
+    player.start()
+    clock.advance(1000)
+    expect(sent.filter(message => message[1] === 0x80)).toEqual([[20, 0x80, 60, 0], [30, 0x80, 60, 0]])
   })
 })
 

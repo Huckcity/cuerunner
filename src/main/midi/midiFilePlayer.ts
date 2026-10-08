@@ -308,6 +308,11 @@ export class MidiFilePlayer {
         const held = this.sounding.get(key) ?? 0
         if (kind === 0x90 && message[2] > 0) {
           this.sounding.set(key, held + 1)
+        } else if (held === 0) {
+          // A release for a note this run is not sounding: one struck before a seek or a
+          // start part-way, or one a hold already let go. Sent, it would be a stray Note Off
+          // on the port — and on a shared channel it would cut another source's note.
+          return
         } else if (held > 1) {
           this.sounding.set(key, held - 1)
         } else {

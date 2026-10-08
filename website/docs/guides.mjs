@@ -1023,7 +1023,8 @@ export const GUIDES = [
       <p>
         <strong>PAUSE</strong> (<kbd>P</kbd>, or the button beside STOP) holds the whole show
         where it stands: every sound goes quiet over a few milliseconds and keeps its place in
-        its file, and every wait, pre-wait, fade and handover waits with it. The button reads
+        its file, a MIDI file lets go of its notes where it stands, and every wait, pre-wait,
+        fade and handover waits with it. The button reads
         <strong>RESUME</strong> while it is held, and the show goes on from exactly where it
         stood. GO waits for the resume rather than firing over a held show; STOP and PANIC end
         the hold along with everything else. To hold one sound while the rest plays on — a
