@@ -268,6 +268,12 @@ export const AUDIO_WIRE = {
       cueId: { type: 'string', required: true },
       whenMs: { type: 'number', required: false, default: 0 }
     },
+    /** The level everything leaves the engine at: 0 to 2 (+6 dB), ramped over a block. */
+    master: {
+      gain: { type: 'number', required: false, default: 1 }
+    },
+    /** The output's meter: each channel's peak over the last block, and the master level. */
+    meters: {},
     fade: {
       cueId: { type: 'string', required: true },
       param: { type: 'string', required: false, default: 'volume' },
@@ -453,6 +459,9 @@ export const AUDIO_CHANNELS = {
   /** Holds a voice where it stands, and lets it go on. */
   pause: 'audio:pause',
   resume: 'audio:resume',
+  /** The engine's output level, and its meter. */
+  master: 'audio:master',
+  meters: 'audio:meters',
   fade: 'audio:fade',
   routing: 'audio:routing',
   progress: 'audio:progress',
@@ -1005,6 +1014,10 @@ export interface AudioEngineBridge {
   pause(cueId: string, whenMs?: number): Promise<AudioCommandResult>
   /** Let a held voice go on, its timed things moved on by the hold. */
   resume(cueId: string, whenMs?: number): Promise<AudioCommandResult>
+  /** Set the level everything leaves the engine at, 0 to 2 (+6 dB). */
+  master(gain: number): Promise<AudioCommandResult>
+  /** Read the output's meter. */
+  meters(): Promise<AudioMeters>
   /**
    * Replace a running cue's routing matrix live, without restarting it: `null` is
    * automatic routing, `[]` is silent, a list is the new matrix. Applies from the
@@ -1090,6 +1103,21 @@ export interface AudioReleasePayload {
   /** Where to play out to, in file ms; absent is the end of the file. */
   endMs?: number
 }
+export interface AudioMasterPayload {
+  gain: number
+}
+
+/**
+ * The output's meter as the engine's last block left it: each output channel's peak, linear
+ * 0–1 and past 1 when it clips, after the master level — and the level itself.
+ */
+export interface AudioMeters {
+  /** Engine-clock ms of the block the reading is from. */
+  at: number
+  master: number
+  peaks: number[]
+}
+
 export interface AudioHoldPayload {
   cueId: string
   whenMs?: number

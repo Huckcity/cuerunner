@@ -668,6 +668,12 @@ void Mixer::apply(const Command& cmd) {
       }
       break;
     }
+    case Command::Master: {
+      // Bounded where the window's fader is: silence up to twice unity, +6 dB.
+      masterTarget_ = std::min(2.0, std::max(0.0, cmd.value));
+      applied = true;
+      break;
+    }
     case Command::Fade: {
       Voice* voice = findVoice(cmd.cueId);
       if (voice != nullptr) {
@@ -938,6 +944,33 @@ void Mixer::render(float* out, int frames, int channels) {
       }
     }
   }
+  applyMaster(out, frames, channels);
+}
+
+/**
+ * The master level and the meter, over a block every voice has already been mixed into: the
+ * level is ramped from where the last block left it to where it is asked to be, and each
+ * channel's peak is taken after it, so the meter reads what leaves the engine.
+ */
+void Mixer::applyMaster(float* out, int frames, int channels) {
+  const int metered = std::min(channels, kMaxOutputChannels);
+  meterChannels_ = metered;
+  for (int channel = 0; channel < metered; channel++) blockPeak_[channel] = 0.0f;
+  const double from = masterCurrent_;
+  const double to = masterTarget_;
+  const bool flat = from == to;
+  for (int frame = 0; frame < frames; frame++) {
+    const double gain = flat ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
+    float* outFrame = out + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+    for (int channel = 0; channel < channels; channel++) {
+      if (gain != 1.0) outFrame[channel] = static_cast<float>(static_cast<double>(outFrame[channel]) * gain);
+      if (channel < metered) {
+        const float level = std::fabs(outFrame[channel]);
+        if (level > blockPeak_[channel]) blockPeak_[channel] = level;
+      }
+    }
+  }
+  masterCurrent_ = to;
 }
 
 void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
@@ -987,6 +1020,11 @@ void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell,
     if (voice.streamSlot >= 0) staging.streamingVoices++;
   }
   staging.active = staging.activeVoices > 0;
+  staging.meterChannels = meterChannels_;
+  for (int channel = 0; channel < kMaxOutputChannels; channel++) {
+    staging.meterPeak[channel] = channel < meterChannels_ ? blockPeak_[channel] : 0.0f;
+  }
+  staging.masterGain = masterTarget_;
   cell.publish(staging);
 }
 

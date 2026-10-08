@@ -35,6 +35,7 @@ import type {
   AudioProbe,
   AudioOnsets,
   AudioSilence,
+  AudioMeters,
   AudioProgress,
   AudioSeekResult,
   AudioRegion,
@@ -584,6 +585,17 @@ export class AudioEngineClient {
   async resume(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
     const result = await bridge().resume(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
     return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Sets the level everything leaves the engine at. */
+  async master(gain: number): Promise<AudioCommandResult> {
+    const result = await bridge().master(gain)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Reads the output's meter: each channel's peak over the last block, after the master. */
+  meters(): Promise<AudioMeters> {
+    return bridge().meters()
   }
 
   /** Drops a cue's future-dated verbs — a start or a stop that has not fired yet. */

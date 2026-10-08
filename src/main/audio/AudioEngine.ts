@@ -21,6 +21,7 @@ import type {
   AudioClockReading,
   AudioErrorCode,
   AudioCommandResult,
+  AudioMeters,
   AudioCrosspoint,
   AudioDeviceInfo,
   AudioEndReason,
@@ -365,6 +366,14 @@ export class NativeAudioEngine {
 
   resume(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
     return this.request('resume', { cueId, whenMs }) as Promise<AudioCommandResult>
+  }
+
+  master(gain: number): Promise<AudioCommandResult> {
+    return this.request('master', { gain }) as Promise<AudioCommandResult>
+  }
+
+  meters(): Promise<AudioMeters> {
+    return this.request('meters', {}) as Promise<AudioMeters>
   }
 
   fade(

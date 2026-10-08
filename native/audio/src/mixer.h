@@ -140,6 +140,7 @@ class Mixer {
   uint64_t underruns() const { return underruns_.load(std::memory_order_relaxed); }
   uint64_t voicesEndedCount() const { return voicesEnded_.load(std::memory_order_relaxed); }
   uint64_t droppedEvents() const { return droppedEvents_; }
+  double masterGain() const { return masterTarget_; }
 
  private:
   Voice* findVoice(const char* cueId);
@@ -153,6 +154,7 @@ class Mixer {
   bool pauseVoice(Voice& voice, int64_t frame);
   bool resumeVoice(Voice& voice, int64_t frame);
   void letGo(Voice& voice, int64_t frame);
+  void applyMaster(float* out, int frames, int channels);
   /**
    * Silences everything at `atFrame`: a voice that never started ends `cancelled`, and
    * one that was sounding ends with `soundingReason` — the reason the panic happened,
@@ -189,6 +191,13 @@ class Mixer {
   uint64_t droppedEvents_ = 0;
   int pendingStreams_[kMaxVoices] = {};
   int pendingStreamCount_ = 0;
+  // The master level: where it is asked to be, and where the last block left it. A change is
+  // ramped across the next block, so a fader moved while the show plays does not click.
+  double masterTarget_ = 1.0;
+  double masterCurrent_ = 1.0;
+  // Each output channel's peak over the block last rendered, for the snapshot's meter.
+  int meterChannels_ = 0;
+  float blockPeak_[kMaxOutputChannels] = {};
 };
 
 }  // namespace ws

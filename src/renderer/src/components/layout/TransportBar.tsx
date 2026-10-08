@@ -5,6 +5,7 @@ import MidiStatusBadge from '../midi/MidiStatusBadge'
 import { AudioStatusBadge } from './AudioStatusBadge'
 import { AlertChip } from './AlertChip'
 import { PlaybackWarnings } from './PlaybackWarnings'
+import { OutputStrip } from './OutputStrip'
 import { formatShortcut } from '../../utils/shortcuts'
 import './TransportBar.css'
 
@@ -77,6 +78,7 @@ export function TransportBar({ onShowStrip }: Props) {
       {/* The keys the show is run with, written for this keyboard. Panic is among them
           because it has no button: this line is where an operator finds it. */}
       <div className="transport-right">
+        <OutputStrip />
         <span className="transport-keys">
           <kbd>Space</kbd> go · <kbd>P</kbd> pause · <kbd>Esc</kbd> stop · <kbd>{formatShortcut('Shift+Esc')}</kbd> panic
         </span>

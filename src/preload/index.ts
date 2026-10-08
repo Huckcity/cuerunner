@@ -6,6 +6,8 @@ import {
   type AudioCancelPayload,
   type AudioReleasePayload,
   type AudioHoldPayload,
+  type AudioMasterPayload,
+  type AudioMeters,
   type AudioCancelResult,
   type AudioClockReading,
   type AudioCommandResult,
@@ -201,6 +203,10 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invokeAudio(AUDIO_CHANNELS.pause, { cueId, whenMs } satisfies AudioHoldPayload),
     resume: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
       invokeAudio(AUDIO_CHANNELS.resume, { cueId, whenMs } satisfies AudioHoldPayload),
+    master: (gain: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.master, { gain } satisfies AudioMasterPayload),
+    meters: (): Promise<AudioMeters> =>
+      invokeAudio(AUDIO_CHANNELS.meters),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */
     routing: (cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> =>
       invokeAudio(AUDIO_CHANNELS.routing, { cueId, outputs } satisfies AudioRoutingPayload),

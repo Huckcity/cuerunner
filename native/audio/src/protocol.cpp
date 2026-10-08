@@ -194,6 +194,9 @@ const WireField kResumeFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireNumber("whenMs", "0"),
 };
+const WireField kMasterFields[] = {
+    wireNumber("gain", "1"),
+};
 const WireField kFadeFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireText("param", "volume"),
@@ -251,6 +254,8 @@ const WireVerb kWireVerbs[] = {
     {"cancel", fieldsOf(kCancelFields)},
     {"pause", fieldsOf(kPauseFields)},
     {"resume", fieldsOf(kResumeFields)},
+    {"master", fieldsOf(kMasterFields)},
+    {"meters", {}},
     {"fade", fieldsOf(kFadeFields)},
     {"routing", fieldsOf(kRoutingFields)},
     {"progress", fieldsOf(kProgressFields)},
@@ -1140,6 +1145,32 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "master") {
+    CommandResultDTO result;
+    EngineError error;
+    if (engine.setMaster(numberOf("gain"), result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "meters") {
+    int channels = 0;
+    float levels[kMaxOutputChannels] = {};
+    double master = 1.0;
+    double atMs = 0.0;
+    engine.meters(channels, levels, master, atMs);
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddNumberToObject(body, "at", atMs);
+    cJSON_AddNumberToObject(body, "master", master);
+    cJSON* peaks = cJSON_AddArrayToObject(body, "peaks");
+    for (int channel = 0; channel < channels; channel++) {
+      cJSON_AddItemToArray(peaks, cJSON_CreateNumber(levels[channel]));
+    }
+    out = replyOk(id, body);
   } else if (verb == "clock") {
     cJSON* body = cJSON_CreateObject();
     cJSON_AddNumberToObject(body, "clockMs", engine.clockMs());

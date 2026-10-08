@@ -33,6 +33,8 @@ const FROZEN_CHANNELS = [
   'audio:events',
   'audio:fade',
   'audio:info',
+  'audio:master',
+  'audio:meters',
   'audio:onsets',
   'audio:panic',
   'audio:pause',

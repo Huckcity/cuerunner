@@ -42,9 +42,21 @@
 }
 
 .transport-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
   text-align: right;
   font-size: var(--text-base);
   color: var(--fg-muted);
+}
+
+/* The keys line gives way first when the window is narrow: the meter and the master stay. */
+.transport-right .transport-keys {
+  order: -1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .transport-right strong {
