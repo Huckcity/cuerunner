@@ -152,7 +152,10 @@ export const GUIDES = [
         whether a build is signed. Windows warns when an unsigned installer is run, and macOS
         warns about an unidentified developer at first launch. Downloads come from
         <code>pub.cuerunner.app</code>, and these links are the newest release's files. A Linux
-        AppImage is published too, and is experimental.
+        AppImage is published too, and is experimental, with a
+        <a href="https://pub.cuerunner.app/latest/Cuerunner.deb">.deb</a> for Debian and Ubuntu
+        beside it. Once installed, Cuerunner offers each new version itself — see
+        <a href="running.html#updates">Updates</a>.
       </p>
       <p>
         <a href="https://pub.cuerunner.app/latest/SHA256SUMS">SHA256SUMS</a> carries the
@@ -316,7 +319,7 @@ export const GUIDES = [
             <tr><td>Wait, Memo</td><td>Wait. A memo is a wait of no length, its notes kept.</td></tr>
             <tr><td>MIDI</td><td>MIDI for note on, note off, control change, program change and SysEx, on the port the workspace's patch names; Show Control for MIDI Show Control's Go, Stop, Resume, Load and Reset.</td></tr>
             <tr><td>Network (QLab 4: OSC)</td><td>OSC, to the host and port of the workspace's network patch, its arguments typed as QLab types them.</td></tr>
-            <tr><td>Second cue list, cart</td><td>Cuerunner runs one cue list. The first QLab list is the show; every other list and cart comes after it as a disarmed group, so GO never runs into it. Arm it, or move its cues, to use them.</td></tr>
+            <tr><td>Second cue list, cart</td><td>Every QLab list is a cue list here, a tab of its own with its own GO, and keeps QLab's id, so a remote that sent <code>/cue_id/{list}/go</code> to QLab sends it here. The first list that is not a cart is the main list. A cart is a cart list, its tiles in the order the cart held them rather than at their grid places.</td></tr>
           </tbody>
         </table>
       </div>
@@ -917,6 +920,26 @@ export const GUIDES = [
         stop. This computer remembers whether you left it in the cart.
       </p>
       <p>
+        A show can hold several <strong>cue lists</strong>, a tab each above the list: the main
+        sequence, a cart of effects, the pre-show loop. <strong>+</strong> adds one; a double
+        click renames it; a right-click colours it, shows it as a cart, disarms it, moves it
+        among the tabs or deletes it with its cues, after asking. Each list keeps its own
+        place: GO, <kbd>Space</kbd> and STOP act on the list in front, and a list you come back
+        to is standing where you left it. Cues running in another list play on, the tab shows a
+        green dot while they do, and the Active tab names the list beside each one. Drag rows
+        onto a tab, or right-click them and choose <strong>Move to</strong>, to move them to
+        another list — a group goes whole. A disarmed list fires nothing, by GO, trigger or the
+        clock. In <strong>List settings</strong> each list follows timecode or ignores it, and
+        sits its own number of frames later on the clock than the show. Every one of these is
+        one <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+      </p>
+      <p>
+        A list shown as a <strong>cart</strong> opens as tiles, and <kbd>F6</kbd> turns it to
+        rows for editing and back. Right-click a tile and press a key to give it a key of its
+        own: that key plays it wherever the show is standing, with the main list in front.
+        Backspace takes the key away.
+      </p>
+      <p>
         The <strong>Active</strong> tab in the dock lists everything that is running, oldest
         first, with the time it has left and a stop of its own on each row. An audio cue's
         bar there is a handle: drag along it and let go, and that cue plays on from there —
@@ -998,6 +1021,34 @@ export const GUIDES = [
         between "the video did not fire" and "the video machine refused the request at
         19:42".
       </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Cuerunner looks for a newer version twenty seconds after it starts and once a day after
+        that, and only looks: when there is one, a bar under the toolbar says so, with its
+        release notes. Nothing is downloaded until you press <strong>Download</strong>, and
+        nothing is installed until you press <strong>Restart now</strong> or quit the app.
+      </p>
+      <ol class="steps">
+        <li><strong>Read the notes.</strong> <strong>Release notes</strong> lists every version between the one you are running and the new one.</li>
+        <li><strong>Download when the show is idle.</strong> A download asked for while a cue is running, paused or waiting is held with a sentence saying so, and a cue fired while a download is under way stops it. Nothing is fetched during a show.</li>
+        <li><strong>Restart, or just quit.</strong> A downloaded update installs the next time Cuerunner quits, or now with <strong>Restart now</strong> — which asks you to save the show first, and is refused while anything is running.</li>
+      </ol>
+      <p>
+        A download whose bytes do not match the checksum its release published, or whose
+        signature is not the publisher's, is refused with a sentence and deleted; nothing is
+        installed. A machine with no network says nothing at all. A copy installed from the
+        <code>.deb</code> is told when there is a newer version and sent to the download page,
+        because a package manager's install cannot replace itself.
+      </p>
+      <p>
+        For show week, set <strong>Show hours</strong> in Settings → Updates: no update checks
+        between the two times, by this computer's clock. Show Mode with a show open is locked out
+        too, unless you turn that off. The first launch after an update shows what changed, once.
+        Every field is in the <a href="../reference/settings.html#updates">settings reference</a>.
+      </p>
     </section>
 `
   },
@@ -1603,8 +1654,19 @@ export const GUIDES = [
         mode, a universe, and how many: <strong>Patch</strong> puts them one after another in
         the first gaps that fit, or from the address you type. The built-in types are a
         dimmer, RGB, dimmer + RGB, RGBW, RGBA, RGBAW + UV and a basic moving head in 8- or
-        16-bit; anything else is a type you make from a channel list, or an
-        <strong>Open Fixture Library</strong> definition file read in.
+        16-bit; anything else is a type you make from a channel list, an
+        <strong>Open Fixture Library</strong> definition file read in, or a
+        <strong>GDTF</strong> file — the format fixture makers publish their own fixtures in,
+        on the GDTF Share and on their own sites — with <strong>Import GDTF file…</strong>.
+      </p>
+      <p>
+        A GDTF import brings every DMX mode the fixture has, each channel at its own width,
+        where each one rests, and the functions across a channel's travel: a shutter that is
+        closed, open and then strobing says which on its fader as you move it. A 24-bit
+        channel is driven on its top two bytes, and the import says so. A fixture whose mode
+        is split over several DMX breaks — separately addressed parts — is refused with a
+        sentence saying so: patch each part as a fixture of its own type. The
+        <a href="../reference/formats.html#gdtf">formats reference</a> has the whole mapping.
       </p>
       <p>
         Two fixtures sharing a slot, and one that runs off the end of its universe, are

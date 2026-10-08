@@ -2,6 +2,7 @@ import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSecti
 import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { canonicalCueList, isDefaultCueLists, type CueListInfo } from '../../../shared/cueLists'
 import { savedOscPatches } from '../../../shared/oscPatches'
 import type { OscPatch } from '../../../shared/cue'
 
@@ -38,14 +39,20 @@ import type { OscPatch } from '../../../shared/cue'
 // The video outputs the same: named at every call, even where there are none, and a show with
 // none writes no section.
 //
-// The OSC patches are named by every caller the same way and for the same reason: a show with
-// none writes no section, and a call site that forgot them would save a show whose messages
-// name patches it no longer has.
+// The cue lists are named by every caller the same way: a call site that forgot them would
+// compile and save every list's cues into a show that has only its main list — which the load
+// funnel would then repair into one list. A show with only its main list under its own name
+// writes no section, so a show saved before lists existed stays byte-identical.
+//
+// The OSC patches are named by every caller for the same reason: a show with none writes no
+// section, and a call site that forgot them would save a show whose messages name patches it
+// no longer has.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'oscPatches'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'cueLists' | 'oscPatches'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
     videoOutputs: WorkspaceValues['videoOutputs']
+    cueLists: CueListInfo[] | undefined
     oscPatches: OscPatch[] | undefined
   }
 ): Workspace {
@@ -60,6 +67,9 @@ export function buildWorkspace(
     // The same for a show with no video output: its bytes are what they were before
     // outputs existed.
     videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined,
+    cueLists: values.cueLists === undefined || isDefaultCueLists(values.cueLists)
+      ? undefined
+      : values.cueLists.map(canonicalCueList),
     oscPatches: savedOscPatches(values.oscPatches)
   })
 }

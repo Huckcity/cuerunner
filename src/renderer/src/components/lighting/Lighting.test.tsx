@@ -146,3 +146,72 @@ describe('the Tracking tab', () => {
     ])
   })
 })
+
+describe('a fixture type read from a GDTF file', () => {
+  it('asks main to read the file, adds the type, and says what the import had to say', async () => {
+    const { FadersPanel } = await import('./FadersPanel')
+    const type = {
+      id: 'gdtf-1',
+      name: 'Test Spot',
+      manufacturer: 'Test Lights',
+      source: 'import' as const,
+      modes: [{
+        name: 'Standard',
+        channels: 2,
+        params: [
+          { key: 'dim', label: 'Dim', kind: 'intensity' as const, offset: 0, fineOffset: null, home: 0 },
+          {
+            key: 'sh1', label: 'Sh1', kind: 'other' as const, offset: 1, fineOffset: null, home: 0.13,
+            functions: [{ name: 'Closed', from: 0 }, { name: 'Open', from: 0.125 }, { name: 'Strobe', from: 0.25 }]
+          }
+        ]
+      }]
+    }
+    vi.mocked(window.cuerunner.show.command).mockResolvedValueOnce({
+      ok: true,
+      result: { ok: true, type, notes: ['Dim in Standard is 24-bit: its two most significant bytes are driven and the rest held at zero.'] }
+    })
+    vi.mocked(window.cuerunner.getPathForFile).mockReturnValueOnce('/rig/Test@Spot.gdtf')
+    act(() => root.render(<PatchPanel />))
+    const input = container.querySelector('input[aria-label="GDTF fixture file"]') as HTMLInputElement
+    const file = new File(['zip'], 'Test@Spot.gdtf')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(window.cuerunner.show.command).toHaveBeenCalledWith('dmx', 'importGdtf', { path: '/rig/Test@Spot.gdtf' })
+    expect(useStore.getState().lighting.types.map(entry => entry.name)).toContain('Test Spot')
+    expect(container.querySelector('.lighting-note[role="status"]')?.textContent).toBe(
+      'Imported Test Spot: 1 mode. Dim in Standard is 24-bit: its two most significant bytes are driven and the rest held at zero.'
+    )
+
+    // Patched, the shutter's fader says which of its functions it rests in.
+    act(() => useStore.setState({
+      lighting: {
+        ...useStore.getState().lighting,
+        fixtures: [{ id: 's1', name: 'Spot 1', typeId: 'gdtf-1', mode: 'Standard', universe: 1, address: 20 }]
+      }
+    }))
+    act(() => root.render(<FadersPanel monitor={null} />))
+    expect(container.querySelector('[data-testid="fader-function"]')?.textContent).toBe('Open')
+  })
+
+  it('puts the sentence a file was refused with beside the buttons, and adds nothing', async () => {
+    vi.mocked(window.cuerunner.show.command).mockResolvedValueOnce({
+      ok: true,
+      result: { ok: false, error: 'that archive has no description.xml, so it is not a GDTF file' }
+    })
+    vi.mocked(window.cuerunner.getPathForFile).mockReturnValueOnce('/rig/empty.gdtf')
+    const before = useStore.getState().lighting.types.length
+    act(() => root.render(<PatchPanel />))
+    const input = container.querySelector('input[aria-label="GDTF fixture file"]') as HTMLInputElement
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'empty.gdtf')], configurable: true })
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container.querySelector('.lighting-error')?.textContent).toBe(
+      'empty.gdtf: that archive has no description.xml, so it is not a GDTF file'
+    )
+    expect(useStore.getState().lighting.types).toHaveLength(before)
+  })
+})

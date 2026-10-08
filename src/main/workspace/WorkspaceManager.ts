@@ -29,6 +29,8 @@ import { heldShowSettings } from '../../shared/show'
 import { LIGHTING_SHAPE } from '../../shared/dmxShape'
 import { lightingRefusal } from '../../shared/dmx'
 import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { CUE_LISTS_SHAPE } from '../../shared/cueListsShape'
+import { cueListsRefusal, heldCueLists, MAIN_CUE_LIST_ID, type CueListInfo } from '../../shared/cueLists'
 import { OSC_PATCH_SHAPE, oscPatchesRefusal } from '../../shared/oscPatches'
 import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
@@ -66,7 +68,9 @@ const LOAD_REPAIR_DETAIL: Record<LoadNote['kind'], string> = {
   // top-level cues, which is not necessarily where it sat inside the block it was in.
   'missing-group': 'it has no group in this file: still fires with the show, at the top level',
   cycle: 'in a loop of groups: returned to the top level',
-  reordered: 'its children were gathered into one block behind it'
+  reordered: 'its children were gathered into one block behind it',
+  'missing-list': 'its cue list is not in this file: it runs in the main list',
+  'list-in-group': 'it named a cue list from inside a group: it runs in its group’s list'
 }
 
 /**
@@ -210,6 +214,35 @@ function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
     }
   }
   return ordered
+}
+
+/**
+ * Repairs which list each cue says it runs in, the way the grouping is repaired: a cue at the
+ * top level naming a list the file does not have runs in the main list, and a child naming a
+ * list at all — a child is in its group's list, and a file this build wrote never says
+ * otherwise — has the name taken off. Each repair is a load note; a file that needs none comes
+ * back as the same array, and nothing but `listId` is touched.
+ */
+function normalizeListMembership(cues: Cue[], lists: CueListInfo[] | undefined, notes?: LoadNote[]): Cue[] {
+  const known = new Set(heldCueLists(lists).map(list => list.id))
+  let out: Cue[] | null = null
+  cues.forEach((cue, at) => {
+    if (cue.listId === undefined) return
+    const kind: LoadNote['kind'] | null = cue.parentId !== null
+      ? 'list-in-group'
+      : known.has(cue.listId) && cue.listId !== MAIN_CUE_LIST_ID ? null : 'missing-list'
+    if (kind === null) return
+    // A cue that names the main list says what saying nothing says; it is written without the
+    // name, so it is taken off quietly rather than reported as a repair.
+    if (!(kind === 'missing-list' && cue.listId === MAIN_CUE_LIST_ID)) {
+      notes?.push({ cueId: cue.id, kind, detail: LOAD_REPAIR_DETAIL[kind] })
+    }
+    const bare = { ...cue }
+    delete bare.listId
+    out ??= cues.slice()
+    out[at] = bare
+  })
+  return out ?? cues
 }
 
 /** Every section the saved form declares, as a file's own top level is read with it. */
@@ -723,6 +756,15 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
       throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
     }
   }
+  // The cue lists are read element by element the way the settings are — a field this build
+  // does not write refuses — and then for what a kind cannot say: an id twice, no main list.
+  if (Object.hasOwn(workspace, 'cueLists') && workspace.cueLists !== undefined) {
+    refuseForeignValue(workspace.cueLists, CUE_LISTS_SHAPE, 'cueLists', source, SHOW_VOICE_STRICT, null)
+    const refusal = cueListsRefusal(workspace.cueLists)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
   refuseForeignCues(workspace.cues, source)
 }
 
@@ -763,6 +805,8 @@ export function migrateWorkspace(workspace: Workspace, source: string, notes?: L
   }
 
   workspace.cues = normalizeGrouping(workspace.cues, notes)
+  // After the grouping, because a cue it returned to the top level is a cue with a list.
+  workspace.cues = normalizeListMembership(workspace.cues, workspace.cueLists, notes)
   // A workspace saved before the firing guard existed has none: it gets the default,
   // which is the window that keeps a bounced trigger from truncating a cue.
   workspace.triggerGuard = normalizeTriggerGuard(workspace.triggerGuard)
@@ -1566,7 +1610,9 @@ export interface MergedShow {
 const MERGE_REPAIR_DETAIL: Record<LoadNote['kind'], (source: string) => string> = {
   'missing-group': source => `its group is not in “${source}”: placed at the top level`,
   cycle: source => `its group led back to it in “${source}”: placed at the top level`,
-  reordered: source => `its children were gathered into one block behind it in “${source}”`
+  reordered: source => `its children were gathered into one block behind it in “${source}”`,
+  'missing-list': source => `its cue list is not in “${source}”: placed in the main list`,
+  'list-in-group': source => `it named a cue list from inside a group in “${source}”: it runs in its group’s list`
 }
 
 /**

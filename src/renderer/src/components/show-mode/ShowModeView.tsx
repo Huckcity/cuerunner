@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type RunningCue } from '../../store'
+import { cuesOfList } from '../../../../shared/cueLists'
 import type { Cue } from '../../../../shared/cue'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { CueIcon } from '../../utils/cueIcons'
@@ -53,7 +54,11 @@ interface Props {
  * running, is kept in view.
  */
 export function ShowModeView({ onExit }: Props) {
-  const cues = useStore(s => s.cues)
+  const allCues = useStore(s => s.cues)
+  const activeListId = useStore(s => s.activeListId)
+  // The list on screen, as its own running order: what is done and what is next are read
+  // along it, and another list's cues are on that list's tab.
+  const cues = useMemo(() => cuesOfList(allCues, activeListId), [allCues, activeListId])
   const selectedId = useStore(s => s.selectedId)
   const running = useStore(s => s.running)
   const listRef = useRef<HTMLOListElement>(null)

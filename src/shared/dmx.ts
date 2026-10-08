@@ -40,6 +40,10 @@ export const DMX_LIMITS = {
   wireValues: 64 * 512,
   /** The largest fixture definition file the import reads. */
   importBytes: 1024 * 1024,
+  /** The named ranges one parameter may carry (a GDTF channel's functions). */
+  functionsPerParam: 64,
+  /** The largest `description.xml` a GDTF file is read for, once inflated. */
+  gdtfDescriptionBytes: 16 * 1024 * 1024,
   /** The longest fade a Light cue, a release or a level change may take: an hour. */
   fadeMs: 3_600_000,
   /** Characters in a name the patch carries. */
@@ -84,6 +88,31 @@ export interface FixtureParam {
   fineOffset: number | null
   /** Where the parameter rests when nothing holds it — a release fades to here. 0–1. */
   home: number
+  /**
+   * What the parameter does across its travel, where a definition says — a shutter that is
+   * closed, then open, then strobing — each from the share of travel it starts at, in order.
+   * Absent for a parameter that does one thing all the way up, which is most of them.
+   */
+  functions?: FixtureFunction[]
+}
+
+/** One named range of a parameter's travel: what it does from `from` up to the next one. */
+export interface FixtureFunction {
+  name: string
+  /** Where the range starts, 0–1. */
+  from: number
+}
+
+/** What a parameter is doing at a value: the name of the range it is in, or null when it names none. */
+export function functionAt(param: Pick<FixtureParam, 'functions'>, value: number): string | null {
+  const functions = param.functions
+  if (functions === undefined || functions.length === 0) return null
+  let found: string | null = null
+  for (const entry of functions) {
+    if (entry.from <= value + 1e-9) found = entry.name
+    else break
+  }
+  return found
 }
 
 /** One way a fixture can be addressed: a channel count and what each channel does. */
@@ -687,6 +716,10 @@ export function lightingRefusal(lighting: LightingSettings): string | null {
       if (params !== null) return params
       for (const entry of mode.params) {
         if (!PARAM_KINDS.includes(entry.kind)) return `a parameter in ${type.name} of the kind “${entry.kind}”`
+        const functions = entry.functions === undefined
+          ? null
+          : over(entry.functions.length, DMX_LIMITS.functionsPerParam, `ranges on ${type.name} ${mode.name} ${entry.label}`)
+        if (functions !== null) return functions
       }
     }
   }

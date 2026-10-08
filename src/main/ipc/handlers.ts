@@ -145,6 +145,9 @@ import {
 } from '../../shared/ipc/qlab'
 import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces } from '../import/qlabImport'
 import { createShowRuntime, defaultServices } from '../show/runtime'
+import { UPDATE_CHANNELS, type UpdateActionResult, type UpdateCheckResult, type WhatsNew } from '../../shared/ipc/update'
+import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../../shared/update'
+import { openDownloads, updates } from '../update/main'
 import { createMachineRedundancy } from '../redundancy/machine'
 import { createMachineDmx } from '../dmx/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
@@ -747,6 +750,30 @@ export function registerIpcHandlers(): void {
     timecodeHub.control(payload.cueId, payload.action))
   // The clocks a cue started stop with the app, and so does the reader.
   app.on('will-quit', () => timecodeHub.dispose())
+
+  // Updates. Free, and every step the operator's: a check, a download, a restart — each
+  // refused with a sentence while the show runs or the lockout holds. The window reports the
+  // show's state as it changes; the service is made on the first call, not at registration.
+  ipcMain.handle(UPDATE_CHANNELS.status, (): UpdateStatus => updates().status())
+  ipcMain.handle(UPDATE_CHANNELS.check, (): Promise<UpdateCheckResult> =>
+    refusalValue(async () => ({ ok: true as const, status: await updates().check() })))
+  ipcMain.handle(UPDATE_CHANNELS.download, (): Promise<UpdateActionResult> =>
+    refusalValue(async () => {
+      await updates().download()
+      return { ok: true as const }
+    }))
+  ipcMain.handle(UPDATE_CHANNELS.install, (): Promise<UpdateActionResult> =>
+    refusalValue(async () => {
+      await updates().install()
+      return { ok: true as const }
+    }))
+  ipcMain.handle(UPDATE_CHANNELS.configure, (_, patch: Partial<UpdateSettings>): Promise<UpdateStatus> =>
+    updates().configure(patch))
+  ipcMain.handle(UPDATE_CHANNELS.report, (_, state: UpdateShowState): void => {
+    updates().report(state)
+  })
+  ipcMain.handle(UPDATE_CHANNELS.whatsNew, (): Promise<WhatsNew | null> => updates().takeWhatsNew())
+  ipcMain.handle(UPDATE_CHANNELS.openDownloads, (): Promise<void> => openDownloads())
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.

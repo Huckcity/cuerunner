@@ -55,6 +55,38 @@
         and the sACN identity this machine sends as, are the machine's, in
         <code>dmx.json</code> beside the licence.
       </p>
+      <p id="gdtf">
+        <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
+        Patch → Import GDTF file…, part of Cuerunner Pro) is copied into the show like any
+        other type, so the show does not need the file again. Only the archive's
+        <code>description.xml</code> is read — the models and wheel images beside it are
+        not — up to 16 MB of XML, and a description that declares a document type is
+        refused. Each <code>DMXMode</code> becomes a mode, as wide as its highest offset. Each
+        <code>DMXChannel</code> with an offset becomes a parameter: its kind from the
+        attribute of the function it starts on (<code>Dimmer</code>, <code>Pan</code>,
+        <code>Tilt</code>, <code>ColorAdd_R</code> and the other emitters, colour wheels and
+        macros as colour, everything else as other), its label from the attribute's pretty
+        name — with the geometry after it where cells share an attribute — its coarse and
+        fine slots from <code>Offset</code>, and where it rests from the default of its
+        initial function (or, in a GDTF 1.0 file, the channel's own <code>Default</code>).
+        A channel with more than one <code>ChannelFunction</code> keeps each one's name and
+        the share of travel it starts at (<code>DMXFrom</code>), up to 64, and the faders name
+        the one a value is in. A 24- or 32-bit channel is driven on its two most significant
+        bytes and the bytes below are held at zero. A virtual channel (no offset) is left out.
+        Refused, with a sentence: a mode spread over more than one <code>DMXBreak</code>, a
+        channel that overwrites another break, an offset past 512, two channels on one slot,
+        a mode with no DMX channels, more than 32 modes or 128 parameters to a mode.
+      </p>
+      <p>
+        A show with more than one cue list carries a <code>cueLists</code> section: each list's
+        id, name, colour, whether it is a cart, whether it is disarmed, how it follows the
+        clock and its tiles' own keys, in tab order. A cue at the top level of a list other than
+        the main one names it with <code>listId</code>; a cue inside a group never does — it runs
+        in its group's list. A show with only its main list under its own name writes no
+        section and no <code>listId</code>, so a show saved before lists existed opens as one
+        list and saves the bytes it always did. A cue naming a list the file does not have runs
+        in the main list, and the bar across the top says so, the way a grouping repair does.
+      </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping

@@ -52,6 +52,8 @@ import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 import type { TriggerGuardSettings } from '../../../shared/workspace'
 import type { TakeoverPlan } from '../../../shared/redundancy'
+import { listArmed, listOfCue, MAIN_CUE_LIST_ID, type CueListInfo } from '../../../shared/cueLists'
+import { idsInList, sequenceOf } from './cueListScope'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
 type ClearAllRunning = () => void
@@ -236,6 +238,12 @@ interface RunnerDeps {
   // a resume can put back what it said. Optional: a runner without it still holds the show,
   // and only the rows do not change.
   getRunning?: () => ReadonlyMap<string, RunningCue>
+  // The show's cue lists, the one on screen, and each list's own playhead. Optional: a runner
+  // without them runs one list, the way every show did before there were several.
+  getCueLists?: () => CueListInfo[]
+  getActiveListId?: () => string
+  getListPlayhead?: (listId: string) => string | null
+  setListPlayhead?: (listId: string, cueId: string | null) => void
   // The show's OSC patches, read per send: a patch edited while the show is loaded is where
   // the next message goes. Optional: a runner without it sends every message to its own host.
   getOscPatches?: () => OscPatch[]
@@ -320,10 +328,18 @@ export class CueEngine {
     this.runs.clear()
   }
 
-  go(): void {
-    const { getCues, getSelected, setSelected } = this.deps!
-    const cues = getCues()
+  /**
+   * GO: fires the cue a list's playhead is on and moves the playhead past it. With no list
+   * named it is the list on screen, whose playhead is the selection; a remote may name another
+   * list, whose place moves without that list coming to the front.
+   */
+  go(listId?: string): void {
+    const { getCues } = this.deps!
+    const { get: getSelected, set: setSelected } = this.playheadOf(listId)
     const selectedId = getSelected()
+    // One list's running order: the cue after a list's last cue is nothing, never the first cue
+    // of another list that happens to sit behind it in the show.
+    const cues = sequenceOf(getCues(), selectedId)
 
     // Nothing selected fires nothing. It used to fire the first cue of the show, and the
     // selection is empty exactly once in every performance: after the last cue. One more
@@ -334,6 +350,7 @@ export class CueEngine {
     if (this.refuseWhileHeld()) return
     const standingIdx = cues.findIndex(c => c.id === selectedId)
     if (standingIdx < 0) return
+    if (!this.listFires(cues[standingIdx].id)) return
 
     // A disarmed cue is skipped, not stood on: the press fires the next armed cue after
     // it. Returning here instead fired nothing and left the selection where it was, so
@@ -344,8 +361,10 @@ export class CueEngine {
 
     // The hand that shook. Every way of firing a cue reaches the runner, so the window
     // is asked here rather than at each of them — and Space, which the OS repeats while
-    // it is held down, is exactly what it is for.
-    if (!this.guard.accepts('key', 'go', this.now())) return
+    // it is held down, is exactly what it is for. Each list's GO is a press of its own: a GO
+    // on the cart straight after one on the main list is two lists being run, not a bounce.
+    const pressed = listId ?? this.deps!.getActiveListId?.() ?? MAIN_CUE_LIST_ID
+    if (!this.guard.accepts('key', pressed === MAIN_CUE_LIST_ID ? 'go' : `go:${pressed}`, this.now())) return
 
     // A cue that is already in flight is left where it is, unless it was told it may be
     // restarted. Checked before the selection moves, so an ignored press changes nothing
@@ -424,9 +443,12 @@ export class CueEngine {
    */
   goById(id: string, atMs?: number, parent?: CueRun): void {
     const { getCues } = this.deps!
-    const cues = getCues()
+    const cues = sequenceOf(getCues(), id)
     const cue = cues.find(c => c.id === id)
     if (!cue || !cue.isArmed) return
+    // A press into a list that has been taken out of the show fires nothing; the show's own
+    // handovers inside a list never started one.
+    if (atMs === undefined && !this.listFires(id)) return
     // A press — a trigger, a desk button, a remote — waits for the show to be let go; the
     // show's own handovers are on the held clock and come due when it runs again.
     if (atMs === undefined && this.refuseWhileHeld()) return
@@ -465,7 +487,7 @@ export class CueEngine {
    */
   adoptCue(cueId: string, seekMs: number): void {
     if (!this.deps) return
-    const cues = this.deps.getCues()
+    const cues = sequenceOf(this.deps.getCues(), cueId)
     const cue = cues.find(candidate => candidate.id === cueId)
     if (!cue || !cue.isArmed) return
     const nextCue = cues[cues.findIndex(candidate => candidate.id === cueId) + 1] ?? null
@@ -506,6 +528,29 @@ export class CueEngine {
       this.deps.setSelected(plan.selectedId)
     }
     return { adopted: plan.adopt.length, skipped: plan.skipped.length }
+  }
+
+  /** A list's playhead, read and moved: the selection for the list on screen, or another list's own. */
+  private playheadOf(listId: string | undefined): { get: () => string | null; set: (id: string | null) => void } {
+    const deps = this.deps!
+    const active = deps.getActiveListId?.()
+    if (listId === undefined || listId === active || !deps.getListPlayhead || !deps.setListPlayhead) {
+      return { get: deps.getSelected, set: deps.setSelected }
+    }
+    const read = deps.getListPlayhead
+    const write = deps.setListPlayhead
+    return { get: () => read(listId), set: id => write(listId, id) }
+  }
+
+  /** Whether a press may fire this cue's list: a list taken out of the show says why it did not. */
+  private listFires(cueId: string): boolean {
+    const lists = this.deps?.getCueLists?.()
+    if (lists === undefined) return true
+    const listId = listOfCue(this.deps!.getCues(), cueId)
+    if (listId === null || listArmed(lists, listId)) return true
+    const name = lists.find(list => list.id === listId)?.name ?? listId
+    this.log({ level: 'info', message: `not fired: the list “${name}” is disarmed` })
+    return false
   }
 
   /**
@@ -2111,6 +2156,20 @@ export class CueEngine {
     const fadeMs = Math.max(0, this.deps.getTriggerGuard().stopFadeMs ?? 0)
     const now = Date.now()
     const fading = this.softStopAt !== null && now - this.softStopAt < this.softStopFadeMs + DOUBLE_STOP_GRACE_MS
+    // STOP is the list on screen's, the way GO is: where another list is running too — a cart
+    // under the main sequence — that one plays on. Where nothing else is running, it is the
+    // STOP it always was, everything and every task with it.
+    const scope = this.stopScope()
+    if (scope !== null) {
+      const cut = fadeMs === 0 || fading
+      const stopped = this.stopList(scope, cut ? 0 : fadeMs)
+      this.softStopAt = cut ? null : now
+      this.softStopFadeMs = cut ? 0 : fadeMs
+      if (stopped > 0) {
+        this.log({ level: 'info', message: cut ? 'stopped the list on screen' : `stopped the list on screen with a ${fadeMs} ms fade — STOP again to cut it` })
+      }
+      return
+    }
     if (fadeMs === 0 || fading) {
       if (fading) this.log({ level: 'info', message: 'cut the STOP fade' })
       this.softStopAt = null
@@ -2127,6 +2186,47 @@ export class CueEngine {
     this.softStopAt = now
     this.softStopFadeMs = fadeMs
     this.log({ level: 'info', message: `stopped with a ${fadeMs} ms fade — STOP again to cut it` })
+  }
+
+  /**
+   * The list STOP is scoped to, or null for the whole show: the list on screen, where some
+   * other list has something running or waiting on a timeline.
+   */
+  private stopScope(): string | null {
+    const active = this.deps?.getActiveListId?.()
+    if (active === undefined) return null
+    const cues = this.deps!.getCues()
+    const busy = new Set([...this.runs.keys(), ...this.timelineTasks.keys()])
+    if (busy.size === 0) return null
+    return idsInList(cues, busy, active).length === busy.size ? null : active
+  }
+
+  /**
+   * STOP for one list: what runs in it is stopped — faded over `fadeMs`, or cut — and every
+   * other list plays on. Its groups go first, top level first, so a child that ends while the
+   * list is being walked cannot carry its group on. Returns how many cues it stopped.
+   */
+  stopList(listId: string, fadeMs = 0): number {
+    if (!this.deps) return 0
+    const cues = this.deps.getCues()
+    const byId = new Map(cues.map(cue => [cue.id, cue]))
+    const depth = (id: string): number => {
+      let n = 0
+      for (let at = byId.get(id); at?.parentId != null && n < cues.length; at = byId.get(at.parentId)) n++
+      return n
+    }
+    const ids = idsInList(cues, new Set([...this.runs.keys(), ...this.timelineTasks.keys()]), listId)
+      .sort((a, b) => depth(a) - depth(b))
+    for (const id of ids) {
+      this.pausedCues.delete(id)
+      this.stopCue(id, fadeMs, false)
+      const cue = byId.get(id)
+      if (cue?.type === 'group') {
+        this.stopGroup(cue as GroupCue, fadeMs)
+        this.playlistCursors.delete(id)
+      }
+    }
+    return ids.length
   }
 
   /**

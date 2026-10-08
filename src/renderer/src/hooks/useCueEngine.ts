@@ -27,7 +27,11 @@ export function useCueEngine() {
       getRunning: () => useStore.getState().running,
       isPro: () => isPro(useStore.getState().license),
       getOscPatches: () => useStore.getState().oscPatches,
-      setArmed: (cueIds, armed) => useStore.getState().updateCues(cueIds, { isArmed: armed })
+      setArmed: (cueIds, armed) => useStore.getState().updateCues(cueIds, { isArmed: armed }),
+      getCueLists: () => useStore.getState().cueLists,
+      getActiveListId: () => useStore.getState().activeListId,
+      getListPlayhead: listId => useStore.getState().listPlayhead(listId),
+      setListPlayhead: (listId, cueId) => useStore.getState().setListPlayhead(listId, cueId)
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 

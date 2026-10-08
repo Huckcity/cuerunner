@@ -208,7 +208,7 @@ function CompareTab() {
 
   const choose = async (): Promise<void> => {
     const {
-      workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, oscPatches,
+      workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, cueLists, oscPatches,
       workspaceId, workspaceCreatedAt, showHistory
     } = useStore.getState()
     const workspace = buildWorkspace({
@@ -223,6 +223,7 @@ function CompareTab() {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
+      cueLists,
       oscPatches,
       cues
     })

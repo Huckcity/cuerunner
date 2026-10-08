@@ -145,7 +145,7 @@ export const PRO_ROWS = [
     pro: {
       identifiers: ['dmx'],
       cues: ['light'],
-      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
+      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, fixture types read from Open Fixture Library and GDTF files, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
     }
   },
   {

@@ -117,6 +117,26 @@
         stop. This computer remembers whether you left it in the cart.
       </p>
       <p>
+        A show can hold several <strong>cue lists</strong>, a tab each above the list: the main
+        sequence, a cart of effects, the pre-show loop. <strong>+</strong> adds one; a double
+        click renames it; a right-click colours it, shows it as a cart, disarms it, moves it
+        among the tabs or deletes it with its cues, after asking. Each list keeps its own
+        place: GO, <kbd>Space</kbd> and STOP act on the list in front, and a list you come back
+        to is standing where you left it. Cues running in another list play on, the tab shows a
+        green dot while they do, and the Active tab names the list beside each one. Drag rows
+        onto a tab, or right-click them and choose <strong>Move to</strong>, to move them to
+        another list — a group goes whole. A disarmed list fires nothing, by GO, trigger or the
+        clock. In <strong>List settings</strong> each list follows timecode or ignores it, and
+        sits its own number of frames later on the clock than the show. Every one of these is
+        one <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+      </p>
+      <p>
+        A list shown as a <strong>cart</strong> opens as tiles, and <kbd>F6</kbd> turns it to
+        rows for editing and back. Right-click a tile and press a key to give it a key of its
+        own: that key plays it wherever the show is standing, with the main list in front.
+        Backspace takes the key away.
+      </p>
+      <p>
         The <strong>Active</strong> tab in the dock lists everything that is running, oldest
         first, with the time it has left and a stop of its own on each row. An audio cue's
         bar there is a handle: drag along it and let go, and that cue plays on from there —
@@ -198,6 +218,34 @@
         between "the video did not fire" and "the video machine refused the request at
         19:42".
       </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Cuerunner looks for a newer version twenty seconds after it starts and once a day after
+        that, and only looks: when there is one, a bar under the toolbar says so, with its
+        release notes. Nothing is downloaded until you press <strong>Download</strong>, and
+        nothing is installed until you press <strong>Restart now</strong> or quit the app.
+      </p>
+      <ol class="steps">
+        <li><strong>Read the notes.</strong> <strong>Release notes</strong> lists every version between the one you are running and the new one.</li>
+        <li><strong>Download when the show is idle.</strong> A download asked for while a cue is running, paused or waiting is held with a sentence saying so, and a cue fired while a download is under way stops it. Nothing is fetched during a show.</li>
+        <li><strong>Restart, or just quit.</strong> A downloaded update installs the next time Cuerunner quits, or now with <strong>Restart now</strong> — which asks you to save the show first, and is refused while anything is running.</li>
+      </ol>
+      <p>
+        A download whose bytes do not match the checksum its release published, or whose
+        signature is not the publisher's, is refused with a sentence and deleted; nothing is
+        installed. A machine with no network says nothing at all. A copy installed from the
+        <code>.deb</code> is told when there is a newer version and sent to the download page,
+        because a package manager's install cannot replace itself.
+      </p>
+      <p>
+        For show week, set <strong>Show hours</strong> in Settings → Updates: no update checks
+        between the two times, by this computer's clock. Show Mode with a show open is locked out
+        too, unless you turn that off. The first launch after an update shows what changed, once.
+        Every field is in the <a href="../reference/settings.html#updates">settings reference</a>.
+      </p>
     </section>
   </main>
 

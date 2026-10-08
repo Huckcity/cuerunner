@@ -6,6 +6,7 @@ import {
   curveShape,
   defaultLightingSettings,
   DMX_LIMITS,
+  functionAt,
   identifyLook,
   lightingRefusal,
   nextFreeAddress,
@@ -186,5 +187,39 @@ describe('the commands main reads', () => {
   it('reads at most four universes for one monitor request', () => {
     expect(readDmxMonitorRequest({ universes: [1, 2] })).toEqual([1, 2])
     expect(() => readDmxMonitorRequest({ universes: [1, 2, 3, 4, 5] })).toThrow(/more than the 4/)
+  })
+})
+
+describe('a parameter’s functions', () => {
+  const shutter = {
+    functions: [
+      { name: 'Closed', from: 0 },
+      { name: 'Open', from: 0.125 },
+      { name: 'Strobe', from: 0.25 }
+    ]
+  }
+
+  it('names the range a value is in, from the start of each range up to the next', () => {
+    expect(functionAt(shutter, 0)).toBe('Closed')
+    expect(functionAt(shutter, 0.124)).toBe('Closed')
+    expect(functionAt(shutter, 0.125)).toBe('Open')
+    expect(functionAt(shutter, 1)).toBe('Strobe')
+    expect(functionAt({}, 0.5)).toBeNull()
+    expect(functionAt({ functions: [{ name: 'Gobo', from: 0.5 }] }, 0.1)).toBeNull()
+  })
+
+  it('is bounded where a saved rig is: more ranges than a parameter may carry are refused by name', () => {
+    const [type] = builtinFixtureTypes()
+    const many = Array.from({ length: DMX_LIMITS.functionsPerParam + 1 }, (_, at) => ({ name: `F${at}`, from: at / 100 }))
+    const loaded: LightingSettings = {
+      ...defaultLightingSettings(),
+      types: [{
+        ...type,
+        modes: [{ ...type.modes[0], params: [{ ...type.modes[0].params[0], functions: many }] }]
+      }]
+    }
+    expect(lightingRefusal(loaded)).toBe(
+      `${DMX_LIMITS.functionsPerParam + 1} ranges on Dimmer 1 channel Dimmer, more than the ${DMX_LIMITS.functionsPerParam} a show may carry`
+    )
   })
 })

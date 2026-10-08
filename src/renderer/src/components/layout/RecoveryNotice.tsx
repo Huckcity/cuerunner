@@ -106,6 +106,7 @@ export function RecoveryNotice() {
             lighting: store.lighting,
             timecode: store.timecode,
             videoOutputs: store.videoOutputs,
+            cueLists: store.cueLists,
             oscPatches: store.oscPatches,
             cues: store.cues
           })
@@ -160,6 +161,8 @@ export function RecoveryNotice() {
       snapshot.workspace.timecode,
       // And its outputs: a recovered show still has its projectors.
       snapshot.workspace.videoOutputs,
+      // And its lists: without them every list's cues would come back in the main one.
+      snapshot.workspace.cueLists,
       snapshot.workspace.oscPatches
     )
     // The place, not just the cues: standing where the session stood means the next GO

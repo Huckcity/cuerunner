@@ -32,6 +32,7 @@ function sent(): Workspace {
     lighting: s.lighting,
     timecode: s.timecode,
     videoOutputs: s.videoOutputs,
+    cueLists: s.cueLists,
     oscPatches: s.oscPatches,
     cues: s.cues
   })
@@ -68,6 +69,7 @@ function editRouted(key: WorkspaceKey): void {
       return
     case 'timecode': useStore.getState().setTimecode({ chase: !useStore.getState().timecode.chase }); return
     case 'videoOutputs': useStore.getState().addVideoOutput(); return
+    case 'cueLists': useStore.getState().addCueList('Effects'); return
     case 'oscPatches':
       useStore.getState().setOscPatches([{ id: 'p1', name: 'Desk', host: '10.0.0.9', port: 8000 }])
       return

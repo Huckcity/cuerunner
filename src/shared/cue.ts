@@ -151,6 +151,12 @@ export interface CueBase {
    * tablet reading it. Null or absent means it is not pinned to anything.
    */
   scriptLine?: number | null
+  /**
+   * The cue list a cue at the top level runs in, by the list's id (`./cueLists`). Absent is
+   * the show's main list — every cue of a show saved before lists existed — and a child never
+   * carries one: it runs in its group's list, which is what keeps a group whole.
+   */
+  listId?: string
 }
 
 /**

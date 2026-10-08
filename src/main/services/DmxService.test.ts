@@ -69,6 +69,38 @@ describe('the lighting service', () => {
     await expect(dmx.command('launch')).rejects.toThrow(/no action "launch"/)
   })
 
+  it('imports a GDTF file, answering a file it cannot read as a value rather than a failed command', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { writeZip } = await import('../workspace/zip')
+    const directory = mkdtempSync(join(tmpdir(), 'feat-ship-dmx-gdtf-'))
+    try {
+      const file = join(directory, 'Dimmer.gdtf')
+      await writeZip(file, [{
+        name: 'description.xml',
+        data: Buffer.from(
+          '<GDTF DataVersion="1.2"><FixtureType Name="Dimmer" Manufacturer="Test"><DMXModes><DMXMode Name="1ch">' +
+            '<DMXChannels><DMXChannel Offset="1"><LogicalChannel Attribute="Dimmer"><ChannelFunction Name="Dimmer" ' +
+            'Attribute="Dimmer" DMXFrom="0/1" Default="0/1"/></LogicalChannel></DMXChannel></DMXChannels></DMXMode>' +
+            '</DMXModes></FixtureType></GDTF>'
+        )
+      }])
+      const { service: dmx } = service()
+      expect(await dmx.command('importGdtf', { path: file })).toMatchObject({
+        ok: true,
+        type: { name: 'Dimmer', manufacturer: 'Test', modes: [{ name: '1ch', channels: 1 }] }
+      })
+      expect(await dmx.command('importGdtf', { path: join(directory, 'missing.gdtf') })).toEqual({
+        ok: false,
+        error: 'that file could not be opened: it has moved, or this machine will not let it be read'
+      })
+      await expect(dmx.command('importGdtf', { path: 'relative.gdtf' })).rejects.toThrow('names the file by its full path')
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   it('lists the machine’s interfaces and keeps the choice with the machine', async () => {
     const { service: dmx } = service()
     expect(await dmx.command('interfaces')).toMatchObject({ selected: null, missing: false })

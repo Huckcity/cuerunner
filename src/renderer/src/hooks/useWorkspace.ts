@@ -44,7 +44,7 @@ function asWritten(sent: Workspace, saved: SavedName): Workspace {
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 export async function guardDirty(): Promise<boolean> {
-  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, oscPatches, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, cueLists, oscPatches, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
 
@@ -66,7 +66,7 @@ export async function guardDirty(): Promise<boolean> {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
-      oscPatches,
+      cueLists, oscPatches,
       cues
     })
     let saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null
@@ -135,7 +135,7 @@ export function loadIntoStore(
     workspace.lighting,
     workspace.timecode,
     workspace.videoOutputs,
-    workspace.oscPatches
+    workspace.cueLists
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
@@ -179,7 +179,7 @@ export async function openDemoWorkspace(): Promise<void> {
  * Whatever is left is reported again for another pick.
  */
 export async function relinkMissingMedia(cueId: string): Promise<void> {
-  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, oscPatches, workspaceId, workspaceCreatedAt } =
+  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, cueLists, oscPatches, workspaceId, workspaceCreatedAt } =
     useStore.getState()
   const workspace = buildWorkspace({
     id: workspaceId,
@@ -192,7 +192,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
-    oscPatches,
+    cueLists, oscPatches,
     cues
   })
   try {
@@ -224,7 +224,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
 export async function exportShowBundle(): Promise<void> {
   const {
     workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
-    triggerGuard, lighting, timecode, oscPatches, workspaceId, workspaceCreatedAt, showHistory
+    triggerGuard, lighting, timecode, cueLists, oscPatches, workspaceId, workspaceCreatedAt, showHistory
   } = useStore.getState()
   // A show with unsaved edits is the show as it stands: what the bundle carries is what
   // is on screen, not what was last written.
@@ -240,7 +240,7 @@ export async function exportShowBundle(): Promise<void> {
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
-    oscPatches,
+    cueLists, oscPatches,
     cues
   })
   try {
@@ -276,7 +276,7 @@ export async function exportShowBundle(): Promise<void> {
 export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again = false): Promise<void> {
   const {
     workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
-    triggerGuard, lighting, timecode, oscPatches, workspaceId, workspaceCreatedAt, showHistory, setMergeReport
+    triggerGuard, lighting, timecode, cueLists, oscPatches, workspaceId, workspaceCreatedAt, showHistory, setMergeReport
   } = useStore.getState()
   // The show as it stands, unsaved edits included: merging in a version of a show that is
   // not what is on screen is merging the wrong thing.
@@ -292,7 +292,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     lighting,
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
-    oscPatches,
+    cueLists, oscPatches,
     cues
   })
   try {
@@ -444,7 +444,7 @@ export function useWorkspace() {
   }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, oscPatches, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, cueLists, oscPatches, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
     // The saved shape the bridge is handed, kept as that exact object: the round trip's
     // witness compares it against the session, so it must be the bytes that went out
@@ -461,7 +461,7 @@ export function useWorkspace() {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
-      oscPatches,
+      cueLists, oscPatches,
       cues
     })
     try {
@@ -496,7 +496,7 @@ export function useWorkspace() {
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, oscPatches, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
+    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, cueLists, oscPatches, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
     // Saving under another name is the same show in another file: the identity travels
     // with it, so both copies stay recognisably the same show. The same round-trip
@@ -513,7 +513,7 @@ export function useWorkspace() {
       lighting,
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
-      oscPatches,
+      cueLists, oscPatches,
       cues
     })
     try {

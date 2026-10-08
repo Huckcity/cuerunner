@@ -32,6 +32,7 @@ import type {
 import { QLAB_EXTENSIONS, readQLabWorkspace } from './qlabFile'
 import { listQLabWorkspaces, readLiveWorkspace, type LiveOptions } from './qlabLive'
 import { mapQLabShow } from './qlabMap'
+import { isDefaultCueLists } from '../../shared/cueLists'
 import type { QLabShow } from './qlabShow'
 
 /** What a show with no name of its own is called once it has come across. */
@@ -48,6 +49,8 @@ export function convertQLabShow(show: QLabShow, source: 'file' | 'live', origin:
     createdAt: new Date().toISOString(),
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
+    // Every QLab list a list here; a show of one list under QLab's default name writes none.
+    ...(isDefaultCueLists(mapped.cueLists) ? {} : { cueLists: mapped.cueLists }),
     ...(mapped.oscPatches.length > 0 ? { oscPatches: mapped.oscPatches } : {}),
     cues: mapped.cues
   }

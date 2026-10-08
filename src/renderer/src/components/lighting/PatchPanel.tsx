@@ -13,6 +13,7 @@ import { NumberField, TextField } from '../common/Field'
 import { addFixtures, addType, patchableTypes, removeFixtures, removeType, updateFixture, userType } from '../../utils/lighting'
 import { importOflFixture } from '../../utils/oflImport'
 import { lightingCommand } from '../../engine/lighting'
+import { importGdtfFixture } from '../../utils/gdtfImport'
 
 /** How long identify flashes a fixture. */
 export const IDENTIFY_MS = 3000
@@ -50,6 +51,9 @@ export function PatchPanel() {
   const [typeName, setTypeName] = useState('')
   const [typeChannels, setTypeChannels] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const gdtfRef = useRef<HTMLInputElement>(null)
+  // What an import has to say beyond succeeding: a 24-bit channel driven on its top two bytes.
+  const [importNote, setImportNote] = useState<string | null>(null)
   const warnings = patchWarnings(lighting)
   const flagged = new Set(warnings.flatMap(warning => warning.fixtureIds))
 
@@ -108,8 +112,30 @@ export function PatchPanel() {
       return
     }
     setError(null)
+    setImportNote(null)
     setLighting(next)
     setTypeId(imported.type.id)
+  }
+
+  const importGdtf = async (file: File): Promise<void> => {
+    setImportNote(null)
+    const imported = await importGdtfFixture(file)
+    if (!imported.ok) {
+      setError(`${file.name}: ${imported.error}`)
+      return
+    }
+    const next = addType(useStore.getState().lighting, imported.type)
+    if ('error' in next) {
+      setError(next.error)
+      return
+    }
+    setError(null)
+    setLighting(next)
+    setTypeId(imported.type.id)
+    const modes = imported.type.modes.length
+    setImportNote(
+      `Imported ${imported.type.name}: ${modes} mode${modes === 1 ? '' : 's'}.${imported.notes.length > 0 ? ` ${imported.notes.join(' ')}` : ''}`
+    )
   }
 
   return (
@@ -254,7 +280,15 @@ export function PatchPanel() {
             e.target.value = ''
             if (file) void importFile(file)
           }} />
+        <button className="lighting-btn" onClick={() => gdtfRef.current?.click()}>Import GDTF file…</button>
+        <input ref={gdtfRef} type="file" accept=".gdtf" hidden aria-label="GDTF fixture file"
+          onChange={e => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (file) void importGdtf(file)
+          }} />
       </div>
+      {importNote !== null && <p className="lighting-note" role="status">{importNote}</p>}
     </div>
   )
 }

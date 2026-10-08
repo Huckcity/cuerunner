@@ -1,0 +1,201 @@
+/* Updates: the bar an update is offered in, the settings tab, and the release notes. Quiet on
+   purpose — an update is never the most important thing on a show machine's screen. */
+
+.app-notice[data-kind='update'] {
+  background: var(--bg-raised);
+  border-bottom-color: var(--accent-blue-dim);
+}
+
+.app-notice[data-kind='update'][data-phase='held'],
+.app-notice[data-kind='update'][data-phase='refused'],
+.app-notice[data-kind='update'][data-phase='failed'] {
+  background: var(--warn-bg);
+  border-bottom-color: var(--warn-border);
+}
+
+.update-notice-message { color: var(--fg-body); }
+
+.update-action {
+  height: 26px;
+  padding: 0 var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition-fast);
+}
+
+.update-action:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.update-action:disabled { opacity: 0.5; cursor: default; }
+
+.update-action[data-primary='true'] {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: transparent;
+}
+
+.update-action[data-primary='true']:hover { background: var(--accent-blue-glow); }
+
+.update-section .update-standing { margin-left: var(--space-2); }
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.update-message {
+  margin: 0 0 var(--space-2);
+  color: var(--warn-fg);
+  font-size: var(--text-sm);
+}
+
+.update-time {
+  width: 110px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+}
+
+.update-time:disabled { opacity: 0.5; }
+
+/* The release notes, in a dialog of their own. */
+
+.update-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 210;
+}
+
+.update-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, 680px);
+  max-height: min(88vh, 640px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.update-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  flex-shrink: 0;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.update-dialog-title {
+  font-family: var(--font-cond);
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semi);
+  color: var(--fg-primary);
+}
+
+.update-dialog-close {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-size: var(--text-md);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.update-dialog-close:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+.update-dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4);
+}
+
+.update-dialog-lede {
+  margin: 0 0 var(--space-3);
+  color: var(--fg-muted);
+  font-size: var(--text-base);
+}
+
+.update-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.release-section + .release-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+.release-version {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--fg-primary);
+}
+
+.release-date {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-normal);
+  color: var(--fg-muted);
+}
+
+.release-group-title {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.release-items {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--fg-body);
+  font-size: var(--text-base);
+  line-height: var(--line-height-base);
+}
+
+.release-items li + li { margin-top: var(--space-1); }
+
+.release-scope {
+  margin-right: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.release-fallback {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--fg-body);
+}
