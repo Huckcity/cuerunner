@@ -219,6 +219,7 @@ Object.defineProperty(window, 'cuerunner', {
       filePlay: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0, passMs: 0 })),
       filePause: vi.fn(() => Promise.resolve({ ok: true as const, positionMs: 0 })),
       fileResume: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0 })),
+      fileSeek: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0 })),
       fileStop: vi.fn(() => Promise.resolve(false))
     },
     network: {

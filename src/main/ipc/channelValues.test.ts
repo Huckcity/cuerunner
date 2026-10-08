@@ -67,6 +67,7 @@ const FROZEN_CHANNELS = [
   'midi:filePause',
   'midi:filePlay',
   'midi:fileResume',
+  'midi:fileSeek',
   'midi:fileStop',
   'midi:listInputPorts',
   'midi:listPorts',

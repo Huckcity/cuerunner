@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import type { MidiFileCue } from '../../../../shared/cue'
 import type { SmfSummary } from '../../../../shared/smf'
@@ -17,7 +17,6 @@ import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'
 import { MIDI_FILE_DEFAULTS, cueNameFromFile, formatDuration } from '../../utils/cueDefaults'
 import { cueEngine } from '../../engine/CueEngine'
-import { isMidiFileHeld, onMidiFileHeldChange } from '../../engine/midiFile'
 import './MidiFileInspector.css'
 
 interface Props { cue: MidiFileCue; tab: string }
@@ -64,7 +63,6 @@ export function MidiFileInspector({ cue, tab }: Props) {
   // for no file at all.
   const [fault, setFault] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
-  const held = useSyncExternalStore(onMidiFileHeldChange, () => isMidiFileHeld(cue.id))
 
   useEffect(() => {
     window.cuerunner.midi.listPorts().then(setPorts)
@@ -182,7 +180,12 @@ export function MidiFileInspector({ cue, tab }: Props) {
   const folder = separator > 0 ? cue.filePath.slice(0, separator) : ''
   const toSeconds = (ms: number) => Math.round(ms / 100) / 10
   const fromSeconds = (s: number) => Math.round(s * 1000)
-  const isRunning = running?.state === 'playing'
+  // The row is the record of a hold, whoever made it — this button, the Active tab, a Control
+  // cue, the show's own PAUSE — so the button reads it rather than keeping its own.
+  const isRunning = running?.state === 'playing' || running?.state === 'paused'
+  const held = running?.state === 'paused'
+  // Held with the whole show: only the show's RESUME lets it go, so this cue's own is not offered.
+  const heldWithShow = held && cueEngine.isHeld()
 
   return (
     <div>
@@ -283,7 +286,9 @@ export function MidiFileInspector({ cue, tab }: Props) {
           <button
             className="inspector-btn midi-file-hold"
             data-held={held}
-            onClick={() => held ? cueEngine.resumeMidiFile(cue.id) : cueEngine.pauseMidiFile(cue.id)}
+            disabled={heldWithShow}
+            title={heldWithShow ? 'Held with the show: RESUME lets it go' : undefined}
+            onClick={() => cueEngine.togglePauseCue(cue.id)}
           >{held ? 'Resume' : 'Pause'}</button>
         </div>
       )}
