@@ -14,6 +14,7 @@ import type {
 import { declaredEventFields } from '../../../shared/audio'
 import { SampleScheduler, SCHEDULER_LOOKAHEAD_MS } from './scheduler'
 import { InputGuard, refirePolicy } from './inputGuard'
+import { ShuffleBag } from './shuffleBag'
 import type { FireSurface } from './inputGuard'
 import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
@@ -216,6 +217,8 @@ export class CueEngine {
    * own counters, which read the window's clock rather than the show's.
    */
   private held: { wallAt: number; cueIds: string[]; rows: Map<string, RunningCue> } | null = null
+  /** What each random group has left to draw before it repeats a child. */
+  private randomDraws = new ShuffleBag()
   /** Audio cues held on their own, while the rest of the show goes on, by cue id. */
   private pausedCues = new Map<string, { at: number; wallAt: number; row: RunningCue | null }>()
 
@@ -1157,7 +1160,10 @@ export class CueEngine {
     if (cue.mode === 'timeline') {
       this.executeGroupTimeline(cue, children, run, at, finish, stillRunning)
     } else if (cue.mode === 'random') {
-      this.fireCue(children[Math.floor(Math.random() * children.length)], at, done, run)
+      // Drawn from a bag rather than picked: every child once before any of them twice.
+      const childId = this.randomDraws.draw(cue.id, children.map(child => child.id))
+      const child = children.find(candidate => candidate.id === childId) ?? children[0]
+      this.fireCue(child, at, done, run)
     } else if (cue.mode === 'playlist') {
       // One child per GO: fire the child at the cursor and advance it. Wrapping to 0
       // marks the pass complete, which also releases the selection and lets
@@ -1606,6 +1612,8 @@ export class CueEngine {
   stopForShowChange(): void {
     // A window whose transport has not mounted has started nothing.
     if (!this.deps) return
+    // The show that opens has played nothing: its random groups start full.
+    this.randomDraws.reset()
     if (this.runs.size > 0 || this.timelineTasks.size > 0) {
       this.log({ level: 'info', message: 'stopped what was running: another show was opened' })
     }
