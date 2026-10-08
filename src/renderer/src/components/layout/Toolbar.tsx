@@ -13,6 +13,7 @@ import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
 import { startNewCueDrag } from '../../utils/newCueDrag'
+import { openLogsFolder } from '../../hooks/useLogFile'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import './Toolbar.css'
 
@@ -177,6 +178,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'export-bundle': exportShowBundle,
     'import-bundle': importShowBundle,
     'report-problem': openReport,
+    'open-logs': () => openLogsFolder(),
     'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings
   }

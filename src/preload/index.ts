@@ -45,6 +45,7 @@ import {
 import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
 import {
   APP_CHANNELS,
+  type LogsOpenResult,
   type ReportEmailResult,
   type ReportInput,
   type ReportSaveResult,
@@ -154,7 +155,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
     saveReport: (text: string): Promise<ReportSaveResult> =>
       invoke(APP_CHANNELS.saveReport, text),
     emailReport: (text: string): Promise<ReportEmailResult> =>
-      invoke(APP_CHANNELS.emailReport, text)
+      invoke(APP_CHANNELS.emailReport, text),
+    writeLog: (lines: string[]): Promise<void> =>
+      invoke(APP_CHANNELS.writeLog, lines),
+    openLogs: (): Promise<LogsOpenResult> =>
+      invoke(APP_CHANNELS.openLogs)
   },
   playback: {
     /**

@@ -29,6 +29,7 @@ import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
 import { ShowModeView } from './components/show-mode/ShowModeView'
 import { useShowMode } from './hooks/useShowMode'
+import { useLogFile } from './hooks/useLogFile'
 import { useSelectedCue, useStore, usePro } from './store'
 import type { GroupCue } from '../../shared/cue'
 import { ProLock } from './components/license/ProLock'
@@ -63,6 +64,8 @@ export function App() {
   // The other machine on the desk: what it is doing with the show, and what to do with
   // the show it hands over.
   useRedundancy()
+  // The session log, written to disk as it is written on screen.
+  useLogFile()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)
@@ -130,13 +133,13 @@ export function App() {
     const delivered = new Set<string>()
     const off = window.cuerunner.app.onMainError((message) => {
       delivered.add(message)
-      useStore.getState().appendLog([{ level: 'error', message }])
+      useStore.getState().appendLog([{ level: 'error', message, origin: 'main' }])
     })
     void window.cuerunner.app.drainMainErrors()
       .then(messages => {
         for (const message of messages) {
           if (delivered.has(message)) continue
-          useStore.getState().appendLog([{ level: 'error', message }])
+          useStore.getState().appendLog([{ level: 'error', message, origin: 'main' }])
         }
       })
       // A renderer that cannot read the backlog still runs the show; it just starts

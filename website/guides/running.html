@@ -114,6 +114,13 @@
         and is not saved with the show. A line that repeats is said once with a count.
       </p>
       <p>
+        Every line is also written, stamped, to <code>cuerunner.log</code> in the app's logs
+        folder — beside the failures the app's own process reports, which reach the file even
+        when the window has gone — so last night's show can be read this morning. The file
+        rolls to <code>cuerunner.1.log</code> at 5 MB. <strong>Open Logs Folder</strong> in the
+        File menu, or <strong>Folder</strong> on the Log tab, opens it.
+      </p>
+      <p>
         An audio event whose type the app does not recognise is named in the log with its
         count and does nothing else — it never reaches the show. An event of a known type
         carrying a field the app cannot look up still plays; the log names the field beside

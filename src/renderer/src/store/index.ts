@@ -110,6 +110,11 @@ export interface LogEntry {
   message: string
   /** Cue identity when the entry was written, e.g. "3 · Network Cue". */
   label?: string
+  /**
+   * Where the line came from when it is not the window's own: a failure main reported, which
+   * main writes to the log file itself, so the window does not write it a second time.
+   */
+  origin?: 'main'
 }
 
 export type LogEntryInput = Omit<LogEntry, 'id' | 'at'>

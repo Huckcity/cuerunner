@@ -14,6 +14,7 @@ export type FileMenuAction =
   | 'export-bundle'
   | 'import-bundle'
   | 'report-problem'
+  | 'open-logs'
   | 'show-settings'
   | 'settings'
 
@@ -56,6 +57,8 @@ export const FILE_MENU: FileMenuEntry[] = [
   // Something went wrong, or is not clear: the report is built here, shown in full, and
   // goes nowhere until the operator copies it, saves it or mails it.
   { action: 'report-problem', label: 'Report a Problem…' },
+  // The session log on disk, which outlives the window: where last night's show is read.
+  { action: 'open-logs', label: 'Open Logs Folder' },
   'separator',
   // The show's own setup, beside the app's: one travels with the workspace, the other
   // with the machine.

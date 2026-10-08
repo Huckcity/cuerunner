@@ -90,6 +90,8 @@ import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { deviceFaultAlert } from '../safety/engineFaults'
 import { panicFromShowEvent } from '../safety/panicBindings'
 import { remotePanicFromEvent } from '../safety/remotePanic'
+import { openLogsFolder, sessionLogFile } from '../log/logsFolder'
+import { isLogBatch } from '../log/sessionLogFile'
 import { OscEngine } from '../osc/OscEngine'
 import {
   openWorkspace,
@@ -109,7 +111,7 @@ import { openDemoWorkspace } from '../workspace/demo'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
-import { drainMainErrors } from '../errors'
+import { drainMainErrors, onMainError } from '../errors'
 import { loadScriptDocument } from '../script/document'
 import { shellWorkingDirectory } from '../script/shellCwd'
 import { createLicenseManager } from '../license/LicenseManager'
@@ -479,6 +481,16 @@ export function registerIpcHandlers(): void {
     refusalValue(() => saveReport(getWin(event), text)))
   ipcMain.handle(APP_CHANNELS.emailReport, (_, text: unknown) =>
     refusalValue(() => emailReport(text)))
+
+  // The session log on disk: the window's lines as it writes them, and main's own failures,
+  // which reach the file even when there is no window left to forward them. A batch that is
+  // not a bounded list of lines is not written — the file is not a place a window can pour into.
+  const logFile = sessionLogFile()
+  onMainError(message => { void logFile.append([`ERROR [main] ${message}`]) })
+  ipcMain.handle(APP_CHANNELS.writeLog, async (_, lines: unknown) => {
+    if (isLogBatch(lines)) await logFile.append(lines)
+  })
+  ipcMain.handle(APP_CHANNELS.openLogs, () => refusalValue(() => openLogsFolder()))
 
   ipcMain.handle(SHOW_CHANNELS.configure, async (_, settings: ShowSettings) => {
     lastShowSettings = settings
