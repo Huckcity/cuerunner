@@ -310,7 +310,19 @@ function mergeSettings(
       const myValue = mine[section.key] ?? null
       const theirValue = yours[section.key] ?? null
       if (sameValue(base, theirValue) && sameValue(base, myValue)) continue
-      merged = { ...merged, [section.key]: decide(section.route, base, myValue, theirValue) } as Workspace
+      const decided = decide(section.route, base, myValue, theirValue)
+      // A side that carries no section is read as `null` so the three can be compared, and
+      // the blend can answer `null` back — the side that dropped the section won. On disk that
+      // is a section the show does not carry, not a section that is `null`: the funnel refuses
+      // `null` where a section's type has none, so the merged show would not open. Absent, it
+      // is the show a file without the section always was, whichever optional section it is.
+      if (decided === null || decided === undefined) {
+        const without = { ...merged } as Record<string, unknown>
+        delete without[section.key]
+        merged = without as unknown as Workspace
+      } else {
+        merged = { ...merged, [section.key]: decided } as Workspace
+      }
     } else if (section.merge === 'keys') {
       // The show's own settings, one key at a time: the services, the plot, the cast, the
       // scenes. A section this show never had and the other one did is a section this show
@@ -439,14 +451,7 @@ export function mergeWorkspaces(
   const cues = order.map(id => merged.get(id)).filter((cue): cue is Cue => cue !== undefined)
   const settings = mergeSettings(ancestor, ours, theirs, options, notes, tally)
   return {
-    workspace: {
-      ...settings,
-      // A side that had only its main list carries no section, and the blend answers that as
-      // `null`; the merged show says it the way a show with only its main list does, by saying
-      // nothing.
-      cueLists: settings.cueLists ?? undefined,
-      cues: repairLists(cues, settings.cueLists ?? undefined, ours, theirs, notes)
-    },
+    workspace: { ...settings, cues: repairLists(cues, settings.cueLists, ours, theirs, notes) },
     notes,
     tally
   }
