@@ -781,6 +781,7 @@ bool Engine::drainLostDevice() {
                        static_cast<double>(mixer_.clockFrames()) * 1000.0 /
                            static_cast<double>(mixer_.sampleRate()),
                        renderedFrames_.load(std::memory_order_relaxed));
+  mixer_.writeBusSnapshot(busSnapshot_, busSnapshotCell_);
   return true;
 }
 
@@ -929,6 +930,7 @@ void Engine::renderAudio(float* out, int frames) {
   mixer_.writeSnapshot(snapshot_, snapshotCell_,
                        static_cast<double>(mixer_.clockFrames()) * 1000.0 / static_cast<double>(mixer_.sampleRate()),
                        renderedFrames_.load(std::memory_order_relaxed));
+  mixer_.writeBusSnapshot(busSnapshot_, busSnapshotCell_);
 }
 
 void Engine::renderOfflineBlock(float* out, int frames) { renderAudio(out, frames); }
@@ -2445,8 +2447,8 @@ bool Engine::setOutputGains(const std::vector<double>& gains, CommandResultDTO& 
 }
 
 void Engine::busMeters(int* channels, float (*peaks)[kMaxOutputChannels]) const {
-  auto snapshot = std::make_unique<MixSnapshot>();
-  snapshotCell_.read(*snapshot);
+  auto snapshot = std::make_unique<BusSnapshot>();
+  busSnapshotCell_.read(*snapshot);
   for (int slot = 0; slot < kMaxPatches; slot++) {
     channels[slot] = snapshot->busChannels[slot];
     for (int channel = 0; channel < kMaxOutputChannels; channel++) peaks[slot][channel] = snapshot->busPeak[slot][channel];

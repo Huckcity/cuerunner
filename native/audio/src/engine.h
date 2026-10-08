@@ -529,6 +529,9 @@ class Engine {
   // `snapshot_` is the writer's own staging copy; readers only ever see `snapshotCell_`.
   mutable MixSnapshot snapshot_;
   mutable SnapshotCell<MixSnapshot> snapshotCell_;
+  // The patches' meters, published apart so the main snapshot costs a show without patches nothing.
+  mutable BusSnapshot busSnapshot_;
+  mutable SnapshotCell<BusSnapshot> busSnapshotCell_;
   std::atomic<bool> running_{false};
   std::atomic<bool> backgroundStop_{false};
   std::thread background_;

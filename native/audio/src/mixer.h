@@ -142,6 +142,8 @@ struct Voice {
   int slicePlays = 0;
   bool sliceRelease = false;
   bool stopAtPassEnd = false;
+  /** Has a patch, a live input or slices: counted in `Mixer::specialVoices_`. */
+  bool special = false;
 };
 
 class Mixer {
@@ -187,6 +189,7 @@ class Mixer {
   // touches — and publishes it through `cell`, where readers copy it out whole.
   void writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell, double clockMs,
                      uint64_t renderedFrames) const;
+  void writeBusSnapshot(BusSnapshot& staging, SnapshotCell<BusSnapshot>& cell) const;
 
   int64_t clockFrames() const { return clockFrames_; }
   int sampleRate() const { return sampleRate_; }
@@ -276,6 +279,11 @@ class Mixer {
   double outputGainCurrent_[kMaxOutputChannels] = {};
   bool outputsAtUnity_ = true;
   InputFeeds* inputs_ = nullptr;
+  // How many voices take the special path, and how many patches are defined: what lets a show
+  // that uses neither skip them whole, block by block.
+  int specialVoices_ = 0;
+  int definedBuses_ = 0;
+  mutable bool busesPublished_ = false;
   // What a voice holds that the render loop reads only at an edge — a slice boundary, a drawn
   // fade — kept out of `Voice` and indexed by its slot, so the per-frame walk over the voices
   // touches as little memory as it did before slices and shapes existed.

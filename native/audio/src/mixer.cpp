@@ -24,6 +24,19 @@ int64_t atOrNow(double ms, int sampleRate, int64_t now) {
   return frame > now ? frame : now;
 }
 
+// Kept out of line on purpose: a drawn shape is the rare case, and reading its table inline
+// made every ramp's evaluation big enough that the compiler stopped inlining it into the
+// per-frame loop — a call per voice per frame on a show with no drawn shape at all, which a
+// sanitizer build turns into a missed device deadline.
+#if defined(_MSC_VER)
+__declspec(noinline)
+#else
+__attribute__((noinline))
+#endif
+double tableShare(const CurveTable* table, double t) {
+  return table != nullptr ? curveTableValue(*table, t) : t;
+}
+
 }  // namespace
 
 Mixer::Mixer(DecodedCache& cache, StreamPool& streams, SpscQueue<Event, 1024>& events,
@@ -57,6 +70,7 @@ void Mixer::configure(int deviceChannels, int sampleRate) {
 
 void Mixer::reset() {
   for (Voice& voice : voices_) voice = Voice{};
+  specialVoices_ = 0;
 }
 
 int Mixer::activeVoiceCount() const {
@@ -102,7 +116,7 @@ double Mixer::curveShape(double t, Curve curve) {
 
 /** The share of a ramp done at `t`: its named curve, or the table it was drawn as. */
 double Mixer::shapeAt(const FadeRamp& ramp, double t) {
-  if (ramp.curve == Curve::Table) return ramp.table != nullptr ? curveTableValue(*ramp.table, t) : t;
+  if (ramp.curve == Curve::Table) return tableShare(ramp.table, t);
   return curveShape(t, ramp.curve);
 }
 
@@ -116,20 +130,17 @@ double Mixer::rampValue(const FadeRamp& ramp, int64_t frame) {
 }
 
 double Mixer::paramValue(const Voice& voice, int param, int64_t frame) const {
-  double base = 1.0;
-  switch (param) {
-    case static_cast<int>(Param::Volume): base = voice.volume; break;
-    case static_cast<int>(Param::Pan): base = voice.pan; break;
-    case static_cast<int>(Param::Trim): base = voice.trim; break;
-    default: base = voice.rate; break;
-  }
+  // The ramp's own arithmetic is `rampValue`'s, called only while a ramp runs: what is left
+  // here stays small enough to be inlined into the frame loop, as it was before ramps had
+  // drawn shapes — four calls per voice per frame otherwise, on every show.
   const FadeRamp& ramp = voice.ramps[param];
-  if (!ramp.active) return base;
-  if (frame >= ramp.endFrame) return ramp.to;
-  if (frame <= ramp.startFrame) return ramp.from;
-  const double span = static_cast<double>(ramp.endFrame - ramp.startFrame);
-  const double t = span > 0.0 ? static_cast<double>(frame - ramp.startFrame) / span : 1.0;
-  return ramp.from + (ramp.to - ramp.from) * shapeAt(ramp, t);
+  if (ramp.active) return rampValue(ramp, frame);
+  switch (param) {
+    case static_cast<int>(Param::Volume): return voice.volume;
+    case static_cast<int>(Param::Pan): return voice.pan;
+    case static_cast<int>(Param::Trim): return voice.trim;
+    default: return voice.rate;
+  }
 }
 
 bool Mixer::sampleOf(const Voice& voice, int64_t frame, int channel, float& out) const {
@@ -218,6 +229,10 @@ void Mixer::finishVoice(Voice& voice, int64_t frame, EndReason reason) {
   voice.cacheEntry = nullptr;
   voice.streamSlot = -1;
   voice.pendingReason = reason;
+  if (voice.special) {
+    voice.special = false;
+    specialVoices_--;
+  }
   voicesEnded_.fetch_add(1, std::memory_order_relaxed);
   emitState(nullptr, false);
 }
@@ -423,6 +438,8 @@ Voice* Mixer::startVoice(const Command& cmd) {
       voice->fadeIn.table = &table;
     }
   }
+  voice->special = voice->patch >= 0 || voice->inputFeed >= 0 || voice->sliceCount > 0;
+  if (voice->special) specialVoices_++;
   emitState(voice, true);
   return voice;
 }
@@ -810,6 +827,7 @@ void Mixer::apply(const Command& cmd) {
         Bus& bus = buses_[cmd.busSlot];
         const bool wasDefined = bus.defined;
         bus.defined = cmd.busDefined;
+        definedBuses_ += (bus.defined ? 1 : 0) - (wasDefined ? 1 : 0);
         bus.channels = std::max(0, std::min(kMaxOutputChannels, cmd.busChannels));
         for (int channel = 0; channel < kMaxOutputChannels; channel++) {
           bus.map[channel] = channel < bus.channels ? cmd.busMap[channel] : -1;
@@ -1074,13 +1092,17 @@ void Mixer::render(float* out, int frames, int channels) {
 
   // The live inputs deliver this block first — every feed that is open, whether a voice
   // reads it or not, so each one's controller stays locked to its device.
-  if (inputs_ != nullptr) inputs_->pullAll(frames, sampleRate_, blockStart);
+  if (inputs_ != nullptr && inputs_->anyOpen()) inputs_->pullAll(frames, sampleRate_, blockStart);
   // Each defined patch's bus starts the block empty.
-  for (int slot = 0; slot < kMaxPatches; slot++) {
+  for (int slot = 0; slot < kMaxPatches && definedBuses_ > 0; slot++) {
     const Bus& bus = buses_[slot];
     if (!bus.defined || bus.channels <= 0) continue;
     std::memset(busData(slot), 0, static_cast<size_t>(frames) * static_cast<size_t>(bus.channels) * sizeof(float));
   }
+
+  // Whether any voice has a patch, a live input or slices: read once a block, so a show using
+  // none of them never reads those fields in the per-frame loop.
+  const bool anySpecial = specialVoices_ > 0;
 
   for (int64_t frame = blockStart; frame < blockEnd; frame++) {
     float* outFrame = out + static_cast<size_t>(frame - blockStart) * static_cast<size_t>(channels);
@@ -1120,7 +1142,7 @@ void Mixer::render(float* out, int frames, int channels) {
       }
 
       // Plain file voices take the path compiled without patches, live inputs or slices.
-      if (voice.patch >= 0 || voice.inputFeed >= 0 || voice.sliceCount > 0) {
+      if (anySpecial && voice.special) {
         mixVoiceFrame<true>(voice, frame, blockStart, outFrame, channels);
       } else {
         mixVoiceFrame<false>(voice, frame, blockStart, outFrame, channels);
@@ -1174,6 +1196,7 @@ void Mixer::advanceSlices(Voice& voice, int64_t frame) {
  * as two cues on one output always have.
  */
 void Mixer::mixBuses(float* out, int frames, int channels) {
+  if (definedBuses_ == 0) return;
   for (int slot = 0; slot < kMaxPatches; slot++) {
     Bus& bus = buses_[slot];
     if (!bus.defined || bus.channels <= 0) continue;
@@ -1306,6 +1329,16 @@ void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell,
     staging.meterPeak[channel] = channel < meterChannels_ ? blockPeak_[channel] : 0.0f;
   }
   staging.masterGain = masterTarget_;
+  cell.publish(staging);
+}
+
+/**
+ * The patches' meters, in a record of their own: the main snapshot is copied word by word on
+ * every block and by every reader, and a show with no patches has nothing to add to it. Written
+ * only while a patch is defined, and once more when the last one goes, so its meters read zero.
+ */
+void Mixer::writeBusSnapshot(BusSnapshot& staging, SnapshotCell<BusSnapshot>& cell) const {
+  if (definedBuses_ == 0 && !busesPublished_) return;
   for (int slot = 0; slot < kMaxPatches; slot++) {
     const Bus& bus = buses_[slot];
     staging.busChannels[slot] = bus.defined ? bus.channels : 0;
@@ -1313,6 +1346,7 @@ void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell,
       staging.busPeak[slot][channel] = bus.defined && channel < bus.channels ? bus.peak[channel] : 0.0f;
     }
   }
+  busesPublished_ = definedBuses_ > 0;
   cell.publish(staging);
 }
 

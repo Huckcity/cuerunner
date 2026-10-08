@@ -313,8 +313,12 @@ struct MixSnapshot {
   int meterChannels = 0;
   float meterPeak[kMaxOutputChannels] = {};
   double masterGain = 1.0;
-  // Each output patch's own meter: the peak of each of its channels over the last block,
-  // after its fader. A patch slot that is not defined reads zero channels.
+};
+
+// Each output patch's own meter: the peak of each of its channels over the last block, after
+// its fader. A patch slot that is not defined reads zero channels. A record of its own, so the
+// main snapshot is no bigger for a show without patches.
+struct BusSnapshot {
   int busChannels[kMaxPatches] = {};
   float busPeak[kMaxPatches][kMaxOutputChannels] = {};
 };

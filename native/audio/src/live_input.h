@@ -224,6 +224,8 @@ class InputFeeds {
   int find(const std::string& device) const;
   /** Render thread: pulls every running feed. */
   void pullAll(int frames, int outRate, int64_t clockFrame);
+  /** Whether any feed is open: one relaxed load a block, so an engine with none pays nothing more. */
+  bool anyOpen() const { return openFeeds_.load(std::memory_order_relaxed) > 0; }
   const float* block(int slot) const;
   int channels(int slot) const;
   std::vector<InputFeedStatus> status();
@@ -232,6 +234,7 @@ class InputFeeds {
 
  private:
   InputFeed feeds_[kMaxInputFeeds];
+  std::atomic<int> openFeeds_{0};
   mutable std::mutex mutex_;
   bool offline_ = false;
   bool testInputs_ = false;

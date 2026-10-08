@@ -478,6 +478,7 @@ int InputFeeds::open(const InputOpenOptions& requested, int outRate, std::string
     return -1;
   }
   if (!feeds_[slot].open(options, outRate, offline_, error)) return -1;
+  openFeeds_.fetch_add(1, std::memory_order_relaxed);
   return slot;
 }
 
@@ -486,12 +487,14 @@ bool InputFeeds::close(const std::string& device) {
   const int slot = find(device.empty() ? std::string("default") : device);
   if (slot < 0 || !feeds_[slot].running()) return false;
   feeds_[slot].close();
+  openFeeds_.fetch_sub(1, std::memory_order_relaxed);
   return true;
 }
 
 void InputFeeds::closeAll() {
   std::lock_guard<std::mutex> lock(mutex_);
   for (InputFeed& feed : feeds_) feed.close();
+  openFeeds_.store(0, std::memory_order_relaxed);
 }
 
 void InputFeeds::pullAll(int frames, int outRate, int64_t clockFrame) {
