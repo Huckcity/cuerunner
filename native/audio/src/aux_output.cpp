@@ -430,7 +430,9 @@ int AuxOutputs::open(const OutputOpenOptions& options, int mainRate, double cloc
     error = "there is no test output called \"" + options.device + "\"";
     return -1;
   }
-  if (!test && offline_) {
+  // The offline and silent backends have no devices at all: any device named is one this
+  // machine, as far as this engine can see, has not got.
+  if (!test && (offline_ || backend_ == "silent")) {
     error = options.device + " is not connected to this machine";
     return -1;
   }
