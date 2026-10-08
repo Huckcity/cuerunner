@@ -44,6 +44,8 @@ export interface ReceiverStart {
 
 /** How often the engine is asked for the LTC frames it has read. */
 const LTC_POLL_MS = 20
+/** How often a reader that stopped listening (the engine restarted) is asked to listen again. */
+const LTC_RELISTEN_MS = 2000
 
 export class TimecodeReceiver {
   private follower: TimecodeFollower
@@ -131,6 +133,7 @@ export class TimecodeReceiver {
     }
     this.follower.describe(detail)
     let reading = false
+    let relistenAt = 0
     const timer = setInterval(() => {
       if (reading) return
       reading = true
@@ -138,6 +141,12 @@ export class TimecodeReceiver {
         .then(result => {
           const here = this.deps.now()
           for (const frame of result.frames) this.ltcFrame(frame, here - (result.nowMs - frame.atMs))
+          // An engine that was restarted under the show is a reader that is not listening any
+          // more: ask again, every couple of seconds, until the input is back.
+          if (!result.listening && here >= relistenAt) {
+            relistenAt = here + LTC_RELISTEN_MS
+            void ltc.listen(device, channel).catch(() => {})
+          }
         })
         .catch(() => {
           // An engine between restarts answers nothing; the follower freewheels and then

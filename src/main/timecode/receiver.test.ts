@@ -127,6 +127,22 @@ describe('the receiver, over MTC', () => {
 })
 
 describe('the receiver, over LTC', () => {
+  it('asks a restarted engine to listen again', async () => {
+    const listens: string[] = []
+    const ltc = new LtcClient(async (verb, params = {}) => {
+      if (verb === 'ltcListen') {
+        listens.push(String(params.device))
+        return { description: 'Interface, channel 1' }
+      }
+      if (verb === 'ltcRead') return { listening: false, description: '', nowMs: 0, frames: [] }
+      return {}
+    })
+    const h = harness({ ltc, ltcPollMs: 5 })
+    await h.receiver.start(settings({ source: 'ltc', ltcDevice: 'Interface' }))
+    await new Promise(resolve => setTimeout(resolve, 30))
+    expect(listens).toEqual(['Interface', 'Interface'])
+  })
+
   it('reads the frames the engine heard, on this process’s clock, and works out the rate from them', async () => {
     let reads = 0
     const frames: LtcReadFrame[] = []
