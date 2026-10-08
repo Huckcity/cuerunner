@@ -52,5 +52,5 @@ test('the timeline offset is asked for only in a timeline group', async () => {
 
 test('an audio cue has one thing called Timing', async () => {
   await toolbarCueBtn(page, 'Audio').click()
-  await expect(page.locator('.inspector-tab')).toHaveText(['Basics', 'Audio', 'Time & Loops', 'Triggers'])
+  await expect(page.locator('.inspector-tab')).toHaveText(['Basics', 'Audio', 'Time & Loops', 'Slices', 'Triggers'])
 })

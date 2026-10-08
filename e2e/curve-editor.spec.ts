@@ -48,6 +48,8 @@ test('a fade\'s shape is drawn by its handles, kept on the cue, and played as dr
   await editor.locator('select.curve-select').selectOption('bezier')
   await expect(editor.locator('.curve-handle')).toHaveCount(2)
   const before = await editor.locator('.curve-editor-path').getAttribute('d')
+  // The panel scrolls: the plot has to be on screen for the pointer to reach its handles.
+  await editor.locator('.curve-editor-plot').scrollIntoViewIfNeeded()
   const plot = await editor.locator('.curve-editor-plot').boundingBox()
   const handle = await editor.locator('.curve-handle-1').boundingBox()
   await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2)
