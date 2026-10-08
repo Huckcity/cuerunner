@@ -1184,9 +1184,9 @@ await rig.blackout()</code></div>
     <section class="panel reveal delay-1" id="bundle">
       <h2>The bundle file<span class="pro">Pro</span></h2>
       <p>
-        A <code>.cuerunnerx</code> is the show <em>and</em> its audio as one file: a zip holding
-        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
-        inside it. It opens in any file manager, and its bytes are a function of the show,
+        A <code>.cuerunnerx</code> is the show <em>and</em> its media as one file — the audio,
+        video, image and MIDI files its cues play — a zip holding <code>show.cuerunner</code>
+        and a <code>media/</code> folder, with the showfile pointing inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file.
       </p>
       <p>

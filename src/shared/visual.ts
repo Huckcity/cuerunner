@@ -205,10 +205,11 @@ export function isVisualCue(cue: { type: string }): cue is VisualCue {
 
 /**
  * Whether a cue names a media file the show carries with it — the cues whose path is made
- * portable on save, resolved on load, bundled, relinked and counted in the footprint.
+ * portable on save, resolved on load, bundled, relinked and counted in the footprint. A MIDI
+ * file is one too: a show that plays a click track has to arrive with it.
  */
-export function carriesMediaFile(cue: { type: string }): cue is { type: 'audio' | 'video' | 'image'; filePath: string } & CueBase {
-  return cue.type === 'audio' || cue.type === 'video' || cue.type === 'image'
+export function carriesMediaFile(cue: { type: string }): cue is { type: 'audio' | 'video' | 'image' | 'midiFile'; filePath: string } & CueBase {
+  return cue.type === 'audio' || cue.type === 'video' || cue.type === 'image' || cue.type === 'midiFile'
 }
 
 // ─── Outputs ──────────────────────────────────────────────────────────────────
