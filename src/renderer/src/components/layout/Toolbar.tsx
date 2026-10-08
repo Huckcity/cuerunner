@@ -13,6 +13,7 @@ import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
+import { openQLabImport } from '../qlab/qlabImport'
 import './Toolbar.css'
 
 /** An Electron accelerator, written for this keyboard. */
@@ -174,6 +175,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'merge': mergeAnotherShow,
     'export-bundle': exportShowBundle,
     'import-bundle': importShowBundle,
+    'import-qlab': openQLabImport,
     'report-problem': openReport,
     'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings

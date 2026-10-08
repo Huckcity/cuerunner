@@ -9,6 +9,7 @@ import { ShowSettings } from './components/show/ShowSettings'
 import { ChangesDialog } from './components/changes/ChangesDialog'
 import { MergeReportDialog } from './components/changes/MergeReportDialog'
 import { ReportDialog } from './components/layout/ReportDialog'
+import { QLabImportHost } from './components/qlab/QLabImportHost'
 import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
@@ -187,6 +188,7 @@ export function App() {
       {mergeReport !== null && (
         <MergeReportDialog report={mergeReport} onClose={() => setMergeReport(null)} />
       )}
+      <QLabImportHost />
     </div>
   )
 }

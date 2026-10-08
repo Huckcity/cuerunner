@@ -119,6 +119,12 @@ export const APP_PATHS = [
     printed: `${CARET} → Export Bundle…`,
     names: [{ menu: 'export-bundle' }]
   },
+  // The QLab guide walks to the import the same way, then on into the dialog's own button.
+  {
+    page: 'guides/qlab.html',
+    printed: `${CARET} → Import QLab Workspace…`,
+    names: [{ menu: 'import-qlab' }]
+  },
   // The support page's report: a path under the brand caret to the File menu item.
   {
     page: 'support.html',

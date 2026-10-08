@@ -26,6 +26,7 @@ import { REDUNDANCY_CHANNELS, type RedundancyBridge } from './redundancy'
 import { LICENSE_CHANNELS, type LicenseBridge } from './license'
 import { SCRIPT_CHANNELS, type ScriptBridge } from './script'
 import { WORKSPACE_CHANNELS, type WorkspaceBridge } from './workspace'
+import { QLAB_CHANNELS, type QLabBridge } from './qlab'
 
 /** Everything `window.cuerunner` carries, as the renderer reads it. */
 export interface CuerunnerBridge {
@@ -44,6 +45,7 @@ export interface CuerunnerBridge {
   license: LicenseBridge
   script: ScriptBridge
   workspace: WorkspaceBridge
+  qlab: QLabBridge
 }
 
 /**
@@ -64,7 +66,8 @@ export const CHANNEL_TABLES = [
   LICENSE_CHANNELS,
   SCRIPT_CHANNELS,
   WORKSPACE_CHANNELS,
-  AUDIO_CHANNELS
+  AUDIO_CHANNELS,
+  QLAB_CHANNELS
 ] as const
 
 /**

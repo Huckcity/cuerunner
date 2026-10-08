@@ -105,6 +105,15 @@ import {
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { exportBundle, importBundle } from '../workspace/bundle'
 import { openDemoWorkspace } from '../workspace/demo'
+import {
+  QLAB_CHANNELS,
+  type QLabFindMediaPayload,
+  type QLabFindMediaResult,
+  type QLabImportResult,
+  type QLabLivePayload,
+  type QLabWorkspacesResult
+} from '../../shared/ipc/qlab'
+import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces } from '../import/qlabImport'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
@@ -822,4 +831,29 @@ export function registerIpcHandlers(): void {
     // declared answer is the three it does have, so anything else reads as Save.
     return result.response === 1 ? 1 : result.response === 2 ? 2 : 0
   })
+
+  // QLab import. Free: it is how a QLab user arrives, and the show it makes is theirs. The
+  // file is read and the socket opened here, never in the window; a file that is not a
+  // workspace, a QLab that is not there and a passcode it would not take are the refusal
+  // arm, said where each was found (`src/main/import/`).
+  ipcMain.handle(QLAB_CHANNELS.importFile, (event): Promise<QLabImportResult> =>
+    refusalValue(async (): Promise<QLabImportResult> => ({ ok: true, imported: await importQLabFile(getWin(event)) })))
+
+  ipcMain.handle(
+    QLAB_CHANNELS.listWorkspaces,
+    (_, address: { host: unknown; port: unknown }): Promise<QLabWorkspacesResult> =>
+      refusalValue(async (): Promise<QLabWorkspacesResult> => ({
+        ok: true,
+        workspaces: await listLiveWorkspaces(address?.host, address?.port)
+      }))
+  )
+
+  ipcMain.handle(QLAB_CHANNELS.importLive, (_, payload: QLabLivePayload): Promise<QLabImportResult> =>
+    refusalValue(async (): Promise<QLabImportResult> => ({ ok: true, imported: await importQLabLive(payload) })))
+
+  ipcMain.handle(QLAB_CHANNELS.findMedia, (event, payload: QLabFindMediaPayload): Promise<QLabFindMediaResult> =>
+    refusalValue(async (): Promise<QLabFindMediaResult> => ({
+      ok: true,
+      found: await findMediaInFolder(getWin(event), payload.workspace, payload.workspacePath)
+    })))
 }

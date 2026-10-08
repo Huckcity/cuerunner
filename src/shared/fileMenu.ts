@@ -13,6 +13,7 @@ export type FileMenuAction =
   | 'merge'
   | 'export-bundle'
   | 'import-bundle'
+  | 'import-qlab'
   | 'report-problem'
   | 'show-settings'
   | 'settings'
@@ -46,6 +47,8 @@ export const FILE_MENU: FileMenuEntry[] = [
   // Handover: the show and the audio it plays as one file, in and out.
   { action: 'export-bundle', label: 'Export Bundle…' },
   { action: 'import-bundle', label: 'Import Bundle…' },
+  // Coming from QLab: a workspace file, or a QLab that is running, as a new show.
+  { action: 'import-qlab', label: 'Import QLab Workspace…' },
   'separator',
   // Something went wrong, or is not clear: the report is built here, shown in full, and
   // goes nowhere until the operator copies it, saves it or mails it.

@@ -92,6 +92,14 @@ import {
   type WorkspaceSavePayload,
   type WorkspaceSaveResult
 } from '../shared/ipc/workspace'
+import {
+  QLAB_CHANNELS,
+  type QLabFindMediaPayload,
+  type QLabFindMediaResult,
+  type QLabImportResult,
+  type QLabLivePayload,
+  type QLabWorkspacesResult
+} from '../shared/ipc/qlab'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
@@ -387,5 +395,21 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(WORKSPACE_CHANNELS.setTitle, title),
     confirmClose: (workspaceName: string): Promise<0 | 1 | 2> =>
       invoke(WORKSPACE_CHANNELS.confirmClose, workspaceName)
+  },
+
+  /**
+   * A QLab show brought across: from its workspace file, through a dialog main shows, or
+   * from a QLab that is running, over the socket main opens. A cancel is a `null` inside
+   * the `ok` arm; a file or a QLab the import cannot read is the refusal arm.
+   */
+  qlab: {
+    importFile: (): Promise<QLabImportResult> =>
+      invoke(QLAB_CHANNELS.importFile),
+    listWorkspaces: (host: string, port: number): Promise<QLabWorkspacesResult> =>
+      invoke(QLAB_CHANNELS.listWorkspaces, { host, port }),
+    importLive: (payload: QLabLivePayload): Promise<QLabImportResult> =>
+      invoke(QLAB_CHANNELS.importLive, payload),
+    findMedia: (workspace: Workspace, workspacePath: string | null): Promise<QLabFindMediaResult> =>
+      invoke(QLAB_CHANNELS.findMedia, { workspace, workspacePath } satisfies QLabFindMediaPayload)
   }
 } satisfies CuerunnerBridge)

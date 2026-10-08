@@ -1,0 +1,184 @@
+/* The QLab import's two dialogs. They borrow the settings dialog's overlay, header and ✕;
+   the frame is a single column, because neither has sections down the side. */
+
+.qlab-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 640px);
+  max-height: min(88vh, 720px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-menu);
+}
+
+.qlab-report { width: min(94vw, 760px); }
+
+.qlab-dialog .settings-header { flex: none; height: 52px; }
+
+.qlab-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.qlab-intro {
+  font-size: var(--text-base);
+  color: var(--fg-body);
+  line-height: 1.5;
+}
+
+.qlab-intro strong { color: var(--fg-primary); font-weight: var(--fw-semi); }
+
+.qlab-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+.qlab-section-title {
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  color: var(--fg-muted);
+}
+
+.qlab-section .field-row input,
+.qlab-section .field-row select { max-width: 280px; }
+
+.qlab-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.qlab-footer { justify-content: flex-end; padding-top: var(--space-2); }
+
+.qlab-button {
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.qlab-button:hover:not(:disabled) { background: var(--bg-hover); }
+.qlab-button:disabled { opacity: 0.6; cursor: default; }
+
+.qlab-primary { border-color: var(--accent-blue-dim); background: var(--bg-selected); }
+.qlab-primary:hover:not(:disabled) { background: var(--accent-blue-dim); }
+
+.qlab-hint {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+
+.qlab-progress { font-size: var(--text-base); color: var(--fg-muted); }
+
+.qlab-error {
+  font-size: var(--text-base);
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+
+.qlab-warn {
+  font-size: var(--text-base);
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+
+.qlab-ok { font-size: var(--text-base); color: var(--ok-fg); }
+
+/* ─── The report ─────────────────────────────────────────────────────────── */
+
+.qlab-types {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+  color: var(--fg-body);
+}
+
+.qlab-types th {
+  text-align: left;
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-muted);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.qlab-types td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.qlab-count { text-align: right; width: 64px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.qlab-became {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-primary);
+}
+
+.qlab-placeholder { color: var(--warn-fg); }
+
+.qlab-notes {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qlab-notes li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.qlab-note-cue {
+  font-size: var(--text-base);
+  color: var(--fg-primary);
+  font-weight: var(--fw-medium);
+}
+
+.qlab-note-number {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+  margin-right: 8px;
+}
+
+.qlab-note-detail {
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}

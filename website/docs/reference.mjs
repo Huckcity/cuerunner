@@ -180,7 +180,7 @@ export const REFERENCE = [
         </a>
         <a class="card doc-card" href="./formats.html">
           <h3>File formats</h3>
-          <p>The <code>.cuerunner</code> workspace, media paths, and the wireless telemetry document.</p>
+          <p>The <code>.cuerunner</code> workspace, media paths, QLab workspaces, and the wireless telemetry document.</p>
         </a>
         <a class="card doc-card" href="./troubleshooting.html">
           <h3>Troubleshooting</h3>
@@ -833,6 +833,49 @@ await rig.blackout()</code></div>
         do not match is refused rather than half-unpacked. See
         <a href="../guides/showfile.html#bundle">Versions and handover</a>.
       </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="qlab">
+      <h2>QLab workspaces</h2>
+      <p>
+        <strong>Import QLab Workspace&hellip;</strong> reads a <code>.qlab5</code> or
+        <code>.qlab4</code> workspace, a QLab 5 workspace saved as a folder (the property list
+        inside it), and a <code>.cues</code> file of cues with no list around them. A workspace
+        is an NSKeyedArchiver archive in a binary property list, with its cue lists stored as a
+        second archive inside the first; both are Apple's container formats, read by
+        Cuerunner's own reader. A workspace past <strong>64 MB</strong> is refused before it is
+        read, and so is one holding more than <strong>10,000</strong> cues.
+      </p>
+      <p>
+        From a running QLab, the import connects over TCP to the address and port given
+        (<code>53000</code> by default), SLIP-framed as QLab's OSC over TCP is, and sends
+        <code>/workspaces</code>, <code>/workspace/{id}/connect</code> with the passcode,
+        <code>/workspace/{id}/cueLists</code>, and <code>/workspace/{id}/cue_id/{id}/valuesForKeys</code>
+        once for each cue. One message is in flight at a time. The connection has 3 seconds
+        to open and every reply 5 seconds to arrive; a reply larger than 16 MB, or a
+        conversation past 64 MB, ends the import.
+      </p>
+      <p>
+        The result is a new show with no file, checked by the same reading every
+        <code>.cuerunner</code> file goes through. Audio paths are absolute: the QLab
+        workspace's folder joined to the path QLab recorded relative to it, or QLab's last
+        known absolute path where there is none. The mapping is in
+        <a href="../guides/qlab.html#mapping">Coming from QLab</a>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>The import says</th><th>Because</th></tr></thead>
+          <tbody>
+            <tr><td>… is not a QLab workspace</td><td>The file is not a binary property list, which every QLab workspace is.</td></tr>
+            <tr><td>… looks like a QLab workspace but cannot be read</td><td>It is a property list whose bytes contradict themselves, or not an archive; the rest of the sentence says which.</td></tr>
+            <tr><td>… holds no QLab cue lists</td><td>An archive, but not of a QLab show.</td></tr>
+            <tr><td>… is N MB, and a QLab workspace this import reads is at most 64 MB</td><td>The size limit, checked before the file is read.</td></tr>
+            <tr><td>no QLab answered at …</td><td>Nothing is listening at that address and port, or QLab's OSC access does not let this computer in.</td></tr>
+            <tr><td>… did not accept that passcode</td><td>The workspace's passcode is not the one typed.</td></tr>
+            <tr><td>… stopped answering</td><td>A reply did not arrive within 5 seconds.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="panel reveal delay-1" id="telemetry">
