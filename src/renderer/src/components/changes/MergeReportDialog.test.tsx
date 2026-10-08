@@ -108,7 +108,7 @@ describe('the merge report', () => {
     // saved by a newer build — so the notice carries the sentence and nothing is thrown.
     openPath.mockResolvedValue({
       ok: false,
-      error: 'that show has a cue this version of Cuerunner does not know (video)'
+      error: 'that show has a cue this version of Cuerunner does not know (hologram)'
     })
     await show()
 
@@ -117,7 +117,7 @@ describe('the merge report', () => {
       open.click()
     })
 
-    expect(useStore.getState().notice).toContain('does not know (video)')
+    expect(useStore.getState().notice).toContain('does not know (hologram)')
     expect(useStore.getState().notice).toContain('Could not open')
   })
 

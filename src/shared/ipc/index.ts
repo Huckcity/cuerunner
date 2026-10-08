@@ -28,6 +28,7 @@ import { SCRIPT_CHANNELS, type ScriptBridge } from './script'
 import { WORKSPACE_CHANNELS, type WorkspaceBridge } from './workspace'
 import { QLAB_CHANNELS, type QLabBridge } from './qlab'
 import { TIMECODE_CHANNELS, type TimecodeBridge } from './timecode'
+import { OUTPUT_CHANNELS, type OutputBridge } from './output'
 
 /** Everything `window.cuerunner` carries, as the renderer reads it. */
 export interface CuerunnerBridge {
@@ -48,6 +49,7 @@ export interface CuerunnerBridge {
   workspace: WorkspaceBridge
   qlab: QLabBridge
   timecode: TimecodeBridge
+  output: OutputBridge
 }
 
 /**
@@ -70,7 +72,8 @@ export const CHANNEL_TABLES = [
   WORKSPACE_CHANNELS,
   AUDIO_CHANNELS,
   QLAB_CHANNELS,
-  TIMECODE_CHANNELS
+  TIMECODE_CHANNELS,
+  OUTPUT_CHANNELS
 ] as const
 
 /**
@@ -86,7 +89,8 @@ export const EVENT_CHANNELS = [
   AUDIO_CHANNELS.events,
   SHOW_CHANNELS.events,
   LICENSE_CHANNELS.changed,
-  TIMECODE_CHANNELS.events
+  TIMECODE_CHANNELS.events,
+  OUTPUT_CHANNELS.events
 ] as const
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number]

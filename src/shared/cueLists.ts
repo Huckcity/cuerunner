@@ -2,7 +2,7 @@
 // playhead and its own GO — the main sequence, a cart of sound effects, a pre-show loop.
 //
 // The representation is the smallest one that keeps the cue list's own invariant (AD-12,
-// AD-27): the show still has one `cues` array, array order is still the running order, a
+// AD-28): the show still has one `cues` array, array order is still the running order, a
 // group's children still sit behind it by `parentId`. What is new is a show-level list of
 // the lists — id, name, colour and the few things a list decides for its cues — and a
 // `listId` on a cue at the top level naming which of them it runs in. A child never carries

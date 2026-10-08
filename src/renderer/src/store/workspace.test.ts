@@ -32,6 +32,7 @@ function savedShape(): Workspace {
     triggerGuard: s.triggerGuard,
     lighting: s.lighting,
     timecode: s.timecode,
+    videoOutputs: s.videoOutputs,
     cueLists: s.cueLists,
     cues: s.cues
   })

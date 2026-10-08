@@ -46,6 +46,7 @@ export function witnessSave(sent: Workspace): boolean {
     triggerGuard,
     lighting,
     timecode,
+    videoOutputs: useStore.getState().videoOutputs,
     cueLists,
     cues
   })

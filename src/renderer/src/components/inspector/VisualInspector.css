@@ -1,0 +1,87 @@
+/* The picture cues' inspector: a small preview of the file, the nine-point grid text is
+   anchored to, and the few controls that sit two to a row. */
+
+.visual-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--field-gap);
+  margin: 0 0 var(--space-2) var(--field-label-w);
+  padding-left: var(--field-gap);
+}
+
+.visual-preview-media {
+  width: 128px;
+  height: 72px;
+  object-fit: contain;
+  background: #000000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.visual-preview-size {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field-row-top {
+  align-items: flex-start;
+}
+
+.field-row .visual-text-body {
+  height: auto;
+  min-height: calc(var(--h-input) * 2);
+  padding: var(--space-1) var(--space-2);
+  resize: vertical;
+}
+
+.field-row label.visual-inline,
+.field-row label.visual-inline-label {
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--fg-body);
+  white-space: nowrap;
+}
+
+.field-row label.visual-inline input {
+  flex: none;
+  height: auto;
+}
+
+.field-row input.visual-color {
+  flex: none;
+  width: 40px;
+  padding: 2px;
+}
+
+.visual-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-template-rows: repeat(3, 16px);
+  gap: 3px;
+  padding: 4px;
+  background: #000000;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
+}
+
+.visual-grid-cell {
+  border: 1px solid var(--border-input);
+  border-radius: 2px;
+  background: var(--bg-input);
+  cursor: pointer;
+  padding: 0;
+}
+
+.visual-grid-cell:hover { background: var(--bg-hover); }
+
+.visual-grid-cell[data-active='true'] {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.visual-no-output,
+.visual-silent { color: var(--accent-amber); }

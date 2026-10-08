@@ -314,10 +314,11 @@ describe('what counts as an edit, per cue type and field', () => {
     ])
   })
 
-  it('reads duration as an edit on every cue type but the two whose length is measured', () => {
-    // An audio cue's length is the engine's measurement and a MIDI File cue's is main's
-    // reading of its file's tempo map; every other type's is a number somebody typed.
-    const measured: string[] = ['audio', 'midiFile']
+  it('reads duration as an edit on every cue type but the ones whose length is measured', () => {
+    // An audio cue's length is the engine's measurement, a MIDI File cue's is main's reading
+    // of its file's tempo map, and a video's is its file's own; every other type's is a
+    // number somebody typed.
+    const measured: string[] = ['audio', 'midiFile', 'video']
     for (const type of CUE_TYPES) {
       const diff = diffWorkspaces(
         workspace([cueOf(type, { id: 'c', duration: 100 })]),

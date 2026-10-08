@@ -7,6 +7,7 @@ import { PlaybackSafety } from './PlaybackSafety'
 import type { PlaybackPanic } from '../../shared/playback'
 import type { AudioEngineEvent } from '../../shared/audio'
 import { panicLighting } from '../dmx/lighting'
+import { panicOutputs } from '../output/panic'
 
 // The one place the safety net is wired to the two things it protects: the native audio
 // service in this process, and every window that may still be there to be told. Nothing
@@ -23,6 +24,9 @@ function broadcastPanic(panic: PlaybackPanic): void {
   // show's own rule. A window that died or stopped answering is not one: the lights run in
   // this process and were never the window's, so they are not stopped for it.
   if (panic.source === 'menu' || panic.source === 'osc' || panic.source === 'midi') panicLighting()
+  // The pictures go with the sound: a panic takes every output down over the same fade,
+  // whether or not the control window is alive to ask for it.
+  panicOutputs(panic.fadeMs)
 }
 
 /** How many engine events are kept for the dev harness, newest last. */

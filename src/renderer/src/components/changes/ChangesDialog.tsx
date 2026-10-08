@@ -222,6 +222,7 @@ function CompareTab() {
       triggerGuard,
       lighting,
       timecode,
+      videoOutputs: useStore.getState().videoOutputs,
       cueLists,
       cues
     })

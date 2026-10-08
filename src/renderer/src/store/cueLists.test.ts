@@ -22,7 +22,7 @@ const LISTS: CueListInfo[] = [...defaultCueLists(), { id: 'fx', name: 'Effects' 
 
 function open(cues: Cue[], lists: CueListInfo[] | null = LISTS): void {
   useStore.getState().loadWorkspace(cues, 'Show', null, undefined, undefined, undefined, undefined, undefined, [],
-    undefined, undefined, lists ?? undefined)
+    undefined, undefined, undefined, lists ?? undefined)
 }
 
 function saved(): Workspace {
@@ -38,6 +38,7 @@ function saved(): Workspace {
     triggerGuard: s.triggerGuard,
     lighting: s.lighting,
     timecode: s.timecode,
+    videoOutputs: s.videoOutputs,
     cueLists: s.cueLists,
     cues: s.cues
   })

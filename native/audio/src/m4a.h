@@ -15,6 +15,9 @@ struct Mp4AudioInfo {
   double durationMs = 0.0;
   char codec[8] = {};
   bool ok = false;
+  // The container held together and has no sound track at all: a video with no audio. Told
+  // apart from a file that cannot be read, because a picture with no sound is ordinary.
+  bool noAudioTrack = false;
 };
 
 // Reads the container headers of an .m4a/.mp4 (ISO BMFF) file. This is metadata only:

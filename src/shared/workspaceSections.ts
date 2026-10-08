@@ -39,6 +39,7 @@
 // this build's own whole, so there a field it does not name refuses.
 
 import type { Cue, CueBase, CueType } from './cue'
+import type { VisualCueBase } from './visual'
 import type { ShowSettings } from './show'
 import type { Workspace } from './workspace'
 
@@ -86,6 +87,7 @@ export const WORKSPACE_SECTIONS = [
   { key: 'triggerGuard', route: 'guard', merge: 'section' },
   { key: 'lighting', route: 'lighting', merge: 'section' },
   { key: 'timecode', route: 'timecode', merge: 'section' },
+  { key: 'videoOutputs', route: 'outputs', merge: 'section' },
   { key: 'cueLists', route: 'lists', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
@@ -403,7 +405,7 @@ export const SHOW_SETTINGS_SHAPE = {
  * guard of the wrong kind is read as the default rather than refused — or `version`, whose
  * one value the check reads as the literal it is.
  */
-type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings'
+type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings' | 'videoOutputs'
 
 /**
  * The kind a section of the form is read as, from the field's own type: the leaf a primitive
@@ -435,7 +437,10 @@ export const WORKSPACE_SECTION_SHAPE = {
   createdAt: 'string',
   history: { items: 'object' },
   audioSettings: 'object',
-  midiSettings: 'object'
+  midiSettings: 'object',
+  // A list of outputs; the window reads each one through `normalizeVideoOutputs`, which
+  // holds its numbers to their ranges.
+  videoOutputs: { items: 'object' }
 } as const satisfies {
   readonly [K in KindOnlySectionKey]: SectionKindOf<NonNullable<Workspace[K]>>
 }
@@ -473,6 +478,28 @@ const CUE_BASE_SHAPE = {
   scriptLine: { absent: true, of: { nothing: true, of: 'number' } },
   listId: { absent: true, of: 'string' }
 } as const satisfies ShapeFields<CueBase>
+
+/**
+ * The fields every picture cue carries besides the base: its output, its layer and level, its
+ * fades and where it sits. The geometry is a shape of its own, and so is its crop.
+ */
+const VISUAL_CUE_SHAPE = {
+  ...CUE_BASE_SHAPE,
+  outputId: 'string',
+  layer: 'number',
+  opacity: { bounded: [0, 1] },
+  fadeInDuration: 'number',
+  fadeOutDuration: 'number',
+  crossfade: 'boolean',
+  geometry: {
+    fit: 'string',
+    x: 'number',
+    y: 'number',
+    scale: 'number',
+    rotation: 'number',
+    crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' }
+  }
+} as const satisfies ShapeFields<VisualCueBase>
 
 /**
  * A cue's fields, by type, with the kind each is written as: the base every cue carries, the
@@ -649,6 +676,35 @@ export const CUE_FIELD_SHAPE = {
     ltcLevelDb: 'number',
     artnet: 'boolean',
     artnetHost: 'string'
+  },
+  // The picture cues (src/shared/visual.ts): what every one of them carries, then its own.
+  video: {
+    ...VISUAL_CUE_SHAPE,
+    type: 'string',
+    filePath: 'string',
+    startTime: 'number',
+    endTime: { nothing: true, of: 'number' },
+    loopCount: 'number',
+    holdLastFrame: 'boolean',
+    // The sound is an audio cue's in all but name, and bounded the same way.
+    volume: { bounded: [0, 1] },
+    pan: { bounded: [-1, 1] },
+    outputs: {
+      nothing: true,
+      of: { elements: { inputChannel: 'number', outputChannel: 'number', gain: 'number' } }
+    }
+  },
+  image: { ...VISUAL_CUE_SHAPE, type: 'string', filePath: 'string' },
+  text: {
+    ...VISUAL_CUE_SHAPE,
+    type: 'string',
+    text: 'string',
+    fontFamily: 'string',
+    fontSize: { bounded: [1, 2000] },
+    color: 'string',
+    bold: 'boolean',
+    italic: 'boolean',
+    position: 'string'
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

@@ -5,6 +5,7 @@ import { targetLabel } from './targetLabel'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
+import { isVisualCue } from '../../../../shared/visual'
 
 interface Props { cue: FadeCue }
 
@@ -27,15 +28,28 @@ export function FadeInspector({ cue }: Props) {
   //
   // A Light cue has a level too: its intensity, which a fade moves to a share of what the
   // cue set, so it is offered beside the sounds.
-  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.type === 'light' || c.id === cue.targetCueId))
+  //
+  // A picture — a video, an image, text — has its opacity, offered beside a sound's volume and
+  // pan: a video has all of them, and an image or text only the one.
+  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.type === 'light' || isVisualCue(c) || c.id === cue.targetCueId))
   const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
   const lightTarget = cues.some(c => c.id === cue.targetCueId && c.type === 'light')
+  const target = cues.find(c => c.id === cue.targetCueId)
+  const pictureOnly = target?.type === 'image' || target?.type === 'text'
+  const hasPicture = target !== undefined && isVisualCue(target)
+  const aim = (targetCueId: string): void => {
+    const next = cues.find(c => c.id === targetCueId)
+    const silent = next?.type === 'image' || next?.type === 'text'
+    set(silent && cue.fadeProperty !== 'opacity'
+      ? { targetCueId, fadeProperty: 'opacity', targetValue: 0, panTargetValue: null }
+      : { targetCueId })
+  }
 
   return (
     <div>
       <div className="field-row">
         <label>Target cue</label>
-        <select value={cue.targetCueId} onChange={e => set({ targetCueId: e.target.value })}>
+        <select value={cue.targetCueId} onChange={e => aim(e.target.value)}>
           <option value="">— select —</option>
           {/* A target that was deleted is said, not papered over: a select whose value
               matches no option draws its first one, which reads as a choice nobody made. */}
@@ -54,12 +68,14 @@ export function FadeInspector({ cue }: Props) {
             onChange={e => {
               const next = e.target.value as typeof property
               if (next === 'both') set({ fadeProperty: 'volume', panTargetValue: cue.panTargetValue ?? 0 })
+              else if (next === 'opacity') set({ fadeProperty: 'opacity', panTargetValue: null, ...(cue.targetValue < 0 ? { targetValue: 0 } : {}) })
               else set({ fadeProperty: next, panTargetValue: null, ...clampedFor(next) })
             }}
           >
-            <option value="volume">Volume</option>
-            <option value="pan">Pan</option>
-            <option value="both">Volume and pan</option>
+            {!pictureOnly && <option value="volume">Volume</option>}
+            {!pictureOnly && <option value="pan">Pan</option>}
+            {!pictureOnly && <option value="both">Volume and pan</option>}
+            {(hasPicture || cue.fadeProperty === 'opacity') && <option value="opacity">Opacity</option>}
           </select>
         )}
         <ResetButton label="Property" value={property} defaultValue={FADE_DEFAULTS.fadeProperty}

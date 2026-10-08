@@ -105,6 +105,7 @@ export function RecoveryNotice() {
             triggerGuard: store.triggerGuard,
             lighting: store.lighting,
             timecode: store.timecode,
+            videoOutputs: store.videoOutputs,
             cueLists: store.cueLists,
             cues: store.cues
           })
@@ -157,6 +158,8 @@ export function RecoveryNotice() {
       // And how it follows timecode: recovering without it would hand back a show that had
       // stopped chasing.
       snapshot.workspace.timecode,
+      // And its outputs: a recovered show still has its projectors.
+      snapshot.workspace.videoOutputs,
       // And its lists: without them every list's cues would come back in the main one.
       snapshot.workspace.cueLists
     )
