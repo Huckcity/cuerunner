@@ -297,6 +297,23 @@ Object.defineProperty(window, 'cuerunner', {
       generate: vi.fn((): Promise<TimecodeGenerateResult> => Promise.resolve({ ok: true, startFrames: 0 })),
       control: vi.fn(() => Promise.resolve(true)),
       onEvents: vi.fn(() => () => {})
+    },
+    output: {
+      configure: vi.fn(() => Promise.resolve()),
+      snapshot: vi.fn(() => Promise.resolve({
+        outputs: [],
+        displays: [],
+        timerWindow: { open: false, mode: 'remaining' as const }
+      })),
+      place: vi.fn(() => Promise.resolve({ ok: false as const, error: 'no outputs in a test' })),
+      layer: vi.fn(() => Promise.resolve({ ok: true as const })),
+      identify: vi.fn(() => Promise.resolve()),
+      testPattern: vi.fn(() => Promise.resolve({ ok: true as const })),
+      preview: vi.fn(() => Promise.resolve(null)),
+      timer: vi.fn(() => Promise.resolve()),
+      timerWindow: vi.fn((state: { open: boolean; mode: 'clock' | 'elapsed' | 'remaining' }) => Promise.resolve(state)),
+      pickFile: vi.fn(() => Promise.resolve(null)),
+      onEvents: vi.fn(() => () => {})
     }
   } satisfies CuerunnerBridge,
   writable: true

@@ -1,7 +1,8 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, ControlCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, ControlCue
 } from '../../../shared/cue'
+import { TEXT_DEFAULTS, VIDEO_DEFAULTS, VISUAL_BASE_DEFAULTS, defaultGeometry } from '../../../shared/visual'
 import type { MidiFileCue } from '../../../shared/cue'
 import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
 
@@ -321,6 +322,34 @@ export function createCue(type: CueType, number = '1'): Cue {
         type: 'timecode',
         ...TIMECODE_DEFAULTS
       } satisfies TimecodeCue
+    // The picture cues: shown on the show's first output until they are pointed at another,
+    // full size, fitted, and at full level. Their defaults live with the rest of the visual
+    // model (src/shared/visual.ts).
+    case 'video':
+      return {
+        ...base('Video Cue', number),
+        type: 'video',
+        filePath: '',
+        ...VISUAL_BASE_DEFAULTS,
+        ...VIDEO_DEFAULTS,
+        geometry: defaultGeometry()
+      } satisfies VideoCue
+    case 'image':
+      return {
+        ...base('Image Cue', number),
+        type: 'image',
+        filePath: '',
+        ...VISUAL_BASE_DEFAULTS,
+        geometry: defaultGeometry()
+      } satisfies ImageCue
+    case 'text':
+      return {
+        ...base('Text Cue', number),
+        type: 'text',
+        ...VISUAL_BASE_DEFAULTS,
+        ...TEXT_DEFAULTS,
+        geometry: defaultGeometry()
+      } satisfies TextCue
     case 'control':
       return {
         ...base('Control Cue', number),

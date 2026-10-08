@@ -2,6 +2,7 @@ import type { Cue } from '../../../shared/cue'
 import { actedOnIds, expandTargets, fadeTargetIds, STOP_ALL, stopTargetIds } from '../../../shared/cueTargets'
 import { cueLabel } from '../../../shared/showfile'
 import type { RunningCue } from '../store'
+import { isVisualCue } from '../../../shared/visual'
 
 /** How many targets a line names before it says how many more. */
 const NAMED = 3
@@ -34,7 +35,7 @@ export function fadedBy(cues: readonly Cue[], running: ReadonlyMap<string, Runni
     const run = running.get(cue.id)
     if (run === undefined || run.state !== 'playing') continue
     for (const target of expandTargets(cues, fadeTargetIds(cue))) {
-      if (target.type === 'audio' || target.type === 'light') fading.add(target.id)
+      if (target.type === 'audio' || target.type === 'light' || isVisualCue(target)) fading.add(target.id)
     }
   }
   return fading

@@ -159,6 +159,7 @@ import type { ScriptDocument, ShowEvent, ShowSettings } from '../../shared/show'
 import type { LicenseStatus } from '../../shared/license'
 import type { Workspace } from '../../shared/workspace'
 import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
+import { registerOutputHandlers } from '../output/ipc'
 import { createMachineOsc } from '../osc/machine'
 import { createOscInterfaces } from '../osc/interfaces'
 
@@ -396,6 +397,9 @@ export function registerIpcHandlers(): void {
   // on any machine; the Pro ones answer to the licence, and the host says so in their
   // status rather than leaving a port bound to nothing.
   void show.configure(defaultShowSettings())
+
+  // Video outputs: the windows main keeps for the show's pictures (src/main/output).
+  registerOutputHandlers()
 
   // Audio
   /**

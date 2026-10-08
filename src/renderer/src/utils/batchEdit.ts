@@ -1,4 +1,5 @@
 import { createCue, FADE_DEFAULTS } from './cueDefaults'
+import { isVisualCue } from '../../../shared/visual'
 import type { Cue, FadeCue, StopCue } from '../../../shared/cue'
 
 /**
@@ -101,7 +102,7 @@ export type TargetingKind = 'fade' | 'stop'
  * that runs, which is every cue but a note.
  */
 export function canTarget(kind: TargetingKind, cue: Cue): boolean {
-  if (kind === 'fade') return cue.type === 'audio' || cue.type === 'light' || cue.type === 'group'
+  if (kind === 'fade') return cue.type === 'audio' || cue.type === 'light' || cue.type === 'group' || isVisualCue(cue)
   return cue.type !== 'memo'
 }
 
@@ -124,9 +125,10 @@ export function targetingBlock(kind: TargetingKind, targets: readonly Cue[], num
       ...(createCue('fade', number) as FadeCue),
       name: `Fade out ${named}`,
       targetCueIds: ids,
-      // A fade made from the list is the fade an operator reaches for there: to silence,
-      // and the cues taken away once they get there.
-      fadeProperty: 'volume',
+      // A fade made from the list is the fade an operator reaches for there: to silence — or,
+      // for pictures with no sound of their own, to black — and the cues taken away once they
+      // get there.
+      fadeProperty: aimedAt.every(target => target.type === 'image' || target.type === 'text') ? 'opacity' : 'volume',
       targetValue: 0,
       stopTargetWhenDone: true,
       duration: FADE_DEFAULTS.duration

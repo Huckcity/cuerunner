@@ -73,13 +73,9 @@ function OscInterfaceBlock() {
   }
 
   return (
-    <section className="settings-block osc-interfaces">
-      <div className="settings-block-head">
-        <div className="settings-block-text">
-          <h3 className="settings-block-title">OSC network interface</h3>
-          <p className="settings-block-blurb">Kept on this machine, not in the show.</p>
-        </div>
-      </div>
+    <section className="osc-settings-group osc-interfaces">
+      <div className="field-section-title">Network interface</div>
+      <p className="inspector-hint" data-scope="panel">Kept on this machine, not in the show.</p>
       {row('in', 'Listen on', 'settings-osc-interface-in')}
       {row('out', 'Send from', 'settings-osc-interface-out')}
       {refusal !== null && <p className="settings-warning" role="status">{refusal}</p>}
@@ -96,22 +92,18 @@ function OscFeedbackBlock() {
   const disabled = !oscIn.enabled
 
   return (
-    <section className="settings-block osc-feedback" data-enabled={feedback.enabled}>
-      <div className="settings-block-head">
-        <div className="settings-block-text">
-          <h3 className="settings-block-title">OSC feedback</h3>
-          <p className="settings-block-blurb">Push the playhead, what is running and its progress to a remote.</p>
-        </div>
+    <section className="osc-settings-group osc-feedback" data-enabled={feedback.enabled}>
+      <div className="field-section-title">Feedback</div>
+      <div className="field-row">
+        <label htmlFor="settings-osc-feedback">Push state</label>
         <input
           id="settings-osc-feedback"
-          className="settings-switch"
           type="checkbox"
-          role="switch"
-          aria-label="OSC feedback"
           checked={feedback.enabled}
           disabled={disabled}
           onChange={e => set({ enabled: e.target.checked })}
         />
+        <span className="settings-info">The playhead, what runs, and its progress</span>
       </div>
       <div className="field-row">
         <label htmlFor="settings-osc-feedback-host">Send to</label>
@@ -166,13 +158,9 @@ function OscPatchesBlock() {
     cue.type === 'osc' && (cue.messages ?? []).some(message => message.patchId === id)).length
 
   return (
-    <section className="settings-block osc-patches">
-      <div className="settings-block-head">
-        <div className="settings-block-text">
-          <h3 className="settings-block-title">OSC patches</h3>
-          <p className="settings-block-blurb">Named destinations an OSC cue sends to: change one address here.</p>
-        </div>
-      </div>
+    <section className="osc-settings-group osc-patches">
+      <div className="field-section-title">OSC patches</div>
+      <p className="inspector-hint" data-scope="panel">Named destinations an OSC cue sends to.</p>
       {patches.map((patch, index) => (
         <div className="osc-patch" key={patch.id} data-patch={patch.id}>
           <div className="field-row">

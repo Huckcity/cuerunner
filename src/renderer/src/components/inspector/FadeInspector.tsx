@@ -7,6 +7,7 @@ import { fadeRoutes } from '../../engine/targets'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
+import { isVisualCue } from '../../../../shared/visual'
 
 interface Props { cue: FadeCue }
 
@@ -22,13 +23,24 @@ export function FadeInspector({ cue }: Props) {
   const clampedFor = (next: 'volume' | 'pan'): Partial<FadeCue> =>
     next === 'volume' && cue.targetValue < 0 ? { targetValue: 0 } : {}
 
-  // A fade moves a level: a sound's, or a light's intensity, which a fade moves to a share of
-  // what the cue set. A group is offered too, and a fade of a group fades everything inside it.
-  // A deleted target stays in the list saying so, rather than quietly vanishing from it.
+  // A fade moves a level: a sound's, a light's intensity — which a fade moves to a share of
+  // what the cue set — or a picture's opacity on its output; a video has both a sound and a
+  // picture. A group is offered too, and a fade of a group fades everything inside it. A
+  // deleted target stays in the list saying so, rather than quietly vanishing from it.
   const ids = fadeTargetIds(cue)
   const routes = fadeRoutes(cues, ids)
   // A light's one level is its intensity: a fade whose targets are all lights reads that way.
-  const lightTarget = routes.light.length > 0 && routes.audio.length === 0
+  const lightTarget = routes.light.length > 0 && routes.audio.length === 0 && routes.pictures.length === 0
+  // Images and text have no sound: a fade of only those moves their opacity and nothing else.
+  const pictureOnly = routes.pictures.length > 0 && routes.audio.length === 0
+  const hasPicture = routes.pictures.length > 0
+  const aim = (next: string[]): void => {
+    const nextRoutes = fadeRoutes(cues, next)
+    const silent = nextRoutes.pictures.length > 0 && nextRoutes.audio.length === 0
+    set(silent && cue.fadeProperty !== 'opacity'
+      ? { ...fadeTargetsPatch(next), fadeProperty: 'opacity', targetValue: 0, panTargetValue: null }
+      : fadeTargetsPatch(next))
+  }
 
   return (
     <div>
@@ -38,11 +50,11 @@ export function FadeInspector({ cue }: Props) {
         cueId={cue.id}
         ids={ids}
         cues={cues}
-        eligible={candidate => candidate.type === 'audio' || candidate.type === 'light' || candidate.type === 'group'}
-        onChange={next => set(fadeTargetsPatch(next))}
+        eligible={candidate => candidate.type === 'audio' || candidate.type === 'light' || candidate.type === 'group' || isVisualCue(candidate)}
+        onChange={aim}
         empty="No cue chosen: this fade moves nothing."
       />
-      {ids.length > routes.missing.length && routes.audio.length === 0 && routes.light.length === 0 && (
+      {ids.length > routes.missing.length && routes.audio.length === 0 && routes.light.length === 0 && routes.pictures.length === 0 && (
         <p className="inspector-hint">Nothing it names has a level to fade.</p>
       )}
       <div className="field-row">
@@ -56,12 +68,14 @@ export function FadeInspector({ cue }: Props) {
             onChange={e => {
               const next = e.target.value as typeof property
               if (next === 'both') set({ fadeProperty: 'volume', panTargetValue: cue.panTargetValue ?? 0 })
+              else if (next === 'opacity') set({ fadeProperty: 'opacity', panTargetValue: null, ...(cue.targetValue < 0 ? { targetValue: 0 } : {}) })
               else set({ fadeProperty: next, panTargetValue: null, ...clampedFor(next) })
             }}
           >
-            <option value="volume">Volume</option>
-            <option value="pan">Pan</option>
-            <option value="both">Volume and pan</option>
+            {!pictureOnly && <option value="volume">Volume</option>}
+            {!pictureOnly && <option value="pan">Pan</option>}
+            {!pictureOnly && <option value="both">Volume and pan</option>}
+            {(hasPicture || cue.fadeProperty === 'opacity') && <option value="opacity">Opacity</option>}
           </select>
         )}
         <ResetButton label="Property" value={property} defaultValue={FADE_DEFAULTS.fadeProperty}

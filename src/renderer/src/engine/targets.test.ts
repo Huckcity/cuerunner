@@ -15,12 +15,17 @@ describe('a fade’s routes', () => {
 
   it('sends sounds to the audio engine and lights to the lighting, a group’s included', () => {
     expect(fadeRoutes(cues, ['g', 'a2', 'l2'])).toEqual({
-      audio: ['a1', 'a2'], light: ['l1', 'l2'], groups: ['g'], inert: [], missing: []
+      audio: ['a1', 'a2'], light: ['l1', 'l2'], pictures: [], groups: ['g'], inert: [], missing: []
     })
   })
 
   it('names a cue with no level it was aimed at, and a target the show has lost', () => {
-    expect(fadeRoutes(cues, ['w2', 'gone'])).toEqual({ audio: [], light: [], groups: [], inert: ['w2'], missing: ['gone'] })
+    expect(fadeRoutes(cues, ['w2', 'gone'])).toEqual({ audio: [], light: [], pictures: [], groups: [], inert: ['w2'], missing: ['gone'] })
+  })
+
+  it('sends a video’s sound with the sounds and its picture with the pictures, and an image’s picture alone', () => {
+    const pictures = [cue('video', 'v'), cue('image', 'i'), cue('text', 't')]
+    expect(fadeRoutes(pictures, ['v', 'i', 't'])).toMatchObject({ audio: ['v'], pictures: ['v', 'i', 't'], inert: [] })
   })
 
   it('names a cue once however it is reached', () => {

@@ -21,9 +21,10 @@ import { MidiFileInspector } from './MidiFileInspector'
 import { LightInspector, LightTrackingTab } from '../lighting/LightInspector'
 import { TimecodeInspector } from './TimecodeInspector'
 import { ControlInspector } from './ControlInspector'
+import { VideoInspector, ImageInspector, TextInspector } from './VisualInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue, LightCue, TimecodeCue, ControlCue
+  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, ControlCue
 } from '../../../../shared/cue'
 import type { MidiFileCue } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
@@ -51,6 +52,9 @@ const TYPE_TABS: Record<string, string[]> = {
   midiFile: ['Basics', 'MIDI File', 'Channels'],
   light: ['Basics', 'Light', 'Tracking'],
   timecode: ['Basics', 'Timecode'],
+  video: ['Basics', 'Video', 'Picture', 'Sound'],
+  image: ['Basics', 'Image', 'Picture'],
+  text: ['Basics', 'Text', 'Picture'],
   control: ['Basics', 'Control']
 }
 
@@ -119,6 +123,10 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
       />
     )
   }
+  // The picture cues share the Picture tab; each has its own for what it shows.
+  if (cue.type === 'video') return <VideoInspector cue={cue as VideoCue} tab={tab} />
+  if (cue.type === 'image') return <ImageInspector cue={cue as ImageCue} tab={tab} />
+  if (cue.type === 'text') return <TextInspector cue={cue as TextCue} tab={tab} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

@@ -41,6 +41,7 @@ export function useAutosave(): void {
         triggerGuard,
         lighting,
         timecode,
+        videoOutputs: useStore.getState().videoOutputs,
         oscPatches,
         cues
       })

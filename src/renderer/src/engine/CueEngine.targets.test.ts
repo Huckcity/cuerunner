@@ -3,6 +3,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { CueEngine } from './CueEngine'
 import { audioEngine } from './audioEngineClient'
+import { visualCues } from './visualCues'
+import { defaultGeometry, type ImageCue, type TextCue, type VideoCue } from '../../../shared/visual'
 import type { AudioCue, Cue, FadeCue, GroupCue, LightCue, OscCue, OscPatch, StopCue, WaitCue } from '../../../shared/cue'
 import { DEFAULT_TRIGGER_GUARD } from '../../../shared/workspace'
 import { createCue } from '../utils/cueDefaults'
@@ -237,5 +239,70 @@ describe('an OSC cue that sends several messages', () => {
     await vi.advanceTimersByTimeAsync(50)
     expect(send().mock.calls.map(call => call[0].address)).toEqual(['/b'])
     expect(lastRuns.get('o')).toMatchObject({ outcome: 'error', error: 'message 1 (/a): its OSC patch is not in this show' })
+  })
+})
+
+describe('a fade and a control cue on picture cues', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); vi.restoreAllMocks() })
+
+  const picture = { outputId: '', layer: 1, opacity: 1, fadeInDuration: 0, fadeOutDuration: 0, crossfade: false, geometry: defaultGeometry() }
+  const video = (id: string): VideoCue => ({
+    ...(createCue('wait', id) as WaitCue), ...picture, id, type: 'video', duration: 10_000, filePath: `/${id}.mp4`,
+    startTime: 0, endTime: null, loopCount: 0, holdLastFrame: false, volume: 1, pan: 0, outputs: null
+  } as VideoCue)
+  const image = (id: string): ImageCue => ({ ...(createCue('wait', id) as WaitCue), ...picture, id, type: 'image', filePath: `/${id}.png` } as ImageCue)
+  const text = (id: string): TextCue => ({
+    ...(createCue('wait', id) as WaitCue), ...picture, id, type: 'text', text: 'Act One', fontFamily: 'IBM Plex Sans',
+    fontSize: 96, color: '#ffffff', bold: false, italic: false, position: 'center'
+  } as TextCue)
+
+  it('fades the opacity of every picture it names, a group’s included, and no sound', () => {
+    const fadeSpy = vi.spyOn(visualCues, 'fade').mockImplementation(() => {})
+    const cues: Cue[] = [
+      fade({ targetCueIds: ['v1', 'g'], fadeProperty: 'opacity', targetValue: 0.2 }),
+      video('v1'), group('g'), { ...image('i1'), parentId: 'g' }, { ...text('t1'), parentId: 'g' }, tone('a1', 'g')
+    ]
+    const { runner } = setup(cues)
+    runner.go()
+    expect(fadeSpy.mock.calls.map(call => call[0]).sort()).toEqual(['i1', 't1', 'v1'])
+    expect(engine.fade).not.toHaveBeenCalled()
+  })
+
+  it('fades a video’s sound and an audio cue’s together on volume, and leaves images alone', () => {
+    const fadeSpy = vi.spyOn(visualCues, 'fade').mockImplementation(() => {})
+    const { runner } = setup([fade({ targetCueIds: ['v1', 'a1', 'i1'], targetValue: 0 }), video('v1'), tone('a1'), image('i1')])
+    runner.go()
+    expect(engine.fade.mock.calls.map(call => call[0]).sort()).toEqual(['a1', 'v1'])
+    expect(fadeSpy).not.toHaveBeenCalled()
+  })
+
+  it('takes the pictures away when it is done, when it was asked to', async () => {
+    const stopSpy = vi.spyOn(visualCues, 'stop').mockImplementation(() => {})
+    vi.spyOn(visualCues, 'fade').mockImplementation(() => {})
+    const { runner } = setup([fade({ targetCueIds: ['i1', 't1'], fadeProperty: 'opacity', stopTargetWhenDone: true }), image('i1'), text('t1')])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(stopSpy).toHaveBeenCalledWith('i1', 0)
+    expect(stopSpy).toHaveBeenCalledWith('t1', 0)
+  })
+
+  it('stops several pictures with a stop’s fade-out', async () => {
+    const stopSpy = vi.spyOn(visualCues, 'stop').mockImplementation(() => {})
+    const { runner } = setup([stop({ targetCueIds: ['i1', 'v1'], fadeOut: true, fadeOutDuration: 700 }), image('i1'), video('v1')])
+    runner.goById('s')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(stopSpy).toHaveBeenCalledWith('i1', 700)
+    expect(stopSpy).toHaveBeenCalledWith('v1', 700)
+  })
+
+  it('readies a picture on its output when a control cue loads it', async () => {
+    const prepareSpy = vi.spyOn(visualCues, 'prepare').mockImplementation(() => {})
+    const control = { ...(createCue('control', 'c')), id: 'c', action: 'load', targetCueIds: ['v1', 'i1'], loadToMs: 4000 } as Cue
+    const { runner } = setup([control, video('v1'), image('i1')])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(prepareSpy.mock.calls.map(call => call[0].id)).toEqual(['v1', 'i1'])
+    expect(runner.loadedOffset('v1')).toBe(4000)
   })
 })

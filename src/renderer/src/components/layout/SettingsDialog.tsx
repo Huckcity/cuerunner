@@ -715,9 +715,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <p className="inspector-hint" data-scope="panel">
                   Addresses or ranges, comma-separated. Empty hears everyone.
                 </p>
+                <OscSettings />
               </ServiceBlock>
-
-              <OscSettings />
 
               {!pro && (
                 <ProHint onUnlock={() => setTab('license')}>

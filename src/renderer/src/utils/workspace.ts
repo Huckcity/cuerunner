@@ -35,13 +35,17 @@ import type { OscPatch } from '../../../shared/cue'
 // that had stopped chasing. A show that leaves it at the defaults writes no section — so a
 // show saved before timecode existed, or that never touched it, stays byte-identical.
 //
+// The video outputs the same: named at every call, even where there are none, and a show with
+// none writes no section.
+//
 // The OSC patches are named by every caller the same way and for the same reason: a show with
 // none writes no section, and a call site that forgot them would save a show whose messages
 // name patches it no longer has.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'oscPatches'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'oscPatches'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
+    videoOutputs: WorkspaceValues['videoOutputs']
     oscPatches: OscPatch[] | undefined
   }
 ): Workspace {
@@ -53,6 +57,9 @@ export function buildWorkspace(
     history: values.history && values.history.length > 0 ? values.history : undefined,
     lighting: values.lighting === undefined || isEmptyLighting(values.lighting) ? undefined : values.lighting,
     timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
+    // The same for a show with no video output: its bytes are what they were before
+    // outputs existed.
+    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined,
     oscPatches: savedOscPatches(values.oscPatches)
   })
 }

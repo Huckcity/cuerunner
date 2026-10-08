@@ -45,6 +45,12 @@ const PATHS: Record<CueType, string[]> = {
   light: ['M4 3.2h5.2l1.2 4.4H2.8z', 'M6.6 1.6v1.6', 'M3.4 9.6 2 13.4', 'M6.6 9.6v4', 'M9.8 9.6l1.4 3.8', 'M11.6 5.4h2.6'],
   // A timecode display: two pairs of digits either side of the colon.
   timecode: ['M1.8 4.4h12.4v7.2H1.8z', 'M4.2 6.4v3.2', 'M6 6.4v3.2', 'M10 6.4v3.2', 'M11.8 6.4v3.2', 'M8 6.9v.01', 'M8 9.1v.01'],
+  // A frame of film: the picture, and the sprocket holes down its edge.
+  video: ['M2.5 3.5h11v9h-11z', 'M5 3.5v9', 'M11 3.5v9', 'M2.5 6.5H5', 'M2.5 9.5H5', 'M11 6.5h2.5', 'M11 9.5h2.5'],
+  // A picture: its frame, a sun and a hill.
+  image: ['M2.5 3.5h11v9h-11z', 'M5.6 6.4v.01', 'M2.5 11l3.4-3.2 2.6 2.4 1.8-1.6 3.2 3'],
+  // A capital T, set on a baseline.
+  text: ['M3.5 3.5h9', 'M8 3.5v9', 'M6 12.5h4'],
   // An arrow reaching another cue: a cue that does something to a cue, not a sound of its own.
   control: ['M9.8 3.6h4v8.8h-4z', 'M1.8 8h6.2', 'M5.6 5.6 8 8l-2.4 2.4']
 }

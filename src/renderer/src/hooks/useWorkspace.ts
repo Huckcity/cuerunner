@@ -6,6 +6,7 @@ import type { LoadNote, Workspace, WorkspaceIdentity } from '../../../shared/wor
 import { buildWorkspace } from '../utils/workspace'
 import { witnessSave } from '../utils/saveWitness'
 import { cueEngine } from '../engine/CueEngine'
+import { carriesMediaFile } from '../../../shared/visual'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
 function reportFailure(message: string): void {
@@ -64,6 +65,7 @@ export async function guardDirty(): Promise<boolean> {
       triggerGuard,
       lighting,
       timecode,
+      videoOutputs: useStore.getState().videoOutputs,
       oscPatches,
       cues
     })
@@ -132,6 +134,7 @@ export function loadIntoStore(
     workspace.history ?? [],
     workspace.lighting,
     workspace.timecode,
+    workspace.videoOutputs,
     workspace.oscPatches
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
@@ -188,6 +191,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     triggerGuard,
     lighting,
     timecode,
+    videoOutputs: useStore.getState().videoOutputs,
     oscPatches,
     cues
   })
@@ -197,9 +201,9 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     // path it was last seen at instead of losing it.
     const resolved: Record<string, string> = {}
     for (const cue of result.workspace.cues) {
-      if (cue.type !== 'audio') continue
+      if (!carriesMediaFile(cue)) continue
       const current = cues.find(c => c.id === cue.id)
-      if (current?.type === 'audio' && current.filePath !== cue.filePath) {
+      if (current !== undefined && carriesMediaFile(current) && current.filePath !== cue.filePath) {
         resolved[cue.id] = cue.filePath
       }
     }
@@ -235,6 +239,7 @@ export async function exportShowBundle(): Promise<void> {
     triggerGuard,
     lighting,
     timecode,
+    videoOutputs: useStore.getState().videoOutputs,
     oscPatches,
     cues
   })
@@ -286,6 +291,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     triggerGuard,
     lighting,
     timecode,
+    videoOutputs: useStore.getState().videoOutputs,
     oscPatches,
     cues
   })
@@ -454,6 +460,7 @@ export function useWorkspace() {
       triggerGuard,
       lighting,
       timecode,
+      videoOutputs: useStore.getState().videoOutputs,
       oscPatches,
       cues
     })
@@ -505,6 +512,7 @@ export function useWorkspace() {
       triggerGuard,
       lighting,
       timecode,
+      videoOutputs: useStore.getState().videoOutputs,
       oscPatches,
       cues
     })

@@ -17,7 +17,11 @@
 //                           app's files.
 //   style-src … unsafe-inline   the stylesheet is a file; inline styles are what React
 //                           writes for a width or a colour, and carry no code.
-//   img-src / font-src data:    small assets the build inlines.
+//   img-src / font-src data:    small assets the build inlines; img-src also takes the
+//                           show's own pictures and an output's preview (`cuerunner-media:`
+//                           is main's scheme for the media files a show names, and serves
+//                           nothing else — src/main/output/mediaProtocol.ts).
+//   media-src               the same scheme, for a video cue's file in an output.
 //   connect-src 'self'      the window makes no requests of its own: network cues, OSC and
 //                           MIDI all leave from the main process.
 //   object-src, base-uri, form-action 'none'   nothing the app uses, so nothing is allowed.
@@ -25,7 +29,8 @@ export const RENDERER_CONTENT_POLICY_DIRECTIVES: Readonly<Record<string, string>
   'default-src': "'self'",
   'script-src': "'self'",
   'style-src': "'self' 'unsafe-inline'",
-  'img-src': "'self' data:",
+  'img-src': "'self' data: cuerunner-media:",
+  'media-src': "'self' cuerunner-media:",
   'font-src': "'self' data:",
   'connect-src': "'self'",
   'worker-src': "'self'",

@@ -1,0 +1,74 @@
+/* An output is black and nothing else: no chrome, no cursor, no scrollbars. The canvas is
+   the size the output composes at, letterboxed into whatever window it is in. */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000000;
+  overflow: hidden;
+  cursor: none;
+  user-select: none;
+}
+
+#stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.output-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Says what is wrong with the output on the output itself: a display that is not there. */
+.output-banner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 10px 16px;
+  background: #8a1c1c;
+  color: #ffffff;
+  font: 600 16px "IBM Plex Sans", sans-serif;
+  text-align: center;
+}
+
+.output-identify {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.55);
+  font: 700 12vh "IBM Plex Sans", sans-serif;
+  text-align: center;
+  text-shadow: 0 0 0.2em #000000;
+}
+
+.output-identify[hidden],
+.output-banner[hidden] {
+  display: none;
+}
+
+body.timer-window {
+  cursor: default;
+}
+
+.timer-digits {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #ffffff;
+  font: 700 18vw "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-digits[hidden] {
+  display: flex;
+}

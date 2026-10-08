@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Builds the packaged M4A/AAC decoder for Linux: a minimal, LGPL-only FFmpeg binary.
+ * Builds the packaged decoder for Linux: a minimal, LGPL-only FFmpeg binary for the sound of
+ * M4A/AAC and ALAC files, and of the video files a video cue plays (MP4/MOV with AAC, and
+ * Matroska/WebM with Opus, Vorbis or MP3).
  *
  * Why a separate executable: the app's own code stays free of FFmpeg's ABI and of its
  * licence obligations; the helper is executed as its own process and speaks float PCM
@@ -14,6 +16,7 @@
  * "corresponding source" requires us to hand on.
  *
  *   node scripts/build-ffmpeg-linux.mjs [--force]
+ *   node scripts/build-ffmpeg-linux.mjs --check   # exit 0 when the helper matches these flags, 3 when not
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -49,9 +52,11 @@ const CONFIGURE_FLAGS = [
   '--enable-avformat',
   '--enable-avutil',
   '--enable-swresample',
-  '--enable-demuxer=mov,wav',
-  '--enable-decoder=aac,alac,pcm_s16le,pcm_s24le,pcm_f32le',
-  '--enable-parser=aac',
+  // MOV/MP4 for M4A and for a video cue's MP4 or MOV; Matroska for its MKV or WebM. Only the
+  // sound is decoded: the picture is the output window's (Chromium's), never this helper's.
+  '--enable-demuxer=mov,wav,matroska',
+  '--enable-decoder=aac,alac,pcm_s16le,pcm_s24le,pcm_f32le,opus,vorbis,mp3float',
+  '--enable-parser=aac,opus,vorbis,mpegaudio',
   '--enable-protocol=file,pipe',
   // Float PCM on a pipe is how the engine reads from this helper; the WAV input side
   // lets the acceptance suite build its own M4A fixtures against this exact build.
@@ -64,13 +69,24 @@ const CONFIGURE_FLAGS = [
 ]
 
 const force = process.argv.includes('--force')
+const check = process.argv.includes('--check')
 
 if (process.platform !== 'linux') {
   console.log(`ffmpeg helper build: skipped (this script builds the Linux helper; on ${process.platform} the platform codec is used)`)
   process.exit(0)
 }
 
-if (existsSync(join(decoderDir, 'ffmpeg')) && !force) {
+// What the helper was built with, written beside it: a helper built from another set of
+// flags — an older one without the Matroska demuxer, say — is rebuilt rather than kept,
+// because a binary that is present is not a binary that decodes what the engine now asks of it.
+const configStamp = join(decoderDir, 'configure.stamp')
+const wantedStamp = `${FFMPEG_VERSION} ${CONFIGURE_FLAGS.join(' ')}`
+const upToDate = existsSync(join(decoderDir, 'ffmpeg')) &&
+  existsSync(configStamp) && readFileSync(configStamp, 'utf8').trim() === wantedStamp
+
+if (check) process.exit(upToDate ? 0 : 3)
+
+if (upToDate && !force) {
   console.log(`ffmpeg helper already built: ${join(decoderDir, 'ffmpeg')} (use --force to rebuild)`)
   process.exit(0)
 }
@@ -184,7 +200,7 @@ const version = execFileSync(ffmpegPath, ['-version'], { encoding: 'utf8' }).spl
 writeFileSync(
   join(decoderDir, 'NOTICE.txt'),
   [
-    'FFmpeg helper binary for Cuerunner (M4A/AAC and ALAC decoding on Linux)',
+    'FFmpeg helper binary for Cuerunner (the sound of M4A, MP4/MOV and Matroska/WebM files, on Linux)',
     '',
     `Version:        ${FFMPEG_VERSION}`,
     `Source:         ${FFMPEG_URL}`,
@@ -203,6 +219,8 @@ writeFileSync(
     ''
   ].join('\n')
 )
+
+writeFileSync(configStamp, `${wantedStamp}\n`)
 
 console.log(`built ${join(decoderDir, 'ffmpeg')}`)
 console.log(version)

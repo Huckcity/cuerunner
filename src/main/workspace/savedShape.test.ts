@@ -25,6 +25,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { serialiseWorkspace } from './serialise'
 import { defaultRfSettings, defaultShowSettings } from '../../shared/show'
+import { createOutput } from '../../shared/visual'
 import { diffWorkspaces } from '../../shared/showfile'
 import { mergeWorkspaces } from '../../shared/showfileMerge'
 import {
@@ -125,6 +126,7 @@ const fixture: Required<Workspace> = {
   lighting,
   // Moved from its defaults, as a show that chases a clock carries it.
   timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
+  videoOutputs: [createOutput('out-1', 'Stage left')],
   // A destination the show's OSC cues name, as a show that sends to a desk carries it.
   oscPatches: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
   cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
@@ -180,6 +182,7 @@ const declared: readonly WorkspaceKey[] = [
   'triggerGuard',
   'lighting',
   'timecode',
+  'videoOutputs',
   'oscPatches',
   'cues'
 ]
@@ -206,6 +209,7 @@ describe('the saved shape', () => {
         triggerGuard: undefined,
         lighting: undefined,
         timecode: undefined,
+        videoOutputs: undefined,
         oscPatches: undefined
       },
       SHOWS
@@ -214,7 +218,7 @@ describe('the saved shape', () => {
     expect(Object.keys(JSON.parse(bare))).toEqual(
       declared.filter(
         key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' &&
-          key !== 'timecode' && key !== 'oscPatches'
+          key !== 'timecode' && key !== 'videoOutputs' && key !== 'oscPatches'
       )
     )
   })
@@ -636,6 +640,57 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     artnet: false,
     artnetHost: '255.255.255.255',
     triggers: [{ id: 'tr-tc', kind: 'timecode', timecode: '00:59:50:00' }]
+  },
+  // The picture cues carry their geometry — an object with an object inside it, the crop — and
+  // the video its sound's crosspoints, so both nestings are walked.
+  video: {
+    ...cueBase('v1'),
+    type: 'video',
+    filePath: '',
+    outputId: 'out-1',
+    layer: 2,
+    opacity: 1,
+    fadeInDuration: 500,
+    fadeOutDuration: 500,
+    crossfade: true,
+    geometry: { fit: 'fill', x: 0.1, y: -0.1, scale: 0.5, rotation: 12, crop: { top: 0.1, right: 0, bottom: 0, left: 0.2 } },
+    startTime: 0,
+    endTime: null,
+    loopCount: -1,
+    holdLastFrame: true,
+    volume: 0.8,
+    pan: 0,
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }]
+  },
+  image: {
+    ...cueBase('i1'),
+    type: 'image',
+    filePath: '',
+    outputId: '',
+    layer: 1,
+    opacity: 0.5,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fit', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } }
+  },
+  text: {
+    ...cueBase('t1'),
+    type: 'text',
+    outputId: '',
+    layer: 3,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'native', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    text: 'Act One',
+    fontFamily: 'IBM Plex Sans',
+    fontSize: 96,
+    color: '#ffffff',
+    bold: true,
+    italic: false,
+    position: 'bottom'
   },
   control: {
     ...cueBase('ct1'),

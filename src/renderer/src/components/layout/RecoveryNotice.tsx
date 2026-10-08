@@ -105,6 +105,7 @@ export function RecoveryNotice() {
             triggerGuard: store.triggerGuard,
             lighting: store.lighting,
             timecode: store.timecode,
+            videoOutputs: store.videoOutputs,
             oscPatches: store.oscPatches,
             cues: store.cues
           })
@@ -157,6 +158,8 @@ export function RecoveryNotice() {
       // And how it follows timecode: recovering without it would hand back a show that had
       // stopped chasing.
       snapshot.workspace.timecode,
+      // And its outputs: a recovered show still has its projectors.
+      snapshot.workspace.videoOutputs,
       snapshot.workspace.oscPatches
     )
     // The place, not just the cues: standing where the session stood means the next GO

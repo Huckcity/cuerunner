@@ -28,6 +28,7 @@ import { serialiseWorkspace } from './serialise'
 import type { MediaReference, MissingMedia } from '../../shared/media'
 import type { AudioCue } from '../../shared/cue'
 import { hasCueList, type LoadNote, type Workspace } from '../../shared/workspace'
+import { carriesMediaFile } from '../../shared/visual'
 
 export const BUNDLE_EXTENSION = 'cuerunnerx'
 
@@ -125,8 +126,8 @@ async function gatherMedia(workspace: Workspace, workspacePath: string | null): 
   const folder = workspacePath === null ? null : dirname(workspacePath)
 
   for (const cue of workspace.cues) {
-    if (cue.type !== 'audio') continue
-    const audio = cue as AudioCue
+    if (!carriesMediaFile(cue)) continue
+    const audio = cue as unknown as AudioCue
     if (audio.filePath === '') continue
     const source = isAbsolute(audio.filePath)
       ? audio.filePath
