@@ -1,0 +1,142 @@
+/* The active cues: one row per running cue, in the dock's own surfaces. The bar under each is
+   the cue's position; on an audio cue it is also a handle, and says so on hover. */
+.active-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.active-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.active-title {
+  font-weight: var(--fw-semi);
+  color: var(--fg-primary);
+  font-size: var(--text-sm);
+}
+
+.active-count {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.active-actions { margin-left: auto; }
+
+.active-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.active-btn:hover { color: var(--fg-primary); }
+
+.active-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.active-empty {
+  padding: var(--space-3);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.active-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 4px 16px 56px minmax(0, 1fr) auto 72px 28px;
+  align-items: center;
+  column-gap: var(--space-2);
+  padding: 6px var(--space-3) 12px 0;
+  font-size: var(--text-base);
+  color: var(--fg-body);
+}
+
+.active-color {
+  align-self: stretch;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.active-icon { color: var(--fg-muted); }
+
+.active-number {
+  font-family: var(--font-mono);
+  color: var(--fg-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-primary);
+}
+
+.active-state { justify-self: start; }
+
+.active-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+  text-align: right;
+}
+
+.active-stop {
+  width: 24px;
+  height: 22px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.active-stop:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+/* The bar runs the width of the row under the name, and is a thicker target where it can be
+   held. The fill is scaled, not resized, so a frame's update is one compositor move. */
+.active-bar {
+  position: absolute;
+  left: calc(4px + var(--space-2));
+  right: var(--space-3);
+  bottom: 3px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.active-bar[data-scrubbable='true'] {
+  cursor: ew-resize;
+  height: 6px;
+  bottom: 2px;
+}
+
+.active-bar[data-scrubbable='true']:hover,
+.active-bar[data-held='true'] { height: 8px; bottom: 1px; }
+
+.active-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--accent-blue);
+  transform-origin: left center;
+  transform: scaleX(0);
+  will-change: transform;
+}
+
+.active-row[data-state='pre-wait'] .active-fill,
+.active-row[data-state='post-wait'] .active-fill { background: var(--fg-subtle); }
