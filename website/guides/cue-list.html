@@ -87,7 +87,7 @@
     <section class="panel reveal delay-2">
       <h2>The cue types</h2>
       <p>
-        Twelve of them, and the <a href="../reference/cue-types.html">reference</a> lists
+        Fourteen of them, and the <a href="../reference/cue-types.html">reference</a> lists
         every field of each. In practice:
       </p>
       <div class="table-wrap">
@@ -100,6 +100,7 @@
             <tr><td>Stop</td><td>Stop one cue, or everything, with or without a fade.</td></tr>
             <tr><td>Group</td><td>Cues inside a cue: fire them in order, all at once, at random, or on a timeline.</td></tr>
             <tr><td>MIDI / OSC / Network</td><td>Send a message to something else in the rig.</td></tr>
+            <tr><td>MIDI File</td><td>Play a <code>.mid</code> to a synth, a click, or anything else on a MIDI port.</td></tr>
             <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
             <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
             <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
@@ -107,6 +108,26 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Playing a MIDI file</h2>
+      <p>
+        A <strong>MIDI File</strong> cue (in the toolbar's More menu) plays a Standard MIDI File
+        to one port — the keys part of a backing track to a synth, a click to the band's in-ears,
+        a sequence to a lighting desk that listens on MIDI. Browse to the file and the tab reads
+        it back: its format, its tempo, its length, and each track by name, so you know it is the
+        file you meant. Pick the port, and set a <strong>Rate</strong> if the band has moved the
+        song's tempo; the cue's length follows, and it completes when the file does, so the cue
+        after it can follow on by itself. A <strong>Start time</strong> and <strong>End time</strong>
+        play part of the file, and a <strong>Loop count</strong> of −1 vamps it until a Stop. On the
+        <strong>Channels</strong> tab you can send each of the file's channels out as a different
+        one — or not at all, to drop the part a player is covering live — and transpose the notes
+        for tonight's key, with the drums on channel 10 left where they are. Start it part-way and
+        every channel is set the way the file had it first, so the right sounds are on the right
+        channels before the next note; stop it and every note it played is released, with the
+        sustain pedal lifted.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
