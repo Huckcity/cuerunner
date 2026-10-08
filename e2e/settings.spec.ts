@@ -304,10 +304,10 @@ test('settings are grouped by what is being set up, and close one way', async ()
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
-  // The backup machine, the timecode it follows and the licence are this machine's own
+  // The backup machine, the timecode it follows, the licence and updates are this machine's own
   // settings rather than the show's, so they sit last, under a heading that says so.
   await expect(dialog.locator('.settings-tab')).toHaveText([
-    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Backup machine', 'Timecode', 'License'
+    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Backup machine', 'Timecode', 'License', 'Updates'
   ])
 
   // MIDI out and MIDI in are one subject, on one tab.
