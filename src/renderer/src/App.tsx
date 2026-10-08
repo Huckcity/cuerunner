@@ -15,6 +15,7 @@ import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
 import { MissingMediaBar } from './components/media/MissingMediaBar'
 import { GroupingNoteBar } from './components/layout/GroupingNoteBar'
+import { PatchFallbackBar } from './components/layout/PatchFallbackBar'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
 import { useMediaLengths } from './hooks/useMediaLengths'
@@ -200,6 +201,7 @@ export function App() {
       <WhatsNewDialog />
       <MissingMediaBar />
       <GroupingNoteBar />
+      <PatchFallbackBar />
       <Toolbar
         onOpenSettings={() => openSettings('general')}
         view={view}

@@ -1,5 +1,7 @@
 import type { Cue } from '../../../shared/cue'
+import type { CueListInfo } from '../../../shared/cueLists'
 import { cueTriggers } from '../engine/triggers'
+import { currentPlatform, formatShortcut } from './shortcuts'
 
 // A key on this machine's keyboard as a cue trigger: written the way the menus write a
 // shortcut ("Mod+Shift+F7"), read off the physical key rather than the character it types —
@@ -131,7 +133,9 @@ function canonicalKey(text: string): string | null {
  * cue *and* do the app's own thing — a key trigger on Space would GO twice — so a trigger is
  * refused on every one of them. Kept beside the trigger because this is the one list that has
  * to hold every key the window binds: the transport (`useKeyboard`), the cue list's keys, the
- * menus' accelerators, the views' function keys and the cart's tile keys.
+ * menus' accelerators and roles (`src/main/index.ts`), the views' function keys and the cart's
+ * tile keys. Written the way the trigger stores a key; `appShortcuts` adds what one platform's
+ * menus hold and another's do not.
  */
 export const APP_SHORTCUTS: ReadonlyArray<{ key: string; does: string }> = [
   { key: 'Space', does: 'GO' },
@@ -151,26 +155,93 @@ export const APP_SHORTCUTS: ReadonlyArray<{ key: string; does: string }> = [
   { key: 'Mod+C', does: 'copy' },
   { key: 'Mod+X', does: 'cut' },
   { key: 'Mod+V', does: 'paste' },
+  { key: 'Mod+A', does: 'select all' },
   { key: 'Mod+N', does: 'a new show' },
   { key: 'Mod+O', does: 'open a show' },
   { key: 'Mod+S', does: 'save' },
   { key: 'Mod+Shift+S', does: 'save as' },
   { key: 'Mod+,', does: 'settings' },
-  { key: 'Mod+Shift+P', does: 'report a problem' },
+  { key: 'Mod+Shift+P', does: 'panic' },
   { key: 'Mod+Q', does: 'quit' },
-  { key: 'Mod+W', does: 'close the window' },
+  // The View menu's zoom roles: actual size, larger (with and without Shift, as the plus key
+  // sits on = on most keyboards), smaller.
+  { key: 'Mod+0', does: 'actual size' },
+  { key: 'Mod+=', does: 'zoom in' },
+  { key: 'Mod+Shift+=', does: 'zoom in' },
+  { key: 'Mod+-', does: 'zoom out' },
   // The cart's tiles answer the number row while the cart is up.
   ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map(key => ({ key, does: 'a cart tile' }))
 ]
 
 /**
- * Why a key cannot be a trigger, as a sentence, or null when it can. A key the app answers is
- * refused; Tab and Enter move focus and press buttons, which a keyboard user cannot lose.
+ * Every key the app answers on one platform: the table above, and the full-screen role, which
+ * is F11 on Windows and Linux and Ctrl+⌘F on a Mac — a press this module reads as `Mod+F`,
+ * since it counts Ctrl and ⌘ as one modifier the way the app's own shortcuts do.
  */
-export function hotkeyConflict(key: string): string | null {
-  const taken = APP_SHORTCUTS.find(entry => entry.key === key)
-  if (taken) return `${key} is the app’s key for ${taken.does}`
-  if (key === 'Tab' || key === 'Shift+Tab') return `${key} moves between controls`
+export function appShortcuts(platform: string = currentPlatform()): ReadonlyArray<{ key: string; does: string }> {
+  return platform === 'darwin'
+    ? [...APP_SHORTCUTS, { key: 'Mod+F', does: 'full screen' }]
+    : [...APP_SHORTCUTS, { key: 'F11', does: 'full screen' }]
+}
+
+/** A cart tile's own key, with the list it is in, as a conflict names it. */
+export interface TileKeyUse {
+  key: string
+  list: string
+}
+
+/** The tile keys a show's carts hold, in tab order. */
+export function tileKeysOf(lists: readonly CueListInfo[]): TileKeyUse[] {
+  return lists.flatMap(list => (list.tileKeys ?? []).map(entry => ({ key: entry.key, list: list.name })))
+}
+
+/**
+ * The `KeyboardEvent.key` a stored combination's press gives, lower-cased the way a tile keeps
+ * its key, or null when that cannot be known or no tile could answer it. A tile answers a press
+ * with no Ctrl, ⌘ or Alt, so only a bare or shifted key can be one: Shift only changes a
+ * letter's case and leaves a function or named key alone, but turns a digit or a mark into
+ * whatever this keyboard's layout puts above it, which is not known here.
+ */
+function tileKeyOfCombo(key: string): string | null {
+  const { modifiers, base } = splitHotkey(key)
+  if (modifiers.some(modifier => modifier !== 'Shift')) return null
+  const shifted = modifiers.includes('Shift')
+  if (/^[A-Z]$/.test(base)) return base.toLowerCase()
+  if (/^F[0-9]+$/.test(base)) return base.toLowerCase()
+  if (base === 'Space') return ' '
+  if (base === 'NumEnter') return 'enter'
+  const pad = /^Num(.)$/.exec(base)
+  if (pad) return shifted ? null : pad[1]
+  if (/^[A-Za-z]+$/.test(base)) return base.toLowerCase()
+  return shifted ? null : base
+}
+
+/** A stored combination's modifiers and key; the key can itself be `Num+`. */
+function splitHotkey(key: string): { modifiers: string[]; base: string } {
+  const plus = key.endsWith('Num+')
+  const parts = (plus ? key.slice(0, -'Num+'.length) : key).split('+').filter(part => part !== '')
+  if (plus) return { modifiers: parts, base: 'Num+' }
+  return { modifiers: parts.slice(0, -1), base: parts[parts.length - 1] ?? '' }
+}
+
+/**
+ * Why a key cannot be a trigger, as a sentence, or null when it can. A key the app answers is
+ * refused, and so is a key a cart tile already answers; Tab and Enter move focus and press
+ * buttons, which a keyboard user cannot lose. The key is named the way this machine's keyboard
+ * labels it — ⌘S on a Mac, Ctrl+S everywhere else — never as the stored `Mod+S`.
+ */
+export function hotkeyConflict(
+  key: string,
+  options: { platform?: string; tileKeys?: readonly TileKeyUse[] } = {}
+): string | null {
+  const platform = options.platform ?? currentPlatform()
+  const label = formatShortcut(key, platform)
+  const taken = appShortcuts(platform).find(entry => entry.key === key)
+  if (taken) return `${label} is the app’s key for ${taken.does}`
+  const pressed = tileKeyOfCombo(key)
+  const tile = pressed === null ? undefined : options.tileKeys?.find(entry => entry.key === pressed)
+  if (tile) return `${label} plays a tile in the cart “${tile.list}”`
+  if (key === 'Tab' || key === 'Shift+Tab') return `${label} moves between controls`
   if (key === 'Enter') return 'Enter presses the button that has focus'
   return null
 }
@@ -182,10 +253,14 @@ export function cuesOnHotkey(cues: readonly Cue[], key: string, except: string |
 }
 
 /** The armed cues a press fires, in list order: every cue with a key trigger on this combination. */
-export function cuesForHotkey(cues: readonly Cue[], key: string): Cue[] {
-  // A key the app answers never fires a cue, whatever a hand-edited file says: the app's own
-  // use of it is what the operator's finger is there for.
-  if (hotkeyConflict(key) !== null) return []
+export function cuesForHotkey(
+  cues: readonly Cue[],
+  key: string,
+  options: { platform?: string; tileKeys?: readonly TileKeyUse[] } = {}
+): Cue[] {
+  // A key the app or a cart tile answers never fires a cue, whatever a hand-edited file says:
+  // the app's own use of it is what the operator's finger is there for.
+  if (hotkeyConflict(key, options) !== null) return []
   return cues.filter(cue => cue.isArmed &&
     cueTriggers(cue).some(trigger => trigger.kind === 'hotkey' && trigger.key === key))
 }

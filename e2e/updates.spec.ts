@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { closeApp, launchApp, toolbarCueBtn } from './helpers'
+import { PLATFORM_FEEDS, type FeedPlatform } from '../src/shared/update'
 
 /** The bytes the server hands out as the update, and a digest that is not theirs. */
 const PAYLOAD = Buffer.from('not an installer: the suite never offers bytes that would pass\n')
@@ -28,19 +29,34 @@ const NOTES = [
   ''
 ].join('\n')
 
-/** The file each platform's feed offers, under the name its updater looks for. */
+/**
+ * Every platform's feed, served the way the release mirror serves them: under `latest/`, each
+ * entry rewritten to that release's own `versions/<tag>/` copy under the name the mirror writes
+ * it by. Each platform's app asks for its own feed and installs its own file from it
+ * (`PLATFORM_FEEDS`, held to electron-updater by `src/main/update/platformFeed.test.ts`), so the
+ * server answers all three and the assertions read this platform's.
+ */
 const OFFERED: Record<string, string[]> = {
-  'latest.yml': ['Cuerunner-Setup-999.0.0.exe'],
-  'latest-mac.yml': ['Cuerunner-999.0.0-universal-mac.zip', 'Cuerunner-999.0.0.dmg'],
-  'latest-linux.yml': ['Cuerunner-999.0.0.AppImage']
+  'latest.yml': ['Cuerunner-Setup.exe'],
+  'latest-mac.yml': ['Cuerunner-mac.zip', 'Cuerunner.dmg'],
+  'latest-linux.yml': ['Cuerunner.AppImage', 'Cuerunner.deb']
 }
+
+/** Where the mirror puts a release's files, relative to the server's root. */
+const VERSIONS = 'versions/v999.0.0/'
+
+/** What this platform's app reads, and the path of the one file it would download. */
+const PLATFORM = PLATFORM_FEEDS[process.platform as FeedPlatform]
+const OWN_FEED = `latest/${PLATFORM.feed}`
+const OWN_PAYLOAD = `${VERSIONS}${OFFERED[PLATFORM.feed].find(name => name.endsWith(`.${PLATFORM.installs}`))}`
+const PAYLOADS = Object.values(OFFERED).flat().map(name => `${VERSIONS}${name}`)
 
 function feedYaml(files: string[]): string {
   return [
     'version: 999.0.0',
     'files:',
-    ...files.flatMap(file => [`  - url: ${file}`, `    sha512: ${WRONG_SHA512}`, `    size: ${PAYLOAD.length}`]),
-    `path: ${files[0]}`,
+    ...files.flatMap(file => [`  - url: ../${VERSIONS}${file}`, `    sha512: ${WRONG_SHA512}`, `    size: ${PAYLOAD.length}`]),
+    `path: ../${VERSIONS}${files[0]}`,
     `sha512: ${WRONG_SHA512}`,
     'releaseNotes: |',
     ...NOTES.split('\n').map(line => (line === '' ? '' : `  ${line}`)),
@@ -62,12 +78,13 @@ test.beforeEach(async () => {
   server = createServer((request, response) => {
     const name = decodeURIComponent(new URL(request.url ?? '/', 'http://feed').pathname.slice(1))
     requests.push(name)
-    if (OFFERED[name] !== undefined) {
+    const feed = name.startsWith('latest/') ? OFFERED[name.slice('latest/'.length)] : undefined
+    if (feed !== undefined) {
       response.writeHead(200, { 'content-type': 'text/yaml' })
-      response.end(feedYaml(OFFERED[name]))
+      response.end(feedYaml(feed))
       return
     }
-    if (Object.values(OFFERED).some(files => files.includes(name))) {
+    if (PAYLOADS.includes(name)) {
       response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': String(PAYLOAD.length) })
       response.end(PAYLOAD)
       return
@@ -76,7 +93,7 @@ test.beforeEach(async () => {
     response.end()
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  feedUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
+  feedUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/latest/`
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'feat-ship-updates-'))
 })
 
@@ -112,8 +129,8 @@ test('offers the release the feed publishes, holds it during a show, and refuses
 
   // The launch check, on its own: the release is offered, not fetched.
   await expect(notice()).toContainText('Cuerunner 999.0.0 is available.')
-  expect(requests.some(name => /^latest(-mac|-linux)?\.yml$/.test(name))).toBe(true)
-  expect(requests.some(name => name.startsWith('Cuerunner-999'))).toBe(false)
+  expect(requests, `this platform reads ${OWN_FEED}`).toContain(OWN_FEED)
+  expect(requests.filter(name => PAYLOADS.includes(name)), 'a check downloaded something').toEqual([])
 
   // Its notes, as words.
   await notice().getByRole('button', { name: 'Release notes' }).click()
@@ -135,7 +152,7 @@ test('offers the release the feed publishes, holds it during a show, and refuses
   await expect(notice()).toContainText(
     'Held: something in the show is running. Nothing is downloaded or installed during a show — ask again once the show is idle.'
   )
-  expect(requests.some(name => name.startsWith('Cuerunner-999')), 'a download went out during the show').toBe(false)
+  expect(requests.filter(name => PAYLOADS.includes(name)), 'a download went out during the show').toEqual([])
 
   // The show stopped: the operator asks again, and the bytes are refused for their checksum.
   await page.locator('body').press('Escape')
@@ -144,7 +161,8 @@ test('offers the release the feed publishes, holds it during a show, and refuses
   await expect(notice()).toContainText(
     'Refused: the download did not match the checksum its release published, so it was deleted and nothing was installed.'
   )
-  expect(requests.some(name => name.startsWith('Cuerunner-999')), 'the download never went out').toBe(true)
+  // The download went out for this platform's own file, from the release's own folder, and no other.
+  expect(requests.filter(name => PAYLOADS.includes(name)), 'the download never went out').toEqual([OWN_PAYLOAD])
   // Refused is the end of it: nothing to restart into.
   await expect(notice().getByRole('button', { name: 'Restart now' })).toHaveCount(0)
 })

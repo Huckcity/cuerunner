@@ -26,6 +26,8 @@ export const MIDI_CHANNELS = {
   filePlay: 'midi:filePlay',
   filePause: 'midi:filePause',
   fileResume: 'midi:fileResume',
+  /** A playing or held file moved to a place in itself, its channels chased there. */
+  fileSeek: 'midi:fileSeek',
   fileStop: 'midi:fileStop'
 } as const
 
@@ -83,6 +85,12 @@ export type MidiFilePauseResult = Refusal | { ok: true; positionMs: number }
 /** How long a resumed run has left; refused for a cue whose file is not playing. */
 export type MidiFileResumeResult = Refusal | { ok: true; remainingMs: number | null }
 
+/** A cue's file and the place to move it to, ms of played time from the run's start. */
+export interface MidiFileSeekPayload {
+  cueId: string
+  positionMs: number
+}
+
 /** MIDI output, as the renderer reads it (`window.cuerunner.midi`). */
 export interface MidiBridge {
   listPorts(): Promise<string[]>
@@ -98,6 +106,8 @@ export interface MidiBridge {
   filePlay(cmd: MidiFilePlayPayload): Promise<MidiFilePlayResult>
   filePause(cmd: MidiFileCuePayload): Promise<MidiFilePauseResult>
   fileResume(cmd: MidiFileCuePayload): Promise<MidiFileResumeResult>
+  /** Moves a cue's file, held or playing; refused for a cue whose file is not playing. */
+  fileSeek(cmd: MidiFileSeekPayload): Promise<MidiFileResumeResult>
   /** Stops a cue's file and releases what it holds; false when it was not playing. */
   fileStop(cmd: MidiFileCuePayload): Promise<boolean>
 }

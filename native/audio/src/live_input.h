@@ -1,18 +1,11 @@
 // Live inputs: a capture device's channels played through the mixer as a voice.
 //
-// A capture device runs on its own clock. Even two devices that claim the same rate drift
-// apart by tens of parts per million, and a device at 44.1 kHz feeding an output at 48 kHz
-// differs by design, so the samples it captures cannot be handed to the output one for one:
-// the buffer between them would empty or overflow within minutes. Each feed therefore sits
-// behind an adaptive resampler. The device's callback writes into a lock-free ring at the
-// device's own pace; the render thread reads it once per block at the output's pace, through
-// a cubic interpolator whose step is the nominal ratio of the two rates nudged by a
-// controller that holds the ring's fill at a target. The controller is proportional-integral
-// on the fill error, measured through a one-second average because the fill is a sawtooth —
-// the device delivers in periods and the output takes in blocks — so the nudge is a few
-// parts per million rather than a wobble. A fill that runs out (an underrun) or runs away
-// (the device stalled and then delivered a backlog) is resynchronised to the target rather
-// than played late, and counted.
+// A capture device runs on its own clock, never the output's: even two devices that claim the
+// same rate drift apart by tens of parts per million, and a device at 44.1 kHz feeding an
+// output at 48 kHz differs by design. Each feed therefore sits behind the drift lock
+// (drift.h): the device's callback writes into its ring at the device's own pace, and the
+// render thread reads it once per block at the output's pace, through the resampler its
+// controller keeps locked to the device.
 //
 // Feeds are kept open once opened, so a cue that goes live is instant: the stream is already
 // running and already locked. A voice that reads a feed is an ordinary mixer voice — its
@@ -27,6 +20,7 @@
 // error, so minutes of drift render in seconds and the same render is the same every run.
 #pragma once
 
+#include "drift.h"
 #include "wsaudio.h"
 
 #include <atomic>
@@ -134,7 +128,6 @@ class InputFeed {
   static constexpr int kFree = 0;
   static constexpr int kStopped = 1;
   static constexpr int kRunning = 2;
-  static constexpr int64_t kRingFrames = 1 << 16;
 
   struct Device;
 
@@ -143,10 +136,6 @@ class InputFeed {
   void advanceSimulation(int64_t clockFrame, int outRate);
   void syntheticThread();
   void stopSynthetic();
-  float sampleAt(int64_t frame, int channel) const {
-    return ring_[static_cast<size_t>(frame & (kRingFrames - 1)) * static_cast<size_t>(channels_) +
-                 static_cast<size_t>(channel)];
-  }
 
   std::atomic<int> state_{kFree};
   std::string device_;
@@ -158,44 +147,21 @@ class InputFeed {
   int kind_ = 0;            // 0 tone, 1 ramp
   double skewPpm_ = 0.0;
   int periodFrames_ = 0;
-  double latencyMs_ = 0.0;
   double jitterMs_ = 0.0;
   uint64_t jitterSeed_ = 0;
   bool jitterDrawn_ = false;
   double pendingJitter_ = 0.0;
   double lastDelivery_ = 0.0;
 
-  std::vector<float> ring_;
+  /** The device's samples, and the resampler locked to its clock. */
+  DriftRing ring_;
   std::vector<float> block_;
-  std::atomic<uint64_t> writeHead_{0};
-  std::atomic<uint64_t> releasedHead_{0};
-  std::atomic<int> maxChunk_{0};
-  std::atomic<bool> resetRequested_{false};
   std::atomic<bool> pulling_{false};
-  std::atomic<double> lastPushAt_{0.0};
   std::vector<float> scratch_;  // a synthetic source's period, filled before it is pushed
-
-  // Consumer-only state.
-  bool primed_ = false;
-  double readPos_ = 0.0;
-  double fillAverage_ = 0.0;
-  double integral_ = 0.0;
-  double adjust_ = 0.0;
-  double target_ = 0.0;
-  double learned_ = 0.0;        // headroom learned from late deliveries, ms
-  double sinceLearned_ = 0.0;   // seconds since it last grew
 
   // Synthetic source's generator position, frames.
   int64_t generated_ = 0;
   double simulatedDue_ = 0.0;
-
-  std::atomic<uint64_t> underruns_{0};
-  std::atomic<uint64_t> overruns_{0};
-  std::atomic<uint64_t> resyncs_{0};
-  std::atomic<double> latencyPublished_{0.0};
-  std::atomic<double> targetPublished_{0.0};
-  std::atomic<double> ratioPublished_{0.0};
-  std::atomic<float> peaks_[kMaxOutputChannels];
 
   std::unique_ptr<Device> deviceState_;
   std::thread synthetic_thread_;

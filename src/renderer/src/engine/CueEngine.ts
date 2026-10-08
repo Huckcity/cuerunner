@@ -38,6 +38,7 @@ import {
   pauseMidiFile as holdMidiFile,
   playMidiFile,
   resumeMidiFile as releaseHeldMidiFile,
+  seekMidiFile,
   stopMidiFile
 } from './midiFile'
 import { goLight, isLightCue, levelLight, panicLights, releaseLight, stopLight, stopLightsAmong } from './lighting'
@@ -1293,37 +1294,42 @@ export class CueEngine {
   }
 
   /**
-   * Holds a running MIDI File cue where it is. Its planned end is taken away while it is
-   * held — a held cue must not complete and move the show on — and main releases what it
-   * has sounding, so a held file is silence rather than a chord left down.
+   * Holds a MIDI File cue's file in main, the one way every pause reaches it — the show's PAUSE,
+   * a cue's own, a Control cue's. Its planned end is taken away while it is held — a held cue
+   * must not complete and move the show on — and main releases what it has sounding, so a held
+   * file is silence rather than a chord left down.
    */
-  pauseMidiFile(cueId: string): void {
-    const run = this.runs.get(cueId)
-    if (!run || run.cancelled || run.phase !== 'running') return
-    if (this.deps!.getCues().find(c => c.id === cueId)?.type !== 'midiFile') return
+  private holdMidiFileRun(cueId: string, run: CueRun): void {
     this.planMidiFileEnd(run, this.now(), null, run.finish!)
     holdMidiFile(cueId)
   }
 
-  /** Plays a held MIDI File cue on, and plans its end again from what main says is left. */
-  resumeMidiFile(cueId: string): void {
-    const run = this.runs.get(cueId)
-    if (!run || run.cancelled || run.phase !== 'running' || !run.finish) return
-    const cue = this.deps!.getCues().find(c => c.id === cueId)
-    if (cue?.type !== 'midiFile') return
+  /**
+   * Lets a held MIDI File cue's file play on in main, with its channels chased back, and plans
+   * its end again from what main says is left: the file's own account of where it stands, not
+   * the window's sum of how long it was held.
+   */
+  private releaseMidiFileRun(cueId: string, run: CueRun): void {
     const from = this.now()
     void releaseHeldMidiFile(cueId).then(result => {
       if (run.cancelled || run.phase !== 'running' || !run.finish || !result.ok) return
+      // Held again before main answered: the hold that came after is the one that stands.
+      if (this.isPaused(cueId)) return
       this.planMidiFileEnd(run, from, result.remainingMs, run.finish)
-      // The row counts down what is left, from the moment it reads as started.
-      if (result.remainingMs !== null) {
-        this.deps!.setRunning(cueId, {
-          cueId,
-          state: 'playing',
-          startedAt: Date.now() - Math.max(0, cue.duration - result.remainingMs),
-          progress: 0
-        })
-      }
+    }).catch(() => {})
+  }
+
+  /**
+   * Moves a running MIDI File cue `positionMs` of played time into itself — a Control cue's
+   * Load — with every channel chased there. A held file moves and stays held; its end is
+   * planned when it is let go.
+   */
+  private seekMidiFileRun(cueId: string, run: CueRun, positionMs: number): void {
+    const from = this.now()
+    void seekMidiFile(cueId, positionMs).then(result => {
+      if (run.cancelled || run.phase !== 'running' || !run.finish || !result.ok) return
+      if (this.isPaused(cueId)) return
+      this.planMidiFileEnd(run, from, result.remainingMs, run.finish)
     }).catch(() => {})
   }
 
@@ -2070,9 +2076,9 @@ export class CueEngine {
   }
 
   /**
-   * The cues a pause or resume of these targets holds: each cue named, and every audio and
-   * video cue inside a group named — the sounds and the moving pictures are what is held; a
-   * group has none of its own.
+   * The cues a pause or resume of these targets holds: each cue named, and every audio, video
+   * and MIDI file cue inside a group named — the sounds, the moving pictures and the files are
+   * what is held; a group has none of its own.
    */
   private holdTargets(targets: readonly Cue[]): string[] {
     const cues = this.deps!.getCues()
@@ -2083,7 +2089,7 @@ export class CueEngine {
       for (const candidate of cues) {
         if (candidate.parentId === null || !inside.has(candidate.parentId)) continue
         inside.add(candidate.id)
-        if ((candidate.type === 'audio' || candidate.type === 'video' || candidate.type === 'input') && this.runs.has(candidate.id)) ids.add(candidate.id)
+        if ((candidate.type === 'audio' || candidate.type === 'video' || candidate.type === 'input' || candidate.type === 'midiFile') && this.runs.has(candidate.id)) ids.add(candidate.id)
       }
     }
     return [...ids]
@@ -2103,6 +2109,12 @@ export class CueEngine {
         // An input that will not open says so when the cue is fired.
       })
       this.log({ level: 'info', message: 'input opened, ready to go live', label })
+      return
+    }
+    const midiFileRun = target.type === 'midiFile' ? this.midiFileRun(target.id) : null
+    if (midiFileRun !== null) {
+      this.seekMidiFileRun(target.id, midiFileRun, atMs)
+      this.log({ level: 'info', message: `moved to ${(atMs / 1000).toFixed(1)}s`, label })
       return
     }
     if ((target.type === 'audio' || target.type === 'video') && this.hasActiveRun(target.id)) {
@@ -2489,6 +2501,8 @@ export class CueEngine {
         // text's display time — so the output and the show clock stop together.
         return run.phase === 'running'
       }
+      // A MIDI file plays in main on its own clock, so it is held there, from the moment it runs.
+      if (cue?.type === 'midiFile') return run.phase === 'running'
       return (cue?.type === 'audio' || cue?.type === 'timecode' || cue?.type === 'input') &&
         (run.phase === 'pending' || run.phase === 'running')
     }).map(([cueId]) => cueId)
@@ -2508,6 +2522,11 @@ export class CueEngine {
     for (const cueId of holding) {
       if (timecodeRunning(cueId)) {
         void controlTimecode(cueId, { action: 'pause' })
+        continue
+      }
+      const midiFileRun = this.midiFileRun(cueId)
+      if (midiFileRun !== null) {
+        this.holdMidiFileRun(cueId, midiFileRun)
         continue
       }
       if (visualCues.isShowing(cueId)) {
@@ -2541,6 +2560,11 @@ export class CueEngine {
         void controlTimecode(cueId, { action: 'resume' })
         continue
       }
+      const midiFileRun = this.midiFileRun(cueId)
+      if (midiFileRun !== null) {
+        this.releaseMidiFileRun(cueId, midiFileRun)
+        continue
+      }
       if (visualCues.isShowing(cueId)) {
         visualCues.resume(cueId, resumedAt)
         if (this.runs.get(cueId)?.silentPicture === true || !this.hasVoice(cueId)) continue
@@ -2554,6 +2578,13 @@ export class CueEngine {
       this.deps.setRunning(cueId, { ...row, startedAt: row.startedAt + heldFor })
     }
     this.log({ level: 'info', message: 'resumed the show' })
+  }
+
+  /** A MIDI File cue's live run, or null for any other cue or one not running. */
+  private midiFileRun(cueId: string): CueRun | null {
+    const run = this.runs.get(cueId)
+    if (!run || run.cancelled || run.phase !== 'running') return null
+    return this.deps!.getCues().find(c => c.id === cueId)?.type === 'midiFile' ? run : null
   }
 
   /** PAUSE as one key: hold the show, or let it go. */
@@ -2574,8 +2605,8 @@ export class CueEngine {
     const run = this.runs.get(cueId)
     const cue = this.deps.getCues().find(c => c.id === cueId)
     if (!run || !cue || run.cancelled) return false
-    if ((cue.type !== 'audio' && cue.type !== 'video' && cue.type !== 'input') || run.phase !== 'running') {
-      this.log({ level: 'error', message: 'only an audio or video cue that is playing can be paused on its own', label: this.cueLabel(cue) })
+    if ((cue.type !== 'audio' && cue.type !== 'video' && cue.type !== 'input' && cue.type !== 'midiFile') || run.phase !== 'running') {
+      this.log({ level: 'error', message: 'only an audio, video or MIDI file cue that is playing can be paused on its own', label: this.cueLabel(cue) })
       return false
     }
     if (run.released) {
@@ -2593,7 +2624,8 @@ export class CueEngine {
     run.soundFadeTask = null
     // A video's picture stands on its frame while its voice is held: both on the engine's clock.
     if (cue.type === 'video') visualCues.pause(cueId, this.now())
-    if (cue.type !== 'video' || !run.silentPicture) void audioEngine.pause(cueId).catch(() => {})
+    if (cue.type === 'midiFile') this.holdMidiFileRun(cueId, run)
+    else if (cue.type !== 'video' || !run.silentPicture) void audioEngine.pause(cueId).catch(() => {})
     const row = this.deps.getRunning?.().get(cueId) ?? null
     this.pausedCues.set(cueId, { at: this.now(), wallAt: Date.now(), row })
     if (row !== null) this.deps.setRunning(cueId, { ...row, state: 'paused' })
@@ -2611,6 +2643,15 @@ export class CueEngine {
     if (!run || run.cancelled || !run.finish) return false
     const heldFor = this.now() - pause.at
     const resumed = this.deps.getCues().find(c => c.id === cueId)
+    if (resumed?.type === 'midiFile') {
+      // Its end is main's to say once the file plays on; nothing here is moved by a sum.
+      this.releaseMidiFileRun(cueId, run)
+      if (pause.row !== null) {
+        this.deps.setRunning(cueId, { ...pause.row, startedAt: pause.row.startedAt + (Date.now() - pause.wallAt) })
+      }
+      this.log({ level: 'info', message: 'resumed', label: this.cueLabel(resumed) })
+      return true
+    }
     if (resumed?.type === 'video') visualCues.resume(cueId, this.now())
     if (resumed?.type !== 'video' || !run.silentPicture) void audioEngine.resume(cueId).catch(() => {})
     run.startAt += heldFor

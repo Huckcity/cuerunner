@@ -8,7 +8,7 @@
 // it), and install either on the operator's restart or on the quit that was happening anyway.
 
 import type { AppUpdater, ProgressInfo } from 'electron-updater'
-import type { UpdateInstall } from '../../shared/update'
+import { platformFeed, type UpdateInstall } from '../../shared/update'
 import type { FoundUpdate, UpdaterPort } from './UpdateService'
 
 export interface ElectronUpdaterOptions {
@@ -71,6 +71,10 @@ export async function createElectronUpdater(options: ElectronUpdaterOptions): Pr
     updater.updateConfigPath = options.devConfigPath
   }
   updater.setFeedURL({ provider: 'generic', url: options.feedUrl })
+  const facts = platformFeed(process.platform)
+  options.log(
+    `[updater] reads ${options.feedUrl}${facts?.feed ?? '(no feed for this platform)'} and installs its ${facts?.installs ?? 'nothing'}`
+  )
   // An updater is an EventEmitter, and one that emits `error` with nobody listening throws it
   // out of the process. Every failure also rejects the call that caused it, which is where the
   // rules read it; this listener only keeps it from being thrown twice.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
 import type { ClockMissedPolicy, CueTrigger } from '../../../../shared/cue'
-import { cuesOnHotkey, hotkeyConflict, hotkeyFromPress, normalizeHotkey } from '../../utils/hotkeys'
+import { cuesOnHotkey, hotkeyConflict, hotkeyFromPress, normalizeHotkey, tileKeysOf } from '../../utils/hotkeys'
 import { formatShortcut } from '../../utils/shortcuts'
 import { clockSeconds, formatClockTime, MAX_GRACE_MINUTES } from '../../engine/clockTriggers'
 
@@ -16,7 +16,8 @@ export function HotkeyTriggerSection({ cueId, onAdd }: { cueId: string; onAdd: (
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
   const key = normalizeHotkey(text)
-  const conflict = key === null ? null : hotkeyConflict(key)
+  const cueLists = useStore(s => s.cueLists)
+  const conflict = key === null ? null : hotkeyConflict(key, { tileKeys: tileKeysOf(cueLists) })
   const shared = key === null ? [] : cuesOnHotkey(cues, key, cueId)
 
   const hint = text.trim() === ''

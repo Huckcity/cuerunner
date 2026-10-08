@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
-import { cuesForHotkey, hotkeyFromPress } from '../utils/hotkeys'
+import { cuesForHotkey, hotkeyFromPress, tileKeysOf } from '../utils/hotkeys'
 import { formatShortcut } from '../utils/shortcuts'
 
 /**
@@ -25,7 +25,7 @@ export function useHotkeyTriggers(): void {
       if (el?.isContentEditable) return
       const key = hotkeyFromPress(e)
       if (key === null) return
-      const cues = cuesForHotkey(store.cues, key)
+      const cues = cuesForHotkey(store.cues, key, { tileKeys: tileKeysOf(store.cueLists) })
       if (cues.length === 0) return
       e.preventDefault()
       if (!cueEngine.acceptsFire('key', `hotkey:${key}`)) return

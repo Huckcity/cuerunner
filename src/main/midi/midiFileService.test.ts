@@ -195,6 +195,18 @@ describe('playing a cue’s file', () => {
     expect(await refusalOf(() => service.resume('other'))).toBe('that cue’s MIDI file is not playing')
   })
 
+  it('moves a held run without waking it, and says what is left from the place it moved to', async () => {
+    await play(writeMidi('seek.mid'))
+    clock.advance(100)
+    service.pause('c1')
+    expect(service.seek('c1', 700)).toEqual({ remainingMs: 300 })
+    const before = sent.length
+    clock.advance(5000)
+    expect(sent).toHaveLength(before)
+    expect(service.resume('c1')).toEqual({ remainingMs: 300 })
+    expect(await refusalOf(() => service.seek('other', 0))).toBe('that cue’s MIDI file is not playing')
+  })
+
   it('stops every file on a panic, with All Notes Off on the channels they used', async () => {
     await play(writeMidi('panic.mid'))
     clock.advance(10)

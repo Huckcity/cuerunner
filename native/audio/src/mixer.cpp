@@ -837,6 +837,7 @@ void Mixer::apply(const Command& cmd) {
         // A patch that has just come into being starts at its level; one that is moved
         // ramps to it over the next block, so a fader does not click.
         if (!wasDefined) bus.gainCurrent = bus.gainTarget;
+        bus.aux = cmd.busAux >= 0 && cmd.busAux < kMaxAuxOutputs ? cmd.busAux : -1;
         applied = true;
       }
       break;
@@ -849,6 +850,24 @@ void Mixer::apply(const Command& cmd) {
       // brought back to 0 dB still ramps there.
       outputsAtUnity_ = false;
       applied = true;
+      break;
+    }
+    case Command::AuxOutput: {
+      if (cmd.auxSlot >= 0 && cmd.auxSlot < kMaxAuxOutputs && !auxScratch_.empty()) {
+        auxChannels_[cmd.auxSlot] = std::max(0, std::min(kMaxOutputChannels, cmd.auxChannels));
+        for (float& peak : auxPeak_[cmd.auxSlot]) peak = 0.0f;
+        anyAux_ = false;
+        for (int slot = 0; slot < kMaxAuxOutputs; slot++) anyAux_ = anyAux_ || auxChannels_[slot] > 0;
+        applied = true;
+      }
+      break;
+    }
+    case Command::AuxLost: {
+      if (cmd.auxSlot >= 0 && cmd.auxSlot < kMaxAuxOutputs) {
+        ackVoices = activeVoiceCount();
+        loseAux(cmd.auxSlot);
+        applied = true;
+      }
       break;
     }
     case Command::Panic: {
@@ -1099,6 +1118,13 @@ void Mixer::render(float* out, int frames, int channels) {
     if (!bus.defined || bus.channels <= 0) continue;
     std::memset(busData(slot), 0, static_cast<size_t>(frames) * static_cast<size_t>(bus.channels) * sizeof(float));
   }
+  // So does each extra output device's.
+  if (anyAux_) {
+    for (int slot = 0; slot < kMaxAuxOutputs; slot++) {
+      if (auxChannels_[slot] <= 0) continue;
+      std::memset(auxData(slot), 0, static_cast<size_t>(frames) * static_cast<size_t>(auxChannels_[slot]) * sizeof(float));
+    }
+  }
 
   // Whether any voice has a patch, a live input or slices: read once a block, so a show using
   // none of them never reads those fields in the per-frame loop.
@@ -1204,16 +1230,24 @@ void Mixer::mixBuses(float* out, int frames, int channels) {
     const float* data = busData(slot);
     const double from = bus.gainCurrent;
     const double to = bus.gainTarget;
+    // The device it is mixed onto: the extra one it names while that is open, the main one
+    // otherwise.
+    float* dest = out;
+    int destChannels = channels;
+    if (bus.aux >= 0 && auxChannels_[bus.aux] > 0) {
+      dest = auxData(bus.aux);
+      destChannels = auxChannels_[bus.aux];
+    }
     for (int frame = 0; frame < frames; frame++) {
       const double gain = from == to ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
       const float* row = data + static_cast<size_t>(frame) * static_cast<size_t>(bus.channels);
-      float* outFrame = out + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+      float* outFrame = dest + static_cast<size_t>(frame) * static_cast<size_t>(destChannels);
       for (int channel = 0; channel < bus.channels; channel++) {
         const float value = static_cast<float>(static_cast<double>(row[channel]) * gain);
         const float level = std::fabs(value);
         if (level > bus.peak[channel]) bus.peak[channel] = level;
         const int output = bus.map[channel];
-        if (output >= 0 && output < channels) outFrame[output] += value;
+        if (output >= 0 && output < destChannels) outFrame[output] += value;
       }
     }
     bus.gainCurrent = to;
@@ -1233,6 +1267,8 @@ void Mixer::applyMaster(float* out, int frames, int channels) {
   const double from = masterCurrent_;
   const double to = masterTarget_;
   const bool flat = from == to;
+  // One master for every device: the extra ones take the same ramp, from the same values.
+  if (anyAux_) masterAux(frames, from, to);
   if (outputsAtUnity_) {
     for (int frame = 0; frame < frames; frame++) {
       const double gain = flat ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
@@ -1273,6 +1309,48 @@ void Mixer::applyMaster(float* out, int frames, int channels) {
     if (outputGainTarget_[channel] != 1.0) unity = false;
   }
   outputsAtUnity_ = unity;
+}
+
+void Mixer::masterAux(int frames, double from, double to) {
+  const bool flat = from == to;
+  for (int slot = 0; slot < kMaxAuxOutputs; slot++) {
+    const int channels = auxChannels_[slot];
+    if (channels <= 0) continue;
+    float* peaks = auxPeak_[slot];
+    for (int channel = 0; channel < channels; channel++) peaks[channel] = 0.0f;
+    float* data = auxData(slot);
+    for (int frame = 0; frame < frames; frame++) {
+      const double gain = flat ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
+      float* row = data + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+      for (int channel = 0; channel < channels; channel++) {
+        if (gain != 1.0) row[channel] = static_cast<float>(static_cast<double>(row[channel]) * gain);
+        const float level = std::fabs(row[channel]);
+        if (level > peaks[channel]) peaks[channel] = level;
+      }
+    }
+  }
+}
+
+/**
+ * An extra output device has gone. What was playing through its patches cannot be heard any
+ * more, so those voices end the way a lost main device ends every voice — `device-lost`, at
+ * once, a voice that had not begun yet `cancelled` — and nothing else is touched: the other
+ * devices' voices play on, and the master, a pause and every fade carry on as they were. The
+ * device stops being mixed, so its patches fall back to the main device's outputs of the same
+ * numbers for anything started after this, until the device is opened again.
+ */
+void Mixer::loseAux(int slot) {
+  const int64_t now = clockFrames_;
+  if (auxChannels_[slot] > 0) {
+    for (Voice& voice : voices_) {
+      if (!voice.active || voice.patch < 0 || buses_[voice.patch].aux != slot) continue;
+      finishVoice(voice, now, voice.started ? EndReason::DeviceLost : EndReason::Cancelled);
+    }
+  }
+  auxChannels_[slot] = 0;
+  for (float& peak : auxPeak_[slot]) peak = 0.0f;
+  anyAux_ = false;
+  for (int other = 0; other < kMaxAuxOutputs; other++) anyAux_ = anyAux_ || auxChannels_[other] > 0;
 }
 
 void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
@@ -1333,12 +1411,15 @@ void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell,
 }
 
 /**
- * The patches' meters, in a record of their own: the main snapshot is copied word by word on
- * every block and by every reader, and a show with no patches has nothing to add to it. Written
- * only while a patch is defined, and once more when the last one goes, so its meters read zero.
+ * The meters only some shows have — each patch's, and each extra output device's — in a record
+ * of their own: the main snapshot is copied word by word on every block and by every reader,
+ * and a show with no patch and no extra device has nothing to add to it. Written only while a
+ * patch is defined or an extra device is open, and once more when the last of them goes, so
+ * their meters read zero.
  */
-void Mixer::writeBusSnapshot(BusSnapshot& staging, SnapshotCell<BusSnapshot>& cell) const {
-  if (definedBuses_ == 0 && !busesPublished_) return;
+void Mixer::writeOptionalMeters(OptionalMeters& staging, SnapshotCell<OptionalMeters>& cell) const {
+  const bool any = definedBuses_ > 0 || anyAux_;
+  if (!any && !optionalMetersPublished_) return;
   for (int slot = 0; slot < kMaxPatches; slot++) {
     const Bus& bus = buses_[slot];
     staging.busChannels[slot] = bus.defined ? bus.channels : 0;
@@ -1346,7 +1427,13 @@ void Mixer::writeBusSnapshot(BusSnapshot& staging, SnapshotCell<BusSnapshot>& ce
       staging.busPeak[slot][channel] = bus.defined && channel < bus.channels ? bus.peak[channel] : 0.0f;
     }
   }
-  busesPublished_ = definedBuses_ > 0;
+  for (int slot = 0; slot < kMaxAuxOutputs; slot++) {
+    staging.auxChannels[slot] = auxChannels_[slot];
+    for (int channel = 0; channel < kMaxOutputChannels; channel++) {
+      staging.auxPeak[slot][channel] = channel < auxChannels_[slot] ? auxPeak_[slot][channel] : 0.0f;
+    }
+  }
+  optionalMetersPublished_ = any;
   cell.publish(staging);
 }
 

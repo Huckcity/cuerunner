@@ -4,6 +4,7 @@
 // preallocated mixer state.
 #pragma once
 
+#include "aux_output.h"
 #include "cache.h"
 #include "capture.h"
 #include "live_input.h"
@@ -56,6 +57,12 @@ struct EngineOptions {
   /** Offer the synthetic live inputs (`test:tone`, `test:ramp`) beside the real ones. The
    *  offline backend always offers them; a device backend only when asked, for the tests. */
   bool testInputs = false;
+  /** Offer the test output devices (`test:out-a`, `test:out-b`) beside the real ones. The
+   *  offline backend always offers them; a device backend only when asked, for the tests. */
+  bool testOutputs = false;
+  /** Offline: where the test output devices tee what they play, beside the render's own WAV.
+   *  A device backend tees them beside `capturePath`. */
+  std::string testOutputCapture;
 };
 
 struct EngineError {
@@ -114,6 +121,25 @@ struct StartResultDTO {
 struct CommandResultDTO {
   double atMs = 0.0;
   bool applied = false;
+};
+
+/** What defining a patch did: the device it plays on, and whether that is the one it asked for. */
+struct PatchResultDTO {
+  double atMs = 0.0;
+  bool applied = false;
+  /** The extra output device the patch plays on; empty for the main device. */
+  std::string device;
+  /** The patch named a device that would not open, and plays on the main device's outputs
+   *  of the same numbers instead. */
+  bool fallback = false;
+  /** Why the device it named would not open; empty unless `fallback`. */
+  std::string reason;
+};
+
+/** One extra output device's meter: each of its channels' peak, after the master level. */
+struct OutputMeterDTO {
+  std::string device;
+  std::vector<float> peaks;
 };
 
 struct CancelResultDTO {
@@ -286,9 +312,30 @@ class Engine {
                   const std::vector<int>& channels, StartOptions options, StartResultDTO& out, EngineError& error);
 
   // ── Output patches and the mixer ──────────────────────────────────────────────────
-  /** Defines (or clears) output patch `slot`: its channels onto device outputs, and its fader. */
-  bool setPatch(int slot, bool defined, const std::vector<int>& outputs, double gain, CommandResultDTO& out,
-                EngineError& error);
+  /**
+   * Defines (or clears) output patch `slot`: its channels onto the outputs of `device` (empty,
+   * or the main device's own id, is the main device), and its fader. A device the engine has
+   * not opened is opened here and kept open; one that will not open leaves the patch on the
+   * main device's outputs of the same numbers, and the answer says so and why.
+   */
+  bool setPatch(int slot, bool defined, const std::vector<int>& outputs, double gain, const std::string& device,
+                PatchResultDTO& out, EngineError& error);
+
+  // ── Extra output devices (aux_output.h) ─────────────────────────────────────────────
+  /** The output devices a patch can name, and the test ones when offered. */
+  bool outputDevices(std::vector<OutputDeviceInfo>& out, EngineError& error) const;
+  /**
+   * Opens an extra output device (or finds it open) — the reconnect for one that was lost —
+   * and brings the patches that named it back onto it.
+   */
+  bool openOutput(const OutputOpenOptions& options, OutputStatus& out, EngineError& error);
+  /** Closes an extra output device; its patches go to the main device. `closed` is false when none was open. */
+  bool closeOutput(const std::string& device, bool& closed, EngineError& error);
+  std::vector<OutputStatus> outputStatus() { return auxOutputs_.status(); }
+  /** Each open extra output device's meter as the last block left it. */
+  void outputMeters(std::vector<OutputMeterDTO>& out) const;
+  /** Test-only: runs the real notification classification against an open test output device. */
+  bool simulateOutputNotification(const std::string& device, int type, bool deliberate, EngineError& error);
   /** Every device output's own fader, linear, in output order; outputs not named are at unity. */
   bool setOutputGains(const std::vector<double>& gains, CommandResultDTO& out, EngineError& error);
   /** Each patch's meter as the last block left it: its channel count and each channel's peak. */
@@ -442,6 +489,20 @@ class Engine {
   void copySnapshot(MixSnapshot& out) const;
   std::string deviceIdString() const;
 
+  /**
+   * Opens an extra output device (or finds it open) and has the mixer mix for it: its slot,
+   * or -1 with the reason. The patch lock is the caller's.
+   */
+  int openAuxLocked(const OutputOpenOptions& options, std::string& error);
+  /** Points patch `slot` at a device (an extra one's slot, or -1 for the main one). The patch lock is the caller's. */
+  bool pointPatchLocked(int slot, int aux, EngineError& error);
+  /** The main device's own id, or empty when the engine has no device. */
+  std::string mainDeviceId() const;
+  /** The render thread's block for every open extra output device, and the simulated ones run. */
+  void pushAux(int frames);
+  /** Service thread: each extra output device that failed is reported, and its voices end. */
+  void handleAuxFailures();
+
   EngineOptions options_;
   std::string sessionId_;
   DecodedCache cache_;
@@ -454,6 +515,24 @@ class Engine {
   LtcOutputs ltcOutputs_;
   LtcInput ltcInput_;
   InputFeeds inputs_;
+  AuxOutputs auxOutputs_;
+
+  /**
+   * What each patch slot was last defined as, on the control side: the device it asked for
+   * and the one it was pointed at. A device opened again (a reconnect) brings back every
+   * patch that asked for it, and one closed sends them to the main device first, so a slot a
+   * device gave up never carries a patch onto the next device to take it. Opening, closing
+   * and pointing patches are serialised by `patchMutex_`, which the service thread never takes.
+   */
+  struct PatchState {
+    bool defined = false;
+    std::vector<int> outputs;
+    double gain = 1.0;
+    std::string device;
+    int aux = -1;
+  };
+  PatchState patches_[kMaxPatches];
+  std::mutex patchMutex_;
 
   std::unique_ptr<DeviceState> device_;
   mutable std::mutex deviceMutex_;
@@ -529,9 +608,10 @@ class Engine {
   // `snapshot_` is the writer's own staging copy; readers only ever see `snapshotCell_`.
   mutable MixSnapshot snapshot_;
   mutable SnapshotCell<MixSnapshot> snapshotCell_;
-  // The patches' meters, published apart so the main snapshot costs a show without patches nothing.
-  mutable BusSnapshot busSnapshot_;
-  mutable SnapshotCell<BusSnapshot> busSnapshotCell_;
+  // The patches' and extra devices' meters, published apart so the main snapshot costs a show
+  // without either nothing.
+  mutable OptionalMeters optionalMeters_;
+  mutable SnapshotCell<OptionalMeters> optionalMetersCell_;
   std::atomic<bool> running_{false};
   std::atomic<bool> backgroundStop_{false};
   std::thread background_;

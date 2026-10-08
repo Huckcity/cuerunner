@@ -40,6 +40,10 @@ import type {
   AudioInputOpenOptions,
   AudioInputStatus,
   AudioMeters,
+  AudioOutputDevice,
+  AudioOutputOpenOptions,
+  AudioOutputStatus,
+  AudioPatchResult,
   AudioProgress,
   AudioSeekResult,
   AudioRegion,
@@ -589,10 +593,32 @@ export class AudioEngineClient {
     return bridge().inputStatus()
   }
 
-  /** Defines output patch `slot`, or clears it with null. */
-  async patch(slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult> {
-    const result = await bridge().patch(slot, outputs, gain)
+  /**
+   * Defines output patch `slot` on `device` ('' is the main device), or clears it with null.
+   * The answer says which device it plays on, and why when that is not the one it named.
+   */
+  async patch(slot: number, outputs: number[] | null, gain: number, device = ''): Promise<AudioPatchResult> {
+    const result = await bridge().patch(slot, outputs, gain, device)
     return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** The output devices a patch can name. */
+  outputs(): Promise<AudioOutputDevice[]> {
+    return bridge().outputs()
+  }
+
+  /** Opens an extra output device — or again, after it was lost: the reconnect. */
+  outputOpen(options: AudioOutputOpenOptions): Promise<AudioOutputStatus> {
+    return bridge().outputOpen(options)
+  }
+
+  outputClose(device: string): Promise<{ closed: boolean }> {
+    return bridge().outputClose(device)
+  }
+
+  /** Every extra output device: whether it plays, its clock against the main one, its buffer. */
+  outputStatus(): Promise<AudioOutputStatus[]> {
+    return bridge().outputStatus()
   }
 
   /** Every device output's own fader, linear. */

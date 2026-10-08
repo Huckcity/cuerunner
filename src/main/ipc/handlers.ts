@@ -29,6 +29,8 @@ import {
   type AudioStartInputPayload,
   type AudioPatchPayload,
   type AudioOutputGainsPayload,
+  type AudioOutputOpenPayload,
+  type AudioOutputClosePayload,
   type AudioConfigurePayload,
   type AudioEngineEvent,
   type AudioFadePayload,
@@ -57,7 +59,8 @@ import {
   type MidiFilePauseResult,
   type MidiFilePlayPayload,
   type MidiFilePlayResult,
-  type MidiFileResumeResult
+  type MidiFileResumeResult,
+  type MidiFileSeekPayload
 } from '../../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../../shared/ipc/network'
 import {
@@ -153,7 +156,7 @@ import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces }
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { UPDATE_CHANNELS, type UpdateActionResult, type UpdateCheckResult, type WhatsNew } from '../../shared/ipc/update'
 import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../../shared/update'
-import { openDownloads, updates } from '../update/main'
+import { closeUpdates, openDownloads, updates } from '../update/main'
 import { createMachineRedundancy } from '../redundancy/machine'
 import { createMachineDmx } from '../dmx/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
@@ -517,9 +520,16 @@ export function registerIpcHandlers(): void {
     audioVerb(() =>
       audioEngine.startInput(payload.cueId, payload.whenMs, payload.device, payload.channels, payload.options)))
   ipcMain.handle(AUDIO_CHANNELS.patch, (_, payload: AudioPatchPayload) =>
-    audioVerb(() => audioEngine.patch(payload.slot, payload.outputs, payload.gain)))
+    audioVerb(() => audioEngine.patch(payload.slot, payload.outputs, payload.gain, payload.device ?? '')))
   ipcMain.handle(AUDIO_CHANNELS.outputGains, (_, payload: AudioOutputGainsPayload) =>
     audioVerb(() => audioEngine.outputGains(payload.gains)))
+  // The extra output devices a patch can name, and their state.
+  ipcMain.handle(AUDIO_CHANNELS.outputs, () => audioVerb(() => audioEngine.outputs()))
+  ipcMain.handle(AUDIO_CHANNELS.outputOpen, (_, payload: AudioOutputOpenPayload) =>
+    audioVerb(() => audioEngine.outputOpen(payload)))
+  ipcMain.handle(AUDIO_CHANNELS.outputClose, (_, payload: AudioOutputClosePayload) =>
+    audioVerb(() => audioEngine.outputClose(payload.device)))
+  ipcMain.handle(AUDIO_CHANNELS.outputStatus, () => audioVerb(() => audioEngine.outputStatus()))
 
   // Every engine event is both forwarded to the window and kept for the safety net: a
   // burst — a panic stopping twenty voices at once — is one message rather than twenty,
@@ -578,6 +588,8 @@ export function registerIpcHandlers(): void {
     refusalValue(async () => ({ ok: true as const, ...midiFiles.pause(cmd.cueId) })))
   ipcMain.handle(MIDI_CHANNELS.fileResume, (_, cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
     refusalValue(async () => ({ ok: true as const, ...midiFiles.resume(cmd.cueId) })))
+  ipcMain.handle(MIDI_CHANNELS.fileSeek, (_, cmd: MidiFileSeekPayload): Promise<MidiFileResumeResult> =>
+    refusalValue(async () => ({ ok: true as const, ...midiFiles.seek(cmd.cueId, cmd.positionMs) })))
   ipcMain.handle(MIDI_CHANNELS.fileStop, (_, cmd: MidiFileCuePayload): boolean => midiFiles.stop(cmd.cueId))
 
   // OSC
@@ -798,6 +810,8 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(UPDATE_CHANNELS.whatsNew, (): Promise<WhatsNew | null> => updates().takeWhatsNew())
   ipcMain.handle(UPDATE_CHANNELS.openDownloads, (): Promise<void> => openDownloads())
+  // The schedule and any download stop with the app, and no write is left landing behind it.
+  app.on('will-quit', () => closeUpdates())
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.

@@ -19,42 +19,11 @@ namespace {
 
 constexpr double kTwoPi = 6.28318530717958647692;
 
-/**
- * The controller's gains, on the fill error in seconds of buffer. Proportional 0.3 corrects
- * an excess over about three seconds; integral 0.02 gives the loop a natural frequency of
- * 0.14 rad/s, just past critical damping — slow enough that the correction is never heard as
- * pitch (a few parts per million once locked) and fast enough to lock a 1000 ppm clock error
- * inside half a minute. The nudge is held to ±0.5 %: no device clock is that far off, and a
- * feed that needs more has stalled and is resynced.
- */
-constexpr double kProportional = 0.3;
-constexpr double kIntegral = 0.02;
-constexpr double kMaxAdjust = 0.005;
-/** The fill is averaged over this long before the controller reads it, seconds. */
-constexpr double kFillAverageSeconds = 1.0;
-/** Headroom kept above the largest delivery and one block's need, ms. */
-constexpr double kMarginMs = 3.0;
-/**
- * Headroom learned from the device: a delivery that arrives late enough to bring the buffer
- * within a quarter of the margin of running dry adds a millisecond, at most once a second
- * and to at most this much. A device whose callbacks wander is given the room it needs
- * before it underruns rather than after, and one that does not keeps the latency it had.
- */
-constexpr double kMaxLearnedMs = 40.0;
-constexpr double kLearnStepMs = 1.0;
-constexpr double kLearnCooldownSeconds = 1.0;
 /** The synthetic sources' level: −12 dBFS. */
 constexpr float kToneLevel = 0.25f;
 constexpr double kToneHz = 1000.0;
 /** A ramp counts the input's frames modulo this, so a test can read the frame back. */
 constexpr int64_t kRampPeriod = 1 << 16;
-
-float catmullRom(float p0, float p1, float p2, float p3, float t) {
-  const float t2 = t * t;
-  const float t3 = t2 * t;
-  return 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
-                 (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
-}
 
 void captureCallback(ma_device* device, void* output, const void* input, ma_uint32 frameCount) {
   (void)output;
@@ -73,31 +42,11 @@ struct InputFeed::Device {
   bool deviceReady = false;
 };
 
-InputFeed::InputFeed() {
-  for (auto& peak : peaks_) peak.store(0.0f, std::memory_order_relaxed);
-}
+InputFeed::InputFeed() = default;
 
 InputFeed::~InputFeed() { close(); }
 
-void InputFeed::push(const float* frames, int count, double at) {
-  if (count <= 0 || channels_ <= 0) return;
-  const uint64_t write = writeHead_.load(std::memory_order_relaxed);
-  const uint64_t released = releasedHead_.load(std::memory_order_acquire);
-  if (write + static_cast<uint64_t>(count) - released > static_cast<uint64_t>(kRingFrames)) {
-    // The reader has fallen a whole ring behind: what it has not read yet is older than
-    // what is arriving, and the arrival is what is dropped — never a wait on a device thread.
-    overruns_.fetch_add(1, std::memory_order_relaxed);
-    return;
-  }
-  const size_t stride = static_cast<size_t>(channels_);
-  for (int i = 0; i < count; i++) {
-    const size_t at = static_cast<size_t>((write + static_cast<uint64_t>(i)) & (kRingFrames - 1)) * stride;
-    std::memcpy(&ring_[at], frames + static_cast<size_t>(i) * stride, stride * sizeof(float));
-  }
-  if (count > maxChunk_.load(std::memory_order_relaxed)) maxChunk_.store(count, std::memory_order_relaxed);
-  lastPushAt_.store(at, std::memory_order_relaxed);
-  writeHead_.store(write + static_cast<uint64_t>(count), std::memory_order_release);
-}
+void InputFeed::push(const float* frames, int count, double at) { ring_.push(frames, count, at); }
 
 void InputFeed::captured(const void* frames, uint32_t count) {
   if (state_.load(std::memory_order_acquire) != kRunning) return;
@@ -183,112 +132,9 @@ void InputFeed::pull(int frames, int outRate, int64_t clockFrame) {
 
 void InputFeed::pullRunning(int frames, int outRate, int64_t clockFrame) {
   if (simulated_) advanceSimulation(clockFrame, outRate);
-  if (resetRequested_.exchange(false, std::memory_order_acq_rel)) {
-    primed_ = false;
-    integral_ = 0.0;
-    adjust_ = 0.0;
-    learned_ = 0.0;
-    sinceLearned_ = kLearnCooldownSeconds;
-  }
   frames = std::min(frames, kMaxOutputFrames);
-  const size_t stride = static_cast<size_t>(channels_);
-  float* out = block_.data();
-
-  const double base = static_cast<double>(inRate_) / static_cast<double>(outRate);
-  const double need = static_cast<double>(frames) * base * (1.0 + kMaxAdjust) + 4.0;
-  const double chunk = static_cast<double>(std::max(1, maxChunk_.load(std::memory_order_relaxed)));
-  const double framesPerMs = static_cast<double>(inRate_) / 1000.0;
-  target_ = latencyMs_ > 0.0 ? std::max(need, latencyMs_ * framesPerMs)
-                             : need + chunk + (kMarginMs + learned_) * framesPerMs;
-  const double dt = static_cast<double>(frames) / static_cast<double>(outRate);
-  sinceLearned_ += dt;
-  const double write = static_cast<double>(writeHead_.load(std::memory_order_acquire));
-
-  const auto silence = [&]() {
-    std::memset(out, 0, static_cast<size_t>(frames) * stride * sizeof(float));
-  };
-
-  if (!primed_) {
-    // Nothing is played until the target is there to be held: starting short is an
-    // underrun a block later.
-    if (write < target_ + 2.0) {
-      silence();
-      return;
-    }
-    readPos_ = write - target_;
-    fillAverage_ = target_ + chunk / 2.0;
-    primed_ = true;
-  }
-
-  double available = write - readPos_;
-  // What the device has captured since it last delivered, estimated from when that was: the
-  // buffer the controller holds is what is buffered on both sides of the callback, so a
-  // period handed over in one piece is not read as the buffer jumping by a period. Without
-  // it, a device whose period matches the output's block reads as a buffer that does not
-  // move at all between deliveries — and a clock error shows up as a step every few seconds
-  // rather than a slope the controller can follow.
   const double now = simulated_ ? static_cast<double>(clockFrame) / static_cast<double>(outRate) : steadyNowMs() / 1000.0;
-  const double sinceDelivery = now - lastPushAt_.load(std::memory_order_relaxed);
-  const double undelivered = std::clamp(sinceDelivery * static_cast<double>(inRate_), 0.0, chunk);
-  if (available < need) {
-    // The device stopped delivering (or never kept up): silence, and lock again once the
-    // buffer is back at its target — with more room, since the room it had was not enough.
-    underruns_.fetch_add(1, std::memory_order_relaxed);
-    learned_ = std::min(kMaxLearnedMs, learned_ + 2.0 * kLearnStepMs);
-    primed_ = false;
-    silence();
-    return;
-  }
-  if (latencyMs_ <= 0.0 && available - need < 0.25 * kMarginMs * framesPerMs && sinceLearned_ >= kLearnCooldownSeconds &&
-      learned_ < kMaxLearnedMs) {
-    learned_ += kLearnStepMs;
-    sinceLearned_ = 0.0;
-  }
-  const double runaway = target_ + std::max(4.0 * target_, 0.2 * static_cast<double>(inRate_));
-  if (available > runaway) {
-    // A stall that delivered its backlog at once: playing it would keep the whole backlog
-    // as latency for good. The buffer goes back to its target, and that is counted.
-    readPos_ = write - target_;
-    fillAverage_ = target_ + chunk / 2.0;
-    available = target_;
-    resyncs_.fetch_add(1, std::memory_order_relaxed);
-  }
-
-  const double weight = std::min(1.0, dt / kFillAverageSeconds);
-  fillAverage_ += weight * (available + undelivered - fillAverage_);
-  // The target is for what is delivered; the average also counts what is waiting in the
-  // device, half a period on average, so that half is where the two meet.
-  const double error = (fillAverage_ - (target_ + chunk / 2.0)) / static_cast<double>(inRate_);
-  integral_ = std::clamp(integral_ + error * dt, -kMaxAdjust / kIntegral, kMaxAdjust / kIntegral);
-  adjust_ = std::clamp(kProportional * error + kIntegral * integral_, -kMaxAdjust, kMaxAdjust);
-  const double step = base * (1.0 + adjust_);
-
-  float blockPeak[kMaxOutputChannels] = {};
-  for (int f = 0; f < frames; f++) {
-    const int64_t index = static_cast<int64_t>(std::floor(readPos_));
-    const float t = static_cast<float>(readPos_ - static_cast<double>(index));
-    float* frameOut = out + static_cast<size_t>(f) * stride;
-    for (size_t c = 0; c < stride; c++) {
-      const int channel = static_cast<int>(c);
-      const float value = catmullRom(sampleAt(index - 1, channel), sampleAt(index, channel),
-                                     sampleAt(index + 1, channel), sampleAt(index + 2, channel), t);
-      frameOut[c] = value;
-      const float level = std::fabs(value);
-      if (level > blockPeak[c]) blockPeak[c] = level;
-    }
-    readPos_ += step;
-  }
-  const int64_t floorRead = static_cast<int64_t>(std::floor(readPos_)) - 2;
-  if (floorRead > 0) releasedHead_.store(static_cast<uint64_t>(floorRead), std::memory_order_release);
-
-  for (size_t c = 0; c < stride && c < static_cast<size_t>(kMaxOutputChannels); c++) {
-    if (blockPeak[c] > peaks_[c].load(std::memory_order_relaxed)) peaks_[c].store(blockPeak[c], std::memory_order_relaxed);
-  }
-  // The age of what is played, from when the device captured it: the buffer, plus half a
-  // delivery on average — a sample waits in the device until its whole period is handed over.
-  latencyPublished_.store(fillAverage_ * 1000.0 / static_cast<double>(inRate_), std::memory_order_relaxed);
-  targetPublished_.store(target_ * 1000.0 / static_cast<double>(inRate_), std::memory_order_relaxed);
-  ratioPublished_.store(adjust_ * 1e6, std::memory_order_relaxed);
+  ring_.pull(block_.data(), frames, outRate, now);
 }
 
 bool InputFeed::open(const InputOpenOptions& options, int outRate, bool offline, std::string& error) {
@@ -365,9 +211,6 @@ bool InputFeed::open(const InputOpenOptions& options, int outRate, bool offline,
   // Buffers sized once: the ring for this many channels, the block for the most a block can
   // ever be. The render thread is out of this slot (close() waited for it), so a resize here
   // races nothing.
-  if (ring_.size() < static_cast<size_t>(kRingFrames) * static_cast<size_t>(channels)) {
-    ring_.assign(static_cast<size_t>(kRingFrames) * static_cast<size_t>(channels), 0.0f);
-  }
   if (block_.empty()) {
     block_.assign(static_cast<size_t>(kMaxOutputFrames) * static_cast<size_t>(kMaxOutputChannels), 0.0f);
   }
@@ -379,26 +222,17 @@ bool InputFeed::open(const InputOpenOptions& options, int outRate, bool offline,
   simulated_ = synthetic && offline;
   skewPpm_ = options.skewPpm;
   periodFrames_ = std::max(0, options.periodFrames);
-  latencyMs_ = std::max(0.0, options.latencyMs);
   if (synthetic) {
     const int period = periodFrames_ > 0 ? periodFrames_ : std::max(1, rate / 100);
     scratch_.assign(static_cast<size_t>(period) * static_cast<size_t>(channels), 0.0f);
   }
-  lastPushAt_.store(0.0, std::memory_order_relaxed);
   jitterMs_ = std::clamp(options.jitterMs, 0.0, 100.0);
   jitterSeed_ = 0x9E3779B97F4A7C15ULL;
   jitterDrawn_ = false;
   lastDelivery_ = 0.0;
   generated_ = 0;
-  writeHead_.store(0, std::memory_order_relaxed);
-  releasedHead_.store(0, std::memory_order_relaxed);
-  maxChunk_.store(synthetic ? std::max(1, periodFrames_ > 0 ? periodFrames_ : rate / 100) : 0,
-                  std::memory_order_relaxed);
-  underruns_.store(0);
-  overruns_.store(0);
-  resyncs_.store(0);
-  for (auto& peak : peaks_) peak.store(0.0f, std::memory_order_relaxed);
-  resetRequested_.store(true, std::memory_order_release);
+  ring_.configure(channels, rate, options.latencyMs,
+                  synthetic ? std::max(1, periodFrames_ > 0 ? periodFrames_ : rate / 100) : 0);
   deviceState_ = std::move(device);
   state_.store(kRunning, std::memory_order_seq_cst);
 
@@ -436,17 +270,15 @@ InputFeedStatus InputFeed::status(int slot) {
   out.sampleRate = inRate_;
   out.running = running();
   out.synthetic = synthetic_;
-  out.latencyMs = latencyPublished_.load(std::memory_order_relaxed);
-  out.targetMs = targetPublished_.load(std::memory_order_relaxed);
-  out.ratioPpm = ratioPublished_.load(std::memory_order_relaxed);
-  out.periodFrames = maxChunk_.load(std::memory_order_relaxed);
-  out.underruns = underruns_.load(std::memory_order_relaxed);
-  out.overruns = overruns_.load(std::memory_order_relaxed);
-  out.resyncs = resyncs_.load(std::memory_order_relaxed);
-  out.capturedFrames = writeHead_.load(std::memory_order_relaxed);
-  for (int c = 0; c < channels_ && c < kMaxOutputChannels; c++) {
-    out.peaks.push_back(peaks_[c].exchange(0.0f, std::memory_order_relaxed));
-  }
+  out.latencyMs = ring_.latencyMs();
+  out.targetMs = ring_.targetMs();
+  out.ratioPpm = ring_.ratioPpm();
+  out.periodFrames = ring_.maxChunk();
+  out.underruns = ring_.underruns();
+  out.overruns = ring_.overruns();
+  out.resyncs = ring_.resyncs();
+  out.capturedFrames = ring_.written();
+  for (int c = 0; c < channels_ && c < kMaxOutputChannels; c++) out.peaks.push_back(ring_.takePeak(c));
   return out;
 }
 

@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
-import type { AudioDeviceInfo } from '../../../../shared/audio'
+import { syncAudioRouting } from '../../engine/audioRouting'
+import { useOutputDevices } from '../../hooks/useOutputDevices'
+import { useAudioEngineInfo } from '../../hooks/useAudioEngineInfo'
+import type { AudioOutputStatus } from '../../../../shared/audio'
 import {
   audioRoutingOf,
   newPatchId,
@@ -36,24 +39,53 @@ export function parseChannels(text: string): number[] | null {
   return outputs.length > 0 && outputs.length <= 32 ? outputs : null
 }
 
+/** A clock error as the readout writes it: signed, to a tenth of a part per million. */
+export function formatDriftPpm(ppm: number): string {
+  const rounded = Math.round(ppm * 10) / 10
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : '±'}${Math.abs(rounded).toFixed(1)} ppm`
+}
+
+/**
+ * One extra output device's state in a line: playing, its rate, how far its clock runs from
+ * the show's device's and how far behind it the device sounds — or lost, and why.
+ */
+export function outputDeviceLine(status: AudioOutputStatus): string {
+  if (status.failed) return `Lost${status.error ? ` — ${status.error}` : ''}`
+  if (!status.running) return 'Closed'
+  const latency = status.latencyMs + status.deviceLatencyMs
+  return `Playing · ${status.sampleRate.toLocaleString()} Hz · ${status.channels} ch · ` +
+    `clock ${formatDriftPpm(status.driftPpm)} · ${latency.toFixed(1)} ms behind`
+}
+
 /**
  * The show's routing settings, in Settings → Audio: its output patches (a name, the device
- * they were made for and the outputs they are), the patch audition plays through, and the
- * loudness a cue is normalised to.
+ * they play on and the outputs they are), the devices they play on as the engine has them,
+ * the patch audition plays through, and the loudness a cue is normalised to.
  */
 export function AudioRoutingSection() {
   const settings = useStore(s => s.audioSettings)
   const updateAudioSettings = useStore(s => s.updateAudioSettings)
   const routing = useMemo(() => audioRoutingOf(settings), [settings])
-  const [devices, setDevices] = useState<AudioDeviceInfo[]>([])
-  const [engineDevice, setEngineDevice] = useState<string | null>(null)
+  const { statuses, devices, fallbacks, main, refresh, relist } = useOutputDevices({ listDevices: true })
+  const { info } = useAudioEngineInfo()
+  const [reconnecting, setReconnecting] = useState<string | null>(null)
+  const [reconnectError, setReconnectError] = useState<{ device: string; message: string } | null>(null)
 
-  useEffect(() => {
-    let current = true
-    audioEngine.devices().then(list => { if (current) setDevices(list) }).catch(() => {})
-    audioEngine.info().then(info => { if (current) setEngineDevice(info.deviceId) }).catch(() => {})
-    return () => { current = false }
-  }, [])
+  const reconnect = async (device: string): Promise<void> => {
+    setReconnecting(device)
+    setReconnectError(null)
+    try {
+      await audioEngine.outputOpen({ device })
+      // The engine brings back every patch that named it; the show's routing is sent again
+      // so a fader moved while it was gone is where the show says.
+      await syncAudioRouting(useStore.getState().audioSettings, true)
+    } catch (error) {
+      setReconnectError({ device, message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setReconnecting(null)
+      refresh()
+    }
+  }
 
   const write = (next: AudioRouting): void =>
     updateAudioSettings(withAudioRouting(useStore.getState().audioSettings, next))
@@ -80,7 +112,7 @@ export function AudioRoutingSection() {
       <div className="field-section-title">Output patches</div>
       <div className="patch-list">
         {routing.patches.map(patch => {
-          const elsewhere = patch.deviceId !== '' && engineDevice !== null && patch.deviceId !== engineDevice
+          const fallback = fallbacks.find(entry => entry.patchId === patch.id)
           return (
             <div key={patch.id} className="patch-entry" data-patch={patch.id}>
               <div className="patch-row">
@@ -89,8 +121,10 @@ export function AudioRoutingSection() {
                 <select aria-label="Patch device" className="patch-device" value={patch.deviceId}
                   onChange={e => setPatch(patch.id, { deviceId: e.target.value })}>
                   <option value="">The show's device</option>
-                  {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
-                  {patch.deviceId !== '' && !devices.some(device => device.id === patch.deviceId) && (
+                  {devices.filter(device => device.id !== main.id).map(device => (
+                    <option key={device.id} value={device.id}>{device.name}</option>
+                  ))}
+                  {patch.deviceId !== '' && patch.deviceId !== main.id && !devices.some(device => device.id === patch.deviceId) && (
                     <option value={patch.deviceId}>{patch.deviceId} (not connected)</option>
                   )}
                 </select>
@@ -102,9 +136,10 @@ export function AudioRoutingSection() {
                   }} />
                 <button className="inspector-btn patch-remove" onClick={() => removePatch(patch.id)}>Remove</button>
               </div>
-              {elsewhere && (
-                <p className="inspector-hint patch-elsewhere">
-                  Made for another device: it plays on outputs {patchChannelsLabel(patch.channels)} of the one in use.
+              {fallback && (
+                <p className="inspector-hint patch-fallback"
+                  title={`Plays on outputs ${fallback.outputs} of ${fallback.to}: ${fallback.reason}.`}>
+                  Plays on outputs {fallback.outputs} of {fallback.to}: {fallback.reason}.
                 </p>
               )}
             </div>
@@ -115,6 +150,42 @@ export function AudioRoutingSection() {
         <button className="inspector-btn patch-add" onClick={addPatch} disabled={routing.patches.length >= 16}>
           Add patch
         </button>
+        <button className="inspector-btn output-relist" onClick={() => {
+          // A device plugged in since the show loaded: listed again, and every patch sent again,
+          // so one that fell back opens on it.
+          relist()
+          void syncAudioRouting(useStore.getState().audioSettings, true).finally(refresh)
+        }}>Look for devices</button>
+      </div>
+      <div className="field-section-title">Output devices</div>
+      <div className="output-device-list">
+        <div className="field-row output-device" data-device="main">
+          <label>{main.name || 'The show\'s device'}</label>
+          <span className="settings-info output-device-state">
+            {info === null
+              ? 'Reading the engine…'
+              : `The show's device · ${info.sampleRate.toLocaleString()} Hz · the clock the others follow` +
+                (info.latencyMs !== null && info.latencyMs > 0 ? ` · ${info.latencyMs.toFixed(1)} ms` : '')}
+          </span>
+        </div>
+        {statuses.map(status => (
+          <div key={status.device} className="field-row output-device" data-device={status.device}
+            data-state={status.failed ? 'lost' : status.running ? 'playing' : 'closed'}>
+            <label>{status.name}</label>
+            <span className="settings-info output-device-state"
+              title={status.running
+                ? `The lock holds ${status.latencyMs.toFixed(1)} ms; the device's own buffer is ${status.deviceLatencyMs.toFixed(1)} ms`
+                : undefined}>
+              {reconnectError?.device === status.device ? `Lost — ${reconnectError.message}` : outputDeviceLine(status)}
+            </span>
+            {status.failed && (
+              <button className="inspector-btn output-reconnect" disabled={reconnecting !== null}
+                onClick={() => { void reconnect(status.device) }}>
+                Reconnect
+              </button>
+            )}
+          </div>
+        ))}
       </div>
       <div className="field-row">
         <label htmlFor="audition-patch">Audition output</label>
