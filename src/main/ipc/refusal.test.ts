@@ -26,6 +26,8 @@ import { SCRIPT_CHANNELS } from '../../shared/ipc/script'
 import { SHOW_CHANNELS } from '../../shared/ipc/show'
 import { WORKSPACE_CHANNELS } from '../../shared/ipc/workspace'
 import { QLAB_CHANNELS } from '../../shared/ipc/qlab'
+import { MIDI_CHANNELS } from '../../shared/ipc/midi'
+import { MIDI_FILE_IDENTITY_MAP } from '../../shared/midiFile'
 import type { Workspace } from '../../shared/workspace'
 import { registerIpcHandlers } from './handlers'
 
@@ -592,6 +594,41 @@ describe('the EW-DX credential channels', () => {
     const call = async (channel: string, id: unknown): Promise<unknown> => handler(channel)('event', id)
     await expect(call(SHOW_CHANNELS.ewDxCredentials, 42)).rejects.toThrow(/source id/)
     await expect(call(SHOW_CHANNELS.ewDxForget, '')).rejects.toThrow(/source id/)
+  })
+})
+
+describe('the MIDI File channels', () => {
+  it('answers a file that is not MIDI with its refusal arm, naming the file', async () => {
+    const file = join(ends.userData.path, 'setlist.mid')
+    writeFileSync(file, 'a set list, saved with the wrong name')
+
+    const result = await handler(MIDI_CHANNELS.fileInspect)('event', { filePath: file })
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'setlist.mid: this is not a MIDI file: it does not begin with a MIDI header'
+    })
+  })
+
+  it('answers a play whose file is not there with its refusal arm', async () => {
+    const result = await handler(MIDI_CHANNELS.filePlay)('event', {
+      cueId: 'f1',
+      filePath: join(ends.userData.path, 'gone.mid'),
+      portName: '',
+      options: {
+        rate: 1, startMs: 0, endMs: null, loopCount: 0,
+        channelMap: [...MIDI_FILE_IDENTITY_MAP], transpose: 0, transposeDrums: false
+      },
+      offsetMs: 0
+    })
+
+    expect(result).toEqual({ ok: false, error: 'gone.mid is not there' })
+  })
+
+  it('answers a hold for a cue whose file is not playing with its refusal arm', async () => {
+    const result = await handler(MIDI_CHANNELS.filePause)('event', { cueId: 'nothing' })
+
+    expect(result).toEqual({ ok: false, error: 'that cue’s MIDI file is not playing' })
   })
 })
 

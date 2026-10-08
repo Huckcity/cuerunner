@@ -314,15 +314,35 @@ describe('what counts as an edit, per cue type and field', () => {
     ])
   })
 
-  it('reads duration as an edit on every cue type but audio', () => {
+  it('reads duration as an edit on every cue type but the two whose length is measured', () => {
+    // An audio cue's length is the engine's measurement and a MIDI File cue's is main's
+    // reading of its file's tempo map; every other type's is a number somebody typed.
+    const measured: string[] = ['audio', 'midiFile']
     for (const type of CUE_TYPES) {
       const diff = diffWorkspaces(
         workspace([cueOf(type, { id: 'c', duration: 100 })]),
         workspace([cueOf(type, { id: 'c', duration: 200 })])
       )
       const fields = diff.changed.flatMap(change => change.fields?.map(field => field.field) ?? [])
-      expect(fields, `duration on a ${type} cue`).toEqual(type === 'audio' ? [] : ['duration'])
+      expect(fields, `duration on a ${type} cue`).toEqual(measured.includes(type) ? [] : ['duration'])
     }
+  })
+
+  it('reads a MIDI File cue pointed at another file as an edit, by the file’s name', () => {
+    // It has no saved route beside its path, so the comparison reads the path's own file
+    // name, the way it reads an audio cue saved before routes existed: choosing another
+    // file reaches history, and the same file on another machine does not.
+    const diff = diffWorkspaces(
+      workspace([cueOf('midiFile', { id: 'c', filePath: '/shows/act1.mid' })]),
+      workspace([cueOf('midiFile', { id: 'c', filePath: '/shows/act2.mid' })])
+    )
+    const fields = diff.changed.flatMap(change => change.fields?.map(field => field.field) ?? [])
+    expect(fields).toEqual(['media'])
+    const moved = diffWorkspaces(
+      workspace([cueOf('midiFile', { id: 'c', filePath: '/shows/act1.mid' })]),
+      workspace([cueOf('midiFile', { id: 'c', filePath: '/elsewhere/act1.mid' })])
+    )
+    expect(moved.changed).toEqual([])
   })
 
   it('never reads a route, an identity or a measured region as an edit', () => {

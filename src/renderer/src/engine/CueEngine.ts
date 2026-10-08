@@ -3,6 +3,7 @@ import type {
   MscCue,
   MicCue
 } from '../../../shared/cue'
+import type { MidiFileCue } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
 import { audioEngine } from './audioEngineClient'
 import type {
@@ -20,6 +21,13 @@ import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
 import { sendMsc } from './showControl'
 import { sendMic } from './mic'
+import {
+  NO_MIDI_FILE_SELECTED,
+  pauseMidiFile as holdMidiFile,
+  playMidiFile,
+  resumeMidiFile as releaseHeldMidiFile,
+  stopMidiFile
+} from './midiFile'
 import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
@@ -741,6 +749,9 @@ export class CueEngine {
         // A note has nothing to do: it completes where it began, so a chain runs through it.
         finish(at)
         break
+      case 'midiFile':
+        this.executeMidiFile(cue as MidiFileCue, run, at, finish)
+        break
     }
   }
 
@@ -934,6 +945,90 @@ export class CueEngine {
         detail.error = errorMessage(error)
       })
       .finally(() => finish(this.now(), detail))
+  }
+
+  /**
+   * Plays a MIDI File cue's file from main, where the port is. Main answers with how long
+   * the run has left — the file's tempo map, the region, the rate and the loops all worked
+   * out there — so the run's end is planned the way an audio cue's is, and the cue completes
+   * and the show follows on by itself. A run that loops until it is stopped has no end to
+   * plan: it holds the show until STOP, or a stop cue, takes it away.
+   */
+  private executeMidiFile(cue: MidiFileCue, run: CueRun, at: number, finish: Finish): void {
+    if (!cue.filePath) {
+      // Like an audio cue with no file: it takes no time, and it says it played nothing.
+      finish(at, { outcome: 'error', error: NO_MIDI_FILE_SELECTED })
+      return
+    }
+    const sentAt = this.now()
+    playMidiFile(cue, cue.portName || this.deps!.getMidiDefaultPort(), run.seekMs)
+      .then(result => {
+        if (run.cancelled || this.isStale(run.generation)) return
+        if (!result.ok) {
+          finish(this.now(), { outcome: 'error', error: result.error })
+          return
+        }
+        // The length a whole run takes, as main worked it out: what the row shows, and what
+        // a group's own length is summed from.
+        if (run.seekMs === 0 && result.remainingMs !== null) {
+          this.deps!.syncCueDuration(cue.id, Math.round(result.remainingMs))
+        }
+        this.planMidiFileEnd(run, sentAt, result.remainingMs, finish)
+      })
+      .catch(error => {
+        if (run.cancelled) return
+        finish(this.now(), { outcome: 'error', error: errorMessage(error) })
+      })
+  }
+
+  /** Plans a MIDI file run's end `remainingMs` after `from`, replacing any end it had. */
+  private planMidiFileEnd(run: CueRun, from: number, remainingMs: number | null, finish: Finish): void {
+    if (run.endTask !== null) { this.scheduler!.cancel(run.endTask); run.endTask = null }
+    if (run.releaseTask !== null && !run.released) { this.scheduler!.cancel(run.releaseTask); run.releaseTask = null }
+    if (remainingMs === null) {
+      run.endAt = null
+      run.plannedMs = null
+      return
+    }
+    run.endAt = from + remainingMs
+    run.plannedMs = remainingMs
+    this.armAudioEndTask(run, finish)
+    this.planRelease(run, run.endAt)
+  }
+
+  /**
+   * Holds a running MIDI File cue where it is. Its planned end is taken away while it is
+   * held — a held cue must not complete and move the show on — and main releases what it
+   * has sounding, so a held file is silence rather than a chord left down.
+   */
+  pauseMidiFile(cueId: string): void {
+    const run = this.runs.get(cueId)
+    if (!run || run.cancelled || run.phase !== 'running') return
+    if (this.deps!.getCues().find(c => c.id === cueId)?.type !== 'midiFile') return
+    this.planMidiFileEnd(run, this.now(), null, run.finish!)
+    holdMidiFile(cueId)
+  }
+
+  /** Plays a held MIDI File cue on, and plans its end again from what main says is left. */
+  resumeMidiFile(cueId: string): void {
+    const run = this.runs.get(cueId)
+    if (!run || run.cancelled || run.phase !== 'running' || !run.finish) return
+    const cue = this.deps!.getCues().find(c => c.id === cueId)
+    if (cue?.type !== 'midiFile') return
+    const from = this.now()
+    void releaseHeldMidiFile(cueId).then(result => {
+      if (run.cancelled || run.phase !== 'running' || !run.finish || !result.ok) return
+      this.planMidiFileEnd(run, from, result.remainingMs, run.finish)
+      // The row counts down what is left, from the moment it reads as started.
+      if (result.remainingMs !== null) {
+        this.deps!.setRunning(cueId, {
+          cueId,
+          state: 'playing',
+          startedAt: Date.now() - Math.max(0, cue.duration - result.remainingMs),
+          progress: 0
+        })
+      }
+    }).catch(() => {})
   }
 
   private executeOsc(cue: OscCue, finish: Finish): void {
@@ -1354,6 +1449,9 @@ export class CueEngine {
     if (run.endTask !== null) { this.scheduler!.cancel(run.endTask); run.endTask = null }
     if (run.releaseTask !== null) { this.scheduler!.cancel(run.releaseTask); run.releaseTask = null }
     if (run.requestId) network.cancel(run.requestId)
+    // A MIDI file this run started is stopped in main, its notes released; for every other
+    // run this is nothing.
+    stopMidiFile(cueId)
     if (this.runs.get(cueId) === run) this.runs.delete(cueId)
 
     const released = run.releasedRun

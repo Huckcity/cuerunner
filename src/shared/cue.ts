@@ -9,7 +9,7 @@ export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' |
 export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
   'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic',
-  'memo'
+  'memo', 'midiFile'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -352,6 +352,43 @@ export interface MscCue extends CueBase {
   portName: string
 }
 
+/**
+ * A cue that plays a Standard MIDI File to one MIDI output port: a backing track's keys,
+ * a click, a lighting desk's own timecoded show — whatever the file holds, at the file's own
+ * tempo map, from main, where the port is.
+ *
+ * Everything about the performance is the file's. What the cue adds is where it goes and how
+ * it is played there: the rate, the part of the file, how often it loops, which of its
+ * channels reach the port and as which channel, and a transposition.
+ */
+export interface MidiFileCue extends CueBase {
+  type: 'midiFile'
+  /** The `.mid` on this machine, or empty for a cue that has not been given one. */
+  filePath: string
+  /** The output port, or empty for the show's own MIDI output port. */
+  portName: string
+  /** 1 is the file's own tempo; 2 plays it in half the time. */
+  playbackRate: number
+  /** Where in the file the cue starts, ms of the file at its own tempo. */
+  startTime: number
+  /** Where it stops, the same way, or null for the end of the file. */
+  endTime: number | null
+  /** 0 plays the region once, n plays it n more times, and −1 loops it until stopped. */
+  loopCount: number
+  /**
+   * Sixteen entries, one per channel of the file: the channel it is sent on, 1–16, or 0 for
+   * a channel that is not sent at all. `[1, 2, … 16]` is the file as written.
+   */
+  channelMap: number[]
+  /** Semitones every note moves by; 0 is the file as written. */
+  transpose: number
+  /**
+   * Whether the transposition reaches the file's channel 10 too. Off by default: that is
+   * where a General MIDI file keeps its drums, and a transposed drum kit is other drums.
+   */
+  transposeDrums: boolean
+}
+
 export type Cue =
   | AudioCue
   | MidiCue
@@ -367,3 +404,4 @@ export type Cue =
   | MscCue
   | MicCue
   | MemoCue
+  | MidiFileCue

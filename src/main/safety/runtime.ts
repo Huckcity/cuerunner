@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { sendToWindow } from '../ipc/broadcast'
 import { PLAYBACK_CHANNELS } from '../../shared/ipc/playback'
 import { audioEngine } from '../audio/AudioEngine'
+import { midiFiles } from '../midi/midiFileRuntime'
 import { PlaybackSafety } from './PlaybackSafety'
 import type { PlaybackPanic } from '../../shared/playback'
 import type { AudioEngineEvent } from '../../shared/audio'
@@ -40,11 +41,20 @@ export function recentEngineEvents(): AudioEngineEvent[] {
 }
 
 export const playbackSafety = new PlaybackSafety({
-  engine: audioEngine,
+  // The MIDI files main is playing go quiet with the audio: their ports are this process's
+  // too, and a panic that left a sequence running would be half a panic. A panic says All
+  // Notes Off on every channel they played on, as well as releasing each note.
+  engine: {
+    panic: fadeMs => {
+      midiFiles.stopAll(true)
+      return audioEngine.panic(fadeMs)
+    }
+  },
   // The engine's own last-known answer, read synchronously at the moment a heartbeat is
   // missed: it is `active` while any voice is scheduled, playing or fading. A renderer
   // that has stopped answering cannot be asked, and a stopped engine does not arm the
-  // watchdog — which is what keeps an idle desk free of false panics.
-  isPlaying: () => audioEngine.snapshot()?.active ?? false,
+  // watchdog — which is what keeps an idle desk free of false panics. A MIDI file main is
+  // playing counts the same way: it is sound this process owns.
+  isPlaying: () => (audioEngine.snapshot()?.active ?? false) || midiFiles.isPlaying(),
   broadcast: broadcastPanic
 })

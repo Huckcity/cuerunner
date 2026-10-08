@@ -37,10 +37,10 @@ export const NOT_YET_PROVED = '(not yet proved on real hardware)'
  * built from this list, so a type that moves across the line moves the words with it, and the
  * guard reads the list against `CUE_TYPES` minus `PRO_CUE_TYPES`.
  */
-const FREE_CUES = ['audio', 'MIDI', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp', 'memo']
+const FREE_CUES = ['audio', 'MIDI', 'MIDI file', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp', 'memo']
 
 /** How a count reads at the head of a sentence: "Eleven cue types". Past the last word, the numeral stands. */
-const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
+const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty']
 
 /**
  * The cue stack's sentence: how many types the free app has, said as a reader says a list, and

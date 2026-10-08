@@ -54,6 +54,7 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'msc',     label: 'Show Control' },
   { type: 'mic',     label: 'Mic' },
   { type: 'memo',    label: 'Memo' },
+  { type: 'midiFile', label: 'MIDI File' },
 ]
 
 interface Props {

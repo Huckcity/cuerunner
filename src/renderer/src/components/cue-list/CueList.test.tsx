@@ -7,7 +7,7 @@ import { useStore } from '../../store'
 describe('what the window says about dropped files it did not take', () => {
   it('names the files and the formats that do play', () => {
     expect(refusedDropNotice(['voice.opus', 'jingle.wma']))
-      .toBe('Not added — Cuerunner plays WAV, AIFF, FLAC, MP3, M4A and OGG: voice.opus, jingle.wma')
+      .toBe('Not added — Cuerunner plays WAV, AIFF, FLAC, MP3, M4A and OGG audio, and MIDI files: voice.opus, jingle.wma')
   })
 
   it('counts the rest of a long drop rather than listing a folder', () => {

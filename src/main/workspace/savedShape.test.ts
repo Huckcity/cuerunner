@@ -539,7 +539,21 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     label: 'Aldonza (37)',
     action: 'mute'
   },
-  memo: { ...cueBase('me1'), type: 'memo' }
+  memo: { ...cueBase('me1'), type: 'memo' },
+  midiFile: {
+    ...cueBase('mf1'),
+    type: 'midiFile',
+    filePath: '/shows/click.mid',
+    portName: '',
+    playbackRate: 1,
+    startTime: 0,
+    // The `null` its end is allowed; the channel map carries a channel that is not sent.
+    endTime: null,
+    loopCount: -1,
+    channelMap: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0],
+    transpose: -2,
+    transposeDrums: false
+  }
 }
 
 describe('the cue-field shape', () => {

@@ -592,6 +592,21 @@ export const CUE_FIELD_SHAPE = {
     cueList: 'string',
     destination: 'string',
     portName: 'string'
+  },
+  midiFile: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    filePath: 'string',
+    portName: 'string',
+    playbackRate: 'number',
+    startTime: 'number',
+    endTime: { nothing: true, of: 'number' },
+    loopCount: 'number',
+    // Sixteen output channels, one per channel of the file; the bounds are the player's to
+    // refuse, where a channel map that is not one is a sentence rather than a load failure.
+    channelMap: { items: 'number' },
+    transpose: 'number',
+    transposeDrums: 'boolean'
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

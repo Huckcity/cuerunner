@@ -38,7 +38,9 @@ const PATHS: Record<CueType, string[]> = {
   // A microphone: the capsule, the cradle it sits in, and the stand.
   mic: ['M8 2a2 2 0 0 0-2 2v3.6a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2z', 'M4.4 7.4a3.6 3.6 0 0 0 7.2 0', 'M8 11v2.6', 'M5.8 13.6h4.4'],
   // A sheet with its corner turned and two lines on it: a note, not a command.
-  memo: ['M3.5 2.5h6.2l2.8 2.8v8.2h-9z', 'M9.7 2.5v2.8h2.8', 'M5.6 8.2h4.8', 'M5.6 10.8h4.8']
+  memo: ['M3.5 2.5h6.2l2.8 2.8v8.2h-9z', 'M9.7 2.5v2.8h2.8', 'M5.6 8.2h4.8', 'M5.6 10.8h4.8'],
+  // A page with notes on it: a file of MIDI, rather than one message.
+  midiFile: ['M3.5 2h6.2l2.8 2.8V14h-9z', 'M9.6 2v2.9h2.9', 'M6 11.6V7.2l3.8-.9v4.4', 'M6 11.6a1 1 0 1 1-2 0 1 1 0 0 1 2 0', 'M9.8 10.7a1 1 0 1 1-2 0 1 1 0 0 1 2 0']
 }
 
 interface Props {
