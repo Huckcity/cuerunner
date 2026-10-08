@@ -491,7 +491,7 @@ describe('the page the checks exist to refuse', () => {
     )
     expect(tabProblems({ ...LIVE, sections: swapped })).toEqual([
       expect.stringContaining(
-        'website/docs/reference.mjs documents the tabs as audio, general, midi, network, wireless, redundancy, timecode, license and src/renderer/src/components/layout/SettingsDialog.tsx\'s `SETTINGS_TABS` declares them as general, audio, midi, network, wireless, redundancy, timecode, license'
+        'website/docs/reference.mjs documents the tabs as audio, general, midi, network, wireless, redundancy, timecode, license, updates and src/renderer/src/components/layout/SettingsDialog.tsx\'s `SETTINGS_TABS` declares them as general, audio, midi, network, wireless, redundancy, timecode, license, updates'
       )
     ])
   })

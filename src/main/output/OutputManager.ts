@@ -118,6 +118,15 @@ export class OutputManager {
     }
   }
 
+  /**
+   * Whether any output is showing a cue's picture — a video, an image or a text on a stage
+   * screen. A picture held on a screen is a show in progress whether or not its cue is still
+   * counting, so the updater treats it as one.
+   */
+  showing(): boolean {
+    return this.registry.list().some(output => this.registry.cuesOn(output.id).length > 0)
+  }
+
   snapshot(): OutputSnapshot {
     return {
       outputs: this.registry.list().map(output => this.statusOf(output.id)),

@@ -41,6 +41,9 @@ import { LightingView } from './components/lighting/LightingView'
 import { useLightingBridge } from './hooks/useLightingBridge'
 import { CueListTabs } from './components/cue-lists/CueListTabs'
 import { useTileKeys } from './hooks/useTileKeys'
+import { useUpdates } from './hooks/useUpdates'
+import { UpdateNotice } from './components/update/UpdateNotice'
+import { WhatsNewDialog } from './components/update/WhatsNewDialog'
 import './App.css'
 
 // Store-backed notice bar: save and open failures land here, where a packaged build
@@ -115,6 +118,8 @@ export function App() {
     return true
   })
   const cartShown = (activeIsCart ? !cartAsRows : cartMode) && !showMode && view === 'cues'
+  // Updates follow the show: main is told whether it is running, in Show Mode, a file.
+  useUpdates(showMode)
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
     ? selected as GroupCue
@@ -181,6 +186,8 @@ export function App() {
       <CrashNotice />
       <RecoveryNotice />
       <NoticeHost />
+      <UpdateNotice showMode={showMode} />
+      <WhatsNewDialog />
       <MissingMediaBar />
       <GroupingNoteBar />
       <Toolbar

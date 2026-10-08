@@ -28,3 +28,7 @@ integration/fixtures/vendor/
 # BMad: the install answers scoped to one machine rather than the repo. Team-wide overrides
 # belong in _bmad/custom/config.toml, which is committed.
 _bmad/config.user.toml
+
+# The update feed's release notes, written from CHANGELOG.md by every `predist` hook
+# (scripts/release-notes.mjs) for electron-builder to read.
+resources/release-notes.md

@@ -29,7 +29,8 @@ export const SETTINGS_SECTIONS = [
   { tab: 'wireless', anchor: 'wireless' },
   { tab: 'redundancy', anchor: 'backup' },
   { tab: 'timecode', anchor: 'timecode' },
-  { tab: 'license', anchor: 'license' }
+  { tab: 'license', anchor: 'license' },
+  { tab: 'updates', anchor: 'updates' }
 ]
 
 /**
@@ -604,6 +605,55 @@ ${table(['Row', 'What it shows'], LICENSE_ROWS.map(row => [row.label, row.prose]
 ${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.prose]))}
     </section>
 
+    <section class="panel reveal delay-3" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Newer versions of Cuerunner, and when this machine may look for them. Kept on the computer,
+        not in the show, and free. A check only asks whether there is something newer; nothing is
+        downloaded until you press <strong>Download</strong>, nothing is installed until you press
+        <strong>Restart now</strong> or quit, and neither happens while anything in the show is
+        running. The <a href="../guides/running.html#updates">guide</a> walks it through.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>This version</td><td>—</td><td>The version running, and how it was installed: Windows installer, macOS app, AppImage, .deb package, or a development build run from source.</td></tr>
+            <tr><td>Check now</td><td>—</td><td>Asks the update feed now, and says what it found beside the button: up to date, a newer version with its notes, or that the server could not be reached. Refused, with the reason, during the show hours or in Show Mode with a show open.</td></tr>
+            <tr><td>Check automatically</td><td>on</td><td>Checks twenty seconds after launch and then once a day. A check that cannot reach the server says nothing at all — a show machine with no network is an ordinary machine. Off, only <strong>Check now</strong> checks.</td></tr>
+            <tr><td>Show hours</td><td>off, 18:00–23:30</td><td>No checks and no downloads between <strong>From</strong> and <strong>To</strong>, by this computer's clock. A window that ends before it starts runs past midnight.</td></tr>
+            <tr><td>In Show Mode</td><td>on</td><td>No checks while a show file is open in Show Mode.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What an update offered on this machine can say:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>It says</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td>Cuerunner <em>x.y.z</em> is available.</td><td>A newer release is published. <strong>Release notes</strong> shows every version between this one and it; <strong>Download</strong> fetches it; <strong>Later</strong> puts the bar away until the next launch. The bar is never drawn in Show Mode.</td></tr>
+            <tr><td>Held: something in the show is running.</td><td>A download or a restart was asked for while a cue was running, paused or waiting, or while sound or a MIDI file was playing. Nothing was fetched or installed; ask again once the show is idle. A cue started while a download is under way stops the download the same way.</td></tr>
+            <tr><td>Refused: the download did not match the checksum its release published…</td><td>The bytes that arrived are not the bytes the release's feed names (SHA-512). They were deleted, and nothing was installed.</td></tr>
+            <tr><td>Refused: the update is not signed by the publisher…</td><td>Windows checks that the new installer is signed by the publisher this copy was signed by, and macOS that the new app carries a valid signature. A download that fails either is deleted, and nothing was installed.</td></tr>
+            <tr><td>Cuerunner <em>x.y.z</em> is ready.</td><td>Downloaded and checked. It installs when Cuerunner quits — the one thing that happens without a press — or now with <strong>Restart now</strong>, which asks you to save the show first. The installer runs silently and starts the new version.</td></tr>
+            <tr><td>…installed from the .deb package, which cannot replace itself</td><td>A <code>.deb</code> belongs to the package manager that installed it: the app says when there is a newer version and <strong>Open the download page</strong> takes you to it. Install the new <code>.deb</code> over the old one; your settings stay.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The feed is <code>pub.cuerunner.app/latest/</code> — <code>latest.yml</code> for Windows,
+        <code>latest-mac.yml</code> for macOS (a Mac updates from a zip of the app rather than
+        the dmg) and <code>latest-linux.yml</code> for the AppImage — and each one names the
+        release's own files under <code>versions/</code>. The settings and the version this
+        machine last ran are kept in <code>updates.json</code> in the app's data folder.
+      </p>
+      <p>
+        After an update, the first launch shows <strong>What's new</strong>: the notes of every
+        version installed since this machine last ran Cuerunner, newest first — skip two releases
+        and you read both. It is shown once.
+      </p>
+    </section>
+
     <section class="panel reveal delay-3" id="show">
       <h2>Show Settings</h2>
       <p>
@@ -972,6 +1022,28 @@ await rig.blackout()</code></div>
         and the sACN identity this machine sends as, are the machine's, in
         <code>dmx.json</code> beside the licence.
       </p>
+      <p id="gdtf">
+        <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
+        Patch → Import GDTF file…, part of Cuerunner Pro) is copied into the show like any
+        other type, so the show does not need the file again. Only the archive's
+        <code>description.xml</code> is read — the models and wheel images beside it are
+        not — up to 16 MB of XML, and a description that declares a document type is
+        refused. Each <code>DMXMode</code> becomes a mode, as wide as its highest offset. Each
+        <code>DMXChannel</code> with an offset becomes a parameter: its kind from the
+        attribute of the function it starts on (<code>Dimmer</code>, <code>Pan</code>,
+        <code>Tilt</code>, <code>ColorAdd_R</code> and the other emitters, colour wheels and
+        macros as colour, everything else as other), its label from the attribute's pretty
+        name — with the geometry after it where cells share an attribute — its coarse and
+        fine slots from <code>Offset</code>, and where it rests from the default of its
+        initial function (or, in a GDTF 1.0 file, the channel's own <code>Default</code>).
+        A channel with more than one <code>ChannelFunction</code> keeps each one's name and
+        the share of travel it starts at (<code>DMXFrom</code>), up to 64, and the faders name
+        the one a value is in. A 24- or 32-bit channel is driven on its two most significant
+        bytes and the bytes below are held at zero. A virtual channel (no offset) is left out.
+        Refused, with a sentence: a mode spread over more than one <code>DMXBreak</code>, a
+        channel that overwrites another break, an offset past 512, two channels on one slot,
+        a mode with no DMX channels, more than 32 modes or 128 parameters to a mode.
+      </p>
       <p>
         A show with more than one cue list carries a <code>cueLists</code> section: each list's
         id, name, colour, whether it is a cart, whether it is disarmed, how it follows the
@@ -1275,7 +1347,7 @@ await rig.blackout()</code></div>
         <li>OSC input is UDP only.</li>
         <li>The channel ceiling a desk model states is the number the console publishes rather than a measurement: a show with more channels than the selected model takes is named under the desk connection, with the number, and every channel is sent as it always was. Only the count control stops at it, and a show already larger than the ceiling keeps its own whole range on the dial rather than being trimmed back to it.</li>
         <li>An SQ's membership is written over the desk's own control service — TCP 51326 outbound, with a keepalive datagram to the desk's UDP 51324 — a protocol Allen &amp; Heath publish nothing about, spoken here from frames measured off an SQ-6 on firmware 1.6.1. The desk's own answer to a membership has never been read, so nothing here says a desk has accepted one: what a recall leaves out is worked out against what Cuerunner last sent, not against the desk. The channel mutes ride the MIDI service beside it, on 51325. The session leaves by the desk's own door when the show stops, and one the desk loses without that goodbye leaves it mute until it is reset — said in the log, on the device row and in an alarm, which is why a lost session is not dialled again in a loop.</li>
-        <li>The lighting is DMX over the network, not a console: a patch, faders, groups and Light cues with tracking — no palettes, no command line, no pixel-matrix fixtures, and no fixture library beyond an Open Fixture Library file read in. 64 universes and 2048 fixtures to a show. The packets are held byte for byte to the sACN and Art-Net documents and to a listener on this machine; no hardware node has been part of a run. The tracking sheet reads the Light cues in list order and does not account for what a Stop or Fade cue does at show time.</li>
+        <li>The lighting is DMX over the network, not a console: a patch, faders, groups and Light cues with tracking — no palettes, no command line, no pixel-matrix fixtures, and no fixture library beyond an Open Fixture Library file or a GDTF file read in — a GDTF fixture split over several DMX breaks is refused rather than patched as one. 64 universes and 2048 fixtures to a show. The packets are held byte for byte to the sACN and Art-Net documents and to a listener on this machine; no hardware node has been part of a run. The tracking sheet reads the Light cues in list order and does not account for what a Stop or Fade cue does at show time.</li>
         <li>A redundant pair both send their lights when both are licensed and both have outputs: the standby's levels are not the live machine's, and receivers merging two sources at one priority take the higher of each slot. Give the standby no outputs, or a lower sACN priority.</li>
         <li>The tablet view is read-only by design.</li>
         <li>Cuerunner is distributed outside the app stores, and the release notes say whether a build is signed: Windows warns when an unsigned installer is run, and macOS warns about an unidentified developer at first launch — Gatekeeper refuses such an app on a machine that has not seen it. Each release publishes its digests twice: a <code>SHA256SUMS</code> beside the assets on its release page, naming the files that page carries, and <code>latest/SHA256SUMS</code> on the download host, naming the files the cards link.</li>

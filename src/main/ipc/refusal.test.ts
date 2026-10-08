@@ -28,6 +28,7 @@ import { WORKSPACE_CHANNELS } from '../../shared/ipc/workspace'
 import { QLAB_CHANNELS } from '../../shared/ipc/qlab'
 import { MIDI_CHANNELS } from '../../shared/ipc/midi'
 import { MIDI_FILE_IDENTITY_MAP } from '../../shared/midiFile'
+import { UPDATE_CHANNELS } from '../../shared/ipc/update'
 import type { Workspace } from '../../shared/workspace'
 import { registerIpcHandlers } from './handlers'
 
@@ -80,6 +81,9 @@ vi.mock('electron', async () => {
   return {
     app: {
       getPath: () => ends.userData.path,
+      // The update channels read the version, and the CHANGELOG beside the app, on first use.
+      getVersion: () => '0.17.0',
+      getAppPath: () => ends.userData.path,
       get isPackaged() {
         return ends.packaged.on
       },
@@ -697,5 +701,36 @@ describe('the QLab import channels', () => {
     vi.mocked(dialog.showOpenDialog).mockRejectedValueOnce(new Error('the dialog itself failed'))
 
     await expect(handler(QLAB_CHANNELS.importFile)('event')).rejects.toThrow('the dialog itself failed')
+  })
+})
+
+describe('the update channels', () => {
+  // The suite runs unpackaged and points at no feed, which is a development build: it has no
+  // updater, and every step it is asked for is an ordinary "no" with a sentence.
+  it('answers a check from a development build with its refusal arm', async () => {
+    expect(await handler(UPDATE_CHANNELS.check)('event')).toEqual({
+      ok: false,
+      error: 'This is a development build, run from its source tree: it updates when the source does.'
+    })
+  })
+
+  it('answers a download and an install with nothing to act on with their refusal arms', async () => {
+    expect(await handler(UPDATE_CHANNELS.download)('event')).toEqual({
+      ok: false,
+      error: 'This is a development build, run from its source tree: it updates when the source does.'
+    })
+    expect(await handler(UPDATE_CHANNELS.install)('event')).toEqual({
+      ok: false,
+      error: 'There is no downloaded update to install.'
+    })
+  })
+
+  it('answers the status with the version running and nothing offered', async () => {
+    expect(await handler(UPDATE_CHANNELS.status)('event')).toMatchObject({
+      current: '0.17.0',
+      install: 'development',
+      phase: 'idle',
+      available: null
+    })
   })
 })
