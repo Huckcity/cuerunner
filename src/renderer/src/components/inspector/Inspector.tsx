@@ -17,10 +17,12 @@ import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
 import { MscInspector } from './MscInspector'
 import { MicInspector } from './MicInspector'
+import { MidiFileInspector } from './MidiFileInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
   MscCue, MicCue
 } from '../../../../shared/cue'
+import type { MidiFileCue } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
 
@@ -40,7 +42,8 @@ const TYPE_TABS: Record<string, string[]> = {
   scene: ['Basics', 'Scene'],
   devamp: ['Basics', 'Devamp'],
   msc: ['Basics', 'Show Control'],
-  mic: ['Basics', 'Mic']
+  mic: ['Basics', 'Mic'],
+  midiFile: ['Basics', 'MIDI File', 'Channels']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -73,6 +76,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   if (tab === 'Show Control') return <MscInspector cue={cue as MscCue} />
+  if (tab === 'MIDI File' || tab === 'Channels') return <MidiFileInspector cue={cue as MidiFileCue} tab={tab} />
   if (tab === 'Mic') {
     return pro ? (
       <MicInspector cue={cue as MicCue} />

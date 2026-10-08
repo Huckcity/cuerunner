@@ -8,6 +8,8 @@ import { cueNameFromFile } from '../../utils/cueDefaults'
 import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import { AUDIO_FORMATS_SENTENCE, isPlayableAudioFile } from '../../../../shared/media'
+import { isMidiFileName } from '../../../../shared/midiFile'
+import { addMidiFileCuesFromFiles } from '../../utils/midiFileDrop'
 import './CueList.css'
 
 /** How many refused files a notice names before it counts the rest. */
@@ -22,7 +24,7 @@ export function refusedDropNotice(names: string[]): string {
   const named = names.slice(0, NAMED_REFUSALS).join(', ')
   const rest = names.length - NAMED_REFUSALS
   const others = rest > 0 ? ` and ${rest} more` : ''
-  return `Not added — Cuerunner plays ${AUDIO_FORMATS_SENTENCE}: ${named}${others}`
+  return `Not added — Cuerunner plays ${AUDIO_FORMATS_SENTENCE} audio, and MIDI files: ${named}${others}`
 }
 
 // One entry in the virtualizer's flat render list.
@@ -247,7 +249,12 @@ export function CueList() {
     if (audioFiles.length > 0) {
       addAudioCuesFromFiles(audioFiles, selectedId ?? undefined)
     }
-    const refused = dropped.filter(f => !isPlayableAudioFile(f.name)).map(f => f.name)
+    // A MIDI file becomes a MIDI File cue, after whatever the drop has added so far.
+    const midiFiles = dropped.filter(f => isMidiFileName(f.name)).map(f => window.cuerunner.getPathForFile(f))
+    if (midiFiles.length > 0) {
+      addMidiFileCuesFromFiles(midiFiles, useStore.getState().selectedId ?? undefined)
+    }
+    const refused = dropped.filter(f => !isPlayableAudioFile(f.name) && !isMidiFileName(f.name)).map(f => f.name)
     if (refused.length > 0) useStore.getState().setNotice(refusedDropNotice(refused))
   }, [addAudioCuesFromFiles, selectedId])
 
@@ -503,7 +510,7 @@ export function CueList() {
       )}
       {isDragOver && (
         <div className="cue-list-drop-hint">
-          Drop audio files to create cues
+          Drop audio or MIDI files to create cues
         </div>
       )}
       {ctxMenu && (() => {
