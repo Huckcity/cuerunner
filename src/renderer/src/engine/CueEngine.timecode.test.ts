@@ -116,6 +116,18 @@ describe('CueEngine — timecode cues', () => {
     expect(setLastRun).toHaveBeenCalledWith('tc1', expect.objectContaining({ outcome: 'error', error: 'No MIDI output port named "Loop"' }))
   })
 
+  it('holds the clock with the show, and lets it go on with it', async () => {
+    const { runner } = setup(makeTimecode())
+    runner.go()
+    await vi.waitFor(() => expect(window.cuerunner.timecode.generate).toHaveBeenCalled())
+    await vi.waitFor(() => expect(runner.isHeld()).toBe(false))
+    await Promise.resolve()
+    runner.pauseAll()
+    expect(window.cuerunner.timecode.control).toHaveBeenCalledWith({ cueId: 'tc1', action: { action: 'pause' } })
+    runner.resumeAll()
+    expect(window.cuerunner.timecode.control).toHaveBeenCalledWith({ cueId: 'tc1', action: { action: 'resume' } })
+  })
+
   it('is refused without a licence', async () => {
     const { runner, appendLog } = setup(makeTimecode(), false)
     runner.go()
