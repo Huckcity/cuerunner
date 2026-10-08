@@ -1,6 +1,7 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue,
+  InputCue
 } from '../../../shared/cue'
 import { TEXT_DEFAULTS, VIDEO_DEFAULTS, VISUAL_BASE_DEFAULTS, defaultGeometry } from '../../../shared/visual'
 import type { MidiFileCue } from '../../../shared/cue'
@@ -47,6 +48,20 @@ export const AUDIO_DEFAULTS = {
 }
 
 export const AUDIO_CROSSPOINT_DEFAULTS: AudioCrosspoint = { inputChannel: 0, outputChannel: 0, gain: 1 }
+
+/**
+ * A new live input: the default input's first channel, at full level in the middle, opened
+ * over a short fade so a hot microphone does not arrive as a thump, and closed over one.
+ */
+export const INPUT_DEFAULTS = {
+  device: '',
+  inputChannels: [0] as number[],
+  volume: 1,
+  pan: 0,
+  fadeInDuration: 50,
+  fadeOutDuration: 200,
+  outputs: null as AudioCrosspoint[] | null
+}
 
 export const OSC_DEFAULTS = {
   host: '127.0.0.1',
@@ -340,6 +355,13 @@ export function createCue(type: CueType, number = '1'): Cue {
         ...TEXT_DEFAULTS,
         geometry: defaultGeometry()
       } satisfies TextCue
+    case 'input':
+      return {
+        ...base('Live Input', number),
+        type: 'input',
+        ...INPUT_DEFAULTS,
+        inputChannels: [...INPUT_DEFAULTS.inputChannels]
+      } satisfies InputCue
   }
 }
 

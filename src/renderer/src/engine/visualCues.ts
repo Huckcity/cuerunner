@@ -8,6 +8,7 @@
 // or a seek is worked out from. The output draws; this decides.
 
 import type { Cue, FadeCurve } from '../../../shared/cue'
+import type { FadeShape } from '../../../shared/fadeShape'
 import type { VisualCue, VideoCue } from '../../../shared/visual'
 import { mediaUrl } from '../../../shared/visual'
 import type { LayerCommand, LayerPatch, LayerSpec, OutputCommandResult, OutputEvent, TextStyle } from '../../../shared/ipc/output'
@@ -200,7 +201,7 @@ export class VisualRunner {
   }
 
   /** A fade cue moving a picture's level. */
-  fade(cueId: string, to: number, durationMs: number, curve: FadeCurve, atShowMs: number): void {
+  fade(cueId: string, to: number, durationMs: number, curve: FadeCurve, atShowMs: number, shape: FadeShape | null = null): void {
     if (!this.showing.has(cueId)) return
     void this.send({
       op: 'fade',
@@ -208,7 +209,8 @@ export class VisualRunner {
       to: Math.min(Math.max(to, 0), 1),
       durationMs: Math.max(0, durationMs),
       curve,
-      at: audioEngine.engineTime(atShowMs)
+      at: audioEngine.engineTime(atShowMs),
+      ...(shape ? { shape } : {})
     })
   }
 

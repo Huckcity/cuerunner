@@ -496,7 +496,14 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     scriptLine: 12,
     trimSilence: true,
     soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false },
-    fadeOutDuration: 1500
+    fadeOutDuration: 1500,
+    // The audio work's own optional fields: a patch, both fade shapes (one of each variant),
+    // slices with a vamp, and the loudness a normalise wrote down.
+    outputPatchId: 'patch-1',
+    fadeInShape: { kind: 'preset', preset: 'equalPower' },
+    fadeOutShape: { kind: 'bezier', x1: 0.2, y1: 0.8, x2: 0.6, y2: 1 },
+    slices: { markers: [1000, 2000], playCounts: [1, -1, 2] },
+    loudness: { filePath: '', integratedLufs: -18.2, truePeakDb: -0.4, silent: false }
   },
   midi: {
     ...cueBase('m1'),
@@ -673,6 +680,19 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     bold: true,
     italic: false,
     position: 'bottom'
+  },
+  input: {
+    ...cueBase('in1'),
+    type: 'input',
+    device: 'test:tone',
+    inputChannels: [0, 1],
+    volume: 0.8,
+    pan: 0,
+    fadeInDuration: 50,
+    fadeOutDuration: 200,
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }],
+    outputPatchId: null,
+    fadeInShape: null
   }
 }
 

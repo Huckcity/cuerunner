@@ -10,6 +10,7 @@
 // in the file.
 
 import type { FadeCurve } from './cue'
+import { shapeValue, type FadeShape } from './fadeShape'
 
 /** The part of a file a video plays, and how often. The same numbers its sound plays with. */
 export interface MediaTimeline {
@@ -124,6 +125,8 @@ export interface Ramp {
   startMs: number
   durationMs: number
   curve: FadeCurve
+  /** A drawn shape (src/shared/fadeShape.ts), read in place of `curve` where there is one. */
+  shape?: FadeShape | null
 }
 
 export function steady(value: number): Ramp {
@@ -133,7 +136,10 @@ export function steady(value: number): Ramp {
 export function rampAt(ramp: Ramp, now: number): number {
   if (ramp.durationMs <= 0 || now >= ramp.startMs + ramp.durationMs) return now < ramp.startMs ? ramp.from : ramp.to
   if (now <= ramp.startMs) return ramp.from
-  return ramp.from + (ramp.to - ramp.from) * curveAt(ramp.curve, (now - ramp.startMs) / ramp.durationMs)
+  const t = (now - ramp.startMs) / ramp.durationMs
+  // A drawn shape is read by the one function every fade reads it with — the lights, the
+  // audio engine's table — so a picture fades on exactly the curve the editor drew.
+  return ramp.from + (ramp.to - ramp.from) * (ramp.shape ? shapeValue(ramp.shape, t) : curveAt(ramp.curve, t))
 }
 
 /** Whether a ramp has reached its value by `now`. */
@@ -146,8 +152,10 @@ export function rampDone(ramp: Ramp, now: number): boolean {
  * fade still running carries on from the level the eye is seeing, never from where the
  * first one was headed.
  */
-export function retarget(ramp: Ramp, to: number, startMs: number, durationMs: number, curve: FadeCurve): Ramp {
-  return { from: rampAt(ramp, startMs), to, startMs, durationMs: Math.max(0, durationMs), curve }
+export function retarget(
+  ramp: Ramp, to: number, startMs: number, durationMs: number, curve: FadeCurve, shape: FadeShape | null = null
+): Ramp {
+  return { from: rampAt(ramp, startMs), to, startMs, durationMs: Math.max(0, durationMs), curve, ...(shape ? { shape } : {}) }
 }
 
 /** The fade-in's factor, 0–1, from the first frame. */

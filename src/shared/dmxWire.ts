@@ -10,6 +10,7 @@
 // `{ ok: false, error }` — because a payload is the one input main does not write itself.
 
 import type { FadeCurve } from './cue'
+import { normalizeFadeShape, type FadeShape } from './fadeShape'
 import {
   DMX_LIMITS,
   EFFECT_RATE_RANGE,
@@ -51,6 +52,8 @@ export interface DmxGo {
   values: DmxValue[]
   fadeMs: number
   curve: FadeCurve
+  /** The fade's drawn shape (src/shared/fadeShape.ts), in place of `curve`; absent is `curve`. */
+  shape?: FadeShape | null
   /** Intensity from this cue is highest-takes-precedence rather than latest. */
   htp: boolean
   effects: DmxEffect[]
@@ -69,6 +72,7 @@ export interface DmxLevel {
   level: number
   fadeMs: number
   curve: FadeCurve
+  shape?: FadeShape | null
 }
 
 /** A live value from the lighting view's faders, tagged with the parameter it came from. */
@@ -296,6 +300,8 @@ export function readDmxGo(payload: unknown): DmxGo {
     values: read,
     fadeMs: fadeMs(go.fadeMs),
     curve: oneOf(go.curve, 'the curve', CURVES),
+    // A shape this build cannot read is no shape: the named curve still fades the rig.
+    ...shapeField(go.shape),
     htp: flag(go.htp, 'the intensity rule'),
     effects
   }
@@ -316,8 +322,15 @@ export function readDmxLevel(payload: unknown): DmxLevel {
     cueId: text(level.cueId, 'the cue id'),
     level: fraction(level.level, 'the level'),
     fadeMs: fadeMs(level.fadeMs),
-    curve: oneOf(level.curve, 'the curve', CURVES)
+    curve: oneOf(level.curve, 'the curve', CURVES),
+    ...shapeField(level.shape)
   }
+}
+
+/** A command's drawn shape, as a field only when it carries one this build can read. */
+function shapeField(value: unknown): { shape?: FadeShape } {
+  const shape = normalizeFadeShape(value)
+  return shape ? { shape } : {}
 }
 
 export function readDmxCueId(payload: unknown): string {

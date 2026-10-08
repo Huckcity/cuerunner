@@ -1,5 +1,6 @@
 import { useStore } from '../store'
 import type { Cue, FadeCurve, LightCue } from '../../../shared/cue'
+import type { FadeShape } from '../../../shared/fadeShape'
 import {
   resolveLook,
   resolveParam,
@@ -67,6 +68,7 @@ export function goLight(cue: LightCue, seekMs = 0): Promise<LightResult> {
     values: resolveLook(lighting, cue.look),
     fadeMs: Math.max(0, cue.duration - seekMs),
     curve: cue.curve,
+    ...(cue.shape ? { shape: cue.shape } : {}),
     htp: cue.intensity === 'htp',
     effects: resolveEffects(lighting, cue.effects)
   })
@@ -83,8 +85,10 @@ export function releaseLight(cueId: string | null, fadeMs: number, curve: FadeCu
 }
 
 /** A Fade cue aimed at a Light cue: its intensity to `level` of what it set. */
-export function levelLight(cueId: string, level: number, fadeMs: number, curve: FadeCurve): Promise<LightResult> {
-  return lightingCommand('level', { cueId, level, fadeMs, curve })
+export function levelLight(
+  cueId: string, level: number, fadeMs: number, curve: FadeCurve, shape: FadeShape | null = null
+): Promise<LightResult> {
+  return lightingCommand('level', { cueId, level, fadeMs, curve, ...(shape ? { shape } : {}) })
 }
 
 /** The panic, by the show's own rule for the lights. */

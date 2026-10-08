@@ -65,7 +65,7 @@ export class DmxService implements ShowService {
       }
       case 'level': {
         const level = readDmxLevel(payload)
-        lighting.level(level.cueId, level.level, level.fadeMs, level.curve)
+        lighting.level(level.cueId, level.level, level.fadeMs, level.curve, level.shape ?? null)
         return null
       }
       case 'program':

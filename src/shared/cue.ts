@@ -1,5 +1,8 @@
 import type { IntensityRule, LightEffect, LightLevel } from './dmx'
 import type { TimecodeRate } from './timecode'
+import type { FadeShape } from './fadeShape'
+import type { CueSlices } from './slices'
+import type { CueLoudness } from './loudness'
 
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
@@ -14,7 +17,8 @@ export const CUE_TYPES = [
   'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic',
   'memo', 'midiFile', 'light',
   'timecode',
-  'video', 'image', 'text'
+  'video', 'image', 'text',
+  'input'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -179,6 +183,24 @@ export interface AudioCue extends CueBase {
    * what the cue did before the trim was asked for.
    */
   soundRegion?: SoundRegion | null
+  /**
+   * The output patch the cue plays through (src/shared/audioRouting.ts), by id; its matrix
+   * then addresses the patch's channels. Absent or null is the device's own channels, which
+   * is what every cue did before patches existed.
+   */
+  outputPatchId?: string | null
+  /** The fade-in's drawn shape; absent or null is the straight line it always was. */
+  fadeInShape?: FadeShape | null
+  /** The fade-out's drawn shape; absent or null is the S-curve it always was. */
+  fadeOutShape?: FadeShape | null
+  /**
+   * The file cut into slices, each played a number of times or until a devamp moves it on
+   * (src/shared/slices.ts). With slices the loop count is not used. Absent or null is the one
+   * region and its loop count.
+   */
+  slices?: CueSlices | null
+  /** The last loudness measurement of the cue's file, which a normalise wrote down. */
+  loudness?: CueLoudness | null
 }
 
 /**
@@ -249,6 +271,11 @@ export interface FadeCue extends CueBase {
   panTargetValue?: number | null
   curve: FadeCurve
   stopTargetWhenDone: boolean
+  /**
+   * The fade's drawn shape, which plays in place of `curve` where there is one; `curve` stays
+   * the nearest named shape, for a build that has no drawn ones. Absent or null is `curve`.
+   */
+  shape?: FadeShape | null
 }
 
 export interface StopCue extends CueBase {
@@ -296,6 +323,12 @@ export interface DevampCue extends CueBase {
   type: 'devamp'
   /** The cue to release. Empty means it is not pointed at anything yet. */
   targetCueId: string
+  /**
+   * What the release does to a sliced (or looping) target: `next` lets the slice it is in
+   * finish its pass and moves on to the next; `stop` ends the target at the end of that pass.
+   * Absent is `next`, which is what a devamp always did.
+   */
+  devampMode?: 'next' | 'stop'
 }
 
 /**
@@ -430,6 +463,37 @@ export interface LightCue extends CueBase {
   effects: LightEffect[]
   curve: FadeCurve
   intensity: IntensityRule
+  /** The fade's drawn shape, in place of `curve` where there is one. Absent or null is `curve`. */
+  shape?: FadeShape | null
+}
+
+/**
+ * A live input through the engine: channels of an input device — a microphone, a line from
+ * the band, a playback machine — played as a voice with a level, a pan, routing (or a patch)
+ * and fades, until it is stopped. The input is resampled to the output's clock with drift
+ * correction (native/audio/src/live_input.h), so a separate interface works as well as the
+ * output's own.
+ *
+ * Not to be confused with the `mic` cue, which mutes and unmutes a radio mic at its
+ * receiver; this one carries the sound.
+ */
+export interface InputCue extends CueBase {
+  type: 'input'
+  /** The input device by the id the engine lists it under; empty is the default input. */
+  device: string
+  /** The device's input channels, zero-based, that are the cue's own channels in order. */
+  inputChannels: number[]
+  /** Level, 0–1, and pan, −1 to 1, as an audio cue's. */
+  volume: number
+  pan: number
+  /** ms; 0 opens at its level. */
+  fadeInDuration: number
+  /** How long a stop of this cue fades for, ms; 0 is a cut. */
+  fadeOutDuration: number
+  /** Crosspoints from the cue's channels, or null for automatic routing. */
+  outputs: AudioCrosspoint[] | null
+  outputPatchId?: string | null
+  fadeInShape?: FadeShape | null
 }
 
 /**
@@ -488,3 +552,4 @@ export type Cue =
   | VideoCue
   | ImageCue
   | TextCue
+  | InputCue

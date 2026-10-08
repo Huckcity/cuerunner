@@ -67,6 +67,24 @@ export const audioEngine = {
     state: 'playing' as const,
     startAtMs
   })),
+  startInput: vi.fn(async (cueId: string, startAtMs: number) => ({
+    cueId,
+    runId: `run-${cueId}`,
+    state: 'playing' as const,
+    startAtMs
+  })),
+  inputs: vi.fn(async () => []),
+  inputOpen: vi.fn(async () => {
+    throw new Error('no inputs in this test')
+  }),
+  inputClose: vi.fn(async () => ({ closed: false })),
+  inputStatus: vi.fn(async () => []),
+  patch: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  outputGains: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  loudness: vi.fn(async (filePath: string) => ({
+    filePath, integratedLufs: -18, truePeakDb: -3, samplePeakDb: -3, silent: false,
+    durationMs: 1000, sampleRate: 48000, channels: 2
+  })),
   stop: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   stopAll: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   seek: vi.fn(async (positionMs: number) => ({

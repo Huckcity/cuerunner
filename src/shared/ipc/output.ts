@@ -15,6 +15,7 @@
 // against the same clock the sound of it is scheduled on (spine AD-6).
 
 import type { FadeCurve } from '../cue'
+import type { FadeShape } from '../fadeShape'
 import type { MediaTimeline } from '../visualClock'
 import type { AudioClockReading } from '../audio'
 import type { DisplayInfo, GridPosition, OutputPlacement, OutputStatus, TimerMode, VideoOutput, VisualGeometry } from '../visual'
@@ -103,7 +104,7 @@ export type LayerCommand =
   | { op: 'prepare'; layer: LayerSpec }
   | { op: 'update'; cueId: string; patch: LayerPatch }
   /** Moves the resting level to `to` from `at`, over `durationMs`. */
-  | { op: 'fade'; cueId: string; to: number; durationMs: number; curve: FadeCurve; at: number }
+  | { op: 'fade'; cueId: string; to: number; durationMs: number; curve: FadeCurve; at: number; shape?: FadeShape | null }
   /** Takes the picture down over `fadeMs`, from `at`. */
   | { op: 'stop'; cueId: string; fadeMs: number; at: number }
   | { op: 'pause'; cueId: string; at: number }

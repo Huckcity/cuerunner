@@ -455,6 +455,12 @@ export const WORKSPACE_SECTION_SHAPE = {
  */
 export type DeclaredFields = { readonly [field: string]: unknown }
 
+/** What a cue that sounds may carry of its patch and its fade-in's drawn shape (src/shared/audioRouting.ts). */
+const AUDIO_IO_CUE_SHAPE = {
+  outputPatchId: { absent: true, of: { nothing: true, of: 'string' } },
+  fadeInShape: { absent: true, of: { nothing: true, of: 'object' } }
+} as const
+
 /** The fields every cue carries, from `CueBase`, with the kind each is written as. */
 const CUE_BASE_SHAPE = {
   id: 'string',
@@ -549,6 +555,15 @@ export const CUE_FIELD_SHAPE = {
         nothing: true,
         of: { startMs: 'number', endMs: 'number', durationMs: 'number', silent: 'boolean' }
       }
+    },
+    ...AUDIO_IO_CUE_SHAPE,
+    // A fade shape is a union of a preset and a Bézier, so each is held to being an object and
+    // read through `normalizeFadeShape`; slices and the loudness record are shapes of their own.
+    fadeOutShape: { absent: true, of: { nothing: true, of: 'object' } },
+    slices: { absent: true, of: { nothing: true, of: { markers: { items: 'number' }, playCounts: { items: 'number' } } } },
+    loudness: {
+      absent: true,
+      of: { nothing: true, of: { filePath: 'string', integratedLufs: 'number', truePeakDb: 'number', silent: 'boolean' } }
     }
   },
   // A message is one of five variants — note on, note off, cc, program change, sysex — so the
@@ -578,7 +593,8 @@ export const CUE_FIELD_SHAPE = {
     targetValue: 'number',
     panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
     curve: 'string',
-    stopTargetWhenDone: 'boolean'
+    stopTargetWhenDone: 'boolean',
+    shape: { absent: true, of: { nothing: true, of: 'object' } }
   },
   stop: {
     ...CUE_BASE_SHAPE,
@@ -608,7 +624,7 @@ export const CUE_FIELD_SHAPE = {
     timeout: 'number'
   },
   scene: { ...CUE_BASE_SHAPE, type: 'string', sceneId: 'string' },
-  devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string' },
+  devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string', devampMode: { absent: true, of: 'string' } },
   mic: { ...CUE_BASE_SHAPE, type: 'string', channelId: 'string', label: 'string', action: 'string' },
   memo: { ...CUE_BASE_SHAPE, type: 'string' },
   msc: {
@@ -658,7 +674,8 @@ export const CUE_FIELD_SHAPE = {
       }
     },
     curve: 'string',
-    intensity: 'string'
+    intensity: 'string',
+    shape: { absent: true, of: { nothing: true, of: 'object' } }
   },
   timecode: {
     ...CUE_BASE_SHAPE,
@@ -690,7 +707,9 @@ export const CUE_FIELD_SHAPE = {
     outputs: {
       nothing: true,
       of: { elements: { inputChannel: 'number', outputChannel: 'number', gain: 'number' } }
-    }
+    },
+    ...AUDIO_IO_CUE_SHAPE,
+    fadeOutShape: { absent: true, of: { nothing: true, of: 'object' } }
   },
   image: { ...VISUAL_CUE_SHAPE, type: 'string', filePath: 'string' },
   text: {
@@ -703,6 +722,23 @@ export const CUE_FIELD_SHAPE = {
     bold: 'boolean',
     italic: 'boolean',
     position: 'string'
+  },
+  // A live input (src/shared/cue.ts): its device and channels, then an audio cue's level,
+  // pan, fades and routing, bounded the same way.
+  input: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    device: 'string',
+    inputChannels: { items: 'number' },
+    volume: { bounded: [0, 1] },
+    pan: { bounded: [-1, 1] },
+    fadeInDuration: 'number',
+    fadeOutDuration: 'number',
+    outputs: {
+      nothing: true,
+      of: { elements: { inputChannel: 'number', outputChannel: 'number', gain: 'number' } }
+    },
+    ...AUDIO_IO_CUE_SHAPE
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

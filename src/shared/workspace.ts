@@ -1,3 +1,4 @@
+import type { OutputFader, OutputPatch } from './audioRouting'
 import type { Cue } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
@@ -26,6 +27,19 @@ export interface AudioSettings {
    * it on or off changes nothing that is already in the show.
    */
   autoTrimSilence?: boolean
+  /**
+   * Where the show's sound goes by name (src/shared/audioRouting.ts): output patches, the
+   * mixer's per-output faders, the patch audition plays through, and the loudness a cue is
+   * normalised to. Each is absent until the show says something with it, so a show saved
+   * before any of them existed saves byte for byte as it did.
+   */
+  outputPatches?: OutputPatch[]
+  outputFaders?: OutputFader[]
+  auditionPatchId?: string
+  /** EBU R128 integrated loudness a normalised cue is set to, LUFS. Absent is −23. */
+  loudnessTargetLufs?: number
+  /** The true peak a normalised cue stays under, dBTP. Absent is −1. */
+  truePeakCeilingDb?: number
 }
 
 export interface MidiSettings {

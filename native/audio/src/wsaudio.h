@@ -201,8 +201,8 @@ constexpr int kMaxOutputFrames = 4096;
 constexpr int kMaxPatches = 16;
 constexpr int kMaxSlices = 32;
 constexpr int kMaxInputFeeds = 8;
-/** Points in a drawn fade shape: enough that a smooth curve read between them is within a
- *  ten-thousandth of itself, few enough to travel inside a command. */
+/** Points in a drawn fade shape: enough that a smooth curve read between them is within half a
+ *  percent of itself where it is steepest, few enough to travel inside a command. */
 constexpr int kMaxCurvePoints = 65;
 
 enum class Curve : int { Linear = 0, SCurve = 1, Logarithmic = 2, Table = 3 };

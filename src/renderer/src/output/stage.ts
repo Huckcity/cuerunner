@@ -187,7 +187,7 @@ export class Stage {
         return
       }
       case 'fade':
-        layer.level = retarget(layer.level, command.to, at, command.durationMs, command.curve)
+        layer.level = retarget(layer.level, command.to, at, command.durationMs, command.curve, command.shape ?? null)
         return
       case 'stop':
         if (layer.stop === null || at + command.fadeMs < layer.stop.atMs + layer.stop.fadeMs) {

@@ -35,6 +35,10 @@ import type {
   AudioProbe,
   AudioOnsets,
   AudioSilence,
+  AudioLoudness,
+  AudioInputDevice,
+  AudioInputOpenOptions,
+  AudioInputStatus,
   AudioMeters,
   AudioProgress,
   AudioSeekResult,
@@ -548,6 +552,60 @@ export class AudioEngineClient {
     return { ...result, startAtMs: result.startAtMs + this.epochFor(sessionId) }
   }
 
+  /**
+   * Starts a live voice: `channels` of the input `device` as the voice's own channels, at
+   * show time `whenMs`. Watched like a file voice, so its end and its progress come back the
+   * same way.
+   */
+  async startInput(
+    cueId: string,
+    whenMs: number,
+    device: string,
+    channels: number[],
+    options: Partial<AudioStartOptions>
+  ): Promise<AudioStartResult> {
+    const sessionId = this.sessionId ?? ''
+    const result = await bridge().startInput(cueId, this.toEngineMs(whenMs), device, channels, options)
+    this.watched.set(cueId, { sessionId: this.sessionId ?? '', runId: result.runId })
+    return { ...result, startAtMs: result.startAtMs + this.epochFor(sessionId) }
+  }
+
+  /** The capture devices a live input can be taken from. */
+  inputs(): Promise<AudioInputDevice[]> {
+    return bridge().inputs()
+  }
+
+  /** Opens a live input ahead of its cue, so GO is instant. */
+  inputOpen(options: AudioInputOpenOptions): Promise<AudioInputStatus> {
+    return bridge().inputOpen(options)
+  }
+
+  inputClose(device: string): Promise<{ closed: boolean }> {
+    return bridge().inputClose(device)
+  }
+
+  /** Every open live input: its latency, drift correction, counters and meter. */
+  inputStatus(): Promise<AudioInputStatus[]> {
+    return bridge().inputStatus()
+  }
+
+  /** Defines output patch `slot`, or clears it with null. */
+  async patch(slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult> {
+    const result = await bridge().patch(slot, outputs, gain)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Every device output's own fader, linear. */
+  async outputGains(gains: number[]): Promise<AudioCommandResult> {
+    const result = await bridge().outputGains(gains)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** A file's integrated loudness and true peak. */
+  loudness(filePath: string): Promise<AudioLoudness> {
+    return bridge().loudness(filePath)
+  }
+
   async stop(cueId: string, fadeMs = 0, whenMs?: number): Promise<AudioCommandResult> {
     const result = await bridge().stop(cueId, fadeMs, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
     this.watched.delete(cueId)
@@ -584,8 +642,11 @@ export class AudioEngineClient {
    * when the cue is trimmed of its trailing silence, which is where its sound stops.
    * The verb a devamp cue sends; `applied` says whether there was a loop to release.
    */
-  async release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
-    const result = await bridge().release(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs), endMs)
+  async release(cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult> {
+    const at = whenMs === undefined ? undefined : this.toEngineMs(whenMs)
+    const result = stopAtSliceEnd === true
+      ? await bridge().release(cueId, at, endMs, true)
+      : await bridge().release(cueId, at, endMs)
     return { ...result, at: this.toShowMs(result.at) }
   }
 
@@ -623,12 +684,15 @@ export class AudioEngineClient {
     param: AudioFadeParam,
     value: number,
     durationMs = 0,
-    curve: 'linear' | 'sCurve' | 'logarithmic' = 'linear',
-    whenMs?: number
+    curve: 'linear' | 'sCurve' | 'logarithmic' | 'custom' = 'linear',
+    whenMs?: number,
+    shape?: number[] | null
   ): Promise<AudioCommandResult> {
-    const result = await bridge().fade(
-      cueId, param, value, durationMs, curve, whenMs === undefined ? undefined : this.toEngineMs(whenMs)
-    )
+    const at = whenMs === undefined ? undefined : this.toEngineMs(whenMs)
+    // A fade with no drawn shape is the call it always was.
+    const result = shape
+      ? await bridge().fade(cueId, param, value, durationMs, 'custom', at, shape)
+      : await bridge().fade(cueId, param, value, durationMs, curve, at)
     return { ...result, at: this.toShowMs(result.at) }
   }
 

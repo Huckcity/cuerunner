@@ -14,6 +14,7 @@
 // tests drive fades, effects and releases on a fake clock and read the bytes back.
 
 import type { FadeCurve } from '../../shared/cue'
+import { fadeShareAt, type FadeShape } from '../../shared/fadeShape'
 import {
   clamp01,
   curveShape,
@@ -41,6 +42,8 @@ interface Fade {
   start: number
   duration: number
   curve: FadeCurve
+  /** A drawn shape, read in place of `curve` by the one function every fade reads. */
+  shape?: FadeShape | null
 }
 
 interface Effect {
@@ -86,7 +89,9 @@ export interface InputFrame {
 function fadeValue(fade: Fade, now: number): number {
   if (fade.duration <= 0 || now >= fade.start + fade.duration) return fade.to
   if (now <= fade.start) return fade.from
-  return fade.from + (fade.to - fade.from) * curveShape((now - fade.start) / fade.duration, fade.curve)
+  const t = (now - fade.start) / fade.duration
+  const share = fade.shape ? fadeShareAt(t, fade.curve, fade.shape) : curveShape(t, fade.curve)
+  return fade.from + (fade.to - fade.from) * share
 }
 
 function effectValue(effect: Effect, now: number): number {
@@ -166,7 +171,7 @@ export class DmxEngine {
         slot.layers.set(command.cueId, {
           value: value.v,
           set: value.v,
-          fade: duration > 0 ? { from, to: value.v, start: now, duration, curve: command.curve } : null,
+          fade: duration > 0 ? { from, to: value.v, start: now, duration, curve: command.curve, shape: command.shape ?? null } : null,
           releasing: false
         })
         this.htp.set(key, slot)
@@ -183,7 +188,7 @@ export class DmxEngine {
         value: value.v,
         owner: command.cueId,
         set: value.v,
-        fade: duration > 0 ? { from, to: value.v, start: now, duration, curve: command.curve } : null,
+        fade: duration > 0 ? { from, to: value.v, start: now, duration, curve: command.curve, shape: command.shape ?? null } : null,
         effect: null
       })
     }
@@ -270,20 +275,20 @@ export class DmxEngine {
    * A Fade cue aimed at a Light cue: the intensity it holds moves to `level` of what it set,
    * over the fade. Colour, position and everything else it holds stay where they are.
    */
-  level(cueId: string, level: number, fadeMs: number, curve: FadeCurve, now: number): void {
+  level(cueId: string, level: number, fadeMs: number, curve: FadeCurve, now: number, shape: FadeShape | null = null): void {
     const target = clamp01(level)
     for (const slot of this.slots.values()) {
       if (slot.owner !== cueId || !slot.i || slot.effect !== null) continue
       const from = slotValue(slot, now)
       slot.value = slot.set * target
-      slot.fade = fadeMs > 0 ? { from, to: slot.value, start: now, duration: fadeMs, curve } : null
+      slot.fade = fadeMs > 0 ? { from, to: slot.value, start: now, duration: fadeMs, curve, shape } : null
     }
     for (const slot of this.htp.values()) {
       const layer = slot.layers.get(cueId)
       if (layer === undefined || layer.releasing) continue
       const from = layerValue(layer, now)
       layer.value = layer.set * target
-      layer.fade = fadeMs > 0 ? { from, to: layer.value, start: now, duration: fadeMs, curve } : null
+      layer.fade = fadeMs > 0 ? { from, to: layer.value, start: now, duration: fadeMs, curve, shape } : null
     }
   }
 

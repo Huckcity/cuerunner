@@ -16,6 +16,7 @@
 // clock frame by frame (`visualSync.ts`), so the two stay together however long the video is.
 
 import type { AudioCrosspoint, CueBase, FadeCurve } from './cue'
+import type { FadeShape } from './fadeShape'
 
 /** One of the nine places text — or the timer — is anchored to on an output. */
 export type GridPosition =
@@ -133,6 +134,11 @@ export interface VideoCue extends VisualCueBase {
   pan: number
   /** The sound's crosspoints, or null for automatic routing — exactly an audio cue's `outputs`. */
   outputs: AudioCrosspoint[] | null
+  /** The output patch the sound plays through, as an audio cue's; absent is the device's channels. */
+  outputPatchId?: string | null
+  /** The sound's fade-in and fade-out shapes, as an audio cue's; absent is the line and the S-curve. */
+  fadeInShape?: FadeShape | null
+  fadeOutShape?: FadeShape | null
 }
 
 /** A still picture. Its `duration` is how long it is shown; 0 holds it until it is stopped. */

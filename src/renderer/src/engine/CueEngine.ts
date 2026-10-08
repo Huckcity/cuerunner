@@ -3,7 +3,8 @@ import type {
   MscCue,
   MicCue,
   LightCue,
-  TimecodeCue
+  TimecodeCue,
+  InputCue
 } from '../../../shared/cue'
 import type { MidiFileCue } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
@@ -48,6 +49,9 @@ import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 import type { TriggerGuardSettings } from '../../../shared/workspace'
 import type { TakeoverPlan } from '../../../shared/redundancy'
+import { slicedLengthMs, slicePieces, slicesInUse } from '../../../shared/slices'
+import { engineShapeOf } from '../../../shared/fadeShape'
+import { patchSlotOf } from './audioRouting'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
 type ClearAllRunning = () => void
@@ -88,6 +92,15 @@ function errorMessage(error: unknown): string {
  * only the engine can say (a forever loop, or a file whose length is not known yet).
  */
 function plannedPlaybackMs(options: AudioStartOptions, durationMs: number): number | null {
+  if (options.slices && options.slices.length > 0) {
+    // The last slice of a region that runs to the end of the file ends where the file does.
+    const pieces = options.slices.map(piece => ({ ...piece, endTime: Math.min(piece.endTime, durationMs) }))
+    if (pieces.some(piece => piece.endTime <= piece.startTime)) return null
+    const sliced = slicedLengthMs(pieces, options.rate)
+    if (sliced === null) return null
+    // A start part-way in (a seek, a timeline) skips what lies before it.
+    return Math.max(0, sliced - Math.max(0, options.startTime - pieces[0].startTime) / (options.rate > 0 ? options.rate : 1))
+  }
   if (options.loopCount < 0) return null
   const segmentMs = (options.endTime ?? durationMs) - options.startTime
   if (segmentMs <= 0) return null
@@ -112,7 +125,45 @@ function startOptions(cue: AudioCue, seekMs = 0, trim = false): AudioStartOption
     // A seek is not a fresh start: fading in again would duck the cue every time the
     // operator drops the playhead somewhere.
     fadeInDuration: seekMs > 0 ? 0 : cue.fadeInDuration,
-    outputs: cue.outputs
+    outputs: cue.outputs,
+    ...soundExtras(cue, played.startMs, played.endMs)
+  }
+}
+
+/** A drawn shape as the trailing argument of a fade, or nothing at all when there is none. */
+function shapeArg(shape: number[] | null | undefined): [number[]] | [] {
+  return shape ? [shape] : []
+}
+
+/** Where a region with no end of its own ends, for a slice: past any file, which the engine clamps. */
+const OPEN_END_MS = 1e12
+
+/**
+ * What a sounding cue carries beyond its region and level: the patch it plays through, its
+ * fade-in's drawn shape and its slices — each only when the cue has it, so a cue without
+ * them sends the start it always sent.
+ */
+function soundExtras(
+  cue: Pick<AudioCue, 'outputPatchId' | 'fadeInShape' | 'slices'>, regionStartMs = 0, regionEndMs: number | null = null
+): Partial<AudioStartOptions> {
+  const extras: Partial<AudioStartOptions> = {}
+  const patch = patchSlotOf(cue.outputPatchId)
+  if (patch >= 0) extras.patch = patch
+  const fadeInShape = engineShapeOf(cue.fadeInShape)
+  if (fadeInShape) extras.fadeInShape = fadeInShape
+  if (slicesInUse(cue.slices)) extras.slices = slicePieces(cue.slices, regionStartMs, regionEndMs ?? OPEN_END_MS)
+  return extras
+}
+
+/** A live input's start: its level, routing, patch and fade-in, as a file voice's would be. */
+function inputStartOptions(cue: InputCue): Partial<AudioStartOptions> {
+  return {
+    volume: cue.volume,
+    pan: cue.pan,
+    trim: 1,
+    fadeInDuration: cue.fadeInDuration,
+    outputs: cue.outputs,
+    ...soundExtras({ outputPatchId: cue.outputPatchId, fadeInShape: cue.fadeInShape, slices: null })
   }
 }
 
@@ -135,7 +186,11 @@ export function videoSound(cue: VideoCue): AudioCue {
     playbackRate: 1,
     trim: 1,
     trimSilence: false,
-    soundRegion: null
+    soundRegion: null,
+    outputPatchId: cue.outputPatchId ?? null,
+    fadeInShape: cue.fadeInShape ?? null,
+    fadeOutShape: cue.fadeOutShape ?? null,
+    slices: null
   } as unknown as AudioCue
 }
 
@@ -192,7 +247,7 @@ interface CueRun {
   /** The task that fades a video's sound out onto its end, so a re-planned end can move it. */
   soundFadeTask?: number | null
   /** An audio cue's fade to silence before its end, and the level it fades from; null for none. */
-  fadeOut?: { ms: number; volume: number } | null
+  fadeOut?: { ms: number; volume: number; shape?: number[] | null } | null
   /** The task that sends that fade, while it has not gone out. */
   fadeOutTask?: number | null
   /** Whether the fade has gone to the engine, so a re-planned end knows to undo it first. */
@@ -610,9 +665,11 @@ export class CueEngine {
     if (cue.type === 'audio') {
       const audio = cue as AudioCue
       const fadeOutMs = audio.fadeOutDuration ?? 0
-      run.fadeOut = fadeOutMs > 0 ? { ms: fadeOutMs, volume: audio.volume } : null
+      run.fadeOut = fadeOutMs > 0 ? { ms: fadeOutMs, volume: audio.volume, shape: engineShapeOf(audio.fadeOutShape) } : null
       this.planAudio(audio, run, executeAt, finish)
     }
+    // A live input goes out the same way: its absolute time, inside the lookahead.
+    if (cue.type === 'input') this.planInput(cue as InputCue, run, executeAt, finish)
     // A video's sound and picture are both scheduled at fire time, for the same instant.
     if (cue.type === 'video') this.planVideo(cue as VideoCue, run, executeAt, finish)
 
@@ -803,6 +860,9 @@ export class CueEngine {
       case 'timecode':
         this.executeTimecode(cue as TimecodeCue, run, at, finish)
         break
+      case 'input':
+        // Planned when the cue was fired, as an audio cue is.
+        break
       case 'video':
         // Planned when the cue was fired, like an audio cue.
         break
@@ -927,6 +987,47 @@ export class CueEngine {
       })
   }
 
+  /**
+   * Sends a live input's start to the engine with its absolute time. It runs until it is
+   * stopped — or, given a length, until that length is up, when it closes over its fade-out.
+   * An input that cannot be opened ends the run with the engine's own sentence.
+   */
+  private planInput(cue: InputCue, run: CueRun, at: number, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    if (cue.inputChannels.length === 0) {
+      this.track(run, this.scheduler!.schedule({
+        at,
+        due: () => finish(at, { outcome: 'error', error: 'no input channels chosen' })
+      }))
+      return
+    }
+    this.track(run, this.scheduler!.schedule({
+      at,
+      early: () => {
+        void audioEngine.startInput(cue.id, at, cue.device, cue.inputChannels, inputStartOptions(cue))
+          .then(result => {
+            run.engineRunId = result.runId
+          })
+          .catch(error => {
+            if (run.cancelled) return
+            this.log({ level: 'error', message: errorMessage(error), label })
+            finish(Math.max(at, this.now()), { outcome: 'error', error: errorMessage(error) })
+          })
+      }
+    }))
+    if (cue.duration > 0) {
+      const endAt = at + cue.duration
+      this.planRelease(run, endAt)
+      this.track(run, this.scheduler!.schedule({
+        at: endAt,
+        due: () => {
+          void audioEngine.stop(cue.id, Math.max(0, cue.fadeOutDuration)).catch(() => {})
+          finish(endAt)
+        }
+      }))
+    }
+  }
+
   private armAudioEnd(cue: AudioCue, run: CueRun, at: number, options: AudioStartOptions, finish: Finish): void {
     // A length the cue already carries is planned now, before the engine is asked for
     // anything; without one the end is planned once the prepare has answered.
@@ -1014,7 +1115,7 @@ export class CueEngine {
         if (run.cancelled) return
         run.fadeOutSent = true
         const from = Math.max(at, this.now())
-        void audioEngine.fade(run.cueId, 'volume', 0, Math.max(0, endAt - from), 'sCurve', from).catch(() => {
+        void audioEngine.fade(run.cueId, 'volume', 0, Math.max(0, endAt - from), 'sCurve', from, ...shapeArg(fade.shape)).catch(() => {
           // The voice ended before its fade: there is nothing left to fade.
         })
       }
@@ -1154,17 +1255,20 @@ export class CueEngine {
     }
     if (cue.fadeProperty === 'opacity') {
       // A picture's level, on its output: the same ramp, drawn rather than heard.
-      visualCues.fade(cue.targetCueId, cue.targetValue, cue.duration, cue.curve, at)
+      if (cue.shape) visualCues.fade(cue.targetCueId, cue.targetValue, cue.duration, cue.curve, at, cue.shape)
+      else visualCues.fade(cue.targetCueId, cue.targetValue, cue.duration, cue.curve, at)
     } else {
       const param: AudioFadeParam = cue.fadeProperty === 'volume' ? 'volume' : 'pan'
+      // A drawn shape plays in place of the named curve: the engine reads its table.
+      const shape = engineShapeOf(cue.shape)
       // The ramp starts at the cue's own time on the clock, whether that is now or later.
-      void audioEngine.fade(cue.targetCueId, param, cue.targetValue, cue.duration, cue.curve, at)
+      void audioEngine.fade(cue.targetCueId, param, cue.targetValue, cue.duration, cue.curve, at, ...shapeArg(shape))
         .catch(() => {
           // A fade with nothing playing is not an error: the cue still takes its time.
         })
       // A volume fade that takes the pan with it: the same ramp's time and curve, on the pan.
       if (param === 'volume' && typeof cue.panTargetValue === 'number') {
-        void audioEngine.fade(cue.targetCueId, 'pan', cue.panTargetValue, cue.duration, cue.curve, at)
+        void audioEngine.fade(cue.targetCueId, 'pan', cue.panTargetValue, cue.duration, cue.curve, at, ...shapeArg(shape))
           .catch(() => {})
       }
     }
@@ -1245,11 +1349,16 @@ export class CueEngine {
     const releaseEndMs = target?.type === 'audio' && this.trimApplies(target as AudioCue)
       ? (target as AudioCue).soundRegion?.endMs
       : undefined
+    // A devamp that stops the target at the end of its pass, rather than letting it play on:
+    // a sliced cue ends at the end of the slice it is in, a loop at the end of its pass.
+    const stopAtEnd = cue.devampMode === 'stop'
     // Releasing a cue that is not looping is a no-op the engine reports, and that is not
     // an error: the operator's devamp arrived after the vamp had already ended.
     const released = releaseEndMs === undefined
-      ? audioEngine.release(cue.targetCueId)
-      : audioEngine.release(cue.targetCueId, undefined, releaseEndMs)
+      ? (stopAtEnd ? audioEngine.release(cue.targetCueId, undefined, undefined, true) : audioEngine.release(cue.targetCueId))
+      : (stopAtEnd
+        ? audioEngine.release(cue.targetCueId, undefined, releaseEndMs, true)
+        : audioEngine.release(cue.targetCueId, undefined, releaseEndMs))
     // A video's picture is let go of with its sound, from the same moment.
     const pictureReleased = target?.type === 'video' ? visualCues.release(cue.targetCueId, this.now()) : false
     void released.then(result => {
@@ -1295,7 +1404,8 @@ export class CueEngine {
    */
   private executeLightFade(cue: FadeCue, run: CueRun, at: number, finish: Finish): void {
     const level = Math.min(1, Math.max(0, cue.targetValue))
-    void levelLight(cue.targetCueId, level, cue.duration, cue.curve)
+    if (cue.shape) void levelLight(cue.targetCueId, level, cue.duration, cue.curve, cue.shape)
+    else void levelLight(cue.targetCueId, level, cue.duration, cue.curve)
     const endAt = at + cue.duration
     this.planRelease(run, endAt)
     this.track(run, this.scheduler!.schedule({
@@ -1546,6 +1656,10 @@ export class CueEngine {
     if (isLightCue(this.deps!.getCues(), cueId)) stopLight(cueId)
     this.cancelTimelineTasks(cueId)
     scriptHost.cancel(cueId)
+    // A live input closes over its own fade-out when nothing else says how: a hot microphone
+    // cut dead is a click in the room.
+    const stopped = this.deps!.getCues().find(c => c.id === cueId)
+    if (fadeMs <= 0 && stopped?.type === 'input') fadeMs = Math.max(0, (stopped as InputCue).fadeOutDuration)
     void audioEngine.stop(cueId, fadeMs).catch(() => {
       // A cue the engine never knew about has nothing to stop.
     })
@@ -1988,7 +2102,8 @@ export class CueEngine {
         // text's display time — so the output and the show clock stop together.
         return run.phase === 'running'
       }
-      return (cue?.type === 'audio' || cue?.type === 'timecode') && (run.phase === 'pending' || run.phase === 'running')
+      return (cue?.type === 'audio' || cue?.type === 'timecode' || cue?.type === 'input') &&
+        (run.phase === 'pending' || run.phase === 'running')
     }).map(([cueId]) => cueId)
   }
 
@@ -2072,7 +2187,7 @@ export class CueEngine {
     const run = this.runs.get(cueId)
     const cue = this.deps.getCues().find(c => c.id === cueId)
     if (!run || !cue || run.cancelled) return false
-    if ((cue.type !== 'audio' && cue.type !== 'video') || run.phase !== 'running') {
+    if ((cue.type !== 'audio' && cue.type !== 'video' && cue.type !== 'input') || run.phase !== 'running') {
       this.log({ level: 'error', message: 'only an audio or video cue that is playing can be paused on its own', label: this.cueLabel(cue) })
       return false
     }
@@ -2189,7 +2304,7 @@ export class CueEngine {
     const run = this.runs.get(cueId)
     if (!run || run.cancelled || run.phase !== 'running') return
     const cue = this.deps!.getCues().find(c => c.id === cueId)
-    if (!cue || (cue.type !== 'audio' && cue.type !== 'video')) return
+    if (!cue || (cue.type !== 'audio' && cue.type !== 'video' && cue.type !== 'input')) return
     void audioEngine.routing(cueId, cue.outputs).catch(() => {
       // A cue with no voice has no matrix to replace.
     })
@@ -2448,7 +2563,8 @@ export class CueEngine {
     const task = this.scheduler!.schedule({
       at: from,
       early: () => {
-        void audioEngine.fade(cue.id, 'volume', 0, Math.max(0, endAt - from), 'linear', from).catch(() => {})
+        void audioEngine.fade(cue.id, 'volume', 0, Math.max(0, endAt - from), 'linear', from, ...shapeArg(engineShapeOf(cue.fadeOutShape)))
+          .catch(() => {})
       }
     })
     run.soundFadeTask = task
@@ -2458,7 +2574,7 @@ export class CueEngine {
   /** Whether a cue has an engine voice to hold: a video with no sound has only its picture. */
   private hasVoice(cueId: string): boolean {
     const cue = this.deps?.getCues().find(c => c.id === cueId)
-    if (cue?.type === 'audio') return true
+    if (cue?.type === 'audio' || cue?.type === 'input') return true
     return cue?.type === 'video' && this.runs.get(cueId)?.silentPicture !== true
   }
 

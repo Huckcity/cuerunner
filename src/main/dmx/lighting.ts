@@ -14,6 +14,7 @@
 import { performance } from 'node:perf_hooks'
 import type { RemoteInfo } from 'node:dgram'
 import type { FadeCurve } from '../../shared/cue'
+import type { FadeShape } from '../../shared/fadeShape'
 import { DMX_LIMITS, defaultLightingSettings } from '../../shared/dmx'
 import type {
   ArtNetNode,
@@ -156,8 +157,8 @@ export class DmxLighting {
     this.engine.release(cueId, fadeMs, curve, this.now())
   }
 
-  level(cueId: string, level: number, fadeMs: number, curve: FadeCurve): void {
-    this.engine.level(cueId, level, fadeMs, curve, this.now())
+  level(cueId: string, level: number, fadeMs: number, curve: FadeCurve, shape: FadeShape | null = null): void {
+    this.engine.level(cueId, level, fadeMs, curve, this.now(), shape)
   }
 
   program(values: DmxProgrammerValue[]): void {
