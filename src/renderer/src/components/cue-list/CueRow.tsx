@@ -212,6 +212,7 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
       <span className="col-pre">{cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}</span>
       <span className="col-post">{cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}</span>
       <span className="col-adv">{cue.advance !== 'none' ? cue.advance : ''}</span>
+      <span className="col-notes" title={cue.notes || undefined}>{cue.notes.trim().split('\n')[0]}</span>
 
       {isAudioPlaying && (
         <div className="cue-progress-bar">

@@ -5,6 +5,8 @@ import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
 import { BatchEditDialog } from './BatchEditDialog'
 import { clipboardHandlers } from '../../hooks/useCueClipboard'
+import { ColumnHeader } from './ColumnHeader'
+import { layoutStyle, loadLayout, saveLayout, type ColumnLayout } from '../../utils/cueColumns'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { createCue, cueNameFromFile, nextCueNumber } from '../../utils/cueDefaults'
 import { droppedCueType, isNewCueDrag } from '../../utils/newCueDrag'
@@ -177,6 +179,12 @@ export function CueList() {
   const [dropRenderIndex, setDropRenderIndex] = useState<number | null>(null)
   // A cue type dragged off the toolbar is over the list: it drops where the line is drawn.
   const [newCueOver, setNewCueOver] = useState(false)
+  // The columns as this operator has arranged them on this machine.
+  const [columns, setColumnLayout] = useState<ColumnLayout>(loadLayout)
+  const setColumns = useCallback((next: ColumnLayout) => {
+    setColumnLayout(next)
+    saveLayout(next)
+  }, [])
 
   // Hover-expand: auto-expand a collapsed group when dragged over for 700ms
   const hoverGroupIdRef = useRef<string | null>(null)
@@ -509,15 +517,10 @@ export function CueList() {
       onDragLeave={handleDragLeave}
       onDrop={handleFileDrop}
       data-drag-over={isDragOver}
+      data-hidden={columns.hidden.join(' ')}
+      style={layoutStyle(columns)}
     >
-      <div className="cue-list-header">
-        <span className="col-num">#</span>
-        <span className="col-name">Name</span>
-        <span className="col-dur">Duration</span>
-        <span className="col-pre">Pre</span>
-        <span className="col-post">Post</span>
-        <span className="col-adv">Advance</span>
-      </div>
+      <ColumnHeader layout={columns} onLayout={setColumns} />
       <div
         ref={parentRef}
         className="cue-list-scroll"
