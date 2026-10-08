@@ -134,10 +134,11 @@ export class TimecodeHub {
     const key = JSON.stringify([receiver.state, receiver.rate, receiver.rateDetected, receiver.detail,
       receiver.frames === null ? null : Math.round(receiver.frames), status.generators.map(g => [g.cueId, g.running, Math.round(g.frames)])])
     if (!force && !moving && key === this.lastPushed) {
-      if (this.context === null && !this.generators.running()) this.idle()
+      if ((this.context === null || receiver.source === 'none') && !this.generators.running()) this.idle()
       return
     }
-    if (!force && this.context === null && !this.generators.running()) this.idle()
+    // Nothing to watch: no receiver with a source, and no clock of a cue's running.
+    if (!force && (this.context === null || receiver.source === 'none') && !this.generators.running()) this.idle()
     this.lastPushed = key
     this.options.broadcast(status)
   }

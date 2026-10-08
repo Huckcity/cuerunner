@@ -345,7 +345,9 @@ try {
         { atMs: 0, verb: 'ltcStart', voiceId: 'a', rate: '23.976' },
         { atMs: 0, verb: 'ltcStart', voiceId: '', rate: '25' },
         { atMs: 0, verb: 'ltcControl', voiceId: 'a', action: 'rewind' },
-        ...['v1', 'v2', 'v3', 'v4', 'v5'].map(voiceId => ({ atMs: 0, verb: 'ltcStart', voiceId, rate: '25' }))
+        ...['v1', 'v2', 'v3', 'v4', 'v5'].map(voiceId => ({ atMs: 0, verb: 'ltcStart', voiceId, rate: '25' })),
+        { atMs: 0, verb: 'ltcRead' },
+        { atMs: 0, verb: 'ltcListen', device: 'cuerunner-feat-timecode-no-such-input', channel: 0 }
       ]
     })
     const replies = summary.results.map(r => r.reply)
@@ -354,6 +356,12 @@ try {
     check('an unknown action is refused', replies[2].ok === false)
     check('four voices run at once and a fifth is refused', replies.slice(3, 7).every(r => r.ok) && replies[7].ok === false &&
       replies[7].error?.code === 'limit')
+    const read = replies[8]?.result
+    check('a reader that is not listening reads nothing, and says so', replies[8]?.ok === true && read.listening === false &&
+      Array.isArray(read.frames) && read.frames.length === 0 && typeof read.nowMs === 'number', JSON.stringify(replies[8]))
+    check('listening on an input that is not there is refused, naming it', replies[9]?.ok === false &&
+      replies[9].error?.code === 'device' && /cuerunner-feat-timecode-no-such-input|no audio system/.test(replies[9].error?.message),
+      JSON.stringify(replies[9]))
   }
 } finally {
   rmSync(workDir, { recursive: true, force: true })

@@ -5,11 +5,30 @@ import { timecodeStatus, useTimecodeStatus } from '../../engine/timecodeStatus'
 import {
   formatFrames,
   formatTimecode,
+  framesPerDay,
+  framesToTimecode,
+  msToFrames,
   parseTimecode,
   positionAt,
-  rateInfo
+  rateInfo,
+  type Timecode,
+  type TimecodeRate
 } from '../../../../shared/timecode'
 import type { CueTrigger } from '../../../../shared/cue'
+
+/**
+ * A frame as the operator typed it: a label (`01:00:10:00`), or a real time from midnight in
+ * seconds (`3610s`, `3610.5 s`) for a show whose times were written against a stopwatch
+ * rather than a clock.
+ */
+export function parseTriggerText(text: string, rate: TimecodeRate): Timecode | null {
+  const seconds = /^\s*(\d+(?:\.\d+)?)\s*s\s*$/i.exec(text)
+  if (seconds !== null) {
+    const frames = msToFrames(Number(seconds[1]) * 1000, rate)
+    return frames < framesPerDay(rate) ? framesToTimecode(frames, rate) : null
+  }
+  return parseTimecode(text, rate)
+}
 
 /**
  * The timecode half of a cue's triggers: the frame of the incoming clock it fires on. Typed,
@@ -21,7 +40,7 @@ export function TimecodeTriggerSection({ onAdd }: { onAdd: (trigger: CueTrigger)
   const { receiver } = useTimecodeStatus()
   const [text, setText] = useState('')
   const rate = receiver.rate
-  const parsed = parseTimecode(text, rate)
+  const parsed = parseTriggerText(text, rate)
 
   const take = (): void => {
     const now = timecodeStatus().receiver
@@ -37,14 +56,16 @@ export function TimecodeTriggerSection({ onAdd }: { onAdd: (trigger: CueTrigger)
         <input
           id="trigger-timecode"
           value={text}
-          placeholder="01:00:10:00"
+          placeholder="01:00:10:00, or 3610s"
           onChange={e => setText(e.target.value)}
         />
       </div>
       <p className="inspector-hint">
         {text.trim() !== '' && parsed === null
           ? `Not a frame at ${rateInfo(rate).label}, the rate the clock is read at.`
-          : 'Fires when the incoming clock runs through this frame.'}
+          : parsed !== null && /s\s*$/i.test(text)
+            ? `${formatTimecode(parsed, rate)} — fires when the incoming clock runs through it.`
+            : 'Fires when the incoming clock runs through this frame.'}
       </p>
       <div className="trigger-actions">
         <button
