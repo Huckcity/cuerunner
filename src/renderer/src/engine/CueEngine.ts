@@ -1890,7 +1890,12 @@ export class CueEngine {
       this.log({ level: 'error', message: result.error, label: this.cueLabel(cue) })
       finish(Math.max(at, this.now()), { outcome: 'error', error: result.error })
     })
-    if (cue.duration > 0) this.scheduleRunEnd(run, at + Math.max(0, cue.duration - run.seekMs), finish)
+    if (cue.duration > 0) {
+      // The end is known, and said on the run: the timers count it down.
+      run.endAt = at + Math.max(0, cue.duration - run.seekMs)
+      run.plannedMs = run.endAt - run.startAt
+      this.scheduleRunEnd(run, run.endAt, finish)
+    }
   }
 
   private holdsLastFrame(cueId: string): boolean {

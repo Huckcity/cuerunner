@@ -20,6 +20,14 @@ import { addCueFromMoreMenu, closeApp, launchApp, openFromRecent, toolbarCueBtn 
 import type { PlaybackDevHarness } from '../src/main/safety/devHarness'
 import { defaultShowSettings } from '../src/shared/show'
 import { createOutput } from '../src/shared/visual'
+import type { OutputProbe } from '../src/shared/ipc/output'
+
+declare global {
+  interface Window {
+    /** The output page's read-only probe (src/renderer/src/output/main.ts). */
+    __cuerunnerOutput?: OutputProbe
+  }
+}
 
 const FIXTURES = path.join(process.cwd(), 'e2e', 'fixtures', 'visual')
 const RED_GREEN = path.join(FIXTURES, 'red-green.mp4')

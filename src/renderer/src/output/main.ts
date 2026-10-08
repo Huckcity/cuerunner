@@ -11,7 +11,7 @@ import '@fontsource/ibm-plex-sans/700.css'
 import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/700.css'
 import './output.css'
-import type { OutputEvent, OutputWindowBridge, OutputWindowCommand, OutputWindowInit, TimerFeed } from '../../../shared/ipc/output'
+import type { OutputEvent, OutputProbe, OutputWindowBridge, OutputWindowCommand, OutputWindowInit, TimerFeed } from '../../../shared/ipc/output'
 import type { TimerMode } from '../../../shared/visual'
 import { EngineClock } from './engineClock'
 import { Stage, timerText } from './stage'
@@ -23,12 +23,7 @@ declare global {
   interface Window {
     cuerunnerOutput: OutputWindowBridge
     /** What the acceptance suite reads an output through: its pixels, and what it is showing. */
-    __cuerunnerOutput?: {
-      renderer(): 'webgl' | 'canvas'
-      size(): { width: number; height: number }
-      pixel(x: number, y: number): number[]
-      showing(): Array<{ cueId: string; opacity: number }>
-    }
+    __cuerunnerOutput?: OutputProbe
   }
 }
 

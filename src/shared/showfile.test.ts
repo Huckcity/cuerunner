@@ -314,14 +314,14 @@ describe('what counts as an edit, per cue type and field', () => {
     ])
   })
 
-  it('reads duration as an edit on every cue type but audio', () => {
+  it('reads duration as an edit on every cue type but audio and video, whose length is their file\'s', () => {
     for (const type of CUE_TYPES) {
       const diff = diffWorkspaces(
         workspace([cueOf(type, { id: 'c', duration: 100 })]),
         workspace([cueOf(type, { id: 'c', duration: 200 })])
       )
       const fields = diff.changed.flatMap(change => change.fields?.map(field => field.field) ?? [])
-      expect(fields, `duration on a ${type} cue`).toEqual(type === 'audio' ? [] : ['duration'])
+      expect(fields, `duration on a ${type} cue`).toEqual(type === 'audio' || type === 'video' ? [] : ['duration'])
     }
   })
 

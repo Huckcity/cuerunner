@@ -221,3 +221,15 @@ export interface OutputWindowBridge {
   report(report: OutputWindowReport): Promise<void>
   onCommands(callback: (commands: OutputWindowCommand[]) => void): () => void
 }
+
+/**
+ * What an output window shows the acceptance suite (`window.__cuerunnerOutput`): how it draws,
+ * the size it composes at, one pixel of the composed frame, and the pictures it has up. Read
+ * only — nothing here changes what the output shows.
+ */
+export interface OutputProbe {
+  renderer(): 'webgl' | 'canvas'
+  size(): { width: number; height: number }
+  pixel(x: number, y: number): number[]
+  showing(): Array<{ cueId: string; opacity: number }>
+}
