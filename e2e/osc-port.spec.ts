@@ -49,17 +49,28 @@ test('a port another program shares is refused, and the Settings status and the 
   const status = dialog.locator('.settings-service[data-service="osc-in"]')
   await expect(status).toHaveAttribute('data-state', 'degraded')
   await expect(status).toContainText(`port ${port} is in use by another program`)
-  await expect(status).toContainText('EADDRINUSE')
+  // The platform's own code for a port held by another socket: EADDRINUSE, or WSAEACCES on
+  // Windows — the sentence before it is the same either way.
+  await expect(status).toContainText(/\((EADDRINUSE|EACCES)\)/)
   await dialog.getByRole('button', { name: 'Close' }).click()
 
   await page.locator('.btn-log').click()
-  await expect(page.locator('.log-panel')).toContainText(
-    `OSC input: port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — this show cannot hear OSC there until it is let go or the port is changed (EADDRINUSE)`
-  )
+  await expect(page.locator('.log-panel')).toContainText(new RegExp(
+    `OSC input: port ${port} is in use by another program \\(QLab, another Cuerunner, a bridge\\) — ` +
+    'this show cannot hear OSC there until it is let go or the port is changed \\((EADDRINUSE|EACCES)\\)'
+  ))
 })
 
 test('a port this show holds cannot be joined by a program that shares ports', async () => {
   const port = await oscPortOfItsOwn(page)
   const { error } = await bindSharing(port)
-  expect(error).toBe('EADDRINUSE')
+  // Refused: EADDRINUSE, or on Windows WSAEACCES, which is what a bind with SO_REUSEADDR gets
+  // on a port held with SO_EXCLUSIVEADDRUSE.
+  expect(error).toBe(process.platform === 'win32' ? 'EACCES' : 'EADDRINUSE')
+  // And this show is still the one listening on it.
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu [data-action="settings"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('button', { name: 'Network', exact: true }).click()
+  await expect(dialog.locator('.settings-service[data-service="osc-in"]')).toContainText(`listening on port ${port}`)
 })
