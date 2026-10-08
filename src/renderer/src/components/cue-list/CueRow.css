@@ -184,6 +184,16 @@
   letter-spacing: var(--ls-caps);
 }
 
+/* A memo's words are what it is for, so the first line of its note is read on the row, in
+   the tone the list keeps for what is said rather than what runs. */
+.memo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
 /* A group carries its children's names as well as its own, so it leads them. */
 .cue-row[data-type='group'] .name-text {
   font-weight: var(--fw-semi);

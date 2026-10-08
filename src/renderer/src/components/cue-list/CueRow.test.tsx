@@ -166,3 +166,45 @@ describe('CueRow — an audio cue with no file', () => {
   })
 })
 
+describe('CueRow — a memo', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  function draw(notes: string, type: 'memo' | 'wait' = 'memo'): void {
+    const cue = { ...createCue(type), name: 'Interval', notes }
+    act(() => {
+      root.render(
+        <CueRow cue={cue} depth={0} isSelected={false} runState={null} failure={null}
+          onClick={() => {}} onContextMenu={() => {}} renamingId={null} />
+      )
+    })
+  }
+
+  const text = (): HTMLElement | null => container.querySelector('.memo-text')
+
+  it('reads the first line of its note on the row, the whole note a hover away', () => {
+    draw('Hold for the bow\nHouse lights on the SM')
+    expect(text()?.textContent).toBe('Hold for the bow')
+    expect(text()?.title).toBe('Hold for the bow\nHouse lights on the SM')
+  })
+
+  it('draws nothing for a memo with no note yet, and no note on any other cue', () => {
+    draw('   ')
+    expect(text()).toBeNull()
+    draw('Notes are the inspector’s on a wait', 'wait')
+    expect(text()).toBeNull()
+  })
+})
+

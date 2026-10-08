@@ -40,7 +40,9 @@ const TYPE_TABS: Record<string, string[]> = {
   scene: ['Basics', 'Scene'],
   devamp: ['Basics', 'Devamp'],
   msc: ['Basics', 'Show Control'],
-  mic: ['Basics', 'Mic']
+  mic: ['Basics', 'Mic'],
+  // A memo is its name and its note, and both are on Basics: it has nothing else to set.
+  memo: ['Basics']
 }
 
 const TRIGGERS_TAB = 'Triggers'

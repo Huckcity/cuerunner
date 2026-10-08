@@ -747,8 +747,8 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a count the README changes', () => {
-    expect(countProblems({ ...LIVE, word: 'twelve', count: 12 })).toEqual([
-      expect.stringContaining('README.md states the free cue stack as "twelve cue types" and the code declares 11 free cue types')
+    expect(countProblems({ ...LIVE, word: 'thirteen', count: 13 })).toEqual([
+      expect.stringContaining('README.md states the free cue stack as "thirteen cue types" and the code declares 12 free cue types')
     ])
   })
 

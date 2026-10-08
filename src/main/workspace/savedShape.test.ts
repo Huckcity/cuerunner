@@ -536,7 +536,8 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     channelId: 'ew-dx:5364000906:0',
     label: 'Aldonza (37)',
     action: 'mute'
-  }
+  },
+  memo: { ...cueBase('me1'), type: 'memo' }
 }
 
 describe('the cue-field shape', () => {

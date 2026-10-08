@@ -165,6 +165,9 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
         ) : (
           <span className="name-text">{cue.name || <em>untitled</em>}</span>
         )}
+        {cue.type === 'memo' && cue.notes.trim() !== '' && (
+          <span className="memo-text" title={cue.notes}>{cue.notes.trim().split('\n')[0]}</span>
+        )}
         {!cue.isArmed && (
           <span className="disarmed-pill">disarmed</span>
         )}

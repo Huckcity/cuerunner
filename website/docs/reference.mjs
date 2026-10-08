@@ -319,6 +319,10 @@ export const REFERENCE = [
               <td><strong>Script</strong> and <strong>Timeout</strong> (60000 ms; 0 waits for ever). See the <a href="./script-api.html">script API</a>.</td>
             </tr>
             <tr>
+              <td><strong>Memo</strong></td>
+              <td>A note in the stack — "hold for the bow", "LX 40 is called by the SM". Its words are its <strong>Name</strong> and <strong>Notes</strong> on Basics, and the first line of the note is read on its row. GO completes it at once: an advance passes straight through it, so a memo between two cues never holds the show.</td>
+            </tr>
+            <tr>
               <td><strong>Mic</strong><span class="pro">Pro</span></td>
               <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
             </tr>

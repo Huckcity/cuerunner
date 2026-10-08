@@ -8,7 +8,8 @@ export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' |
  */
 export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
-  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic'
+  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic',
+  'memo'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -281,6 +282,16 @@ export interface MicCue extends CueBase {
   action: 'mute' | 'unmute'
 }
 
+/**
+ * A note in the stack: what the show needs said where it happens — "hold for the bow",
+ * "LX 40 is called by the SM" — and nothing else. Its words are the cue's own name and
+ * notes, so it carries no field of its own. GO on it completes at once and passes any
+ * chain through it, so a memo between two cues never holds the show.
+ */
+export interface MemoCue extends CueBase {
+  type: 'memo'
+}
+
 export interface SceneCue extends CueBase {
   type: 'scene'
   /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
@@ -342,3 +353,4 @@ export type Cue =
   | DevampCue
   | MscCue
   | MicCue
+  | MemoCue

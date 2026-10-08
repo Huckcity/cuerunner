@@ -1,6 +1,6 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue
 } from '../../../shared/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -238,6 +238,11 @@ export function createCue(type: CueType, number = '1'): Cue {
         label: '',
         action: 'mute'
       } satisfies MicCue
+    case 'memo':
+      return {
+        ...base('Memo', number),
+        type: 'memo'
+      } satisfies MemoCue
   }
 }
 

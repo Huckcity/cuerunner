@@ -700,6 +700,10 @@ export class CueEngine {
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
+      case 'memo':
+        // A note has nothing to do: it completes where it began, so a chain runs through it.
+        finish(at)
+        break
     }
   }
 
@@ -1124,7 +1128,8 @@ export class CueEngine {
         // Fire-and-forget types have already happened — don't replay
         if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
             child.type === 'network' || child.type === 'script' || child.type === 'stop' ||
-            child.type === 'devamp' || child.type === 'msc' || child.type === 'mic') continue
+            child.type === 'devamp' || child.type === 'msc' || child.type === 'mic' ||
+            child.type === 'memo') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }
     }
