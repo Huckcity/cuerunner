@@ -397,7 +397,8 @@ app.whenReady().then(() => {
       recentEvents: recentEngineEvents,
       status: () => audioEngine.status(),
       kill: () => audioEngine.crashForTest(),
-      simulateDeviceLoss: () => audioEngine.simulateDeviceLossForTest()
+      simulateDeviceLoss: () => audioEngine.simulateDeviceLossForTest(),
+      simulateOutputLoss: (device: string) => audioEngine.simulateOutputLossForTest(device)
     }
   })
   // A quit the renderer cancels must keep its audio: File→Exit on a dirty workspace

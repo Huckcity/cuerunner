@@ -35,7 +35,9 @@
  * `startInput`), the output patches and output faders (`patch`, `outputGains`, a start's
  * `patch`), slices and drawn fade shapes (a start's `slices` and `fadeInShape`, a fade's
  * `shape`, a release's `stopAtSliceEnd`) and the loudness meter (`loudness`) joined the same
- * table before 4 shipped, for the same reason.
+ * table before 4 shipped, for the same reason — and so did the extra output devices (a patch's
+ * `device`, `outputs` through `outputStatus`, the meters' `devices`, and a device notification
+ * simulated for one of the test outputs).
  */
 export const AUDIO_PROTOCOL_VERSION = 4
 
@@ -352,7 +354,9 @@ export const AUDIO_WIRE = {
     /** Test hook: runs the real device-notification classification without hardware. */
     simulateDeviceNotification: {
       type: { type: 'string', required: true },
-      deliberate: { type: 'boolean', required: false, default: false }
+      deliberate: { type: 'boolean', required: false, default: false },
+      /** One of the test output devices, whose loss is simulated instead of the main device's. */
+      device: { type: 'string', required: false, default: '' }
     },
     shutdown: {},
     // ── Linear timecode (native/audio/src/ltc.h) ────────────────────────────
@@ -423,12 +427,38 @@ export const AUDIO_WIRE = {
     patch: {
       slot: { type: 'number', required: true },
       outputs: { type: 'array', required: false, nullable: true, default: null },
-      gain: { type: 'number', required: false, default: 1 }
+      gain: { type: 'number', required: false, default: 1 },
+      /** The output device the patch plays on, by id; '' (or the main device's own id) is the main device. */
+      device: { type: 'string', required: false, default: '' }
     },
     /** Every device output's own fader, linear, in output order. */
     outputGains: {
       gains: { type: 'array', required: true }
-    }
+    },
+    // ── Extra output devices (native/audio/src/aux_output.h) ──────────────────
+    /** The output devices a patch can name, and the test ones when offered. */
+    outputs: {},
+    /** Opens an extra output device (or finds it open): the reconnect for one that was lost. */
+    outputOpen: {
+      device: { type: 'string', required: true },
+      /** A test output's rate; 0 is the main device's. A device is asked for the main rate. */
+      sampleRate: { type: 'number', required: false, default: 0 },
+      /** A test output's channels. A device keeps its own. */
+      channels: { type: 'number', required: false, default: 2 },
+      /** How far a test output's clock is off its rate, ppm. */
+      skewPpm: { type: 'number', required: false, default: 0 },
+      /** A test output's period, frames; 0 is 10 ms. */
+      periodFrames: { type: 'number', required: false, default: 0 },
+      /** The buffer the drift lock holds, ms; 0 sizes it from the main device's blocks. */
+      latencyMs: { type: 'number', required: false, default: 0 },
+      /** How late a test output's callbacks may each be, ms. */
+      jitterMs: { type: 'number', required: false, default: 0 }
+    },
+    outputClose: {
+      device: { type: 'string', required: true }
+    },
+    /** Every extra output device: whether it plays, its clock against the main one, its buffer. */
+    outputStatus: {}
   },
   events: AUDIO_WIRE_EVENTS
 } as const satisfies {
@@ -591,6 +621,11 @@ export const AUDIO_CHANNELS = {
   /** The mixer: an output patch's map and fader, and the per-output faders. */
   patch: 'audio:patch',
   outputGains: 'audio:outputGains',
+  /** Extra output devices: the ones a patch can name, opening and closing one, and their state. */
+  outputs: 'audio:outputs',
+  outputOpen: 'audio:outputOpen',
+  outputClose: 'audio:outputClose',
+  outputStatus: 'audio:outputStatus',
   pickFile: 'audio:pickFile',
   /** Main pushes AudioEngineEvent[] here; preload subscribes with `onEvents`. */
   events: 'audio:events'
@@ -1168,6 +1203,77 @@ export interface AudioBusMeter {
   peaks: number[]
 }
 
+/** An output device a patch can name. */
+export interface AudioOutputDevice {
+  /** What a patch names it by: the id the device list gives it. */
+  id: string
+  name: string
+  /** 0 when the backend does not say before it is opened. */
+  channels: number
+  sampleRate: number
+  isDefault: boolean
+  /** One of the engine's test outputs (`test:out-a`, `test:out-b`), not hardware. */
+  synthetic: boolean
+}
+
+/** What opening an extra output device asks for. Everything but the device and the buffer applies to a test output only. */
+export interface AudioOutputOpenOptions {
+  device: string
+  sampleRate?: number
+  channels?: number
+  skewPpm?: number
+  periodFrames?: number
+  latencyMs?: number
+  jitterMs?: number
+}
+
+/** An extra output device, as the engine reports it. */
+export interface AudioOutputStatus {
+  slot: number
+  device: string
+  name: string
+  channels: number
+  sampleRate: number
+  running: boolean
+  /** Lost since it was opened: its patches play on the main device until it is opened again. */
+  failed: boolean
+  synthetic: boolean
+  /** Why it was lost; null while it plays. */
+  error: string | null
+  /** What the drift lock adds between the main device and this one, ms (a one-second average). */
+  latencyMs: number
+  /** The buffer the lock holds, ms. */
+  targetMs: number
+  /** The device's own buffer, ms, from its period (an estimate; 0 for a test output). */
+  deviceLatencyMs: number
+  /** How fast its clock runs against the main device's, ppm, as the lock measures it. */
+  driftPpm: number
+  /** The main device's largest block, frames. */
+  periodFrames: number
+  underruns: number
+  overruns: number
+  resyncs: number
+  playedFrames: number
+  /** Engine-clock ms its stream began at. */
+  startedAtMs: number
+}
+
+/** What defining a patch did: the device it plays on, and whether that is the one it asked for. */
+export interface AudioPatchResult extends AudioCommandResult {
+  /** The extra output device it plays on, or null for the main device. */
+  device: string | null
+  /** It named a device that would not open, and plays on the main device's outputs of the same numbers. */
+  fallback: boolean
+  /** Why that device would not open; null unless `fallback`. */
+  reason: string | null
+}
+
+/** One extra output device's meter: each of its outputs' peak, after the master level. */
+export interface AudioDeviceMeter {
+  device: string
+  peaks: number[]
+}
+
 /**
  * A window into a file, in ms from its start. Both ends together, because half a window
  * is not one: a request with no region is the whole file.
@@ -1307,10 +1413,22 @@ export interface AudioEngineBridge {
     channels: number[],
     options: Partial<AudioStartOptions>
   ): Promise<AudioStartResult>
-  /** Define output patch `slot` (its channels onto device outputs, and its fader), or clear it with null. */
-  patch(slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult>
+  /**
+   * Define output patch `slot` (its channels onto the outputs of `device`, and its fader), or
+   * clear it with null. `device` absent or '' is the main device; one the engine has not opened
+   * is opened and kept open, and one that will not open leaves the patch on the main device's
+   * outputs of the same numbers — the answer says which, and why.
+   */
+  patch(slot: number, outputs: number[] | null, gain: number, device?: string): Promise<AudioPatchResult>
   /** Every device output's own fader, linear, in output order. */
   outputGains(gains: number[]): Promise<AudioCommandResult>
+  /** The output devices a patch can name. */
+  outputs(): Promise<AudioOutputDevice[]>
+  /** Opens an extra output device ahead of the cue that uses it — or again, after it was lost. */
+  outputOpen(options: AudioOutputOpenOptions): Promise<AudioOutputStatus>
+  outputClose(device: string): Promise<{ closed: boolean }>
+  /** Every extra output device: whether it plays, its clock against the main one, its buffer. */
+  outputStatus(): Promise<AudioOutputStatus[]>
   /** Subscribe to engine events. Returns the unsubscribe function. */
   onEvents(callback: (events: AudioEngineEvent[]) => void): () => void
   /** File dialog for choosing a cue's media. */
@@ -1366,6 +1484,8 @@ export interface AudioMeters {
   peaks: number[]
   /** Each defined output patch's meter, after its fader. Absent from an engine without patches. */
   buses?: AudioBusMeter[]
+  /** Each open extra output device's meter. Absent from an engine without them. */
+  devices?: AudioDeviceMeter[]
 }
 
 export interface AudioHoldPayload {
@@ -1438,6 +1558,12 @@ export interface AudioPatchPayload {
   /** Device outputs, one per patch channel; null clears the patch. */
   outputs: number[] | null
   gain: number
+  /** The output device, by id; absent or '' is the main device. */
+  device?: string
+}
+export type AudioOutputOpenPayload = AudioOutputOpenOptions
+export interface AudioOutputClosePayload {
+  device: string
 }
 export interface AudioOutputGainsPayload {
   gains: number[]

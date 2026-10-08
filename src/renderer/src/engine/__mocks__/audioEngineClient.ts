@@ -79,7 +79,13 @@ export const audioEngine = {
   }),
   inputClose: vi.fn(async () => ({ closed: false })),
   inputStatus: vi.fn(async () => []),
-  patch: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  patch: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true, device: null, fallback: false, reason: null })),
+  outputs: vi.fn(async () => []),
+  outputOpen: vi.fn(async () => {
+    throw new Error('no output devices in this test')
+  }),
+  outputClose: vi.fn(async () => ({ closed: false })),
+  outputStatus: vi.fn(async () => []),
   outputGains: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
   loudness: vi.fn(async (filePath: string) => ({
     filePath, integratedLufs: -18, truePeakDb: -3, samplePeakDb: -3, silent: false,
