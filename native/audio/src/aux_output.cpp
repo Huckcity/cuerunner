@@ -180,7 +180,7 @@ bool AuxOutput::openReal(const OutputOpenOptions& options, const AuxHost& host, 
   }
   if (!found) {
     ma_context_uninit(&state->context);
-    error = "the output device " + options.device + " is not connected to this machine";
+    error = options.device + " is not connected to this machine";
     return false;
   }
   ma_device_config config = ma_device_config_init(ma_device_type_playback);
@@ -431,7 +431,7 @@ int AuxOutputs::open(const OutputOpenOptions& options, int mainRate, double cloc
     return -1;
   }
   if (!test && offline_) {
-    error = "the output device " + options.device + " is not connected to this machine";
+    error = options.device + " is not connected to this machine";
     return -1;
   }
   int slot = find(options.device);
