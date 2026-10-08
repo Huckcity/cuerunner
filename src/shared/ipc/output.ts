@@ -6,8 +6,9 @@
 // output windows have a preload of their own (src/preload/output.ts) and a bridge of their
 // own, `OutputWindowBridge` — a smaller door for a page that only draws: it reads its first
 // state, reads the engine's clock, and reports what it showed. Its channels are not in
-// `CHANNEL_TABLES`, because the control window's bridge does not call them; they are held to
-// their own registrar by src/main/output/parity.test.ts instead.
+// `CHANNEL_TABLES`, because the control window's bridge does not call them; they are declared
+// in ./outputWindow.ts (a module of their own, so the two preloads share no code) and held
+// to their own registrar by src/main/output/parity.test.ts.
 //
 // Every time a command carries is on the engine's sample clock, in engine milliseconds —
 // never the window's show clock and never a wall clock — so an output can place a picture
@@ -43,18 +44,6 @@ export const OUTPUT_CHANNELS = {
   pickFile: 'output:pickFile',
   /** What the outputs did, pushed: first frames, ends, dissolves, statuses. */
   events: 'output:events'
-} as const
-
-/** The output windows' own channels: their preload calls these, and main pushes on `commands`. */
-export const OUTPUT_WINDOW_CHANNELS = {
-  /** The window has loaded: main answers with what it is and what it should be showing. */
-  ready: 'outputWindow:ready',
-  /** One reading of the engine's sample clock, for the window to keep its pictures on. */
-  clock: 'outputWindow:clock',
-  /** What the window did, for main to pass on. */
-  report: 'outputWindow:report',
-  /** Commands from main, pushed. */
-  commands: 'outputWindow:commands'
 } as const
 
 /** How a block of text is drawn. */

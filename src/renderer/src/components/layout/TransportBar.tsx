@@ -13,7 +13,7 @@ interface Props {
 }
 
 /** The show's panels, which share the dock with the selected cue. */
-export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script'
+export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script' | 'outputs'
 
 /**
  * What runs the show and what needs the operator: the running count and the standing

@@ -5,6 +5,7 @@ import { targetLabel } from './targetLabel'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
+import { isVisualCue } from '../../../../shared/visual'
 
 interface Props { cue: FadeCue }
 
@@ -17,14 +18,24 @@ export function FadeInspector({ cue }: Props) {
   // this list was a target that could be chosen and would do nothing. A cue of another
   // kind that an older show already aims at stays in the list, so the panel shows what
   // the cue says rather than quietly showing something else.
-  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.id === cue.targetCueId))
+  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || isVisualCue(c) || c.id === cue.targetCueId))
   const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
+  // What the target has to fade: a sound's volume and pan, a picture's opacity — and a
+  // video has both. A picture with no sound offers only what it has.
+  const target = cues.find(c => c.id === cue.targetCueId)
+  const pictureOnly = target?.type === 'image' || target?.type === 'text'
+  const hasPicture = target !== undefined && isVisualCue(target)
+  const aim = (targetCueId: string): void => {
+    const next = cues.find(c => c.id === targetCueId)
+    const silent = next?.type === 'image' || next?.type === 'text'
+    set(silent && cue.fadeProperty !== 'opacity' ? { targetCueId, fadeProperty: 'opacity', targetValue: 0 } : { targetCueId })
+  }
 
   return (
     <div>
       <div className="field-row">
         <label>Target cue</label>
-        <select value={cue.targetCueId} onChange={e => set({ targetCueId: e.target.value })}>
+        <select value={cue.targetCueId} onChange={e => aim(e.target.value)}>
           <option value="">— select —</option>
           {/* A target that was deleted is said, not papered over: a select whose value
               matches no option draws its first one, which reads as a choice nobody made. */}
@@ -35,8 +46,9 @@ export function FadeInspector({ cue }: Props) {
       <div className="field-row">
         <label>Property</label>
         <select value={cue.fadeProperty} onChange={e => set({ fadeProperty: e.target.value as FadeCue['fadeProperty'] })}>
-          <option value="volume">Volume</option>
-          <option value="pan">Pan</option>
+          {!pictureOnly && <option value="volume">Volume</option>}
+          {!pictureOnly && <option value="pan">Pan</option>}
+          {(hasPicture || cue.fadeProperty === 'opacity') && <option value="opacity">Opacity</option>}
         </select>
         <ResetButton label="Property" value={cue.fadeProperty} defaultValue={FADE_DEFAULTS.fadeProperty}
           onReset={() => set({ fadeProperty: FADE_DEFAULTS.fadeProperty })} />

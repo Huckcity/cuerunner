@@ -32,7 +32,11 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    // Two preloads: the control window's bridge, and the output windows' smaller one.
+    // Two preloads: the control window's bridge, and the output windows' smaller one. Each
+    // has to come out as one file — a sandboxed preload can require `electron` and nothing
+    // else, so a chunk the two shared would be a chunk neither could load — which is why
+    // the output windows' channel table lives in a module of its own
+    // (src/shared/ipc/outputWindow.ts) that the control window's preload never imports.
     build: {
       ...shipped,
       rollupOptions: {

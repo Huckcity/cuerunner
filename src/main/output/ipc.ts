@@ -13,9 +13,9 @@ import { sendToWindow } from '../ipc/broadcast'
 import { audioEngine } from '../audio/AudioEngine'
 import { OutputManager, isOutputWindow } from './OutputManager'
 import { createMachinePlacements } from './placements'
+import { OUTPUT_WINDOW_CHANNELS } from '../../shared/ipc/outputWindow'
 import {
   OUTPUT_CHANNELS,
-  OUTPUT_WINDOW_CHANNELS,
   type LayerCommand,
   type OutputEvent,
   type OutputPlacePayload,

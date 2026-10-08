@@ -6,12 +6,12 @@
 // Sandboxed like the control window's, and asking `electron` for nothing else.
 
 import { contextBridge, ipcRenderer } from 'electron'
-import {
-  OUTPUT_WINDOW_CHANNELS,
-  type OutputWindowBridge,
-  type OutputWindowCommand,
-  type OutputWindowInit,
-  type OutputWindowReport
+import { OUTPUT_WINDOW_CHANNELS } from '../shared/ipc/outputWindow'
+import type {
+  OutputWindowBridge,
+  OutputWindowCommand,
+  OutputWindowInit,
+  OutputWindowReport
 } from '../shared/ipc/output'
 import type { AudioClockReading } from '../shared/audio'
 

@@ -17,9 +17,10 @@ import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
 import { MscInspector } from './MscInspector'
 import { MicInspector } from './MicInspector'
+import { VideoInspector, ImageInspector, TextInspector } from './VisualInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue
+  MscCue, MicCue, VideoCue, ImageCue, TextCue
 } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
@@ -40,7 +41,10 @@ const TYPE_TABS: Record<string, string[]> = {
   scene: ['Basics', 'Scene'],
   devamp: ['Basics', 'Devamp'],
   msc: ['Basics', 'Show Control'],
-  mic: ['Basics', 'Mic']
+  mic: ['Basics', 'Mic'],
+  video: ['Basics', 'Video', 'Picture', 'Sound'],
+  image: ['Basics', 'Image', 'Picture'],
+  text: ['Basics', 'Text', 'Picture']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -84,6 +88,10 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
       />
     )
   }
+  // The picture cues share the Picture tab; each has its own for what it shows.
+  if (cue.type === 'video') return <VideoInspector cue={cue as VideoCue} tab={tab} />
+  if (cue.type === 'image') return <ImageInspector cue={cue as ImageCue} tab={tab} />
+  if (cue.type === 'text') return <TextInspector cue={cue as TextCue} tab={tab} />
   return <div className="inspector-placeholder">No settings for this tab.</div>
 }
 

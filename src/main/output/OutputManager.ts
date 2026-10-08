@@ -19,8 +19,8 @@ import { refuseNavigation } from '../safety/navigation'
 import { reportMainError } from '../errors'
 import { OutputRegistry } from './registry'
 import type { MachinePlacements } from './placements'
+import { OUTPUT_WINDOW_CHANNELS } from '../../shared/ipc/outputWindow'
 import {
-  OUTPUT_WINDOW_CHANNELS,
   type LayerCommand,
   type OutputCommandResult,
   type OutputEvent,

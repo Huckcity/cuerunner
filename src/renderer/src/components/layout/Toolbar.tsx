@@ -50,6 +50,9 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'devamp',  label: 'Devamp'  },
   { type: 'msc',     label: 'Show Control' },
   { type: 'mic',     label: 'Mic' },
+  { type: 'video',   label: 'Video' },
+  { type: 'image',   label: 'Image' },
+  { type: 'text',    label: 'Text' },
 ]
 
 interface Props {
