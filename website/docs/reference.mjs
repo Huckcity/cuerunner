@@ -258,7 +258,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio cue), <strong>Property</strong> (volume or pan), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
+              <td><strong>Target</strong> (an audio cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve), <strong>Target value</strong> (0 to 1 for a volume, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>

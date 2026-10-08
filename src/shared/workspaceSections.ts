@@ -547,6 +547,7 @@ export const CUE_FIELD_SHAPE = {
     targetCueId: 'string',
     fadeProperty: 'string',
     targetValue: 'number',
+    panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
     curve: 'string',
     stopTargetWhenDone: 'boolean'
   },

@@ -219,6 +219,12 @@ export interface FadeCue extends CueBase {
   targetCueId: string
   fadeProperty: 'volume' | 'pan'
   targetValue: number
+  /**
+   * Where a volume fade takes the pan as well, −1 to 1, over the same time and curve — the
+   * sound that walks off to one side as it goes. Optional on disk, and absent or null is a
+   * fade of the one property, which is what a show saved before it existed did.
+   */
+  panTargetValue?: number | null
   curve: FadeCurve
   stopTargetWhenDone: boolean
 }

@@ -954,6 +954,11 @@ export class CueEngine {
       .catch(() => {
         // A fade with nothing playing is not an error: the cue still takes its time.
       })
+    // A volume fade that takes the pan with it: the same ramp's time and curve, on the pan.
+    if (param === 'volume' && typeof cue.panTargetValue === 'number') {
+      void audioEngine.fade(cue.targetCueId, 'pan', cue.panTargetValue, cue.duration, cue.curve, at)
+        .catch(() => {})
+    }
     const endAt = at + cue.duration
     this.planRelease(run, endAt)
     this.track(run, this.scheduler!.schedule({

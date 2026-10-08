@@ -494,6 +494,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     targetCueId: '',
     fadeProperty: 'volume',
     targetValue: 1,
+    panTargetValue: -0.5,
     curve: 'linear',
     stopTargetWhenDone: false
   },
