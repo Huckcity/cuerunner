@@ -12,7 +12,7 @@ import { savedShape } from '../../shared/workspaceSections.ts'
 import type { AudioCue, Cue } from '../../shared/cue.ts'
 import type { MediaReference } from '../../shared/media.ts'
 import type { Workspace } from '../../shared/workspace.ts'
-import { carriesMediaFile } from '../../shared/visual'
+import { carriesMediaFile } from '../../shared/visual.ts'
 
 // ─── The route a save writes for one cue ──────────────────────────────────────
 

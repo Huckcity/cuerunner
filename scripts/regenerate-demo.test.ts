@@ -7,6 +7,7 @@
 // file, the loader, the serialiser and the recipe cannot drift apart.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { DEMO_FILE, demoBytes, runDemo } from './regenerate-demo.ts'
 
 const shipped = (): string => readFileSync(DEMO_FILE, 'utf-8')
@@ -34,6 +35,19 @@ describe('the demo show harness', () => {
     // anything else is refused rather than ignored.
     await expect(runDemo(['--write'])).rejects.toThrow('unknown option "--write" — the only one is --check')
   })
+
+  it('runs as npm runs it: under node, with nothing between it and its imports', () => {
+    // Vitest resolves an import with no extension and node does not, so everything this
+    // file imports above could load here while `npm run demo:check` dies on an import
+    // written without `.ts` somewhere down the serialiser's chain. Run it the way npm does.
+    const run = spawnSync(
+      process.execPath,
+      ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', 'scripts/regenerate-demo.ts', '--check'],
+      { encoding: 'utf-8', timeout: 60_000 }
+    )
+    expect(run.stderr).toBe('')
+    expect(run.status).toBe(0)
+  }, 60_000)
 })
 
 // The demo is the first show anybody runs, pressing GO down the list at their own pace. A
