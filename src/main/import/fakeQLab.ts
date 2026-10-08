@@ -43,6 +43,8 @@ export interface FakeQLabOptions {
   flood?: number
   /** Replies with the workspace prefix kept, as some QLab versions do. */
   keepPrefix?: boolean
+  /** Keys it does not know: a `valuesForKeys` that asks for one is refused whole. */
+  unknownKeys?: string[]
 }
 
 export interface FakeQLab {
@@ -159,6 +161,10 @@ export async function startFakeQLab(options: FakeQLabOptions): Promise<FakeQLab>
         return
       }
       const keys = typeof args[0] === 'string' ? JSON.parse(args[0]) as string[] : []
+      if (keys.some(key => options.unknownKeys?.includes(key))) {
+        reply(socket, address, { status: 'error' })
+        return
+      }
       const data: Record<string, unknown> = {}
       for (const key of keys) if (cue.values && key in cue.values) data[key] = cue.values[key]
       reply(socket, address, { status: 'ok', data })

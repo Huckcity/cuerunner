@@ -316,8 +316,14 @@ async function liveCues(
     const kind = qlabKind(typeName)
     let values: Record<string, unknown> = {}
     if (id !== '') {
+      const address = `${prefix}/cue_id/${id}/valuesForKeys`
       const keys = [...COMMON_KEYS, ...(TYPE_KEYS[kind] ?? [])]
-      const reply = await session.request(`${prefix}/cue_id/${id}/valuesForKeys`, [JSON.stringify(keys)])
+      let reply = await session.request(address, [JSON.stringify(keys)])
+      // A QLab that does not know one of a type's keys may refuse the whole question; the
+      // keys every cue has are asked again on their own, so the cue keeps its timing.
+      if (reply.status !== 'ok' && keys.length > COMMON_KEYS.length) {
+        reply = await session.request(address, [JSON.stringify(COMMON_KEYS)])
+      }
       values = reply.status === 'ok' ? record(reply.data) ?? {} : {}
     }
     const children = Array.isArray(listed['cues']) ? await liveCues(listed['cues'], session, prefix, counter) : undefined

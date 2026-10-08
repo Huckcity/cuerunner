@@ -79,6 +79,15 @@ describe('a running QLab, over OSC', () => {
     expect(show.lists[0].cues).toHaveLength(4)
   })
 
+  it('asks again for what every cue has when QLab refuses a type’s keys, so the cue keeps its timing', async () => {
+    qlab = await startFakeQLab({ workspaces: [WORKSPACE], unknownKeys: ['sliderLevels'] })
+    const show = await readLiveWorkspace('127.0.0.1', qlab.port, 'WS-1', undefined)
+    const [walkIn] = show.lists[0].cues
+    expect(walkIn).toMatchObject({ postWait: 2, continueMode: 1, notes: 'House open' })
+    expect(walkIn.media).toBeUndefined()
+    expect(qlab.requests.filter(address => address === '/workspace/WS-1/cue_id/A1/valuesForKeys')).toHaveLength(2)
+  })
+
   it('sends a passcode, and says so when QLab refuses it', async () => {
     qlab = await startFakeQLab({ workspaces: [{ ...WORKSPACE, passcode: '4321' }] })
     await expect(readLiveWorkspace('127.0.0.1', qlab.port, 'WS-1', '0000'))

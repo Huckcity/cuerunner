@@ -24,7 +24,7 @@ const NOTE_SECTIONS: Array<{ kind: QLabImportNote['kind']; title: string; blurb:
   {
     kind: 'placeholder',
     title: 'Placeholders',
-    blurb: 'Cuerunner has no cue of this kind yet. Each is a disarmed cue under its QLab number and name, with what it did in its notes.'
+    blurb: 'Disarmed, under the QLab number and name; the notes say what each one was.'
   },
   {
     kind: 'approximated',
@@ -141,9 +141,8 @@ export function QLabReportDialog({ report }: { report: QLabImportReport }) {
             ) : (
               <>
                 <p className="qlab-warn" data-testid="qlab-media-missing">
-                  {plural(missingMedia.length, 'file is', 'files are')} not where QLab said. Point Cuerunner at
-                  the folder that holds them — the show’s audio folder, a copy of it, a stick — and every one
-                  that is there is linked at once.
+                  {plural(missingMedia.length, 'file is', 'files are')} not where QLab said. Find in Folder… links
+                  every one a folder holds.
                 </p>
                 <ul className="qlab-notes qlab-missing">
                   {missingMedia.map(entry => (
