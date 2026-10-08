@@ -664,6 +664,19 @@ export const GUIDES = [
         meter, and the master beside them.
       </p>
       <p>
+        A patch can play on another interface: choose it as the patch's device — the band's
+        in-ear rack beside the house system, a second USB interface for the delays. The engine
+        plays every device the patches name at once, opened when the show loads so the first
+        cue on one starts at once, and holds each to the show's own device's clock, so a cue
+        sent to two of them stays in phase all night rather than drifting apart. The master,
+        PAUSE, PANIC, fades and live inputs reach them all. <strong>Output devices</strong>, under
+        the patches, says how each one is: its rate, its clock against the show's device and
+        how far behind it it sounds. If one goes — unplugged, taken by another program — its
+        cues stop, the rest of the show plays on, and its patches play on the show's device
+        until <strong>Reconnect</strong> brings it back. A show opened on a machine that has not
+        got one of its devices says which patches fell back, and where they are playing instead.
+      </p>
+      <p>
         <strong>Audition</strong> plays a cue, a selection or a whole file on the show's
         audition output — headphones at the desk — without firing anything: the list does not
         move. Choose the audition output in Settings → Audio first.
