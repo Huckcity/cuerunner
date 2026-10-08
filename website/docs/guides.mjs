@@ -240,6 +240,9 @@ export const GUIDES = [
         <strong>Notes</strong> among them, which reads the first line of each cue's notes on its
         row. The layout belongs to this computer rather than the show, and
         <strong>Reset columns</strong> on the same menu puts the list back as it was.
+        Double-click a <strong>Pre</strong> or <strong>Post</strong> cell — or the
+        <strong>Duration</strong> of a wait or a fade — to type a new time where you read it:
+        <code>1.5</code> or <code>1:30</code>, Enter to keep it, Esc to put it back.
       </p>
       <p>
         With several rows selected (<kbd>Shift</kbd>-click a range, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click
