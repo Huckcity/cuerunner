@@ -538,6 +538,10 @@ export class NativeAudioEngine {
     if (exclusive !== undefined) args.push('--exclusive', exclusive)
     const sampleRate = readEnv('CUERUNNER_AUDIO_SAMPLE_RATE')
     if (sampleRate !== undefined) args.push('--sample-rate', sampleRate)
+    // How many outputs the engine opens with: what a test of routing across more than a pair
+    // asks of the silent backend, which takes no device configuration once it is running.
+    const channels = readEnv('CUERUNNER_AUDIO_CHANNELS')
+    if (channels !== undefined && !appIsPackaged()) args.push('--channels', channels)
 
     const child = this.spawnEngine(binaryPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     this.child = child

@@ -3,7 +3,7 @@
 // settings to the engine. Mounted once, from the top of the app.
 
 import { useEffect } from 'react'
-import { applyAudioDeviceSettings } from '../engine/audioDeviceSettings'
+import { applyAudioDeviceSettings, deviceOptionsFromSettings } from '../engine/audioDeviceSettings'
 import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
 
@@ -12,6 +12,9 @@ const HEARTBEAT_MS = 1000
 
 export function usePlaybackBridge(): void {
   const audioSettings = useStore(s => s.audioSettings)
+  // The device half of the audio settings: the show's patches, faders and loudness target
+  // live there too, and a fader moved in the mixer is not a device to reopen.
+  const deviceKey = JSON.stringify(deviceOptionsFromSettings(audioSettings))
 
   // Main's watchdog listens for this beat whether or not a cue is running: silence
   // while playback is active is what tells it the window is gone.
@@ -34,8 +37,8 @@ export function usePlaybackBridge(): void {
   // The request itself lives in audioDeviceSettings, shared with the panel's lever; the
   // refusal is already in the store by the time it rejects.
   useEffect(() => {
-    applyAudioDeviceSettings(audioSettings).catch(() => {
+    applyAudioDeviceSettings(useStore.getState().audioSettings).catch(() => {
       // Recorded by applyAudioDeviceSettings; nothing left for this effect to do.
     })
-  }, [audioSettings])
+  }, [deviceKey])
 }
