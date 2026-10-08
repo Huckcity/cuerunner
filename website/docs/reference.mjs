@@ -235,13 +235,17 @@ export const REFERENCE = [
             <tr><td>File</td><td>—</td><td>WAV, AIFF, FLAC, MP3, M4A, OGG. A file at another sample rate is resampled as it plays; pitch and tempo are unchanged.</td></tr>
             <tr><td>Start time / End time</td><td>0 / end of file</td><td>The part of the file this cue plays. Draggable on the waveform.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>Starts at the first sound in the file and ends at the last, where silence is anything below −60 dBFS. Never rewrites the region you set: turning it off plays the whole region again.</td></tr>
-            <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts.</td></tr>
-            <tr><td>Fade out</td><td>0 s</td><td>Ramps down to silence over this long so that the ramp ends where the cue does: the end of its region, or of its last loop. The engine times it from the cue's planned end, and a seek or a rate change moves it with the end. A cue that loops for ever has no end to land on; fade it with a fade or stop cue. STOP still cuts at once.</td></tr>
+            <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts. <strong>Fade-in shape</strong>: the default straight line, a preset (linear, S-curve, logarithmic, exponential, equal power) or <strong>Custom</strong> — a curve drawn by dragging its two handles. The engine plays exactly the curve drawn.</td></tr>
+            <tr><td>Fade out</td><td>0 s</td><td>Ramps down to silence over this long so that the ramp ends where the cue does: the end of its region, or of its last loop. The engine times it from the cue's planned end, and a seek or a rate change moves it with the end. A cue that loops for ever has no end to land on; fade it with a fade or stop cue. STOP still cuts at once. <strong>Fade-out shape</strong>: the default S-curve, a preset or a drawn curve, as the fade in.</td></tr>
             <tr><td>Volume</td><td>100%</td><td>The cue's own level, applied to every output.</td></tr>
             <tr><td>Pan</td><td>centre</td><td>−1 to 1. Automatic routing spreads it across the pair.</td></tr>
             <tr><td>Rate</td><td>1.00×</td><td>Playback speed, 0.25× to 4×.</td></tr>
             <tr><td>Loop count</td><td>0</td><td><code>0</code> plays once, <code>n</code> repeats n more times, <code>-1</code> loops for ever — a vamp, released by a devamp cue.</td></tr>
             <tr><td>Routing</td><td>Automatic</td><td><strong>Automatic</strong> (channels in order), <strong>Matrix</strong> (crosspoints with gains) or <strong>Silent</strong> (runs, sends nothing).</td></tr>
+            <tr><td>Output patch</td><td>Device channels</td><td>Plays through one of the show's <strong>output patches</strong> (Settings → Audio) instead of naming device outputs: the routing then addresses the patch's own channels, and the patch's fader and mute in the <strong>Mixer</strong> apply. A cue whose patch is deleted plays on the device's channels.</td></tr>
+            <tr><td>Loudness</td><td>not measured</td><td><strong>Normalize</strong> measures the file (EBU R128 integrated loudness and true peak) and sets the <strong>Trim</strong> so the cue plays at the show's target (−23 LUFS unless Settings → Audio says otherwise), its true peak held under the ceiling (−1 dBTP) and the trim inside its range. The reading stays on the cue. Select several cues and choose <strong>Normalize loudness</strong> from the right-click menu to do them all as one undo step.</td></tr>
+            <tr><td>Audition</td><td>—</td><td><strong>Audition cue</strong> plays the cue as the show would — region, loops, slices, level, fades — and <strong>Whole file</strong> plays the file from its start, both on the show's <strong>audition output</strong> only. Nothing in the show moves: no row lights and nothing advances. Press again to stop. The right-click menu auditions a selection, one cue after another. With no audition output chosen it says so and plays nothing.</td></tr>
+            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, and each plays a number of times or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
           </tbody>
         </table>
       </div>
@@ -259,7 +263,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio, video, image or text cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
+              <td><strong>Target</strong> (an audio, video, image or text cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> for a picture — a video has all of them, an image or text only opacity; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic), <strong>Shape</strong> (a preset or a drawn curve that plays in place of the curve — on a sound, a light and a picture alike) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
@@ -267,7 +271,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
-              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound.</td>
+              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
             </tr>
           </tbody>
         </table>
@@ -404,6 +408,10 @@ export const REFERENCE = [
               <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
             </tr>
             <tr>
+              <td><strong>Live Input</strong></td>
+              <td>Plays a live input — a microphone, a line from the band — through the engine. <strong>Input</strong> (a capture device; the default input for a new cue), <strong>Channels</strong> (which of its inputs are the cue's channels), <strong>Volume</strong>, <strong>Pan</strong>, <strong>Fade in</strong> (50 ms, with a shape), <strong>Fade out</strong> (200 ms, used when the cue is stopped), <strong>Output patch</strong> and <strong>Routing</strong> as an audio cue's. It runs until stopped, or for its <strong>Duration</strong> when it has one. The input can be a different interface from the output: the engine resamples it to the output's clock and corrects the drift between the two, holding a small, steady buffer. <strong>Open input</strong> opens the device ahead of the cue so GO is instant and the meters read; the tab shows each channel's level, the time through the engine and the clock correction. Pause, show-wide pause, Fade cues, STOP and PANIC reach it. With no channel chosen it does nothing and says so. Not the <strong>Mic</strong> cue, which mutes a radio mic at its receiver.</td>
+            </tr>
+            <tr>
               <td><strong>Timecode</strong><span class="pro">Pro</span></td>
               <td>Runs a SMPTE clock. <strong>Rate</strong> — 24, 25, 29.97 drop-frame, 29.97 non-drop or 30 fps (25 for a new cue); <strong>Start from</strong> the <strong>Start</strong> time (01:00:00:00) or the incoming timecode (<strong>jam sync</strong>: the clock starts where the received one is, keeps to it, and carries on alone if it drops out); <strong>End</strong>, or empty to run until stopped — the cue's length is the difference. Outputs, in any mix, all one clock: <strong>MTC</strong> to a MIDI port (the show's output port if none is chosen) — a full-frame message on every start, locate and pause, then quarter frames; <strong>LTC</strong> written by the audio engine to an output channel (3 for a new cue) at a level in dBFS (−12) — give it a channel of its own; <strong>Art-Net</strong> ArtTimeCode once a frame to an address (255.255.255.255), or <code>host:port</code>. While it runs the tab shows where the clock is, with <strong>Pause</strong>/<strong>Resume</strong> and <strong>Locate</strong> to any frame. With no output ticked, or a start or end that is not a frame of the rate, the cue refuses and says why.</td>
             </tr>
@@ -461,6 +469,10 @@ export const REFERENCE = [
             <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
             <tr><td>Channels</td><td>device default</td><td>How many outputs the device offers the routing matrix.</td></tr>
             <tr><td>Exclusive</td><td>off</td><td>Keeps other apps off the device, for every channel it has and steadier timing. A driver that refuses says why.</td></tr>
+            <tr><td>Output patches</td><td>none</td><td>Named sets of outputs — "Mains" is <code>1-2</code>, "Foldback" <code>5, 6</code> — that cues play through by name. Each has a name, the device it was made for and its outputs; <strong>Add patch</strong> takes the next free pair. A patch made for another device plays on the same outputs of the device in use, and says so. Up to 16. Saved with the show.</td></tr>
+            <tr><td>Audition output</td><td>none</td><td>The patch <strong>Audition</strong> plays on — headphones at the desk, a booth monitor. With none chosen, audition is off rather than playing into the house.</td></tr>
+            <tr><td>Normalize to</td><td>−23 LUFS</td><td>The integrated loudness (EBU R128) <strong>Normalize</strong> sets a cue's trim for. −23 is broadcast; −16 to −18 suits a show's music.</td></tr>
+            <tr><td>True-peak ceiling</td><td>−1 dBTP</td><td>A normalised cue is never set louder than its true peak allows under this.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>A default for new audio cues, not a switch over the show. Cues already in the list keep the trim they were made with.</td></tr>
           </tbody>
         </table>
@@ -468,7 +480,10 @@ export const REFERENCE = [
       <p>
         Under them, what the engine is actually doing: backend, rate, device, latency,
         voices playing, media memory, and any dropouts. That block is a reading, not a
-        setting. Under it sits <strong>Reconnect device</strong>, which sends the show's
+        setting. The <strong>Mixer</strong>, beside the master in the transport, has a strip for every output
+        patch and every device output — each a fader (double-click for 0 dB), a mute and a meter read after
+        them — and the master. The patch and output faders are saved with the show; the master is this
+        computer's. Under the engine reading sits <strong>Reconnect device</strong>, which sends the show's
         settings to the engine again so a device it lost is reopened — a no-op while the
         device is already running them, and the way back once the interface is plugged in
         again. It is disabled while the engine runs a backend with no device at all, where

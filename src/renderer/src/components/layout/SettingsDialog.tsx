@@ -25,6 +25,7 @@ import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
 import { RedundancySection } from '../redundancy/RedundancySection'
 import { TimecodeSection } from '../timecode/TimecodeSection'
+import { AudioRoutingSection } from '../audio/AudioRoutingSection'
 import './SettingsDialog.css'
 
 interface Props {
@@ -508,6 +509,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               {deviceRefusalShown && (
                 <p className="settings-device-error" role="alert">{audioDeviceError}</p>
               )}
+
+              <AudioRoutingSection />
 
               <div className="field-section-title">New audio cues</div>
               <div className="field-row">

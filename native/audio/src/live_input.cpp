@@ -457,8 +457,11 @@ int InputFeeds::find(const std::string& device) const {
   return -1;
 }
 
-int InputFeeds::open(const InputOpenOptions& options, int outRate, std::string& error) {
+int InputFeeds::open(const InputOpenOptions& requested, int outRate, std::string& error) {
   std::lock_guard<std::mutex> lock(mutex_);
+  // The default input has one name, whichever way it was asked for, so it is one feed.
+  InputOpenOptions options = requested;
+  if (options.device.empty()) options.device = "default";
   if (isSynthetic(options.device) && !testInputs_) {
     error = "test inputs are not offered by this engine";
     return -1;
@@ -480,7 +483,7 @@ int InputFeeds::open(const InputOpenOptions& options, int outRate, std::string& 
 
 bool InputFeeds::close(const std::string& device) {
   std::lock_guard<std::mutex> lock(mutex_);
-  const int slot = find(device);
+  const int slot = find(device.empty() ? std::string("default") : device);
   if (slot < 0 || !feeds_[slot].running()) return false;
   feeds_[slot].close();
   return true;

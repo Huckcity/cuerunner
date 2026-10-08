@@ -6,6 +6,9 @@ import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
 import { isVisualCue } from '../../../../shared/visual'
+import { CurveEditor } from '../audio/CurveEditor'
+
+const CURVE_NAMES: Record<FadeCurve, string> = { linear: 'the curve: linear', sCurve: 'the curve: S-curve', logarithmic: 'the curve: logarithmic' }
 
 interface Props { cue: FadeCue }
 
@@ -31,7 +34,7 @@ export function FadeInspector({ cue }: Props) {
   //
   // A picture — a video, an image, text — has its opacity, offered beside a sound's volume and
   // pan: a video has all of them, and an image or text only the one.
-  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.type === 'light' || isVisualCue(c) || c.id === cue.targetCueId))
+  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.type === 'input' || c.type === 'light' || isVisualCue(c) || c.id === cue.targetCueId))
   const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
   const lightTarget = cues.some(c => c.id === cue.targetCueId && c.type === 'light')
   const target = cues.find(c => c.id === cue.targetCueId)
@@ -113,6 +116,10 @@ export function FadeInspector({ cue }: Props) {
         <ResetButton label="Curve" value={cue.curve} defaultValue={FADE_DEFAULTS.curve}
           onReset={() => set({ curve: FADE_DEFAULTS.curve })} />
       </div>
+      {/* A drawn shape plays in place of the curve above, for a sound, a light and a picture
+          alike; the curve stays what a build without shapes fades with. */}
+      <CurveEditor name="fade" label="Shape" defaultLabel={CURVE_NAMES[cue.curve]} shape={cue.shape}
+        onChange={shape => set({ shape })} />
       <div className="field-row">
         <label>Stop target when done</label>
         <input type="checkbox" checked={cue.stopTargetWhenDone}

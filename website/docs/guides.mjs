@@ -546,7 +546,7 @@ export const GUIDES = [
     path: 'guides/sound.html',
     section: 'Guides',
     title: 'Working with sound',
-    blurb: 'Audio cues in practice: levels and pan, fades, trimming silence, loops and vamps, and routing channels to the device.',
+    blurb: 'Audio cues in practice: levels and pan, fades and their shapes, loudness, loops, vamps and slices, routing, patches and the mixer, auditioning, and live inputs.',
     body: `
     <section class="panel reveal">
       <h1>Working with sound</h1>
@@ -596,6 +596,20 @@ export const GUIDES = [
         take music out under dialogue.
       </p>
       <p>
+        Every fade has a <strong>shape</strong>: the cue's fade in and fade out, a fade cue,
+        a Light cue's fade. Leave it at its default, pick a preset — <strong>equal power</strong>
+        for a crossfade that does not dip, <strong>exponential</strong> for a slow start — or
+        choose <strong>Custom</strong> and drag the curve's two handles until it moves the way
+        the moment wants. What is drawn is what plays.
+      </p>
+      <p>
+        <strong>Normalize</strong>, on the Audio tab beside the trim, measures the file the way
+        a broadcast meter does (EBU R128) and sets the trim so the cue plays at the show's
+        loudness target, its true peak kept under the ceiling. Select a run of cues and choose
+        <strong>Normalize loudness</strong> from the right-click menu to level the whole set in
+        one go — and take it back with one undo. The target and ceiling are in Settings → Audio.
+      </p>
+      <p>
         A <strong>stop cue</strong> stops a target at once, or fades it out first over a
         time you set. <strong>Wait for fade</strong> holds the show until that fade has
         finished, which matters when the next cue starts the moment this one is done.
@@ -615,6 +629,13 @@ export const GUIDES = [
         lap it is on and plays out to the end of the file. That is the underscore that
         holds for a scene change of unknown length and then resolves properly.
       </p>
+      <p>
+        For music with more than one place to hold, use the <strong>Slices</strong> tab: add
+        markers to cut the region into slices, and give each a number of passes or make it a
+        <strong>Vamp</strong>. The cue plays the intro once, vamps the groove until the devamp,
+        plays the bridge twice and holds on the next vamp — each change landing on its sample.
+        A devamp set to <strong>Stop at the end of the slice</strong> ends the cue there instead.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -630,6 +651,25 @@ export const GUIDES = [
       <p>
         The device itself, its sample rate, buffer and channel count are in
         Settings → Audio, with what the engine is actually doing underneath them.
+      </p>
+      <p>
+        <strong>Output patches</strong>, also in Settings → Audio, name sets of outputs —
+        Mains, Foldback, Delays — so a cue says where it goes by name: choose the patch under
+        <strong>Output patch</strong>, and a matrix then addresses the patch's own channels. When
+        the rig changes, change the patch, not every cue. The <strong>Mixer</strong> button by
+        the master opens a strip for each patch and each output, with a fader, a mute and a
+        meter, and the master beside them.
+      </p>
+      <p>
+        <strong>Audition</strong> plays a cue, a selection or a whole file on the show's
+        audition output — headphones at the desk — without firing anything: the list does not
+        move. Choose the audition output in Settings → Audio first.
+      </p>
+      <p>
+        A <strong>Live Input</strong> cue plays a microphone or a line input through the engine
+        with the same level, pan, routing, patches and fades as a file. Pick the input and its
+        channels; <strong>Open input</strong> shows the level and the time through the engine. A
+        separate interface works: the engine follows its clock and keeps the buffer steady.
       </p>
       <p>
         On Windows, <strong>Audio system</strong> above the device picks how the sound

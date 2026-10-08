@@ -24,6 +24,9 @@ import { NumberField, TextField } from '../common/Field'
 import { RoutingMatrix } from './RoutingMatrix'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueEngine, videoSound } from '../../engine/CueEngine'
+import { CurveEditor } from '../audio/CurveEditor'
+import { PatchSelect } from '../audio/PatchSelect'
+import { AuditionButton } from '../audio/AuditionButton'
 import { visualCues } from '../../engine/visualCues'
 import { cueNameFromFile } from '../../utils/cueDefaults'
 import { formatDuration } from '../../utils/cueDefaults'
@@ -282,8 +285,17 @@ function VideoSoundTab({ cue }: { cue: VideoCue }) {
         <ResetButton label="Pan" value={cue.pan} defaultValue={VIDEO_DEFAULTS.pan}
           onReset={() => applyPan(VIDEO_DEFAULTS.pan)} />
       </div>
+      <CurveEditor name="video-fade-in" label="Fade-in shape" defaultLabel="linear" shape={cue.fadeInShape}
+        onChange={shape => set({ fadeInShape: shape })} />
+      <CurveEditor name="video-fade-out" label="Fade-out shape" defaultLabel="linear" shape={cue.fadeOutShape}
+        onChange={shape => set({ fadeOutShape: shape })} />
       <div className="field-section-title">Output routing</div>
+      <PatchSelect name="video" value={cue.outputPatchId} onChange={outputPatchId => set({ outputPatchId })} />
       <RoutingMatrix cue={videoSound(cue)} fileChannels={fileChannels} deviceChannels={deviceChannels} onChange={applyRouting} />
+      <div className="field-row">
+        <label>Audition</label>
+        <AuditionButton cue={cue} label="Audition the sound" />
+      </div>
     </div>
   )
 }

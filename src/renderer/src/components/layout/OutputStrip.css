@@ -58,3 +58,16 @@
   text-align: right;
   cursor: default;
 }
+
+/* Opens the mixer: every output's fader and meter, every patch's, and the master. */
+.mixer-open {
+  padding: 2px var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.mixer-open:hover { background: var(--bg-hover); color: var(--fg-primary); }

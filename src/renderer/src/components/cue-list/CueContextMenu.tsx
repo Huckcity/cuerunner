@@ -8,6 +8,8 @@ import { formatShortcut } from '../../utils/shortcuts'
 import { canTarget, targetingBlock, type TargetingKind } from '../../utils/batchEdit'
 import { nextCueNumber } from '../../utils/cueDefaults'
 import { canPaste, copyCues, pasteCues } from '../../hooks/useCueClipboard'
+import { audition, auditionItemOf } from '../../engine/audition'
+import { normalizable, normalizeSummary, planNormalize } from '../../utils/normalize'
 import './CueContextMenu.css'
 
 interface Props {
@@ -126,6 +128,19 @@ export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Pr
     if (block.length > 0) insertCues(block, aimedAt[aimedAt.length - 1].id)
     onClose()
   }
+  // The selection's sound, heard on the audition output in list order, and its loudness set to
+  // the show's target as one edit.
+  const audible = targetCues.filter(c => auditionItemOf(c) !== null)
+  const loud = targetCues.filter(normalizable)
+  const handleAudition = () => { audition.playCues(audible, useStore.getState().audioSettings); onClose() }
+  const handleNormalize = () => {
+    onClose()
+    void planNormalize(loud, useStore.getState().audioSettings).then(({ patches, outcomes }) => {
+      const state = useStore.getState()
+      if (Object.keys(patches).length > 0) state.patchCues(patches)
+      state.appendLog([{ level: 'info', message: normalizeSummary(outcomes) }])
+    })
+  }
   const fadeCount = aimable('fade').length
   const stopCount = aimable('stop').length
 
@@ -191,6 +206,20 @@ export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Pr
         <button className="cue-context-menu-item" data-action="batch-edit" onClick={handleBatchEdit} onMouseEnter={e => e.currentTarget.focus()}>
           <span className="cue-context-menu-icon">⋯</span>
           Edit{count}…
+        </button>
+      )}
+      {audible.length > 0 && (
+        <button className="cue-context-menu-item" data-action="audition" onClick={handleAudition} onMouseEnter={e => e.currentTarget.focus()}
+          title="Hear it on the audition output, without firing the show">
+          <span className="cue-context-menu-icon">▷</span>
+          Audition{audible.length > 1 ? ` (${audible.length})` : ''}
+        </button>
+      )}
+      {loud.length > 0 && (
+        <button className="cue-context-menu-item" data-action="normalize" onClick={handleNormalize} onMouseEnter={e => e.currentTarget.focus()}
+          title="Measure each file (EBU R128) and set each trim to the show's loudness target, as one edit">
+          <span className="cue-context-menu-icon">≈</span>
+          Normalize loudness{loud.length > 1 ? ` (${loud.length})` : ''}
         </button>
       )}
       {fadeCount > 0 && (

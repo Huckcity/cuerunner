@@ -21,9 +21,10 @@ import { MidiFileInspector } from './MidiFileInspector'
 import { LightInspector, LightTrackingTab } from '../lighting/LightInspector'
 import { TimecodeInspector } from './TimecodeInspector'
 import { VideoInspector, ImageInspector, TextInspector } from './VisualInspector'
+import { InputInspector } from './InputInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue
+  MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, InputCue
 } from '../../../../shared/cue'
 import type { MidiFileCue } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
@@ -33,7 +34,7 @@ import './Inspector.css'
 // it. An audio cue's second tab is about the file — where it starts and stops, how it
 // fades in, how often it loops — which is not the cue's timing, so it is not called that.
 const TYPE_TABS: Record<string, string[]> = {
-  audio: ['Basics', 'Audio', 'Time & Loops'],
+  audio: ['Basics', 'Audio', 'Time & Loops', 'Slices'],
   midi: ['Basics', 'MIDI'],
   osc: ['Basics', 'OSC'],
   wait: ['Basics', 'Wait'],
@@ -53,7 +54,8 @@ const TYPE_TABS: Record<string, string[]> = {
   timecode: ['Basics', 'Timecode'],
   video: ['Basics', 'Video', 'Picture', 'Sound'],
   image: ['Basics', 'Image', 'Picture'],
-  text: ['Basics', 'Text', 'Picture']
+  text: ['Basics', 'Text', 'Picture'],
+  input: ['Basics', 'Live Input']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -64,7 +66,8 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === TRIGGERS_TAB) {
     return <Triggers cue={cue} />
   }
-  if (tab === 'Audio' || tab === 'Time & Loops') return <AudioInspector cue={cue as AudioCue} tab={tab} />
+  if (tab === 'Audio' || tab === 'Time & Loops' || tab === 'Slices') return <AudioInspector cue={cue as AudioCue} tab={tab} />
+  if (tab === 'Live Input') return <InputInspector cue={cue as InputCue} />
   if (tab === 'MIDI') return <MidiInspector cue={cue as MidiCue} />
   if (tab === 'OSC') return <OscInspector cue={cue as OscCue} />
   if (tab === 'Wait') return <WaitInspector cue={cue as WaitCue} />

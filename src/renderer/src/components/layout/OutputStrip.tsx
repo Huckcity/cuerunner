@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { audioEngine } from '../../engine/audioEngineClient'
+import { masterDb, setMasterDb, subscribeMaster } from '../../utils/masterLevel'
+import { MixerPanel } from '../mixer/MixerPanel'
 import './OutputStrip.css'
 
 /** How often the meter is read: a reading per frame of a 20 Hz display, which a meter's eye needs. */
@@ -12,8 +14,6 @@ export const TOP_DB = 6
 
 /** How fast a meter bar falls back, per reading: a peak is seen, then lets go. */
 const FALL_PER_READING = 0.82
-
-const STORAGE_KEY = 'cuerunner.master.db'
 
 /** A level in dB as the engine's linear gain: the floor is silence. */
 export function gainFromDb(db: number): number {
@@ -34,21 +34,6 @@ export function formatDb(db: number): string {
   return db < 0 ? `−${text} dB` : db > 0 ? `+${text} dB` : `${text} dB`
 }
 
-function storedDb(): number {
-  try {
-    const value = Number(localStorage.getItem(STORAGE_KEY))
-    return localStorage.getItem(STORAGE_KEY) !== null && Number.isFinite(value)
-      ? Math.min(TOP_DB, Math.max(FLOOR_DB, value))
-      : 0
-  } catch {
-    return 0
-  }
-}
-
-function storeDb(db: number): void {
-  try { localStorage.setItem(STORAGE_KEY, String(db)) } catch { /* unity is fine */ }
-}
-
 /**
  * What leaves the engine, and how loud: a meter per output pair's channel, and the master
  * level. The master is this machine's — the level a room wants is the room's, not the show's —
@@ -57,7 +42,10 @@ function storeDb(db: number): void {
  * fader pulled down is a meter that falls with it.
  */
 export function OutputStrip() {
-  const [db, setDb] = useState(storedDb)
+  // The master is shared with the mixer's master strip (utils/masterLevel.ts).
+  const db = useSyncExternalStore(subscribeMaster, masterDb)
+  const setDb = setMasterDb
+  const [mixerOpen, setMixerOpen] = useState(false)
   const [clipped, setClipped] = useState(false)
   const barRefs = useRef<Array<HTMLSpanElement | null>>([])
   const levels = useRef<number[]>([0, 0])
@@ -66,7 +54,6 @@ export function OutputStrip() {
   useEffect(() => {
     const send = (): void => { void audioEngine.master(gainFromDb(db)).catch(() => {}) }
     send()
-    storeDb(db)
     return audioEngine.onSessionChange(send)
   }, [db])
 
@@ -125,6 +112,10 @@ export function OutputStrip() {
         title="Master level — double-click for 0 dB"
       />
       <span className="master-readout" onDoubleClick={() => setDb(0)}>{formatDb(db)}</span>
+      <button className="mixer-open" onClick={() => setMixerOpen(true)} title="The mixer: every output, every patch and the master">
+        Mixer
+      </button>
+      {mixerOpen && <MixerPanel onClose={() => setMixerOpen(false)} />}
     </div>
   )
 }

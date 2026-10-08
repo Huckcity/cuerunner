@@ -109,7 +109,7 @@ function plannedPlaybackMs(options: AudioStartOptions, durationMs: number): numb
 }
 
 /** The engine options a cue plays with, offset into the file for a seek. */
-function startOptions(cue: AudioCue, seekMs = 0, trim = false): AudioStartOptions {
+export function startOptions(cue: AudioCue, seekMs = 0, trim = false): AudioStartOptions {
   // The region the cue plays, silence trim and all. An offset — a timeline that starts
   // part-way into the cue — moves the region's own start, and the trim still holds the
   // head of the file: an offset that lands in the trimmed silence is silence.

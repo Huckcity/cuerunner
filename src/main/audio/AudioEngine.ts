@@ -530,6 +530,8 @@ export class NativeAudioEngine {
     const args = ['--socket', path, '--backend', readEnv('CUERUNNER_AUDIO_BACKEND') ?? 'auto']
     const capture = readEnv('CUERUNNER_TEST_AUDIO_CAPTURE')
     if (capture !== undefined && !appIsPackaged()) args.push('--capture', capture)
+    // The engine's synthetic live inputs, for a test run on a machine with no input device.
+    if (readEnv('CUERUNNER_TEST_INPUTS') === '1' && !appIsPackaged()) args.push('--test-inputs')
     const deviceId = readEnv('CUERUNNER_AUDIO_DEVICE')
     if (deviceId !== undefined) args.push('--device', deviceId)
     const exclusive = readEnv('CUERUNNER_AUDIO_EXCLUSIVE')

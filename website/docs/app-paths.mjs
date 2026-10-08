@@ -234,6 +234,12 @@ export const APP_PATHS = [
     printed: `${prose(SETTINGS_ITEM)} → Timecode`,
     names: [{ tab: 'timecode' }]
   },
+  // The cue types reference sends an audio cue's patches, audition and loudness to the Audio tab.
+  {
+    page: 'reference/cue-types.html',
+    printed: `${prose(SETTINGS_ITEM)} → Audio`,
+    names: [{ tab: 'audio' }]
+  },
   // The formats page's own-file note now sends a reader whose show refused to the tab the cast
   // and the faders are set up in, so the same path is declared for it.
   {

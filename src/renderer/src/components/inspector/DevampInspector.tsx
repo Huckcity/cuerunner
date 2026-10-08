@@ -29,9 +29,17 @@ export function DevampInspector({ cue }: Props) {
           {targets.map(c => <option key={c.id} value={c.id}>{targetLabel(c)}</option>)}
         </select>
       </div>
+      <div className="field-row">
+        <label htmlFor="devamp-mode">Then</label>
+        <select id="devamp-mode" className="devamp-mode" value={cue.devampMode ?? 'next'}
+          onChange={e => update(cue.id, { devampMode: e.target.value === 'stop' ? 'stop' : undefined })}>
+          <option value="next">Play on into the next slice</option>
+          <option value="stop">Stop at the end of the slice</option>
+        </select>
+      </div>
       <p className="inspector-hint">
-        Lets a looping cue go: it finishes the lap it is on, then plays to the end of the
-        file. Set a cue to loop forever on its Time &amp; Loops tab to make it a vamp.
+        Lets a looping cue go: it finishes the lap it is on, then plays on — into its next
+        slice, or to the end of the file. Make a vamp on the cue's Time &amp; Loops or Slices tab.
       </p>
       <LastRun cueId={cue.id} />
     </div>

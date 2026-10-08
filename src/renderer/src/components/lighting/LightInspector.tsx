@@ -15,6 +15,7 @@ import { ResetButton } from '../inspector/ResetButton'
 import { LIGHT_DEFAULTS } from '../../utils/cueDefaults'
 import { paramsOf, targetName, targetParams, trackingSheet, type TrackingRole } from '../../utils/lighting'
 import './Lighting.css'
+import { CurveEditor } from '../audio/CurveEditor'
 
 /** A target as a select carries it: its kind and its id in one value. */
 function targetValue(target: 'fixture' | 'group', id: string): string {
@@ -117,6 +118,7 @@ export function LightInspector({ cue }: { cue: LightCue }) {
         <ResetButton label="Curve" value={cue.curve} defaultValue={LIGHT_DEFAULTS.curve}
           onReset={() => set({ curve: LIGHT_DEFAULTS.curve })} />
       </div>
+      <CurveEditor name="light" label="Shape" defaultLabel="the curve" shape={cue.shape} onChange={shape => set({ shape })} />
       <div className="field-row">
         <label htmlFor="light-intensity">Intensity</label>
         <select id="light-intensity" value={cue.intensity} onChange={e => set({ intensity: e.target.value as IntensityRule })}>

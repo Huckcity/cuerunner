@@ -76,6 +76,10 @@
             <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
             <tr><td>Channels</td><td>device default</td><td>How many outputs the device offers the routing matrix.</td></tr>
             <tr><td>Exclusive</td><td>off</td><td>Keeps other apps off the device, for every channel it has and steadier timing. A driver that refuses says why.</td></tr>
+            <tr><td>Output patches</td><td>none</td><td>Named sets of outputs — "Mains" is <code>1-2</code>, "Foldback" <code>5, 6</code> — that cues play through by name. Each has a name, the device it was made for and its outputs; <strong>Add patch</strong> takes the next free pair. A patch made for another device plays on the same outputs of the device in use, and says so. Up to 16. Saved with the show.</td></tr>
+            <tr><td>Audition output</td><td>none</td><td>The patch <strong>Audition</strong> plays on — headphones at the desk, a booth monitor. With none chosen, audition is off rather than playing into the house.</td></tr>
+            <tr><td>Normalize to</td><td>−23 LUFS</td><td>The integrated loudness (EBU R128) <strong>Normalize</strong> sets a cue's trim for. −23 is broadcast; −16 to −18 suits a show's music.</td></tr>
+            <tr><td>True-peak ceiling</td><td>−1 dBTP</td><td>A normalised cue is never set louder than its true peak allows under this.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>A default for new audio cues, not a switch over the show. Cues already in the list keep the trim they were made with.</td></tr>
           </tbody>
         </table>
@@ -83,7 +87,10 @@
       <p>
         Under them, what the engine is actually doing: backend, rate, device, latency,
         voices playing, media memory, and any dropouts. That block is a reading, not a
-        setting. Under it sits <strong>Reconnect device</strong>, which sends the show's
+        setting. The <strong>Mixer</strong>, beside the master in the transport, has a strip for every output
+        patch and every device output — each a fader (double-click for 0 dB), a mute and a meter read after
+        them — and the master. The patch and output faders are saved with the show; the master is this
+        computer's. Under the engine reading sits <strong>Reconnect device</strong>, which sends the show's
         settings to the engine again so a device it lost is reopened — a no-op while the
         device is already running them, and the way back once the interface is plugged in
         again. It is disabled while the engine runs a backend with no device at all, where

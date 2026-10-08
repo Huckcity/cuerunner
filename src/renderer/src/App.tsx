@@ -27,6 +27,7 @@ import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import { useRedundancy } from './hooks/useRedundancy'
 import { useTimecodeFollow } from './hooks/useTimecodeFollow'
 import { useOutputs } from './hooks/useOutputs'
+import { useAudioRoutingSync } from './hooks/useAudioRoutingSync'
 import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
@@ -78,6 +79,7 @@ export function App() {
   useTimecodeFollow()
   // The video outputs: which the show declares, what they report, and the timers on them.
   useOutputs()
+  useAudioRoutingSync()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)

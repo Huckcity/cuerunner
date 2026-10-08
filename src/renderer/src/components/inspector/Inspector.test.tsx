@@ -51,10 +51,10 @@ describe('Inspector', () => {
   const labels = (): string[] =>
     [...container.querySelectorAll('.field-row label')].map(label => label.textContent ?? '')
 
-  it('gives an audio cue Basics, Audio, Time & Loops and Triggers — one thing called Timing', () => {
+  it('gives an audio cue Basics, Audio, Time & Loops, Slices and Triggers — one thing called Timing', () => {
     const audio = cue('audio')
     show([audio], audio)
-    expect(tabs()).toEqual(['Basics', 'Audio', 'Time & Loops', 'Triggers'])
+    expect(tabs()).toEqual(['Basics', 'Audio', 'Time & Loops', 'Slices', 'Triggers'])
   })
 
   it('keeps triggers off Basics, and counts them on their own tab', () => {
