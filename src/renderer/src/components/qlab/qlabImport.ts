@@ -182,6 +182,7 @@ export async function findQLabMediaInFolder(): Promise<void> {
     triggerGuard: store.triggerGuard,
     lighting: store.lighting,
     timecode: store.timecode,
+    cueLists: store.cueLists,
     cues: store.cues
   })
   set({ busy: true, error: null })

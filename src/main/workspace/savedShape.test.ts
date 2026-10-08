@@ -42,6 +42,7 @@ import type { Workspace } from '../../shared/workspace'
 import { builtinFixtureTypes, defaultLightingSettings, type LightingSettings } from '../../shared/dmx'
 import { LIGHTING_SHAPE } from '../../shared/dmxShape'
 import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { CUE_LIST_SHAPE } from '../../shared/cueListsShape'
 
 vi.mock('electron', () => ({
   // Nothing here touches the user-data folder; the serialiser needs no Electron at all.
@@ -125,7 +126,16 @@ const fixture: Required<Workspace> = {
   lighting,
   // Moved from its defaults, as a show that chases a clock carries it.
   timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
-  cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
+  // A second list with every optional field a list can carry, so the walk reaches all of them.
+  cueLists: [
+    { id: 'main', name: 'Main Cue List' },
+    {
+      id: 'sfx', name: 'Effects', color: 'blue', cart: true, disarmed: true,
+      timecode: { enabled: false, offsetFrames: 250 },
+      tileKeys: [{ cueId: 'a2', key: 'q' }]
+    }
+  ],
+  cues: [cue('a1', 'Walk-in'), { ...cue('a2', 'Interval'), listId: 'sfx' }]
 }
 
 /**
@@ -178,6 +188,7 @@ const declared: readonly WorkspaceKey[] = [
   'triggerGuard',
   'lighting',
   'timecode',
+  'cueLists',
   'cues'
 ]
 
@@ -196,13 +207,17 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined, timecode: undefined },
+      {
+        ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined,
+        timecode: undefined, cueLists: undefined
+      },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
       declared.filter(
-        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' && key !== 'timecode'
+        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' &&
+          key !== 'timecode' && key !== 'cueLists'
       )
     )
   })
@@ -438,7 +453,7 @@ describe('the settings-field shape', () => {
 })
 
 /** One cue's own fields, from `CueBase`: what every cue carries, without the optionals. */
-function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'> {
+function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine' | 'listId'> {
   return {
     id,
     number: id,
@@ -490,6 +505,8 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     triggers: [{ id: 't-a1', kind: 'osc', address: '/go' }],
     refire: 'restart',
     scriptLine: 12,
+    // A cue at the top level of a list other than the main one names it.
+    listId: 'sfx',
     trimSilence: true,
     soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false },
     fadeOutDuration: 1500
@@ -627,6 +644,14 @@ describe('the lighting shape', () => {
     // carries and the declaration has not learned fails here, and so does a declared field the
     // rig has not got.
     expect(shapeDifferences(lighting, LIGHTING_SHAPE, 'lighting')).toEqual([])
+  })
+})
+
+describe('the cue lists shape', () => {
+  it('declares every field a cue list carries, with the kind it is written as', () => {
+    for (const list of fixture.cueLists) {
+      expect(shapeDifferences(list, CUE_LIST_SHAPE, `cueLists.${list.id}`)).toEqual([])
+    }
   })
 })
 

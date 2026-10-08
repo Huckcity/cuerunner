@@ -2,6 +2,7 @@ import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSecti
 import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { canonicalCueList, isDefaultCueLists, type CueListInfo } from '../../../shared/cueLists'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
 // the same way, so a recovered workspace has the shape a saved one does.
@@ -32,10 +33,16 @@ import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../share
 // optional on the saved form, so a call site that forgot it would compile and save a show
 // that had stopped chasing. A show that leaves it at the defaults writes no section — so a
 // show saved before timecode existed, or that never touched it, stays byte-identical.
+//
+// The cue lists are named by every caller the same way: a call site that forgot them would
+// compile and save every list's cues into a show that has only its main list — which the load
+// funnel would then repair into one list. A show with only its main list under its own name
+// writes no section, so a show saved before lists existed stays byte-identical.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'cueLists'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
+    cueLists: CueListInfo[] | undefined
   }
 ): Workspace {
   return savedShape({
@@ -45,6 +52,9 @@ export function buildWorkspace(
     // be the key every save of every show carries for no reason.
     history: values.history && values.history.length > 0 ? values.history : undefined,
     lighting: values.lighting === undefined || isEmptyLighting(values.lighting) ? undefined : values.lighting,
-    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode
+    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
+    cueLists: values.cueLists === undefined || isDefaultCueLists(values.cueLists)
+      ? undefined
+      : values.cueLists.map(canonicalCueList)
   })
 }
