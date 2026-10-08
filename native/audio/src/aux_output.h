@@ -252,6 +252,9 @@ class AuxOutputs {
   int takeFailure(std::string& message);
 
  private:
+  /** `find`, with the lock already held — a device's name is only written under it. */
+  int findLocked(const std::string& device) const;
+
   AuxOutput outputs_[kMaxAuxOutputs];
   mutable std::mutex mutex_;
   bool offline_ = false;

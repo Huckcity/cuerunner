@@ -409,6 +409,11 @@ OutputStatus AuxOutput::status(int slot) const {
 // ── The set ──────────────────────────────────────────────────────────────────────────────
 
 int AuxOutputs::find(const std::string& device) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return findLocked(device);
+}
+
+int AuxOutputs::findLocked(const std::string& device) const {
   for (int slot = 0; slot < kMaxAuxOutputs; slot++) {
     if (outputs_[slot].inUse() && outputs_[slot].device() == device) return slot;
   }
@@ -436,7 +441,7 @@ int AuxOutputs::open(const OutputOpenOptions& options, int mainRate, double cloc
     error = options.device + " is not connected to this machine";
     return -1;
   }
-  int slot = find(options.device);
+  int slot = findLocked(options.device);
   if (slot >= 0 && outputs_[slot].running()) return slot;
   if (slot < 0) {
     for (int candidate = 0; candidate < kMaxAuxOutputs && slot < 0; candidate++) {
