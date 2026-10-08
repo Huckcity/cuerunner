@@ -3,7 +3,7 @@
 
 ## cuerunner
 
-Electron + React + TypeScript show control for live performance, a QLab alternative for Windows, with the audio engine in a native C++ process of its own — a renderer crash does not stop the sound. Main owns fs, sockets, the licence and the engine; the renderer has no Node access and talks through `window.cuerunner` only. The contract is `_bmad-output/specs/spec-cuerunner/SPEC.md` (what is being built) and `_bmad-output/planning-artifacts/architecture/architecture-cuerunner-2026-09-17/ARCHITECTURE-SPINE.md` (AD-1..AD-25, how the parts must agree — read the AD before changing what it binds). `README.md` is builder-facing; `website/docs/*.mjs` is operator-facing.
+Electron + React + TypeScript show control for live performance, a QLab alternative for Windows, with the audio engine in a native C++ process of its own — a renderer crash does not stop the sound. Main owns fs, sockets, the licence and the engine; the renderer has no Node access and talks through `window.cuerunner` only. The contract is `_bmad-output/specs/spec-cuerunner/SPEC.md` (what is being built) and `_bmad-output/planning-artifacts/architecture/architecture-cuerunner-2026-09-17/ARCHITECTURE-SPINE.md` (AD-1..AD-28, how the parts must agree — read the AD before changing what it binds). `README.md` is builder-facing; `website/docs/*.mjs` is operator-facing.
 
 ## Policy
 
