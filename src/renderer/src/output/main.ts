@@ -154,6 +154,7 @@ async function runOutput(): Promise<void> {
 
 async function runTimer(): Promise<void> {
   document.body.classList.add('timer-window')
+  document.title = 'Timer — Cuerunner'
   const root = document.getElementById('stage') as HTMLDivElement
   const digits = element('div', 'timer-digits')
   root.appendChild(digits)

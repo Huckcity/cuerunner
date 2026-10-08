@@ -404,6 +404,7 @@ export class Stage {
       const ends = this.endsAt(layer)
       if (ends !== null && now >= ends && layer.shownAt !== null) {
         this.host.emit({ kind: 'ended', cueId: spec.cueId, outputId: spec.outputId, at: ends, held: false })
+        this.endedDuringDissolve(layer)
         this.removeLayer(layer, true)
       }
     }
@@ -443,6 +444,7 @@ export class Stage {
         this.host.emit({ kind: 'ended', cueId: spec.cueId, outputId: spec.outputId, at: now, held: true })
       } else {
         this.host.emit({ kind: 'ended', cueId: spec.cueId, outputId: spec.outputId, at: now, held: false })
+        this.endedDuringDissolve(layer)
         this.removeLayer(layer, true)
       }
       return
@@ -520,6 +522,16 @@ export class Stage {
       return
     }
     if (dissolveProgress(dissolve.firstFrameMs, dissolve.durationMs, now) >= 1) this.finishDissolve()
+  }
+
+  /**
+   * A picture being dissolved to reached its own end before the dissolve did: what it was
+   * replacing goes now, as it would have at the dissolve's end. A picture that was *stopped*
+   * mid-dissolve is the other case — the operator took it back — and leaves what it was
+   * replacing where it is (`advanceDissolve`).
+   */
+  private endedDuringDissolve(layer: Layer): void {
+    if (this.dissolve !== null && this.dissolve.incoming === layer.spec.cueId) this.finishDissolve()
   }
 
   private finishDissolve(): void {
