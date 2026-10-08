@@ -1,7 +1,7 @@
 // The update rules, each one held against a fake updater that answers the way the test says:
 // no network, no electron-updater, a clock and a schedule of the test's own.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compareVersions, parseReleaseNotes } from '../../shared/releaseNotes'
@@ -101,8 +101,15 @@ let pushed: UpdateStatus[]
 let updater: FakeUpdater
 let timers: ManualTimers
 
+/**
+ * Every service a test made, closed before its folder is removed: a service writes its file in
+ * the background (the version it first ran, the time of a check), and a write that lands after
+ * the folder is gone is what `rm` met as "directory not empty" on a loaded runner.
+ */
+const made: UpdateService[] = []
+
 function make(options: { install?: UpdateInstall; current?: string; engineBusy?: () => boolean; noUpdater?: boolean } = {}): UpdateService {
-  return new UpdateService({
+  const service = new UpdateService({
     current: options.current ?? '0.17.0',
     install: options.install ?? 'nsis',
     updater: async () => (options.noUpdater ? null : updater),
@@ -114,12 +121,14 @@ function make(options: { install?: UpdateInstall; current?: string; engineBusy?:
     timers,
     launchDelayMs: 1000
   })
+  made.push(service)
+  return service
 }
 
 /** Lets the promise chains a call started run to the end. */
 async function flush(service: UpdateService): Promise<void> {
   for (let round = 0; round < 5; round++) await Promise.resolve()
-  await service.settled()
+  await service.flush()
 }
 
 beforeEach(() => {
@@ -131,7 +140,8 @@ beforeEach(() => {
   timers = new ManualTimers()
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(made.splice(0).map(service => service.close()))
   rmSync(directory, { recursive: true, force: true })
 })
 
@@ -422,8 +432,7 @@ describe('what is new', () => {
   it('says nothing on a first run, and remembers the version for next time', async () => {
     const service = make({ current: '0.18.0' })
     expect(await service.takeWhatsNew()).toBeNull()
-    await flush(service)
-    await new Promise(resolve => setTimeout(resolve, 20))
+    await service.flush()
     expect(JSON.parse(readFileSync(file, 'utf8')).lastSeenVersion).toBe('0.18.0')
   })
 
@@ -475,5 +484,36 @@ describe('the CHANGELOG this build ships', () => {
     expect(sections.length).toBeGreaterThan(5)
     expect(compareVersions(sections[0].version, sections[1].version)).toBe(1)
     expect(sections[0].groups.every(group => group.items.length > 0)).toBe(true)
+  })
+})
+
+describe('the file, on the way out', () => {
+  it('finishes the write a first run starts before close() answers, so the folder can go at once', async () => {
+    const service = make({ current: '0.18.0' })
+    await service.close()
+    expect(JSON.parse(readFileSync(file, 'utf8')).lastSeenVersion).toBe('0.18.0')
+    // What the teardown does next, and what failed on macOS before: nothing is left writing.
+    rmSync(directory, { recursive: true, force: true })
+    expect(existsSync(directory)).toBe(false)
+  })
+
+  it('writes nothing once disposed, so a quit leaves no write landing behind it', async () => {
+    const service = make()
+    await service.flush()
+    const before = readFileSync(file, 'utf8')
+    service.dispose()
+    await service.configure({ check: false })
+    await service.flush()
+    expect(readFileSync(file, 'utf8')).toBe(before)
+  })
+
+  it('waits for a check under way, and for the write it makes, before it settles', async () => {
+    updater.feed = NEWER
+    const service = make()
+    await service.flush()
+    const checking = service.automaticCheck()
+    await service.flush()
+    await checking
+    expect(JSON.parse(readFileSync(file, 'utf8')).lastCheckedAt).toBe(clock.getTime())
   })
 })

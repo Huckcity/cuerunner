@@ -153,7 +153,7 @@ import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces }
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { UPDATE_CHANNELS, type UpdateActionResult, type UpdateCheckResult, type WhatsNew } from '../../shared/ipc/update'
 import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../../shared/update'
-import { openDownloads, updates } from '../update/main'
+import { closeUpdates, openDownloads, updates } from '../update/main'
 import { createMachineRedundancy } from '../redundancy/machine'
 import { createMachineDmx } from '../dmx/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
@@ -798,6 +798,8 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(UPDATE_CHANNELS.whatsNew, (): Promise<WhatsNew | null> => updates().takeWhatsNew())
   ipcMain.handle(UPDATE_CHANNELS.openDownloads, (): Promise<void> => openDownloads())
+  // The schedule and any download stop with the app, and no write is left landing behind it.
+  app.on('will-quit', () => closeUpdates())
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.

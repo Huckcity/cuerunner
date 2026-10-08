@@ -127,9 +127,13 @@ export function startUpdates(): void {
   }
 }
 
-/** Stops the schedule and any download, on the way out. */
-export function stopUpdates(): void {
-  service?.dispose()
+/**
+ * The way out: the schedule and any download stopped, no write started after it, and the one
+ * under way finished. Registered on `will-quit` beside the other services' teardown; Electron
+ * does not wait for the promise, but nothing new is written once it has been called.
+ */
+export async function closeUpdates(): Promise<void> {
+  await service?.close()
 }
 
 /** The download page, in the browser: where a copy that cannot replace itself gets the new one. */
